@@ -1,0 +1,21 @@
+{
+  "workspaces": {
+    "project": "."
+  },
+  "executionProfiles": {
+    "safe-readonly": {
+      "default": true,
+      "permissionProfile": "read-only",
+      "provider": "example-provider",
+      "model": "example-model",
+      "thinkingLevel": "medium"
+    },
+    "coding-example": {
+      "default": false,
+      "permissionProfile": "coding",
+      "provider": "another-example-provider",
+      "model": "another-example-model",
+      "thinkingLevel": "high"
+    }
+  }
+}

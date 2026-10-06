@@ -1,0 +1,48 @@
+{
+  "name": "pi-session-mcp",
+  "version": "0.6.0",
+  "description": "Local stdio MCP server for controlled Pi coding-agent sessions",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "pi",
+    "coding-agent",
+    "stdio"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plagor44-ux/pi-session-mcp.git"
+  },
+  "homepage": "https://github.com/plagor44-ux/pi-session-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/plagor44-ux/pi-session-mcp/issues"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:cli": "tsc -p tsconfig.cli.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "doctor": "node scripts/doctor.mjs",
+    "setup": "node dist/setup-main.js",
+    "start": "node dist/main.js",
+    "inspect": "mcp-inspector node dist/main.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.4",
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/server": "2.2.0",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/inspector": "0.19.0",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

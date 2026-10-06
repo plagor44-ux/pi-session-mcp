@@ -1,0 +1,87 @@
+name: Pi SDK canary
+
+# Early warning for upstream Pi SDK changes: checks the unchanged sources against
+# the newest published SDK without touching the exact pin. The check itself lives
+# in scripts/pi-sdk-canary.sh so it can be reproduced locally.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Pi SDK version or dist-tag to test
+        required: false
+        default: latest
+  pull_request:
+    paths:
+      - .github/workflows/pi-sdk-canary.yml
+      - scripts/pi-sdk-canary.sh
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pi-sdk-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+      - run: npm ci
+      - id: canary
+        name: Check against the candidate Pi SDK
+        env:
+          EVENT: ${{ github.event_name }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          # A pull request only validates this workflow, against the pinned version.
+          if [ "$EVENT" = pull_request ]; then
+            target="$(node -p "require('./package.json').dependencies['@earendil-works/pi-coding-agent']")"
+          else
+            target="${REQUESTED:-latest}"
+          fi
+          bash scripts/pi-sdk-canary.sh "$target"
+      - name: Report an incompatible Pi SDK
+        if: failure() && steps.canary.outputs.candidate != '' && github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          CANDIDATE: ${{ steps.canary.outputs.candidate }}
+          PINNED: ${{ steps.canary.outputs.pinned }}
+          TYPECHECK: ${{ steps.canary.outputs.typecheck }}
+          TESTS: ${{ steps.canary.outputs.tests }}
+        with:
+          script: |
+            const { CANDIDATE: candidate, PINNED: pinned, TYPECHECK: typecheck, TESTS: tests } = process.env;
+            const label = "pi-sdk-canary";
+            const marker = `<!-- pi-sdk-canary:${candidate} -->`;
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              `Pi SDK \`${candidate}\` is not compatible with the pinned sources (pinned \`${pinned}\`).`,
+              "",
+              `- typecheck: ${typecheck || "not run"}`,
+              `- SDK-facing tests: ${tests || "not run"}`,
+              `- run: ${run}`,
+              "",
+              "Reproduce locally: `npm ci && bash scripts/pi-sdk-canary.sh " + candidate + " && npm ci`",
+            ].join("\n");
+            // One open tracker issue carries every report; the oldest labeled one wins.
+            const open = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: "open", labels: label, per_page: 100 });
+            const tracker = open.filter((issue) => !issue.pull_request).sort((a, b) => a.number - b.number)[0];
+            if (!tracker) {
+              await github.rest.issues.create({ ...context.repo, title: `Pi SDK canary: ${candidate} is incompatible with the pinned sources`, body, labels: [label] });
+              return;
+            }
+            // Report each incompatible version once; nightly repeats of the same version stay quiet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: tracker.number, per_page: 100 });
+            if ([tracker.body, ...comments.map((comment) => comment.body)].some((text) => (text ?? "").includes(marker))) return;
+            await github.rest.issues.createComment({ ...context.repo, issue_number: tracker.number, body });
