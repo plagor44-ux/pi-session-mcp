@@ -48,6 +48,11 @@ function failure(id: DoctorCheckId, subject: string, remediation: string): Docto
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
 function ok(id: DoctorCheckId, subject: string): DoctorCheck { return Object.freeze({ id, severity: "ok", subject }); }
 function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && ["ENOENT", "config_path_required"].includes(String((error as { code?: unknown }).code)); }
+/** The lockfile's modification time, or undefined for an npm installation, which has no lockfile. */
+async function lockfileMtime(fs: DoctorFileSystem, root: string): Promise<number | undefined> {
+  try { return (await fs.stat(join(root, "package-lock.json"))).mtimeMs; }
+  catch (error) { if (isMissing(error)) return undefined; throw error; }
+}
 function isUnreadable(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && ["EACCES", "EPERM"].includes(String((error as { code?: unknown }).code)); }
 function isSemver(value: string): boolean { return /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(value); }
 
@@ -60,9 +65,13 @@ function satisfiesNode(version: string, range: string): boolean {
   return got[0] > want[0] || (got[0] === want[0] && (got[1] > want[1] || (got[1] === want[1] && got[2] >= want[2])));
 }
 
+/** Build inputs beyond the manifests. An installed package has none of them, which is not staleness. */
 async function productionBuildInputMtimes(root: string): Promise<number[]> {
   const mtimes: number[] = [];
-  for (const name of ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json"] as const) mtimes.push((await stat(join(root, name))).mtimeMs);
+  for (const name of ["tsconfig.json", "tsconfig.build.json"] as const) {
+    try { mtimes.push((await stat(join(root, name))).mtimeMs); }
+    catch (error) { if (!isMissing(error)) throw error; }
+  }
   const visit = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
@@ -70,7 +79,8 @@ async function productionBuildInputMtimes(root: string): Promise<number[]> {
       else if (entry.isFile() && entry.name.endsWith(".ts")) mtimes.push((await stat(path)).mtimeMs);
     }
   };
-  await visit(join(root, "src"));
+  try { await visit(join(root, "src")); }
+  catch (error) { if (!isMissing(error)) throw error; }
   return mtimes;
 }
 
@@ -86,7 +96,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       metadata = await readPackageMetadata(root, fs.readFile);
     }
     if (!metadata || !isSemver(metadata.version) || typeof metadata.engines?.node !== "string" || !/>=\s*\d+/.test(metadata.engines.node)) throw new Error("invalid package metadata");
-    if (!injected && (!metadata.lockVersion || !isSemver(metadata.lockVersion))) throw new Error("invalid lock metadata");
+    if (!injected && metadata.lockVersion !== undefined && !isSemver(metadata.lockVersion)) throw new Error("invalid lock metadata");
   } catch {
     checks.push(failure("package_metadata_unreadable", "package metadata", "repair package metadata"));
   }
@@ -103,7 +113,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   if (buildMtime !== undefined) {
     try {
       const packageMtime = (await fs.stat(join(root, "package.json"))).mtimeMs;
-      const lockMtime = (await fs.stat(join(root, "package-lock.json"))).mtimeMs;
+      const lockMtime = await lockfileMtime(fs, root);
       const inputMtimes = [packageMtime, lockMtime].filter((value): value is number => value !== undefined);
       if (!dependencies.fileSystem) inputMtimes.push(...await productionBuildInputMtimes(root));
       if (inputMtimes.some((mtime) => mtime > buildMtime)) checks.push(warning("build_stale", "build output", "run the production build"));

@@ -18,16 +18,20 @@ An installation consists of three locations:
 
 | What | Location | Notes |
 | --- | --- | --- |
-| Release directory | a dedicated directory per release, for example `~/.local/share/pi-session-mcp/releases/<tag>` | A checkout of one release tag with its build output. |
-| Configuration | a file outside the release directory, for example `~/.config/pi-session-mcp/pi-session-mcp.json` | Operator-owned, mode `0600`, never committed. |
+| Package | the npm global prefix, or a dedicated directory per release such as `~/.local/share/pi-session-mcp/releases/<tag>` | The built server, `setup` and Doctor. |
+| Configuration | a file outside the package, for example `~/.config/pi-session-mcp/pi-session-mcp.json` | Operator-owned, mode `0600`, never committed. |
 | Setup ownership state | `~/.local/state/pi-session-mcp/ownership.json` | Written by `setup` only. Path-free and secret-free. |
 
-Use a dedicated release directory, not a development checkout. A registered
-client launches `dist/main.js` from the registered path each time it starts.
-Rebuilding or switching branches in that directory changes what every client
-starts next, replaces files under server processes that are still running, and
-invalidates the ownership record that `setup` keeps for the registration. One
-directory per release avoids all three; see [Upgrade](#upgrade).
+Never register a development checkout. A registered client launches
+`dist/main.js` from the registered path each time it starts. Rebuilding or
+switching branches in that directory changes what every client starts next,
+replaces files under server processes that are still running, and invalidates
+the ownership record that `setup` keeps for the registration.
+
+The commands in this guide use the `pi-session-mcp-doctor` and
+`pi-session-mcp-setup` executables of an npm installation. In a release
+checkout, use `npm run --silent doctor` and `npm run --silent setup --` with
+the same arguments.
 
 ## Requirements
 
@@ -52,43 +56,59 @@ directory per release avoids all three; see [Upgrade](#upgrade).
 Pi Session MCP embeds the Pi SDK version pinned in `package.json`. It reuses the
 local user's existing Pi authentication and never stores or prints it.
 
-## 1. Get a release
+## 1. Install
+
+### From npm
+
+```bash
+npm install -g pi-session-mcp@<version>
+pi-session-mcp-doctor --json | head -c 200
+```
+
+This installs the built package with its three executables `pi-session-mcp`,
+`pi-session-mcp-setup` and `pi-session-mcp-doctor`. Name an exact version, so
+that an upgrade is a deliberate step. The Doctor call fails with
+`config_missing` until step 2 is done; it only confirms that the executables
+run.
+
+npm resolves the package's transitive dependencies at install time within the
+ranges that the Pi SDK and the MCP SDK declare, because npm does not ship a
+lockfile inside a package. Direct dependencies are pinned exactly. If you need
+the exact dependency tree that the maintainers tested, install from a release
+tag instead.
+
+### From a release tag
 
 Pick a tag from the
-[releases page](https://github.com/plagor44-ux/pi-session-mcp/releases) and clone
-exactly that tag into the release directory:
+[releases page](https://github.com/plagor44-ux/pi-session-mcp/releases), clone
+exactly that tag into a directory of its own, and build it:
 
 ```bash
 INSTALL_DIR="$HOME/.local/share/pi-session-mcp/releases/<tag>"
 git clone --branch <tag> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 git describe --tags --exact-match
-```
-
-The last command prints the tag. Run the remaining commands in this guide from
-the release directory.
-
-## 2. Build
-
-```bash
 npm ci
 npm run build
 npm run build:cli
 ```
 
-`npm ci` installs exactly the locked dependencies. `npm run build` writes the
-server and `setup` to `dist/`. `npm run build:cli` writes the separate offline
-Doctor. Nothing is built implicitly later: `doctor` and `setup` only run what
-these commands produced.
+`git describe` prints the tag. `npm ci` installs exactly the locked dependency
+tree. `npm run build` writes the server and `setup` to `dist/`, and
+`npm run build:cli` writes the separate offline Doctor. Nothing is built
+implicitly later. Run the `npm run` forms of the commands below from this
+directory.
 
-## 3. Configure
+## 2. Configure
 
-Create the configuration file outside the release directory and restrict it to
-your user:
+Create the configuration file outside the package and restrict it to your
+user. The package ships an example; in an npm installation it is
+`$(npm root -g)/pi-session-mcp/pi-session-mcp.example.json`, in a release
+checkout it is in the checkout:
 
 ```bash
 mkdir -p "$HOME/.config/pi-session-mcp"
-cp pi-session-mcp.example.json "$HOME/.config/pi-session-mcp/pi-session-mcp.json"
+cp "$(npm root -g)/pi-session-mcp/pi-session-mcp.example.json" "$HOME/.config/pi-session-mcp/pi-session-mcp.json"
 chmod 600 "$HOME/.config/pi-session-mcp/pi-session-mcp.json"
 export PI_SESSION_MCP_CONFIG="$HOME/.config/pi-session-mcp/pi-session-mcp.json"
 ```
@@ -139,10 +159,10 @@ directory is the client's project, so a file found there must never become the
 policy. Each registration stores the absolute configuration path, so registered
 clients do not depend on your shell environment.
 
-## 4. Check the installation
+## 3. Check the installation
 
 ```bash
-npm run --silent doctor
+pi-session-mcp-doctor
 ```
 
 A healthy installation prints one `OK` line per check and exits with `0`:
@@ -159,12 +179,12 @@ OK workspace_unreadable [my-project]
 
 Each line names a check, not a finding: `OK build_missing` means that the check
 for a missing build passed. Exit status `1` means warnings only, `2` means a
-failed check and `64` means invalid command-line usage. Add `-- --json` for the
+failed check and `64` means invalid command-line usage. Add `--json` for the
 sanitized JSON report. Doctor is offline: it uses no MCP connection, Pi session,
 provider, credential or network access. The checks are listed in the
 [Doctor contract](doctor-design.md).
 
-## 5. Register a client
+## 4. Register a client
 
 `setup` plans by default and changes a client registration only with an
 explicit operation. Each call names one or more targets of the form
@@ -176,15 +196,15 @@ explicit operation. Each call names one or more targets of the form
 | Claude Code | `claude-code:user:pi-session-mcp`, `claude-code:project:pi-session-mcp`, `claude-code:local:pi-session-mcp` |
 
 For Claude Code `project` and `local` scope, run `setup` from the project
-directory by calling the built entry point directly, for example
-`node "$INSTALL_DIR/dist/setup-main.js" --dry-run --target claude-code:project:pi-session-mcp`.
+directory. In a release checkout that means calling the built entry point
+directly: `node "$INSTALL_DIR/dist/setup-main.js" --dry-run --target claude-code:project:pi-session-mcp`.
 
 Plan, apply and verify:
 
 ```bash
-npm run --silent setup -- --dry-run --target claude-code:user:pi-session-mcp
-npm run --silent setup -- --apply --target claude-code:user:pi-session-mcp
-npm run --silent setup -- --verify --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --dry-run --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
 Each report has one line for the operation with its overall status, and one line
@@ -218,7 +238,7 @@ If a registration already exists, `setup` never replaces it:
 Start a new client session after registering. The client launches the server on
 demand; there is nothing to start by hand.
 
-## 6. Run a first session
+## 5. Run a first session
 
 From the client, call the tools in this order:
 
@@ -248,10 +268,30 @@ needs no new registration; moving it does.
 
 ## Upgrade
 
-Install the new release next to the old one, move the registrations, and remove
-the old directory when no client session uses it any more. `setup` binds each
-owned registration to the package manifests and to every built runtime file, so
-the old release must remove its registration before the new one applies:
+`setup` binds each owned registration to the package manifests and to every
+built runtime file, so the old version must remove its registration before the
+new one applies. Read the [changelog](../CHANGELOG.md) before upgrading; it
+records changes that affect operators, such as renamed provider keys.
+
+### npm installation
+
+An npm upgrade replaces the package in place. Close the client sessions that
+use the server first, because a server process that is still running would
+load modules of the new version lazily.
+
+```bash
+export PI_SESSION_MCP_CONFIG="$HOME/.config/pi-session-mcp/pi-session-mcp.json"
+pi-session-mcp-setup --remove --target claude-code:user:pi-session-mcp
+npm install -g pi-session-mcp@<new-version>
+pi-session-mcp-doctor
+pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
+```
+
+### Release checkout
+
+Install the new release next to the old one, move the registrations, and
+remove the old directory when no client session uses it any more:
 
 ```bash
 export PI_SESSION_MCP_CONFIG="$HOME/.config/pi-session-mcp/pi-session-mcp.json"
@@ -268,35 +308,36 @@ git clone --branch <new-tag> --depth 1 https://github.com/plagor44-ux/pi-session
 
 Repeat the `setup` lines for every registered target, then start new client
 sessions. Client sessions that are already open keep running the old release
-until they end. Read the [changelog](../CHANGELOG.md) before upgrading; it
-records changes that affect operators, such as renamed provider keys.
+until they end.
 
-Do not rebuild a release directory in place. If the build was replaced while a
-registration was owned, `--dry-run`, `--apply` and `--verify` report
+### If the build changed first
+
+Do not rebuild a release directory in place. If the package was replaced while
+a registration was owned, `--dry-run`, `--apply` and `--verify` report
 `release_binding_mismatch`, and `--remove` and `--rollback` report
 `ownership_diverged`. Two ways out:
 
-- Restore the previous build bytes (check out the previous tag and build it
-  again), then run `--remove`.
+- Restore the previous version, then run `--remove`.
 - Remove the registration with the client's own command, then run `--remove`
   once. It reports `removed` and clears the ownership record. Afterwards
-  `--apply` and `--verify` work with the new build.
+  `--apply` and `--verify` work with the new version.
 
 A registration that was added manually is not bound to the build. Point it at
-the new release directory with the client's own commands.
+the new version with the client's own commands.
 
 ## Remove
 
 ```bash
-cd "$INSTALL_DIR"
 export PI_SESSION_MCP_CONFIG="$HOME/.config/pi-session-mcp/pi-session-mcp.json"
-npm run --silent setup -- --remove --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --remove --target claude-code:user:pi-session-mcp
+npm uninstall -g pi-session-mcp
 ```
 
 `--remove` deletes only a registration that `setup` owns. `--rollback` runs the
 same owned removal and reports `rolled_back`; use it to undo an apply. After
-every target reports `removed`, delete the release directory, the configuration
-file and `~/.local/state/pi-session-mcp/`.
+every target reports `removed`, uninstall the package or delete the release
+directory, and delete the configuration file and
+`~/.local/state/pi-session-mcp/`.
 
 ## When something fails
 

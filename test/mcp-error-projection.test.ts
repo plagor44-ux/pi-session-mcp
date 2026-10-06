@@ -5,13 +5,14 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { createAgentSession, type AgentSessionEvent, type ModelRuntime, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, it } from "vitest";
+import { readFixtureLog } from "./fixture-log.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 import type { McpServers } from "../src/mcp-config.js";
 import { connectSessionMcpTools } from "../src/mcp-session-tools.js";
@@ -46,11 +47,7 @@ interface Message extends DeclaringMessage {
 interface Context { messages?: Message[] }
 
 async function records(logPath: string): Promise<Recorded[]> {
-  const data = await readFile(logPath, "utf8").catch((error: unknown) => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "";
-    throw error;
-  });
-  return data.split("\n").filter(Boolean).map((line) => JSON.parse(line) as Recorded);
+  return readFixtureLog<Recorded>(logPath);
 }
 
 async function recordWithin(logPath: string, event: string, milliseconds = 10_000): Promise<Recorded> {

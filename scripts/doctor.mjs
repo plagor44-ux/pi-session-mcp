@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const DOCTOR_ENTRY = new URL("../.pi-session-mcp-cli/doctor-cli.js", import.meta.url);
 
@@ -60,6 +61,12 @@ export async function runDoctorBootstrap(argv, dependencies = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// npm installs bin entries as symlinks, so compare real paths.
+function isEntryPoint(argv1) {
+  if (!argv1) return false;
+  try { return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(argv1); } catch { return false; }
+}
+
+if (isEntryPoint(process.argv[1])) {
   process.exitCode = await runDoctorBootstrap(process.argv.slice(2));
 }

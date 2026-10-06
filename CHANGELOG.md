@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.6.1 — 2026-10-07
+
+- The stdio fixture tests no longer fail when they read a log line that the
+  fixture is still writing: only newline-terminated lines are parsed. Test-only
+  change.
+- Published as the npm package `pi-session-mcp` with the executables
+  `pi-session-mcp`, `pi-session-mcp-setup` and `pi-session-mcp-doctor`. The
+  package contains the built files, the documentation and the example
+  configuration, but no lockfile, because npm does not ship lockfiles inside
+  packages. Doctor and `setup` therefore accept an installation without a
+  lockfile, and the entry points start through npm's `bin` symlinks. Public
+  tools, fields, states and error codes are unchanged.
+
 ## 0.6.0 — 2026-10-06
 
 - First public release, version `0.6.0`. Earlier 0.x versions were developed

@@ -25,12 +25,13 @@
  *   `test/mcp-stdio-e2e.test.ts`
  */
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as waitFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "vitest";
+import { readFixtureLog } from "./fixture-log.js";
 import {
   createAgentSession,
   type AgentSession,
@@ -99,8 +100,7 @@ async function temporaryDirectory(prefix: string): Promise<string> {
 }
 
 async function records(logPath: string): Promise<Recorded[]> {
-  const text = await readFile(logPath, "utf8").catch(() => "");
-  return text.split("\n").filter((line) => line.length > 0).map((line) => JSON.parse(line) as Recorded);
+  return readFixtureLog<Recorded>(logPath);
 }
 
 async function toolCalls(logPath: string): Promise<Recorded[]> {

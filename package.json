@@ -1,6 +1,6 @@
 {
   "name": "pi-session-mcp",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Local stdio MCP server for controlled Pi coding-agent sessions",
   "license": "MIT",
   "keywords": [
@@ -18,8 +18,25 @@
   "bugs": {
     "url": "https://github.com/plagor44-ux/pi-session-mcp/issues"
   },
-  "private": true,
   "type": "module",
+  "bin": {
+    "pi-session-mcp": "dist/main.js",
+    "pi-session-mcp-setup": "dist/setup-main.js",
+    "pi-session-mcp-doctor": "scripts/doctor.mjs"
+  },
+  "files": [
+    "dist/",
+    ".pi-session-mcp-cli/",
+    "scripts/doctor.mjs",
+    "pi-session-mcp.example.json",
+    "docs/",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=22.19.0"
   },
@@ -31,7 +48,8 @@
     "doctor": "node scripts/doctor.mjs",
     "setup": "node dist/setup-main.js",
     "start": "node dist/main.js",
-    "inspect": "mcp-inspector node dist/main.js"
+    "inspect": "mcp-inspector node dist/main.js",
+    "prepack": "npm run build && npm run build:cli"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.0.4",

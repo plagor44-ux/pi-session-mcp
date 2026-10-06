@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError, type ConfigurationMetadata } from "../src/config.js";
 import { parseDoctorArgs, renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorFileSystem } from "../src/doctor.js";
 
@@ -34,7 +37,23 @@ const healthyConfig = async () => ({
   configuration: TEST_CONFIGURATION,
 });
 
+afterAll(removeTemporaryRoots);
+
 describe("offline doctor", () => {
+  it("accepts an npm installation that has no lockfile and no sources", async () => {
+    // An npm installation has package.json and the built files, but no lockfile, no src/ and no tsconfig.
+    const root = await temporaryRoot("pi-session-mcp-installed-");
+    await writeFile(join(root, "package.json"), JSON.stringify({ version: "1.2.3", engines: { node: ">=22.19.0" } }));
+    await mkdir(join(root, "dist"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await writeFile(join(root, "dist", "main.js"), "export {};\n");
+    const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]) }) });
+    expect(result.checks.map((check) => check.id)).not.toContain("package_metadata_unreadable");
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "build_stale", severity: "ok" }));
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "version_mismatch", severity: "ok" }));
+    expect(result.ok).toBe(true);
+  });
+
   it("returns a deterministic sanitized healthy model and equivalent projections", async () => {
     const result = await runDoctor({ packageRoot: "/hidden/root", fileSystem: fsFor({ files: ["/hidden/root/dist/main.js"], dirs: ["/hidden/workspace"] }), loadConfig: healthyConfig });
     expect(result.exitCode).toBe(0);

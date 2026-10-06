@@ -7,7 +7,7 @@ import { createClaudeCodeAdapter, createCodexAdapter } from "./client-adapters/i
 import { runDoctor } from "./doctor.js";
 import { createMcpStdioLauncher } from "./setup-process.js";
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
-import { PACKAGE_VERSION, readPackageMetadata } from "./package-metadata.js";
+import { PACKAGE_VERSION, readLockfile, readPackageMetadata } from "./package-metadata.js";
 import { DurableOwnershipStore, MemoryOwnershipStore, type OwnershipAccess, type OwnershipStore, type OwnershipRecord } from "./setup-ownership.js";
 import { result, type SetupFinding, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
 
@@ -162,7 +162,7 @@ export function registrationFingerprint(intent: RegistrationIntent, releaseBindi
 /** Bind setup ownership to the exact package manifests and built runtime tree. */
 export async function immutableReleaseBinding(packageRoot: string): Promise<string> {
   const metadata = await readPackageMetadata(packageRoot, readFile);
-  if (metadata.version !== PACKAGE_VERSION || metadata.lockVersion !== PACKAGE_VERSION) throw new Error("release_version_mismatch");
+  if (metadata.version !== PACKAGE_VERSION || (metadata.lockVersion !== undefined && metadata.lockVersion !== PACKAGE_VERSION)) throw new Error("release_version_mismatch");
   const runtimeRoot = join(packageRoot, "dist");
   const runtimeFiles = await listRuntimeFiles(runtimeRoot);
   for (const required of ["main.js", "setup-command-guardian.js"] as const) {
@@ -171,9 +171,10 @@ export async function immutableReleaseBinding(packageRoot: string): Promise<stri
     if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("release_entry_invalid");
   }
   const hash = createHash("sha256");
-  for (const manifest of ["package.json", "package-lock.json"] as const) {
-    hash.update(manifest).update("\0").update(await readFile(join(packageRoot, manifest))).update("\0");
-  }
+  hash.update("package.json").update("\0").update(await readFile(join(packageRoot, "package.json"))).update("\0");
+  // A Git checkout binds its lockfile too; an npm installation has none to bind.
+  const lock = await readLockfile(packageRoot, readFile);
+  if (lock !== undefined) hash.update("package-lock.json").update("\0").update(lock).update("\0");
   for (const relativePath of runtimeFiles) {
     hash.update(relativePath).update("\0").update(await readFile(join(runtimeRoot, ...relativePath.split("/")))).update("\0");
   }
