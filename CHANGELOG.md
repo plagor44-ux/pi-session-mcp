@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.1 — 2026-10-07
+
 - Published as the npm package `pi-session-mcp` with the executables
   `pi-session-mcp`, `pi-session-mcp-setup` and `pi-session-mcp-doctor`. The
   package contains the built files, the documentation and the example

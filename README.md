@@ -29,7 +29,7 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.6.0**.
+The package version is **0.6.1**.
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux only**, Node.js 22.19.0 or newer.
