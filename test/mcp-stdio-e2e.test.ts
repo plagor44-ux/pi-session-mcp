@@ -8,12 +8,13 @@
  * execution remain the production paths.
  */
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as waitFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, it } from "vitest";
+import { readFixtureLog } from "./fixture-log.js";
 import type { ModelRuntime, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 import { createStdioMcpConnection } from "../src/mcp-stdio-client.js";
@@ -79,8 +80,7 @@ async function scratchFixture(
 }
 
 async function records(logPath: string): Promise<Recorded[]> {
-  const text = await readFile(logPath, "utf8").catch(() => "");
-  return text.split("\n").filter((line) => line.length > 0).map((line) => JSON.parse(line) as Recorded);
+  return readFixtureLog<Recorded>(logPath);
 }
 
 /**
