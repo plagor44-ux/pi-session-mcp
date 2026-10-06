@@ -171,14 +171,26 @@ package contains exactly the tagged sources:
 git clone --branch v<x.y.z> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git /tmp/pi-session-mcp-release
 cd /tmp/pi-session-mcp-release
 npm ci
-npm pack --dry-run        # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/
-npm publish --otp=<code>  # the prepack script builds the server, setup and Doctor
-npm view pi-session-mcp@<x.y.z> version dist.tarball
+npm publish --dry-run     # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/
+npm stage publish         # the prepack script builds the server, setup and Doctor
 ```
 
-Publishing needs the npm account of the maintainer with two-factor
-authentication; `--otp` takes the current one-time code. Finally create the
-GitHub release:
+`npm stage publish` (npm 11.15 or later) places the version in the registry's
+staging area without a second factor. The maintainer then approves it with the
+account's second factor, on npmjs.com under the package's **Staged Packages**
+tab or with `npm stage approve <stage-id>`. Staging a package that does not
+exist yet also creates the public placeholder version `0.0.0-stage`. A direct
+`npm publish` works as well when the second factor can be entered in the
+terminal.
+
+After the approval, confirm that the registry serves the staged bytes:
+
+```bash
+npm view pi-session-mcp@<x.y.z> version dist.shasum
+```
+
+The shasum must equal the one that `npm stage publish` printed. Finally create
+the GitHub release:
 
 ```bash
 gh release create v<x.y.z> --title "pi-session-mcp v<x.y.z>" --notes-file <notes-file>
