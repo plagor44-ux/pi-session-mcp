@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0 — 2026-10-06
+
 - First public release, version `0.6.0`. Earlier 0.x versions were developed
   privately; their history is not part of this repository.
 - Eight MCP tools over stdio for controlled Pi coding-agent sessions:
