@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isEntryPoint } from "./entry-point.js";
 import { createProcessRunner } from "./setup-process.js";
 import { createProductionSetup, isSupportedTarget } from "./setup.js";
 import { formatSetupHuman, formatSetupResult, parseSetupArgs, type SetupCliRequest } from "./setup-cli.js";
@@ -46,4 +47,4 @@ function cliFailure(operation: SetupOperation, targets: readonly SetupTarget[], 
   return result(operation, reported.map((target) => ({ target, status: "failed", code })), "failed", exitCode);
 }
 function write(value: SetupResult, json: boolean): number { process.stdout.write((json ? formatSetupResult(value) : formatSetupHuman(value)) + "\n"); return value.exitCode; }
-if (import.meta.url === `file://${process.argv[1]}`) void main().then((code) => { process.exitCode = code; });
+if (isEntryPoint(import.meta.url, process.argv[1])) void main().then((code) => { process.exitCode = code; });

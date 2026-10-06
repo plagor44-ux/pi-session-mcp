@@ -18,8 +18,10 @@ does not authorize any of them.
 The public contract is the set of eight tools with their fields, states and
 error codes, as defined in the [tool contracts](tool-contracts.md).
 
-`package.json` is marked `private`. A GitHub release and its source archive are
-the distribution; nothing is published to npm.
+A release is distributed twice: as the GitHub release with its source archive,
+and as the npm package `pi-session-mcp`. The npm package contains the built
+files, the executables, the documentation and the example configuration, but
+no lockfile, because npm does not ship lockfiles inside packages.
 
 ## Update the Pi SDK
 
@@ -160,6 +162,25 @@ git switch main
 git pull --ff-only
 git tag -a v<x.y.z> -m "pi-session-mcp v<x.y.z>"
 git push origin v<x.y.z>
+```
+
+Then publish the npm package from a fresh clone of the tag, so that the
+package contains exactly the tagged sources:
+
+```bash
+git clone --branch v<x.y.z> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git /tmp/pi-session-mcp-release
+cd /tmp/pi-session-mcp-release
+npm ci
+npm pack --dry-run        # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/
+npm publish --otp=<code>  # the prepack script builds the server, setup and Doctor
+npm view pi-session-mcp@<x.y.z> version dist.tarball
+```
+
+Publishing needs the npm account of the maintainer with two-factor
+authentication; `--otp` takes the current one-time code. Finally create the
+GitHub release:
+
+```bash
 gh release create v<x.y.z> --title "pi-session-mcp v<x.y.z>" --notes-file <notes-file>
 ```
 
@@ -167,7 +188,8 @@ The release notes have three sections:
 
 - **Highlights**: the changes that matter to operators.
 - **Verification**: the release source commit, the annotated tag object, the CI
-  runs on the merge commit and on the tag, and the local Level 1 results.
+  runs on the merge commit and on the tag, the local Level 1 results, and the
+  npm package version and tarball digest.
 - **Boundary**: what was not done or not verified, for example that no new live
   acceptance was performed.
 
@@ -175,7 +197,8 @@ After publishing:
 
 1. Run the published-release
    [Level 2 acceptance](acceptance.md#working-tree-and-published-release-variants)
-   from a fresh clone of the tag and record it.
+   from a fresh clone of the tag and from the published npm package, and
+   record it.
 2. Upgrade the installation as described in
    [Installation](installation.md#upgrade).
 3. Update the status section in [Acceptance](acceptance.md).

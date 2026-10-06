@@ -112,6 +112,11 @@ env -i HOME="$DISPOSABLE_HOME" PATH="$PATH" PI_SESSION_MCP_CONFIG="$ACCEPTANCE_C
 A working-tree run accepts a change, for example a newly supported client
 version. It proves nothing about published bytes.
 
+A published-package run installs the published npm package into a temporary
+prefix (`npm install -g --prefix <dir> pi-session-mcp@<version>`) and runs the
+lifecycle through the installed `pi-session-mcp-setup`, which also proves the
+executables and the entry-point detection through npm's symlinks.
+
 A published-release run uses a fresh clone of the published tag instead of an
 existing branch or local tag. It additionally records the tag object and the
 peeled commit, confirms `git describe --tags --exact-match`, passes Level 1 on

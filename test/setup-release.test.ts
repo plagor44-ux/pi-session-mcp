@@ -31,6 +31,15 @@ describe("immutable setup release binding", () => {
     expect(await immutableReleaseBinding(root)).not.toBe(before);
   });
 
+  it("binds an npm installation that has no lockfile", async () => {
+    const root = await releaseFixture();
+    await rm(join(root, "package-lock.json"));
+    const binding = await immutableReleaseBinding(root);
+    expect(binding).toMatch(/^[0-9a-f]{64}$/);
+    await writeFile(join(root, "dist", "nested", "runtime.js"), "export const runtime = 2;\n");
+    expect(await immutableReleaseBinding(root)).not.toBe(binding);
+  });
+
   it("fails closed when package and lock versions differ", async () => {
     const root = await releaseFixture();
     await writeFile(join(root, "package-lock.json"), JSON.stringify({ packages: { "": { version: "0.2.0" } } }));

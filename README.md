@@ -63,29 +63,24 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 ## Quick start
 
 ```bash
-INSTALL_DIR="$HOME/.local/share/pi-session-mcp/releases/<tag>"
-git clone --branch <tag> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git "$INSTALL_DIR"
-cd "$INSTALL_DIR"
-npm ci
-npm run build
-npm run build:cli
+npm install -g pi-session-mcp@<version>
 
 mkdir -p "$HOME/.config/pi-session-mcp"
-cp pi-session-mcp.example.json "$HOME/.config/pi-session-mcp/pi-session-mcp.json"   # then edit it
+cp "$(npm root -g)/pi-session-mcp/pi-session-mcp.example.json" "$HOME/.config/pi-session-mcp/pi-session-mcp.json"   # then edit it
 chmod 600 "$HOME/.config/pi-session-mcp/pi-session-mcp.json"
 export PI_SESSION_MCP_CONFIG="$HOME/.config/pi-session-mcp/pi-session-mcp.json"
 
-npm run --silent doctor
-npm run --silent setup -- --dry-run --target claude-code:user:pi-session-mcp
-npm run --silent setup -- --apply --target claude-code:user:pi-session-mcp
-npm run --silent setup -- --verify --target claude-code:user:pi-session-mcp
+pi-session-mcp-doctor
+pi-session-mcp-setup --dry-run --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
+pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
 Use `codex:user:pi-session-mcp` for Codex. The example configuration contains placeholders only: replace the workspace, provider and model with real local values, and never add credentials to the file.
 
-`doctor` is an offline health check. `setup` plans by default, changes a client registration only with an explicit operation, and never replaces an existing divergent registration. Neither needs credentials, a provider or a model.
+`pi-session-mcp-doctor` is an offline health check. `pi-session-mcp-setup` plans by default, changes a client registration only with an explicit operation, and never replaces an existing divergent registration. Neither needs credentials, a provider or a model.
 
-The [installation guide](docs/installation.md) covers the configuration rules, existing registrations, configuration changes, upgrades and removal.
+The [installation guide](docs/installation.md) also covers installing from a release tag with the exact locked dependency tree, the configuration rules, existing registrations, configuration changes, upgrades and removal.
 
 ## Configuration
 
@@ -114,7 +109,8 @@ The [installation guide](docs/installation.md) covers the configuration rules, e
 ## Run it by hand
 
 ```bash
-npm start
+pi-session-mcp          # npm installation
+npm start               # release checkout
 ```
 
 This starts the server on stdin and stdout. `PI_SESSION_MCP_CONFIG` must name the configuration file; the server never looks for one in its working directory. Do not type ordinary text into the process and do not redirect diagnostics to stdout: stdout carries MCP frames only.
