@@ -52,7 +52,7 @@
     "prepack": "npm run build && npm run build:cli"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "1.0.4",
+    "@earendil-works/pi-coding-agent": "1.1.0",
     "@modelcontextprotocol/client": "2.2.0",
     "@modelcontextprotocol/server": "2.2.0",
     "zod": "4.5.4"

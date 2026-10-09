@@ -36,7 +36,7 @@ The package version is **0.6.1**.
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
 - **Out of scope by design:** HTTP, a web UI, persistence, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process.
 - **Not a sandbox.** A `coding` profile restricts the Pi tools that a session may use. It does not isolate the process from the operating system.
-- **Acceptance.** Every release passes the provider-free checks. The live two-client acceptance has not yet been repeated on a build with Pi SDK `1.0.x`; see [Acceptance](docs/acceptance.md).
+- **Acceptance.** Every release passes the provider-free checks. The live two-client acceptance has not yet been repeated on a build with Pi SDK `1.x`; see [Acceptance](docs/acceptance.md).
 
 ## How it works
 

@@ -8,6 +8,10 @@
   15,000 ms shutdown and exits with status `0`; the first of EOF and a signal
   sets the exit status. Public tools, fields, states and error codes are
   unchanged.
+- Built on Pi SDK `1.1.0` (was `1.0.4`). Pi now retries `server_busy` provider
+  errors instead of ending the turn. The new `aborted` flag on settled runs is
+  not a closed terminal cause, so failed turns still report `turn_failed`.
+  Public tools, fields, states and error codes are unchanged.
 
 ## 0.6.1 — 2026-10-07
 

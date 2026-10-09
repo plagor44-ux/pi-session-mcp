@@ -224,4 +224,4 @@ not count as a ten-task cycle.
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The
 live two-client acceptance has not yet been repeated on a build with Pi SDK
-`1.0.x`.
+`1.x`.
