@@ -23,6 +23,9 @@
   loses 216 packages and gains 89, and the earlier lockfile patches for
   `proxy-addr`, `shell-quote` and `concurrently` leave the tree with the old
   Inspector.
+- Development: TypeScript `7.0.2` (was `5.9.3`), Vitest `5.0.3` (was
+  `4.1.11`) and `@types/node` `22.20.5` (was `22.19.19`). The emitted
+  JavaScript is byte-identical to the TypeScript 5.9 build.
 
 ## 0.6.1 — 2026-10-07
 
