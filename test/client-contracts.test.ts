@@ -62,12 +62,16 @@ function intentFor(scope: ClientScope, entryPath = paths.entryPath): Registratio
   return { ...paths, scope, entryPath };
 }
 
-describe("recorded Codex CLI 0.159.2 contract", () => {
-  const contract = loadContract("codex-0.159.2");
+// Each recording documents the contract of one Codex CLI version; the neighbor is one never recorded.
+describe.each([
+  { version: "0.159.2", neighbor: "0.160.0" },
+  { version: "0.162.0", neighbor: "0.163.0" },
+])("recorded Codex CLI $version contract", ({ version, neighbor }) => {
+  const contract = loadContract(`codex-${version}`);
 
   it("discovers the version and the user scope", async () => {
     const adapter = createCodexAdapter({ runner: simulatedClient(contract) });
-    expect(await adapter.discover()).toEqual({ client: "codex", version: "0.159.2", supportsJson: true, supportsAdd: true, supportsRemove: true, scopes: ["user"] });
+    expect(await adapter.discover()).toEqual({ client: "codex", version, supportsJson: true, supportsAdd: true, supportsRemove: true, scopes: ["user"] });
   });
 
   it("runs the recorded registration cycle: absent, add, equivalent, remove, absent", async () => {
@@ -88,16 +92,16 @@ describe("recorded Codex CLI 0.159.2 contract", () => {
   });
 
   it("accepts a version that was never recorded when its outputs match the contract", async () => {
-    const adapter = createCodexAdapter({ runner: simulatedClient(contract, { version: "codex-cli 0.160.0\n" }) });
+    const adapter = createCodexAdapter({ runner: simulatedClient(contract, { version: `codex-cli ${neighbor}\n` }) });
     const intent = intentFor("user");
-    expect(await adapter.discover()).toEqual({ client: "codex", version: "0.160.0", supportsJson: true, supportsAdd: true, supportsRemove: true, scopes: ["user"] });
+    expect(await adapter.discover()).toEqual({ client: "codex", version: neighbor, supportsJson: true, supportsAdd: true, supportsRemove: true, scopes: ["user"] });
     expect((await adapter.inspect("user", intent)).state).toBe("absent");
     await adapter.add(intent);
     expect((await adapter.inspect("user", intent)).state).toBe("equivalent");
   });
 
   it("does not depend on a parseable version line", async () => {
-    const adapter = createCodexAdapter({ runner: simulatedClient(contract, { version: "WARNING: helper binaries were not created\ncodex-cli 0.159.2\n" }) });
+    const adapter = createCodexAdapter({ runner: simulatedClient(contract, { version: `WARNING: helper binaries were not created\ncodex-cli ${version}\n` }) });
     expect(await adapter.discover()).toEqual({ client: "codex", version: "unknown", supportsJson: true, supportsAdd: true, supportsRemove: true, scopes: ["user"] });
     expect((await adapter.inspect("user", intentFor("user"))).state).toBe("absent");
   });
@@ -106,6 +110,7 @@ describe("recorded Codex CLI 0.159.2 contract", () => {
 // Each recording documents the contract of one Claude Code version; the neighbor is one never recorded.
 describe.each([
   { version: "2.1.292", neighbor: "2.1.293" },
+  { version: "2.1.295", neighbor: "2.1.296" },
 ])("recorded Claude Code $version contract", ({ version, neighbor }) => {
   const contract = loadContract(`claude-code-${version}`);
   const scopes = ["user", "project", "local"] as const;

@@ -29,14 +29,14 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.6.1**.
+The package version is **0.6.2**.
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux only**, Node.js 22.19.0 or newer.
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
 - **Out of scope by design:** HTTP, a web UI, persistence, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process.
 - **Not a sandbox.** A `coding` profile restricts the Pi tools that a session may use. It does not isolate the process from the operating system.
-- **Acceptance.** Every release passes the provider-free checks. The live two-client acceptance has not yet been repeated on a build with Pi SDK `1.0.x`; see [Acceptance](docs/acceptance.md).
+- **Acceptance.** Every release passes the provider-free checks. The live two-client acceptance has not yet been repeated on a build with Pi SDK `1.x`; see [Acceptance](docs/acceptance.md).
 
 ## How it works
 
@@ -123,6 +123,8 @@ npm run inspect
 ```
 
 Listing tools and testing input validation needs no provider credentials. An accepted prompt needs existing local Pi authentication and an available provider and model.
+
+Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS keychain it also stores secrets there unencrypted; `MCP_INSPECTOR_SECRET_STORE=memory` keeps them in memory only.
 
 ## Security model
 

@@ -1,0 +1,179 @@
+{
+  "description": "Claude Code 2.1.295 outputs captured in a disposable HOME and scratch project on 2026-10-09. Paths are placeholders: <NODE>, <ENTRY>, <CONFIG>, <HOME>, <PROJECT>.",
+  "calls": [
+    {
+      "args": [
+        "--version"
+      ],
+      "exitCode": 0,
+      "stdout": "2.1.295 (Claude Code)\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "--help"
+      ],
+      "exitCode": 0,
+      "stdout": "Usage: claude mcp [options] [command]\n\nConfigure and manage MCP servers\n\nOptions:\n  -h, --help                            Display help for command\n\nCommands:\n  add [options] <name> <commandOrUrl> [args...]  Add an MCP server to Claude Code.\n  \n  Examples:\n    # Add HTTP server:\n    claude mcp add --transport http sentry https://mcp.sentry.dev/mcp\n  \n    # Add HTTP server with headers:\n    claude mcp add --transport http corridor https://app.corridor.dev/api/mcp --header \"Authorization: Bearer ...\"\n  \n    # Add stdio server with environment variables:\n    claude mcp add my-server -e API_KEY=xxx -- npx my-mcp-server\n  \n    # Add stdio server with subprocess flags:\n    claude mcp add my-server -- my-command --some-flag arg1\n  add-from-claude-desktop [options]     Import MCP servers from Claude Desktop\n                                        (Mac and WSL only)\n  add-json [options] <name> <json>      Add an MCP server (stdio, SSE, HTTP, or\n                                        WebSocket) with a JSON string\n  get <name>                            Get details about an MCP server.\n                                        Unapproved .mcp.json servers are shown\n                                        as ⏸ Pending approval and not connected\n                                        to; approved servers are health-checked\n                                        unless disabled for this project.\n  help [command]                        display help for command\n  list                                  List configured MCP servers. Unapproved\n                                        .mcp.json servers are shown as ⏸ Pending\n                                        approval and not connected to; approved\n                                        servers are health-checked unless\n                                        disabled for this project.\n  login [options] <name>                Authenticate with an MCP server (HTTP,\n                                        SSE, or claude.ai connector)\n  logout <name>                         Clear stored OAuth credentials for an\n                                        MCP server\n  remove [options] <name>               Remove an MCP server\n  reset-project-choices                 Reset all approved and rejected\n                                        project-scoped (.mcp.json) servers\n                                        within this project\n  serve [options]                       Start the Claude Code MCP server\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "No MCP server named \"pi-session-mcp\". Run `claude mcp add` to add one.\n"
+    },
+    {
+      "args": [
+        "mcp",
+        "add",
+        "pi-session-mcp",
+        "-s",
+        "user",
+        "-e",
+        "PI_SESSION_MCP_CONFIG=<CONFIG>",
+        "--",
+        "<NODE>",
+        "<ENTRY>"
+      ],
+      "exitCode": 0,
+      "stdout": "Added stdio MCP server pi-session-mcp with command: <NODE> <ENTRY> to user config\nFile modified: <HOME>/.claude.json\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 0,
+      "stdout": "pi-session-mcp:\n  Scope: User config (available in all your projects)\n  Status: ✔ Connected\n  Type: stdio\n  Command: <NODE>\n  Args: <ENTRY>\n  Environment:\n    PI_SESSION_MCP_CONFIG=<CONFIG>\n\nTo remove this server, run: claude mcp remove pi-session-mcp -s user\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "remove",
+        "pi-session-mcp",
+        "-s",
+        "user"
+      ],
+      "exitCode": 0,
+      "stdout": "Removed MCP server pi-session-mcp from user config\nFile modified: <HOME>/.claude.json\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "No MCP server named \"pi-session-mcp\". Run `claude mcp add` to add one.\n"
+    },
+    {
+      "args": [
+        "mcp",
+        "add",
+        "pi-session-mcp",
+        "-s",
+        "project",
+        "-e",
+        "PI_SESSION_MCP_CONFIG=<CONFIG>",
+        "--",
+        "<NODE>",
+        "<ENTRY>"
+      ],
+      "exitCode": 0,
+      "stdout": "Added stdio MCP server pi-session-mcp with command: <NODE> <ENTRY> to project config\nFile modified: <PROJECT>/.mcp.json\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 0,
+      "stdout": "pi-session-mcp:\n  Scope: Project config (shared via .mcp.json)\n  Status: ⏸ Pending approval (run `claude` to approve)\n  Type: stdio\n  Command: <NODE>\n  Args: <ENTRY>\n  Environment:\n    PI_SESSION_MCP_CONFIG=<CONFIG>\n\nTo remove this server, run: claude mcp remove pi-session-mcp -s project\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "remove",
+        "pi-session-mcp",
+        "-s",
+        "project"
+      ],
+      "exitCode": 0,
+      "stdout": "Removed MCP server pi-session-mcp from project config\nFile modified: <PROJECT>/.mcp.json\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "No MCP server named \"pi-session-mcp\". Run `claude mcp add` to add one.\n"
+    },
+    {
+      "args": [
+        "mcp",
+        "add",
+        "pi-session-mcp",
+        "-s",
+        "local",
+        "-e",
+        "PI_SESSION_MCP_CONFIG=<CONFIG>",
+        "--",
+        "<NODE>",
+        "<ENTRY>"
+      ],
+      "exitCode": 0,
+      "stdout": "Added stdio MCP server pi-session-mcp with command: <NODE> <ENTRY> to local config\nFile modified: <HOME>/.claude.json [project: <PROJECT>]\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 0,
+      "stdout": "pi-session-mcp:\n  Scope: Local config (private to you in this project)\n  Status: ✔ Connected\n  Type: stdio\n  Command: <NODE>\n  Args: <ENTRY>\n  Environment:\n    PI_SESSION_MCP_CONFIG=<CONFIG>\n\nTo remove this server, run: claude mcp remove pi-session-mcp -s local\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "remove",
+        "pi-session-mcp",
+        "-s",
+        "local"
+      ],
+      "exitCode": 0,
+      "stdout": "Removed MCP server pi-session-mcp from local config\nFile modified: <HOME>/.claude.json [project: <PROJECT>]\n",
+      "stderr": ""
+    },
+    {
+      "args": [
+        "mcp",
+        "get",
+        "pi-session-mcp"
+      ],
+      "exitCode": 1,
+      "stdout": "",
+      "stderr": "No MCP server named \"pi-session-mcp\". Run `claude mcp add` to add one.\n"
+    }
+  ]
+}

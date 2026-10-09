@@ -118,8 +118,8 @@ Patch transitive advisories in the lockfile only:
    `package-lock.json` changed. Direct pins in `package.json` stay untouched.
 2. If an advisory remains because a parent package pins an affected version
    exactly, resolve the parent at another version inside the range that its own
-   dependent declares. The development-only `concurrently` is resolved this way
-   at `9.2.0`.
+   dependent declares. The development-only `concurrently` was resolved this
+   way at `9.2.0` until MCP Inspector 2.x stopped depending on it.
 3. Run `npm ci`, both audit commands and the Level 1 checks.
 4. Name every patched package, its versions, its advisory and whether it is in
    the production install path in the changelog.
