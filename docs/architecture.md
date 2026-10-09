@@ -4,7 +4,7 @@
 
 - [`@earendil-works/pi-coding-agent` 1.1.0](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) supplies the documented root exports used by this server, including `ModelRuntime` and `createAgentSession`. Since 0.99 the prompt preflight hook reports a dispatch disposition (`started`, `queued`, `handled`) and is not called on rejection; only `started` admits a public turn (`admitsTurn` in `src/sdk-pi-adapter.ts`). Model-visible tools are declared on transcript system messages rather than in the provider context. `test/sdk-contract.test.ts` pins both assumptions provider-free.
 - [`@modelcontextprotocol/server` 2.3.1](https://www.npmjs.com/package/@modelcontextprotocol/server) supplies `McpServer`, structured tool output, and the stdio entry point.
-- [Zod 4.5.4](https://zod.dev/) validates strict configuration, tool input, and structured output.
+- [Zod 4.6.5](https://zod.dev/) validates strict configuration, tool input, and structured output.
 
 All are exact direct pins. No API is taken from an unexported package path. A nightly canary checks the unchanged sources against the newest published Pi SDK without changing the pin (see the README section "Checks").
 

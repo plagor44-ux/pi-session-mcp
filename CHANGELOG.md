@@ -15,6 +15,8 @@
 - Built on the MCP TypeScript SDK `2.3.1` (was `2.2.0`). Its packages are now
   licensed under Apache-2.0 instead of MIT. The stdio entry point already
   builds one server per connection, which the SDK now requires.
+- Validates with Zod `4.6.5` (was `4.5.4`), which fixes an out-of-memory
+  regression of Zod 4.5 in recursive schemas.
 
 ## 0.6.1 — 2026-10-07
 
