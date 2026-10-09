@@ -124,6 +124,8 @@ npm run inspect
 
 Listing tools and testing input validation needs no provider credentials. An accepted prompt needs existing local Pi authentication and an available provider and model.
 
+Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS keychain it also stores secrets there unencrypted; `MCP_INSPECTOR_SECRET_STORE=memory` keeps them in memory only.
+
 ## Security model
 
 - **Local and single-peer.** No network listener, no daemon between client sessions, no persisted session state.

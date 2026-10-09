@@ -17,6 +17,12 @@
   builds one server per connection, which the SDK now requires.
 - Validates with Zod `4.6.5` (was `4.5.4`), which fixes an out-of-memory
   regression of Zod 4.5 in recursive schemas.
+- Development: MCP Inspector `2.10.1` (was the deprecated `0.19.0`). `npm run
+  inspect` works as before. Inspector 2.x keeps its catalog in
+  `~/.mcp-inspector/`; see the README for its secret storage. The lockfile
+  loses 216 packages and gains 89, and the earlier lockfile patches for
+  `proxy-addr`, `shell-quote` and `concurrently` leave the tree with the old
+  Inspector.
 
 ## 0.6.1 — 2026-10-07
 
