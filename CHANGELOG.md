@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.2 — 2026-10-09
+
 - The server now shuts down when the MCP client closes its stdin. Previously
   only `SIGINT` and `SIGTERM` ran the bounded shutdown, so after stdin EOF an
   idle Pi session and its external MCP server kept running. EOF uses the same
@@ -26,6 +28,8 @@
 - Development: TypeScript `7.0.2` (was `5.9.3`), Vitest `5.0.3` (was
   `4.1.11`) and `@types/node` `22.20.5` (was `22.19.19`). The emitted
   JavaScript is byte-identical to the TypeScript 5.9 build.
+- `setup` was re-recorded against Codex CLI `0.162.0` and Claude Code
+  `2.1.295`; their `mcp` command contracts are unchanged.
 
 ## 0.6.1 — 2026-10-07
 
