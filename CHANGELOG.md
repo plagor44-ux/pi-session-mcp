@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The server now shuts down when the MCP client closes its stdin. Previously
+  only `SIGINT` and `SIGTERM` ran the bounded shutdown, so after stdin EOF an
+  idle Pi session and its external MCP server kept running. EOF uses the same
+  15,000 ms shutdown and exits with status `0`; the first of EOF and a signal
+  sets the exit status. Public tools, fields, states and error codes are
+  unchanged.
+
 ## 0.6.1 — 2026-10-07
 
 - The stdio fixture tests no longer fail when they read a log line that the
