@@ -12,6 +12,9 @@
   errors instead of ending the turn. The new `aborted` flag on settled runs is
   not a closed terminal cause, so failed turns still report `turn_failed`.
   Public tools, fields, states and error codes are unchanged.
+- Built on the MCP TypeScript SDK `2.3.1` (was `2.2.0`). Its packages are now
+  licensed under Apache-2.0 instead of MIT. The stdio entry point already
+  builds one server per connection, which the SDK now requires.
 
 ## 0.6.1 — 2026-10-07
 
