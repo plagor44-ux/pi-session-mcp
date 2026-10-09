@@ -55,6 +55,12 @@ async function main(): Promise<void> {
   };
   process.once("SIGINT", () => { void shutdown(130); });
   process.once("SIGTERM", () => { void shutdown(143); });
+  // On stdin EOF the SDK closes only its transport and server instance; sessions and
+  // their MCP children need the same bounded shutdown as a signal. The first trigger wins.
+  const endOfInput = (): void => { void shutdown(0); };
+  process.stdin.once("end", endOfInput);
+  process.stdin.once("close", endOfInput);
+  if (process.stdin.readableEnded || process.stdin.destroyed) endOfInput();
 }
 
 await main();

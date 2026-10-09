@@ -243,6 +243,9 @@ npm test
 `test/mcp-session-tools.test.ts` covers policy, discovery, mapping, result/error
 handling, cancellation, deadlines, shutdown and per-session ownership.
 `test/mcp-registry-cleanup.test.ts` covers asynchronous disposal and shutdown races.
+`test/process-stdin-eof.test.ts` starts the freshly compiled server entry point with
+a placeholder loopback provider and checks that stdin EOF, alone or racing `SIGTERM`,
+closes idle, running and still-starting sessions and their MCP children.
 `test/mcp-sdk-integration.test.ts` covers config/capabilities and adapter wiring with
 a fake model runtime and fake MCP connection. It is not a live protocol test.
 `test/mcp-error-projection.test.ts` exercises the pinned Pi SDK and a real local
