@@ -247,3 +247,25 @@ also passed a narrower live check:
 - All five tasks of the matrix reached their intended outcome in three
   sequential invocations, and every pre-registered check passed.
 - It covered no Codex task and does not count as a ten-task cycle.
+
+After its release, `v0.6.3` passed Level 1 on a fresh clone of its tag. It also
+passed Level 2 as published release and as published npm package, with Codex
+CLI `0.162.0` and Claude Code `2.1.296`, on 2026-10-10.
+
+On 2026-10-10, `main` at `4d333da`, which is `v0.6.3` plus the Doctor fix and
+documentation, passed a narrower live check with Codex:
+- Scope: Codex CLI `0.162.0` as the only client, run headless with
+  `codex exec` and the three tool approvals that
+  [client setup](client-setup.md#run-codex-without-prompts) describes. Pi SDK
+  `1.1.0` ran on the same local model.
+- All five tasks of the matrix reached their intended outcome in three
+  sequential invocations, and every pre-registered check passed.
+- The client could wait between polls and needed 1 to 3 `pi_turn_get` calls per
+  turn.
+- It covered no Claude Code task and does not count as a ten-task cycle. The
+  Claude Code check above ran on another commit.
+
+Before its release, `v0.6.4` passed Level 1 and the working-tree Level 2 on its
+release candidate, with Codex CLI `0.162.0` and Claude Code `2.1.296`. Its
+server entry point `dist/main.js` is byte-identical to that of `4d333da` and of
+`v0.6.3`.
