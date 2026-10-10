@@ -115,7 +115,13 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       const packageMtime = (await fs.stat(join(root, "package.json"))).mtimeMs;
       const lockMtime = await lockfileMtime(fs, root);
       const inputMtimes = [packageMtime, lockMtime].filter((value): value is number => value !== undefined);
-      if (!dependencies.fileSystem) inputMtimes.push(...await productionBuildInputMtimes(root));
+      if (!dependencies.fileSystem) {
+        const buildInputMtimes = await productionBuildInputMtimes(root);
+        // npm writes an installed package at extraction time in archive order, so without
+        // build inputs the manifest times say nothing about the freshness of the build.
+        if (buildInputMtimes.length === 0) inputMtimes.length = 0;
+        else inputMtimes.push(...buildInputMtimes);
+      }
       if (inputMtimes.some((mtime) => mtime > buildMtime)) checks.push(warning("build_stale", "build output", "run the production build"));
       else checks.push(ok("build_stale", "build output"));
     } catch { checks.push(warning("build_stale", "build output", "rebuild to establish current build state")); }

@@ -20,7 +20,7 @@ and owners are:
 | `node_version_unsupported` | Runtime does not satisfy `package.json#engines.node` | `Node.js` |
 | `package_metadata_unreadable` | Package metadata is missing, unreadable or malformed, or a lockfile is present but malformed | `package metadata` |
 | `build_missing` | `dist/main.js` is absent, inaccessible, or not a regular file | `build output` |
-| `build_stale` | Package, lock, build configuration, or production TypeScript input is newer than the build output, or freshness cannot be established. Inputs that an npm installation does not contain are skipped | `build output` |
+| `build_stale` | Package, lock, build configuration, or production TypeScript input is newer than the build output, or freshness cannot be established. Inputs that an npm installation does not contain are skipped. Without any build configuration or TypeScript input, as in an npm installation, the package and lock times are not compared either, because npm writes extracted files with the extraction time | `build output` |
 | `version_mismatch` | Package and lock versions differ; this is a warning and does not apply to an npm installation, which has no lockfile | `package version` |
 | `config_missing` | `PI_SESSION_MCP_CONFIG` is not set, or the file it names is absent | `configuration` |
 | `config_unreadable` | The supported configuration path cannot be read | `configuration` |
