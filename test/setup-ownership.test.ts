@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { DurableOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
 import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readTextIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
@@ -118,6 +118,43 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     releaseFirst();
     await first;
     await expect(second).rejects.toThrow("ownership_lock_unavailable");
+  });
+
+  it("rejects a lock inode replaced after the lock file was opened", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-replaced-");
+    const path = join(directory, "ownership.json");
+    const store = new DurableOwnershipStore(path, { afterLockOpen: async () => { await unlink(`${path}.flock`); await writeFile(`${path}.flock`, "", { mode: 0o600 }); } });
+    await expect(store.transaction(async () => undefined)).rejects.toThrow("ownership_lock_unavailable");
+  });
+
+  it("refuses a symlinked lock file", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-symlink-");
+    const path = join(directory, "ownership.json");
+    await writeFile(join(directory, "elsewhere"), "", { mode: 0o600 });
+    await symlink(join(directory, "elsewhere"), `${path}.flock`);
+    await expect(new DurableOwnershipStore(path).transaction(async () => undefined)).rejects.toThrow("ownership_lock_unavailable");
+  });
+
+  it("stops waiting for a held lock when aborted", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-abort-");
+    const path = join(directory, "ownership.json");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let entered!: () => void;
+    const holding = new Promise<void>((resolve) => { entered = resolve; });
+    const first = new DurableOwnershipStore(path).transaction(async () => { entered(); await gate; });
+    try {
+      await holding;
+      const controller = new AbortController();
+      const started = Date.now();
+      const second = new DurableOwnershipStore(path, { signal: controller.signal, acquireTimeoutMs: 10_000 }).transaction(async () => undefined);
+      setTimeout(() => controller.abort(), 100);
+      await expect(second).rejects.toThrow("operation_aborted");
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      release();
+      await first;
+    }
   });
 
   it("keeps the kernel fence through parent SIGKILL until guardian cleanup", async () => {
@@ -290,4 +327,15 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     }
   }, 20_000);
 
+});
+
+describe("durable setup ownership platform gate", () => {
+  it("fails closed on an unsupported platform before touching the filesystem", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-platform-");
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    try {
+      await expect(new DurableOwnershipStore(join(directory, "state", "ownership.json")).transaction(async () => undefined)).rejects.toThrow("platform_unsupported");
+      expect(existsSync(join(directory, "state"))).toBe(false);
+    } finally { vi.restoreAllMocks(); }
+  });
 });

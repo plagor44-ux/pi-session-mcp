@@ -1,9 +1,10 @@
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, readFile, rename, rm, stat, statfs } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import { acquireSetupGuardian } from "./setup-process.js";
+import { assertSupportedFilesystem, currentSetupPlatform, openLockedDarwin, type SetupPlatform } from "./setup-platform.js";
 import type { SetupTarget } from "./setup-result.js";
 
 export interface OwnershipRecord {
@@ -60,9 +61,10 @@ export class DurableOwnershipStore implements OwnershipStore {
     return this.withLock(operation);
   }
   private async withLock<T>(operation: (access: OwnershipAccess) => Promise<T>): Promise<T> {
-    if (process.platform !== "linux") throw new Error("platform_unsupported");
+    const platform = currentSetupPlatform();
+    if (!platform) throw new Error("platform_unsupported");
     const directory = dirname(this.path);
-    await ensureOwnershipDirectory(directory);
+    await ensureOwnershipDirectory(directory, platform);
     const controller = new AbortController();
     const abort = (): void => controller.abort();
     this.options.signal?.addEventListener("abort", abort, { once: true });
@@ -71,9 +73,14 @@ export class DurableOwnershipStore implements OwnershipStore {
       if (controller.signal.aborted) throw new Error("operation_aborted");
     };
     const lockPath = `${this.path}.flock`;
+    const acquireTimeoutMs = this.options.acquireTimeoutMs ?? 30_000;
     let lockHandle;
     try {
-      lockHandle = await open(lockPath, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
+      // macOS takes the kernel lock at open time; on Linux the trusted flock
+      // locks this same open file description in acquireSetupGuardian.
+      lockHandle = platform === "darwin"
+        ? await openLockedDarwin(lockPath, { timeoutMs: acquireTimeoutMs, signal: controller.signal })
+        : await open(lockPath, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
       await lockHandle.chmod(0o600);
       await lockHandle.sync();
       await syncDirectory(directory);
@@ -81,13 +88,18 @@ export class DurableOwnershipStore implements OwnershipStore {
       if (!descriptor.isFile() || !linked.isFile() || descriptor.dev !== linked.dev || descriptor.ino !== linked.ino) throw new Error("ownership_lock_invalid");
       await this.options.afterLockOpen?.();
     }
-    catch { this.options.signal?.removeEventListener("abort", abort); await lockHandle?.close().catch(() => undefined); throw new Error("ownership_lock_unavailable"); }
+    catch (error) {
+      this.options.signal?.removeEventListener("abort", abort);
+      await lockHandle?.close().catch(() => undefined);
+      const code = (error as Error).message;
+      throw new Error(["ownership_lock_busy", "operation_aborted"].includes(code) ? code : "ownership_lock_unavailable");
+    }
     const validateLock = async (): Promise<void> => {
       const [descriptor, linked] = await Promise.all([lockHandle.stat(), stat(lockPath)]);
       if (!descriptor.isFile() || !linked.isFile() || descriptor.dev !== linked.dev || descriptor.ino !== linked.ino) throw new Error("ownership_lock_invalid");
     };
     let guardian;
-    try { guardian = await acquireSetupGuardian(lockHandle.fd, this.options.acquireTimeoutMs ?? 30_000, controller.signal, validateLock); }
+    try { guardian = await acquireSetupGuardian(lockHandle.fd, acquireTimeoutMs, controller.signal, validateLock); }
     catch (error) {
       this.options.signal?.removeEventListener("abort", abort);
       await lockHandle.close().catch(() => undefined);
@@ -125,21 +137,7 @@ export class DurableOwnershipStore implements OwnershipStore {
   private async write(entries: readonly OwnershipRecord[], assertHealthy: () => void): Promise<void> { const directory = dirname(this.path); const temporary = `${this.path}.tmp-${process.pid}-${randomUUID()}`; let renamed = false; try { const handle = await open(temporary, "wx", 0o600); try { await handle.writeFile(JSON.stringify(entries)); await handle.sync(); } finally { await handle.close(); } await this.options.beforeRename?.(); assertHealthy(); await rename(temporary, this.path); renamed = true; await syncDirectory(directory); } finally { if (!renamed) await rm(temporary, { force: true }).catch(() => undefined); } }
 }
 
-// Kernel flock and directory fsync semantics are accepted only on the local
-// Linux filesystems covered by the setup test matrix.
-const SUPPORTED_LOCAL_FILESYSTEMS = new Set([
-  0xef53, // ext2/3/4
-  0x58465342, // XFS
-  0x9123683e, // Btrfs
-  0x01021994, // tmpfs
-  0x794c7630, // overlayfs
-  0x2fc12fc1, // ZFS
-  0xf2f52010, // F2FS
-  0x24051905, // UBIFS
-  0xca451a4e, // bcachefs
-]);
-
-async function ensureOwnershipDirectory(directory: string): Promise<void> {
+async function ensureOwnershipDirectory(directory: string, platform: SetupPlatform): Promise<void> {
   const missing: string[] = [];
   let cursor = directory;
   while (true) {
@@ -155,7 +153,7 @@ async function ensureOwnershipDirectory(directory: string): Promise<void> {
       cursor = parent;
     }
   }
-  await assertSupportedFilesystem(cursor);
+  await assertSupportedFilesystem(cursor, platform);
   for (const candidate of missing.reverse()) {
     try { await mkdir(candidate, { mode: 0o700 }); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new Error("ownership_directory_unavailable"); }
@@ -166,12 +164,7 @@ async function ensureOwnershipDirectory(directory: string): Promise<void> {
     await syncDirectory(dirname(candidate));
   }
   await chmod(directory, 0o700);
-  await assertSupportedFilesystem(directory);
-}
-
-async function assertSupportedFilesystem(path: string): Promise<void> {
-  const filesystem = await statfs(path);
-  if (!SUPPORTED_LOCAL_FILESYSTEMS.has(filesystem.type)) throw new Error("ownership_filesystem_unsupported");
+  await assertSupportedFilesystem(directory, platform);
 }
 
 async function syncDirectory(path: string): Promise<void> {

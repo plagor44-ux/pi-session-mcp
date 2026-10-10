@@ -47,7 +47,7 @@ describe("setup executable", () => {
     expect(output).not.toMatch(/SECRET|RAW_RELEASE|config\.json/);
   });
 
-  it.each(["win32", "darwin"] as const)("fails closed on %s before creating setup or spawning a client", async (platform) => {
+  it.each(["win32", "freebsd"] as const)("fails closed on %s before creating setup or spawning a client", async (platform) => {
     process.env.PI_SESSION_MCP_CONFIG = "/SECRET/config.json";
     const writes: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
@@ -58,6 +58,17 @@ describe("setup executable", () => {
     const output = writes.join("");
     expect(JSON.parse(output)).toMatchObject({ operation: "apply", exitCode: 1, findings: [{ code: "platform_unsupported" }] });
     expect(output).not.toMatch(/SECRET|config\.json/);
+  });
+
+  it("accepts darwin as a setup platform", async () => {
+    process.env.PI_SESSION_MCP_CONFIG = "/SECRET/config.json";
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+    vi.spyOn(process, "platform", "get").mockReturnValue("darwin");
+    const createSetup = vi.fn(async () => ({ run: async () => result("dry-run", []) }) as unknown as SetupOrchestrator);
+    expect(await main(["--json", "--dry-run", "--target", "codex:user:pi-session-mcp"], { createSetup })).toBe(0);
+    expect(createSetup).toHaveBeenCalledOnce();
+    expect(JSON.parse(writes.join(""))).toMatchObject({ operation: "dry-run", exitCode: 0 });
   });
 
   it.skipIf(process.platform !== "linux").each([{ signal: "SIGINT", exitCode: 130 }, { signal: "SIGTERM", exitCode: 143 }] as const)("awaits $signal cleanup and returns only a stable sanitized result", async ({ signal: processSignal, exitCode }) => {
