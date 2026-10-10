@@ -207,6 +207,13 @@ pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
 pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
+`setup` changes a Codex registration only through `codex mcp add` and
+`codex mcp remove`, and Codex rewrites `config.toml` on each of them. Codex CLI
+`0.162.0` groups all `[mcp_servers.*]` tables together and drops a comment
+directly above such a table; settings are preserved. If your `config.toml`
+contains comments worth keeping, copy it before `--apply`, `--rollback` or
+`--remove` on `codex:user:pi-session-mcp`.
+
 Each report has one line for the operation with its overall status, and one line
 per target with a finding in the form `status (code)`:
 

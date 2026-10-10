@@ -8,6 +8,10 @@
   `package_metadata_unreadable` and `build_missing`, and inside another
   checkout it reported that checkout. `npm run doctor` in a release checkout
   and `setup` were not affected.
+- The installation guide and client setup reference now say that Codex
+  rewrites `config.toml` when a registration changes: it groups the
+  `[mcp_servers.*]` tables and drops comments directly above them. Copy the
+  file first if its comments matter.
 
 ## 0.6.3 — 2026-10-10
 
