@@ -186,8 +186,8 @@ Server deadlines are profile-specific authentication/catalog work 5,000 ms per o
 
 There are eight tools: `pi_capabilities_get`, `pi_session_start`, `pi_session_list`, `pi_session_get`, `pi_session_prompt`, `pi_session_abort`, `pi_session_close`, and `pi_turn_get`. Capability discovery accepts only `{}`. `pi_session_start` rejects the old `profile` input, raw `provider`, `model`, `thinkingLevel`, credential-like fields, and all unknown fields. Its safe session metadata includes the configured execution-profile alias and post-verified provider/model/effective thinking level; the existing `profile` output remains derived permission metadata.
 
-The returned `thinkingLevel` records the effective Pi session setting. Pi
-Control compares it with the configured profile selection before admitting the
+The returned `thinkingLevel` records the effective Pi session setting. The
+server compares it with the configured profile selection before admitting the
 session; it does not verify provider-side reasoning or measure or cap its
 reasoning-token budget: a provider may use reasoning tokens even when the session
 selects `off`. Pi Session MCP does not project thinking content or provider-side

@@ -33,5 +33,5 @@ scope, for example:
   operating-system sandbox, and this is a documented limit, not a defect.
 - Vulnerabilities in Pi, in the MCP clients, in model providers or in other
   dependencies belong to those projects. A dependency advisory that affects Pi
-  Control's own use of the dependency is in scope.
+  Session MCP's own use of the dependency is in scope.
 - The server trusts its one local MCP peer and the operator's configuration.

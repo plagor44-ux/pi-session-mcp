@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The client setup reference and the security policy no longer use the
+  project's former name. Both sentences now name the server or Pi Session MCP.
+
 ## 0.6.4 — 2026-10-10
 
 - `pi-session-mcp-doctor` now checks the package it belongs to, whatever the
