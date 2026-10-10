@@ -54,6 +54,31 @@ describe("offline doctor", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts an npm installation that extracted package.json after the build", async () => {
+    // npm 12 writes extraction times in archive order, and the archive lists dist/ before package.json.
+    const root = await temporaryRoot("pi-session-mcp-installed-");
+    await mkdir(join(root, "dist"));
+    await writeFile(join(root, "dist", "main.js"), "export {};\n");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await writeFile(join(root, "package.json"), JSON.stringify({ version: "1.2.3", engines: { node: ">=22.19.0" } }));
+    const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]) }) });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "build_stale", severity: "ok" }));
+    expect(result.exitCode).toBe(0);
+  });
+
+  it("still reports a source checkout whose package.json is newer than the build as stale", async () => {
+    const root = await temporaryRoot("pi-session-mcp-checkout-");
+    await mkdir(join(root, "src"));
+    await writeFile(join(root, "src", "main.ts"), "export {};\n");
+    await writeFile(join(root, "tsconfig.json"), "{}\n");
+    await mkdir(join(root, "dist"));
+    await writeFile(join(root, "dist", "main.js"), "export {};\n");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await writeFile(join(root, "package.json"), JSON.stringify({ version: "1.2.3", engines: { node: ">=22.19.0" } }));
+    const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]) }) });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "build_stale", severity: "warning" }));
+  });
+
   it("returns a deterministic sanitized healthy model and equivalent projections", async () => {
     const result = await runDoctor({ packageRoot: "/hidden/root", fileSystem: fsFor({ files: ["/hidden/root/dist/main.js"], dirs: ["/hidden/workspace"] }), loadConfig: healthyConfig });
     expect(result.exitCode).toBe(0);
