@@ -12,6 +12,10 @@
   rewrites `config.toml` when a registration changes: it groups the
   `[mcp_servers.*]` tables and drops comments directly above them. Copy the
   file first if its comments matter.
+- The client setup reference now explains that `codex exec` rejects
+  `pi_session_prompt`, `pi_session_abort` and `pi_session_close` unless they
+  are approved, because it never asks and the tools are marked destructive. It
+  shows the per-run `-c` approvals.
 
 ## 0.6.3 — 2026-10-10
 

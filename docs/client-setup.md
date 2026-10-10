@@ -127,6 +127,32 @@ codex mcp get pi-session-mcp
 directly above such a table; settings are preserved. Copy the file first if its
 comments matter to you.
 
+### Run Codex without prompts
+
+Interactive Codex asks before it calls a tool that is marked
+`destructiveHint: true`: `pi_session_prompt`, `pi_session_abort` and
+`pi_session_close`. `codex exec` never asks, so Codex CLI `0.162.0` rejects
+these calls with "MCP tool call requires approval, but approval policy is
+never". A headless run can then start sessions but cannot prompt, abort or
+close them.
+
+Approve the three tools for each headless run:
+
+```bash
+codex exec \
+  -c 'mcp_servers.pi-session-mcp.tools.pi_session_prompt.approval_mode="approve"' \
+  -c 'mcp_servers.pi-session-mcp.tools.pi_session_abort.approval_mode="approve"' \
+  -c 'mcp_servers.pi-session-mcp.tools.pi_session_close.approval_mode="approve"' \
+  'Your task'
+```
+
+The same `approval_mode` entries can live in `config.toml` under
+`[mcp_servers.pi-session-mcp.tools.<tool>]`. They do not change the output of
+`codex mcp get`, so `setup` still treats the registration as equal. But
+`codex mcp remove`, which `setup --remove` and `--rollback` use, deletes them,
+so they are gone after an upgrade. The per-run overrides do not have this
+problem.
+
 ## Register with Claude Code
 
 Claude Code CLI 2.1.251 was locally confirmed with this command form. Replace every absolute-path placeholder with your local paths; use absolute paths for the Node executable, built entry point, and configuration file.
