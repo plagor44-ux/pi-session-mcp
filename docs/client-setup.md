@@ -7,8 +7,10 @@ installation with upgrade and removal, start with [Installation](installation.md
 ## Prerequisites
 
 - Node.js **22.19.0 or newer**
-- Linux with a root-owned util-linux `flock` at `/usr/bin/flock` or `/bin/flock`,
-  readable `/proc`, and a supported local ownership filesystem
+- Linux, the only accepted platform. For `setup` also: a root-owned util-linux
+  `flock` at `/usr/bin/flock` or `/bin/flock`, readable `/proc`, and a supported
+  local ownership filesystem. A manual registration does not need these; see
+  [Register without setup](installation.md#register-without-setup)
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 

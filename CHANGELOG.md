@@ -4,6 +4,12 @@
 
 - The client setup reference and the security policy no longer use the
   project's former name. Both sentences now name the server or Pi Session MCP.
+- The installation guide now describes how to register a client without
+  `setup`, for macOS, where `setup` refuses with `platform_unsupported`:
+  Doctor, the client's own registration commands, the checks that replace
+  `--verify`, and how to upgrade and remove. The README states that macOS
+  support is planned and that no acceptance level has covered the manual path.
+  Documentation only; no code changed.
 
 ## 0.6.4 — 2026-10-10
 
