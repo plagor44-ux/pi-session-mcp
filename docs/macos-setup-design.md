@@ -120,11 +120,14 @@ regular file owned by uid 0, not group- or world-writable, and executable.
    - `validateFence`;
    - starting the guardian with the locked descriptor as fd 3;
    - the second validation.
-4. `acquireSetupGuardian` gets an explicit lock mode:
-   - `"flock-helper"` on Linux runs the util-linux step;
-   - `"held"` on macOS skips it, because the descriptor is already locked.
+4. `acquireSetupGuardian` derives the lock step from the platform:
+   - on Linux it runs the util-linux step;
+   - on macOS it skips it, because the caller passes a descriptor from
+     `openLockedDarwin` that is already locked.
 
-   The guardian start, IPC protocol and release are shared.
+   There is no lock-mode parameter, so a caller cannot select the
+   already-locked mode for an unlocked descriptor by mistake. The guardian
+   start, IPC protocol and release are shared.
 
 ### Process-group proof
 
@@ -247,7 +250,8 @@ These are added to `threat-model.md` and `client-setup-design.md`:
   - a malformed line, an extra header line, empty output;
   - a missing own PID, a non-zero exit, output over the cap.
 - `isTrustedSystemBinary`: not root-owned, group-writable, world-writable,
-  not executable, a symlink, missing.
+  not executable, not a regular file, missing. Like the existing `flock`
+  check, it follows symlinks, so Linux behavior is unchanged.
 - macOS filesystem rule: same type, different type, and `statfs` failure.
 - macOS lock loop:
   - `EAGAIN` then success; persistent `EAGAIN` until the timeout gives
@@ -289,11 +293,15 @@ macOS runners are treated individually, with the cause recorded.
 
 ## CI
 
-The `verify` job in `.github/workflows/ci.yml` becomes a matrix:
+The ruleset "Protect main" requires a status check named `verify`. A plain
+matrix would rename it to `verify (macos-15)` and so on, and block every merge.
+The workflow therefore has two jobs:
 
-- `os: [ubuntu-latest, macos-15, macos-26]`, with `fail-fast: false`;
-- the same steps;
-- Node pinned to `22.19.0`.
+- **`test`:** a matrix over `os: [ubuntu-latest, macos-15, macos-26]` with
+  `fail-fast: false`, the same steps as today, and Node pinned to `22.19.0`.
+- **`verify`:** depends on `test`, always runs, and passes only if every
+  platform passed. It keeps the required check name, so the ruleset does
+  not change.
 
 Standard GitHub-hosted runners are free for this public repository. The Pi SDK
 canary stays on Linux.
