@@ -226,8 +226,17 @@ covered. Pi Session MCP has passed all three levels in earlier private cycles. T
 live two-client acceptance has not yet been repeated on a build with Pi SDK
 `1.x`.
 
-The latest release, `v0.6.2`, passed Level 1 on a fresh clone of its tag. It
-passed Level 2 in all three variants: working tree, published release, and
-published npm package. The clients were Codex CLI `0.162.0` (`user`) and Claude
-Code `2.1.295` (`user`, `project`, `local`), on 2026-10-09 and 2026-10-10. It
-had no Level 3 cycle.
+`v0.6.2` passed Level 1 on a fresh clone of its tag. It passed Level 2 in all
+three variants: working tree, published release, and published npm package.
+The clients were Codex CLI `0.162.0` (`user`) and Claude Code `2.1.295`
+(`user`, `project`, `local`), on 2026-10-09 and 2026-10-10. It had no Level 3
+cycle.
+
+Before its release, `v0.6.3` passed Level 1 and the working-tree Level 2 on its
+release candidate, with Claude Code `2.1.296`. On 2026-10-10 the same candidate
+also passed a narrower live check:
+- Scope: Claude Code `2.1.296` as the only client, with Pi SDK `1.1.0` on a
+  local `qwen3.6-35b-a3b-splash` model served by LM Studio.
+- All five tasks of the matrix reached their intended outcome in three
+  sequential invocations, and every pre-registered check passed.
+- It covered no Codex task and does not count as a ten-task cycle.
