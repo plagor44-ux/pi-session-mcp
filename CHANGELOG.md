@@ -2,12 +2,16 @@
 
 ## Unreleased
 
+## 0.6.3 — 2026-10-10
+
 - Doctor no longer reports a false `build_stale` warning right after
   `npm install` with npm 12. npm 12 writes extracted files with the extraction
   time, and the package lists `dist/` before `package.json`, so the installed
   manifest was always newer than the build. An installation without build
   configuration or TypeScript sources no longer compares manifest times; a
   source checkout still does.
+- `setup` was re-recorded against Claude Code `2.1.296`; its `mcp` command
+  contract is unchanged.
 
 ## 0.6.2 — 2026-10-09
 

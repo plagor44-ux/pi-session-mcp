@@ -22,7 +22,7 @@ There are exactly eight tools. No `pi_turn_wait` tool or live provider/model inv
 ```json
 {
   "ok": true,
-  "server": { "name": "pi-session-mcp", "version": "0.6.2" },
+  "server": { "name": "pi-session-mcp", "version": "0.6.3" },
   "configuration": {
     "fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "reloadPolicy": "restart-required"
