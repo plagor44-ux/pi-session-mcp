@@ -122,6 +122,11 @@ codex mcp list
 codex mcp get pi-session-mcp
 ```
 
+`codex mcp add` and `codex mcp remove` rewrite `config.toml`. Codex CLI
+`0.162.0` groups all `[mcp_servers.*]` tables together and drops a comment
+directly above such a table; settings are preserved. Copy the file first if its
+comments matter to you.
+
 ## Register with Claude Code
 
 Claude Code CLI 2.1.251 was locally confirmed with this command form. Replace every absolute-path placeholder with your local paths; use absolute paths for the Node executable, built entry point, and configuration file.

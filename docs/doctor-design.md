@@ -3,6 +3,8 @@
 `src/doctor-cli.ts` is a separate local entry point. It never imports the MCP
 server, initializes transport, creates a Pi session, reads credentials, or
 performs network activity.
+It checks the package it was loaded from, never the current working
+directory: an npm executable can run from any directory.
 
 `runDoctor` returns one frozen result model (`schemaVersion: 1`, `ok`, a
 sanitized semver `packageVersion` when metadata is available, ordered `checks`,
