@@ -22,12 +22,24 @@ Codex supports only `codex:user:pi-session-mcp`. Claude Code supports `user`,
 registration output, or scope outside the recorded contracts is `unsupported`,
 and the client version is reported for information only. The adapters do not
 parse undocumented client config files.
-Setup is currently supported on Linux with a root-owned, non-writable
-util-linux `flock` at `/usr/bin/flock` or `/bin/flock`, readable `/proc`, and an
-ownership directory on ext2/3/4, XFS, Btrfs, tmpfs, overlayfs, ZFS, F2FS,
-UBIFS, or bcachefs. Other filesystems fail closed before lock acquisition.
-Every non-Linux platform fails closed with `platform_unsupported` before any
-client command is spawned.
+Setup is supported on Linux and macOS
+([ADR 0005](adr/0005-macos-setup-platform.md)); `src/setup-platform.ts` owns
+the operating-system facts behind the fence.
+
+- **Linux:**
+  - a root-owned, non-writable util-linux `flock` at `/usr/bin/flock` or
+    `/bin/flock`;
+  - readable `/proc`;
+  - an ownership directory on ext2/3/4, XFS, Btrfs, tmpfs, overlayfs, ZFS,
+    F2FS, UBIFS, or bcachefs.
+- **macOS:**
+  - the root-owned, non-writable system `/bin/ps`;
+  - an ownership directory with the same `statfs` type as `/`, which is the
+    APFS system volume on every macOS that Node.js 22 supports. macOS assigns
+    `f_type` dynamically, so no fixed number is compared.
+
+Other filesystems fail closed before lock acquisition. Every other platform
+fails closed with `platform_unsupported` before any client command is spawned.
 
 ## Ownership and transactions
 
@@ -35,9 +47,9 @@ Each adapter exposes inspection, apply, verify, and remove operations. Apply fir
 
 The production bridge derives Node from `process.execPath` and the entry point from the package root; configuration comes only from `PI_SESSION_MCP_CONFIG`. These values are internal command arguments and never CLI arguments, reports, or metadata. The opaque ownership fingerprint also binds `package.json`, the lockfile when the installation has one, and every built runtime JavaScript module. Both `main.js` and the regular, non-symlink `setup-command-guardian.js` are mandatory release artifacts; any runtime symlink fails closed. A package/lock mismatch or later build-content drift therefore fails closed instead of silently reusing ownership. Public client commands run through a bounded `CommandRunner` (timeout, process-group termination, and output cap); undocumented config files are not parsed.
 
-The production CLI uses an atomic durable store with restrictive filesystem modes; the in-memory store exists only for library tests. Neither form persists paths, environment values, secrets, prompts, SDK errors, or auth metadata. On Linux, a stable, never-renamed lock file is held through a kernel `flock` for the complete inspect → pending → client mutation → owned transaction. Newly created ownership directories and every atomic state rename are fsynced through their parent directory before success. There is no clock-based stale recovery: the kernel releases the lock only when every holder of the locked open-file description exits. Missing or untrusted `flock`, an unsupported filesystem, a symlink/non-regular lock file, or an inode mismatch fails closed. The trusted same-UID operator must not unlink or replace the stable lock path while setup is running; setup checks its inode before acquisition, after acquisition, and before exposing transaction access, but same-UID filesystem tampering is outside the fence's trust boundary. A later run reconciles `pending` state: a matching equivalent registration is promoted to owned, an absent registration is safely retried, and any divergence fails closed.
+The production CLI uses an atomic durable store with restrictive filesystem modes; the in-memory store exists only for library tests. Neither form persists paths, environment values, secrets, prompts, SDK errors, or auth metadata. A stable, never-renamed lock file is held through a kernel lock for the complete inspect → pending → client mutation → owned transaction. On Linux, the trusted util-linux `flock` locks the open file description that setup opened. On macOS, setup opens the lock file with `O_EXLOCK | O_NONBLOCK`, which takes a lock with flock(2) semantics on the open file description at open time; a busy lock is retried every 50 ms within the same acquisition bound. Newly created ownership directories and every atomic state rename are fsynced through their parent directory before success. There is no clock-based stale recovery: the kernel releases the lock only when every holder of the locked open-file description exits. A missing or untrusted `flock` or `ps`, an unsupported filesystem, a symlink/non-regular lock file, or an inode mismatch fails closed. The trusted same-UID operator must not unlink or replace the stable lock path while setup is running; setup compares the inode of the open lock file with the path after opening it, again once the fence is held, and before exposing transaction access, but same-UID filesystem tampering is outside the fence's trust boundary. A later run reconciles `pending` state: a matching equivalent registration is promoted to owned, an absent registration is safely retried, and any divergence fails closed.
 
-Mutating public client commands run under a transaction guardian that inherits the locked file description, starts the client in its own process group, and watches both the parent PID and IPC channel. Parent EOF, `SIGINT`, `SIGTERM`, or command timeout causes TERM then KILL. The guardian releases the fence only after `/proc` confirms that no non-zombie group member remains. Indeterminate cleanup returns a stable failure to the caller while the detached guardian retains the fence and continues cleanup, preventing a later setup transaction from racing the orphan. A mutation already accepted by an external client CLI or configuration backend cannot be rolled back automatically; ownership remains `pending` for reconciliation.
+Mutating public client commands run under a transaction guardian that inherits the locked file description, starts the client in its own process group, and watches both the parent PID and IPC channel. Parent EOF, `SIGINT`, `SIGTERM`, or command timeout causes TERM then KILL. The guardian releases the fence only after a determinate process-table scan confirms that no non-zombie group member remains: `/proc` on Linux, and on macOS a strictly parsed `/bin/ps -A -o pid=,pgid=,stat=` that must list the scanning process itself. Indeterminate cleanup returns a stable failure to the caller while the detached guardian retains the fence and continues cleanup, preventing a later setup transaction from racing the orphan. A mutation already accepted by an external client CLI or configuration backend cannot be rolled back automatically; ownership remains `pending` for reconciliation.
 
 Here “gone” means no group member can still execute: a zombie has terminated and
 released its file descriptors, even when its PID awaits an external reaper. The

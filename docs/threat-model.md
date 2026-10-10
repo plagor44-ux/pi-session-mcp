@@ -30,23 +30,30 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   equality with a bounded direct MCP initialize, `tools/list`, and
   `pi_capabilities_get({})` call. It never starts a session or invokes
   a provider; the verifier cleans up its process.
-- **Concurrent setup corruption:** On an explicitly supported local Linux
-  filesystem (ext2/3/4, XFS, Btrfs, tmpfs, overlayfs, ZFS, F2FS, UBIFS, or
-  bcachefs), durable
-  ownership transactions hold a stable, never-renamed regular file through a
-  kernel `flock`. There is no clock-based stale recovery. A transaction guardian
-  inherits that locked file description, launches each mutating client command
-  in its own process group, and retains the fence across parent death until
-  `/proc` confirms that no non-zombie group member remains. Indeterminate cleanup
-  retains the fence and fails closed; missing or untrusted `flock`, unsupported
-  filesystems, symlinks, inode mismatch, and raw lock errors are reduced to
-  stable codes. Directory creation and atomic state replacement are fsynced
+- **Concurrent setup corruption:** Durable ownership transactions hold a
+  stable, never-renamed regular file through a kernel lock on an explicitly
+  supported local filesystem:
+  - on Linux, through the trusted util-linux `flock`, on ext2/3/4, XFS, Btrfs,
+    tmpfs, overlayfs, ZFS, F2FS, UBIFS, or bcachefs;
+  - on macOS, through `O_EXLOCK` at open, on the APFS volume type of `/`.
+
+  There is no clock-based stale recovery. A transaction guardian inherits that
+  locked file description, launches each mutating client command in its own
+  process group, and retains the fence across parent death until a determinate
+  process-table scan confirms that no non-zombie group member remains. The scan
+  reads `/proc` on Linux and the trusted system `/bin/ps` on macOS; a `ps`
+  sample that fails, has an unexpected line or does not list the scanning
+  process is indeterminate. Indeterminate cleanup retains the fence and fails
+  closed. A missing or untrusted `flock` or `ps`, unsupported filesystems,
+  symlinks, inode mismatch, and raw lock errors are reduced to stable codes. Directory creation and atomic state replacement are fsynced
   through their parent directory before success. A mutation already accepted
   by an external CLI or configuration backend cannot be rolled back
   automatically and remains `pending` for reconciliation.
-- **Unsupported process-group guarantees:** Setup is accepted on Linux only.
-  Every non-Linux platform fails closed before client spawn because the tested
-  kernel-fence and `/proc` process-group proof are unavailable.
+- **Unsupported process-group guarantees:** Setup runs on Linux and macOS
+  only. Every other platform fails closed before client spawn because no
+  tested kernel fence and process-group proof exist for it. On both supported
+  platforms, the fence does not cover descendants that leave the process
+  group, and it does not promise PID reaping.
 
 - **Workspace escape:** callers can request configured workspace aliases only; validated configuration maps aliases to resolved paths. There is no arbitrary `cwd` input.
 - **Execution-selection escalation:** callers cannot supply raw provider, model, thinking level, permission profile, or credentials. A configured execution-profile alias binds all of those values; exactly one configured default is `read-only`. The legacy `profile` input is rejected rather than silently reinterpreted.

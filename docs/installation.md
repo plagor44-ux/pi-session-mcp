@@ -35,16 +35,20 @@ the same arguments.
 
 ## Requirements
 
-- Linux. `setup` fails closed on every other platform, and the server has only
-  been accepted on Linux. On macOS, register the client manually; see
-  [Register without setup](#register-without-setup).
+- Linux or macOS. `setup` fails closed on every other platform. macOS is tested
+  in CI on macOS 15 and 26 on Apple silicon. Setup acceptance on a real Mac is
+  pending; see [Acceptance](acceptance.md#status).
 - Node.js **22.19.0 or newer**. `setup` registers the absolute path of the Node
   executable that runs it, so run it with the Node installation that clients
   should use.
-- For `setup`: a root-owned util-linux `flock` at `/usr/bin/flock` or
+- For `setup` on Linux: a root-owned util-linux `flock` at `/usr/bin/flock` or
   `/bin/flock`, readable `/proc`, and the ownership state directory
   `~/.local/state/pi-session-mcp` on ext2/3/4, XFS, Btrfs, tmpfs, overlayfs, ZFS,
   F2FS, UBIFS or bcachefs. Network and FUSE filesystems fail closed.
+- For `setup` on macOS: the system `/bin/ps`, and the ownership state directory
+  `~/.local/state/pi-session-mcp` on the same filesystem type as `/`, which is
+  APFS. A home directory on HFS+, exFAT, a network volume or any other
+  filesystem fails closed.
 - Codex CLI or Claude Code. `setup` does not pin client versions. It accepts a
   client whose public `mcp` command output matches the expected contract and
   reports `unsupported` otherwise. The contract was last recorded with Codex CLI
@@ -248,20 +252,18 @@ demand; there is nothing to start by hand.
 
 ### Register without setup
 
-`setup` is accepted on Linux only. On macOS and Windows it refuses every
-operation, `--verify` included, with `platform_unsupported` before it starts a
-client command. On Linux, `--apply`, `--verify`, `--rollback` and `--remove`
-also fail closed when the `flock`, `/proc` or filesystem prerequisites are not
-met. A manual registration needs none of this: it uses the client's own
-commands and writes no ownership state.
-
-Pi Session MCP has not been accepted on macOS. No acceptance level has been run
-there, and macOS support is planned. Until then, this path is the way to
-register a client on macOS, and it is not covered by any acceptance.
+`setup` runs on Linux and macOS. On every other platform, Windows included, it
+refuses every operation, `--verify` included, with `platform_unsupported`
+before it starts a client command. On Linux and macOS, `--apply`, `--verify`,
+`--rollback` and `--remove` also fail closed when the platform prerequisites in
+[Requirements](#requirements) are not met. A manual registration needs none of
+this: it uses the client's own commands and writes no ownership state. Use it
+when `setup` cannot run, or when you manage client configuration yourself. No
+acceptance level covers this path.
 
 1. Install as in section 1, configure as in section 2, and run Doctor as in
-   section 3. Doctor has no platform-specific check and needs neither `flock`
-   nor `/proc`.
+   section 3. Doctor has no platform-specific check and needs neither the lock
+   nor the process-table prerequisites of `setup`.
 2. Register the server with the client's own command, as the
    [Codex](client-setup.md#register-with-codex) and
    [Claude Code](client-setup.md#register-with-claude-code) sections of the

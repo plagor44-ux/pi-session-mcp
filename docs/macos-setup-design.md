@@ -1,7 +1,8 @@
 # macOS setup platform design
 
-**Status:** Draft for review (2026-10-10). Tracking issue: #32. Follows #28 and
-PR #30. The decision record is ADR 0005, written with the implementation.
+**Status:** Implemented (2026-10-10); Level-2 acceptance on real hardware is
+pending. Tracking issue: #32. Follows #28 and PR #30. The decision record is
+[ADR 0005](adr/0005-macos-setup-platform.md).
 
 ## Goal
 

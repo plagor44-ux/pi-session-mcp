@@ -2,15 +2,25 @@
 
 ## Unreleased
 
+- `setup` now supports macOS, with the same guarantees as on Linux. It runs
+  `--dry-run`, `--apply`, `--verify`, `--rollback` and `--remove`, and keeps
+  the kernel fence and the process-group proof. On macOS:
+  - setup takes the ownership lock with `O_EXLOCK` when it opens the lock
+    file;
+  - it proves process-group cleanup with the trusted system `/bin/ps`;
+  - it accepts the ownership directory only on the APFS volume type of `/`.
+
+  Every other platform still refuses with `platform_unsupported`. Result codes,
+  statuses and exit codes are unchanged. CI now runs on Linux, macOS 15 and
+  macOS 26; the required `verify` check aggregates all three. Setup acceptance
+  on a real Mac is still pending. See ADR 0005 and #32.
 - The client setup reference and the security policy no longer use the
   project's former name. Both sentences now name the server or Pi Session MCP.
 - The installation guide now describes how to register a client without
-  `setup`, for macOS, where `setup` refuses with `platform_unsupported`:
-  Doctor, the client's own registration commands, checks that are weaker than
-  `--verify` because no bounded direct MCP handshake exists outside `setup`,
-  and how to upgrade and remove. The README states that macOS support is
-  planned and that no acceptance level has covered the manual path.
-  Documentation only; no code changed.
+  `setup`: Doctor, the client's own registration commands, checks that are
+  weaker than `--verify` because no bounded direct MCP handshake exists outside
+  `setup`, and how to upgrade and remove. No acceptance level covers the
+  manual path.
 
 ## 0.6.4 — 2026-10-10
 
