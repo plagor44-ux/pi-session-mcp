@@ -225,3 +225,9 @@ Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The
 live two-client acceptance has not yet been repeated on a build with Pi SDK
 `1.x`.
+
+The latest release, `v0.6.2`, passed Level 1 on a fresh clone of its tag. It
+passed Level 2 in all three variants: working tree, published release, and
+published npm package. The clients were Codex CLI `0.162.0` (`user`) and Claude
+Code `2.1.295` (`user`, `project`, `local`), on 2026-10-09 and 2026-10-10. It
+had no Level 3 cycle.
