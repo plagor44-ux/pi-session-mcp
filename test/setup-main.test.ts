@@ -1,14 +1,13 @@
-import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { main, type SetupMainDependencies } from "../src/setup-main.js";
 import { DurableOwnershipStore } from "../src/setup-ownership.js";
+import { currentSetupPlatform } from "../src/setup-platform.js";
 import { SetupOrchestrator, result } from "../src/setup.js";
-import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readTextIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
+import { cleanupFixtureProcesses, expectProcessTerminated, isLockHeld, processState, readPidIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
 
 describe("setup executable", () => {
   const originalConfig = process.env.PI_SESSION_MCP_CONFIG;
@@ -71,7 +70,7 @@ describe("setup executable", () => {
     expect(JSON.parse(writes.join(""))).toMatchObject({ operation: "dry-run", exitCode: 0 });
   });
 
-  it.skipIf(process.platform !== "linux").each([{ signal: "SIGINT", exitCode: 130 }, { signal: "SIGTERM", exitCode: 143 }] as const)("awaits $signal cleanup and returns only a stable sanitized result", async ({ signal: processSignal, exitCode }) => {
+  it.skipIf(!currentSetupPlatform()).each([{ signal: "SIGINT", exitCode: 130 }, { signal: "SIGTERM", exitCode: 143 }] as const)("awaits $signal cleanup and returns only a stable sanitized result", async ({ signal: processSignal, exitCode }) => {
     process.env.PI_SESSION_MCP_CONFIG = "/SECRET/config.json";
     const writes: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
@@ -90,7 +89,7 @@ describe("setup executable", () => {
     expect(output).not.toMatch(/SECRET|config\.json/);
   });
 
-  it.skipIf(process.platform !== "linux").each([{ signal: "SIGINT", exitCode: 130 }, { signal: "SIGTERM", exitCode: 143 }] as const)("holds the fence while $signal cleans a stubborn real process group", async ({ signal: processSignal, exitCode }) => {
+  it.skipIf(!currentSetupPlatform()).each([{ signal: "SIGINT", exitCode: 130 }, { signal: "SIGTERM", exitCode: 143 }] as const)("holds the fence while $signal cleans a stubborn real process group", async ({ signal: processSignal, exitCode }) => {
     const directory = await temporaryRoot("pi-session-mcp-main-signal-");
     const ownershipPath = join(directory, "ownership.json");
     const marker = join(directory, "helper.pid");
@@ -133,7 +132,7 @@ describe("setup executable", () => {
     let cleanupGroupPid: number | undefined;
     let termAcknowledgement: number | undefined;
     let runnerExitCode: number | undefined;
-    let competingStatus: number | null | undefined;
+    let lockWasHeld: boolean | undefined;
     let helperWasLive = false;
     let helperStayedLive = false;
     let guardianWasStopped = false;
@@ -156,16 +155,14 @@ describe("setup executable", () => {
             termAcknowledgement = await waitForPidFile(termMarker);
             const stoppedDeadline = Date.now() + 5_000;
             do {
-              const stat = await readTextIfPresent(`/proc/${guardianPid}/stat`);
-              guardianWasStopped = stat !== undefined && stat[stat.lastIndexOf(") ") + 2] === "T";
+              guardianWasStopped = (await processState(guardianPid)) === "T";
               if (!guardianWasStopped) await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
             } while (!guardianWasStopped && Date.now() < stoppedDeadline);
-            const helperStat = await readFile(`/proc/${helperPid}/stat`, "utf8");
-            helperWasLive = helperStat[helperStat.lastIndexOf(") ") + 2] !== "Z";
-            const flockPath = existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/bin/flock";
-            competingStatus = spawnSync(flockPath, ["-n", `${ownershipPath}.flock`, "/bin/true"], { stdio: "ignore" }).status;
-            const afterProbe = await readFile(`/proc/${helperPid}/stat`, "utf8");
-            helperStayedLive = afterProbe[afterProbe.lastIndexOf(") ") + 2] !== "Z";
+            const helperState = await processState(helperPid);
+            helperWasLive = helperState !== undefined && helperState !== "Z";
+            lockWasHeld = isLockHeld(`${ownershipPath}.flock`);
+            const afterProbe = await processState(helperPid);
+            helperStayedLive = afterProbe !== undefined && afterProbe !== "Z";
           } catch (error) { observationFailure = error; throw error; }
           finally {
             try { signalFixtureProcess(guardianPid, "SIGCONT"); }
@@ -189,7 +186,7 @@ describe("setup executable", () => {
       expect(guardianWasStopped).toBe(true);
       expect(helperWasLive).toBe(true);
       expect(helperStayedLive).toBe(true);
-      expect(competingStatus).toBe(1);
+      expect(lockWasHeld).toBe(true);
       const output = writes.join("");
       expect(JSON.parse(output)).toMatchObject({ operation: "apply", exitCode, findings: [{ code: "operation_interrupted" }] });
       expect(output).not.toMatch(/SECRET|config\.json|mutation_failed/);
