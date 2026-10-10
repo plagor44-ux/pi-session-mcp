@@ -147,6 +147,9 @@ snapshot and digest tools and the scan for leaked values are prepared per cycle.
 - Clients: record the exact client versions and how each client reached the
   server. Prefer a temporary per-invocation MCP configuration, so that no
   global registration changes.
+- Waiting: let each client wait a bounded time between `pi_turn_get` polls,
+  for example by allowing a shell `sleep` of a few seconds. A client that may
+  call only the Pi Session MCP tools has no way to wait and polls back to back.
 - Pre-registration: fix the plan, the acceptance criteria per task, the prompts,
   the oracles, the tools, the configurations and the fixture digests before the
   first task.
@@ -182,6 +185,10 @@ repeat a task.
 - Liveness: a running turn whose `updatedAt` advanced beyond `startedAt` shows
   observable activity. Its absence only means that the turn finished between
   two polls.
+- Polling cost: count the `pi_turn_get` calls per turn. The counts are evidence
+  for the revisit trigger on bounded waiting in
+  [ADR 0003](adr/0003-post-mvp-maintenance.md) only when the client could wait
+  between polls.
 
 ### Gate
 
