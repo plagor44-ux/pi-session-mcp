@@ -269,3 +269,9 @@ Before its release, `v0.6.4` passed Level 1 and the working-tree Level 2 on its
 release candidate, with Codex CLI `0.162.0` and Claude Code `2.1.296`. Its
 server entry point `dist/main.js` is byte-identical to that of `4d333da` and of
 `v0.6.3`.
+
+After its release, `v0.6.4` passed Level 1 on a fresh clone of its tag. It also
+passed Level 2 as published release and as published npm package, with Codex
+CLI `0.162.0` and Claude Code `2.1.296`, on 2026-10-10. The installed
+`pi-session-mcp-doctor` reported a healthy package when run from an unrelated
+working directory.
