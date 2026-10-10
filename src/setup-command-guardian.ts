@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 import { spawn, type ChildProcess } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import type { ProcessTable } from "./setup-platform.js";
+
+type SetupPlatformModule = typeof import("./setup-platform.js");
+// Source-mode tests run this guardian through Node type stripping, which cannot
+// map a static `./setup-platform.js` import to its `.ts` source.
+const platform = await (import(import.meta.url.endsWith(".ts") ? "./setup-platform.ts" : "./setup-platform.js") as Promise<SetupPlatformModule>);
+const platformName = platform.currentSetupPlatform();
+const table: ProcessTable | undefined = platformName ? platform.createProcessTable(platformName) : undefined;
 
 type GroupState = "alive" | "gone" | "unknown";
 interface RunRequest {
@@ -26,6 +33,8 @@ interface ActiveExecution {
 const TERM_GRACE_MS = 100;
 const CLEANUP_REPORT_MS = 2_000;
 const RETRY_MS = 25;
+// Each macOS scan starts `ps`, so cleanup loops poll no faster than the table allows.
+const CLEANUP_RETRY_MS = Math.max(RETRY_MS, table?.pollMs ?? RETRY_MS);
 
 let active: ActiveExecution | undefined;
 let shuttingDown = false;
@@ -67,49 +76,9 @@ function parseRequest(value: unknown): Request | undefined {
   return { type: "run", id: input.id as number, command: input.command, args: input.args as string[], timeoutMs: input.timeoutMs as number, maxOutputBytes: input.maxOutputBytes as number };
 }
 
-function readProcessGroup(pid: number): { readonly group: number; readonly state: string } {
-  const line = readFileSync(`/proc/${pid}/stat`, "utf8").trim();
-  const close = line.lastIndexOf(") ");
-  const state = line[close + 2];
-  if (close < 3 || !state || !/^[A-Za-z]$/.test(state) || line[close + 3] !== " ") throw new Error("process_stat_invalid");
-  const fields = line.slice(close + 4).trim().split(/\s+/);
-  const group = Number(fields[1]);
-  if (!Number.isSafeInteger(group) || group < 0) throw new Error("process_group_invalid");
-  return { group, state };
-}
-
-function processTableReadable(): boolean {
-  let sawSelf = false;
-  try {
-    for (const entry of readdirSync("/proc", { withFileTypes: true })) {
-      if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-      try {
-        const pid = Number(entry.name);
-        readProcessGroup(pid);
-        if (pid === process.pid) sawSelf = true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
-      }
-    }
-  } catch { return false; }
-  return sawSelf;
-}
-
-function groupState(group: number): GroupState {
-  if (forceUnknownForSourceTest) return "unknown";
-  let entries;
-  try { entries = readdirSync("/proc", { withFileTypes: true }); }
-  catch { return "unknown"; }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-    try {
-      const processState = readProcessGroup(Number(entry.name));
-      if (processState.group === group && processState.state !== "Z") return "alive";
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return "unknown";
-    }
-  }
-  return "gone";
+async function groupState(group: number): Promise<GroupState> {
+  if (forceUnknownForSourceTest || !table) return "unknown";
+  return table.groupState(group);
 }
 
 function signalGroup(group: number, signal: NodeJS.Signals): void {
@@ -152,7 +121,7 @@ function start(request: RunRequest): void {
     signalGroup(execution.group, "SIGKILL");
     const reportDeadline = Date.now() + CLEANUP_REPORT_MS;
     while (true) {
-      const state = groupState(execution.group);
+      const state = await groupState(execution.group);
       if (state === "gone") {
         finish(reportedCode);
         active = undefined;
@@ -161,7 +130,7 @@ function start(request: RunRequest): void {
       }
       if (!execution.resultSent && Date.now() >= reportDeadline) finish(126);
       signalGroup(execution.group, "SIGKILL");
-      await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+      await new Promise((resolve) => setTimeout(resolve, CLEANUP_RETRY_MS));
     }
   };
   execution.timeout = setTimeout(() => { void cleanup(124); }, request.timeoutMs);
@@ -173,12 +142,14 @@ function start(request: RunRequest): void {
   });
   child.once("close", (code) => {
     if (execution.cleanupStarted) return;
-    const state = groupState(execution.group);
-    if (state === "gone") {
-      finish(code ?? 1);
-      active = undefined;
-      if (shuttingDown || !process.connected) exitWhenSafe();
-    } else void cleanup(code ?? 1);
+    void groupState(execution.group).then((state) => {
+      if (execution.cleanupStarted) return;
+      if (state === "gone") {
+        finish(code ?? 1);
+        active = undefined;
+        if (shuttingDown || !process.connected) exitWhenSafe();
+      } else void cleanup(code ?? 1);
+    });
   });
 }
 
@@ -201,7 +172,7 @@ async function terminateActive(): Promise<void> {
   signalGroup(execution.group, "SIGKILL");
   const reportDeadline = Date.now() + CLEANUP_REPORT_MS;
   while (true) {
-    const state = groupState(execution.group);
+    const state = await groupState(execution.group);
     if (state === "gone") {
       if (!execution.resultSent) { execution.resultSent = true; send({ type: "result", id: execution.id, exitCode: 125, stdout: "", stderr: "" }); }
       active = undefined;
@@ -210,7 +181,7 @@ async function terminateActive(): Promise<void> {
     }
     if (!execution.resultSent && Date.now() >= reportDeadline) { execution.resultSent = true; send({ type: "result", id: execution.id, exitCode: 126, stdout: "", stderr: "" }); }
     signalGroup(execution.group, "SIGKILL");
-    await new Promise((resolve) => setTimeout(resolve, RETRY_MS));
+    await new Promise((resolve) => setTimeout(resolve, CLEANUP_RETRY_MS));
   }
 }
 
@@ -220,7 +191,7 @@ process.on("disconnect", () => {
 });
 process.once("SIGINT", () => { shuttingDown = true; if (active) void terminateActive(); else exitWhenSafe(); });
 process.once("SIGTERM", () => { shuttingDown = true; if (active) void terminateActive(); else exitWhenSafe(); });
-if (processTableReadable()) send({ type: "ready" });
+if (table && await table.readable()) send({ type: "ready" });
 else {
   clearInterval(parentWatch);
   if (process.connected) process.disconnect();

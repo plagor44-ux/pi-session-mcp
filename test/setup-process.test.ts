@@ -305,3 +305,13 @@ describe.skipIf(process.platform !== "linux")("setup process runner", () => {
     }
   });
 });
+
+describe("setup process runner platform gate", () => {
+  it("returns 126 without spawning on an unsupported platform", async () => {
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    try {
+      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", "require('node:fs').writeFileSync('must-not-exist','')"]);
+      expect(result).toEqual({ exitCode: 126, stdout: "", stderr: "" });
+    } finally { vi.restoreAllMocks(); }
+  });
+});
