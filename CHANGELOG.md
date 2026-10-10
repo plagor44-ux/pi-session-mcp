@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `pi-session-mcp-doctor` now checks the package it belongs to, whatever the
+  current directory is. Previously it checked the current directory: in an npm
+  installation, run from another directory, it failed with
+  `package_metadata_unreadable` and `build_missing`, and inside another
+  checkout it reported that checkout. `npm run doctor` in a release checkout
+  and `setup` were not affected.
+
 ## 0.6.3 — 2026-10-10
 
 - Doctor no longer reports a false `build_stale` warning right after
