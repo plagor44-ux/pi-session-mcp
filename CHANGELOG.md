@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.4 — 2026-10-10
+
 - `pi-session-mcp-doctor` now checks the package it belongs to, whatever the
   current directory is. Previously it checked the current directory: in an npm
   installation, run from another directory, it failed with
