@@ -259,8 +259,9 @@ Pi Session MCP has not been accepted on macOS. No acceptance level has been run
 there, and macOS support is planned. Until then, this path is the way to
 register a client on macOS, and it is not covered by any acceptance.
 
-1. Install and configure as in steps 1 and 2, then run Doctor as in step 3. It
-   has no platform-specific check and needs neither `flock` nor `/proc`.
+1. Install as in section 1, configure as in section 2, and run Doctor as in
+   section 3. Doctor has no platform-specific check and needs neither `flock`
+   nor `/proc`.
 2. Register the server with the client's own command, as the
    [Codex](client-setup.md#register-with-codex) and
    [Claude Code](client-setup.md#register-with-claude-code) sections of the
@@ -271,24 +272,38 @@ register a client on macOS, and it is not covered by any acceptance.
    resulting absolute path into the command; a substitution inside the single
    quotes of the Codex example would not be expanded.
 3. Check the registration instead of `--verify`:
-   - Doctor passed in step 1.
+   - Doctor passed in item 1.
+   - Compare the stored registration with what you meant to register.
+     `claude mcp get pi-session-mcp` and `codex mcp get pi-session-mcp` print
+     the Node executable, the entry point and the configuration path that the
+     client stored, and Claude Code also prints the scope. Each must equal the
+     value you passed. `--verify` makes this comparison for `setup`. Without
+     it, a registration that still points at an old release directory passes
+     every other check.
    - `claude mcp list` and `claude mcp get pi-session-mcp` report `Connected`
      when the client could start the server and complete the MCP connection.
-     `codex mcp get pi-session-mcp` shows the registration that Codex stored.
+     A registration with `-s project` reports `Pending approval` instead,
+     because Claude Code connects to a project server only after you approve it
+     in a session in that project. Approve it, then expect `Connected`.
    - Start a new client session and call `pi_capabilities_get` with `{}`. The
      client lists the eight tools, and the call returns the configured aliases.
 
    Like `--verify`, none of these starts a Pi session or contacts a provider.
 4. Upgrade and remove with the client's own commands. Nothing owns the
-   registration and it is not bound to the build. An npm upgrade replaces the
-   package in place and keeps the entry point, so close the client sessions,
-   install the new version and repeat steps 1 and 3. A new release directory
-   needs a new registration: run `codex mcp remove pi-session-mcp` or
-   `claude mcp remove pi-session-mcp -s <scope>`, add the server again with the
-   new paths, and repeat steps 1 and 3. To remove it entirely, run the client's
-   remove command, then uninstall the package or delete the release directory
-   and the configuration file. A manual registration leaves no ownership state,
-   so the `--remove` of the Remove section does not apply.
+   registration and it is not bound to the build.
+   - An npm upgrade replaces the package in place and keeps the entry point.
+     Close the client sessions, install the new version as in section 1, run
+     Doctor as in section 3, and repeat the checks of item 3. Do not run the
+     `cp` of section 2 again: it replaces your configuration with the packaged
+     example.
+   - A new release directory needs a new registration. Run
+     `codex mcp remove pi-session-mcp` or
+     `claude mcp remove pi-session-mcp -s <scope>`, add the server again with
+     the new paths, run Doctor, and repeat the checks of item 3.
+   - To remove it entirely, run the client's remove command, then uninstall the
+     package or delete the release directory and the configuration file. A
+     manual registration leaves no ownership state, so the `--remove` of the
+     Remove section does not apply.
 
 ## 5. Run a first session
 
