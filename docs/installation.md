@@ -271,7 +271,11 @@ register a client on macOS, and it is not covered by any acceptance.
    prints that directory, in a release checkout it is the checkout. Write the
    resulting absolute path into the command; a substitution inside the single
    quotes of the Codex example would not be expanded.
-3. Check the registration instead of `--verify`:
+3. Check the registration. These checks are not a replacement for
+   `setup --verify`: it also performs a bounded direct MCP handshake, and
+   outside `setup` nothing does that yet. The last check below depends on the
+   client, which can hang or hide a handshake problem, so treat the result as
+   weaker evidence than `--verify`.
    - Doctor passed in item 1.
    - Compare the stored registration with what you meant to register.
      `claude mcp get pi-session-mcp` and `codex mcp get pi-session-mcp` print
