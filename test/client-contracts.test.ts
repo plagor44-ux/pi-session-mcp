@@ -111,6 +111,7 @@ describe.each([
 describe.each([
   { version: "2.1.292", neighbor: "2.1.293" },
   { version: "2.1.295", neighbor: "2.1.296" },
+  { version: "2.1.296", neighbor: "2.1.297" },
 ])("recorded Claude Code $version contract", ({ version, neighbor }) => {
   const contract = loadContract(`claude-code-${version}`);
   const scopes = ["user", "project", "local"] as const;
