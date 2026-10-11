@@ -29,7 +29,7 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.7.0**.
+The package version is **0.7.1**.
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is recorded for Claude Code only; Codex is still pending. See [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.

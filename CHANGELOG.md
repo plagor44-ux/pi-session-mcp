@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.7.1 — 2026-10-11
+
+The public MCP contract is unchanged.
+
 - Extension tool names are now limited to 1 to 64 letters, digits, `_` and
   `-`, not starting with `-`, so `.` and `:` no longer pass and every name fits
   the common provider function-name limit. Names that Pi SDK 1.1.0 treats as
