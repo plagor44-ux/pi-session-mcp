@@ -372,13 +372,14 @@ pin the installed version in the profile:
   --extensions`, update the pinned version and restart the client.
 - **Full capabilities.** An extension loads with its providers, tools, hooks
   and system-prompt changes. In `read-only` profiles the model still gets only
-  `read`, `grep`, `find` and `ls`; in `coding` profiles it also gets every
-  extension tool. Extension commands never run from client prompts, but
+  `read`, `grep`, `find` and `ls`; in `coding` profiles every extension tool
+  may be active. Extension commands never run from client prompts, but
   extension input hooks can still see, rewrite or consume a client prompt.
 - **Fail-closed start.** A session start fails with `extension_load_failed` if
   an extension reports a hook error while binding. It fails the same way if an
   extension registers an MCP server while loading or starting, because Pi's
-  built-in MCP extension is not loaded. An extension tool whose name collides with another tool fails with
+  built-in MCP extension is not loaded. An extension tool whose name collides
+  with another tool, or whose name is not a plain identifier, fails with
   `extension_tool_conflict`.
 - **Cursor runtime.** `pi-cursor-sdk` runs Cursor's local agent runtime. That
   runtime starts its own processes (for example git and the MCP servers

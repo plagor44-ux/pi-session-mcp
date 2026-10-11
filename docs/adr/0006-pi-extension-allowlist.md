@@ -9,9 +9,9 @@ Embedded sessions loaded no Pi extensions. Providers that exist only as Pi
 extensions, such as `cursor` from `pi-cursor-sdk`, were unusable through Pi
 Session MCP although Pi had them installed and authenticated.
 
-ADR 0003 chose maintenance without a new feature phase. This ADR is an
-explicitly approved scope expansion by the owner (2026-10-11, issue #34), in
-the same way ADR 0005 relates to ADR 0003.
+ADR 0003 chose maintenance without a new feature phase. Unlike ADR 0005,
+which followed a fired ADR 0003 revisit trigger, this is a scope expansion
+the owner explicitly approved (2026-10-11, issue #34).
 
 ## Decision
 
@@ -27,7 +27,7 @@ An execution profile may name Pi extensions as
   system-prompt changes.
 - In `read-only` profiles the model's tools stay `read`, `grep`, `find` and
   `ls`.
-- In `coding` profiles every extension tool is active.
+- In `coding` profiles every extension tool may be active.
 - An extension tool name that collides with another tool fails closed in both
   profiles.
 

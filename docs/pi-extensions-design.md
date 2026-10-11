@@ -210,6 +210,9 @@ and step 6 leaves no session to dispose.
   granted MCP tool or a tool of another extension fails with
   `extension_tool_conflict`. This also stops an extension from replacing a
   built-in tool inside a `read-only` profile.
+  A name must also match `[A-Za-z0-9_.:][A-Za-z0-9_.:-]*`: the SDK reads `*`
+  in an allowlist as a glob and a leading `+` or `-` as a modifier, so any
+  other name fails the same way, in both profiles.
   The check runs after load and again after binding, because a `session_start`
   handler can register a tool during `bindExtensions`. If the registered tool
   set then differs from the one the session was created with, the start fails
@@ -253,9 +256,13 @@ A new module `src/stdout-guard.ts` runs first in `src/main.ts`, before any
 other import with side effects:
 
 - It captures the original `process.stdout.write`.
-- It builds a `Writable` that forwards to the captured write. `main` passes
-  `new StdioServerTransport(process.stdin, thatWritable)` to `serveStdio`
+- It builds a write-through `Proxy` over the real stdout: `write` and `end`
+  resolve to the original bound methods and every other function is bound to
+  the real stream, so queued frames reach stdout synchronously. `main` passes
+  `new StdioServerTransport(process.stdin, thatProxy)` to `serveStdio`
   through its `transport` option.
+- It also patches `process.stdout.end` for foreign callers: a foreign `end`
+  neither leaks content nor closes the real stdout.
 - It replaces `process.stdout.write` and `console.log`, `console.info` and
   `console.debug`. Their output is dropped. The guard writes at most one
   structured stderr line per second, carrying the bytes and the number of
@@ -337,8 +344,8 @@ Automated tests use no credentials and no network.
 - **Config** (`test/config.test.ts`): valid scoped and unscoped specs;
   rejection of ranges, tags, `git:`, paths, duplicates and more than 8
   entries; the field on read-only and coding profiles.
-- **Resolution** (`test/pi-extensions.test.ts`), with an injected package
-  manager and file system: not installed, version mismatch, invalid manifest,
+- **Resolution** (`test/pi-extensions.test.ts`), with an injected install-location
+  lookup and file system: not installed, version mismatch, invalid manifest,
   missing `pi.extensions`, an entry or symlink escaping the package directory,
   and the guarantee that `resolve()` and install methods are never called.
 - **Doctor** (`test/doctor.test.ts`): both new checks, check order, and that
@@ -355,7 +362,9 @@ Automated tests use no credentials and no network.
   - profiles without extensions taking the unchanged path.
 - **stdout guard** (`test/stdout-guard.test.ts`): foreign `write` and
   `console.*` output does not reach stdout, transport writes do, and the
-  stderr event carries only a byte count.
+  stderr event carries only a byte count. Regressions cover synchronous
+  delivery of every queued transport frame and a foreign `end` that must not
+  close stdout.
 - **SDK contract with the real SDK** (`test/sdk-extension-contract.test.ts`):
   a fixture extension in `test/fixtures/pi-extension-fixture`, installed into a
   temporary Pi agent directory, registers:
@@ -363,14 +372,17 @@ Automated tests use no credentials and no network.
   - a tool and a slash command;
   - a `setActiveTools` attempt;
   - `console.log` and `process.stdout.write` calls;
-  - `session_start` and `session_shutdown` hooks.
+  - `session_start` and `session_shutdown` hooks;
+  - a `before_agent_start` hook that repeats the widening attempt (adding
+    `bash`, `write`, `edit` and the fixture tool) on every prompt.
 
   The test proves that:
   - the provider resolves and a prompt completes;
-  - read-only keeps the fixture tool inactive;
+  - read-only keeps the fixture tool and the built-in write tools inactive,
+    including against the mid-turn `before_agent_start` widening attempt;
   - the slash command is not dispatched;
   - both lifecycle events are observed.
-- **stdio end to end** (`test/mcp-stdio-e2e.test.ts`): the built server runs
+- **stdio end to end** (`test/process-extension.test.ts`): the built server runs
   with a configuration that uses the fixture extension. Every stdout frame
   parses, and stderr contains `foreign_stdout_suppressed`.
 
