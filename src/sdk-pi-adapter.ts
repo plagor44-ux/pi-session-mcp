@@ -515,7 +515,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch");
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset");
   }
 
   /** Provider, model, authentication and availability, exactly as configured. */
@@ -584,6 +584,8 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     mcpTools: SessionMcpTools,
     disposeSession: () => void | Promise<void>,
     toolMismatch: PiSessionCreationErrorCode | undefined,
+    // `subset` lets an extension narrow its own active tools; nothing outside the allowlist may be active.
+    toolCheck: "exact" | "subset" = "exact",
   ): Promise<PiSessionHandle> {
     try {
       if (session.model?.provider !== executionProfile.provider || session.model.id !== executionProfile.model) {
@@ -594,7 +596,11 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       }
       if (toolMismatch !== undefined) {
         const active = new Set(session.getActiveToolNames());
-        if (active.size !== tools.length || tools.some((name) => !active.has(name))) {
+        const allowed = new Set(tools);
+        const mismatch = toolCheck === "subset"
+          ? [...active].some((name) => !allowed.has(name))
+          : active.size !== tools.length || tools.some((name) => !active.has(name));
+        if (mismatch) {
           throw this.failure(executionProfile, "postcheck", toolMismatch);
         }
       }

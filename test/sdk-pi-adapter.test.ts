@@ -697,10 +697,23 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects an active tool set that differs after binding and disposes the runtime", async () => {
+  it("rejects an active tool outside the allowlist after binding and disposes the runtime", async () => {
     const h = extensionHarness({ activeTools: [...PROFILE_TOOLS["read-only"], "fixture_tool"] });
     await expect(h.create()).rejects.toMatchObject({ code: "execution_selection_mismatch" });
     expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a coding session with an active tool outside the allowlist", async () => {
+    const h = extensionHarness({ permissionProfile: "coding", activeTools: [...PROFILE_TOOLS.coding, "fixture_tool", "rogue"] });
+    await expect(h.create()).rejects.toMatchObject({ code: "execution_selection_mismatch" });
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("admits a session whose extension deactivates its own tool", async () => {
+    const h = extensionHarness({ permissionProfile: "coding", activeTools: [...PROFILE_TOOLS.coding] });
+    const handle = await h.create();
+    expect(handle.appliedSelection.model).toBe(profile.model);
+    expect(h.runtimeDispose).not.toHaveBeenCalled();
   });
 
   it("closes through the session runtime so session_shutdown runs", async () => {

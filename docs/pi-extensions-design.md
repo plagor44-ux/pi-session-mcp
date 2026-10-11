@@ -181,7 +181,11 @@ For a profile with `extensions`, `SdkPiSessionAdapter.create` runs:
 7. **Bind.** Call `session.bindExtensions({ mode: "print" })` without a UI
    context, so the SDK's no-op UI applies and `session_start` is emitted. A
    failure is `extension_load_failed`.
-8. **Postchecks.** Model, thinking level and active tools, as today.
+8. **Postchecks.** Model, thinking level and active tools. For extension
+   sessions no active tool may be outside the composed allowlist, but fewer
+   active tools are allowed: an extension may deactivate tools, as
+   `pi-cursor-sdk` does with its own tool in `session_start`. Sessions without
+   extensions keep the exact-equality check as today.
 
 Step 3, step 6 and step 7 are each bounded by the existing session-creation
 deadline (`SESSION_CREATION_TIMEOUT_MS`). A failure after step 6 disposes the
