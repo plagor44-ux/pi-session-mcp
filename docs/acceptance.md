@@ -128,10 +128,22 @@ client cycles.
 
 `scripts/setup-acceptance.mjs` runs the isolation, the sequence and the pass
 criteria above with the real clients. It uses disposable homes below its work
-directory (default `~/.cache/pi-session-mcp-acceptance`, never below `/tmp` or
-`$TMPDIR`), removes them afterwards and writes a sanitized JSON result without
+directory (default `~/.cache/pi-session-mcp-acceptance`, never below `/tmp`,
+`/var/tmp`, `/dev/shm` or `$TMPDIR`), removes them afterwards (also after Ctrl-C
+or SIGTERM, with exit `130` or `143`) and writes a sanitized JSON result without
 paths or environment values. It exits with `0` when every check passed, `1` when
-a check failed and `2` on a usage or environment error.
+a check failed and `2` on a usage, environment or harness error.
+
+`--setup` is split on whitespace, so paths in it must not contain spaces. Its
+first token must be an absolute path to an existing file or a command found on
+`PATH`; otherwise the script exits with `2`.
+
+The script only reads the real `~/.codex/config.toml` and `~/.claude.json` to
+prove that the MCP registrations in them did not change. A file that does not
+exist counts as the constant digest `absent`; one that exists but cannot be read
+fails the check. A real client session that changes its own MCP registrations
+during the run makes the digest check fail (a false fail), so close or idle real
+clients first.
 
 Working tree, after `npm run build` and `npm run build:cli`:
 
@@ -191,7 +203,7 @@ CI-tested, and it has not passed Level 2 for Codex.
 - **Interruption.** Start `--apply` for one target and press Ctrl-C while it
   runs.
   - The run exits with `130` and reports `operation_interrupted`.
-  - Afterwards `ps -A -o pid=,command=` lists no `claude mcp` or `codex mcp`
+  - Afterwards `ps -ww -A -o pid=,command=` lists no `claude mcp` or `codex mcp`
     command and no `setup-main.js` or `setup-command-guardian.js` process of
     the build under test.
   - A following `--apply` reports one of three outcomes, depending on where
@@ -203,7 +215,8 @@ CI-tested, and it has not passed Level 2 for Codex.
   - A following `--remove` reports `ok (removed)`.
   - If the operation completes before the interrupt arrives, record that and
     repeat. An interrupt that never lands is not a pass.
-- **Processes.** Check that no process remains with `ps` instead of `/proc`.
+- **Processes.** Check that no process remains with `ps -ww` instead of `/proc`;
+  without `-ww`, `ps` truncates long commands when it has no terminal.
 
 The evidence record names the build (commit or tag), the environment above,
 every command with its exit status, and the sanitized JSON results. It

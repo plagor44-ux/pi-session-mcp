@@ -13,7 +13,9 @@
 //
 //   --setup      command that runs the setup CLI, for example
 //                "node <checkout>/dist/setup-main.js" or
-//                "<prefix>/bin/pi-session-mcp-setup"
+//                "<prefix>/bin/pi-session-mcp-setup". It is split on
+//                whitespace, so paths in it must not contain spaces; its first
+//                token must be an existing file or a command found on PATH
 //   --label      free text that names the run in the result
 //   --out        file that receives the sanitized JSON result
 //   --build-dir  checkout or installed package whose package.json,
@@ -21,15 +23,17 @@
 //                byte-identical before and after the run
 //   --clients    comma-separated subset, default "codex,claude-code"
 //   --work-dir   default ~/.cache/pi-session-mcp-acceptance; it must not be
-//                below a temporary directory, because Codex refuses helper
+//                below a temporary directory (/tmp, /var/tmp, /dev/shm or the
+//                system temporary directory), because Codex refuses helper
 //                binaries there
 //
-// Exit status: 0 all checks passed, 1 a check failed, 2 usage or environment
-// error. Node built-ins only; Linux and macOS.
+// Exit status: 0 all checks passed, 1 a check failed, 2 on a usage,
+// environment or harness error; 130 and 143 after SIGINT and SIGTERM. Node
+// built-ins only; Linux and macOS.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
-  chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync,
+  accessSync, chmodSync, constants, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -83,7 +87,7 @@ function isInside(path, parent) {
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 function refuseTemporaryWorkDir(workDir) {
-  const temporary = new Set(["/tmp", "/private/tmp", tmpdir()]);
+  const temporary = new Set(["/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", "/dev/shm", tmpdir()]);
   for (const dir of [...temporary]) temporary.add(realPathOf(dir));
   const candidates = [resolve(workDir), realPathOf(workDir)];
   if ([...temporary].some((dir) => candidates.some((c) => isInside(c, dir)))) {
@@ -91,10 +95,25 @@ function refuseTemporaryWorkDir(workDir) {
   }
 }
 
+// The first token of --setup must be an existing file or a command on PATH.
+function checkSetupCommand(token) {
+  const isExecutableFile = (p) => {
+    try { accessSync(p, constants.X_OK); return statSync(p).isFile(); } catch { return false; }
+  };
+  if (token.includes("/")) {
+    if (!isAbsolute(token)) usageError("the first token of --setup must be an absolute path or a command name: setup commands run in another directory");
+    if (!existsSync(token)) usageError("the first token of --setup is not an existing file");
+    return;
+  }
+  const found = (process.env.PATH ?? "").split(":").some((dir) => dir !== "" && isExecutableFile(join(dir, token)));
+  if (!found) usageError("the first token of --setup is not a command found on PATH");
+}
+
 const args = parseArguments();
 if (process.platform !== "linux" && process.platform !== "darwin") usageError("only Linux and macOS are supported");
 const WORK_DIR = args["work-dir"] ? resolve(args["work-dir"]) : join(homedir(), ".cache", "pi-session-mcp-acceptance");
 refuseTemporaryWorkDir(WORK_DIR);
+checkSetupCommand(args.setup.trim().split(/\s+/)[0]);
 if (!existsSync(dirname(resolve(args.out)))) usageError("the directory of --out does not exist");
 if (args["build-dir"] && !existsSync(resolve(args["build-dir"]))) usageError("--build-dir does not exist");
 
@@ -124,8 +143,14 @@ function mcpServersOf(claudeJson) {
   for (const [key, entry] of Object.entries(claudeJson.projects ?? {})) if (entry?.mcpServers) servers.projects[key] = entry.mcpServers;
   return servers;
 }
+// A config file that does not exist has the constant digest "absent"; one that
+// exists but cannot be read or parsed is "unreadable" and fails the run.
+function digestOf(path, digest) {
+  if (!existsSync(path)) return "absent";
+  try { return digest(readFileSync(path, "utf8")); } catch { return "unreadable"; }
+}
 function realClaudeDigest() {
-  try { return sha(JSON.stringify(canonical(mcpServersOf(JSON.parse(readFileSync(join(REAL_HOME, ".claude.json"), "utf8")))))); } catch { return "unreadable"; }
+  return digestOf(join(REAL_HOME, ".claude.json"), (text) => sha(JSON.stringify(canonical(mcpServersOf(JSON.parse(text))))));
 }
 // Only the `mcp_servers` tables of the Codex config take part in the digest.
 function mcpTables(text) {
@@ -139,7 +164,7 @@ function mcpTables(text) {
   return out.join("\n");
 }
 function realCodexDigest() {
-  try { return sha(mcpTables(readFileSync(join(REAL_HOME, ".codex", "config.toml"), "utf8"))); } catch { return "unreadable"; }
+  return digestOf(join(REAL_HOME, ".codex", "config.toml"), (text) => sha(mcpTables(text)));
 }
 const realDigest = () => CLIENTS.map((c) => (c === "codex" ? realCodexDigest() : realClaudeDigest())).join("|");
 
@@ -227,7 +252,7 @@ function buildSnapshot(buildDir) {
 // Process table as [{ pid, ppid, cmd }]: /proc on Linux, `ps` on macOS.
 function processTable() {
   if (process.platform === "darwin") {
-    const r = spawnSync("/bin/ps", ["-A", "-o", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const r = spawnSync("/bin/ps", ["-ww", "-A", "-o", "pid=,ppid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     if (r.status !== 0) throw new Error("ps failed");
     return r.stdout.split("\n").flatMap((line) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
@@ -256,6 +281,9 @@ function leftoverProcesses(patterns) {
     .filter((p) => !skip.has(p.pid) && !p.cmd.includes("setup-acceptance.mjs") && patterns.some((pattern) => p.cmd.includes(pattern)))
     .map((p) => p.pid);
 }
+// Signal handlers only run when the event loop turns; the lifecycle is
+// otherwise synchronous, so it yields between steps (a running child finishes first).
+const tick = () => new Promise((done) => setImmediate(done));
 const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 // ---- lifecycle -----------------------------------------------------------
@@ -350,10 +378,10 @@ function runStep(t, step, reports, stateBeforeStep1) {
   return record;
 }
 
-function runTarget(t, reports) {
+async function runTarget(t, reports) {
   const entry = { target: `${t.client}:${t.scope}:${ALIAS}`, steps: [], postconditions: {} };
   const stateBeforeStep1 = clientState(t.client);
-  for (const step of SEQUENCE) entry.steps.push(runStep(t, step, reports, stateBeforeStep1));
+  for (const step of SEQUENCE) { await tick(); entry.steps.push(runStep(t, step, reports, stateBeforeStep1)); }
   // after step 9
   entry.postconditions = {
     registrationAbsent: check(!present(t.client, t.scope, ALIAS)),
@@ -374,9 +402,10 @@ function checkFinalState(result) {
   }
 }
 
-function checkProcesses(buildDir) {
+function checkProcesses(buildDirs) {
   const patterns = ["setup-main.js", "setup-command-guardian.js", "pi-session-mcp-setup"];
-  patterns.push(buildDir ? join(buildDir, "dist", "main.js") : "pi-session-mcp/dist/main.js");
+  if (buildDirs) patterns.push(...buildDirs.map((dir) => join(dir, "dist", "main.js")));
+  else patterns.push("pi-session-mcp/dist/main.js");
   let leftover = leftoverProcesses(patterns);
   for (let i = 0; i < 10 && leftover.length > 0; i += 1) { sleepMs(500); leftover = leftoverProcesses(patterns); } // allow a short settle
   return { leftoverCount: leftover.length, pass: check(leftover.length === 0) };
@@ -433,8 +462,21 @@ const result = {
   failures: 0,
 };
 const reports = []; // raw stdout of every setup command, for the leak scan only
-const buildDir = args["build-dir"] ? resolve(args["build-dir"]) : null;
+// The build directory as given and with symlinks resolved: a process may name either.
+const buildDirs = args["build-dir"] ? [...new Set([resolve(args["build-dir"]), realpathSync(resolve(args["build-dir"]))])] : null;
+const buildDir = buildDirs ? buildDirs[buildDirs.length - 1] : null;
 let harnessError = false;
+
+// A signal skips the `finally` below: remove this run's directory only, then exit.
+// The handler runs at the next tick, that is after the child process in flight.
+function removeRunDirectoryAndExit(code) {
+  try {
+    if (basename(ROOT) === RUN_ID && dirname(ROOT) === WORK_DIR && ROOT !== WORK_DIR) rmSync(ROOT, { recursive: true, force: true });
+  } catch { /* best effort */ }
+  process.exit(code);
+}
+process.on("SIGINT", () => removeRunDirectoryAndExit(130));
+process.on("SIGTERM", () => removeRunDirectoryAndExit(143));
 
 try {
   const realBefore = realDigest();
@@ -443,9 +485,11 @@ try {
   prepareEnvironment();
   // The Claude Code local scope is keyed by the project path as the client sees it.
   if (realpathSync(project) !== project) result.notes.push("project path is a symlink; local-scope inspection may mismatch");
+  await tick();
   recordVersions(result, buildDir);
+  await tick();
   addSentinels(result);
-  for (const t of TARGETS) result.targets.push(runTarget(t, reports));
+  for (const t of TARGETS) result.targets.push(await runTarget(t, reports));
   checkFinalState(result);
 
   if (buildDir) {
@@ -453,12 +497,13 @@ try {
     result.buildUnchanged = check(JSON.stringify(canonical(buildBefore)) === JSON.stringify(canonical(after)));
     result.buildFileCount = Object.keys(after).length;
   }
-  result.processCheck = checkProcesses(buildDir);
+  result.processCheck = checkProcesses(buildDirs);
   result.pathLeakCheck = scanReports(reports);
 
   const realAfter = realDigest();
-  result.realRegistrationsUnchanged = check(realBefore === realAfter && !realBefore.includes("unreadable"));
+  result.realRegistrationsUnchanged = check(realBefore === realAfter && !realBefore.includes("unreadable") && !realAfter.includes("unreadable"));
   if (realBefore.includes("unreadable")) result.notes.push("a real registration source was unreadable; digest comparison is not meaningful for it");
+  if (realBefore.includes("absent")) result.notes.push("a real registration source does not exist; its digest is the constant absent");
 } catch (error) {
   result.notes.push(`harness_error: ${stripPaths(String(error?.message ?? error))}`);
   check(false);
