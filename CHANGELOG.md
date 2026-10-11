@@ -12,9 +12,9 @@
 - Extension pins with build metadata, such as `npm:<name>@1.2.3+build.1`, are
   now rejected when the configuration loads. npm does not keep build metadata
   in a published version, so such a pin could never match the installed
-  manifest; the configuration now fails (and Doctor reports `config_invalid`)
-  instead of every session failing with `extension_version_mismatch`.
-  Fixes #42.
+  manifest. Such a configuration is now invalid as a whole: the server does not
+  start and Doctor reports `config_invalid`, instead of every session of the
+  profile failing with `extension_version_mismatch`. Fixes #42.
 - Client prompts now reach Pi with `source: "rpc"`, the marker Pi's own RPC
   mode uses for input from a program, instead of the SDK default
   `interactive`. Extension `input` hooks can no longer mistake a client prompt
