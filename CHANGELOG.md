@@ -19,6 +19,9 @@
   mode uses for input from a program, instead of the SDK default
   `interactive`. Extension `input` hooks can no longer mistake a client prompt
   for a human at the terminal. Fixes #43.
+- The npm package no longer ships the implementation plans under
+  `docs/superpowers/`; the operator documentation stays included. A test
+  checks the packed file list. Fixes #39.
 
 ## 0.7.0 — 2026-10-11
 
