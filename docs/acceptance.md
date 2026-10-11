@@ -522,3 +522,54 @@ Claude Code `2.1.296`, on 2026-10-11:
 The Pi extension live check above ran on `eeaa597`, before the final fixes to
 extension tool names and the `read-only` contract test. It has not been
 repeated on the release candidate.
+
+After its release, `v0.7.0` passed Level 1 and Level 2 on a fresh clone of its
+tag, and Level 2 as published npm package, on 2026-10-11, with Node.js
+`26.11.1`, Codex CLI `0.162.1` and Claude Code `2.1.296`:
+- Tag clone: `git describe --tags --exact-match` reported `v0.7.0`. The tag
+  object is `a5516ce6e4e159ef1e20ee38aba06672379e9cb7` and the peeled commit
+  `6783631d2ae1813707cf798360a0a0f4c58ca66d`.
+- Level 1 on the tag clone:
+  - every command exited with `0`;
+  - the test run reported 37 files, 660 passed and 5 skipped;
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities;
+  - Doctor reported `packageVersion` `0.7.0` and no finding;
+  - `dist/main.js` has the SHA-256
+    `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`.
+- Level 2 passed 96 of 96 checks on the tag clone, and 96 of 96 with the npm
+  package installed into a temporary prefix through
+  `pi-session-mcp-setup`. In both runs the real client registrations were
+  unchanged, no process remained, and the built files were byte-identical
+  before and after the client cycles.
+- The npm package has the shasum `c8d73311dbde1bdebd78e58b1f01c7cf3bebf374`.
+  The tarball downloaded from the registry had the same SHA-1 and SHA-512
+  integrity.
+- Installed package:
+  - `pi-session-mcp-doctor` reported a healthy package `0.7.0` when run from an
+    unrelated working directory;
+  - with a configuration that pins `pi-cursor-sdk@0.5.3` on three profiles,
+    `setup --apply` and `--verify` for `claude-code:user:pi-session-mcp`
+    reported `applied` and `mcp_verified`.
+
+On 2026-10-11 the installed `v0.7.0` package also passed the Pi extension live
+check on Linux:
+- Method: the same scripted JSON-RPC client as above drove the installed
+  server. It used the operator's configuration with three `pi-cursor-sdk@0.5.3`
+  profiles: one `read-only` and one `coding` profile with
+  `claude-opus-5-5@1m` and `claude-opus-5-5@300k` at thinking level `high`, and
+  one `coding` profile with `composer-2.5` at thinking level `off`.
+- Each of the three profiles started, completed a prompt with "PONG", and
+  closed. One `coding` and one `read-only` Cursor session started in parallel
+  and both completed.
+- Profiles without extensions on three other providers (xAI, Mistral and
+  DeepSeek) each completed a prompt.
+- After close no descendant process of the server remained. No stdout line
+  failed to parse as an MCP frame; stderr carried four
+  `foreign_stdout_suppressed` reports for 12 suppressed writes and no other
+  event.
+- The two OpenAI profiles ended `failed` with `turn_failed`. A direct Pi CLI
+  call outside the server showed that the account had reached its usage limit,
+  so they are not evidence for or against the release.
+
+This check does not cover macOS, an MCP client in the loop, or a session that
+uses Cursor's own tools.
