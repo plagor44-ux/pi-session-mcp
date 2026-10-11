@@ -5,7 +5,8 @@ describe("extension specs", () => {
   it.each([
     ["npm:pi-cursor-sdk@0.5.3", "pi-cursor-sdk", "0.5.3"],
     ["npm:@scope/provider-ext@1.2.3", "@scope/provider-ext", "1.2.3"],
-    ["npm:ext@1.0.0-beta.1+build.5", "ext", "1.0.0-beta.1+build.5"],
+    ["npm:ext@1.0.0-beta.1", "ext", "1.0.0-beta.1"],
+    ["npm:@scope/ext@2.0.0-rc.2", "@scope/ext", "2.0.0-rc.2"],
   ])("parses %s", (spec, name, version) => {
     expect(parseExtensionSpec(spec)).toEqual({ spec, name, version });
     expect(Object.isFrozen(parseExtensionSpec(spec))).toBe(true);
@@ -23,6 +24,9 @@ describe("extension specs", () => {
     "npm:/absolute/path@1.0.0",
     "npm:Upper@1.0.0",
     "npm:@scope@1.0.0",
+    "npm:x@1.2.3+build.1",
+    "npm:x@1.2.3-beta.1+b",
+    "npm:@scope/x@1.2.3+b",
     " npm:ext@1.0.0",
     `npm:${"a".repeat(260)}@1.0.0`,
   ])("rejects %s", (spec) => {

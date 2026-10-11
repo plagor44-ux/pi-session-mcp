@@ -115,8 +115,12 @@ Rules, enforced by `configSchema`:
 
 - Each entry matches `npm:<name>@<version>`. `<name>` is an npm package name,
   optionally scoped (`@scope/name`), lowercase. `<version>` is an exact semver
-  version with optional prerelease and build metadata. Ranges, tags, `git:`,
-  paths and URLs are rejected.
+  version with an optional prerelease. Build metadata (`+build`) is rejected
+  because npm does not keep it in a published version, so such a pin could
+  never match the installed manifest; the configuration fails with
+  `config_invalid` instead of every session failing with
+  `extension_version_mismatch`. Ranges, tags, `git:`, paths and URLs are
+  rejected.
 - At most 8 entries per profile. A package name appears at most once per
   profile.
 - The field is allowed on `read-only` and `coding` profiles, including the

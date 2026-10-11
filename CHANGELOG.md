@@ -9,6 +9,12 @@
   `list_mcp_resource_templates`, `read_mcp_resource`) are rejected too, because
   the SDK would keep them outside the allowlist. Both cases fail with
   `extension_tool_conflict`. Fixes #41.
+- Extension pins with build metadata, such as `npm:<name>@1.2.3+build.1`, are
+  now rejected when the configuration loads. npm does not keep build metadata
+  in a published version, so such a pin could never match the installed
+  manifest; the configuration now fails (and Doctor reports `config_invalid`)
+  instead of every session failing with `extension_version_mismatch`.
+  Fixes #42.
 
 ## 0.7.0 — 2026-10-11
 

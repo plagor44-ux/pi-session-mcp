@@ -155,7 +155,7 @@ Rules:
 - A profile may load Pi extensions that Pi has installed, through
   `extensions`: a list of at most 8 entries of the form
   `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
-  sources and paths are rejected. See [Pi extensions](#pi-extensions).
+  sources, paths and build metadata (`+build`) are rejected. See [Pi extensions](#pi-extensions).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 

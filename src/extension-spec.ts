@@ -8,8 +8,13 @@ export interface ExtensionSpec {
 
 export const MAX_PROFILE_EXTENSIONS = 8;
 const MAX_SPEC_LENGTH = 256;
-/** `npm:<name>@<exact semver>`; the name may be scoped. Ranges, tags, git sources and paths never match. */
-const EXTENSION_SPEC_PATTERN = /^npm:((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/;
+/**
+ * `npm:<name>@<exact semver>` with an optional prerelease; the name may be scoped. Ranges, tags,
+ * git sources and paths never match. Build metadata (`+build`) never matches either: npm does not
+ * keep it in a published version, so such a pin could never equal the installed manifest. Rejecting
+ * it here fails the configuration instead of every session with `extension_version_mismatch`.
+ */
+const EXTENSION_SPEC_PATTERN = /^npm:((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/;
 
 export function parseExtensionSpec(spec: string): ExtensionSpec | undefined {
   if (spec.length > MAX_SPEC_LENGTH) return undefined;
