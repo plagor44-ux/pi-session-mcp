@@ -40,19 +40,21 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   There is no clock-based stale recovery. A transaction guardian inherits that
   locked file description, launches each mutating client command in its own
   process group, and retains the fence across parent death until a determinate
-  process-table scan confirms that no non-zombie group member remains. The scan
-  reads `/proc` on Linux and the trusted system `/bin/ps` on macOS; a `ps`
-  sample that fails, has an unexpected line or does not list the scanning
+  process-table scan confirms that no non-zombie group member remains. The
+  scan reads `/proc` on Linux and the trusted system `/bin/ps` on macOS; a
+  `ps` sample that fails, has an unexpected line or does not list the scanning
   process is indeterminate. On macOS the proof rests on `/bin/ps` on the
   sealed, SIP-protected system volume, together with the uid and mode check
-  that also guards `flock`. The macOS lock relies on the documented
-  `O_EXLOCK` behavior of open(2): flock(2) semantics on the open file
-  description, and `EOPNOTSUPP` on a filesystem without locking, which fails
-  closed. Indeterminate cleanup retains the fence and fails closed. A missing or untrusted `flock` or `ps`, unsupported filesystems,
-  symlinks, inode mismatch, and raw lock errors are reduced to stable codes. Directory creation and atomic state replacement are fsynced
-  through their parent directory before success. A mutation already accepted
-  by an external CLI or configuration backend cannot be rolled back
-  automatically and remains `pending` for reconciliation.
+  that also guards `flock`. The macOS lock relies on the documented `O_EXLOCK`
+  behavior of open(2): flock(2) semantics on the open file description, and
+  `EOPNOTSUPP` on a filesystem without locking, which fails closed.
+  Indeterminate cleanup retains the fence and fails closed. A missing or
+  untrusted `flock` or `ps`, unsupported filesystems, symlinks, inode
+  mismatch, and raw lock errors are reduced to stable codes. Directory
+  creation and atomic state replacement are fsynced through their parent
+  directory before success. A mutation already accepted by an external CLI or
+  configuration backend cannot be rolled back automatically and remains
+  `pending` for reconciliation.
 - **Unsupported process-group guarantees:** Setup runs on Linux and macOS
   only. Every other platform fails closed before client spawn because no
   tested kernel fence and process-group proof exist for it. On both supported

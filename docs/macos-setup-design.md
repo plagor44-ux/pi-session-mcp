@@ -233,7 +233,7 @@ Public behavior is identical on both platforms:
 
 ## Trust boundary and limits
 
-These are added to `threat-model.md` and `client-setup-design.md`:
+These are recorded in `threat-model.md`; `client-setup-design.md` names the platform requirements:
 
 - On macOS, the proof that no live group member remains rests on `/bin/ps`,
   which sits on the sealed, SIP-protected system volume, together with the
