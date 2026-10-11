@@ -30,12 +30,40 @@ describe("resolvePiExtension", () => {
     expect(dependencies.installedPath).toHaveBeenCalledWith("npm:fixture-ext", "/unused-agent-dir");
   });
 
-  it("finds Pi's user install through the package manager without resolving or installing", async () => {
+  it("finds Pi's user install by its location without the SDK package manager", async () => {
     const { root, dir } = await installed(valid);
+    const lookup = vi.spyOn(DefaultPackageManager.prototype, "getInstalledPath");
     const resolve = vi.spyOn(DefaultPackageManager.prototype, "resolve");
-    await expect(resolvePiExtension(extension, { agentDir: root })).resolves.toBe(await realpath(dir));
-    expect(resolve).not.toHaveBeenCalled();
-    resolve.mockRestore();
+    try {
+      await expect(resolvePiExtension(extension, { agentDir: root })).resolves.toBe(await realpath(dir));
+      expect(lookup).not.toHaveBeenCalled();
+      expect(resolve).not.toHaveBeenCalled();
+    } finally {
+      lookup.mockRestore();
+      resolve.mockRestore();
+    }
+  });
+
+  it("reports a package missing from an empty agent directory as not installed", async () => {
+    const root = await temporaryRoot("pi-session-mcp-extension-");
+    await expect(resolvePiExtension(extension, { agentDir: root })).rejects.toMatchObject({ code: "extension_not_installed" });
+  });
+
+  it("reports a failing install lookup as a load failure", async () => {
+    const installedPath = vi.fn((): string | undefined => { throw new Error("lookup failed"); });
+    await expect(resolvePiExtension(extension, { agentDir: "/unused-agent-dir", installedPath })).rejects.toMatchObject({ name: "PiExtensionError", code: "extension_load_failed" });
+  });
+
+  it("reports an installed path that is a regular file as a load failure", async () => {
+    const root = await temporaryRoot("pi-session-mcp-extension-");
+    const file = join(root, "not-a-directory");
+    await writeFile(file, "x");
+    await expect(resolvePiExtension(extension, at(file))).rejects.toMatchObject({ code: "extension_load_failed" });
+  });
+
+  it("accepts a manifest with a byte order mark", async () => {
+    const { dir } = await installed(`\uFEFF${JSON.stringify(valid)}`);
+    await expect(resolvePiExtension(extension, at(dir))).resolves.toBe(await realpath(dir));
   });
 
   it("reports a package Pi has not installed", async () => {
@@ -55,14 +83,17 @@ describe("resolvePiExtension", () => {
   it.each([
     ["invalid JSON", "{"],
     ["a non-object manifest", "null"],
+    ["an array manifest", "[]"],
     ["no pi.extensions", { name: "fixture-ext", version: "1.2.3" }],
     ["an empty pi.extensions", { ...valid, pi: { extensions: [] } }],
     ["an absolute entry", { ...valid, pi: { extensions: ["/etc/passwd"] } }],
     ["a missing entry file", { ...valid, pi: { extensions: ["./missing.js"] } }],
+    ["a directory entry", { ...valid, pi: { extensions: ["./lib"] } }],
     ["an entry outside the package", { ...valid, pi: { extensions: ["../outside.js"] } }],
   ])("rejects %s as a load failure", async (_label, manifest) => {
     const { root, dir } = await installed(manifest);
     await writeFile(join(root, "npm", "node_modules", "outside.js"), "export default () => {};\n");
+    await mkdir(join(dir, "lib"));
     const error = await resolvePiExtension(extension, at(dir)).catch((caught: unknown) => caught);
     expect(error).toMatchObject({ name: "PiExtensionError", code: "extension_load_failed" });
     expect(String((error as Error).message)).not.toContain(root);

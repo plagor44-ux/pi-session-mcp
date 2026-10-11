@@ -1,21 +1,23 @@
-import { readFile, realpath } from "node:fs/promises";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
-import { DefaultPackageManager, getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 
 export interface PiExtensionResolverDependencies {
   /** Pi's agent directory; defaults to the SDK's `getAgentDir()`. */
   readonly agentDir?: string;
-  /** Looks up Pi's user-scope install of an npm source without installing anything. */
+  /** Locates Pi's user-scope install of an npm source; the default only computes the path. */
   readonly installedPath?: (source: string, agentDir: string) => string | undefined;
   readonly readFile?: (path: string) => Promise<string>;
   readonly realpath?: (path: string) => Promise<string>;
+  readonly stat?: (path: string) => Promise<{ isFile(): boolean }>;
 }
 
+// The SDK has no side-effect-free lookup: `resolve()` runs `npm install`, and `getInstalledPath`
+// falls back to a synchronous `npm root -g` on a miss and accepts global installs made outside Pi.
+// So this only computes where Pi puts user-scope npm packages; a missing directory means not installed.
 function installedPathFromPi(source: string, agentDir: string): string | undefined {
-  const settingsManager = SettingsManager.inMemory(undefined, { projectTrusted: false });
-  // `getInstalledPath` only looks the directory up; `resolve()` would run `npm install`.
-  return new DefaultPackageManager({ cwd: agentDir, agentDir, settingsManager }).getInstalledPath(source, "user");
+  return join(agentDir, "npm", "node_modules", source.slice("npm:".length));
 }
 
 function inside(root: string, candidate: string): boolean {
@@ -35,6 +37,7 @@ export async function resolvePiExtension(extension: ExtensionSpec, dependencies:
   const agentDir = dependencies.agentDir ?? getAgentDir();
   const read = dependencies.readFile ?? ((path: string) => readFile(path, "utf8"));
   const real = dependencies.realpath ?? realpath;
+  const statFile = dependencies.stat ?? stat;
   let installed: string | undefined;
   try { installed = (dependencies.installedPath ?? installedPathFromPi)(`npm:${extension.name}`, agentDir); }
   catch { throw new PiExtensionError("extension_load_failed"); }
@@ -43,11 +46,11 @@ export async function resolvePiExtension(extension: ExtensionSpec, dependencies:
   let manifest: unknown;
   try {
     root = await real(installed);
-    manifest = JSON.parse(await read(join(root, "package.json")));
+    manifest = JSON.parse((await read(join(root, "package.json"))).replace(/^\uFEFF/, ""));
   } catch (error) {
     throw new PiExtensionError(isMissing(error) ? "extension_not_installed" : "extension_load_failed");
   }
-  if (typeof manifest !== "object" || manifest === null) throw new PiExtensionError("extension_load_failed");
+  if (typeof manifest !== "object" || manifest === null || Array.isArray(manifest)) throw new PiExtensionError("extension_load_failed");
   const { version, pi } = manifest as { version?: unknown; pi?: { extensions?: unknown } };
   if (version !== extension.version) throw new PiExtensionError("extension_version_mismatch");
   const entries = pi?.extensions;
@@ -57,9 +60,10 @@ export async function resolvePiExtension(extension: ExtensionSpec, dependencies:
   }
   for (const entry of entries as string[]) {
     let target: string;
-    try { target = await real(join(root, entry)); }
-    catch { throw new PiExtensionError("extension_load_failed"); }
-    if (!inside(root, target)) throw new PiExtensionError("extension_load_failed");
+    try {
+      target = await real(join(root, entry));
+      if (!inside(root, target) || !(await statFile(target)).isFile()) throw new PiExtensionError("extension_load_failed");
+    } catch { throw new PiExtensionError("extension_load_failed"); }
   }
   return root;
 }

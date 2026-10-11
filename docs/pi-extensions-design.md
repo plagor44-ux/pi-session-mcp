@@ -82,15 +82,16 @@ installed package:
 7. `noExtensions: true` suppresses settings and auto-discovered extensions but
    still loads `additionalExtensionPaths`.
 8. `DefaultPackageManager.resolve()` runs `npm install` for missing or
-   mismatched npm packages. `getInstalledPath(source, "user")` only looks up
-   the installed directory.
+   mismatched npm packages, and `getInstalledPath(source, "user")` falls back
+   to a synchronous `npm root -g` on a miss and accepts legacy global
+   installs; neither is side-effect free.
 9. `pi-cursor-sdk` and `@cursor/sdk` call `console.log`. In a stdio MCP server
    such output corrupts the protocol stream.
 
 The relevant SDK functions are root exports of
 `@earendil-works/pi-coding-agent`: `createAgentSessionServices`,
 `createAgentSessionFromServices`, `createAgentSessionRuntime`,
-`AgentSessionRuntime`, `DefaultPackageManager`, `getAgentDir` and
+`AgentSessionRuntime`, `getAgentDir` and
 `ModelRuntime`. No internal module is imported.
 
 ## Design
@@ -134,10 +135,10 @@ and by Doctor.
 
 `resolveExtension(spec, dependencies)`:
 
-1. Builds a `DefaultPackageManager` for the Pi agent directory returned by
-   `getAgentDir()` with an in-memory settings manager, and calls
-   `getInstalledPath("npm:<name>", "user")`. It never calls `resolve()` or any
-   install method.
+1. Computes Pi's user install location `<agent dir>/npm/node_modules/<name>`,
+   with the agent directory from `getAgentDir()`. It never calls the SDK
+   package manager, never spawns npm and never installs. A package installed
+   anywhere else counts as not installed.
 2. No path: `extension_not_installed`.
 3. Reads `<dir>/package.json`. Unreadable or invalid JSON:
    `extension_load_failed`. A `version` that differs from the pinned version:
@@ -145,10 +146,12 @@ and by Doctor.
 4. Reads `pi.extensions` from the manifest. It must be a non-empty array of
    relative paths. Every entry must resolve, after symlink resolution, to a
    file inside the real package directory. Otherwise: `extension_load_failed`.
+   `pi.extensions` entries must be plain relative file paths; globs and
+   overrides, which Pi accepts, fail with `extension_load_failed`.
 5. Returns the real package directory. The SDK receives that directory, not
    the `npm:` source, so it cannot start a temporary install.
 
-Dependencies (package manager factory, file reads, real-path resolution) are
+Dependencies (install-location lookup, file reads, real-path resolution, stat) are
 injectable for tests.
 
 ### Session creation
@@ -261,7 +264,7 @@ is path-free and secret-free. `capabilitiesSchema` and
 Doctor gains two checks after the workspace checks, one per profile and
 extension, with the subject `<profile>:<package name>`:
 
-- `extension_missing` (error) when `getInstalledPath` finds nothing;
+- `extension_missing` (error) when the resolver finds no installed package;
 - `extension_version_mismatch` (error) when the installed manifest version
   differs, or the manifest is unreadable.
 
