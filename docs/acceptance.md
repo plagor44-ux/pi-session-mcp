@@ -124,6 +124,54 @@ that checkout with Doctor reporting the release version, and confirms that the
 manifests and built runtime files are byte-identical before and after the
 client cycles.
 
+### macOS
+
+macOS uses the same isolation, sequence and pass criteria, with the additions
+below. A run for Claude Code is recorded under [Status](#status). macOS is
+CI-tested, and it has not passed Level 2 for Codex.
+
+- **Environment.** Record:
+  - the macOS version and architecture (`sw_vers`, `uname -m`);
+  - the Node.js version;
+  - the Codex CLI and Claude Code versions.
+- **Disposable home.** It must be on the APFS volume type of `/`. A directory
+  below the user's home qualifies.
+  - For an ownership directory on another filesystem, `--apply`, `--verify`,
+    `--rollback` and `--remove` fail closed with `failed (operation_failed)`
+    and exit `1`.
+  - Keep the Codex home outside both `$TMPDIR` (normally below `/var/folders`)
+    and `/tmp`, for the reason given under [Isolation](#isolation).
+- **Before the sequence:** run `npm run --silent doctor`.
+- **Lock contention.** After step 9, start two `--apply` runs for
+  `claude-code:user:pi-session-mcp` at the same time.
+  - One run reports `ok (applied)`. The other waits for the lock, then
+    reports `unchanged (already_equivalent)`.
+  - Both exit with `0`.
+  - A following `--remove` reports `ok (removed)`.
+  - A waiting run that reports `failed (operation_failed)` with exit `1` did
+    not get the lock within the 30 s acquisition bound. That counts as a
+    failure of the run.
+- **Interruption.** Start `--apply` for one target and press Ctrl-C while it
+  runs.
+  - The run exits with `130` and reports `operation_interrupted`.
+  - Afterwards `ps -A -o pid=,command=` lists no `claude mcp` or `codex mcp`
+    command and no `setup-main.js` or `setup-command-guardian.js` process of
+    the build under test.
+  - A following `--apply` reports one of three outcomes, depending on where
+    the interrupt landed:
+    - it reconciles the pending record (`ok (pending_recovered)`);
+    - it applies again (`ok (applied)`);
+    - it finds the registration already owned
+      (`unchanged (already_equivalent)`).
+  - A following `--remove` reports `ok (removed)`.
+  - If the operation completes before the interrupt arrives, record that and
+    repeat. An interrupt that never lands is not a pass.
+- **Processes.** Check that no process remains with `ps` instead of `/proc`.
+
+The evidence record names the build (commit or tag), the environment above,
+every command with its exit status, and the sanitized JSON results. It
+contains no paths, environment values or secrets.
+
 ## Level 3: live two-client acceptance
 
 Live acceptance delegates real work from Codex and from Claude Code to Pi
@@ -275,3 +323,94 @@ passed Level 2 as published release and as published npm package, with Codex
 CLI `0.162.0` and Claude Code `2.1.296`, on 2026-10-10. The installed
 `pi-session-mcp-doctor` reported a healthy package when run from an unrelated
 working directory.
+
+macOS: `setup` supports macOS from the change that tracks #32. That change is
+tested in CI on macOS 15 and macOS 26 (Apple silicon) next to Linux.
+
+On 2026-10-11, the build of `d89740c`, the head of the pull request branch,
+passed the working-tree Level 2 on a real Mac with Claude Code as the only
+client:
+- Environment: macOS 26.7.1 (`25G241`) on `arm64`, Node.js `22.23.3` and Claude
+  Code `2.1.294`. The disposable home was on the APFS data volume that the
+  root volume belongs to.
+- Level 1 on that checkout: `npm ci`, `npm run typecheck`, `npm run build`,
+  `npm run build:cli` and `npm test` exited with `0`. The test run reported 531
+  passed and 23 skipped. The skipped tests are the 21 Linux `/proc` fixture
+  tests, the Linux-only lock-inode replacement test and the probe-only
+  controller output test. `npm audit` reported 0 vulnerabilities, and
+  `git diff --check` reported nothing. `git status --short` printed nothing
+  before the evidence was written.
+- Doctor with the acceptance configuration reported no error.
+- All three Claude Code targets (`user`, `project` and `local`) completed the
+  nine-step sequence. Every step reported the expected overall status, finding
+  and exit status.
+- After the sequences the `pi-session-mcp` registration was absent, the sentinel
+  was still present and the ownership record set was empty. The ownership
+  directory had mode `0700` and the ownership file mode `0600`. No server,
+  setup or guardian process of the build remained, and the digest of the real
+  Claude Code registrations was unchanged. No report contained a path, an
+  environment value or a secret.
+- Lock contention: two simultaneous `--apply` runs for
+  `claude-code:user:pi-session-mcp` finished within 5 s. One reported
+  `ok (applied)` and the other `unchanged (already_equivalent)`. Both exited
+  with `0`, and the following `--remove` reported `ok (removed)`.
+- Interruption: SIGINT was sent to the process group of a running `--apply`
+  after 0.2 s, 0.5 s and 0.9 s. Each run exited with `130` and reported
+  `operation_interrupted`. None left a `claude mcp` command or a setup or
+  guardian process behind. In each case the following `--apply` reported
+  `ok (applied)` and the following `--remove` reported `ok (removed)`.
+
+This run does not cover:
+- Codex, which was not installed on the machine, so macOS has not passed
+  setup acceptance for Codex.
+- A Ctrl-C keypress in an interactive terminal. A script sent the signal from a
+  shell without a terminal.
+- The `pending_recovered` and `already_equivalent` outcomes after an interrupt.
+  The following `--apply` reported `applied` in every case.
+- Intel Macs, the published-release and published-package variants, and
+  Level 3.
+
+On 2026-10-11 the same build also passed a narrower live check on that Mac:
+- Scope: Claude Code `2.1.294` as the only client, with Pi SDK `1.1.0` on a
+  local `qwen3.6-35b-a3b-splash` model served by LM Studio. The server was the
+  build of `d89740c`: the sources are identical to it, and `dist/main.js` has
+  the SHA-256 `a69bfec2f9f161b74a6d7b067fda9b76d94c294170bc59a771a79e3f29a7123c`.
+- Method: three sequential headless invocations, one per task group, with a
+  temporary per-invocation MCP configuration (`--strict-mcp-config`), a
+  credential-free configuration with one `read-only` and one `coding` profile,
+  and a disposable Pi agent directory. The client could run `sleep` between
+  polls. The plan, prompts, oracles and fixture digests were fixed before the
+  first invocation, and no task was repeated.
+- Preflight: one bounded request to the model returned HTTP `200` in about 1 s.
+  The loaded model was the same and idle before and after every invocation, and
+  nothing was loaded or unloaded.
+- Read-only analysis with a same-session follow-up: both turns ended
+  `completed`. The first answer contained the expected marker, and the second
+  answer was exactly the expected number. The fixture digest (path, mode and
+  content) was identical before and after.
+- Bounded coding change with a same-session follow-up: both turns ended
+  `completed`. The oracle passed on a snapshot taken between the turns and on
+  the final workspace, and that snapshot did not yet contain the second turn's
+  change. Only the one allowed file differed, with no added or removed file and
+  unchanged modes.
+- Abort and recovery: the turn was `running`, then `aborted` after
+  `pi_session_abort`. `pi_session_close` succeeded, `pi_session_list` returned
+  no session, and a fresh session started `idle` and closed.
+- Counts: `pi_turn_get` was called 3, 3 and 2 times in the three invocations,
+  and no Pi Session MCP tool returned an error.
+- A scan of every Pi Session MCP tool result in the three transcripts found no
+  absolute path, configuration file name, endpoint, key or token marker, or stack
+  frame. No server or client process remained after any invocation, each
+  client's standard error was empty, and the digest of the real Claude Code
+  registrations was unchanged.
+
+This check does not cover:
+- Codex, or any task from a second client. It is not a ten-task cycle and does
+  not satisfy the Level 3 gate.
+- The check that the first turn's terminal view stays unchanged after a second
+  turn started. The transcripts do not poll the first turn again.
+- A git-based check of the allowed diff. The coding fixture is not a Git
+  repository, so a path, mode and content digest stood in for it.
+- A coding turn that tries to change a file outside the allowed set.
+- Interactive approval dialogs, external MCP grants, and client restart or
+  resume.

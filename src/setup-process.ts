@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
 import type { McpStdioProcess } from "./client-adapters/mcp-verifier.js";
+import type { ProcessGroupState, ProcessTable } from "./setup-platform.js";
 
 export interface ProcessRunnerOptions { readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly env?: NodeJS.ProcessEnv; readonly signal?: AbortSignal; }
 export interface SetupGuardian {
@@ -15,52 +16,52 @@ const DEFAULT_MAX = 65_536;
 const ABORT_GROUP_CLEANUP_TIMEOUT = 2_000;
 const GUARDIAN_START_TIMEOUT = 5_000;
 
+type SetupPlatformModule = typeof import("./setup-platform.js");
+let platformModule: Promise<SetupPlatformModule> | undefined;
+/**
+ * Source-mode harnesses import this file through Node type stripping, which
+ * cannot map a static `./setup-platform.js` import to its `.ts` source.
+ */
+function loadSetupPlatform(): Promise<SetupPlatformModule> {
+  platformModule ??= import(import.meta.url.endsWith(".ts") ? "./setup-platform.ts" : "./setup-platform.js") as Promise<SetupPlatformModule>;
+  return platformModule;
+}
+async function currentProcessTable(): Promise<ProcessTable | undefined> {
+  const platform = await loadSetupPlatform();
+  const name = platform.currentSetupPlatform();
+  return name ? platform.createProcessTable(name) : undefined;
+}
+
 /** Kill a detached process and every descendant in its process group. */
-function terminateProcessGroup(child: import("node:child_process").ChildProcess, signal: NodeJS.Signals): void {
+function terminateProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
   if (child.pid === undefined) return;
   if (process.platform !== "win32") {
     try { process.kill(-child.pid, signal); return; } catch { /* already exited or no group */ }
   }
   try { child.kill(signal); } catch { /* already exited */ }
 }
-type ProcessGroupState = "alive" | "gone" | "unknown";
-function processGroupState(child: import("node:child_process").ChildProcess): ProcessGroupState {
-  if (child.pid === undefined || process.platform !== "linux") return "unknown";
-  const group = child.pid;
-  try {
-    for (const entry of readdirSync("/proc", { withFileTypes: true })) {
-      if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-      try { const stat = readProcStat(Number(entry.name)); if (stat.pgrp === group && stat.state !== "Z") return "alive"; }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") return "unknown"; }
-    }
-  } catch { return "unknown"; }
-  return "gone";
-}
-function readProcStat(pid: number): { readonly pgrp: number; readonly state: string } {
-  const line = readFileSync(`/proc/${pid}/stat`, "utf8").trim();
-  const close = line.lastIndexOf(") ");
-  const state = line[close + 2];
-  if (close < 3 || !state || !/^[A-Za-z]$/.test(state) || line[close + 3] !== " ") throw new Error("process_stat_invalid");
-  const fields = line.slice(close + 4).trim().split(/\s+/);
-  const pgrp = Number(fields[1]);
-  if (!Number.isSafeInteger(pgrp) || pgrp < 0) throw new Error("process_group_invalid");
-  return { pgrp, state };
-}
 const delay = (milliseconds: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /** Runs only an explicit executable/argv pair, with bounded output and termination. */
 export function createProcessRunner(options: ProcessRunnerOptions = {}): CommandRunner {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT; const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX;
-  return { run(command, args, signal): Promise<CommandResult> { const effectiveSignal = options.signal && signal ? AbortSignal.any([options.signal, signal]) : options.signal ?? signal; if (process.platform !== "linux") return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" }); return new Promise((resolve) => {
+  return { async run(command, args, signal): Promise<CommandResult> { const effectiveSignal = options.signal && signal ? AbortSignal.any([options.signal, signal]) : options.signal ?? signal; const table = await currentProcessTable(); if (!table) return { exitCode: 126, stdout: "", stderr: "" }; return new Promise((resolve) => {
     const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"], env: options.env, detached: process.platform !== "win32" }); let stdout = ""; let stderr = ""; let overflow = false; let aborted = false;
     const collect = (part: "stdout" | "stderr") => (chunk: Buffer): void => { const value = chunk.toString("utf8"); const current = part === "stdout" ? stdout : stderr; if (Buffer.byteLength(current + value, "utf8") > maxOutputBytes) { overflow = true; return; } if (part === "stdout") stdout += value; else stderr += value; };
     child.stdout.on("data", collect("stdout")); child.stderr.on("data", collect("stderr")); let done = false; let timedOut = false; let killTimer: NodeJS.Timeout | undefined; let hardTimer: NodeJS.Timeout | undefined; let groupPoll: NodeJS.Timeout | undefined; let groupDeadline = 0;
     const finish = (exitCode: number): void => { if (done) return; done = true; effectiveSignal?.removeEventListener("abort", abort); clearTimeout(timer); if (!timedOut && killTimer) clearTimeout(killTimer); if (!timedOut && hardTimer) clearTimeout(hardTimer); if (groupPoll) clearTimeout(groupPoll); resolve({ exitCode, stdout: overflow ? Buffer.from(stdout).subarray(0, maxOutputBytes).toString("utf8") : stdout, stderr: overflow ? "output_limit" : stderr }); };
+    let groupCheck = false;
     const finishAfterGroup = (successCode: number): void => {
-      if (done) return;
-      if (processGroupState(child) === "gone") { finish(successCode); return; }
-      if (Date.now() >= groupDeadline) { finish(126); return; }
-      groupPoll = setTimeout(() => finishAfterGroup(successCode), 10);
+      if (done || groupCheck) return;
+      groupCheck = true;
+      const group = child.pid;
+      void (group === undefined ? Promise.resolve<ProcessGroupState>("unknown") : table.groupState(group)).then((state) => {
+        groupCheck = false;
+        if (done) return;
+        if (state === "gone") { finish(successCode); return; }
+        if (Date.now() >= groupDeadline) { finish(126); return; }
+        groupPoll = setTimeout(() => finishAfterGroup(successCode), table.pollMs);
+      });
     };
     const abort = (): void => { if (done) return; aborted = true; groupDeadline = Date.now() + ABORT_GROUP_CLEANUP_TIMEOUT; terminateProcessGroup(child, "SIGTERM"); killTimer = setTimeout(() => { terminateProcessGroup(child, "SIGKILL"); finishAfterGroup(125); }, 100); };
     effectiveSignal?.addEventListener("abort", abort, { once: true });
@@ -82,6 +83,7 @@ export interface McpLauncherOptions { readonly nodePath: string; readonly entryP
 /** Starts the local MCP server with only the controlled configuration environment. */
 export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: AbortSignal) => Promise<McpStdioProcess> {
   return async (signal) => {
+    const table = await currentProcessTable();
     const child = spawn(options.nodePath, [options.entryPath], { stdio: ["pipe", "pipe", "pipe"], env: { PI_SESSION_MCP_CONFIG: options.configPath }, detached: process.platform !== "win32" });
     const max = options.maxFrameBytes ?? DEFAULT_MAX; let buffer = ""; let closed = false; let overflow = false;
     child.stdout.on("data", (chunk: Buffer) => { if (overflow) return; buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer, "utf8") > max) { overflow = true; buffer = ""; } });
@@ -118,49 +120,54 @@ export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: Ab
         await delay(100);
         terminateProcessGroup(child, "SIGKILL");
         const childClosed = await waitForClose(1_000);
+        const group = child.pid;
+        const groupState = async (): Promise<ProcessGroupState> => table && group !== undefined ? table.groupState(group) : "unknown";
         const groupDeadline = Date.now() + 1_000;
-        while (processGroupState(child) === "alive" && Date.now() < groupDeadline) await delay(10);
-        if (!childClosed || processGroupState(child) !== "gone") throw new Error("mcp_process_cleanup_failed");
+        let state = await groupState();
+        while (state !== "gone" && Date.now() < groupDeadline) { await delay(table?.pollMs ?? 10); state = await groupState(); }
+        if (!childClosed || state !== "gone") throw new Error("mcp_process_cleanup_failed");
       },
     };
   };
 }
 
 /**
- * Acquires the Linux kernel fence and starts the transaction guardian. The
- * guardian inherits the locked file description, so parent death cannot release
- * the fence while a client mutation or descendant is still live.
+ * Starts the transaction guardian with the kernel fence held. On Linux the
+ * trusted util-linux `flock` locks the caller's open file description first;
+ * on macOS the caller passes a descriptor from `openLockedDarwin`, which is
+ * locked at open time. The guardian inherits the locked file description, so
+ * parent death cannot release the fence while a client mutation or
+ * descendant is still live.
  */
 export async function acquireSetupGuardian(lockFd: number, timeoutMs: number, signal?: AbortSignal, validateFence?: () => Promise<void>): Promise<SetupGuardian> {
-  if (process.platform !== "linux") throw new Error("platform_unsupported");
-  const flockPath = ["/usr/bin/flock", "/bin/flock"].find((candidate) => {
-    try {
-      const file = statSync(candidate);
-      return file.isFile() && file.uid === 0 && (file.mode & 0o022) === 0 && (file.mode & 0o111) !== 0;
-    } catch { return false; }
-  });
-  if (!flockPath) throw new Error("ownership_lock_unavailable");
+  const platform = await loadSetupPlatform();
+  const platformName = platform.currentSetupPlatform();
+  if (!platformName) throw new Error("platform_unsupported");
+  const flockPath = platformName === "linux" ? ["/usr/bin/flock", "/bin/flock"].find((candidate) => platform.isTrustedSystemBinary(candidate)) : undefined;
+  if (platformName === "linux" && !flockPath) throw new Error("ownership_lock_unavailable");
   const modulePath = fileURLToPath(import.meta.url);
   const guardianPath = fileURLToPath(new URL(modulePath.endsWith(".ts") ? "./setup-command-guardian.ts" : "./setup-command-guardian.js", import.meta.url));
   try { if (!lstatSync(guardianPath).isFile()) throw new Error("guardian_invalid"); }
   catch { throw new Error("ownership_lock_unavailable"); }
-  const waitSeconds = String(Math.ceil(Math.max(1_000, Math.min(timeoutMs, 120_000)) / 1_000));
-  let locker: ChildProcess;
-  try {
-    locker = spawn(flockPath, ["-E", "75", "-w", waitSeconds, "3"], {
-      stdio: ["ignore", "ignore", "ignore", lockFd],
-      detached: true,
-    });
-  } catch { throw new Error("ownership_lock_unavailable"); }
-  const stopAcquisition = (): void => { if (locker.pid !== undefined) { try { process.kill(-locker.pid, "SIGKILL"); } catch { /* already gone */ } } };
-  if (signal?.aborted) stopAcquisition();
-  signal?.addEventListener("abort", stopAcquisition, { once: true });
-  try {
-    await new Promise<void>((resolve, reject) => {
-      locker.once("error", () => reject(new Error("ownership_lock_unavailable")));
-      locker.once("close", (code) => code === 0 ? resolve() : reject(new Error(code === 75 ? "ownership_lock_busy" : signal?.aborted ? "operation_aborted" : "ownership_lock_unavailable")));
-    });
-  } finally { signal?.removeEventListener("abort", stopAcquisition); }
+  if (flockPath) {
+    const waitSeconds = String(Math.ceil(Math.max(1_000, Math.min(timeoutMs, 120_000)) / 1_000));
+    let locker: ChildProcess;
+    try {
+      locker = spawn(flockPath, ["-E", "75", "-w", waitSeconds, "3"], {
+        stdio: ["ignore", "ignore", "ignore", lockFd],
+        detached: true,
+      });
+    } catch { throw new Error("ownership_lock_unavailable"); }
+    const stopAcquisition = (): void => { if (locker.pid !== undefined) { try { process.kill(-locker.pid, "SIGKILL"); } catch { /* already gone */ } } };
+    if (signal?.aborted) stopAcquisition();
+    signal?.addEventListener("abort", stopAcquisition, { once: true });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        locker.once("error", () => reject(new Error("ownership_lock_unavailable")));
+        locker.once("close", (code) => code === 0 ? resolve() : reject(new Error(code === 75 ? "ownership_lock_busy" : signal?.aborted ? "operation_aborted" : "ownership_lock_unavailable")));
+      });
+    } finally { signal?.removeEventListener("abort", stopAcquisition); }
+  }
   if (signal?.aborted) throw new Error("operation_aborted");
   try { await validateFence?.(); }
   catch { throw new Error("ownership_lock_unavailable"); }

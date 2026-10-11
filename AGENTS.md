@@ -15,12 +15,14 @@
   contract, and never auto-replace divergent registrations.
 - Setup accepts only configured client targets and derives absolute paths
   internally; durable ownership state must remain path-free and secret-free.
-- Mutating setup is Linux-only and requires a supported local-filesystem kernel
-  `flock`, a trusted fixed util-linux binary, and readable `/proc`;
-  keep the stable lock inode and guardian-held fence until a determinate `/proc`
-  scan confirms no non-zombie mutating client process-group member remains.
-  A zombie is terminated and holds no file descriptors; this is a termination
-  guarantee, not a PID-reaping guarantee. An indeterminate scan retains the fence.
+- Mutating setup runs on Linux and macOS only. Linux requires a supported
+  local-filesystem kernel `flock`, a trusted fixed util-linux binary, and
+  readable `/proc`; macOS requires an `O_EXLOCK` lock on the APFS volume type
+  of `/` and the trusted system `/bin/ps`. On both, keep the stable lock inode
+  and guardian-held fence until a determinate process-table scan confirms no
+  non-zombie mutating client process-group member remains. A zombie is
+  terminated and holds no file descriptors; this is a termination guarantee,
+  not a PID-reaping guarantee. An indeterminate scan retains the fence.
 - Verify must include Doctor, registration equality, and a bounded direct MCP
   handshake/tools/list/capabilities check, without starting sessions or using a
   provider. No real mutation or dogfooding may be claimed without evidence.

@@ -15,6 +15,7 @@ async function releaseFixture(): Promise<string> {
   await writeFile(join(root, "package-lock.json"), JSON.stringify({ packages: { "": { version: PACKAGE_VERSION } } }));
   await writeFile(join(root, "dist", "main.js"), "export const main = true;\n");
   await writeFile(join(root, "dist", "setup-command-guardian.js"), "export const guardian = true;\n");
+  await writeFile(join(root, "dist", "setup-platform.js"), "export const platform = true;\n");
   await writeFile(join(root, "dist", "nested", "runtime.js"), "export const runtime = 1;\n");
   return root;
 }
@@ -53,6 +54,16 @@ describe("immutable setup release binding", () => {
     const linked = await releaseFixture();
     await rm(join(linked, "dist", "setup-command-guardian.js"));
     await symlink("main.js", join(linked, "dist", "setup-command-guardian.js"));
+    await expect(immutableReleaseBinding(linked)).rejects.toThrow("release_symlink_invalid");
+  });
+
+  it("requires a regular non-symlink platform module in the immutable runtime", async () => {
+    const missing = await releaseFixture();
+    await rm(join(missing, "dist", "setup-platform.js"));
+    await expect(immutableReleaseBinding(missing)).rejects.toThrow("release_entry_missing");
+    const linked = await releaseFixture();
+    await rm(join(linked, "dist", "setup-platform.js"));
+    await symlink("main.js", join(linked, "dist", "setup-platform.js"));
     await expect(immutableReleaseBinding(linked)).rejects.toThrow("release_symlink_invalid");
   });
 

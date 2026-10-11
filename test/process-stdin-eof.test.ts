@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { readFixtureLog } from "./fixture-log.js";
-import { cleanupFixtureProcesses, readTextIfPresent, signalFixtureProcess, stopFixtureProcess, waitForProcessTerminated } from "./process-fixture.js";
+import { cleanupFixtureProcesses, processCommandLine, processInspectionSupported, signalFixtureProcess, stopFixtureProcess, waitForProcessTerminated } from "./process-fixture.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 const REPOSITORY = fileURLToPath(new URL("..", import.meta.url));
@@ -35,8 +35,8 @@ const LOG_VARIABLE = "PI_SESSION_MCP_TEST_MCP_LOG";
 const EXIT_BOUND_MS = 8_000;
 const TEST_TIMEOUT_MS = 30_000;
 const execFileAsync = promisify(execFile);
-/** Termination checks read `/proc`, as in the other process-level tests. */
-const describeOnLinux = describe.skipIf(process.platform !== "linux");
+/** Termination checks use `/proc` on Linux and `ps` on macOS, as in the other process-level tests. */
+const describeWithProcessInspection = describe.skipIf(!processInspectionSupported);
 
 interface Recorded { event: string; pid?: number; code?: number }
 interface Exit { code: number | null; signal: NodeJS.Signals | null }
@@ -88,7 +88,7 @@ afterAll(removeTemporaryRoots);
 /** Kill a recorded PID only while it still runs the fixture script, never a reused PID. */
 async function stopFixtureChild(pid: number): Promise<void> {
   let commandLine: string | undefined;
-  try { commandLine = await readTextIfPresent(`/proc/${pid}/cmdline`); }
+  try { commandLine = await processCommandLine(pid); }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return; throw error; }
   if (commandLine?.includes(FIXTURE)) await stopFixtureProcess(pid);
 }
@@ -194,7 +194,7 @@ async function expectCleanShutdown(harness: Harness, code: number, childPid: num
   await waitForProcessTerminated(childPid);
 }
 
-describeOnLinux("server entry point on stdin EOF", () => {
+describeWithProcessInspection("server entry point on stdin EOF", () => {
   it("closes an idle session and its MCP child, then exits", async () => {
     const harness = await startServer();
     await startSession(harness);
@@ -256,7 +256,7 @@ describeOnLinux("server entry point on stdin EOF", () => {
   }, TEST_TIMEOUT_MS);
 });
 
-describeOnLinux("server entry point on stdin EOF racing a signal", () => {
+describeWithProcessInspection("server entry point on stdin EOF racing a signal", () => {
   // The child ignores EOF, so closing its connection takes the stdio client's 2,000 ms
   // EOF window plus SIGTERM. `eof-ignored` marks that shutdown is in progress.
   const slowClose = { MCP_FIXTURE_IGNORE_EOF: "1" };
