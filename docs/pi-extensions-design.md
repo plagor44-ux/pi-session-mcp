@@ -210,9 +210,17 @@ and step 6 leaves no session to dispose.
   granted MCP tool or a tool of another extension fails with
   `extension_tool_conflict`. This also stops an extension from replacing a
   built-in tool inside a `read-only` profile.
-  A name must also match `[A-Za-z0-9_.:][A-Za-z0-9_.:-]*`: the SDK reads `*`
-  in an allowlist as a glob and a leading `+` or `-` as a modifier, so any
-  other name fails the same way, in both profiles.
+  A name must also match `[A-Za-z0-9_][A-Za-z0-9_-]{0,63}`: the SDK reads `*`
+  in an allowlist as a glob and a leading `+` or `-` as a modifier, and 64
+  characters of letters, digits, `_` and `-` fit the common provider
+  function-name limit, so any other name fails the same way, in both
+  profiles. Names that Pi SDK 1.1.0 treats as MCP tools fail too: any name
+  starting with `mcp__`, and exactly `list_mcp_resources`,
+  `list_mcp_resource_templates` and `read_mcp_resource`. When the allowlist
+  names no `mcp__` entry, the SDK keeps such tools outside the allowlist for
+  codemode and tool_search, so they could otherwise be active without a grant.
+  This server's own MCP bridge tools use a single underscore (`mcp_<server>_<tool>`)
+  and never collide.
   The check runs after load and again after binding, because a `session_start`
   handler can register a tool during `bindExtensions`. If the registered tool
   set then differs from the one the session was created with, the start fails
@@ -311,7 +319,7 @@ admitted:
 | `extension_not_installed` | Configured Pi extension is not installed | Pi has no user install of the package. |
 | `extension_version_mismatch` | Configured Pi extension version is not installed | The installed version differs from the pinned version. |
 | `extension_load_failed` | Configured Pi extension could not be loaded | Invalid manifest, entry outside the package, load or bind error, services diagnostic of type `error`. |
-| `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool. |
+| `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe (see *Name conflicts*). |
 
 Existing codes keep their meaning. An extension provider that is unknown after
 loading is `unknown_provider`.

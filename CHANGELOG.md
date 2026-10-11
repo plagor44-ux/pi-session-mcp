@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Extension tool names are now limited to 1 to 64 letters, digits, `_` and
+  `-`, not starting with `-`, so `.` and `:` no longer pass and every name fits
+  the common provider function-name limit. Names that Pi SDK 1.1.0 treats as
+  MCP tools (the `mcp__` prefix, `list_mcp_resources`,
+  `list_mcp_resource_templates`, `read_mcp_resource`) are rejected too, because
+  the SDK would keep them outside the allowlist. Both cases fail with
+  `extension_tool_conflict`. Fixes #41.
+
 ## 0.7.0 — 2026-10-11
 
 This is a minor release because the public contract changes, as ADR 0003

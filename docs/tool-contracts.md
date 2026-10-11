@@ -71,7 +71,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_not_installed` | Pi has no installed package for a configured extension. |
 | `extension_version_mismatch` | Pi's installed extension package has another version than the configured one. |
 | `extension_load_failed` | A configured extension has an invalid manifest, failed to load or failed to bind. |
-| `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool. |
+| `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 

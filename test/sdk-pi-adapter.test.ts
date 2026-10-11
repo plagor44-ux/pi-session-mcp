@@ -660,6 +660,8 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     ["read-only", [["read"]]],
     ["coding", [["bash"]]],
     ["coding", [["dup"], ["dup"]]],
+    ["coding", [["mcp__x"]]],
+    ["read-only", [["read_mcp_resource"]]],
   ] as const)("fails closed on a %s tool conflict %j", async (permissionProfile, extensionTools) => {
     const h = extensionHarness({ permissionProfile, extensionTools: extensionTools.map((names) => [...names]) });
     await expect(h.create()).rejects.toMatchObject({ code: "extension_tool_conflict" });

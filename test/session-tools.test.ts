@@ -20,4 +20,22 @@ describe("composeSessionTools", () => {
     expect(composeSessionTools("read-only", [], [[name]])).toBeUndefined();
     expect(composeSessionTools("coding", [], [[name]])).toBeUndefined();
   });
+
+  it.each([
+    "mcp__x",
+    "mcp__",
+    "list_mcp_resources",
+    "list_mcp_resource_templates",
+    "read_mcp_resource",
+    "a.b",
+    "a:b",
+    "a".repeat(65),
+  ])("rejects the MCP-reserved or provider-unsafe extension tool name %j in both profiles", (name) => {
+    expect(composeSessionTools("read-only", [], [[name]])).toBeUndefined();
+    expect(composeSessionTools("coding", [], [[name]])).toBeUndefined();
+  });
+
+  it.each(["a".repeat(64), "cursor_activate_skill", "fixture_tool", "my-tool", "_x", "mcp_note_x"])("accepts the extension tool name %j", (name) => {
+    expect(composeSessionTools("coding", [], [[name]])).toEqual([...PROFILE_TOOLS.coding, name]);
+  });
 });

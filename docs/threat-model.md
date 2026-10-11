@@ -119,7 +119,7 @@ behind `pi-cursor-sdk` starts processes of its own during turns (observed with
 Cursor, in a `read-only` profile too); none inherited the server's stdout in
 that run. Extensions may persist their own state outside Pi
 Session MCP's in-memory boundary. Extension tool names are checked for
-conflicts after loading and again after binding; a tool that an extension
+conflicts and for unsafe or MCP-reserved names after loading and again after binding; a tool that an extension
 registers later, during a turn, is not re-checked and may replace a built-in
 tool, `read` included, because allowlisted extensions are trusted code. An extension may deactivate built-in or granted
 tools for its own session.
