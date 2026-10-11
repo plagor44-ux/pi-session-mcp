@@ -457,3 +457,31 @@ branch (#34) passed the Pi extension live check on Linux:
 
 This check does not cover macOS, Codex or Claude Code as the client, the Cursor
 cloud runtime, or a session that uses Cursor's own tools.
+
+Before its release, `v0.7.0` passed Level 1 and the working-tree Level 2 on its
+release candidate on Linux, with Node.js `26.11.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.296`, on 2026-10-11:
+- The first working-tree Level 2, on `2d05e55`, failed. On all four targets
+  `--verify` (steps 5 and 8) reported `failed (mcp_failed)` with exit `1`; every
+  other step passed. The verifier rejected the `extensions` field that
+  `pi_capabilities_get` lists since #34. This is #36.
+- After the fix, the working-tree Level 2 on `2c5ab3d` passed all nine steps on
+  all four targets, 96 of 96 checks.
+  - The real client registrations were unchanged, no process remained, and the
+    built files were byte-identical before and after the client cycles.
+  - The run placed one sentinel in each Claude Code scope instead of one per
+    client, so its check count differs from earlier records.
+- Level 1 on `09b32a8`: every command exited with `0`.
+  - The test run reported 37 files, 660 passed and 5 skipped.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - Doctor reported `packageVersion` `0.7.0` and no finding.
+  - The commits after `2c5ab3d` change only tests and documentation. The built
+    `dist/` and `.pi-session-mcp-cli/` are byte-identical to those of `2c5ab3d`,
+    and `dist/main.js` has the SHA-256
+    `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`.
+- The Codex CLI `0.162.1` contract was recorded. It differs from `0.162.0` only
+  in the version line.
+
+The Pi extension live check above ran on `eeaa597`, before the final fixes to
+extension tool names and the `read-only` contract test. It has not been
+repeated on the release candidate.
