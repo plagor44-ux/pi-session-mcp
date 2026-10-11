@@ -217,10 +217,13 @@ in these places:
 
 Public behavior is identical on both platforms:
 
-- The stable codes are unchanged. Lock failures are `ownership_lock_busy`,
-  `ownership_lock_unavailable` and `ownership_filesystem_unsupported`.
-  Internally they surface as the existing public `ownership_unavailable`,
-  `cleanup_failed` and `operation_interrupted`.
+- The stable codes are unchanged. The internal lock and filesystem errors are
+  `ownership_lock_busy`, `ownership_lock_unavailable` and
+  `ownership_filesystem_unsupported`. They never reach a report. When one
+  ends an ownership transaction, the CLI reports `operation_failed` with
+  exit 1, or `operation_interrupted` with exit 130 or 143 after a signal. This
+  is the same as on Linux. Failures inside a transaction keep their existing
+  public codes, such as `ownership_unavailable` and `cleanup_failed`.
 - An `unknown` process-group state while the guardian holds the fence keeps
   the fence and reports exit code 126 to the caller. Cleanup continues in the
   detached guardian.
@@ -352,8 +355,8 @@ A Level-2 run on the owner's Mac, from the PR branch build, records:
   - The second waits for the first, because the acquisition timeout is 30 s.
   - It then reports the registration as already equivalent.
   - Both exit with 0, and the ownership record stays readable.
-  - `ownership_lock_busy` would appear only if the first run held the lock
-    for longer than the timeout.
+  - A waiting run that reports `operation_failed` with exit 1 did not get the
+    lock within the timeout.
 - **Interruption:** Ctrl-C during `--apply` gives exit code 130, leaves no
   process from the client command's group behind, and a following run
   reconciles.

@@ -134,11 +134,13 @@ has not passed Level 2.
   - the macOS version and architecture (`sw_vers`, `uname -m`);
   - the Node.js version;
   - the Codex CLI and Claude Code versions.
-- **Disposable home.** It must be on the APFS volume type of `/`. Setup fails
-  closed with `ownership_unavailable` for an ownership directory on another
-  filesystem. A directory below the user's home or below `$TMPDIR` qualifies.
-  The Codex home still belongs outside `/tmp`, which on macOS resolves to
-  `/private/tmp`.
+- **Disposable home.** It must be on the APFS volume type of `/`. A directory
+  below the user's home qualifies.
+  - For an ownership directory on another filesystem, `--apply`, `--verify`,
+    `--rollback` and `--remove` fail closed with `failed (operation_failed)`
+    and exit `1`.
+  - Keep the Codex home outside both `$TMPDIR` (normally below `/var/folders`)
+    and `/tmp`, for the reason given under [Isolation](#isolation).
 - **Before the sequence:** run `npm run --silent doctor`.
 - **Lock contention.** After step 9, start two `--apply` runs for
   `claude-code:user:pi-session-mcp` at the same time.
@@ -146,15 +148,21 @@ has not passed Level 2.
     reports `unchanged (already_equivalent)`.
   - Both exit with `0`.
   - A following `--remove` reports `ok (removed)`.
-  - `ownership_lock_busy` would mean that the first run held the lock for more
-    than the 30 s acquisition bound. That counts as a failure of the run.
+  - A waiting run that reports `failed (operation_failed)` with exit `1` did
+    not get the lock within the 30 s acquisition bound. That counts as a
+    failure of the run.
 - **Interruption.** Start `--apply` for one target and press Ctrl-C while it
   runs.
   - The run exits with `130` and reports `operation_interrupted`.
-  - Afterwards `ps -A -o pid=,pgid=,command=` shows no process of the client
-    command's group and no setup or guardian process of the build under test.
-  - A following `--apply` either reconciles the pending record
-    (`ok (pending_recovered)`) or applies again (`ok (applied)`).
+  - Afterwards `ps -A -o pid=,command=` lists no `claude mcp` or `codex mcp`
+    command and no `setup-main.js` or `setup-command-guardian.js` process of
+    the build under test.
+  - A following `--apply` reports one of three outcomes, depending on where
+    the interrupt landed:
+    - it reconciles the pending record (`ok (pending_recovered)`);
+    - it applies again (`ok (applied)`);
+    - it finds the registration already owned
+      (`unchanged (already_equivalent)`).
   - A following `--remove` reports `ok (removed)`.
   - If the operation completes before the interrupt arrives, record that and
     repeat. An interrupt that never lands is not a pass.
