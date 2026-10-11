@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Execution profiles can load Pi extensions that Pi has installed, pinned as
+  `npm:<name>@<exact version>` in a new `extensions` field. Such a session
+  loads the extension with its providers, tools, hooks and system-prompt
+  changes, in a model runtime of its own; `read-only` profiles never activate
+  extension tools. New errors: `extension_not_installed`,
+  `extension_version_mismatch`, `extension_load_failed`,
+  `extension_tool_conflict`. Doctor checks configured extensions offline.
+  `pi_capabilities_get` lists each profile's `extensions`. Client prompts no
+  longer dispatch extension commands, and an always-on guard keeps stdout
+  reserved for MCP frames. See ADR 0006 and #34.
 - `setup` now supports macOS, with the same guarantees as on Linux. It runs
   `--dry-run`, `--apply`, `--verify`, `--rollback` and `--remove`, and keeps
   the kernel fence and the process-group proof. On macOS:

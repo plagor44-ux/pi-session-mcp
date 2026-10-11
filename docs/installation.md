@@ -152,6 +152,10 @@ Rules:
   `azure`; a profile that names the old key must be changed.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
+- A profile may load Pi extensions that Pi has installed, through
+  `extensions`: a list of at most 8 entries of the form
+  `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
+  sources and paths are rejected. See [Pi extensions](#pi-extensions).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -339,6 +343,53 @@ configuration or credentials.
 
 The configuration path is part of the registration. Editing the file in place
 needs no new registration; moving it does.
+
+## Pi extensions
+
+An execution profile can load Pi extensions that Pi has installed. Install them
+with Pi (`pi install npm:<name>`; update with `pi update --extensions`), then
+pin the installed version in the profile:
+
+```json
+"code-cursor": {
+  "default": false,
+  "permissionProfile": "coding",
+  "provider": "cursor",
+  "model": "<model id from Pi's cursor catalog>",
+  "thinkingLevel": "high",
+  "extensions": ["npm:pi-cursor-sdk@0.5.3"]
+}
+```
+
+- **Install location.** Only Pi's own user install counts:
+  `<Pi agent dir>/npm/node_modules/<name>`, normally `~/.pi/agent/npm/…`,
+  created by `pi install npm:<name>`. A package installed with `npm i -g` is
+  reported as not installed: sessions report `extension_not_installed`, Doctor
+  reports `extension_missing`.
+- **Version pin.** The server never installs or updates extensions. If Pi has
+  another version installed, sessions of that profile fail with
+  `extension_version_mismatch` and Doctor reports it. After `pi update
+  --extensions`, update the pinned version and restart the client.
+- **Full capabilities.** An extension loads with its providers, tools, hooks
+  and system-prompt changes. In `read-only` profiles the model still gets only
+  `read`, `grep`, `find` and `ls`; in `coding` profiles every extension tool
+  may be active. Extension commands never run from client prompts, but
+  extension input hooks can still see, rewrite or consume a client prompt.
+- **Fail-closed start.** A session start fails with `extension_load_failed` if
+  an extension reports a hook error while binding. It fails the same way if an
+  extension registers an MCP server while loading or starting, because Pi's
+  built-in MCP extension is not loaded. An extension tool whose name collides
+  with another tool, or whose name is not a plain identifier, fails with
+  `extension_tool_conflict`.
+- **Cursor runtime.** `pi-cursor-sdk` runs Cursor's local agent runtime. That
+  runtime starts its own processes (for example git and the MCP servers
+  configured for Cursor) and may act through Cursor's own tooling, so a
+  `read-only` profile limits only Pi's tools, not what the Cursor runtime does.
+- **Trust.** Only list extensions you trust like any other program you run:
+  they execute inside the server process with your rights.
+- **Cursor sign-in limit.** Without a stored Cursor key, `pi-cursor-sdk`
+  reports a placeholder key. Session start succeeds and the first prompt fails
+  with `turn_failed`. Store the key with Pi first.
 
 ## Upgrade
 

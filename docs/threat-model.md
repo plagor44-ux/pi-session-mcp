@@ -68,12 +68,19 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 - **Thinking-level clamping:** SDK capability handling can alter a requested level. The adapter compares the effective `session.thinkingLevel` after creation and disposes on a mismatch.
 - **Orphaned SDK session:** a post-creation mismatch or later registry failure could otherwise leave a live Pi handle. The adapter holds it locally until all postconditions pass, best-effort disposes on each later failure, and the registry admits only verified handles.
 - **Excess capability:** the execution profile selects a permission-derived tool allowlist. Read-only permits only `read`, `grep`, `find`, and `ls`; coding remains high impact.
-- **Project resource code execution:** Pi resource loading disables extensions, skills, prompts, and themes. Non-executable `AGENTS.md` context remains untrusted instruction content, never authorization.
+- **Project resource code execution:** Pi resource loading disables extension discovery, skills, prompts, and themes; only a profile's allowlisted extensions load (see below). Non-executable `AGENTS.md` context remains untrusted instruction content, never authorization.
 - **Concurrent state corruption:** a per-session queue serializes prompt admission and close; concurrent abort callers share one attempt for the active turn. Closing is terminal, settles an active turn, and disposes once.
 - **Secret/prompt disclosure:** stdout is protocol-only. Stderr diagnostics use stable code and safe context only. Public metadata is whitelisted and omits auth objects/sources, credential paths, headers, base URLs, complete model objects, SDK IDs, raw provider errors, prompts, transcripts, and tool data. Completed `assistantText` can still repeat model-visible data and is potentially sensitive.
 - **Capability-enumeration disclosure:** the trusted local MCP peer can read configured workspace aliases and execution-profile provider/model intent. Discovery omits workspace paths, authentication state, SDK state, sessions, turns, prompts, transcripts, and tool data. Operators must choose aliases that are suitable for this trusted-peer boundary.
 - **Stale capability assumptions:** discovery reads configuration only. It makes no provider, authentication, filesystem, or network probe and cannot prove that a configured provider/model is available. Session creation keeps the existing exact runtime checks.
 - **Availability:** input length is bounded; profile-specific authentication/catalog work and session creation have 5,000 ms and 10,000 ms deadlines. Preflight, abort, close cleanup, registry shutdown, and process shutdown (signal or stdin EOF) have 5,000 ms, 5,000 ms, 5,000 ms, 12,000 ms, and 15,000 ms server-side deadlines. Active sessions retain 20 turns and 64 KiB UTF-8 of final text per turn. The registry rejects starts after shutdown begins and disposes a late-created handle. The process shutdown path explicitly exits the process after its cleanup deadline, but cannot prove graceful termination of a blocked provider operation.
+- **Allowlisted Pi extensions:** a profile's `extensions` load operator-trusted code into the server process with the user's full rights; it may start processes, use the network and write files (for example `pi-cursor-sdk` below `~/.pi/agent`, `~/.cursor/projects/` and `<workspace>/.pi/`). Mitigations:
+  - Only exact `npm:<name>@<version>` specs from the operator's configuration load; the MCP client cannot name an extension.
+  - Resolution never installs, and a different installed version fails closed. Only Pi's own user install (`<Pi agent dir>/npm/node_modules/<name>`, normally below `~/.pi/agent`) counts; a package installed elsewhere, for example with `npm i -g`, is reported as not installed.
+  - `read-only` profiles never activate extension tools. At session start, after load and again after binding, no extension tool may shadow a built-in or granted tool; later registrations are covered in the residual risks.
+  - Client prompts never dispatch extension commands, but extension input hooks can still see, rewrite or consume a prompt.
+  - Each extension session gets its own model runtime, and close emits `session_shutdown`.
+- **stdout corruption:** every write through `process.stdout` or `console.log`, `console.info` and `console.debug` other than the MCP transport's is dropped. The stdout guard intercepts `process.stdout.write`, `process.stdout.end` and `console.log`, `console.info` and `console.debug`, which covers output from extensions and the SDK in the server process. stderr gets only `foreign_stdout_suppressed` with byte and write counts, never the content. Anything that writes file descriptor 1 directly is not covered; see the residual risks.
 - **Misleading annotations:** annotations are client hints only and never grant access.
 - **Shutdown orphaning:** `SIGINT`, `SIGTERM`, and stdin EOF invoke the same bounded registry cleanup and transport close, so a client that only closes stdin does not leave sessions or their MCP children running. Handles are disposed at most once; late promises are ignored after removal. Explicit process exit prevents local shutdown from hanging indefinitely, but SDK limitations can leave external work unconfirmed or abruptly cut off.
 
@@ -100,3 +107,19 @@ change public terminal errors; cancellation and close still take precedence.
 Aliases and profile definitions are trusted administrator configuration, not a filesystem or provider-security sandbox. A locally available model may later be unreachable; no live provider request is made during selection. Symlinks and Pi tools can reach resources permitted to the OS identity. `AGENTS.md` can influence model behavior. The number of active sessions and the duration of an already accepted turn remain unbounded. Stdio peer authentication, quotas, persistent recovery, provider hard-kill capability, dependency integrity policy, and OS/filesystem isolation remain outside the verified boundary. Coding-profile acceptance checks behavior in a selected fixture; it does not prove OS-level isolation.
 The trusted same-UID operator can unlink or replace the setup lock path between
 checks and must not mutate the ownership directory during a transaction.
+
+An allowlisted extension is trusted code; pinning its version does not detect
+modification of the installed package directory. `read-only` limits the
+model's tools, not extension code or hooks. Anything that writes file
+descriptor 1 directly reaches the MCP stream, because Node.js cannot intercept
+it: in-process writes such as `fs.writeSync(1, …)` or native code, and child
+processes that an extension starts with inherited stdio. The Cursor runtime
+behind `pi-cursor-sdk` starts processes of its own during turns (observed with
+`pi-cursor-sdk@0.5.3`: `git`, `ssh`, `gh` and the MCP servers configured for
+Cursor, in a `read-only` profile too); none inherited the server's stdout in
+that run. Extensions may persist their own state outside Pi
+Session MCP's in-memory boundary. Extension tool names are checked for
+conflicts after loading and again after binding; a tool that an extension
+registers later, during a turn, is not re-checked and may replace a built-in
+tool, `read` included, because allowlisted extensions are trusted code. An extension may deactivate built-in or granted
+tools for its own session.

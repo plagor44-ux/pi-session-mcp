@@ -22,13 +22,14 @@ export function projectCapabilities(
       .map((alias) => ({ alias })),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
-      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel }) => ({
+      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions }) => ({
         alias,
         default: isDefault,
         permissionProfile,
         provider,
         model,
         thinkingLevel,
+        extensions: (extensions ?? []).map((extension) => extension.spec),
       })),
   };
 }

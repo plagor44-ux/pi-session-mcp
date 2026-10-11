@@ -28,3 +28,8 @@
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
 - The current product boundary is local stdio, in-memory state, and one trusted local MCP peer. HTTP, a web UI, persistence/resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- Pi extensions load only from an execution profile's exact
+  `npm:<name>@<version>` allowlist, resolved from Pi's install without
+  installing. Client prompts never dispatch extension commands, and stdout stays
+  reserved for MCP frames through the stdout guard. Extensions may persist their
+  own state; Pi Session MCP itself stays in-memory.

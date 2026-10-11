@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { stdoutGuard } from "./stdout-guard-install.js";
+import { serveStdio, StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { loadConfig } from "./config.js";
 import { startupFailureDiagnostic, type StartupDiagnostic } from "./process-diagnostics.js";
 import { createServer } from "./server.js";
@@ -31,7 +32,10 @@ async function main(): Promise<void> {
     registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces);
     handle = serveStdio(
       () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration),
-      { onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }) },
+      {
+        transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
+        onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),
+      },
     );
   } catch (error) {
     writeDiagnostic(startupFailureDiagnostic(error));

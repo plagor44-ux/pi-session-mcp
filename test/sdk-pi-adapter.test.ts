@@ -1,13 +1,17 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ModelRuntime, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
+import type { AgentSessionRuntime, AgentSessionServices, CreateAgentSessionRuntimeFactory } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError } from "../src/config.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
+import type { McpConnection } from "../src/mcp-session-tools.js";
+import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
 import { startupFailureDiagnostic } from "../src/process-diagnostics.js";
 import type { PiTurnOutcome } from "../src/pi-adapter.js";
 import { AUTH_OPERATION_TIMEOUT_MS, SESSION_CREATION_TIMEOUT_MS, createPhase0ResourceLoader, normalizeAssistantOutcome, PROFILE_TOOLS, SdkPiSessionAdapter, type SdkPiAdapterDiagnostic, type SdkStopReason } from "../src/sdk-pi-adapter.js";
+import type { ExtensionSdk } from "../src/sdk-pi-adapter.js";
 
 afterAll(removeTemporaryRoots);
 
@@ -525,5 +529,292 @@ describe("startup diagnostics", () => {
     const unknown = startupFailureDiagnostic(new Error("SECRET_STARTUP /private/config.json"));
     expect(unknown).toEqual({ level: "error", event: "startup_failed", stage: "startup", code: "startup_failed" });
     expect(JSON.stringify(unknown)).not.toMatch(/SECRET|private|config\.json|message|path/i);
+  });
+});
+
+describe("plain-text prompts", () => {
+  it("sends every prompt as plain text so extension commands never run", async () => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: createSessionFixture(session) });
+    const handle = await create(adapter);
+    await handle.prompt("/fixture-cmd hello", () => undefined);
+    expect(session.prompt).toHaveBeenCalledWith("/fixture-cmd hello", expect.objectContaining({ expandPromptTemplates: false }));
+  });
+});
+
+const fixtureExtension = parseExtensionSpec("npm:fixture-ext@1.2.3")!;
+const extensionProfile: ResolvedExecutionProfile = Object.freeze({ ...profile, alias: "with-extension", extensions: Object.freeze([fixtureExtension]) });
+
+function extensionHarness(options: {
+  permissionProfile?: "read-only" | "coding";
+  extensionTools?: string[][];
+  loadErrors?: number;
+  diagnosticError?: boolean;
+  activeTools?: string[];
+  withMcp?: boolean;
+} = {}) {
+  const permissionProfile = options.permissionProfile ?? "read-only";
+  const extensionTools = options.extensionTools ?? [["fixture_tool"]];
+  const mcpNames = options.withMcp ? ["mcp_knowledge_search"] : [];
+  const expectedTools = permissionProfile === "coding"
+    ? [...PROFILE_TOOLS.coding, ...mcpNames, ...extensionTools.flat()]
+    : [...PROFILE_TOOLS["read-only"], ...mcpNames];
+  // The same mutable maps back every `getExtensions()` call, so a fake bind can register tools.
+  const toolMaps = extensionTools.map((names) => new Map<string, unknown>(names.map((name) => [name, {}])));
+  const mcpClosed = vi.fn();
+  const mcpConnection: McpConnection = {
+    async connect() {}, async listTools() { return { tools: [{ name: "search_knowledge", inputSchema: { type: "object" } }] }; },
+    async callTool() { return { content: [{ type: "text", text: "found" }] }; }, async close() { mcpClosed(); },
+  };
+  const fixture = runtimeFixture();
+  const { session, dispose: sessionDispose } = sessionFixture();
+  const bindExtensions = vi.fn(async (_bindings: { mode?: string; onError?: (error: unknown) => void }) => undefined);
+  Object.assign(session as object, { bindExtensions, getActiveToolNames: vi.fn(() => options.activeTools ?? expectedTools) });
+  const services = {
+    cwd: "/hidden/workspace", agentDir: "/hidden/workspace", modelRuntime: fixture.runtime, settingsManager: {},
+    diagnostics: options.diagnosticError ? [{ type: "error", message: "hidden" }] : [],
+    resourceLoader: {
+      getExtensions: () => ({
+        extensions: toolMaps.map((tools) => ({ tools })),
+        errors: Array.from({ length: options.loadErrors ?? 0 }, () => ({ path: "/hidden", error: "hidden" })),
+      }),
+    },
+  } as unknown as AgentSessionServices;
+  const runtimeDispose = vi.fn(async () => undefined);
+  const sessionRuntime = { session, dispose: runtimeDispose } as unknown as AgentSessionRuntime;
+  const createServices = vi.fn(async (_options: unknown) => services);
+  const createSessionFromServices = vi.fn(async (_options: unknown) => ({ session }) as unknown as CreateAgentSessionResult);
+  const createRuntime = vi.fn(async (factory: CreateAgentSessionRuntimeFactory, runtimeOptions: Parameters<CreateAgentSessionRuntimeFactory>[0]) => {
+    await factory(runtimeOptions);
+    return sessionRuntime;
+  });
+  const resolveExtension = vi.fn(async (_extension: unknown) => "/hidden/extension/fixture-ext");
+  const runtimeFactory = vi.fn(async () => fixture.runtime);
+  const createSession = createSessionFixture(session);
+  const diagnostics: SdkPiAdapterDiagnostic[] = [];
+  const adapter = new SdkPiSessionAdapter({
+    modelRuntimeFactory: runtimeFactory, createSession, resolveExtension,
+    extensionSdk: { createServices, createSessionFromServices, createRuntime } as unknown as ExtensionSdk,
+    mcpConnectionFactory: () => mcpConnection,
+    diagnosticSink: (diagnostic) => { diagnostics.push(diagnostic); },
+  });
+  const executionProfile: ResolvedExecutionProfile = {
+    ...extensionProfile, permissionProfile,
+    ...(options.withMcp ? { mcpServers: { knowledge: { command: process.execPath, args: ["/operator/server.mjs"], tools: { search: { name: "search_knowledge", readOnly: true } } } } } : {}),
+  };
+  return {
+    toolMaps, mcpClosed,
+    adapter, fixture, session, sessionDispose, bindExtensions, services, sessionRuntime, runtimeDispose, createServices,
+    createSessionFromServices, createRuntime, resolveExtension, runtimeFactory, createSession, diagnostics, expectedTools,
+    create: (override: ResolvedExecutionProfile = executionProfile) => adapter.create({ cwd: "/hidden/workspace", executionProfile: override }),
+  };
+}
+
+describe("SdkPiSessionAdapter allowlisted extensions", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  it("loads extensions through services before verifying the selection", async () => {
+    const h = extensionHarness();
+    const handle = await h.create();
+    expect(h.resolveExtension).toHaveBeenCalledWith(fixtureExtension);
+    expect(h.createServices).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "/hidden/workspace", agentDir: "/hidden/workspace", modelRuntime: h.fixture.runtime,
+      resourceLoaderOptions: expect.objectContaining({
+        noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
+        additionalExtensionPaths: ["/hidden/extension/fixture-ext"],
+      }),
+    }));
+    expect(h.createServices.mock.invocationCallOrder[0]!).toBeLessThan(h.fixture.getProvider.mock.invocationCallOrder[0]!);
+    expect(h.createSession).not.toHaveBeenCalled();
+    expect(h.createSessionFromServices).toHaveBeenCalledWith(expect.objectContaining({
+      services: h.services, model: h.fixture.resolvedModel, thinkingLevel: profile.thinkingLevel, tools: PROFILE_TOOLS["read-only"],
+    }));
+    expect(h.bindExtensions).toHaveBeenCalledWith({ mode: "print", onError: expect.any(Function) });
+    expect(handle.appliedSelection).toEqual({ provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel });
+  });
+
+  it("gives every extension session its own model runtime", async () => {
+    const h = extensionHarness();
+    await Promise.all([h.create(), h.create()]);
+    expect(h.runtimeFactory).toHaveBeenCalledTimes(2);
+    expect(h.createServices).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps profiles without extensions on the unchanged path", async () => {
+    const h = extensionHarness();
+    await h.create(profile);
+    await h.create({ ...profile, extensions: [] });
+    expect(h.createServices).not.toHaveBeenCalled();
+    expect(h.createSession).toHaveBeenCalledTimes(2);
+    expect(h.runtimeFactory).toHaveBeenCalledTimes(1);
+  });
+
+  it("activates extension tools in coding profiles", async () => {
+    const h = extensionHarness({ permissionProfile: "coding" });
+    await h.create();
+    expect(h.createSessionFromServices).toHaveBeenCalledWith(expect.objectContaining({ tools: [...PROFILE_TOOLS.coding, "fixture_tool"] }));
+  });
+
+  it.each([
+    ["read-only", [["read"]]],
+    ["coding", [["bash"]]],
+    ["coding", [["dup"], ["dup"]]],
+  ] as const)("fails closed on a %s tool conflict %j", async (permissionProfile, extensionTools) => {
+    const h = extensionHarness({ permissionProfile, extensionTools: extensionTools.map((names) => [...names]) });
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_tool_conflict" });
+    expect(h.createRuntime).not.toHaveBeenCalled();
+  });
+
+  it.each(["extension_not_installed", "extension_version_mismatch", "extension_load_failed"] as const)("reports a %s resolution failure", async (code) => {
+    const h = extensionHarness();
+    h.resolveExtension.mockRejectedValueOnce(new PiExtensionError(code));
+    await expect(h.create()).rejects.toMatchObject({ name: "PiSessionCreationError", code });
+    expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_resolve", code, extension: "fixture-ext@1.2.3" }));
+    expect(JSON.stringify(h.diagnostics)).not.toContain("/hidden");
+    expect(h.runtimeFactory).not.toHaveBeenCalled();
+    expect(h.createServices).not.toHaveBeenCalled();
+  });
+
+  it("classifies a foreign resolver failure as a load failure", async () => {
+    const h = extensionHarness();
+    h.resolveExtension.mockRejectedValueOnce(new Error("/hidden/path"));
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+  });
+
+  it.each([{ loadErrors: 1 }, { diagnosticError: true }])("fails closed on extension load errors %j", async (options) => {
+    const h = extensionHarness(options);
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+    expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_load", code: "extension_load_failed" }));
+    expect(h.createRuntime).not.toHaveBeenCalled();
+  });
+
+  it("disposes the session runtime when binding fails", async () => {
+    const h = extensionHarness();
+    h.bindExtensions.mockRejectedValueOnce(new Error("hidden"));
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+    expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_bind" }));
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an active tool outside the allowlist after binding and disposes the runtime", async () => {
+    const h = extensionHarness({ activeTools: [...PROFILE_TOOLS["read-only"], "fixture_tool"] });
+    await expect(h.create()).rejects.toMatchObject({ code: "execution_selection_mismatch" });
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a coding session with an active tool outside the allowlist", async () => {
+    const h = extensionHarness({ permissionProfile: "coding", activeTools: [...PROFILE_TOOLS.coding, "fixture_tool", "rogue"] });
+    await expect(h.create()).rejects.toMatchObject({ code: "execution_selection_mismatch" });
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("admits a session whose extension deactivates its own tool", async () => {
+    const h = extensionHarness({ permissionProfile: "coding", activeTools: [...PROFILE_TOOLS.coding] });
+    const handle = await h.create();
+    expect(handle.appliedSelection.model).toBe(profile.model);
+    expect(h.runtimeDispose).not.toHaveBeenCalled();
+  });
+
+  it("closes through the session runtime so session_shutdown runs", async () => {
+    const h = extensionHarness();
+    const handle = await h.create();
+    await handle.dispose();
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+    expect(h.sessionDispose).not.toHaveBeenCalled();
+  });
+
+  it("disposes a session runtime that resolves after the creation deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = extensionHarness();
+      const late = deferred<AgentSessionRuntime>();
+      h.createRuntime.mockImplementationOnce(() => late.promise);
+      const outcome = expect(h.create()).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+      await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
+      await outcome;
+      late.resolve(h.sessionRuntime);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails closed when binding registers a tool that replaces a built-in", async () => {
+    const h = extensionHarness({ withMcp: true });
+    h.bindExtensions.mockImplementationOnce(async () => { h.toolMaps[0]!.set("read", {}); });
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_tool_conflict" });
+    expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_bind", code: "extension_tool_conflict" }));
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+    expect(h.mcpClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when binding adds any tool to the selection", async () => {
+    const h = extensionHarness({ permissionProfile: "coding" });
+    h.bindExtensions.mockImplementationOnce(async () => { h.toolMaps[0]!.set("late_tool", {}); });
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_tool_conflict" });
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when a hook reports an error while binding", async () => {
+    const h = extensionHarness({ withMcp: true });
+    h.bindExtensions.mockImplementationOnce(async (bindings) => { bindings.onError?.({ extensionPath: "/hidden", event: "session_start", error: "hidden" }); });
+    await expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+    expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_bind", code: "extension_load_failed" }));
+    expect(JSON.stringify(h.diagnostics)).not.toContain("/hidden");
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+    expect(h.mcpClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores hook errors reported after binding", async () => {
+    const h = extensionHarness();
+    let onError: ((error: unknown) => void) | undefined;
+    h.bindExtensions.mockImplementationOnce(async (bindings) => { onError = bindings.onError; });
+    const handle = await h.create();
+    onError?.({ error: "late" });
+    expect(handle.appliedSelection.model).toBe(profile.model);
+    expect(h.runtimeDispose).not.toHaveBeenCalled();
+  });
+
+  it("closes granted MCP tools on a tool conflict and on a bind failure", async () => {
+    const conflict = extensionHarness({ withMcp: true, extensionTools: [["read"]] });
+    await expect(conflict.create()).rejects.toMatchObject({ code: "extension_tool_conflict" });
+    expect(conflict.mcpClosed).toHaveBeenCalledTimes(1);
+    const bind = extensionHarness({ withMcp: true });
+    bind.bindExtensions.mockRejectedValueOnce(new Error("hidden"));
+    await expect(bind.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+    expect(bind.mcpClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes MCP and bounds a hanging runtime disposal on failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = extensionHarness({ withMcp: true });
+      h.runtimeDispose.mockImplementation(() => new Promise<undefined>(() => undefined));
+      h.bindExtensions.mockRejectedValueOnce(new Error("hidden"));
+      const outcome = expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.mcpClosed).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
+      await outcome;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fails an extension load that outlives the creation deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = extensionHarness();
+      h.createServices.mockImplementationOnce(() => new Promise<AgentSessionServices>(() => undefined));
+      const outcome = expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+      await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
+      await outcome;
+      expect(h.diagnostics).toContainEqual(expect.objectContaining({ stage: "extension_load", code: "extension_load_failed" }));
+      expect(h.createRuntime).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

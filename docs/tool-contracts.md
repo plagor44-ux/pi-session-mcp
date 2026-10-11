@@ -34,12 +34,13 @@ There are exactly eight tools. No `pi_turn_wait` tool or live provider/model inv
     "permissionProfile": "read-only",
     "provider": "configured-provider",
     "model": "configured-model",
-    "thinkingLevel": "medium"
+    "thinkingLevel": "medium",
+    "extensions": []
   }]
 }
 ```
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases, and the six documented profile fields. It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases, and the seven documented profile fields. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
 
 Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`. Clients may use them for presentation, but the strict input schema and server-owned projection enforce the contract.
 
@@ -67,6 +68,10 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `external_mcp_no_tools` | Complete valid discovery returned no tools while explicit grants were required. |
 | `external_mcp_grant_tool_missing` | Complete valid nonempty discovery omitted an explicitly granted remote tool. |
 | `external_mcp_activation_mismatch` | Pi did not activate exactly the expected post-discovery tool set. |
+| `extension_not_installed` | Pi has no installed package for a configured extension. |
+| `extension_version_mismatch` | Pi's installed extension package has another version than the configured one. |
+| `extension_load_failed` | A configured extension has an invalid manifest, failed to load or failed to bind. |
+| `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool. |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 

@@ -159,3 +159,41 @@ describe("loadConfig", () => {
     expect(loaded.configuration.reloadPolicy).toBe("restart-required");
   });
 });
+
+describe("execution profile extensions", () => {
+  const safe = { default: true, permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off" };
+
+  async function loadProfiles(executionProfiles: Record<string, unknown>) {
+    const root = await temporaryRoot("pi-session-mcp-extensions-");
+    const path = join(root, "config.json");
+    await writeFile(path, JSON.stringify({ workspaces: { repo: "." }, executionProfiles }));
+    return loadConfig(path);
+  }
+
+  it("parses pinned extensions on read-only and coding profiles", async () => {
+    const config = await loadProfiles({
+      safe: { ...safe, extensions: ["npm:pi-cursor-sdk@0.5.3"] },
+      code: { ...safe, default: false, permissionProfile: "coding", extensions: ["npm:@scope/ext@1.2.3", "npm:other@2.0.0"] },
+    });
+    expect(config.executionProfiles.get("safe")?.extensions).toEqual([{ spec: "npm:pi-cursor-sdk@0.5.3", name: "pi-cursor-sdk", version: "0.5.3" }]);
+    expect(config.executionProfiles.get("code")?.extensions?.map((extension) => extension.name)).toEqual(["@scope/ext", "other"]);
+    expect(Object.isFrozen(config.executionProfiles.get("code")?.extensions)).toBe(true);
+  });
+
+  it("keeps profiles without extensions free of the field", async () => {
+    const config = await loadProfiles({ safe });
+    expect(config.executionProfiles.get("safe")).not.toHaveProperty("extensions");
+  });
+
+  it.each([
+    [["npm:pi-cursor-sdk@^0.5.3"]],
+    [["npm:pi-cursor-sdk@latest"]],
+    [["git:github.com/owner/repo@1.0.0"]],
+    [["/absolute/extension"]],
+    [["npm:dup@1.0.0", "npm:dup@1.0.1"]],
+    [Array.from({ length: 9 }, (_, index) => `npm:ext-${index}@1.0.0`)],
+    ["npm:not-an-array@1.0.0"],
+  ])("rejects invalid extensions %j", async (extensions) => {
+    await expect(loadProfiles({ safe: { ...safe, extensions } })).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
+});
