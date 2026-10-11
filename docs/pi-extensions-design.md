@@ -180,10 +180,12 @@ For a profile with `extensions`, `SdkPiSessionAdapter.create` runs:
    failure is `extension_load_failed`.
 8. **Postchecks.** Model, thinking level and active tools, as today.
 
-Steps 3 to 7 run under the existing session-creation deadline. A failure after
-step 3 disposes the services and the session through the lifecycle path, which
-emits `session_shutdown`. A start that resolves after the deadline is disposed
-the same way, never admitted.
+Step 3, step 6 and step 7 are each bounded by the existing session-creation
+deadline (`SESSION_CREATION_TIMEOUT_MS`). A failure after step 6 disposes the
+session through the lifecycle path, which emits `session_shutdown`. A session
+that resolves after its deadline is disposed the same way, never admitted.
+Extension code loaded in step 3 cannot be unloaded; a failure between step 3
+and step 6 leaves no session to dispose.
 
 ### Tools, hooks and prompts
 
@@ -195,8 +197,12 @@ the same way, never admitted.
 - **`coding`.** The tool list is the built-in coding tools, the granted MCP
   tools, and every tool registered by the profile's extensions. The adapter
   reads the registered tool names from the services' resource loader after
-  step 3. A name that collides with a built-in tool, an MCP tool or a tool of
-  another extension fails with `extension_tool_conflict`.
+  step 3.
+- **Name conflicts, both profiles.** An extension tool whose name equals a
+  built-in tool (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`), a
+  granted MCP tool or a tool of another extension fails with
+  `extension_tool_conflict`. This also stops an extension from replacing a
+  built-in tool inside a `read-only` profile.
 - **Hooks.** All extension hooks run in both permission profiles, including
   `before_agent_start` system-prompt changes, `tool_call`, `tool_result`,
   `before_provider_request`, `before_provider_headers` and `context`.
@@ -213,8 +219,9 @@ The handle of an extension session owns the `AgentSessionRuntime` that wraps
 its services and session. `close`, the close cleanup after an abort deadline,
 registry shutdown and late-start disposal call `AgentSessionRuntime.dispose()`,
 which emits `session_shutdown` and disposes the session. Existing deadlines,
-idempotent close and tombstones do not change. MCP connections are closed
-after the runtime, as today after the session.
+idempotent close and tombstones do not change. MCP connections close
+concurrently with the runtime, as they close concurrently with the session
+today; the handle's disposal completes when both have settled.
 
 How the session is wrapped in an `AgentSessionRuntime` uses only the exported
 `createAgentSessionRuntime` and `AgentSessionRuntime` API. The exact wiring is
@@ -264,9 +271,9 @@ offline. `setup --verify` includes Doctor and therefore these checks.
 ### Diagnostics
 
 The adapter's diagnostic sink gains the stages `extension_resolve`,
-`extension_load`, `extension_bind` and `extension_shutdown`. A diagnostic
-carries the profile alias, the package name, the pinned version and the error
-code. It never carries a path, an extension error message, or prompt content.
+`extension_load` and `extension_bind`. A diagnostic carries the profile alias
+and the error code; a resolution failure also carries the failing extension as
+`<name>@<version>`. Disposal stays best effort and reports nothing, as today. It never carries a path, an extension error message, or prompt content.
 
 ## Failure semantics
 
@@ -278,7 +285,7 @@ admitted:
 | `extension_not_installed` | Configured Pi extension is not installed | Pi has no user install of the package. |
 | `extension_version_mismatch` | Configured Pi extension version is not installed | The installed version differs from the pinned version. |
 | `extension_load_failed` | Configured Pi extension could not be loaded | Invalid manifest, entry outside the package, load or bind error, services diagnostic of type `error`. |
-| `extension_tool_conflict` | Configured Pi extension tools conflict | A tool name collides (coding profiles). |
+| `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool. |
 
 Existing codes keep their meaning. An extension provider that is unknown after
 loading is `unknown_provider`.
