@@ -364,7 +364,8 @@ pin the installed version in the profile:
 - **Install location.** Only Pi's own user install counts:
   `<Pi agent dir>/npm/node_modules/<name>`, normally `~/.pi/agent/npm/…`,
   created by `pi install npm:<name>`. A package installed with `npm i -g` is
-  reported as not installed (`extension_not_installed`).
+  reported as not installed: sessions report `extension_not_installed`, Doctor
+  reports `extension_missing`.
 - **Version pin.** The server never installs or updates extensions. If Pi has
   another version installed, sessions of that profile fail with
   `extension_version_mismatch` and Doctor reports it. After `pi update
@@ -372,12 +373,17 @@ pin the installed version in the profile:
 - **Full capabilities.** An extension loads with its providers, tools, hooks
   and system-prompt changes. In `read-only` profiles the model still gets only
   `read`, `grep`, `find` and `ls`; in `coding` profiles it also gets every
-  extension tool. Extension commands never run from client prompts.
+  extension tool. Extension commands never run from client prompts, but
+  extension input hooks can still see, rewrite or consume a client prompt.
 - **Fail-closed start.** A session start fails with `extension_load_failed` if
   an extension reports a hook error while binding. It fails the same way if an
-  extension registers an MCP server, because Pi's built-in MCP extension is not
-  loaded. An extension tool whose name collides with another tool fails with
+  extension registers an MCP server while loading or starting, because Pi's
+  built-in MCP extension is not loaded. An extension tool whose name collides with another tool fails with
   `extension_tool_conflict`.
+- **Cursor runtime.** `pi-cursor-sdk` runs Cursor's local agent runtime. That
+  runtime starts its own processes (for example git and the MCP servers
+  configured for Cursor) and may act through Cursor's own tooling, so a
+  `read-only` profile limits only Pi's tools, not what the Cursor runtime does.
 - **Trust.** Only list extensions you trust like any other program you run:
   they execute inside the server process with your rights.
 - **Cursor sign-in limit.** Without a stored Cursor key, `pi-cursor-sdk`

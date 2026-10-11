@@ -263,7 +263,7 @@ not count as a ten-task cycle.
 
 ## Pi extension live check
 
-Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run it from a working tree (`npm run build`, then `node dist/main.js`) with a temporary configuration whose profile names `"extensions": ["npm:pi-cursor-sdk@0.5.3"]` and a Cursor model from Pi's catalog.
+Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run it from a working tree (`npm run build`, then `node dist/main.js`) with a temporary configuration, passed through `PI_SESSION_MCP_CONFIG`, whose profile names `"extensions": ["npm:pi-cursor-sdk@0.5.3"]` and a Cursor model from Pi's catalog.
 
 1. `pi_session_start`, a prompt answered with "PONG", `pi_turn_get` completed, `pi_session_close`.
 2. Two parallel sessions of that profile, each completing a prompt.
@@ -271,7 +271,7 @@ Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run
 4. stderr shows no `foreign_stdout_suppressed` storm and no stdout frame fails to parse.
 5. Record how the Cursor local runtime starts its child processes (inherited or piped stdio).
 
-Record date, versions and outcome under Status. No secret, path or prompt content goes into the record.
+Record date, source commit, versions and outcome under Status. No secret, path or prompt content goes into the record.
 
 ## Evidence rules
 

@@ -219,6 +219,9 @@ and step 6 leaves no session to dispose.
   start with `extension_load_failed`. Failure cleanup disposes the session
   runtime, bounded by the creation deadline, concurrently with closing the
   granted MCP connections.
+- **MCP servers registered by extensions.** An extension that registers an MCP
+  server while loading or starting fails the start with
+  `extension_load_failed`, because the built-in MCP extension is not loaded.
 - **Hooks.** All extension hooks run in both permission profiles, including
   `before_agent_start` system-prompt changes, `tool_call`, `tool_result`,
   `before_provider_request`, `before_provider_headers` and `context`.
