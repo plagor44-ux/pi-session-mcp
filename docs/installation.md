@@ -37,7 +37,8 @@ the same arguments.
 
 - Linux or macOS. `setup` fails closed on every other platform. macOS is tested
   in CI on macOS 15 and 26 on Apple silicon. Setup acceptance on a real Mac is
-  pending; see [Acceptance](acceptance.md#status).
+  recorded for Claude Code only; Codex is still pending. See
+  [Acceptance](acceptance.md#status).
 - Node.js **22.19.0 or newer**. `setup` registers the absolute path of the Node
   executable that runs it, so run it with the Node installation that clients
   should use.

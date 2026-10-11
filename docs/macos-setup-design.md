@@ -1,7 +1,7 @@
 # macOS setup platform design
 
 **Status:** Implemented (2026-10-10); Level-2 acceptance on real hardware is
-pending. Tracking issue: #32. Follows #28 and PR #30. The decision record is
+recorded for Claude Code (2026-10-11) and pending for Codex. Tracking issue: #32. Follows #28 and PR #30. The decision record is
 [ADR 0005](adr/0005-macos-setup-platform.md).
 
 ## Goal

@@ -127,8 +127,8 @@ client cycles.
 ### macOS
 
 macOS uses the same isolation, sequence and pass criteria, with the additions
-below. Until a run is recorded under [Status](#status), macOS is CI-tested but
-has not passed Level 2.
+below. A run for Claude Code is recorded under [Status](#status). macOS is
+CI-tested, and it has not passed Level 2 for Codex.
 
 - **Environment.** Record:
   - the macOS version and architecture (`sw_vers`, `uname -m`);
@@ -325,5 +325,47 @@ CLI `0.162.0` and Claude Code `2.1.296`, on 2026-10-10. The installed
 working directory.
 
 macOS: `setup` supports macOS from the change that tracks #32. That change is
-tested in CI on macOS 15 and macOS 26 (Apple silicon) next to Linux. No macOS
-Level 2 run is recorded yet, so macOS has not passed setup acceptance.
+tested in CI on macOS 15 and macOS 26 (Apple silicon) next to Linux.
+
+On 2026-10-11, the build of `d89740c`, the head of the pull request branch,
+passed the working-tree Level 2 on a real Mac with Claude Code as the only
+client:
+- Environment: macOS 26.7.1 (`25G241`) on `arm64`, Node.js `22.23.3` and Claude
+  Code `2.1.294`. The disposable home was on the APFS data volume that the
+  root volume belongs to.
+- Level 1 on that checkout: `npm ci`, `npm run typecheck`, `npm run build`,
+  `npm run build:cli` and `npm test` exited with `0`. The test run reported 531
+  passed and 23 skipped. The skipped tests are the 21 Linux `/proc` fixture
+  tests, the Linux-only lock-inode replacement test and the probe-only
+  controller output test. `npm audit` reported 0 vulnerabilities, and
+  `git diff --check` reported nothing. `git status --short` printed nothing
+  before the evidence was written.
+- Doctor with the acceptance configuration reported no error.
+- All three Claude Code targets (`user`, `project` and `local`) completed the
+  nine-step sequence. Every step reported the expected overall status, finding
+  and exit status.
+- After the sequences the `pi-session-mcp` registration was absent, the sentinel
+  was still present and the ownership record set was empty. The ownership
+  directory had mode `0700` and the ownership file mode `0600`. No server,
+  setup or guardian process of the build remained, and the digest of the real
+  Claude Code registrations was unchanged. No report contained a path, an
+  environment value or a secret.
+- Lock contention: two simultaneous `--apply` runs for
+  `claude-code:user:pi-session-mcp` finished within 5 s. One reported
+  `ok (applied)` and the other `unchanged (already_equivalent)`. Both exited
+  with `0`, and the following `--remove` reported `ok (removed)`.
+- Interruption: SIGINT was sent to the process group of a running `--apply`
+  after 0.2 s, 0.5 s and 0.9 s. Each run exited with `130` and reported
+  `operation_interrupted`. None left a `claude mcp` command or a setup or
+  guardian process behind. In each case the following `--apply` reported
+  `ok (applied)` and the following `--remove` reported `ok (removed)`.
+
+This run does not cover:
+- Codex, which was not installed on the machine, so macOS has not passed
+  setup acceptance for Codex.
+- A Ctrl-C keypress in an interactive terminal. A script sent the signal from a
+  shell without a terminal.
+- The `pending_recovered` and `already_equivalent` outcomes after an interrupt.
+  The following `--apply` reported `applied` in every case.
+- Intel Macs, the published-release and published-package variants, and
+  Level 3.

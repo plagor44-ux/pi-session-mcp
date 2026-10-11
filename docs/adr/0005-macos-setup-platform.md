@@ -2,6 +2,7 @@
 
 **Status:** Accepted (2026-10-10). macOS counts as accepted only after
 Level-2 setup acceptance on real hardware; see [Acceptance](../acceptance.md).
+That acceptance is recorded for Claude Code (2026-10-11); Codex is still pending.
 
 ## Context
 
