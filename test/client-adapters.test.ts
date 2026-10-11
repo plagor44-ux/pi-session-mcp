@@ -5,7 +5,7 @@ import { verifyMcpCapabilities, type McpStdioProcess, type McpVerifierResult } f
 import { versionFromOutput } from "../src/client-adapters/command.js";
 import { projectCapabilities } from "../src/capabilities.js";
 import { ImmutableMap, type ConfiguredExecutionProfile } from "../src/execution-profile.js";
-import { parseExtensionSpec, type ExtensionSpec } from "../src/extension-spec.js";
+import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec, type ExtensionSpec } from "../src/extension-spec.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import type { CommandRunner } from "../src/client-adapters/index.js";
 
@@ -43,6 +43,10 @@ function capabilitiesWith(configuration: unknown): Record<string, unknown> {
 
 function capabilitiesWithProfile(profile: Record<string, unknown>): Record<string, unknown> {
   return { ...VERIFIED_CAPABILITIES, executionProfiles: [profile] };
+}
+
+function extensionSpecs(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `npm:ext-${index}@1.0.0`);
 }
 
 function extension(spec: string): ExtensionSpec {
@@ -132,10 +136,15 @@ describe("client adapters", () => {
     ["non-array extensions", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: "npm:pi-cursor-sdk@0.5.3" })],
     ["non-string extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: [1] })],
     ["unpinned extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: ["npm:pi-cursor-sdk@latest"] })],
-    ["too many extensions", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: Array.from({ length: 9 }, (_, index) => `npm:ext-${index}@1.0.0`) })],
+    ["too many extensions", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: extensionSpecs(MAX_PROFILE_EXTENSIONS + 1) })],
   ];
   it.each(malformedCapabilities)("rejects %s in the capabilities payload", async (_label, capabilities) => {
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("failed");
+  });
+
+  it("accepts the maximum number of profile extensions", async () => {
+    const capabilities = capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: extensionSpecs(MAX_PROFILE_EXTENSIONS) });
+    expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
   });
 
   it("verifies the server's own capability projection, including profile extensions", async () => {
