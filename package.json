@@ -30,6 +30,7 @@
     "scripts/doctor.mjs",
     "pi-session-mcp.example.json",
     "docs/",
+    "!docs/superpowers/",
     "CHANGELOG.md",
     "SECURITY.md",
     "CONTRIBUTING.md"
