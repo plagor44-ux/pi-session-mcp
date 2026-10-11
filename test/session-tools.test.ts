@@ -15,4 +15,9 @@ describe("composeSessionTools", () => {
   ] as const)("fails closed on a %s conflict", (permissionProfile, mcp, extension) => {
     expect(composeSessionTools(permissionProfile, mcp, extension)).toBeUndefined();
   });
+
+  it.each(["*", "+x", "-x", ""])("rejects the extension tool name %j in both profiles", (name) => {
+    expect(composeSessionTools("read-only", [], [[name]])).toBeUndefined();
+    expect(composeSessionTools("coding", [], [[name]])).toBeUndefined();
+  });
 });

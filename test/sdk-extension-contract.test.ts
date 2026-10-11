@@ -19,6 +19,7 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 const FIXTURE = fileURLToPath(new URL("./fixtures/pi-extension-fixture", import.meta.url));
 const extension = parseExtensionSpec("npm:pi-extension-fixture@1.0.0")!;
+// Shared by every test in this file, so the tests must run sequentially: never use `describe.concurrent`.
 const events = (): string[] => ((globalThis as { __piExtensionFixtureEvents?: string[] }).__piExtensionFixtureEvents ??= []);
 
 afterAll(removeTemporaryRoots);
@@ -74,7 +75,8 @@ describe("Pi SDK contract for allowlisted extensions", () => {
     const session = await registry.start("repo", executionProfile);
     try {
       const accepted = await registry.prompt(session.id, "list the tools");
-      await terminal(registry, session.id, accepted.turn.turnId);
+      expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
+      expect(events()).toContain("widen:before_agent_start");
       expect(events()).toContain(`tools:${[...PROFILE_TOOLS["read-only"]].sort().join(",")}`);
     } finally {
       await registry.close(session.id);
@@ -86,7 +88,7 @@ describe("Pi SDK contract for allowlisted extensions", () => {
     const session = await registry.start("repo", executionProfile);
     try {
       const accepted = await registry.prompt(session.id, "list the tools");
-      await terminal(registry, session.id, accepted.turn.turnId);
+      expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
       expect(events()).toContain(`tools:${[...PROFILE_TOOLS.coding, "fixture_tool"].sort().join(",")}`);
     } finally {
       await registry.close(session.id);

@@ -630,7 +630,7 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     expect(h.createSessionFromServices).toHaveBeenCalledWith(expect.objectContaining({
       services: h.services, model: h.fixture.resolvedModel, thinkingLevel: profile.thinkingLevel, tools: PROFILE_TOOLS["read-only"],
     }));
-    expect(h.bindExtensions).toHaveBeenCalledWith(expect.objectContaining({ mode: "print", onError: expect.any(Function) }));
+    expect(h.bindExtensions).toHaveBeenCalledWith({ mode: "print", onError: expect.any(Function) });
     expect(handle.appliedSelection).toEqual({ provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel });
   });
 
