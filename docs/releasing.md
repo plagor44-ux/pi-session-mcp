@@ -20,7 +20,8 @@ error codes, as defined in the [tool contracts](tool-contracts.md).
 
 A release is distributed twice: as the GitHub release with its source archive,
 and as the npm package `pi-session-mcp`. The npm package contains the built
-files, the executables, the documentation and the example configuration, but
+files, the executables, the operator documentation and the example
+configuration. It contains no implementation plans (`docs/superpowers/`), and
 no lockfile, because npm does not ship lockfiles inside packages.
 
 ## Update the Pi SDK
@@ -47,7 +48,10 @@ update is possible. It is not an update and not an acceptance.
    ships in the package as
    `node_modules/@earendil-works/pi-coding-agent/CHANGELOG.md`. Look for changes
    to stop reasons, prompt acceptance, the tools declared to the model,
-   provider keys, MCP naming and packaging.
+   provider keys, MCP naming and packaging. For MCP naming, compare the SDK's
+   `isMcpToolName` (`dist/core/mcp-servers.js`) with the reserved names in
+   `src/session-tools.ts`. That function is not a root export, so no test
+   notices when the SDK reserves another name.
 
 3. Move the pin:
 
@@ -100,7 +104,8 @@ release, record the contract again:
 5. Update the versions named in [Installation](installation.md).
 6. Run the working-tree
    [Level 2 lifecycle](acceptance.md#level-2-setup-acceptance) with the real
-   client for every scope.
+   client for every scope (`scripts/setup-acceptance.mjs`, see
+   [Tooling](acceptance.md#tooling)).
 
 ## Patch audit advisories
 
@@ -151,7 +156,10 @@ Steps:
    `## Unreleased`, so that the unreleased entries become the release entries.
 4. Run the Level 1 checks. `npm run --silent doctor -- --json` must report the
    new `packageVersion`.
-5. Open one pull request named `chore: prepare v<x.y.z> release`.
+5. Run the working-tree
+   [Level 2 acceptance](acceptance.md#tooling) on the release candidate with
+   `scripts/setup-acceptance.mjs`, unless the release notes state its absence.
+6. Open one pull request named `chore: prepare v<x.y.z> release`.
 
 ## Publish a release
 
@@ -171,7 +179,7 @@ package contains exactly the tagged sources:
 git clone --branch v<x.y.z> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git /tmp/pi-session-mcp-release
 cd /tmp/pi-session-mcp-release
 npm ci
-npm publish --dry-run     # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/
+npm publish --dry-run     # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/ without docs/superpowers/
 npm stage publish         # the prepack script builds the server, setup and Doctor
 ```
 
@@ -210,7 +218,8 @@ After publishing:
 1. Run the published-release
    [Level 2 acceptance](acceptance.md#working-tree-and-published-release-variants)
    from a fresh clone of the tag and from the published npm package, and
-   record it.
+   record it. `scripts/setup-acceptance.mjs` runs both
+   ([Tooling](acceptance.md#tooling)).
 2. Upgrade the installation as described in
    [Installation](installation.md#upgrade).
 3. Update the status section in [Acceptance](acceptance.md).

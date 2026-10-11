@@ -40,8 +40,8 @@ model runtime per session:
 
 Profiles without extensions keep the previous path. Client prompts are plain
 text for every profile: they never dispatch extension commands, skills or
-templates. An always-on stdout guard gives the MCP transport the only real
-stdout writer.
+templates, and extension input hooks see them with `source: "rpc"`. An
+always-on stdout guard gives the MCP transport the only real stdout writer.
 
 ## Consequences
 

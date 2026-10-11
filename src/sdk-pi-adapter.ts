@@ -284,6 +284,9 @@ class SdkHandle implements PiSessionHandle {
       promptResult = this.session.prompt(text, {
         // Client text is content, never a command: no extension command, skill or template dispatch.
         expandPromptTemplates: false,
+        // Pi's own RPC mode uses `rpc` for input from a program over stdio, which matches an MCP
+        // client. `interactive`, the SDK default, means a human at the terminal or the CLI's print mode.
+        source: "rpc",
         preflightResult: (disposition) => signalPreflight(admitsTurn(disposition)),
       });
     } catch {

@@ -188,6 +188,7 @@ describe("execution profile extensions", () => {
   it.each([
     [["npm:pi-cursor-sdk@^0.5.3"]],
     [["npm:pi-cursor-sdk@latest"]],
+    [["npm:pi-cursor-sdk@0.5.3+build.1"]],
     [["git:github.com/owner/repo@1.0.0"]],
     [["/absolute/extension"]],
     [["npm:dup@1.0.0", "npm:dup@1.0.1"]],

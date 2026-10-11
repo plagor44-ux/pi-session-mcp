@@ -155,7 +155,7 @@ Rules:
 - A profile may load Pi extensions that Pi has installed, through
   `extensions`: a list of at most 8 entries of the form
   `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
-  sources and paths are rejected. See [Pi extensions](#pi-extensions).
+  sources, paths and build metadata (`+build`) are rejected. See [Pi extensions](#pi-extensions).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -374,13 +374,16 @@ pin the installed version in the profile:
   and system-prompt changes. In `read-only` profiles the model still gets only
   `read`, `grep`, `find` and `ls`; in `coding` profiles every extension tool
   may be active. Extension commands never run from client prompts, but
-  extension input hooks can still see, rewrite or consume a client prompt.
+  extension input hooks can still see, rewrite or consume a client prompt;
+  they receive it with `source: "rpc"`, never `interactive`.
 - **Fail-closed start.** A session start fails with `extension_load_failed` if
   an extension reports a hook error while binding. It fails the same way if an
   extension registers an MCP server while loading or starting, because Pi's
   built-in MCP extension is not loaded. An extension tool whose name collides
-  with another tool, or whose name is not a plain identifier, fails with
-  `extension_tool_conflict`.
+  with another tool, or whose name is not 1 to 64 letters, digits, `_` or `-`
+  (not starting with `-`), or whose name Pi treats as an MCP tool (starting
+  with `mcp__`, or `list_mcp_resources`, `list_mcp_resource_templates`,
+  `read_mcp_resource`), fails with `extension_tool_conflict`.
 - **Cursor runtime.** `pi-cursor-sdk` runs Cursor's local agent runtime. That
   runtime starts its own processes (for example git and the MCP servers
   configured for Cursor) and may act through Cursor's own tooling, so a

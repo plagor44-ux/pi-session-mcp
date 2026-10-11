@@ -70,6 +70,19 @@ describe("Pi SDK contract for allowlisted extensions", () => {
     }
   }, 30_000);
 
+  it("shows client prompts to extension input hooks as rpc input", async () => {
+    const { registry, executionProfile } = await harness("read-only");
+    const session = await registry.start("repo", executionProfile);
+    try {
+      const accepted = await registry.prompt(session.id, "hello");
+      expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
+      expect(events()).toContain("input:rpc");
+      expect(events()).not.toContain("input:interactive");
+    } finally {
+      await registry.close(session.id);
+    }
+  }, 30_000);
+
   it("keeps extension tools away from the model in read-only profiles even against setActiveTools", async () => {
     const { registry, executionProfile } = await harness("read-only");
     const session = await registry.start("repo", executionProfile);

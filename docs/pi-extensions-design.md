@@ -115,8 +115,12 @@ Rules, enforced by `configSchema`:
 
 - Each entry matches `npm:<name>@<version>`. `<name>` is an npm package name,
   optionally scoped (`@scope/name`), lowercase. `<version>` is an exact semver
-  version with optional prerelease and build metadata. Ranges, tags, `git:`,
-  paths and URLs are rejected.
+  version with an optional prerelease. Build metadata (`+build`) is rejected
+  because npm does not keep it in a published version, so such a pin could
+  never match the installed manifest; the configuration fails with
+  `config_invalid` instead of every session failing with
+  `extension_version_mismatch`. Ranges, tags, `git:`, paths and URLs are
+  rejected.
 - At most 8 entries per profile. A package name appears at most once per
   profile.
 - The field is allowed on `read-only` and `coding` profiles, including the
@@ -210,9 +214,17 @@ and step 6 leaves no session to dispose.
   granted MCP tool or a tool of another extension fails with
   `extension_tool_conflict`. This also stops an extension from replacing a
   built-in tool inside a `read-only` profile.
-  A name must also match `[A-Za-z0-9_.:][A-Za-z0-9_.:-]*`: the SDK reads `*`
-  in an allowlist as a glob and a leading `+` or `-` as a modifier, so any
-  other name fails the same way, in both profiles.
+  A name must also match `[A-Za-z0-9_][A-Za-z0-9_-]{0,63}`: the SDK reads `*`
+  in an allowlist as a glob and a leading `+` or `-` as a modifier, and 64
+  characters of letters, digits, `_` and `-` fit the common provider
+  function-name limit, so any other name fails the same way, in both
+  profiles. Names that Pi SDK 1.1.0 treats as MCP tools fail too: any name
+  starting with `mcp__`, and exactly `list_mcp_resources`,
+  `list_mcp_resource_templates` and `read_mcp_resource`. When the allowlist
+  names no `mcp__` entry, the SDK keeps such tools outside the allowlist for
+  codemode and tool_search, so they could otherwise be active without a grant.
+  This server's own MCP bridge tools use a single underscore (`mcp_<server>_<tool>`)
+  and never collide.
   The check runs after load and again after binding, because a `session_start`
   handler can register a tool during `bindExtensions`. If the registered tool
   set then differs from the one the session was created with, the start fails
@@ -230,7 +242,11 @@ and step 6 leaves no session to dispose.
   `before_provider_request`, `before_provider_headers` and `context`.
 - **Prompts.** Every `session.prompt()` call, for every profile, passes
   `expandPromptTemplates: false`. Client prompt text never dispatches an
-  extension command, a skill command or a prompt template.
+  extension command, a skill command or a prompt template. The call also
+  passes `source: "rpc"`, which is what Pi's own RPC mode uses for input from
+  a program over stdio and so matches an MCP client. The SDK default,
+  `interactive`, means a human at the terminal or the CLI's print mode, which
+  a client prompt is not. Extension `input` hooks therefore see `rpc`.
 - **UI and flags.** No UI context is bound; extension UI calls return the
   SDK's no-op results. `extensionFlagValues` is empty, so extension flags keep
   their defaults.
@@ -311,7 +327,7 @@ admitted:
 | `extension_not_installed` | Configured Pi extension is not installed | Pi has no user install of the package. |
 | `extension_version_mismatch` | Configured Pi extension version is not installed | The installed version differs from the pinned version. |
 | `extension_load_failed` | Configured Pi extension could not be loaded | Invalid manifest, entry outside the package, load or bind error, services diagnostic of type `error`. |
-| `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool. |
+| `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe (see *Name conflicts*). |
 
 Existing codes keep their meaning. An extension provider that is unknown after
 loading is `unknown_provider`.
@@ -358,7 +374,7 @@ Automated tests use no credentials and no network.
   - `session_shutdown` on close, on a failure after services, and on a late
     start after the deadline;
   - tool lists for read-only and coding, and `extension_tool_conflict`;
-  - `expandPromptTemplates: false` on every prompt;
+  - `expandPromptTemplates: false` and `source: "rpc"` on every prompt;
   - profiles without extensions taking the unchanged path.
 - **stdout guard** (`test/stdout-guard.test.ts`): foreign `write` and
   `console.*` output does not reach stdout, transport writes do, and the

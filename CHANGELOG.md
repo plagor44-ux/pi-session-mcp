@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Extension tool names are now limited to 1 to 64 letters, digits, `_` and
+  `-`, not starting with `-`, so `.` and `:` no longer pass and every name fits
+  the common provider function-name limit. Names that Pi SDK 1.1.0 treats as
+  MCP tools (the `mcp__` prefix, `list_mcp_resources`,
+  `list_mcp_resource_templates`, `read_mcp_resource`) are rejected too, because
+  the SDK would keep them outside the allowlist. Both cases fail with
+  `extension_tool_conflict`. Fixes #41.
+- Extension pins with build metadata, such as `npm:<name>@1.2.3+build.1`, are
+  now rejected when the configuration loads. npm does not keep build metadata
+  in a published version, so such a pin could never match the installed
+  manifest. Such a configuration is now invalid as a whole: the server does not
+  start and Doctor reports `config_invalid`, instead of every session of the
+  profile failing with `extension_version_mismatch`. Fixes #42.
+- Client prompts now reach Pi with `source: "rpc"`, the marker Pi's own RPC
+  mode uses for input from a program, instead of the SDK default
+  `interactive`. Extension `input` hooks that read the source now see that a
+  program, not a human at the terminal, sent the prompt. Fixes #43.
+- The npm package no longer ships the implementation plans under
+  `docs/superpowers/`; the operator documentation stays included. A test
+  checks the packed file list. Fixes #39.
+
 ## 0.7.0 — 2026-10-11
 
 This is a minor release because the public contract changes, as ADR 0003
