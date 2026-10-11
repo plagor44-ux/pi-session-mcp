@@ -20,7 +20,8 @@ error codes, as defined in the [tool contracts](tool-contracts.md).
 
 A release is distributed twice: as the GitHub release with its source archive,
 and as the npm package `pi-session-mcp`. The npm package contains the built
-files, the executables, the documentation and the example configuration, but
+files, the executables, the operator documentation and the example
+configuration. It contains no implementation plans (`docs/superpowers/`), and
 no lockfile, because npm does not ship lockfiles inside packages.
 
 ## Update the Pi SDK
@@ -175,7 +176,7 @@ package contains exactly the tagged sources:
 git clone --branch v<x.y.z> --depth 1 https://github.com/plagor44-ux/pi-session-mcp.git /tmp/pi-session-mcp-release
 cd /tmp/pi-session-mcp-release
 npm ci
-npm publish --dry-run     # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/
+npm publish --dry-run     # review the file list: dist/, .pi-session-mcp-cli/, scripts/doctor.mjs, docs/ without docs/superpowers/
 npm stage publish         # the prepack script builds the server, setup and Doctor
 ```
 
