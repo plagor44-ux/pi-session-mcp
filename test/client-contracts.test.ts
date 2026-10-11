@@ -66,6 +66,7 @@ function intentFor(scope: ClientScope, entryPath = paths.entryPath): Registratio
 describe.each([
   { version: "0.159.2", neighbor: "0.160.0" },
   { version: "0.162.0", neighbor: "0.163.0" },
+  { version: "0.162.1", neighbor: "0.162.2" },
 ])("recorded Codex CLI $version contract", ({ version, neighbor }) => {
   const contract = loadContract(`codex-${version}`);
 
