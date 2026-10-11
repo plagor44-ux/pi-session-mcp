@@ -153,6 +153,24 @@ async function withCreationDeadline<T>(start: () => Promise<T>, disposeLate: (va
   }
 }
 
+/** Runs a session disposal bounded by the creation deadline; failures and a timeout are swallowed. */
+async function boundedDisposal(dispose: () => void | Promise<void>): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, SESSION_CREATION_TIMEOUT_MS); });
+  let disposal: Promise<void>;
+  try { disposal = Promise.resolve(dispose()).then(() => undefined, () => undefined); }
+  catch { disposal = Promise.resolve(); }
+  try {
+    await Promise.race([disposal, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function registeredExtensionTools(services: AgentSessionServices): string[][] {
+  return services.resourceLoader.getExtensions().extensions.map((extension) => [...extension.tools.keys()]);
+}
+
 type SdkAssistantMessage = Extract<Extract<AgentSessionEvent, { type: "message_end" }>["message"], { role: "assistant" }>;
 /** Derived from the root-exported `AgentSessionEvent`; the SDK root does not export `StopReason`. */
 export type SdkStopReason = SdkAssistantMessage["stopReason"];
@@ -433,7 +451,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       if (loaded.errors.length > 0 || services.diagnostics.some((diagnostic) => diagnostic.type === "error")) {
         throw new Error("extension load reported errors");
       }
-      extensionTools = loaded.extensions.map((extension) => [...extension.tools.keys()]);
+      extensionTools = registeredExtensionTools(services);
     } catch {
       throw this.failure(executionProfile, "extension_load", "extension_load_failed");
     }
@@ -467,13 +485,34 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     }
     // `AgentSessionRuntime.dispose()` emits `session_shutdown` before disposing the session.
     const disposeRuntime = (): Promise<void> => sessionRuntime.dispose().catch(() => undefined);
+    // Bounded and concurrent: a hanging `session_shutdown` handler must not keep MCP processes open.
+    const cleanUp = async (): Promise<void> => {
+      await Promise.all([boundedDisposal(disposeRuntime), mcpTools.close()]);
+    };
+    let bindErrors = 0;
+    let bound = false;
+    let conflict = false;
     try {
       // Without a UI context the SDK binds its no-op UI; binding emits `session_start`.
-      await withCreationDeadline(() => sessionRuntime.session.bindExtensions({ mode: "print" }));
+      await withCreationDeadline(() => sessionRuntime.session.bindExtensions({
+        mode: "print",
+        // `ExtensionRunner.emit` routes handler errors here instead of rejecting the bind.
+        onError: () => { if (!bound) bindErrors += 1; },
+      }));
+      bound = true;
+      if (bindErrors > 0) throw new Error("extension hook reported errors while binding");
+      // A `session_start` handler may register a tool that replaces a built-in or granted tool.
+      // Tools an extension registers later, during a turn, are not re-checked: allowlisted
+      // extensions are trusted code.
+      const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services));
+      if (!recheck || recheck.length !== tools.length || recheck.some((name, index) => name !== tools[index])) conflict = true;
     } catch {
-      await disposeRuntime();
-      await mcpTools.close();
+      await cleanUp();
       throw this.failure(executionProfile, "extension_bind", "extension_load_failed");
+    }
+    if (conflict) {
+      await cleanUp();
+      throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
       mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch");
@@ -565,8 +604,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         thinkingLevel: session.thinkingLevel,
       }, mcpTools, disposeSession);
     } catch (error) {
-      try { await disposeSession(); } catch { /* Disposal is best effort. */ }
-      await mcpTools.close();
+      await Promise.all([boundedDisposal(disposeSession), mcpTools.close()]);
       if (error instanceof PiSessionCreationError) throw error;
       throw this.failure(executionProfile, "postcheck", "pi_session_creation_failed");
     }

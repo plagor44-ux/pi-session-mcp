@@ -206,6 +206,15 @@ and step 6 leaves no session to dispose.
   granted MCP tool or a tool of another extension fails with
   `extension_tool_conflict`. This also stops an extension from replacing a
   built-in tool inside a `read-only` profile.
+  The check runs after load and again after binding, because a `session_start`
+  handler can register a tool during `bindExtensions`. If the registered tool
+  set then differs from the one the session was created with, the start fails
+  with `extension_tool_conflict`. Tools an extension registers later, during a
+  turn, are not re-checked; allowlisted extensions are trusted code.
+- **Hook errors while binding.** A hook error reported while binding fails the
+  start with `extension_load_failed`. Failure cleanup disposes the session
+  runtime, bounded by the creation deadline, concurrently with closing the
+  granted MCP connections.
 - **Hooks.** All extension hooks run in both permission profiles, including
   `before_agent_start` system-prompt changes, `tool_call`, `tool_result`,
   `before_provider_request`, `before_provider_headers` and `context`.
