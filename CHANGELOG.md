@@ -17,8 +17,8 @@
   profile failing with `extension_version_mismatch`. Fixes #42.
 - Client prompts now reach Pi with `source: "rpc"`, the marker Pi's own RPC
   mode uses for input from a program, instead of the SDK default
-  `interactive`. Extension `input` hooks can no longer mistake a client prompt
-  for a human at the terminal. Fixes #43.
+  `interactive`. Extension `input` hooks that read the source now see that a
+  program, not a human at the terminal, sent the prompt. Fixes #43.
 - The npm package no longer ships the implementation plans under
   `docs/superpowers/`; the operator documentation stays included. A test
   checks the packed file list. Fixes #39.
