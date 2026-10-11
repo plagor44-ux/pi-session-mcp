@@ -9,22 +9,21 @@
  * provider and no credentials are involved. Sessions use the real stdio MCP fixture
  * as their external MCP server.
  */
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { setTimeout as waitFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { compileServerEntry } from "./compiled-entry.js";
 import { readFixtureLog } from "./fixture-log.js";
 import { cleanupFixtureProcesses, processCommandLine, processInspectionSupported, signalFixtureProcess, stopFixtureProcess, waitForProcessTerminated } from "./process-fixture.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
-const REPOSITORY = fileURLToPath(new URL("..", import.meta.url));
 const FIXTURE = fileURLToPath(new URL("./fixtures/mcp-stdio-server.mjs", import.meta.url));
 const LOG_VARIABLE = "PI_SESSION_MCP_TEST_MCP_LOG";
 /**
@@ -34,7 +33,6 @@ const LOG_VARIABLE = "PI_SESSION_MCP_TEST_MCP_LOG";
  */
 const EXIT_BOUND_MS = 8_000;
 const TEST_TIMEOUT_MS = 30_000;
-const execFileAsync = promisify(execFile);
 /** Termination checks use `/proc` on Linux and `ps` on macOS, as in the other process-level tests. */
 const describeWithProcessInspection = describe.skipIf(!processInspectionSupported);
 
@@ -54,17 +52,7 @@ const servers: ChildProcessWithoutNullStreams[] = [];
 const fixtureLogs: string[] = [];
 const providers: Server[] = [];
 
-beforeAll(async () => {
-  const root = await temporaryRoot("pi-session-mcp-entry-build-");
-  // The compiled entry imports `../package.json` and the installed packages.
-  await symlink(join(REPOSITORY, "package.json"), join(root, "package.json"));
-  await symlink(join(REPOSITORY, "node_modules"), join(root, "node_modules"), "dir");
-  await execFileAsync(process.execPath, [
-    join(REPOSITORY, "node_modules", "typescript", "bin", "tsc"),
-    "-p", join(REPOSITORY, "tsconfig.build.json"), "--outDir", join(root, "out"), "--declaration", "false",
-  ], { cwd: REPOSITORY, timeout: 120_000 });
-  entry = join(root, "out", "main.js");
-}, 150_000);
+beforeAll(async () => { entry = await compileServerEntry(); }, 150_000);
 
 afterEach(async () => {
   // A failing assertion must not leave the server or its MCP child running.
