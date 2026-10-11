@@ -118,7 +118,7 @@ Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
 }
 ```
 
-Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`; aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
+Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers` and `extensions` described in [Installation](installation.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
 
 Use placeholders until a locally available provider/model pair is known. Do not put keys, tokens, credential objects, headers, base URLs, or authentication paths in this file.
 

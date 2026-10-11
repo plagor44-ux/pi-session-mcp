@@ -12,7 +12,7 @@ does not authorize any of them.
 [ADR 0003](adr/0003-post-mvp-maintenance.md) sets the rule:
 
 - A change that keeps the public MCP contract ships as a patch release
-  (`0.6.x`). This includes Pi SDK updates.
+  (for example `0.7.x`). This includes Pi SDK updates.
 - A change to the public contract needs a minor release and its own decision.
 
 The public contract is the set of eight tools with their fields, states and
