@@ -25,6 +25,10 @@ export type PiSessionCreationErrorCode =
   | "external_mcp_no_tools"
   | "external_mcp_grant_tool_missing"
   | "external_mcp_activation_mismatch"
+  | "extension_not_installed"
+  | "extension_version_mismatch"
+  | "extension_load_failed"
+  | "extension_tool_conflict"
   | "pi_session_creation_failed";
 
 const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> = {
@@ -39,6 +43,10 @@ const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> =
   external_mcp_no_tools: "Configured external MCP server returned no tools",
   external_mcp_grant_tool_missing: "Configured external MCP grant is missing from discovery",
   external_mcp_activation_mismatch: "Configured external MCP tools could not be activated",
+  extension_not_installed: "Configured Pi extension is not installed",
+  extension_version_mismatch: "Configured Pi extension version is not installed",
+  extension_load_failed: "Configured Pi extension could not be loaded",
+  extension_tool_conflict: "Configured Pi extension tools conflict",
   pi_session_creation_failed: "Pi session creation failed",
 };
 

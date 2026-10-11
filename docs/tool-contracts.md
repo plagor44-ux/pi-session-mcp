@@ -68,6 +68,10 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `external_mcp_no_tools` | Complete valid discovery returned no tools while explicit grants were required. |
 | `external_mcp_grant_tool_missing` | Complete valid nonempty discovery omitted an explicitly granted remote tool. |
 | `external_mcp_activation_mismatch` | Pi did not activate exactly the expected post-discovery tool set. |
+| `extension_not_installed` | Pi has no installed package for a configured extension. |
+| `extension_version_mismatch` | Pi's installed extension package has another version than the configured one. |
+| `extension_load_failed` | A configured extension has an invalid manifest, failed to load or failed to bind. |
+| `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool. |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 
