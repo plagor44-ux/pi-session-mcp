@@ -1,3 +1,4 @@
+import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "../extension-spec.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-metadata.js";
 
 export const MCP_VERIFY_TIMEOUT_MS = 5_000;
@@ -97,13 +98,15 @@ function validCapabilities(value: unknown): boolean {
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
     const record = profile as Record<string, unknown>;
-    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel"])
+    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions"])
       && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
       && typeof record.default === "boolean"
       && (record.permissionProfile === "read-only" || record.permissionProfile === "coding")
       && typeof record.provider === "string" && record.provider.length > 0 && record.provider.length <= 256
       && typeof record.model === "string" && record.model.length > 0 && record.model.length <= 256
-      && typeof record.thinkingLevel === "string" && ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(record.thinkingLevel);
+      && typeof record.thinkingLevel === "string" && ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(record.thinkingLevel)
+      && Array.isArray(record.extensions) && record.extensions.length <= MAX_PROFILE_EXTENSIONS
+      && record.extensions.every((spec) => typeof spec === "string" && parseExtensionSpec(spec) !== undefined);
   })) return false;
   const defaults = profiles.filter((profile) => (profile as Record<string, unknown>).default === true);
   if (defaults.length !== 1 || (defaults[0] as Record<string, unknown>).permissionProfile !== "read-only") return false;
