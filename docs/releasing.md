@@ -48,7 +48,10 @@ update is possible. It is not an update and not an acceptance.
    ships in the package as
    `node_modules/@earendil-works/pi-coding-agent/CHANGELOG.md`. Look for changes
    to stop reasons, prompt acceptance, the tools declared to the model,
-   provider keys, MCP naming and packaging.
+   provider keys, MCP naming and packaging. For MCP naming, compare the SDK's
+   `isMcpToolName` (`dist/core/mcp-servers.js`) with the reserved names in
+   `src/session-tools.ts`. That function is not a root export, so no test
+   notices when the SDK reserves another name.
 
 3. Move the pin:
 
