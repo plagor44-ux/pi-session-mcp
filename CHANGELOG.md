@@ -15,6 +15,10 @@
   manifest; the configuration now fails (and Doctor reports `config_invalid`)
   instead of every session failing with `extension_version_mismatch`.
   Fixes #42.
+- Client prompts now reach Pi with `source: "rpc"`, the marker Pi's own RPC
+  mode uses for input from a program, instead of the SDK default
+  `interactive`. Extension `input` hooks can no longer mistake a client prompt
+  for a human at the terminal. Fixes #43.
 
 ## 0.7.0 — 2026-10-11
 

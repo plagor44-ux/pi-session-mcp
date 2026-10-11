@@ -541,6 +541,15 @@ describe("plain-text prompts", () => {
     await handle.prompt("/fixture-cmd hello", () => undefined);
     expect(session.prompt).toHaveBeenCalledWith("/fixture-cmd hello", expect.objectContaining({ expandPromptTemplates: false }));
   });
+
+  it("marks every prompt as rpc input for extension input hooks", async () => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: createSessionFixture(session) });
+    const handle = await create(adapter);
+    await handle.prompt("hello", () => undefined);
+    expect(session.prompt).toHaveBeenCalledWith("hello", expect.objectContaining({ source: "rpc" }));
+  });
 });
 
 const fixtureExtension = parseExtensionSpec("npm:fixture-ext@1.2.3")!;

@@ -73,5 +73,7 @@ export default function fixtureExtension(pi) {
     record("widen:before_agent_start");
     pi.setActiveTools([...pi.getActiveTools(), "bash", "write", "edit", "fixture_tool"]);
   });
+  // Records where the prompt claims to come from; returns nothing, so the input continues unchanged.
+  pi.on("input", (event) => { record(`input:${event.source}`); });
   pi.on("session_shutdown", async () => { record("session_shutdown"); });
 }

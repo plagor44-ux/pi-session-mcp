@@ -242,7 +242,11 @@ and step 6 leaves no session to dispose.
   `before_provider_request`, `before_provider_headers` and `context`.
 - **Prompts.** Every `session.prompt()` call, for every profile, passes
   `expandPromptTemplates: false`. Client prompt text never dispatches an
-  extension command, a skill command or a prompt template.
+  extension command, a skill command or a prompt template. The call also
+  passes `source: "rpc"`, which is what Pi's own RPC mode uses for input from
+  a program over stdio and so matches an MCP client. The SDK default,
+  `interactive`, means a human at the terminal or the CLI's print mode, which
+  a client prompt is not. Extension `input` hooks therefore see `rpc`.
 - **UI and flags.** No UI context is bound; extension UI calls return the
   SDK's no-op results. `extensionFlagValues` is empty, so extension flags keep
   their defaults.
@@ -370,7 +374,7 @@ Automated tests use no credentials and no network.
   - `session_shutdown` on close, on a failure after services, and on a late
     start after the deadline;
   - tool lists for read-only and coding, and `extension_tool_conflict`;
-  - `expandPromptTemplates: false` on every prompt;
+  - `expandPromptTemplates: false` and `source: "rpc"` on every prompt;
   - profiles without extensions taking the unchanged path.
 - **stdout guard** (`test/stdout-guard.test.ts`): foreign `write` and
   `console.*` output does not reach stdout, transport writes do, and the

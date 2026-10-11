@@ -374,7 +374,8 @@ pin the installed version in the profile:
   and system-prompt changes. In `read-only` profiles the model still gets only
   `read`, `grep`, `find` and `ls`; in `coding` profiles every extension tool
   may be active. Extension commands never run from client prompts, but
-  extension input hooks can still see, rewrite or consume a client prompt.
+  extension input hooks can still see, rewrite or consume a client prompt;
+  they receive it with `source: "rpc"`, never `interactive`.
 - **Fail-closed start.** A session start fails with `extension_load_failed` if
   an extension reports a hook error while binding. It fails the same way if an
   extension registers an MCP server while loading or starting, because Pi's
