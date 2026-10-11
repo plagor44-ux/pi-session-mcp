@@ -537,7 +537,7 @@ extension tool names and the `read-only` contract test. It has not been
 repeated on the release candidate.
 
 After its release, `v0.7.0` passed Level 1 and Level 2 on a fresh clone of its
-tag, and Level 2 as published npm package, on 2026-10-11, with Node.js
+tag, and Level 2 as published npm package, on 2026-10-11, on Linux with Node.js
 `26.11.1`, Codex CLI `0.162.1` and Claude Code `2.1.296`:
 - Tag clone: `git describe --tags --exact-match` reported `v0.7.0`. The tag
   object is `a5516ce6e4e159ef1e20ee38aba06672379e9cb7` and the peeled commit
@@ -554,6 +554,10 @@ tag, and Level 2 as published npm package, on 2026-10-11, with Node.js
   `pi-session-mcp-setup`. In both runs the real client registrations were
   unchanged, no process remained, and the built files were byte-identical
   before and after the client cycles.
+  - These runs, and the release candidate's runs above, used the harness that
+    #40 later checked in as `scripts/setup-acceptance.mjs`.
+  - The checked-in script, after its review fixes, also passed 96 of 96 on the
+    tag clone.
 - The npm package has the shasum `c8d73311dbde1bdebd78e58b1f01c7cf3bebf374`.
   The tarball downloaded from the registry had the same SHA-1 and SHA-512
   integrity.
@@ -571,8 +575,8 @@ check on Linux:
   profiles: one `read-only` and one `coding` profile with
   `claude-opus-5-5@1m` and `claude-opus-5-5@300k` at thinking level `high`, and
   one `coding` profile with `composer-2.5` at thinking level `off`.
-- Each of the three profiles started, completed a prompt with "PONG", and
-  closed. One `coding` and one `read-only` Cursor session started in parallel
+- Each of the three profiles started, completed a prompt with the expected
+  one-word answer, and closed. One `coding` and one `read-only` Cursor session started in parallel
   and both completed.
 - Profiles without extensions on three other providers (xAI, Mistral and
   DeepSeek) each completed a prompt.
