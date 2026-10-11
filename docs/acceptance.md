@@ -124,6 +124,54 @@ that checkout with Doctor reporting the release version, and confirms that the
 manifests and built runtime files are byte-identical before and after the
 client cycles.
 
+### macOS
+
+macOS uses the same isolation, sequence and pass criteria, with the additions
+below. Until a run is recorded under [Status](#status), macOS is CI-tested but
+has not passed Level 2.
+
+- **Environment.** Record:
+  - the macOS version and architecture (`sw_vers`, `uname -m`);
+  - the Node.js version;
+  - the Codex CLI and Claude Code versions.
+- **Disposable home.** It must be on the APFS volume type of `/`. A directory
+  below the user's home qualifies.
+  - For an ownership directory on another filesystem, `--apply`, `--verify`,
+    `--rollback` and `--remove` fail closed with `failed (operation_failed)`
+    and exit `1`.
+  - Keep the Codex home outside both `$TMPDIR` (normally below `/var/folders`)
+    and `/tmp`, for the reason given under [Isolation](#isolation).
+- **Before the sequence:** run `npm run --silent doctor`.
+- **Lock contention.** After step 9, start two `--apply` runs for
+  `claude-code:user:pi-session-mcp` at the same time.
+  - One run reports `ok (applied)`. The other waits for the lock, then
+    reports `unchanged (already_equivalent)`.
+  - Both exit with `0`.
+  - A following `--remove` reports `ok (removed)`.
+  - A waiting run that reports `failed (operation_failed)` with exit `1` did
+    not get the lock within the 30 s acquisition bound. That counts as a
+    failure of the run.
+- **Interruption.** Start `--apply` for one target and press Ctrl-C while it
+  runs.
+  - The run exits with `130` and reports `operation_interrupted`.
+  - Afterwards `ps -A -o pid=,command=` lists no `claude mcp` or `codex mcp`
+    command and no `setup-main.js` or `setup-command-guardian.js` process of
+    the build under test.
+  - A following `--apply` reports one of three outcomes, depending on where
+    the interrupt landed:
+    - it reconciles the pending record (`ok (pending_recovered)`);
+    - it applies again (`ok (applied)`);
+    - it finds the registration already owned
+      (`unchanged (already_equivalent)`).
+  - A following `--remove` reports `ok (removed)`.
+  - If the operation completes before the interrupt arrives, record that and
+    repeat. An interrupt that never lands is not a pass.
+- **Processes.** Check that no process remains with `ps` instead of `/proc`.
+
+The evidence record names the build (commit or tag), the environment above,
+every command with its exit status, and the sanitized JSON results. It
+contains no paths, environment values or secrets.
+
 ## Level 3: live two-client acceptance
 
 Live acceptance delegates real work from Codex and from Claude Code to Pi
@@ -275,3 +323,7 @@ passed Level 2 as published release and as published npm package, with Codex
 CLI `0.162.0` and Claude Code `2.1.296`, on 2026-10-10. The installed
 `pi-session-mcp-doctor` reported a healthy package when run from an unrelated
 working directory.
+
+macOS: `setup` supports macOS from the change that tracks #32. That change is
+tested in CI on macOS 15 and macOS 26 (Apple silicon) next to Linux. No macOS
+Level 2 run is recorded yet, so macOS has not passed setup acceptance.

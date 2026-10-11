@@ -32,7 +32,7 @@ It is not the right tool when:
 The package version is **0.6.4**.
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
-- **Linux only**, Node.js 22.19.0 or newer. On other platforms `setup` refuses with `platform_unsupported`. macOS support is planned. Until it is accepted, [Register without setup](docs/installation.md#register-without-setup) describes a manual path that no acceptance level has covered.
+- **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is pending until it is recorded in [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
 - **Out of scope by design:** HTTP, a web UI, persistence, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process.
 - **Not a sandbox.** A `coding` profile restricts the Pi tools that a session may use. It does not isolate the process from the operating system.

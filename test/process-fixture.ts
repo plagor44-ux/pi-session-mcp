@@ -1,9 +1,60 @@
-import { closeSync, openSync, readSync } from "node:fs";
+import { execFile, spawnSync } from "node:child_process";
+import { closeSync, constants, existsSync, openSync, readSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { expect } from "vitest";
 
 type TextReader = (path: string, encoding: "utf8") => Promise<string>;
 const ZOMBIE_STAT = /^\d+ \(.*\) Z /;
+
+/** Process inspection in these fixtures uses `/proc` on Linux and `ps` on macOS. */
+export const processInspectionSupported = process.platform === "linux" || process.platform === "darwin";
+
+/** From XNU `bsd/sys/fcntl.h`, as in src/setup-platform.ts. */
+const DARWIN_O_NONBLOCK = 0x4;
+const DARWIN_O_EXLOCK = 0x20;
+
+function darwinProcessField(pid: number, field: "stat=" | "command="): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    execFile("/bin/ps", ["-o", field, "-p", String(pid)], { env: { LC_ALL: "C" }, encoding: "utf8" }, (error, stdout, stderr) => {
+      if (!error) { resolve(stdout.trim()); return; }
+      // ps exits 1 with no output when the PID does not exist.
+      if (error.code === 1 && stdout.trim() === "" && stderr.trim() === "") { resolve(undefined); return; }
+      reject(error);
+    });
+  });
+}
+
+/** The first state letter of a process (`Z` for a zombie), or undefined when it is gone. */
+export async function processState(pid: number): Promise<string | undefined> {
+  if (process.platform === "darwin") return (await darwinProcessField(pid, "stat="))?.[0];
+  const stat = await readTextIfPresent(`/proc/${pid}/stat`);
+  return stat === undefined ? undefined : stat[stat.lastIndexOf(") ") + 2];
+}
+
+/** The command line of a process, or undefined when it is gone. */
+export async function processCommandLine(pid: number): Promise<string | undefined> {
+  if (process.platform === "darwin") return darwinProcessField(pid, "command=");
+  return readTextIfPresent(`/proc/${pid}/cmdline`);
+}
+
+/** True while another open file description holds the setup lock file. */
+export function isLockHeld(path: string): boolean {
+  if (process.platform === "darwin") {
+    let fd: number;
+    try { fd = openSync(path, constants.O_RDWR | DARWIN_O_EXLOCK | DARWIN_O_NONBLOCK); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "EAGAIN" || code === "EWOULDBLOCK") return true;
+      throw error;
+    }
+    closeSync(fd);
+    return false;
+  }
+  const flockPath = existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/bin/flock";
+  const status = spawnSync(flockPath, ["-n", path, "/bin/true"], { stdio: "ignore" }).status;
+  if (status !== 0 && status !== 1) throw new Error("fixture_lock_probe_failed");
+  return status === 1;
+}
 
 /** One complete kernel sample, without libuv yields between open/read/close. */
 export async function readProcStatText(path: string, encoding: "utf8"): Promise<string> {
@@ -42,9 +93,14 @@ export async function readTextIfPresent(path: string, readText: TextReader = rea
 }
 
 /** Proves the process stopped executing; it does not prove reaping or fence release. */
-export async function expectProcessTerminated(pid: number, readText: TextReader = readProcStatText): Promise<void> {
+export async function expectProcessTerminated(pid: number, readText?: TextReader): Promise<void> {
   expect(Number.isSafeInteger(pid) && pid > 1).toBe(true);
-  const stat = await readTextIfPresent(`/proc/${pid}/stat`, readText);
+  if (readText === undefined && process.platform === "darwin") {
+    const state = await processState(pid);
+    if (state !== undefined) expect(state).toBe("Z");
+    return;
+  }
+  const stat = await readTextIfPresent(`/proc/${pid}/stat`, readText ?? readProcStatText);
   // Keep the assertion outside the read catch so a live process always fails.
   if (stat !== undefined) expect(stat).toMatch(ZOMBIE_STAT);
 }
@@ -73,12 +129,21 @@ export function signalFixtureProcess(pid: number, signal: NodeJS.Signals, group 
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
 }
 
-export async function waitForProcessTerminated(pid: number, readText: TextReader = readProcStatText, timeoutMs = 5_000): Promise<void> {
+export async function waitForProcessTerminated(pid: number, readText?: TextReader, timeoutMs = 5_000): Promise<void> {
   expect(Number.isSafeInteger(pid) && pid > 1).toBe(true);
   const deadline = Date.now() + timeoutMs;
+  if (readText === undefined && process.platform === "darwin") {
+    while (true) {
+      const state = await processState(pid);
+      if (state === undefined || state === "Z") return;
+      if (Date.now() >= deadline) { expect(state).toBe("Z"); return; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  const reader = readText ?? readProcStatText;
   while (true) {
     let stat: string | undefined;
-    try { stat = await readTextIfPresent(`/proc/${pid}/stat`, readText); }
+    try { stat = await readTextIfPresent(`/proc/${pid}/stat`, reader); }
     catch (error) {
       // Reaping can invalidate an already opened /proc file. ESRCH is unknown,
       // so cleanup must obtain a later Z/ENOENT sample within the same bound.

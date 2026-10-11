@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isEntryPoint } from "./entry-point.js";
 import { createProcessRunner } from "./setup-process.js";
+import { currentSetupPlatform } from "./setup-platform.js";
 import { createProductionSetup, isSupportedTarget } from "./setup.js";
 import { formatSetupHuman, formatSetupResult, parseSetupArgs, type SetupCliRequest } from "./setup-cli.js";
 import { result, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
@@ -17,7 +18,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
     json = request.json;
   } catch { return write(cliFailure("dry-run", [], "usage_invalid", 64), json); }
   const operation = request.operation ?? "dry-run";
-  if (process.platform !== "linux") return write(cliFailure(operation, request.targets, "platform_unsupported", 1), request.json);
+  if (!currentSetupPlatform()) return write(cliFailure(operation, request.targets, "platform_unsupported", 1), request.json);
   const config = process.env.PI_SESSION_MCP_CONFIG;
   if (!config) return write(cliFailure(operation, request.targets, "config_required", 1), request.json);
   const root = dependencies.packageRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "..");

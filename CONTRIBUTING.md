@@ -8,7 +8,7 @@ working on anything.
 
 ## Development setup
 
-Linux and Node.js 22.19.0 or newer:
+Linux or macOS and Node.js 22.19.0 or newer:
 
 ```bash
 npm ci

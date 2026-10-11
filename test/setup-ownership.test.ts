@@ -1,17 +1,41 @@
 import { randomUUID } from "node:crypto";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { DurableOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
-import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readTextIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
+import { currentSetupPlatform } from "../src/setup-platform.js";
+import { cleanupFixtureProcesses, expectProcessTerminated, isLockHeld, processState, readPidIfPresent, readTextIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
 
 afterAll(removeTemporaryRoots);
 
-describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
+const processModuleUrl = pathToFileURL(resolve("src/setup-process.ts")).href;
+const platformModuleUrl = pathToFileURL(resolve("src/setup-platform.ts")).href;
+
+/**
+ * A raw-Node harness that holds the fence through a real guardian. macOS locks
+ * at open time; Linux locks the same open file description through flock.
+ */
+function guardianHarness(lockPath: string, body: readonly string[]): string {
+  return [
+    "import { constants } from 'node:fs'; import { open } from 'node:fs/promises'; const fs=await import('node:fs');",
+    `import { acquireSetupGuardian } from ${JSON.stringify(processModuleUrl)};`,
+    `import { openLockedDarwin } from ${JSON.stringify(platformModuleUrl)};`,
+    `const handle=process.platform==='darwin'?await openLockedDarwin(${JSON.stringify(lockPath)},{timeoutMs:5000}):await open(${JSON.stringify(lockPath)},constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);`,
+    "const guardian=await acquireSetupGuardian(handle.fd,5000);",
+    ...body,
+  ].join("\n");
+}
+
+/** A mutation-side statement that records its parent, the guardian, in `marker`. */
+function recordGuardian(marker: string): string {
+  return `fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.ppid));fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)});`;
+}
+
+describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
   it("persists only bounded path-free ownership data with restrictive modes", async () => {
     const directory = await temporaryRoot("pi-session-mcp-owned-");
     const path = join(directory, "state", "ownership.json");
@@ -23,7 +47,7 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     await store.put(record);
     expect(await store.get(record.target)).toEqual(record);
     const serialized = await readFile(path, "utf8");
-    expect(serialized).not.toMatch(/PI_SESSION_MCP_CONFIG|\/home\/|\.\.\/|SECRET/);
+    expect(serialized).not.toMatch(/PI_SESSION_MCP_CONFIG|\/home\/|\/Users\/|\/private\/|\.\.\/|SECRET/);
     expect((await stat(path)).mode & 0o777).toBe(0o600);
     expect((await stat(join(directory, "state"))).mode & 0o777).toBe(0o700);
   });
@@ -82,10 +106,17 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
       // Racing the transaction also propagates a failure before either readiness ack.
       await Promise.race([firstPendingWritten, first]);
       observed = secondStore.transaction(async (access) => (await access.get(target))?.phase);
-      await Promise.race([secondLockOpened, observed]);
-      // The second descriptor is open while the first transaction still holds its gate.
-      const flockPath = existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/bin/flock";
-      expect(spawnSync(flockPath, ["-n", `${path}.flock`, "/bin/true"], { stdio: "ignore" }).status).toBe(1);
+      if (process.platform === "darwin") {
+        // macOS takes the lock at open time, so the waiting store has no descriptor yet.
+        let settled = false;
+        void observed.then(() => { settled = true; }, () => { settled = true; });
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 200));
+        expect(settled).toBe(false);
+      } else {
+        // The second descriptor is open while the first transaction still holds its gate.
+        await Promise.race([secondLockOpened, observed]);
+      }
+      expect(isLockHeld(`${path}.flock`)).toBe(true);
       release();
       await first;
       await expect(observed).resolves.toBe("owned");
@@ -97,7 +128,9 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     }
   });
 
-  it("rejects a lock inode replaced while acquisition is waiting", async () => {
+  // Only Linux has a descriptor while it waits; macOS waits before open. The
+  // replaced-after-open case below covers both platforms.
+  it.skipIf(process.platform !== "linux")("rejects a lock inode replaced while acquisition is waiting", async () => {
     const directory = await temporaryRoot("pi-session-mcp-owned-inode-");
     const path = join(directory, "ownership.json");
     let releaseFirst!: () => void;
@@ -120,28 +153,59 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     await expect(second).rejects.toThrow("ownership_lock_unavailable");
   });
 
+  it("rejects a lock inode replaced after the lock file was opened", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-replaced-");
+    const path = join(directory, "ownership.json");
+    const store = new DurableOwnershipStore(path, { afterLockOpen: async () => { await unlink(`${path}.flock`); await writeFile(`${path}.flock`, "", { mode: 0o600 }); } });
+    await expect(store.transaction(async () => undefined)).rejects.toThrow("ownership_lock_unavailable");
+  });
+
+  it("refuses a symlinked lock file", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-symlink-");
+    const path = join(directory, "ownership.json");
+    await writeFile(join(directory, "elsewhere"), "", { mode: 0o600 });
+    await symlink(join(directory, "elsewhere"), `${path}.flock`);
+    await expect(new DurableOwnershipStore(path).transaction(async () => undefined)).rejects.toThrow("ownership_lock_unavailable");
+  });
+
+  it("stops waiting for a held lock when aborted", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-abort-");
+    const path = join(directory, "ownership.json");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let entered!: () => void;
+    const holding = new Promise<void>((resolve) => { entered = resolve; });
+    const first = new DurableOwnershipStore(path).transaction(async () => { entered(); await gate; });
+    try {
+      await holding;
+      const controller = new AbortController();
+      const started = Date.now();
+      const second = new DurableOwnershipStore(path, { signal: controller.signal, acquireTimeoutMs: 10_000 }).transaction(async () => undefined);
+      setTimeout(() => controller.abort(), 100);
+      await expect(second).rejects.toThrow("operation_aborted");
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      release();
+      await first;
+    }
+  });
+
   it("keeps the kernel fence through parent SIGKILL until guardian cleanup", async () => {
     const directory = await temporaryRoot("pi-session-mcp-owned-guardian-");
     const path = join(directory, "ownership.json");
     const marker = join(directory, "helper.pid");
     const guardianMarker = join(directory, "guardian.pid");
     const mutationMarker = join(directory, "mutation.pid");
-    const moduleUrl = pathToFileURL(resolve("src/setup-process.ts")).href;
     const helperScript = `const fs=require('node:fs'); process.on('SIGTERM',()=>{}); fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)}); setInterval(()=>{},1000);`;
     const mutation = [
       "const {spawn}=require('node:child_process'); const fs=require('node:fs');",
+      recordGuardian(guardianMarker),
       `fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)}); spawn(process.execPath,['-e',${JSON.stringify(helperScript)}],{stdio:'ignore'});`,
       "process.on('SIGTERM',()=>{});setInterval(()=>{},1000);",
     ].join(" ");
-    const harness = [
-      "import { constants } from 'node:fs'; import { open } from 'node:fs/promises';",
-      `import { acquireSetupGuardian } from ${JSON.stringify(moduleUrl)};`,
-      `const handle=await open(${JSON.stringify(`${path}.flock`)},constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);`,
-      "const guardian=await acquireSetupGuardian(handle.fd,5000);",
-      "const fs=await import('node:fs'); const child=fs.readdirSync('/proc').filter(value=>/^\\d+$/.test(value)).map(Number).find(pid=>{try{const line=fs.readFileSync(`/proc/${pid}/stat`,'utf8');const close=line.lastIndexOf(') ');return Number(line.slice(close+4).trim().split(/\\s+/)[0])===process.pid;}catch{return false;}});",
-      `fs.writeFileSync(${JSON.stringify(`${guardianMarker}.tmp`)},String(child)); fs.renameSync(${JSON.stringify(`${guardianMarker}.tmp`)},${JSON.stringify(guardianMarker)});`,
+    const harness = guardianHarness(`${path}.flock`, [
       `const output=await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}]);process.exitCode=output.exitCode;`,
-    ].join("\n");
+    ]);
     const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let helperPid: number | undefined;
@@ -156,19 +220,17 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
       let guardianStopped = false;
       const stoppedDeadline = Date.now() + 5_000;
       do {
-        const line = await readTextIfPresent(`/proc/${guardianPid}/stat`);
-        guardianStopped = line !== undefined && line[line.lastIndexOf(") ") + 2] === "T";
+        guardianStopped = (await processState(guardianPid)) === "T";
         if (!guardianStopped) await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
       } while (!guardianStopped && Date.now() < stoppedDeadline);
       expect(guardianStopped).toBe(true);
       signalFixtureProcess(parent.pid!, "SIGKILL");
       await parentClosed;
       try {
-        const helperStat = await readFile(`/proc/${helperPid}/stat`, "utf8");
-        expect(helperStat[helperStat.lastIndexOf(") ") + 2]).not.toBe("Z");
-        const flockPath = existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/bin/flock";
-        const competing = spawnSync(flockPath, ["-n", `${path}.flock`, "/bin/true"], { stdio: "ignore" });
-        expect(competing.status).toBe(1);
+        const helperState = await processState(helperPid);
+        expect(helperState).toBeDefined();
+        expect(helperState).not.toBe("Z");
+        expect(isLockHeld(`${path}.flock`)).toBe(true);
       } finally {
         signalFixtureProcess(guardianPid, "SIGCONT");
       }
@@ -196,19 +258,12 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     const guardianMarker = join(directory, "guardian.pid");
     const mutationMarker = join(directory, "mutation.started");
     const resultMarker = join(directory, "result.code");
-    const moduleUrl = pathToFileURL(resolve("src/setup-process.ts")).href;
-    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)});setInterval(()=>{},1000);`;
-    const harness = [
-      "import { constants } from 'node:fs'; import { open } from 'node:fs/promises'; const fs=await import('node:fs');",
-      `import { acquireSetupGuardian } from ${JSON.stringify(moduleUrl)};`,
-      `const handle=await open(${JSON.stringify(`${path}.flock`)},constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);`,
-      "const guardian=await acquireSetupGuardian(handle.fd,5000);",
-      "const child=fs.readdirSync('/proc').filter(value=>/^\\d+$/.test(value)).map(Number).find(pid=>{try{const line=fs.readFileSync(`/proc/${pid}/stat`,'utf8');const close=line.lastIndexOf(') ');return Number(line.slice(close+4).trim().split(/\\s+/)[0])===process.pid;}catch{return false;}});",
-      `fs.writeFileSync(${JSON.stringify(`${guardianMarker}.tmp`)},String(child)); fs.renameSync(${JSON.stringify(`${guardianMarker}.tmp`)},${JSON.stringify(guardianMarker)});`,
+    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${recordGuardian(guardianMarker)}fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)});setInterval(()=>{},1000);`;
+    const harness = guardianHarness(`${path}.flock`, [
       "const controller=new AbortController(); process.on('SIGTERM',()=>controller.abort());",
       `const output=await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}],controller.signal);`,
       `fs.writeFileSync(${JSON.stringify(`${resultMarker}.tmp`)},String(output.exitCode)); fs.renameSync(${JSON.stringify(`${resultMarker}.tmp`)},${JSON.stringify(resultMarker)}); await guardian.release(); await handle.close();`,
-    ].join("\n");
+    ]);
     const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let guardianPid: number | undefined;
@@ -229,8 +284,7 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
       } while (reported === undefined && Date.now() < reportDeadline);
       expect(reported).toBe(126);
       await parentClosed;
-      const flockPath = existsSync("/usr/bin/flock") ? "/usr/bin/flock" : "/bin/flock";
-      expect(spawnSync(flockPath, ["-n", `${path}.flock`, "/bin/true"], { stdio: "ignore" }).status).toBe(1);
+      expect(isLockHeld(`${path}.flock`)).toBe(true);
       signalFixtureProcess(guardianPid, "SIGUSR2");
       await expect(new DurableOwnershipStore(path, { acquireTimeoutMs: 10_000 }).transaction(async () => undefined)).resolves.toBeUndefined();
     } finally {
@@ -254,17 +308,10 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     const mutationMarker = join(directory, "mutation.pid");
     const oracleMarker = join(directory, "owned-oracle.pid");
     if (markerState === "unreadable") await mkdir(mutationMarker);
-    const moduleUrl = pathToFileURL(resolve("src/setup-process.ts")).href;
-    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});fs.writeFileSync(${JSON.stringify(`${oracleMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${oracleMarker}.tmp`)},${JSON.stringify(oracleMarker)});setInterval(()=>{},1000);`;
-    const harness = [
-      "import { constants } from 'node:fs'; import { open } from 'node:fs/promises'; const fs=await import('node:fs');",
-      `import { acquireSetupGuardian } from ${JSON.stringify(moduleUrl)};`,
-      `const handle=await open(${JSON.stringify(lockPath)},constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);`,
-      "const guardian=await acquireSetupGuardian(handle.fd,5000);",
-      "const child=fs.readdirSync('/proc').filter(value=>/^\\d+$/.test(value)).map(Number).find(pid=>{try{const line=fs.readFileSync(`/proc/${pid}/stat`,'utf8');const close=line.lastIndexOf(') ');return Number(line.slice(close+4).trim().split(/\\s+/)[0])===process.pid;}catch{return false;}});",
-      `fs.writeFileSync(${JSON.stringify(`${guardianMarker}.tmp`)},String(child));fs.renameSync(${JSON.stringify(`${guardianMarker}.tmp`)},${JSON.stringify(guardianMarker)});`,
+    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${recordGuardian(guardianMarker)}fs.writeFileSync(${JSON.stringify(`${oracleMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${oracleMarker}.tmp`)},${JSON.stringify(oracleMarker)});setInterval(()=>{},1000);`;
+    const harness = guardianHarness(lockPath, [
       `await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}]);`,
-    ].join("\n");
+    ]);
     const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let guardianPid: number | undefined;
@@ -290,4 +337,15 @@ describe.skipIf(process.platform !== "linux")("durable setup ownership", () => {
     }
   }, 20_000);
 
+});
+
+describe("durable setup ownership platform gate", () => {
+  it("fails closed on an unsupported platform before touching the filesystem", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-platform-");
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    try {
+      await expect(new DurableOwnershipStore(join(directory, "state", "ownership.json")).transaction(async () => undefined)).rejects.toThrow("platform_unsupported");
+      expect(existsSync(join(directory, "state"))).toBe(false);
+    } finally { vi.restoreAllMocks(); }
+  });
 });

@@ -7,10 +7,14 @@ installation with upgrade and removal, start with [Installation](installation.md
 ## Prerequisites
 
 - Node.js **22.19.0 or newer**
-- Linux, the only accepted platform. For `setup` also: a root-owned util-linux
-  `flock` at `/usr/bin/flock` or `/bin/flock`, readable `/proc`, and a supported
-  local ownership filesystem. A manual registration does not need these; see
-  [Register without setup](installation.md#register-without-setup)
+- Linux or macOS. For `setup` also:
+  - on Linux, a root-owned util-linux `flock` at `/usr/bin/flock` or
+    `/bin/flock`, readable `/proc`, and a supported local ownership filesystem;
+  - on macOS, the system `/bin/ps` and an ownership directory on the APFS
+    volume type of `/`.
+
+  A manual registration does not need these; see
+  [Register without setup](installation.md#register-without-setup).
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 
@@ -66,11 +70,20 @@ divergent existing registration is reported and never automatically replaced.
 Ownership is durable and contains only path-free, secret-free pending/owned
 state. A kernel-fenced guardian retains transaction ownership until every
 mutating client process-group member is gone, including after parent signals or
-hard parent exit. Non-Linux setup fails closed before client spawn.
-Supported ownership filesystems are ext2/3/4, XFS, Btrfs, tmpfs, overlayfs,
-ZFS, F2FS, UBIFS, and bcachefs. Network, FUSE, unreadable `/proc`, an untrusted
-`flock` binary, or same-UID replacement of the stable lock path are outside the
-accepted setup boundary and fail closed where they can be detected.
+hard parent exit. Setup on any platform other than Linux and macOS fails
+closed before client spawn.
+
+Supported ownership filesystems:
+- **Linux:** ext2/3/4, XFS, Btrfs, tmpfs, overlayfs, ZFS, F2FS, UBIFS, and
+  bcachefs.
+- **macOS:** the APFS volume type of `/`.
+
+The following are outside the accepted setup boundary and fail closed where
+they can be detected:
+- network or FUSE filesystems;
+- unreadable `/proc`;
+- an untrusted `flock` or `ps` binary;
+- same-UID replacement of the stable lock path.
 
 Verify runs Doctor, checks exact registration equality, and then performs a
 bounded direct MCP `initialize`, `tools/list`, and

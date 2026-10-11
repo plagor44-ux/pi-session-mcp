@@ -1,14 +1,15 @@
 import { execPath } from "node:process";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import fs from "node:fs";
+import fs, { existsSync } from "node:fs";
 import { open, readFile, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { createProcessRunner } from "../src/setup-process.js";
-import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readProcStatText, signalFixtureProcess, stopFixtureProcess, waitForPidFile, waitForProcessTerminated } from "./process-fixture.js";
+import { currentSetupPlatform } from "../src/setup-platform.js";
+import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readProcStatText, signalFixtureProcess, stopFixtureProcess, processState, waitForPidFile, waitForProcessTerminated } from "./process-fixture.js";
 
 afterAll(removeTemporaryRoots);
 
@@ -29,7 +30,7 @@ async function cleanupDescendants(parentPidFile: string, pidFile: string): Promi
   ]);
 }
 
-describe.skipIf(process.platform !== "linux")("setup process runner", () => {
+describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
   it("captures a short-lived process exit without using a real client", async () => {
     const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", "process.stdout.write('SAFE_STDOUT'); process.stderr.write('SAFE_STDERR'); process.exitCode=7"]);
     expect(result.exitCode).toBe(7);
@@ -108,7 +109,9 @@ describe.skipIf(process.platform !== "linux")("setup process runner", () => {
       await once(child, "spawn");
       expect(child.pid).toBeTypeOf("number");
       const pid = child.pid!;
-      expect(await readFile(`/proc/${pid}/stat`, "utf8")).not.toMatch(/^\d+ \(.*\) Z /);
+      const state = await processState(pid);
+      expect(state).toBeDefined();
+      expect(state).not.toBe("Z");
       await expect(expectProcessTerminated(pid)).rejects.toMatchObject({ name: "AssertionError" });
     } finally {
       child.kill("SIGKILL");
@@ -116,6 +119,25 @@ describe.skipIf(process.platform !== "linux")("setup process runner", () => {
     }
   });
 
+  it("cleans a living fixture even when another cleanup step rejects", async () => {
+    const child = spawn(execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
+    const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
+    const error = Object.assign(new Error("unreadable"), { code: "EACCES" });
+    try {
+      await once(child, "spawn");
+      await expect(cleanupFixtureProcesses([
+        async () => { throw error; },
+        async () => { child.kill("SIGKILL"); await closed; },
+      ])).rejects.toMatchObject({ name: "AggregateError", errors: [error] });
+      expect(child.signalCode).toBe("SIGKILL");
+    } finally {
+      child.kill("SIGKILL");
+      await closed;
+    }
+  });
+});
+
+describe.skipIf(process.platform !== "linux")("Linux /proc fixture", () => {
   it("preserves one complete kernel stat sample through actual owned reaping", async () => {
     const directory = await temporaryRoot("pi-session-mcp-proc-sample-");
     const marker = join(directory, "child.pid");
@@ -287,21 +309,16 @@ describe.skipIf(process.platform !== "linux")("setup process runner", () => {
     const error = Object.assign(new Error("unreadable"), { code });
     await expect(waitForProcessTerminated(123, async () => { throw error; })).rejects.toBe(error);
   });
+});
 
-  it("cleans a living fixture even when another cleanup step rejects", async () => {
-    const child = spawn(execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
-    const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
-    const error = Object.assign(new Error("unreadable"), { code: "EACCES" });
+describe("setup process runner platform gate", () => {
+  it("returns 126 without spawning on an unsupported platform", async () => {
+    const marker = join(await temporaryRoot("pi-session-mcp-platform-gate-"), "spawned");
+    vi.spyOn(process, "platform", "get").mockReturnValue("win32");
     try {
-      await once(child, "spawn");
-      await expect(cleanupFixtureProcesses([
-        async () => { throw error; },
-        async () => { child.kill("SIGKILL"); await closed; },
-      ])).rejects.toMatchObject({ name: "AggregateError", errors: [error] });
-      expect(child.signalCode).toBe("SIGKILL");
-    } finally {
-      child.kill("SIGKILL");
-      await closed;
-    }
+      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)},'')`]);
+      expect(result).toEqual({ exitCode: 126, stdout: "", stderr: "" });
+      expect(existsSync(marker)).toBe(false);
+    } finally { vi.restoreAllMocks(); }
   });
 });
