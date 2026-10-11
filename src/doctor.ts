@@ -2,6 +2,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, type AppConfig } from "./config.js";
+import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
@@ -10,7 +11,7 @@ export type DoctorCheckId =
   | "node_version_unsupported" | "package_metadata_unreadable" | "build_missing"
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
-  | "workspace_not_writable";
+  | "workspace_not_writable" | "extension_missing" | "extension_version_mismatch";
 
 export interface DoctorCheck {
   readonly id: DoctorCheckId;
@@ -39,10 +40,12 @@ export interface DoctorDependencies {
   readonly fileSystem?: DoctorFileSystem;
   readonly loadConfig?: () => Promise<AppConfig>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
+  /** Reads the installed manifest of a pinned extension; never imports extension code. */
+  readonly resolveExtension?: (extension: ExtensionSpec) => Promise<string>;
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -151,6 +154,23 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           if (canWrite) { try { await fs.access(path, constants.W_OK); checks.push(ok("workspace_not_writable", alias)); } catch { checks.push(failure("workspace_not_writable", alias, "grant coding workspace write access")); } }
         }
       } catch (error) { checks.push(failure(isMissing(error) ? "workspace_missing" : "workspace_unreadable", alias, isMissing(error) ? "fix the workspace alias target" : "grant workspace access")); }
+    }
+  }
+  if (config) {
+    const resolveExtension = dependencies.resolveExtension
+      ?? (async (extension: ExtensionSpec) => (await import("./pi-extensions.js")).resolvePiExtension(extension));
+    for (const [alias, profile] of [...config.executionProfiles].sort(([a], [b]) => a.localeCompare(b))) {
+      for (const extension of profile.extensions ?? []) {
+        const subject = `${alias}:${extension.name}`;
+        try {
+          await resolveExtension(extension);
+          checks.push(ok("extension_missing", subject), ok("extension_version_mismatch", subject));
+        } catch (error) {
+          const code = error instanceof PiExtensionError ? error.code : "extension_load_failed";
+          if (code === "extension_not_installed") checks.push(failure("extension_missing", subject, "install the pinned extension version with Pi"));
+          else checks.push(ok("extension_missing", subject), failure("extension_version_mismatch", subject, "install the pinned extension version with Pi"));
+        }
+      }
     }
   }
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));

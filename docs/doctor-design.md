@@ -31,6 +31,10 @@ and owners are:
 | `workspace_not_directory` | A resolved workspace is not a directory | validated workspace alias |
 | `workspace_unreadable` | A resolved workspace cannot be read | validated workspace alias |
 | `workspace_not_writable` | A workspace is not writable while a coding profile can target it | validated workspace alias |
+| `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
+| `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
+
+Doctor reads extension manifests from Pi's user install location only; it never installs packages and never imports extension code.
 
 The Doctor reuses `loadConfig`; it does not duplicate alias, profile, thinking
 level, or read-only-default rules. Workspace values are used only for local

@@ -1,7 +1,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
 import { ConfigError, type ConfigurationMetadata } from "../src/config.js";
 import { parseDoctorArgs, renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorFileSystem } from "../src/doctor.js";
 
@@ -175,5 +176,41 @@ describe("offline doctor", () => {
   it("distinguishes a workspace file from a directory", async () => {
     const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js", "/hidden/workspace"] }), loadConfig: healthyConfig });
     expect(result.checks).toContainEqual(expect.objectContaining({ id: "workspace_not_directory", severity: "error", subject: "repo" }));
+  });
+
+  const extension = parseExtensionSpec("npm:fixture-ext@1.2.3")!;
+  const configWithExtension = async () => {
+    const base = await healthyConfig();
+    return { ...base, executionProfiles: new Map([["safe", { ...base.executionProfiles.get("safe")!, extensions: [extension] }]]) };
+  };
+  const extensionFs = () => fsFor({ files: ["/root/dist/main.js"], dirs: ["/hidden/workspace"] });
+
+  it("reports installed pinned extensions as ok", async () => {
+    const resolveExtension = vi.fn(async () => "/hidden/extension");
+    const result = await runDoctor({ packageRoot: "/root", fileSystem: extensionFs(), loadConfig: configWithExtension, resolveExtension });
+    expect(resolveExtension).toHaveBeenCalledWith(extension);
+    expect(result.checks).toContainEqual({ id: "extension_missing", severity: "ok", subject: "safe:fixture-ext" });
+    expect(result.checks).toContainEqual({ id: "extension_version_mismatch", severity: "ok", subject: "safe:fixture-ext" });
+    expect(result.checks.slice(-2).map((check) => check.id)).toEqual(["extension_missing", "extension_version_mismatch"]);
+  });
+
+  it.each([
+    ["extension_not_installed", "extension_missing"],
+    ["extension_version_mismatch", "extension_version_mismatch"],
+    ["extension_load_failed", "extension_version_mismatch"],
+  ] as const)("maps %s to a failing %s check without a path", async (code, id) => {
+    const result = await runDoctor({
+      packageRoot: "/root", fileSystem: extensionFs(), loadConfig: configWithExtension,
+      resolveExtension: async () => { throw new PiExtensionError(code); },
+    });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id, severity: "error", subject: "safe:fixture-ext" }));
+    expect(result.exitCode).toBe(2);
+    expect(JSON.stringify(result)).not.toContain("/hidden/extension");
+  });
+
+  it("never resolves extensions when no profile has any", async () => {
+    const resolveExtension = vi.fn(async () => "/hidden/extension");
+    await runDoctor({ packageRoot: "/root", fileSystem: extensionFs(), loadConfig: healthyConfig, resolveExtension });
+    expect(resolveExtension).not.toHaveBeenCalled();
   });
 });
