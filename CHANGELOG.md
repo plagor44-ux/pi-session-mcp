@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.0 — 2026-10-11
+
+This is a minor release because the public contract changes, as ADR 0003
+requires: four new error codes, and the `extensions` field of each execution
+profile in `pi_capabilities_get`.
+
 - Execution profiles can load Pi extensions that Pi has installed, pinned as
   `npm:<name>@<exact version>` in a new `extensions` field. Such a session
   loads the extension with its providers, tools, hooks and system-prompt
@@ -22,8 +28,9 @@
 
   Every other platform still refuses with `platform_unsupported`. Result codes,
   statuses and exit codes are unchanged. CI now runs on Linux, macOS 15 and
-  macOS 26; the required `verify` check aggregates all three. Setup acceptance
-  on a real Mac is still pending. See ADR 0005 and #32.
+  macOS 26; the required `verify` check aggregates all three. On a real Mac,
+  setup acceptance passed for Claude Code; it has not run for Codex. See ADR
+  0005 and #32.
 - The client setup reference and the security policy no longer use the
   project's former name. Both sentences now name the server or Pi Session MCP.
 - The installation guide now describes how to register a client without
