@@ -426,3 +426,34 @@ This check does not cover:
 - A coding turn that tries to change a file outside the allowed set.
 - Interactive approval dialogs, external MCP grants, and client restart or
   resume.
+
+On 2026-10-11 the working-tree build of `eeaa597` on the `feat/pi-extensions`
+branch (#34) passed the Pi extension live check on Linux:
+- Environment: Node.js `26.11.1`, Pi SDK `1.1.0`, and `pi-cursor-sdk@0.5.3`
+  installed by Pi with a stored Cursor key. `dist/main.js` has the SHA-256
+  `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`.
+- Method: a scripted JSON-RPC client drove `node dist/main.js` over stdio, with
+  a temporary configuration passed through `PI_SESSION_MCP_CONFIG`. The
+  configuration had a `coding` and a `read-only` profile, each with provider
+  `cursor`, model `auto`, thinking level `off` and
+  `"extensions": ["npm:pi-cursor-sdk@0.5.3"]`.
+- The `coding` profile started, its prompt completed with "PONG", and the
+  session closed.
+- Two sessions, one of each profile, started in parallel and both prompts
+  completed with "PONG".
+- After close, no descendant process of the server remained.
+- No stdout line failed to parse as an MCP frame. stderr carried two
+  `foreign_stdout_suppressed` reports for 21 suppressed writes and no other
+  event.
+- During turns the Cursor local runtime started `git`, `ssh`, `gh`, `node` and
+  the MCP servers configured for Cursor through `npm exec`, in the `read-only`
+  profile as well. None of them inherited the server's stdout: each had its own
+  pipe, a socket, `/dev/null` or a file as standard output.
+- The first run, on the earlier build of `6740484`, failed to start the
+  `coding` profile with `execution_selection_mismatch`: `pi-cursor-sdk`
+  deactivates its own `cursor_activate_skill` tool when the session starts.
+  `eeaa597` lets an extension narrow its active tools while still rejecting
+  any tool outside the allowlist.
+
+This check does not cover macOS, Codex or Claude Code as the client, the Cursor
+cloud runtime, or a session that uses Cursor's own tools.
