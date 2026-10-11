@@ -369,3 +369,48 @@ This run does not cover:
   The following `--apply` reported `applied` in every case.
 - Intel Macs, the published-release and published-package variants, and
   Level 3.
+
+On 2026-10-11 the same build also passed a narrower live check on that Mac:
+- Scope: Claude Code `2.1.294` as the only client, with Pi SDK `1.1.0` on a
+  local `qwen3.6-35b-a3b-splash` model served by LM Studio. The server was the
+  build of `d89740c`: the sources are identical to it, and `dist/main.js` has
+  the SHA-256 `a69bfec2f9f161b74a6d7b067fda9b76d94c294170bc59a771a79e3f29a7123c`.
+- Method: three sequential headless invocations, one per task group, with a
+  temporary per-invocation MCP configuration (`--strict-mcp-config`), a
+  credential-free configuration with one `read-only` and one `coding` profile,
+  and a disposable Pi agent directory. The client could run `sleep` between
+  polls. The plan, prompts, oracles and fixture digests were fixed before the
+  first invocation, and no task was repeated.
+- Preflight: one bounded request to the model returned HTTP `200` in about 1 s.
+  The loaded model was the same and idle before and after every invocation, and
+  nothing was loaded or unloaded.
+- Read-only analysis with a same-session follow-up: both turns ended
+  `completed`. The first answer contained the expected marker, and the second
+  answer was exactly the expected number. The fixture digest (path, mode and
+  content) was identical before and after.
+- Bounded coding change with a same-session follow-up: both turns ended
+  `completed`. The oracle passed on a snapshot taken between the turns and on
+  the final workspace, and that snapshot did not yet contain the second turn's
+  change. Only the one allowed file differed, with no added or removed file and
+  unchanged modes.
+- Abort and recovery: the turn was `running`, then `aborted` after
+  `pi_session_abort`. `pi_session_close` succeeded, `pi_session_list` returned
+  no session, and a fresh session started `idle` and closed.
+- Counts: `pi_turn_get` was called 3, 3 and 2 times in the three invocations,
+  and no Pi Session MCP tool returned an error.
+- A scan of every Pi Session MCP tool result in the three transcripts found no
+  absolute path, configuration file name, endpoint, key or token marker, or stack
+  frame. No server or client process remained after any invocation, each
+  client's standard error was empty, and the digest of the real Claude Code
+  registrations was unchanged.
+
+This check does not cover:
+- Codex, or any task from a second client. It is not a ten-task cycle and does
+  not satisfy the Level 3 gate.
+- The check that the first turn's terminal view stays unchanged after a second
+  turn started. The transcripts do not poll the first turn again.
+- A git-based check of the allowed diff. The coding fixture is not a Git
+  repository, so a path, mode and content digest stood in for it.
+- A coding turn that tries to change a file outside the allowed set.
+- Interactive approval dialogs, external MCP grants, and client restart or
+  resume.
