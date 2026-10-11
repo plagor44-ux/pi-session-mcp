@@ -9,8 +9,9 @@ directory: an npm executable can run from any directory.
 `runDoctor` returns one frozen result model (`schemaVersion: 1`, `ok`, a
 sanitized semver `packageVersion` when metadata is available, ordered `checks`,
 and `exitCode`). Human and JSON output are projections of that same model.
-Subjects are only fixed component names or validated workspace aliases; paths,
-configuration values, errors, credentials, and provider data are never output.
+Subjects are only fixed component names, validated workspace aliases, or
+validated `<profile>:<package>` pairs; paths, configuration values, errors,
+credentials, and provider data are never output.
 
 Each check is `{ id, severity, subject, remediation? }`. Severity is `ok`,
 `warning`, or `error`; remediation is a fixed safe sentence. The initial IDs
