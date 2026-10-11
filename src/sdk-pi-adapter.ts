@@ -151,8 +151,8 @@ export function admitsTurn(disposition: PromptDisposition): boolean {
       return true;
     // Only while streaming with `streamingBehavior`; Pi Session MCP never passes it and serializes turns.
     case "queued":
-    // An extension command or input handler consumed the prompt without a model turn. The
-    // isolated resource loader (`noExtensions`) makes this unreachable; no public turn exists.
+    // An extension input handler consumed the prompt without a model turn. Commands never
+    // dispatch (`expandPromptTemplates: false`), but allowlisted extensions may handle input.
     case "handled":
       return false;
     default: {
@@ -206,7 +206,11 @@ class SdkHandle implements PiSessionHandle {
     this.subscriptions.add(cleanup);
     let promptResult: Promise<void>;
     try {
-      promptResult = this.session.prompt(text, { preflightResult: (disposition) => signalPreflight(admitsTurn(disposition)) });
+      promptResult = this.session.prompt(text, {
+        // Client text is content, never a command: no extension command, skill or template dispatch.
+        expandPromptTemplates: false,
+        preflightResult: (disposition) => signalPreflight(admitsTurn(disposition)),
+      });
     } catch {
       cleanup();
       throw new Error("Pi prompt failed");

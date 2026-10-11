@@ -527,3 +527,14 @@ describe("startup diagnostics", () => {
     expect(JSON.stringify(unknown)).not.toMatch(/SECRET|private|config\.json|message|path/i);
   });
 });
+
+describe("plain-text prompts", () => {
+  it("sends every prompt as plain text so extension commands never run", async () => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: createSessionFixture(session) });
+    const handle = await create(adapter);
+    await handle.prompt("/fixture-cmd hello", () => undefined);
+    expect(session.prompt).toHaveBeenCalledWith("/fixture-cmd hello", expect.objectContaining({ expandPromptTemplates: false }));
+  });
+});
