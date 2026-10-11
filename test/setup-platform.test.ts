@@ -159,6 +159,15 @@ describe("macOS lock acquisition", () => {
     await expect(pending).rejects.toThrow("operation_aborted");
     expect(Date.now() - started).toBeLessThan(1_000);
   });
+  it("bounds a non-finite timeout at the maximum instead of waiting forever", async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const pending = openLockedDarwin("/lock", { timeoutMs: Number.NaN, retryMs: 1, signal: controller.signal, openFile: async () => { calls += 1; throw Object.assign(new Error("busy"), { code: "EAGAIN" }); } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    controller.abort();
+    await expect(pending).rejects.toThrow("operation_aborted");
+    expect(calls).toBeGreaterThan(1);
+  });
   it("does not open after an abort", async () => {
     const controller = new AbortController();
     controller.abort();

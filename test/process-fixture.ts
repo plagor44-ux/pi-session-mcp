@@ -15,10 +15,10 @@ const DARWIN_O_EXLOCK = 0x20;
 
 function darwinProcessField(pid: number, field: "stat=" | "command="): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
-    execFile("/bin/ps", ["-o", field, "-p", String(pid)], { env: { LC_ALL: "C" }, encoding: "utf8" }, (error, stdout) => {
+    execFile("/bin/ps", ["-o", field, "-p", String(pid)], { env: { LC_ALL: "C" }, encoding: "utf8" }, (error, stdout, stderr) => {
       if (!error) { resolve(stdout.trim()); return; }
       // ps exits 1 with no output when the PID does not exist.
-      if (error.code === 1 && stdout.trim() === "") { resolve(undefined); return; }
+      if (error.code === 1 && stdout.trim() === "" && stderr.trim() === "") { resolve(undefined); return; }
       reject(error);
     });
   });

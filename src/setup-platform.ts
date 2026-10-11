@@ -186,7 +186,8 @@ export interface DarwinLockOptions {
 export async function openLockedDarwin(path: string, options: DarwinLockOptions): Promise<FileHandle> {
   const openFile = options.openFile ?? ((target: string, flags: number, mode: number) => open(target, flags, mode));
   const flags = constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW | DARWIN_O_EXLOCK | DARWIN_O_NONBLOCK;
-  const deadline = Date.now() + Math.max(1_000, Math.min(options.timeoutMs, 120_000));
+  const boundMs = Number.isFinite(options.timeoutMs) ? Math.max(1_000, Math.min(options.timeoutMs, 120_000)) : 120_000;
+  const deadline = Date.now() + boundMs;
   const retryMs = options.retryMs ?? 50;
   while (true) {
     if (options.signal?.aborted) throw new Error("operation_aborted");

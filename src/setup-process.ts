@@ -124,7 +124,7 @@ export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: Ab
         const groupState = async (): Promise<ProcessGroupState> => table && group !== undefined ? table.groupState(group) : "unknown";
         const groupDeadline = Date.now() + 1_000;
         let state = await groupState();
-        while (state === "alive" && Date.now() < groupDeadline) { await delay(table?.pollMs ?? 10); state = await groupState(); }
+        while (state !== "gone" && Date.now() < groupDeadline) { await delay(table?.pollMs ?? 10); state = await groupState(); }
         if (!childClosed || state !== "gone") throw new Error("mcp_process_cleanup_failed");
       },
     };

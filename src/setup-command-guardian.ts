@@ -142,6 +142,7 @@ function start(request: RunRequest): void {
   });
   child.once("close", (code) => {
     if (execution.cleanupStarted) return;
+    if (execution.timeout) clearTimeout(execution.timeout);
     void groupState(execution.group).then((state) => {
       if (execution.cleanupStarted) return;
       if (state === "gone") {

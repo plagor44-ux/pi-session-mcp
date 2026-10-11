@@ -1,7 +1,7 @@
 import { execPath } from "node:process";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import fs from "node:fs";
+import fs, { existsSync } from "node:fs";
 import { open, readFile, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
@@ -313,10 +313,12 @@ describe.skipIf(process.platform !== "linux")("Linux /proc fixture", () => {
 
 describe("setup process runner platform gate", () => {
   it("returns 126 without spawning on an unsupported platform", async () => {
+    const marker = join(await temporaryRoot("pi-session-mcp-platform-gate-"), "spawned");
     vi.spyOn(process, "platform", "get").mockReturnValue("win32");
     try {
-      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", "require('node:fs').writeFileSync('must-not-exist','')"]);
+      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)},'')`]);
       expect(result).toEqual({ exitCode: 126, stdout: "", stderr: "" });
+      expect(existsSync(marker)).toBe(false);
     } finally { vi.restoreAllMocks(); }
   });
 });

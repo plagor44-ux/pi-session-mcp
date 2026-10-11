@@ -227,8 +227,9 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
       signalFixtureProcess(parent.pid!, "SIGKILL");
       await parentClosed;
       try {
-        expect(await processState(helperPid)).not.toBe("Z");
-        expect(await processState(helperPid)).toBeDefined();
+        const helperState = await processState(helperPid);
+        expect(helperState).toBeDefined();
+        expect(helperState).not.toBe("Z");
         expect(isLockHeld(`${path}.flock`)).toBe(true);
       } finally {
         signalFixtureProcess(guardianPid, "SIGCONT");
