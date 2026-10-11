@@ -100,7 +100,8 @@ release, record the contract again:
 5. Update the versions named in [Installation](installation.md).
 6. Run the working-tree
    [Level 2 lifecycle](acceptance.md#level-2-setup-acceptance) with the real
-   client for every scope.
+   client for every scope (`scripts/setup-acceptance.mjs`, see
+   [Tooling](acceptance.md#tooling)).
 
 ## Patch audit advisories
 
@@ -151,7 +152,10 @@ Steps:
    `## Unreleased`, so that the unreleased entries become the release entries.
 4. Run the Level 1 checks. `npm run --silent doctor -- --json` must report the
    new `packageVersion`.
-5. Open one pull request named `chore: prepare v<x.y.z> release`.
+5. Run the working-tree
+   [Level 2 acceptance](acceptance.md#tooling) on the release candidate with
+   `scripts/setup-acceptance.mjs`, unless the release notes state its absence.
+6. Open one pull request named `chore: prepare v<x.y.z> release`.
 
 ## Publish a release
 
@@ -210,7 +214,8 @@ After publishing:
 1. Run the published-release
    [Level 2 acceptance](acceptance.md#working-tree-and-published-release-variants)
    from a fresh clone of the tag and from the published npm package, and
-   record it.
+   record it. `scripts/setup-acceptance.mjs` runs both
+   ([Tooling](acceptance.md#tooling)).
 2. Upgrade the installation as described in
    [Installation](installation.md#upgrade).
 3. Update the status section in [Acceptance](acceptance.md).

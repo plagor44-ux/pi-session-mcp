@@ -124,6 +124,43 @@ that checkout with Doctor reporting the release version, and confirms that the
 manifests and built runtime files are byte-identical before and after the
 client cycles.
 
+### Tooling
+
+`scripts/setup-acceptance.mjs` runs the isolation, the sequence and the pass
+criteria above with the real clients. It uses disposable homes below its work
+directory (default `~/.cache/pi-session-mcp-acceptance`, never below `/tmp` or
+`$TMPDIR`), removes them afterwards and writes a sanitized JSON result without
+paths or environment values. It exits with `0` when every check passed, `1` when
+a check failed and `2` on a usage or environment error.
+
+Working tree, after `npm run build` and `npm run build:cli`:
+
+```bash
+node scripts/setup-acceptance.mjs \
+  --setup "node $PWD/dist/setup-main.js" --build-dir "$PWD" \
+  --label working-tree --out level2-result.json
+```
+
+Published package: install it into a temporary prefix outside `/tmp`, then pass
+the installed executable and package directory.
+
+```bash
+npm install -g --prefix "$PREFIX" pi-session-mcp@<version>
+node scripts/setup-acceptance.mjs \
+  --setup "$PREFIX/bin/pi-session-mcp-setup" \
+  --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
+  --label npm-<version> --out level2-result.json
+```
+
+Tag clone: build a fresh clone of the tag (`npm ci`, `npm run build`,
+`npm run build:cli`) and use it like the working tree, with `--setup` and
+`--build-dir` pointing at the clone.
+
+`--clients codex` or `--clients claude-code` limits a run to one client, for
+example on a macOS machine without Codex. The script does not cover the macOS
+lock-contention and interruption steps, Level 1, or the tag identity checks
+(tag object, peeled commit, `git describe`). Run those by hand.
+
 ### macOS
 
 macOS uses the same isolation, sequence and pass criteria, with the additions
