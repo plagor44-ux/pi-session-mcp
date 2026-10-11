@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installStdoutGuard } from "../src/stdout-guard.js";
@@ -69,8 +70,45 @@ describe("stdout guard", () => {
     h.guard.transportStdout.on("error", onError);
     const failure = Object.assign(new Error("hidden"), { code: "EPIPE" });
     h.stream.emit("error", failure);
-    // `destroy(error)` emits the error on a later tick.
     await new Promise((resolve) => setImmediate(resolve));
     expect(onError).toHaveBeenCalledWith(failure);
+  });
+
+  it("delivers every queued transport frame synchronously", () => {
+    // Pipe-like stdout: the data lands synchronously, only the callback is deferred.
+    const written: string[] = [];
+    let ended = false;
+    const fake = Object.assign(new EventEmitter(), {
+      write(chunk: string | Uint8Array, encodingOrCallback?: unknown, callback?: unknown): boolean {
+        written.push(Buffer.from(chunk).toString("utf8"));
+        const done = typeof encodingOrCallback === "function" ? encodingOrCallback : callback;
+        if (typeof done === "function") process.nextTick(done as () => void);
+        return true;
+      },
+      end(): void { ended = true; },
+    }) as unknown as NodeJS.WriteStream;
+    const guard = installStdoutGuard({ stream: fake, console: { log: vi.fn(), info: vi.fn(), debug: vi.fn() }, report: () => undefined, onExit: () => undefined });
+    guard.transportStdout.write("frame0\n");
+    guard.transportStdout.write("frame1\n");
+    guard.transportStdout.write("frame2\n");
+    expect(written).toEqual(["frame0\n", "frame1\n", "frame2\n"]);
+    expect(ended).toBe(false);
+  });
+
+  it("suppresses foreign end without ending stdout", async () => {
+    const h = harness();
+    const done = vi.fn();
+    const result = h.stream.end("secret\n", done);
+    const doneLast = vi.fn();
+    h.stream.end(doneLast);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(result).toBe(h.stream);
+    expect(done).toHaveBeenCalledTimes(1);
+    expect(doneLast).toHaveBeenCalledTimes(1);
+    expect(h.stream.writableEnded).toBe(false);
+    expect(Buffer.concat(h.written).byteLength).toBe(0);
+    h.guard.flush();
+    expect(JSON.parse(h.reports[0]!)).toMatchObject({ bytes: Buffer.byteLength("secret\n"), writes: 1 });
+    expect(h.reports[0]).not.toContain("secret");
   });
 });
