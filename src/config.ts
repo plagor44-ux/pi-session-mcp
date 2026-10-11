@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
+import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "./extension-spec.js";
 import { isMcpServers, snapshotMcpServers, type McpServers } from "./mcp-config.js";
 import {
   ALIAS_PATTERN,
@@ -14,13 +15,21 @@ import {
 const alias = z.string().regex(ALIAS_PATTERN);
 const permissionProfile = z.enum(["read-only", "coding"] satisfies [PermissionProfile, PermissionProfile]);
 const thinkingLevel = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] satisfies [ThinkingLevel, ...ThinkingLevel[]]);
+const extensionSpec = z.string().refine((value) => parseExtensionSpec(value) !== undefined);
 const profileSchema = z.object({
   default: z.boolean(), permissionProfile, provider: z.string().trim().min(1).max(256),
   model: z.string().trim().min(1).max(256), thinkingLevel,
   mcpServers: z.custom<McpServers>((value) => isMcpServers(value)).optional(),
+  extensions: z.array(extensionSpec).max(MAX_PROFILE_EXTENSIONS).optional(),
 }).strict().superRefine((profile, context) => {
   if (profile.mcpServers !== undefined && !isMcpServers(profile.mcpServers, profile.permissionProfile)) {
     context.addIssue({ code: "custom", path: ["mcpServers"], message: "MCP tool grants do not match the permission profile" });
+  }
+  if (profile.extensions !== undefined) {
+    const names = profile.extensions.flatMap((spec) => parseExtensionSpec(spec)?.name ?? []);
+    if (new Set(names).size !== names.length) {
+      context.addIssue({ code: "custom", path: ["extensions"], message: "An extension package may appear only once per profile" });
+    }
   }
 });
 
@@ -101,9 +110,10 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   }
   const base = dirname(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
-  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, ...value }]) => [key, Object.freeze({
+  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, ...value }]) => [key, Object.freeze({
     alias: key, ...value,
     ...(mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(mcpServers) }),
+    ...(extensions === undefined ? {} : { extensions: Object.freeze(extensions.map((spec) => parseExtensionSpec(spec)!)) }),
   })] as const));
   const defaultEntry = [...executionProfiles].find(([, profile]) => profile.default);
   if (!defaultEntry) throw new Error("Execution profile configuration is invalid");

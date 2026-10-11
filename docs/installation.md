@@ -152,6 +152,10 @@ Rules:
   `azure`; a profile that names the old key must be changed.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
+- A profile may load Pi extensions that Pi has installed, through
+  `extensions`: a list of at most 8 entries of the form
+  `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
+  sources and paths are rejected. See [Pi extensions](#pi-extensions).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 

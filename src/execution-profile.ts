@@ -1,3 +1,4 @@
+import type { ExtensionSpec } from "./extension-spec.js";
 import { snapshotMcpServers, type McpServers } from "./mcp-config.js";
 
 export const ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
@@ -14,6 +15,7 @@ export interface ConfiguredExecutionProfile {
   readonly model: string;
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
+  readonly extensions?: readonly ExtensionSpec[];
 }
 
 /** The immutable, server-side selection passed to the Pi adapter. */
@@ -24,6 +26,7 @@ export interface ResolvedExecutionProfile {
   readonly model: string;
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
+  readonly extensions?: readonly ExtensionSpec[];
 }
 
 export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile): ResolvedExecutionProfile {
@@ -34,6 +37,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
     model: profile.model,
     thinkingLevel: profile.thinkingLevel,
     ...(profile.mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(profile.mcpServers) }),
+    ...(profile.extensions === undefined ? {} : { extensions: profile.extensions }),
   });
 }
 

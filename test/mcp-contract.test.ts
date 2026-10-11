@@ -71,7 +71,7 @@ describe("MCP contracts", () => {
         workspaces: { items: { required: ["alias"], additionalProperties: false } },
         executionProfiles: {
           items: {
-            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel"],
+            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions"],
             additionalProperties: false,
           },
         },
@@ -112,11 +112,11 @@ describe("MCP contracts", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium",
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high",
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [],
         },
       ],
     });

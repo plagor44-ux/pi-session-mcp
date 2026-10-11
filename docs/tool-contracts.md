@@ -34,12 +34,13 @@ There are exactly eight tools. No `pi_turn_wait` tool or live provider/model inv
     "permissionProfile": "read-only",
     "provider": "configured-provider",
     "model": "configured-model",
-    "thinkingLevel": "medium"
+    "thinkingLevel": "medium",
+    "extensions": []
   }]
 }
 ```
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases, and the six documented profile fields. It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases, and the seven documented profile fields. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
 
 Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`. Clients may use them for presentation, but the strict input schema and server-owned projection enforce the contract.
 

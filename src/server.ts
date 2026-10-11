@@ -42,6 +42,7 @@ const capabilitiesSchema = z.object({
     provider: z.string(),
     model: z.string(),
     thinkingLevel: thinkingLevelSchema,
+    extensions: z.array(z.string()),
   }).strict()),
 }).strict();
 

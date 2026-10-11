@@ -19,6 +19,7 @@ describe("configuration capability projection", () => {
       ["zeta-profile", {
         alias: "zeta-profile", default: false, permissionProfile: "coding",
         provider: "provider-z", model: "model-z", thinkingLevel: "high",
+        extensions: [{ spec: "npm:ext@1.0.0", name: "ext", version: "1.0.0" }],
       }],
       ["alpha-profile", {
         alias: "alpha-profile", default: true, permissionProfile: "read-only",
@@ -36,11 +37,11 @@ describe("configuration capability projection", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium",
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high",
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"],
         },
       ],
     });
