@@ -590,3 +590,25 @@ check on Linux:
 
 This check does not cover macOS, an MCP client in the loop, or a session that
 uses Cursor's own tools.
+
+Before its release, `v0.7.1` passed Level 1 and the working-tree Level 2 on its
+release candidate `82dff20` on Linux, with Node.js `26.11.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.296`, on 2026-10-11:
+- Level 1: every command exited with `0`.
+  - The test run reported 38 files, 684 passed and 5 skipped.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - Doctor reported `packageVersion` `0.7.1` and no finding.
+- Level 2 ran through `scripts/setup-acceptance.mjs` on a fresh clone of the
+  candidate.
+  - All nine steps passed on all four targets, 96 of 96 checks.
+  - The real client registrations were unchanged, and no process remained.
+  - The built files were byte-identical before and after the client cycles.
+- `dist/main.js` is byte-identical to that of `v0.7.0`. The changed modules are
+  the extension tool-name rule, the pin format and the prompt source.
+
+The branch build of `8d5b069`, whose sources match this candidate, passed the
+Pi extension live check with the operator's configuration on 2026-10-11:
+- Three `pi-cursor-sdk@0.5.3` profiles and one xAI profile each completed a
+  prompt.
+- Two Cursor sessions completed in parallel.
+- No process remained, and no foreign line reached the MCP stdout.
