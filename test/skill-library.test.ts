@@ -2,8 +2,10 @@ import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
-  builtinSkillPath, CONTROLLER_SKILLS, MAX_SKILL_TREE_BYTES, MAX_SKILL_TREE_FILES, PACKAGE_ROOT, readSkillTree,
-  resolveLibrarySkill, shippedSkillsDirectory, SKILL_NAME_PATTERN, skillOverrideDirectory,
+  builtinSkillPath, CONTROLLER_SKILLS, LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, legacySkillTreeFingerprint, MAX_SKILL_TREE_BYTES,
+  MAX_SKILL_TREE_FILES, PACKAGE_ROOT, provesLegacyFingerprint, readSkillTree, RELEASED_SKILL_TREES, releasedSkillFingerprint,
+  resolveLibrarySkill, shippedSkillsDirectory, SKILL_NAME_PATTERN, SKILL_TREE_FINGERPRINT_PATTERN, skillOverrideDirectory,
+  SkillTreeError, skillTreeFingerprint,
 } from "../src/skill-library.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -55,10 +57,60 @@ describe("skill library", () => {
     const directory = await skill(root, "tree", { "references/b.md": "b", "a.md": "a", ".hidden": "x", ".git/config": "x" });
     const first = await readSkillTree(directory);
     expect(first.files.map((file) => file.path)).toEqual(["SKILL.md", "a.md", "references/b.md"]);
-    expect(first.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.fingerprint).toMatch(SKILL_TREE_FINGERPRINT_PATTERN);
+    expect(first.legacyFingerprint).toMatch(LEGACY_SKILL_TREE_FINGERPRINT_PATTERN);
     expect((await readSkillTree(directory)).fingerprint).toBe(first.fingerprint);
     await writeFile(join(directory, "a.md"), "changed");
     expect((await readSkillTree(directory)).fingerprint).not.toBe(first.fingerprint);
+  });
+
+  it("separates trees that the version 1 encoding confused through NUL bytes in content", async () => {
+    const root = await temporaryRoot("pi-skill-tree-collision-");
+    const joined = await skill(root, "joined");
+    await mkdir(join(joined, "assets"));
+    await writeFile(join(joined, "assets", "a.bin"), Buffer.from("X\0assets/b.bin\0Y", "latin1"));
+    const split = await skill(root, "split", { "assets/a.bin": "X", "assets/b.bin": "Y" });
+    // Both trees carry the same valid SKILL.md apart from the name line; align it.
+    await writeFile(join(joined, "SKILL.md"), "---\nname: same\ndescription: Fixture.\n---\n");
+    await writeFile(join(split, "SKILL.md"), "---\nname: same\ndescription: Fixture.\n---\n");
+    const [a, b] = await Promise.all([readSkillTree(joined), readSkillTree(split)]);
+    expect(a.legacyFingerprint).toBe(b.legacyFingerprint);
+    expect(a.fingerprint).not.toBe(b.fingerprint);
+  });
+
+  it("encodes lengths and order explicitly and refuses duplicate paths", () => {
+    const file = (path: string, content: string) => ({ path, bytes: Buffer.from(content, "utf8") });
+    const ordered = skillTreeFingerprint([file("SKILL.md", "s"), file("a/b.md", "x")]);
+    expect(skillTreeFingerprint([file("a/b.md", "x"), file("SKILL.md", "s")])).toBe(ordered);
+    expect(skillTreeFingerprint([file("SKILL.md", "s"), file("a/b.md", "x"), file("c", "")])).not.toBe(ordered);
+    expect(skillTreeFingerprint([file("SKILL.md", "sa"), file("/b.md", "x")])).not.toBe(ordered);
+    expect(() => skillTreeFingerprint([file("SKILL.md", "s"), file("SKILL.md", "t")])).toThrow(SkillTreeError);
+    expect(legacySkillTreeFingerprint([file("SKILL.md", "s")])).toMatch(LEGACY_SKILL_TREE_FINGERPRINT_PATTERN);
+  });
+
+  it("accepts a version 1 fingerprint only with byte equality to a trusted tree", async () => {
+    const root = await temporaryRoot("pi-skill-tree-legacy-");
+    const current = await readSkillTree(await skill(root, "current", { "a.md": "a" }));
+    const other = await readSkillTree(await skill(root, "other", { "a.md": "b" }));
+    expect(provesLegacyFingerprint("current", current.legacyFingerprint, current, [current])).toBe(true);
+    // A matching version 1 value alone is not enough: the candidate must be the trusted tree.
+    expect(provesLegacyFingerprint("current", current.legacyFingerprint, other, [current])).toBe(false);
+    expect(provesLegacyFingerprint("current", current.legacyFingerprint, current)).toBe(false);
+    expect(provesLegacyFingerprint("current", current.fingerprint, current, [current])).toBe(false);
+    const released = RELEASED_SKILL_TREES[0]!;
+    expect(provesLegacyFingerprint(released.name, released.legacyFingerprint, { fingerprint: released.fingerprint })).toBe(true);
+    expect(provesLegacyFingerprint("pi-session-review", released.legacyFingerprint, { fingerprint: released.fingerprint })).toBe(false);
+    expect(releasedSkillFingerprint(released.name, released.legacyFingerprint)).toBe(released.fingerprint);
+    expect(releasedSkillFingerprint(released.name, current.legacyFingerprint)).toBeUndefined();
+  });
+
+  it("lists every shipped skill of 0.8.0 as a released tree", () => {
+    expect(RELEASED_SKILL_TREES.map((tree) => tree.name).sort()).toEqual(["pi-session-implementation", "pi-session-orchestration", "pi-session-review"]);
+    for (const tree of RELEASED_SKILL_TREES) {
+      expect(tree.release).toBe("0.8.0");
+      expect(tree.legacyFingerprint).toMatch(LEGACY_SKILL_TREE_FINGERPRINT_PATTERN);
+      expect(tree.fingerprint).toMatch(SKILL_TREE_FINGERPRINT_PATTERN);
+    }
   });
 
   it("rejects a missing SKILL.md, links inside the tree and oversized trees", async () => {

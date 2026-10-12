@@ -6,7 +6,7 @@ import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
 import { readSkillBases, SkillBasesError } from "./skill-customize.js";
-import { readSkillTree, shippedSkillsDirectory } from "./skill-library.js";
+import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFingerprint, shippedSkillsDirectory, type ReleasedSkillTree } from "./skill-library.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
@@ -48,6 +48,8 @@ export interface DoctorDependencies {
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
   /** Reads the installed manifest of a pinned extension; never imports extension code. */
   readonly resolveExtension?: (extension: ExtensionSpec) => Promise<string>;
+  /** Reference trees that resolve legacy skill bases; defaults to the released shipped skills. */
+  readonly releasedSkillTrees?: readonly ReleasedSkillTree[];
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
@@ -95,9 +97,10 @@ async function productionBuildInputMtimes(root: string): Promise<number[]> {
 
 /**
  * Compares the shipped skills with the fingerprints recorded when the operator copied them.
- * Reads only the bases file and the shipped files; nothing is executed or changed.
+ * Reads only the bases file and the shipped files, takes no lock and writes nothing: the bases
+ * file is replaced atomically, so a read sees either the old or the new content.
  */
-async function skillOverrideChecks(overrideDirectory: string | undefined, shippedDirectory: string): Promise<DoctorCheck[]> {
+async function skillOverrideChecks(overrideDirectory: string | undefined, shippedDirectory: string, released: readonly ReleasedSkillTree[] | undefined): Promise<DoctorCheck[]> {
   if (overrideDirectory === undefined) return [];
   let bases: Readonly<Record<string, string>>;
   try { bases = await readSkillBases(overrideDirectory); }
@@ -110,9 +113,13 @@ async function skillOverrideChecks(overrideDirectory: string | undefined, shippe
     let fingerprint: string;
     try { fingerprint = (await readSkillTree(join(shippedDirectory, name))).fingerprint; }
     catch { continue; }
-    checks.push(fingerprint === base
+    const command = `pi-session-mcp-setup --apply --customize-skill ${name}`;
+    // A legacy base is meaningful only as the version 2 value of the released original it names.
+    const recorded = LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(base) ? releasedSkillFingerprint(name, base, released) : base;
+    if (recorded === undefined) checks.push(warning("skill_override_outdated", `skill:${name}`, `the recorded base predates version 2 fingerprints and cannot be confirmed; review the shipped skill, then run ${command}`));
+    else checks.push(recorded === fingerprint
       ? ok("skill_override_outdated", `skill:${name}`)
-      : warning("skill_override_outdated", `skill:${name}`, `review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill ${name}`));
+      : warning("skill_override_outdated", `skill:${name}`, `review the changed shipped skill, then run ${command}`));
   }
   return checks;
 }
@@ -225,7 +232,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
-  if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot)));
+  if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot), dependencies.releasedSkillTrees));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
   const hasError = checks.some((check) => check.severity === "error");

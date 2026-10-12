@@ -215,3 +215,14 @@ the controller skill that `setup --apply` installs, so the next release after
 0.7.1 is 0.8.0. The change is recorded under
 `## Unreleased` in the changelog. Implementing it does not itself release or
 bump the version.
+
+## Note of 2026-10-12: fingerprints, locking and recovery after 0.8.0
+
+The decisions above stand. Three details changed after 0.8.0 (issues #50, #51
+and #52): skill tree fingerprints are version 2 (`v2:` values; a 0.8.0 value
+counts only when a trusted reference proves it), `--apply --customize-skill`
+runs under a kernel lock on the override directory and writes the bases file as
+schema version 2, and an interrupted update of an installed copy is settled by
+the next `--apply`, `--remove` or `--rollback`. See [Pi
+skills](../skills.md#upgrade-from-080) and the [setup lifecycle
+design](../client-setup-design.md#skill-installation).

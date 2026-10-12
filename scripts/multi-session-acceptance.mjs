@@ -9,26 +9,31 @@
 //
 // Usage:
 //   node scripts/multi-session-acceptance.mjs prepare --candidate <dir> \
-//     --base-config <file> --from-profile <alias> [--work-dir <dir>]
+//     --base-config <file> --from-profile <alias> [--with-extensions] [--work-dir <dir>]
 //   node scripts/multi-session-acceptance.mjs run --run <run dir> \
 //     --client claude|codex --scenario parallel|abort [--timeout-min <n>] [--codex-model <id>]
 //   node scripts/multi-session-acceptance.mjs reanalyze --run <run dir> --client <c> --scenario <s>
 //   node scripts/multi-session-acceptance.mjs evidence --run <run dir> --out <file>
 //
 // `prepare` copies only provider, model and thinking level from one existing
-// profile of the operator configuration; it never copies credentials, MCP
-// servers or other workspaces. Everything sensitive (transcripts, configuration,
-// the handshake token, paths) stays below <run dir>/private. `run` and
-// `evidence` print and write only sanitized metadata. Linux only (it reads
-// /proc); Node built-ins only. It never changes a client's persistent
-// configuration, HOME or CODEX_HOME.
+// profile of the operator configuration (with the explicit `--with-extensions`
+// opt-in also that profile's exact `extensions` allowlist); it never copies
+// credentials, MCP servers or other workspaces. Everything sensitive
+// (transcripts, configuration, the handshake token, paths, fixture baselines)
+// stays below <run dir>/private. `run` and `evidence` print and write only
+// sanitized metadata. Linux only (it reads /proc); Node built-ins only. It
+// never changes a client's persistent configuration, HOME or CODEX_HOME.
+//
+// The module exports its building blocks for the provider-free tests. Importing
+// it never runs a subcommand; only a direct `node` invocation does.
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, writeFileSync,
+  existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 const SERVER = "pi-candidate";
@@ -39,22 +44,31 @@ const SCENARIOS = {
   abort: { tasks: ["wait", "range"] },
 };
 
-function fail(message, code = 2) { process.stderr.write(`${message}\n`); process.exit(code); }
-const HARNESS_SHA256 = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
+/** A classified, path-free failure of the harness; the CLI entry turns it into an exit code. */
+export class HarnessFailure extends Error {
+  constructor(message, code = 2) { super(message); this.name = "HarnessFailure"; this.code = code; }
+}
+function fail(message, code = 2) { throw new HarnessFailure(message, code); }
+export const HARNESS_SHA256 = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
 /** A run is bound to the harness that prepared it; another version must not run or re-evaluate it. */
 function sameHarness(info) { if (info.harnessSha256 !== HARNESS_SHA256) fail("this harness differs from the one that prepared the run"); }
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-function inside(path, parent) { const rel = relative(parent, path); return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)); }
-function git(cwd, ...args) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid" } });
+/** Results are findings: a second write to the same path is a bug, never a silent overwrite. */
+const writeJsonOnce = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+export function inside(path, parent) { const rel = relative(parent, path); return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)); }
+const byPath = (a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+// Fixture repositories ignore the operator's git configuration, so a signing or template setting cannot change them.
+const GIT_ENV = { GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@invalid", GIT_COMMITTER_NAME: "fixture", GIT_COMMITTER_EMAIL: "fixture@invalid", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" };
+export function git(cwd, ...args) {
+  const result = spawnSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, ...GIT_ENV } });
   if (result.status !== 0) fail(`git ${args[0]} failed in a fixture`);
   return result.stdout;
 }
 
 // ---- fixtures -----------------------------------------------------------------
-const FIXTURES = {
+export const FIXTURES = {
   slug: {
     "package.json": `{ "name": "fixture-slug", "private": true, "type": "module", "scripts": { "test": "node --test" } }\n`,
     "src/slug.js": "/** Lowercase ASCII slug: words joined by single hyphens, no leading or trailing hyphen. */\nexport function slugify(text) {\n  throw new Error(\"not implemented\");\n}\n",
@@ -74,10 +88,10 @@ const FIXTURES = {
     "test/range.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { range } from \"../src/range.js\";\n\ntest(\"default step\", () => assert.deepEqual(range(0, 4), [0, 1, 2, 3]));\ntest(\"custom step\", () => assert.deepEqual(range(1, 10, 3), [1, 4, 7]));\ntest(\"empty\", () => assert.deepEqual(range(5, 5), []));\ntest(\"bad step\", () => assert.throws(() => range(0, 3, 0), RangeError));\n",
   },
 };
-const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] };
+export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] };
 
 /** SHA-256 over every built runtime module, so evidence binds to all of dist/, not just its entry. */
-function distTreeSha256(candidate) {
+export function distTreeSha256(candidate) {
   const hash = createHash("sha256");
   const walk = (dir, prefix) => {
     for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
@@ -90,7 +104,7 @@ function distTreeSha256(candidate) {
   return hash.digest("hex");
 }
 
-function writeFixture(dir, files) {
+export function writeFixture(dir, files) {
   for (const [name, content] of Object.entries(files)) {
     mkdirSync(join(dir, name, ".."), { recursive: true });
     writeFileSync(join(dir, name), content);
@@ -100,8 +114,250 @@ function writeFixture(dir, files) {
   git(dir, "commit", "-q", "-m", "fixture");
 }
 
+// ---- fixture baselines and independent oracles ---------------------------------------
+/** Every file below `dir` (except the top-level `.git/`) by relative path, type, mode and SHA-256. */
+export function manifestOf(dir, { skipGit = false } = {}) {
+  const entries = [];
+  const walk = (current, prefix) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (skipGit && prefix === "" && entry.name === ".git") continue;
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) walk(full, rel);
+      else if (entry.isSymbolicLink()) entries.push({ path: rel, type: "symlink", mode: 0, sha256: sha256(readlinkSync(full)) });
+      else if (entry.isFile()) entries.push({ path: rel, type: "file", mode: statSync(full).mode & 0o777, sha256: sha256(readFileSync(full)) });
+      else entries.push({ path: rel, type: "other", mode: 0, sha256: "" });
+    }
+  };
+  walk(dir, "");
+  return entries.sort(byPath);
+}
+/** One digest over a directory tree; a missing tree and a symbolic link in its place are distinct, visible values. */
+export function treeSha256(dir) {
+  let top; try { top = lstatSync(dir); } catch { return "missing"; }
+  if (top.isSymbolicLink()) return sha256(`symlink\0${readlinkSync(dir)}`);
+  if (!top.isDirectory()) return "notDirectory";
+  try { return sha256(JSON.stringify(manifestOf(dir))); } catch { return "unreadable"; }
+}
+const fileSha256 = (path) => { try { return sha256(readFileSync(path)); } catch { return "missing"; } };
+
+/**
+ * Runs git against a worker-controlled repository. GIT_DIR and GIT_WORK_TREE pin it to the fixture so a
+ * damaged or removed `.git` never falls through to a parent repository, and configuration that could
+ * execute commands is switched off. Returns the output, or undefined when git failed.
+ */
+function gitInFixture(dir, args) {
+  const result = spawnSync("git", ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", ...args], {
+    cwd: dir, env: { ...process.env, ...GIT_ENV, GIT_DIR: join(dir, ".git"), GIT_WORK_TREE: dir, GIT_OPTIONAL_LOCKS: "0", GIT_NO_REPLACE_OBJECTS: "1" },
+    timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 64 * 1024 * 1024,
+  });
+  return result.status === 0 && !result.error ? result.stdout : undefined;
+}
+const nulList = (buffer) => buffer.toString("utf8").split("\0").filter(Boolean);
+
+/** The state a fixture starts from: its initial commit and a manifest of its files. Stored outside the worker workspace. */
+export function captureBaseline(dir) {
+  const head = gitInFixture(dir, ["rev-parse", "--verify", "HEAD^{commit}"]);
+  if (!head) fail("a fixture has no initial commit");
+  return { schemaVersion: 1, commit: head.toString("utf8").trim(), manifest: manifestOf(dir, { skipGit: true }) };
+}
+
+/**
+ * Compares a fixture with its baseline in three independent ways and returns the union of changed paths:
+ * the working tree against the manifest (added, deleted, modified, untracked, ignored), HEAD against the
+ * base commit, and the index against the base commit. A missing or unreadable baseline, `.git` or base
+ * commit is an error, never a clean result.
+ */
+export function compareToBaseline(dir, baseline, allowed) {
+  const out = { ok: false, error: undefined, changed: new Set(), sources: { workingTree: 0, index: 0, head: 0 }, disallowed: 0 };
+  if (baseline?.schemaVersion !== 1 || !/^[0-9a-f]{40,64}$/.test(baseline.commit ?? "") || !Array.isArray(baseline.manifest)) { out.error = "baselineUnreadable"; return out; }
+  let gitDir; try { gitDir = lstatSync(join(dir, ".git")); } catch { gitDir = undefined; }
+  if (!gitDir?.isDirectory()) { out.error = "gitMissing"; return out; }
+  if (!gitInFixture(dir, ["cat-file", "-e", `${baseline.commit}^{commit}`])) { out.error = "baseCommitMissing"; return out; }
+  if (!gitInFixture(dir, ["rev-parse", "--verify", "HEAD^{commit}"])) { out.error = "headUnreadable"; return out; }
+  let now; try { now = manifestOf(dir, { skipGit: true }); } catch { out.error = "workingTreeUnreadable"; return out; }
+  const before = new Map(baseline.manifest.map((entry) => [entry.path, entry]));
+  const after = new Map(now.map((entry) => [entry.path, entry]));
+  const tree = new Set();
+  for (const [path, entry] of after) {
+    const original = before.get(path);
+    if (!original || original.type !== entry.type || original.mode !== entry.mode || original.sha256 !== entry.sha256) tree.add(path);
+  }
+  for (const path of before.keys()) if (!after.has(path)) tree.add(path);
+  const head = gitInFixture(dir, ["diff", "--name-only", "-z", "--no-renames", "--no-ext-diff", baseline.commit, "HEAD", "--"]);
+  const index = gitInFixture(dir, ["diff", "--cached", "--name-only", "-z", "--no-renames", "--no-ext-diff", baseline.commit, "--"]);
+  if (!head || !index) { out.error = "gitFailed"; return out; }
+  const headPaths = nulList(head); const indexPaths = nulList(index);
+  out.sources = { workingTree: tree.size, index: indexPaths.length, head: headPaths.length };
+  for (const path of [...tree, ...headPaths, ...indexPaths]) out.changed.add(path);
+  out.disallowed = [...out.changed].filter((path) => !allowed.includes(path)).length;
+  out.ok = out.disallowed === 0;
+  return out;
+}
+
+/**
+ * Checks the harness defines on top of the worker-editable tests, per fixture. Each case calls an exported
+ * function of the worker's module in a separate `node` child and compares the result; they follow the
+ * contract documented in the fixture's own source comments.
+ */
+export const BUSINESS_CHECKS = {
+  slug: { module: "src/slug.js", cases: [
+    { fn: "slugify", args: ["Hello World"], returns: "hello-world" },
+    { fn: "slugify", args: ["  Leading and trailing  "], returns: "leading-and-trailing" },
+    { fn: "slugify", args: ["Rock & Roll!"], returns: "rock-roll" },
+    { fn: "slugify", args: ["a--b__c"], returns: "a-b-c" },
+    { fn: "slugify", args: ["  --Hello,   World--  "], returns: "hello-world" },
+    { fn: "slugify", args: ["Route 66"], returns: "route-66" },
+    { fn: "slugify", args: ["---"], returns: "" },
+    { fn: "slugify", args: [""], returns: "" },
+  ] },
+  stats: { module: "src/stats.js", cases: [
+    { fn: "mean", args: [[1, 2, 3]], returns: 2 },
+    { fn: "median", args: [[3, 1, 2]], returns: 2 },
+    { fn: "median", args: [[4, 1, 3, 2]], returns: 2.5 },
+    { fn: "median", args: [[5]], returns: 5 },
+    { fn: "median", args: [[1, 2, 3, 4, 5, 6]], returns: 3.5 },
+    { fn: "median", args: [[10, 9, 100]], returns: 10 },
+    { fn: "median", args: [[-5, -1, -3]], returns: -3 },
+    // A frozen input throws on an in-place sort, so this fails an implementation that modifies its input.
+    { fn: "median", args: [[3, 1, 2]], frozen: true, returns: 2 },
+    { fn: "median", args: [[]], throws: true },
+  ] },
+  range: { module: "src/range.js", cases: [
+    { fn: "range", args: [0, 4], returns: [0, 1, 2, 3] },
+    { fn: "range", args: [1, 10, 3], returns: [1, 4, 7] },
+    { fn: "range", args: [5, 5], returns: [] },
+    { fn: "range", args: [0, 3, 0], throws: true },
+    { fn: "range", args: [0, 10, 5], returns: [0, 5] },
+    { fn: "range", args: [0, 10, 4], returns: [0, 4, 8] },
+    { fn: "range", args: [3, 1], returns: [] },
+    { fn: "range", args: [-3, 2], returns: [-3, -2, -1, 0, 1] },
+    { fn: "range", args: [0, 1], returns: [0] },
+  ] },
+};
+const CHECK_RUNNER = [
+  "import assert from \"node:assert/strict\";",
+  "import { resolve } from \"node:path\";",
+  "import { pathToFileURL } from \"node:url\";",
+  "const spec = JSON.parse(process.env.ACCEPTANCE_CHECK_SPEC);",
+  "const mod = await import(pathToFileURL(resolve(process.cwd(), spec.module)).href);",
+  "const freeze = (value) => (Array.isArray(value) ? Object.freeze(value.map(freeze)) : value);",
+  "const results = spec.cases.map((item) => {",
+  "  try {",
+  "    const actual = mod[item.fn](...(item.frozen ? item.args.map(freeze) : item.args));",
+  "    if (item.throws) return false;",
+  "    assert.deepStrictEqual(actual, item.returns);",
+  "    return true;",
+  "  } catch (error) { return Boolean(item.throws) && error instanceof RangeError; }",
+  "});",
+  "console.log(JSON.stringify(results));",
+].join("\n");
+/** True only when the worker's module passes every harness-defined case; any crash, hang or odd output fails. */
+export function runBusinessChecks(task, dir) {
+  const spec = BUSINESS_CHECKS[task];
+  if (!spec) return true;
+  const child = spawnSync(process.execPath, ["--input-type=module", "-e", CHECK_RUNNER], {
+    cwd: dir, encoding: "utf8", timeout: 15_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024,
+    env: { PATH: process.env.PATH ?? "", ACCEPTANCE_CHECK_SPEC: JSON.stringify(spec) },
+  });
+  if (child.status !== 0 || child.error) return false;
+  try {
+    const results = JSON.parse(child.stdout.trim().split("\n").at(-1) ?? "");
+    return Array.isArray(results) && results.length === spec.cases.length && results.every((value) => value === true);
+  } catch { return false; }
+}
+
+/** The state of one fixture as a digest: working tree, HEAD and index. Used to detect changes after a run. */
+export function fixtureStateSha256(dir) {
+  try {
+    const head = gitInFixture(dir, ["rev-parse", "--verify", "HEAD"]);
+    const index = gitInFixture(dir, ["ls-files", "-s", "-z"]);
+    if (!head || !index) return "unreadable";
+    return sha256(JSON.stringify({ manifest: manifestOf(dir, { skipGit: true }), head: head.toString("utf8").trim(), index: sha256(index) }));
+  } catch { return "unreadable"; }
+}
+const baselineFile = (priv, client, task) => join(priv, "baselines", client, `${task}.json`);
+const baselineReader = (priv, client) => (task) => { try { return readJson(baselineFile(priv, client, task)); } catch { return undefined; } };
+
+// ---- bound resources --------------------------------------------------------------------
+/**
+ * Digests of everything the acceptance relies on besides the fixtures' working trees: the candidate build,
+ * the controller skill copies, the worker skills, the override directory, the run configuration, the
+ * harness and the fixture baselines. Names are path-free so a mismatch can be reported as it is.
+ */
+/**
+ * Controller skills in the operator's home that a client could load instead of the run's own copy. Claude Code
+ * prefers a personal skill over a project skill of the same name; the controller runs with
+ * `--setting-sources project,local`, which on Claude Code 2.1.296 was observed to hide personal skills. Both
+ * copies are bound, so a change during the run is detected, and Codex is refused while its copy differs.
+ */
+export function operatorControllerSkills(home = homedir()) {
+  return {
+    operatorClaudeSkill: treeSha256(join(home, ".claude", "skills", "pi-session-orchestration")),
+    operatorCodexSkill: treeSha256(join(home, ".agents", "skills", "pi-session-orchestration")),
+  };
+}
+
+export function computeResources(run, candidate, home = homedir()) {
+  const priv = join(run, "private");
+  const codexLink = join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration");
+  const candidateSkill = join(candidate, "skills", "pi-session-orchestration");
+  let codexSkill = "missing";
+  try {
+    const target = readlinkSync(codexLink);
+    // The link must point at the candidate's own skill; its content is what the Codex controller reads.
+    codexSkill = resolve(dirname(codexLink), target) === candidateSkill ? sha256(`linked\0${treeSha256(candidateSkill)}`) : "wrongTarget";
+  } catch { /* stays missing */ }
+  let build = "missing";
+  try { build = sha256(`${sha256(readFileSync(join(candidate, "dist", "main.js")))}\n${distTreeSha256(candidate)}`); } catch { /* stays missing */ }
+  return {
+    candidateBuild: build,
+    controllerSkill: treeSha256(join(run, "controller-claude", ".claude", "skills", "pi-session-orchestration")),
+    codexControllerSkill: codexSkill,
+    workerSkillImplementation: treeSha256(join(candidate, "skills", "pi-session-implementation")),
+    workerSkillReview: treeSha256(join(candidate, "skills", "pi-session-review")),
+    handshakeSkill: treeSha256(join(priv, "skills", "acceptance-handshake")),
+    overrideDirectory: treeSha256(join(priv, "skills")),
+    runConfiguration: fileSha256(join(priv, "config.json")),
+    claudeMcpConfiguration: fileSha256(join(priv, "claude-mcp.json")),
+    fixtureBaselines: treeSha256(join(priv, "baselines")),
+    harness: HARNESS_SHA256,
+    ...operatorControllerSkills(home),
+  };
+}
+/** Names of the bound resources that differ from the recorded digests. */
+export function changedResources(recorded, current) {
+  return [...new Set([...Object.keys(recorded ?? {}), ...Object.keys(current)])].filter((name) => recorded?.[name] !== current[name]).sort();
+}
+function resourcesChangedSincePrepare(run, info) {
+  if (!info.resources) fail("the run has no recorded resource digests; prepare a new run");
+  return changedResources(info.resources, computeResources(run, info.candidate));
+}
+/** State at the end of a run: bound resources plus the fixtures of the scenario. A reanalysis must find the same. */
+export function endStateOf(run, info, client, scenario) {
+  const fixtures = Object.fromEntries(SCENARIOS[scenario].tasks.map((task) => [task, fixtureStateSha256(join(run, `controller-${client}`, "fixtures", task))]));
+  return { resources: computeResources(run, info.candidate), fixtures };
+}
+export function endStateChanges(recorded, current) {
+  const fixtures = [...new Set([...Object.keys(recorded?.fixtures ?? {}), ...Object.keys(current.fixtures)])].filter((task) => recorded?.fixtures?.[task] !== current.fixtures[task]).sort();
+  return { resources: changedResources(recorded?.resources, current.resources), fixtures };
+}
+
 // ---- prepare --------------------------------------------------------------------
-function prepare(values) {
+const EXTENSION_SPEC = /^npm:((?:@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/;
+/** The server's own rule for `extensions`: at most 8 exact `npm:<name>@<version>` pins, without duplicates. */
+export function parseExtensionAllowlist(list) {
+  if (!Array.isArray(list) || list.length === 0 || list.length > 8) fail("the source profile's extensions must be a list of 1 to 8 entries");
+  const parsed = list.map((spec) => {
+    const match = typeof spec === "string" && spec.length <= 256 ? EXTENSION_SPEC.exec(spec) : null;
+    if (!match) fail("every extension must be an exact npm:<name>@<version> pin");
+    return { spec, name: match[1], version: match[2] };
+  });
+  if (new Set(parsed.map((item) => item.name)).size !== parsed.length) fail("an extension is listed twice");
+  return parsed;
+}
+
+export function prepare(values) {
   if (!values.candidate || !values["base-config"] || !values["from-profile"]) fail("prepare needs --candidate, --base-config and --from-profile");
   const candidate = realpathSync(resolve(values.candidate));
   const entry = join(candidate, "dist", "main.js");
@@ -111,13 +367,16 @@ function prepare(values) {
   }
   const base = readJson(resolve(values["base-config"]));
   const source = base.executionProfiles?.[values["from-profile"]];
-  if (!source || source.extensions || source.mcpServers) fail("--from-profile must name a profile without extensions or MCP servers");
+  if (!source || source.mcpServers) fail("--from-profile must name an existing profile without MCP servers");
+  if (source.extensions && !values["with-extensions"]) fail("the profile has extensions; pass --with-extensions to copy exactly its allowlist, or choose another profile");
+  if (values["with-extensions"] && !source.extensions) fail("--with-extensions needs a profile that has extensions");
+  const extensions = values["with-extensions"] ? parseExtensionAllowlist(source.extensions) : undefined;
   const workDir = resolve(values["work-dir"] ?? join(homedir(), ".cache", "pi-session-mcp-acceptance"));
   if ([tmpdir(), "/tmp", "/var/tmp", "/dev/shm"].some((dir) => inside(workDir, dir))) fail("--work-dir must not be inside a temporary directory: Codex refuses helper binaries there");
   const runId = `skills-${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
   const run = join(workDir, runId);
   const priv = join(run, "private");
-  for (const dir of [priv, join(priv, "transcripts"), join(priv, "results"), join(priv, "skills", "acceptance-handshake")]) mkdirSync(dir, { recursive: true, mode: 0o700 });
+  for (const dir of [priv, join(priv, "transcripts"), join(priv, "results"), join(priv, "reanalyses"), join(priv, "baselines"), join(priv, "skills", "acceptance-handshake")]) mkdirSync(dir, { recursive: true, mode: 0o700 });
   const token = randomBytes(8).toString("hex");
   writeFileSync(join(priv, "skills", "acceptance-handshake", "SKILL.md"), [
     "---", "name: acceptance-handshake",
@@ -133,6 +392,9 @@ function prepare(values) {
       const dir = join(controller, "fixtures", task);
       mkdirSync(dir, { recursive: true });
       writeFixture(dir, FIXTURES[task]);
+      // The baseline lives beside the run, never inside the worker's workspace.
+      mkdirSync(join(priv, "baselines", client), { recursive: true, mode: 0o700 });
+      writeJson(baselineFile(priv, client, task), captureBaseline(dir));
       workspaces[`${prefix}-${task}`] = relative(priv, dir);
     }
   }
@@ -141,7 +403,7 @@ function prepare(values) {
   const codexSkills = join(run, "controller-codex", ".agents", "skills");
   mkdirSync(codexSkills, { recursive: true });
   symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(codexSkills, "pi-session-orchestration"));
-  const profile = { provider: source.provider, model: source.model, thinkingLevel: source.thinkingLevel };
+  const profile = { provider: source.provider, model: source.model, thinkingLevel: source.thinkingLevel, ...(extensions ? { extensions: extensions.map((item) => item.spec) } : {}) };
   const config = {
     workspaces,
     // Library references: the shipped worker skills, and the handshake skill from the override
@@ -160,7 +422,7 @@ function prepare(values) {
   writeFileSync(join(priv, "config.json"), configBytes, { mode: 0o600 });
   const node = process.execPath;
   writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: { PI_SESSION_MCP_CONFIG: join(priv, "config.json") } } } });
-  const claudeSkillSetup = installClaudeSkill(candidate, run, priv);
+  const claudeSkillSetup = installClaudeSkill(candidate, run, priv, Boolean(extensions));
   const packageJson = readJson(join(candidate, "package.json"));
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: candidate, encoding: "utf8" });
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: candidate, encoding: "utf8" });
@@ -174,7 +436,10 @@ function prepare(values) {
     harnessSha256: HARNESS_SHA256,
     configFingerprint: `sha256:${sha256(configBytes)}`,
     claudeSkillSetup,
-    profile: { from: values["from-profile"], ...profile },
+    profile: { from: values["from-profile"], provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel },
+    // Names and versions only; the pins themselves are what the configuration holds.
+    extensions: (extensions ?? []).map(({ name, version }) => ({ name, version })),
+    resources: computeResources(run, candidate),
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
@@ -186,13 +451,23 @@ function prepare(values) {
  * and the client's own files go to a disposable home, so no real registration changes; the
  * controller later runs with the real home and only reads the project skill.
  */
-function installClaudeSkill(candidate, run, priv) {
+/**
+ * The environment of the candidate's setup in its disposable home. Setup's Doctor resolves allowlisted
+ * extensions from Pi's install, which the disposable home lacks, so an extension profile gets the operator's
+ * Pi agent directory through `PI_CODING_AGENT_DIR`. Doctor only reads extension manifests there.
+ */
+export function setupEnvironment(home, path, configPath, withExtensions, env = process.env) {
+  const agentDir = env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+  return [`HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${configPath}`, ...(withExtensions ? [`PI_CODING_AGENT_DIR=${agentDir}`] : [])];
+}
+
+function installClaudeSkill(candidate, run, priv, withExtensions) {
   const home = join(run, "setup-home");
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const claude = spawnSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim();
   if (!claude) fail("claude is not on PATH");
   const path = [...new Set([dirname(process.execPath), dirname(claude), "/usr/bin", "/bin"])].join(":");
-  const setup = spawnSync("env", ["-i", `HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${join(priv, "config.json")}`,
+  const setup = spawnSync("env", ["-i", ...setupEnvironment(home, path, join(priv, "config.json"), withExtensions),
     process.execPath, join(candidate, "dist", "setup-main.js"), "--apply", "--json", "--target", "claude-code:project:pi-session-mcp"],
   { cwd: join(run, "controller-claude"), encoding: "utf8", timeout: 120_000 });
   let parsed; try { parsed = JSON.parse(setup.stdout); } catch { parsed = undefined; }
@@ -241,6 +516,8 @@ function command(client, info, priv, controller, values) {
   const text = prompt(client, values.scenario);
   if (client === "claude") {
     const allowed = [...TOOLS.map((tool) => `mcp__${SERVER}__${tool}`), "Read", "Grep", "Glob", "Bash(sleep:*)", "Bash(node --test:*)", "Bash(git -C:*)"];
+    // `--setting-sources project,local` also keeps a personal skill of the same name from shadowing the run's
+    // project copy (observed on Claude Code 2.1.296); see operatorControllerSkills.
     return { file: "claude", args: ["-p", text, "--mcp-config", join(priv, "claude-mcp.json"), "--strict-mcp-config", "--permission-mode", "dontAsk",
       "--allowedTools", ...allowed, "--setting-sources", "project,local", "--output-format", "stream-json", "--verbose", "--no-session-persistence"] };
   }
@@ -256,33 +533,196 @@ function command(client, info, priv, controller, values) {
 }
 
 // ---- process watching -------------------------------------------------------------
-function procInfo(pid) {
+export function procInfo(pid) {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
     const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
     const comm = stat.slice(stat.indexOf("(") + 1, stat.lastIndexOf(")"));
-    return { pid, ppid: Number(fields[1]), start: fields[19], comm };
+    return { pid, ppid: Number(fields[1]), pgrp: Number(fields[2]), state: fields[0], start: fields[19], comm };
   } catch { return undefined; }
 }
-const alive = ({ pid, start }) => procInfo(pid)?.start === start;
+/** Same process (PID and start time) and not a zombie: a zombie is terminated and holds nothing. */
+export const alive = ({ pid, start }) => { const now = procInfo(pid); return now?.start === start && now.state !== "Z"; };
 function readSafe(read) { try { return read(); } catch { return ""; } }
 
-function snapshot(rootPid, run, info) {
+/**
+ * The processes of the run: the controller's tree, the run's servers and processes working inside the run. With
+ * `rootStart` the controller is matched by PID and start time, so a PID that the kernel reuses after the client
+ * exited never makes a foreign process, or its children, the run's own.
+ */
+export function snapshot(rootPid, run, info, rootStart) {
   const all = new Map();
   for (const name of readdirSync("/proc")) if (/^\d+$/.test(name)) { const p = procInfo(Number(name)); if (p) all.set(p.pid, p); }
+  const isRoot = (pid) => pid === rootPid && (rootStart === undefined || all.get(pid)?.start === rootStart);
   const found = [];
   for (const p of all.values()) {
-    let ancestor = p.ppid; let fromClient = p.pid === rootPid;
-    for (let hops = 0; ancestor > 1 && hops < 64 && !fromClient; hops += 1) { if (ancestor === rootPid) fromClient = true; ancestor = all.get(ancestor)?.ppid ?? 0; }
+    let ancestor = p.ppid; let fromClient = isRoot(p.pid);
+    for (let hops = 0; ancestor > 1 && hops < 64 && !fromClient; hops += 1) { if (isRoot(ancestor)) fromClient = true; ancestor = all.get(ancestor)?.ppid ?? 0; }
     const cmdline = readSafe(() => readFileSync(`/proc/${p.pid}/cmdline`, "utf8"));
     const isServer = cmdline.includes(info.entry) && readSafe(() => readFileSync(`/proc/${p.pid}/environ`, "utf8")).split("\0").includes(`PI_SESSION_MCP_CONFIG=${join(run, "private", "config.json")}`);
     const cwd = readSafe(() => readlinkSync(`/proc/${p.pid}/cwd`));
     const inRun = cwd !== "" && inside(cwd, run);
     // The fixture a process works in, for example `wait` for the worker's long shell command.
     const fixture = inRun ? relative(run, cwd).split("/").slice(1).join("/").match(/^fixtures\/([a-z]+)/)?.[1] : undefined;
-    if (fromClient || isServer || inRun) found.push({ ...p, fixture, role: isServer ? "server" : p.pid === rootPid ? "client" : fromClient ? "client-descendant" : "run-cwd" });
+    if (fromClient || isServer || inRun) found.push({ ...p, fixture, role: isServer ? "server" : isRoot(p.pid) ? "client" : fromClient ? "client-descendant" : "run-cwd" });
   }
   return found;
+}
+
+// ---- bounded supervision of the controller ------------------------------------------
+export const DEFAULT_TIMEOUT_MIN = 25;
+export const MAX_TIMEOUT_MIN = 180;
+/** [min, max] in milliseconds; the maximum stays below the 2^31-1 ms timer limit. */
+const BUDGET_LIMITS = { timeoutMs: [100, MAX_TIMEOUT_MIN * 60_000], graceMs: [0, 600_000], killWaitMs: [0, 60_000], drainMs: [0, 60_000], intervalMs: [10, 60_000] };
+const DEFAULT_BUDGETS = { graceMs: 10_000, killWaitMs: 3_000, drainMs: 3_000, intervalMs: 250 };
+/** Fills defaults and rejects any budget that is not a finite integer inside its range. */
+export function validateBudgets(budgets) {
+  const merged = { ...DEFAULT_BUDGETS, ...budgets };
+  for (const [name, [min, max]] of Object.entries(BUDGET_LIMITS)) {
+    const value = merged[name];
+    if (!Number.isInteger(value) || value < min || value > max) fail(`invalid budget ${name}: must be an integer from ${min} to ${max} ms`);
+  }
+  return merged;
+}
+/** `--timeout-min`: a finite number of minutes above 0, at most MAX_TIMEOUT_MIN; the default applies when absent. */
+export function parseTimeoutMinutes(value) {
+  if (value === undefined) return DEFAULT_TIMEOUT_MIN;
+  if (!/^\d+(\.\d+)?$/.test(value)) fail("--timeout-min must be a positive number of minutes");
+  const minutes = Number(value);
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > MAX_TIMEOUT_MIN) fail(`--timeout-min must be above 0 and at most ${MAX_TIMEOUT_MIN}`);
+  return minutes;
+}
+
+/** Members of a process group that started at or after `notBefore` (clock ticks): the group cannot predate its leader. */
+function groupMembers(pgid, notBefore) {
+  if (notBefore === undefined) return [];
+  const found = [];
+  for (const name of readSafe(() => readdirSync("/proc")) || []) {
+    if (!/^\d+$/.test(name)) continue;
+    const p = procInfo(Number(name));
+    if (p && p.pgrp === pgid && p.state !== "Z" && Number(p.start) >= Number(notBefore)) found.push(p);
+  }
+  return found;
+}
+/**
+ * A recorded process is this run's own to kill when it was found through the controller's process tree or as
+ * this run's server. A process that merely has its working directory inside the run is only reported, since
+ * an operator's shell could be there too.
+ */
+const ownedByRun = (p) => p.pid !== process.pid && ["client", "client-descendant", "server"].includes(p.role);
+const ROLE_RANK = { "run-cwd": 0, "client-descendant": 1, client: 2, server: 3 };
+/**
+ * A later sighting of the same process (PID and start time) never loses what an earlier one established. A server
+ * that is exiting, or a zombie that its client has not reaped yet, has no command line, environment or working
+ * directory left to read, so a sweep in that window sees it only as a descendant of the client. A descendant that
+ * outlives the client is reparented and would otherwise be found only through its working directory, which is
+ * never killed.
+ */
+export function mergeSighting(earlier, later) {
+  if (!earlier) return later;
+  const role = ROLE_RANK[earlier.role] > ROLE_RANK[later.role] ? earlier.role : later.role;
+  return { ...later, role, fixture: later.fixture ?? earlier.fixture };
+}
+/** SIGKILL for recorded processes that still have the recorded PID and start time. Never by name. */
+export function killRecorded(list) {
+  let killed = 0;
+  for (const p of list) {
+    if (!ownedByRun(p) || !alive(p)) continue;
+    try { process.kill(p.pid, "SIGKILL"); killed += 1; } catch { /* gone in between */ }
+  }
+  return killed;
+}
+
+/**
+ * Runs a client in its own process group and returns when it is done, always within the budgets:
+ * the timeout, then (after SIGTERM and `graceMs`) SIGKILL for the group and every recorded process of the
+ * run, then `killWaitMs`, then `drainMs` for the output pipes, which are destroyed when a descendant keeps
+ * them open. A spawn failure and SIGINT/SIGTERM delivered to the harness (through `signals`) end the run the
+ * same way and are classified. Every timer, interval and listener is gone when the promise settles.
+ *
+ * `scan(rootPid, rootStart)` lists the processes belonging to the run; the interval records them by PID and
+ * start time. Without the client's start time nothing is recorded, since its PID alone proves nothing.
+ */
+export async function superviseProcess({ file, args = [], cwd, env, budgets = {}, scan = () => [], signals = process }) {
+  const b = validateBudgets(budgets);
+  const started = Date.now();
+  const chunks = []; let stderrBytes = 0;
+  const seen = new Map();
+  const timers = new Set();
+  const state = { exited: false, exitCode: null, spawned: false, timedOut: false, spawnFailed: false, harnessAborted: false, abortSignal: undefined, unterminated: false, drainDestroyed: false };
+  const finish = () => ({
+    output: Buffer.concat(chunks), stderrBytes, exitCode: state.exitCode, timedOut: state.timedOut, spawnFailed: state.spawnFailed,
+    harnessAborted: state.harnessAborted, abortSignal: state.abortSignal, unterminated: state.unterminated, drainDestroyed: state.drainDestroyed,
+    seen, elapsedMs: Date.now() - started,
+  });
+  let child;
+  try { child = spawn(file, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true }); } catch { state.spawnFailed = true; return finish(); }
+  const pgid = child.pid;
+  const childStart = pgid === undefined ? undefined : procInfo(pgid)?.start;
+  const noop = () => {};
+  child.stdout.on("data", (chunk) => chunks.push(chunk)); child.stdout.on("error", noop);
+  child.stderr.on("data", (chunk) => { stderrBytes += chunk.length; }); child.stderr.on("error", noop);
+  let closed = false;
+  const closedEvent = new Promise((done) => child.once("close", () => { closed = true; done(); }));
+  const exitedEvent = new Promise((done) => {
+    child.once("spawn", () => { state.spawned = true; });
+    child.once("exit", (code, signal) => { state.exited = true; state.exitCode = code ?? signal; done(); });
+    // Kept after the first event: a later 'error' on a ChildProcess without a listener would throw.
+    child.on("error", () => { if (!state.spawned && !state.exited) { state.spawnFailed = true; state.exited = true; done(); } });
+  });
+  const sleep = (ms) => new Promise((done) => { const t = setTimeout(() => { timers.delete(t); done(); }, ms); timers.add(t); });
+  const until = async (predicate, ms) => {
+    const deadline = Date.now() + ms;
+    while (!predicate()) { if (Date.now() >= deadline) return false; await sleep(Math.min(50, Math.max(1, deadline - Date.now()))); }
+    return true;
+  };
+  const within = (promise, ms) => new Promise((done) => { const t = setTimeout(() => { timers.delete(t); done(false); }, ms); timers.add(t); promise.then(() => { clearTimeout(t); timers.delete(t); done(true); }); });
+  const sweep = () => {
+    if (pgid === undefined || childStart === undefined) return;
+    try { for (const p of scan(pgid, childStart)) { const key = `${p.pid}:${p.start}`; seen.set(key, mergeSighting(seen.get(key), p)); } } catch { /* a racing /proc read */ }
+  };
+  const ownAlive = () => [...seen.values()].filter((p) => ownedByRun(p) && alive(p));
+  const gone = () => state.exited && groupMembers(pgid, childStart).length === 0 && ownAlive().length === 0;
+  const signalGroup = (signal) => {
+    if (pgid === undefined || (state.exited && groupMembers(pgid, childStart).length === 0)) return;
+    try { process.kill(-pgid, signal); } catch { /* group already gone */ }
+  };
+  let skipGrace = false; let terminating; let terminationDone = () => {};
+  const terminated = new Promise((done) => { terminationDone = done; });
+  /** SIGTERM to the group, a bounded grace period, then SIGKILL for the group and the recorded processes of the run. */
+  const terminate = () => (terminating ??= (async () => {
+    signalGroup("SIGTERM");
+    await until(() => skipGrace || gone(), b.graceMs);
+    if (!gone()) { sweep(); signalGroup("SIGKILL"); killRecorded([...seen.values()]); await until(gone, b.killWaitMs); }
+    terminationDone();
+  })());
+  const watch = pgid === undefined ? undefined : setInterval(sweep, b.intervalMs);
+  const limit = setTimeout(() => { state.timedOut = true; void terminate(); }, b.timeoutMs);
+  const onSignal = (signal) => {
+    if (state.spawnFailed) return;
+    if (state.harnessAborted) { skipGrace = true; return; }
+    state.harnessAborted = true; state.abortSignal = signal; void terminate();
+  };
+  const onInt = () => onSignal("SIGINT"); const onTerm = () => onSignal("SIGTERM");
+  signals.on("SIGINT", onInt); signals.on("SIGTERM", onTerm);
+  try {
+    // The escalation is bounded, so a client that cannot be reaped still ends the wait (`unterminated`).
+    await Promise.race([exitedEvent, terminated]);
+    clearTimeout(limit);
+    if (terminating) await terminating;
+    // `exit` does not mean the pipes are closed: a descendant may hold them. Give the output a bounded drain.
+    if (!state.spawnFailed) {
+      if (!(await within(closedEvent, b.drainMs)) && !closed) state.drainDestroyed = true;
+    }
+    child.stdout.destroy(); child.stderr.destroy();
+    if (!state.exited) state.unterminated = true;
+    sweep();
+    return finish();
+  } finally {
+    clearInterval(watch); clearTimeout(limit);
+    for (const t of timers) clearTimeout(t);
+    signals.off("SIGINT", onInt); signals.off("SIGTERM", onTerm);
+  }
 }
 
 // ---- transcript parsing ---------------------------------------------------------------
@@ -307,7 +747,7 @@ function controllerActions(client, lines) {
   return actions;
 }
 
-function toolCalls(client, lines) {
+export function toolCalls(client, lines) {
   const calls = [];
   const pending = new Map();
   for (const line of lines) {
@@ -331,19 +771,26 @@ function toolCalls(client, lines) {
   return calls;
 }
 
-function analyze(client, scenario, calls, info, rawText) {
+export function analyze(client, scenario, calls, info, rawText) {
   const p = CLIENTS[client];
   const counts = Object.fromEntries(TOOLS.map((tool) => [tool, calls.filter((call) => call.tool === tool).length]));
   const capabilities = calls.find((call) => call.tool === "pi_capabilities_get" && call.result?.ok)?.result;
   const code = capabilities?.executionProfiles?.find((profile) => profile.alias === "accept-code");
   const sessions = new Map();
-  for (const call of calls) if (call.tool === "pi_session_start" && call.result?.ok) sessions.set(call.result.session.id, { workspace: call.result.session.workspace, profile: call.result.session.executionProfile, turns: new Map(), closed: false, aborts: [], abortedSeenAt: undefined, closedAt: undefined, polls: 0 });
+  for (const call of calls) if (call.tool === "pi_session_start" && call.result?.ok) sessions.set(call.result.session.id, { workspace: call.result.session.workspace, profile: call.result.session.executionProfile, turns: new Map(), closed: false, aborts: [], abortedSeenAt: undefined, closedAt: undefined, polls: 0, liveness: new Map() });
   calls.forEach((call, index) => {
     const session = sessions.get(call.input?.sessionId);
     if (!session) return;
     const turn = call.result?.turn;
     if (turn?.turnId) session.turns.set(turn.turnId, { ...(session.turns.get(turn.turnId) ?? {}), ...turn });
     if (call.tool === "pi_turn_get") session.polls += 1;
+    // Liveness: does `updatedAt` move past `startedAt` while the turn is still `running`? An observation, not a criterion.
+    if (call.tool === "pi_turn_get" && turn?.turnId && turn.state === "running") {
+      const live = session.liveness.get(turn.turnId) ?? { runningPolls: 0, updatedAtAdvancedWhileRunning: false };
+      live.runningPolls += 1;
+      if (Date.parse(turn.updatedAt) > Date.parse(turn.startedAt)) live.updatedAtAdvancedWhileRunning = true;
+      session.liveness.set(turn.turnId, live);
+    }
     if (call.tool === "pi_turn_get" && turn?.state === "aborted") session.abortedSeenAt ??= index;
     if (call.tool === "pi_session_close" && call.result?.ok) { session.closed = true; session.closedAt ??= index; }
     // Every abort result in order: an abort_timeout followed by a successful retry stays visible.
@@ -372,7 +819,8 @@ function analyze(client, scenario, calls, info, rawText) {
     acceptCodeSkills: code?.skills,
     toolCalls: counts,
     sessionsStarted: sessions.size,
-    sessions: [...sessions.values()].map((session) => ({ workspace: session.workspace, profile: session.profile, turns: turnsOf(session).map((turn) => turn.state), polls: session.polls, aborts: session.aborts, closed: session.closed })),
+    sessions: [...sessions.values()].map((session) => ({ workspace: session.workspace, profile: session.profile, turns: turnsOf(session).map((turn) => turn.state), polls: session.polls, aborts: session.aborts, closed: session.closed,
+      turnLiveness: turnsOf(session).map((turn) => session.liveness.get(turn.turnId) ?? { runningPolls: 0, updatedAtAdvancedWhileRunning: false }) })),
     firstTurnsOverlapSeconds: Number.isFinite(overlapMs) ? Math.round(overlapMs / 100) / 10 : undefined,
     firstTurnsOverlap: Number.isFinite(overlapMs) && overlapMs > 0,
     tokenInControllerPrompts: prompts.some((text) => text.includes(info.token)),
@@ -403,25 +851,29 @@ function analyze(client, scenario, calls, info, rawText) {
 }
 
 /** Whether a file was last written inside one of the worker turns (1 s tolerance for clock granularity). */
-function writtenDuring(path, intervals) {
+export function writtenDuring(path, intervals) {
   const mtime = readSafe(() => statSync(path).mtimeMs);
   return typeof mtime === "number" && intervals.some(([start, end]) => end !== undefined && mtime >= Date.parse(start) - 1_000 && mtime <= Date.parse(end) + 1_000);
 }
 
-function oracle(controller, scenario, info, intervals = {}) {
+export function oracle(controller, scenario, info, intervals = {}, baselineOf = () => undefined) {
   const out = {};
   for (const task of SCENARIOS[scenario].tasks) {
     const dir = join(controller, "fixtures", task);
-    const changed = git(dir, "status", "--porcelain", "--untracked-files=all").split("\n").filter(Boolean).map((line) => line.slice(3));
-    const check = { onlyAllowedChanges: changed.every((file) => ALLOWED_CHANGES[task].includes(file)), changedFiles: changed.length };
+    // Against the fixed baseline: working tree, HEAD and index. `git status` alone misses committed changes.
+    const comparison = compareToBaseline(dir, baselineOf(task), ALLOWED_CHANGES[task]);
+    const changed = [...comparison.changed];
+    const check = { onlyAllowedChanges: comparison.ok, baselineError: comparison.error, changedFiles: changed.length, changeSources: comparison.sources };
     // Attribution: every changed file was last written during a worker turn of this task's session.
     check.changesWrittenDuringWorkerTurns = changed.every((file) => writtenDuring(join(dir, file), intervals[task] ?? []));
     if (task !== "wait") {
-      const test = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8", timeout: 60_000 });
+      const test = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
       check.testsPass = test.status === 0;
+      // The worker may edit the tests it is judged by, so the harness brings its own cases.
+      check.businessChecks = runBusinessChecks(task, dir);
     }
     if (task === "slug") {
-      const tests = readFileSync(join(dir, "test", "slug.test.js"), "utf8").match(/\btest\(/g)?.length ?? 0;
+      const tests = readSafe(() => readFileSync(join(dir, "test", "slug.test.js"), "utf8")).match(/\btest\(/g)?.length ?? 0;
       check.addedTest = tests > 3;
       check.handshake = readSafe(() => readFileSync(join(dir, "HANDSHAKE.txt"), "utf8")).trim() === `handshake ${info.token}`;
       check.handshakeWrittenDuringFollowUp = writtenDuring(join(dir, "HANDSHAKE.txt"), (intervals.slug ?? []).slice(1));
@@ -432,66 +884,190 @@ function oracle(controller, scenario, info, intervals = {}) {
   return out;
 }
 
-async function runClient(values) {
+/**
+ * The mechanical pass criteria of docs/acceptance.md for one result, as stable path-free codes. `passed` is
+ * true only when no code is listed; a changed resource, or a reanalysis whose state differs from the end of
+ * the original run, never passes.
+ */
+export function evaluateAcceptance(result, scenario) {
+  const failures = [];
+  const need = (ok, code) => { if (!ok) failures.push(code); };
+  const t = result.transcript ?? {};
+  const prefix = CLIENTS[result.client];
+  need(result.exitCode === 0, "controllerExit");
+  need(!result.timedOut, "timedOut");
+  need(!result.spawnFailed, "spawnFailed");
+  need(!result.harnessAborted, "harnessAborted");
+  need(!result.analysisFailed, "analysisFailed");
+  need(result.resources?.changedAfterRun?.length === 0, "resourcesChanged");
+  need(!result.reanalysis || (result.reanalysis.stateChanges?.resources?.length === 0 && result.reanalysis.stateChanges?.fixtures?.length === 0), "stateChangedSinceRun");
+  need((result.processes?.serversObserved ?? 0) >= 1, "noServerObserved");
+  need(Object.keys(result.processes?.residualByRole ?? {}).length === 0, "residualProcesses");
+  need(t.capabilitiesFirst === true, "capabilitiesNotFirst");
+  need(t.candidateConfirmed === true, "candidateNotConfirmed");
+  need(JSON.stringify(t.acceptCodeSkills) === JSON.stringify(["implementation", "handshake"]), "workerSkills");
+  need(t.structuralLeaks === 0, "structuralLeaks");
+  need(t.tokenInControllerPrompts === false && t.tokenInControllerTask === false && t.controllerTranscriptHasToken === false, "tokenExposed");
+  need(t.privateMarkersInWorkerPrompts === false && t.controllerTouchedPrivate === false, "privateAccess");
+  need((t.sessionsStarted ?? 0) >= 2 && (t.sessions ?? []).every((session) => session.closed), "sessionsNotClosed");
+  const state = (name) => t.sessions?.find((session) => session.workspace === `${prefix}-${name}`)?.turns?.[0];
+  if (scenario === "parallel") {
+    need(state("slug") === "completed" && state("stats") === "completed", "firstTurnsNotCompleted");
+    need(t.firstTurnsOverlap === true, "noOverlap");
+    need(t.followUpCompleted === true, "followUpNotCompleted");
+  } else {
+    need(t.abortedTurn === true && t.abortOk === true, "abortFailed");
+    need(t.abortedBeforeClose === true && t.abortBeforeAbortedSeen === true, "abortOrder");
+    need(t.neighborCompleted === true && t.abortWhileNeighborRunning === true, "neighborNotRunningDuringAbort");
+  }
+  for (const [task, check] of Object.entries(result.oracle ?? {})) {
+    need(check.onlyAllowedChanges === true, `${task}:changes`);
+    need(check.changesWrittenDuringWorkerTurns === true, `${task}:attribution`);
+    if (task !== "wait") need(check.testsPass === true && check.businessChecks === true, `${task}:tests`);
+    if (task === "slug") need(check.addedTest === true && check.handshake === true && check.handshakeWrittenDuringFollowUp === true, "slug:followUp");
+    if (task === "wait") need(check.lateFileAbsent === true, "wait:lateFile");
+  }
+  need(Object.keys(result.oracle ?? {}).length === SCENARIOS[scenario].tasks.length, "oracleMissing");
+  return { passed: failures.length === 0, failures };
+}
+
+const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
+
+/** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code) } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
+  const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
+  validateBudgets({ ...budgets, timeoutMs });
   const run = realpathSync(resolve(values.run));
   const priv = join(run, "private");
   const info = readJson(join(priv, "run.json"));
   const controller = join(run, `controller-${values.client}`);
   const label = `${values.client}-${values.scenario}`;
   sameHarness(info);
-  if (existsSync(join(priv, "results", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
-  if (sha256(readFileSync(info.entry)) !== info.entrySha256 || distTreeSha256(info.candidate) !== info.distSha256) fail("the candidate build changed since prepare");
+  if (existsSync(join(priv, "results", `${label}.json`)) || existsSync(join(priv, "launches", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
+  const baselineOf = baselineReader(priv, values.client);
+  // Codex's precedence between a home skill and the run's repository skill is not established, so a differing
+  // home copy refuses the run instead of leaving open which skill the controller read.
+  if (values.client === "codex") {
+    const home = operatorControllerSkills().operatorCodexSkill;
+    if (home !== "missing" && home !== treeSha256(join(info.candidate, "skills", "pi-session-orchestration"))) fail("a pi-session-orchestration skill in the home's Codex skills differs from the candidate's; Codex could read it instead, so this run is refused");
+  }
+  // Everything bound at prepare must be unchanged before the controller starts; the fixtures must still be pristine.
+  const changedBefore = resourcesChangedSincePrepare(run, info);
+  if (changedBefore.length > 0) fail(`resourcesChanged: ${JSON.stringify(changedBefore)}`);
+  const dirtyFixtures = SCENARIOS[values.scenario].tasks.filter((task) => {
+    const comparison = compareToBaseline(join(controller, "fixtures", task), baselineOf(task), []);
+    return !comparison.ok || comparison.changed.size > 0;
+  });
+  if (dirtyFixtures.length > 0) fail(`fixturesChanged: ${JSON.stringify(dirtyFixtures)}`);
   const before = snapshot(-1, run, info).filter((p) => p.role === "server");
   if (before.length > 0) fail("a server of this run is already running");
   const { file, args } = command(values.client, info, priv, controller, values);
   const transcript = join(priv, "transcripts", `${label}.jsonl`);
-  const started = Date.now();
-  const child = spawn(file, args, { cwd: controller, stdio: ["ignore", "pipe", "pipe"], detached: true });
-  const chunks = []; let stderrBytes = 0;
-  child.stdout.on("data", (chunk) => chunks.push(chunk));
-  child.stderr.on("data", (chunk) => { stderrBytes += chunk.length; });
-  const seen = new Map();
-  const timer = setInterval(() => { for (const p of snapshot(child.pid, run, info)) seen.set(`${p.pid}:${p.start}`, p); }, 250);
-  let timedOut = false;
-  const limit = setTimeout(() => { timedOut = true; try { process.kill(-child.pid, "SIGTERM"); } catch { /* already gone */ } }, Number(values["timeout-min"] ?? 25) * 60_000);
-  const exitCode = await new Promise((done) => child.on("close", (code, signal) => done(code ?? signal)));
-  clearTimeout(limit);
-  clearInterval(timer);
-  const durationSeconds = Math.round((Date.now() - started) / 1000);
-  writeFileSync(transcript, Buffer.concat(chunks), { mode: 0o600 });
+  // A launch is on record before the controller starts, so an attempt that ends without a result is never repeated silently.
+  mkdirSync(join(priv, "launches"), { recursive: true, mode: 0o700 });
+  writeJsonOnce(join(priv, "launches", `${label}.json`), { launchedAt: new Date().toISOString() });
+  const supervised = await superviseProcess({
+    file, args, cwd: controller, budgets: { ...budgets, timeoutMs }, signals,
+    scan: (rootPid, rootStart) => snapshot(rootPid, run, info, rootStart),
+  });
+  const { seen } = supervised;
+  const durationSeconds = Math.round(supervised.elapsedMs / 1000);
+  const resultPath = join(priv, "results", `${label}.json`);
+  let residual = [];
+  /** The result of an analysis that did not finish: on record, and it never passes. */
+  const unfinished = (signal) => {
+    const result = {
+      client: values.client, scenario: values.scenario, exitCode: supervised.exitCode,
+      timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted || signal !== undefined,
+      durationSeconds, stderrBytes: supervised.stderrBytes, analysisFailed: true,
+    };
+    // The first signal that ended the run stays the recorded one.
+    if (supervised.abortSignal ?? signal) result.abortSignal = supervised.abortSignal ?? signal;
+    if (supervised.unterminated) result.unterminated = true;
+    if (supervised.drainDestroyed) result.drainDestroyed = true;
+    const failures = Object.entries({ timedOut: result.timedOut, spawnFailed: result.spawnFailed, harnessAborted: result.harnessAborted }).filter(([, set]) => set).map(([code]) => code);
+    result.acceptance = { passed: false, failures: [...failures, "analysisFailed"] };
+    return result;
+  };
+  // superviseProcess has removed its signal listeners. A signal during the analysis would otherwise end the
+  // harness without a result and without cleanup, and the launch record would then block a new attempt.
+  let interrupted;
+  const onSignal = (signal) => {
+    if (interrupted) return;
+    interrupted = unfinished(signal);
+    try { writeJsonOnce(resultPath, interrupted); }
+    finally { killRecorded([...seen.values(), ...residual]); exit(1); }
+  };
+  const onInt = () => onSignal("SIGINT"); const onTerm = () => onSignal("SIGTERM");
+  signals.on("SIGINT", onInt); signals.on("SIGTERM", onTerm);
+  try {
+    let result;
+    try {
+      result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: (list) => { residual = list; } });
+    } catch {
+      // A crash of the analysis still leaves a result on record, and it never passes.
+      result = unfinished();
+    }
+    // Only reachable when `exit` returns, as in the tests: the interrupted result is already on record.
+    if (interrupted) return interrupted;
+    try { writeJsonOnce(resultPath, result); }
+    // Leftovers are on record now; do not leave this run's own processes behind, also when the analysis failed.
+    finally { killRecorded([...seen.values(), ...residual]); }
+    return result;
+  } finally {
+    signals.off("SIGINT", onInt); signals.off("SIGTERM", onTerm);
+  }
+}
+
+/** Everything after the supervised controller: transcript, residual processes, transcript analysis, oracles and verdict. */
+async function analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: reportResidual }) {
+  const { seen } = supervised;
+  writeFileSync(transcript, supervised.output, { mode: 0o600 });
   // Cleanup: every process this run started must be gone, matched by PID and start time.
   let residual = [];
   // The server may take up to 15 s for its bounded process shutdown.
-  for (let waited = 0; waited <= 17_000; waited += 500) {
+  for (let waited = 0; waited <= 17_000 && !supervised.spawnFailed; waited += 500) {
     residual = [...seen.values()].filter(alive).concat(snapshot(-1, run, info).filter((p) => !seen.has(`${p.pid}:${p.start}`)));
+    reportResidual(residual);
     if (residual.length === 0) break;
     await new Promise((done) => setTimeout(done, 500));
   }
-  const rawText = Buffer.concat(chunks).toString("utf8");
+  const rawText = supervised.output.toString("utf8");
   const calls = toolCalls(values.client, rawText.split("\n"));
-  const roles = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
   const observed = [...seen.values()];
   const result = {
-    client: values.client, scenario: values.scenario, exitCode, timedOut, durationSeconds, stderrBytes,
+    client: values.client, scenario: values.scenario, exitCode: supervised.exitCode,
+    timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted,
+    durationSeconds, stderrBytes: supervised.stderrBytes,
     processes: {
-      observedByRole: roles(observed),
+      observedByRole: roleCounts(observed),
       serversObserved: observed.filter((p) => p.role === "server").length,
       workerSleepObserved: observed.some((p) => p.comm === "sleep" && p.fixture === "wait"),
-      residualByRole: roles(residual),
+      residualByRole: roleCounts(residual),
       residualCommands: [...new Set(residual.map((p) => p.comm))],
     },
     transcript: analyze(values.client, values.scenario, calls, info, rawText),
   };
-  result.oracle = oracle(controller, values.scenario, info, result.transcript.turnIntervals);
+  if (supervised.abortSignal) result.abortSignal = supervised.abortSignal;
+  if (supervised.unterminated) result.unterminated = true;
+  if (supervised.drainDestroyed) result.drainDestroyed = true;
+  result.oracle = oracle(controller, values.scenario, info, result.transcript.turnIntervals, baselineOf);
   delete result.transcript.turnIntervals;
-  writeJson(join(priv, "results", `${label}.json`), result);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  // Recheck after the controller finished: a change since prepare must never be accepted.
+  result.resources = { changedBeforeLaunch: [], changedAfterRun: resourcesChangedSincePrepare(run, info) };
+  result.endState = endStateOf(run, info, values.client, values.scenario);
+  result.acceptance = evaluateAcceptance(result, values.scenario);
+  return result;
 }
 
-/** Recomputes the transcript analysis and the oracles of a finished run; the process record is kept. */
-function reanalyze(values) {
+/**
+ * Recomputes the transcript analysis and the oracles of a finished run without touching the original result: the
+ * outcome goes to a separate file. A reanalysis whose fixtures or bound resources differ from the state recorded
+ * at the end of the original run is marked and cannot pass.
+ */
+export function reanalyze(values) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("reanalyze needs --run, --client and --scenario");
   const run = realpathSync(resolve(values.run));
   const priv = join(run, "private");
@@ -502,37 +1078,68 @@ function reanalyze(values) {
   const rawText = readFileSync(join(priv, "transcripts", `${label}.jsonl`), "utf8");
   const calls = toolCalls(values.client, rawText.split("\n"));
   const transcript = analyze(values.client, values.scenario, calls, info, rawText);
-  const result = { ...stored, transcript, oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info, transcript.turnIntervals) };
+  const stateChanges = endStateChanges(stored.endState, endStateOf(run, info, values.client, values.scenario));
+  const result = {
+    ...stored, transcript,
+    oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info, transcript.turnIntervals, baselineReader(priv, values.client)),
+    resources: { changedBeforeLaunch: stored.resources?.changedBeforeLaunch ?? [], changedAfterRun: resourcesChangedSincePrepare(run, info) },
+    reanalysis: { of: label, stateChanges, analyzedAt: new Date().toISOString() },
+  };
   delete transcript.turnIntervals;
-  writeJson(join(priv, "results", `${label}.json`), result);
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  delete result.endState;
+  result.acceptance = evaluateAcceptance(result, values.scenario);
+  mkdirSync(join(priv, "reanalyses"), { recursive: true, mode: 0o700 });
+  // A new file per reanalysis; `wx` never replaces an earlier one.
+  for (let n = 1; ; n += 1) {
+    try { writeJsonOnce(join(priv, "reanalyses", `${label}-${String(n).padStart(3, "0")}.json`), result); break; }
+    catch (error) { if (error?.code !== "EEXIST") throw error; }
+  }
+  return result;
 }
 
-function evidence(values) {
+/** The sanitized record: original results first, reanalyses listed separately, and every launch with whether it left a result. */
+export function evidence(values) {
   if (!values.run || !values.out) fail("evidence needs --run and --out");
   const priv = join(resolve(values.run), "private");
   const info = readJson(join(priv, "run.json"));
-  const results = readdirSync(join(priv, "results")).sort().map((name) => readJson(join(priv, "results", name)));
+  const list = (dir) => (existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".json")).sort().map((name) => ({ name, value: readJson(join(dir, name)) })) : []);
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
     sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, distSha256: info.distSha256, harnessSha256: info.harnessSha256,
     configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
-    results,
+    extensions: info.extensions ?? [], resources: info.resources,
+    results: list(join(priv, "results")).map(({ value }) => value),
+    reanalyses: list(join(priv, "reanalyses")).map(({ name, value }) => ({ file: name.replace(/\.json$/, ""), ...value })),
+    // A launch without a result (a killed harness, an out-of-memory end) stays visible in the published record.
+    launches: list(join(priv, "launches")).map(({ name, value }) => ({ label: name.replace(/\.json$/, ""), launchedAt: value.launchedAt, hasResult: existsSync(join(priv, "results", name)) })),
   }, null, 2);
   for (const marker of [homedir(), info.token, info.candidate, resolve(values.run)]) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
   writeFileSync(resolve(values.out), `${text}\n`);
 }
 
-const [subcommand, ...rest] = process.argv.slice(2);
-let values;
-try {
-  ({ values } = parseArgs({ args: rest, options: {
-    candidate: { type: "string" }, "base-config": { type: "string" }, "from-profile": { type: "string" }, "work-dir": { type: "string" },
-    run: { type: "string" }, client: { type: "string" }, scenario: { type: "string" }, "timeout-min": { type: "string" }, "codex-model": { type: "string" }, out: { type: "string" },
-  } }));
-} catch (error) { fail(error.message); }
-if (subcommand === "prepare") prepare(values);
-else if (subcommand === "run") await runClient(values);
-else if (subcommand === "reanalyze") reanalyze(values);
-else if (subcommand === "evidence") evidence(values);
-else fail("usage: multi-session-acceptance.mjs prepare|run|evidence ...");
+const OPTIONS = {
+  candidate: { type: "string" }, "base-config": { type: "string" }, "from-profile": { type: "string" }, "work-dir": { type: "string" }, "with-extensions": { type: "boolean" },
+  run: { type: "string" }, client: { type: "string" }, scenario: { type: "string" }, "timeout-min": { type: "string" }, "codex-model": { type: "string" }, out: { type: "string" },
+};
+async function main(argv) {
+  const [subcommand, ...rest] = argv;
+  let values;
+  try { ({ values } = parseArgs({ args: rest, options: OPTIONS })); } catch (error) { fail(error.message); }
+  if (subcommand === "prepare") prepare(values);
+  else if (subcommand === "run") {
+    const result = await runClient(values);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    // A run that ended through the supervisor's own timeout, spawn failure or abort is not a clean finish.
+    if (result.timedOut || result.spawnFailed || result.harnessAborted || result.analysisFailed) process.exitCode = 1;
+  } else if (subcommand === "reanalyze") process.stdout.write(`${JSON.stringify(reanalyze(values), null, 2)}\n`);
+  else if (subcommand === "evidence") evidence(values);
+  else fail("usage: multi-session-acceptance.mjs prepare|run|reanalyze|evidence ...");
+}
+const entryPath = process.argv[1] === undefined ? undefined : readSafe(() => realpathSync(process.argv[1]));
+if (entryPath && entryPath === readSafe(() => realpathSync(fileURLToPath(import.meta.url)))) {
+  try { await main(process.argv.slice(2)); } catch (error) {
+    if (!(error instanceof HarnessFailure)) throw error;
+    process.stderr.write(`${error.message}\n`);
+    process.exitCode = error.code;
+  }
+}

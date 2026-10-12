@@ -20,7 +20,7 @@ An installation consists of these locations:
 | --- | --- | --- |
 | Package | the npm global prefix, or a dedicated directory per release such as `~/.local/share/pi-session-mcp/releases/<tag>` | The built server, `setup` and Doctor. |
 | Configuration | a file outside the package, for example `~/.config/pi-session-mcp/pi-session-mcp.json` | Operator-owned, mode `0600`, never committed. |
-| Skill overrides (optional) | the `skills/` directory next to the configuration file, for example `~/.config/pi-session-mcp/skills/` | Your own or customized skills, plus `.pi-session-mcp-bases.json`. Created by you or by `setup --customize-skill`. See [Pi skills](#pi-skills). |
+| Skill overrides (optional) | the `skills/` directory next to the configuration file, for example `~/.config/pi-session-mcp/skills/` | Your own or customized skills, plus `.pi-session-mcp-bases.json` and its lock file `.pi-session-mcp-bases.lock`. Created by you or by `setup --customize-skill`. See [Pi skills](#pi-skills). |
 | Controller skill | `~/.agents/skills/pi-session-orchestration` (Codex), `~/.claude/skills/pi-session-orchestration` or `<project>/.claude/skills/pi-session-orchestration` (Claude Code) | Written by `setup --apply`; see [Register a client](#4-register-a-client). |
 | Setup ownership state | `~/.local/state/pi-session-mcp/ownership.json` | Written by `setup` only. Path-free and secret-free. |
 
@@ -487,7 +487,8 @@ choose skills.
   create `<override dir>/<new-name>/SKILL.md` and reference it as
   `builtin:<new-name>`; no command is needed. After a package update, Doctor
   warns with `skill_override_outdated` when a shipped skill changed since you
-  copied it.
+  copied it. `--apply --customize-skill` takes a kernel lock on the override
+  directory, so concurrent runs cannot lose a recorded base.
 - A `builtin:` name with no override and no shipped skill makes Doctor report
   `skill_missing` and the session start fail with `skill_load_failed`.
 - An extension allowlist alone makes none of a package's skills available. If a
@@ -512,6 +513,11 @@ installed, unless you modified it, and `--apply` for the new version installs
 the new text. A package update that changes a shipped skill does not touch an
 override of yours; Doctor warns with `skill_override_outdated` so that you can
 review the change.
+
+After an upgrade from 0.8.0, run `setup` as a dry-run and then with `--apply`
+for your targets. Copies and records of 0.8.0 are proven before setup acts on
+them; one that cannot be proven is reported as `skill_legacy_unverified` and
+stays untouched. See [Upgrade from 0.8.0](skills.md#upgrade-from-080).
 
 ### npm installation
 

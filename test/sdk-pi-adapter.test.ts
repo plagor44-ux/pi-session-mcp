@@ -432,32 +432,59 @@ async function createWithSession(session: AgentSession) {
 }
 
 describe("running-turn activity signals", () => {
-  it("reports one content-free signal per completed tool execution and assistant message", async () => {
+  it("reports one content-free signal per public assistant message and tool execution event", async () => {
     const fixture = activitySessionFixture();
     const handle = await createWithSession(fixture.session);
     const onActivity = vi.fn();
     const outcome = handle.prompt("work", () => undefined, onActivity);
 
+    // Lifecycle events and non-assistant messages are not activity.
     fixture.emit({ type: "agent_start" });
     fixture.emit({ type: "message_start", message: { role: "user", content: [{ type: "text", text: "WORK_PROMPT_MARKER" }] } });
-    fixture.emit({ type: "message_update", message: { role: "assistant", content: [] } });
+    fixture.emit({ type: "message_update", message: { role: "user", content: [] } });
     fixture.emit({ type: "message_end", message: { role: "user", content: [{ type: "text", text: "WORK_PROMPT_MARKER" }] } });
+    fixture.emit({ type: "message_start", message: { role: "toolResult", content: [] } });
     fixture.emit({ type: "message_end", message: { role: "toolResult", content: [{ type: "text", text: "SECRET_TOOL_RESULT" }] } });
+    fixture.emit({ type: "turn_start" });
     fixture.emit({ type: "turn_end", message: { role: "assistant", content: [] }, toolResults: [] });
-    fixture.emit({ type: "tool_execution_start", toolCallId: "call_1", toolName: "read", args: { path: "SECRET_TOOL_ARGUMENT" } });
     expect(onActivity).not.toHaveBeenCalled();
 
-    fixture.emit({ type: "tool_execution_end", toolCallId: "call_1", toolName: "read", result: { content: [{ type: "text", text: "SECRET_TOOL_RESULT" }] }, isError: false });
+    // Assistant message start and update are stream activity.
+    fixture.emit({ type: "message_start", message: { role: "assistant", content: [] } });
     expect(onActivity).toHaveBeenCalledTimes(1);
-    fixture.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "all done" }], stopReason: "stop" } });
+    fixture.emit({ type: "message_update", message: { role: "assistant", content: [] }, assistantMessageEvent: { type: "text_delta", delta: "SECRET_DELTA" } });
     expect(onActivity).toHaveBeenCalledTimes(2);
 
+    // Tool execution start, update and end are each activity.
+    fixture.emit({ type: "tool_execution_start", toolCallId: "call_1", toolName: "read", args: { path: "SECRET_TOOL_ARGUMENT" } });
+    expect(onActivity).toHaveBeenCalledTimes(3);
+    fixture.emit({ type: "tool_execution_update", toolCallId: "call_1", toolName: "read", args: {}, partialResult: "SECRET_PARTIAL" });
+    expect(onActivity).toHaveBeenCalledTimes(4);
+    fixture.emit({ type: "tool_execution_end", toolCallId: "call_1", toolName: "read", result: { content: [{ type: "text", text: "SECRET_TOOL_RESULT" }] }, isError: false });
+    expect(onActivity).toHaveBeenCalledTimes(5);
+    fixture.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "all done" }], stopReason: "stop" } });
+    expect(onActivity).toHaveBeenCalledTimes(6);
+
     // The signal is content-free: no event, tool, or message payload crosses the boundary.
-    expect(onActivity.mock.calls).toEqual([[], []]);
+    expect(onActivity.mock.calls.every((call) => call.length === 0)).toBe(true);
 
     fixture.settle();
     await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "all done" });
     expect(fixture.unsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes the answer only from the last assistant message_end, never from stream events", async () => {
+    const fixture = activitySessionFixture();
+    const handle = await createWithSession(fixture.session);
+    const outcome = handle.prompt("work", () => undefined, vi.fn());
+    fixture.emit({ type: "message_start", message: { role: "assistant", content: [] } });
+    fixture.emit({ type: "message_update", message: { role: "assistant", content: [{ type: "text", text: "STREAMED_PARTIAL" }] }, assistantMessageEvent: { type: "text_delta", delta: "STREAMED_PARTIAL" } });
+    fixture.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "first" }], stopReason: "toolUse" } });
+    fixture.emit({ type: "message_start", message: { role: "assistant", content: [] } });
+    fixture.emit({ type: "message_update", message: { role: "assistant", content: [{ type: "text", text: "STREAMED_PARTIAL" }] }, assistantMessageEvent: { type: "text_delta", delta: "STREAMED_PARTIAL" } });
+    fixture.settle();
+    // No terminal assistant message_end for the second message: the earlier one stays the answer.
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "first" });
   });
 
   it("isolates observer failures from SDK event dispatch and the terminal outcome", async () => {

@@ -131,9 +131,15 @@ Patch transitive advisories in the lockfile only:
 
 ## Prepare a release
 
+A release travels in the pull request of the change it ships. That pull
+request also carries the version, the changelog heading and the pre-release
+acceptance record; there is no separate release pull request. Records that can
+only be made after publishing go into the pull request of the next change.
+
 Preconditions:
 
-- `main` contains every change of the release, and Level 1 is green on `main`.
+- The change pull request contains every change of the release, and Level 1
+  is green on its head.
 - `npm audit` reports 0 vulnerabilities.
 - The public contract is unchanged, or a minor release has been decided.
 - The acceptance that this release requires is recorded, or its absence is
@@ -141,8 +147,9 @@ Preconditions:
 
 Steps:
 
-1. Create a release branch from the current `main`. Never reuse a release branch
-   that predates later merges: its lockfile would undo later dependency patches.
+1. Bring the change branch up to date with `main` if `main` moved. Never reuse
+   a branch that predates later merges without that: its lockfile would undo
+   later dependency patches.
 2. Set the version:
 
    ```bash
@@ -159,11 +166,13 @@ Steps:
 5. Run the working-tree
    [Level 2 acceptance](acceptance.md#tooling) on the release candidate with
    `scripts/setup-acceptance.mjs`, unless the release notes state its absence.
-6. Open one pull request named `chore: prepare v<x.y.z> release`.
+6. Record the pre-release acceptance in the status section of
+   [Acceptance](acceptance.md) and push it to the change pull request. Name the
+   release in the pull request's title and description.
 
 ## Publish a release
 
-After the release pull request is merged and CI is green on the merge commit:
+After the change pull request is merged and CI is green on the merge commit:
 
 ```bash
 git switch main
@@ -217,9 +226,9 @@ After publishing:
 
 1. Run the published-release
    [Level 2 acceptance](acceptance.md#working-tree-and-published-release-variants)
-   from a fresh clone of the tag and from the published npm package, and
-   record it. `scripts/setup-acceptance.mjs` runs both
-   ([Tooling](acceptance.md#tooling)).
+   from a fresh clone of the tag and from the published npm package.
+   `scripts/setup-acceptance.mjs` runs both ([Tooling](acceptance.md#tooling)).
 2. Upgrade the installation as described in
    [Installation](installation.md#upgrade).
-3. Update the status section in [Acceptance](acceptance.md).
+3. Record both in the status section of [Acceptance](acceptance.md) with the
+   pull request of the next change, not in a pull request of their own.

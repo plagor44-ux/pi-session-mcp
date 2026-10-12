@@ -72,8 +72,13 @@ export interface SkillTreeFile {
 
 export interface SkillTree {
   readonly files: readonly SkillTreeFile[];
-  /** SHA-256 hex over the sorted relative paths and contents; path-free and stable. */
+  /** Version 2 fingerprint (`v2:` and SHA-256 hex) of the paths and contents; path-free and stable. */
   readonly fingerprint: string;
+  /**
+   * The version 1 fingerprint that 0.8.0 recorded, only to recognize such records. It is
+   * ambiguous and never proves identity on its own; see `provesLegacyFingerprint`.
+   */
+  readonly legacyFingerprint: string;
 }
 
 export class SkillTreeError extends Error {
@@ -81,6 +86,95 @@ export class SkillTreeError extends Error {
     super("Skill directory is not usable");
     this.name = "SkillTreeError";
   }
+}
+
+/** A version 2 skill tree fingerprint as it is stored. */
+export const SKILL_TREE_FINGERPRINT_PATTERN = /^v2:[0-9a-f]{64}$/;
+/** A version 1 fingerprint as 0.8.0 stored it: bare SHA-256 hex. */
+export const LEGACY_SKILL_TREE_FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
+const FINGERPRINT_DOMAIN = "pi-session-mcp skill tree v2\n";
+
+function uint32(value: number): Buffer {
+  const bytes = Buffer.alloc(4);
+  bytes.writeUInt32BE(value);
+  return bytes;
+}
+
+function uint64(value: number): Buffer {
+  const bytes = Buffer.alloc(8);
+  bytes.writeBigUInt64BE(BigInt(value));
+  return bytes;
+}
+
+/**
+ * Version 2: a domain and version tag, the file count, then per file in byte order of the path
+ * the length-prefixed UTF-8 path and the length-prefixed content. Every field has an explicit
+ * length, so two different trees never share an encoding.
+ */
+export function skillTreeFingerprint(files: readonly SkillTreeFile[]): string {
+  const entries = files.map((file) => ({ path: Buffer.from(file.path, "utf8"), bytes: file.bytes }))
+    .sort((left, right) => Buffer.compare(left.path, right.path));
+  const hash = createHash("sha256").update(FINGERPRINT_DOMAIN, "utf8").update(uint32(entries.length));
+  entries.forEach((entry, index) => {
+    if (index > 0 && Buffer.compare(entries[index - 1]!.path, entry.path) === 0) throw new SkillTreeError("skill_tree_invalid");
+    hash.update(uint32(entry.path.length)).update(entry.path).update(uint64(entry.bytes.length)).update(entry.bytes);
+  });
+  return `v2:${hash.digest("hex")}`;
+}
+
+/**
+ * Version 1, as 0.8.0 computed it: `path NUL content NUL` per file in reading order. File
+ * content may contain NUL bytes, so two different trees can share this value.
+ */
+export function legacySkillTreeFingerprint(files: readonly SkillTreeFile[]): string {
+  const hash = createHash("sha256");
+  for (const file of files) hash.update(file.path).update("\0").update(file.bytes).update("\0");
+  return hash.digest("hex");
+}
+
+export interface ReleasedSkillTree {
+  readonly name: string;
+  readonly release: string;
+  readonly legacyFingerprint: string;
+  readonly fingerprint: string;
+}
+
+/**
+ * The shipped skills of every release that recorded version 1 fingerprints (0.8.0 only), as
+ * trusted references for recognizing such records. Computed from the `v0.8.0` tag and checked
+ * against the published npm package.
+ */
+export const RELEASED_SKILL_TREES: readonly ReleasedSkillTree[] = Object.freeze([
+  Object.freeze({ name: "pi-session-orchestration", release: "0.8.0", legacyFingerprint: "e2a72b558ea14748a4badd0058ff65b8731cc125033a666706b103842784673a", fingerprint: "v2:39edc4c4783dec7f90345b22844a17e5e48b465722bb0f1b20059d6ee51e1523" }),
+  Object.freeze({ name: "pi-session-implementation", release: "0.8.0", legacyFingerprint: "5f719b44da266d3f66dd5bf3c18f3e3e04ca7df357e2fe2eedbf0409e6c1bf64", fingerprint: "v2:f8ce75eff83a5c952f6ca51c04e1e8025cb7c2c558c30d692f291a3f6594eb12" }),
+  Object.freeze({ name: "pi-session-review", release: "0.8.0", legacyFingerprint: "8cf58ccb8d473a3eedf12ce6b902b1e91dd9e2fef83ad110c4d8e2e6164cb257", fingerprint: "v2:610c0b4829eeb1ce6c9b2000ad73f8e88ca230707eef7f7b1708a80767952bf0" }),
+]);
+
+/**
+ * Whether a version 1 fingerprint from a record proves that `candidate` is the tree it names:
+ * a trusted reference, a released shipped tree of this name or one of `references` (such as
+ * the current library tree), has exactly this version 1 fingerprint and is byte-identical to
+ * `candidate` by its version 2 fingerprint. The version 1 fingerprint alone never suffices.
+ */
+export function provesLegacyFingerprint(
+  name: string,
+  legacyFingerprint: string,
+  candidate: Pick<SkillTree, "fingerprint">,
+  references: readonly Pick<SkillTree, "fingerprint" | "legacyFingerprint">[] = [],
+  released: readonly ReleasedSkillTree[] = RELEASED_SKILL_TREES,
+): boolean {
+  if (!LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(legacyFingerprint) || !SKILL_TREE_FINGERPRINT_PATTERN.test(candidate.fingerprint)) return false;
+  const trusted = [...released.filter((tree) => tree.name === name), ...references];
+  return trusted.some((tree) => tree.legacyFingerprint === legacyFingerprint && tree.fingerprint === candidate.fingerprint);
+}
+
+/**
+ * The version 2 fingerprint of the released shipped skill that a version 1 fingerprint names,
+ * or undefined. Only released trees qualify: the current shipped tree could share a version 1
+ * fingerprint with an older original without being that original.
+ */
+export function releasedSkillFingerprint(name: string, legacyFingerprint: string, released: readonly ReleasedSkillTree[] = RELEASED_SKILL_TREES): string | undefined {
+  return released.find((tree) => tree.name === name && tree.legacyFingerprint === legacyFingerprint)?.fingerprint;
 }
 
 export interface ReadSkillTreeOptions {
@@ -129,7 +223,5 @@ export async function readSkillTree(directory: string, options: ReadSkillTreeOpt
   };
   await visit(root, "", 0);
   if (!files.some((file) => file.path === "SKILL.md")) throw new SkillTreeError("skill_tree_missing");
-  const hash = createHash("sha256");
-  for (const file of files) hash.update(file.path).update("\0").update(file.bytes).update("\0");
-  return Object.freeze({ files: Object.freeze(files), fingerprint: hash.digest("hex") });
+  return Object.freeze({ files: Object.freeze(files), fingerprint: skillTreeFingerprint(files), legacyFingerprint: legacySkillTreeFingerprint(files) });
 }

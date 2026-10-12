@@ -1,55 +1,17 @@
-import { createHash, randomUUID } from "node:crypto";
-import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, writeFileSync } from "node:fs";
 import { chmod, lstat, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { isRecord } from "../src/setup-ownership.js";
 import { MemoryOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
-import { SetupOrchestrator, type SetupClientAdapter } from "../src/setup.js";
-import type { SetupOperation, SetupTarget } from "../src/setup-result.js";
+import { SetupOrchestrator } from "../src/setup.js";
+import type { SetupTarget } from "../src/setup-result.js";
 import { readSkillTree } from "../src/skill-library.js";
-import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+import { fingerprint, expectSkill, fixture, skill, skillTarget, targets } from "./fixtures/setup-skills-fixture.js";
+import { removeTemporaryRoots } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
-const skill = "pi-session-orchestration";
-const fingerprint = "a".repeat(64);
-const targets: SetupTarget[] = [
-  { client: "codex", scope: "user", alias: "pi-session-mcp" },
-  ...["user", "local", "project"].map((scope) => ({ client: "claude-code", scope, alias: "pi-session-mcp" })),
-];
-const projectIdentity = (cwd: string): string => createHash("sha256").update(realpathSync(cwd)).digest("hex").slice(0, 16);
-const skillTarget = (target: SetupTarget, cwd = "/"): SetupTarget => ({
-  ...target, scope: target.scope === "local" ? "user" : target.scope,
-  alias: target.scope === "project" ? `skill:${skill}@${projectIdentity(cwd)}` : `skill:${skill}`,
-});
-async function fixture(linkedRoots = false) {
-  const root = await temporaryRoot("pi-setup-skills-");
-  const anchor = linkedRoots ? join(root, "alias") : root;
-  if (linkedRoots) await symlink(root, anchor);
-  const home = join(anchor, "home"); const cwd = join(anchor, "project"); const packageRoot = join(root, "package");
-  const configPath = join(root, "config", "config.json");
-  const source = join(packageRoot, "skills", skill); const override = join(root, "config", "skills", skill);
-  await mkdir(source, { recursive: true }); await mkdir(home); await mkdir(cwd);
-  await mkdir(join(source, "references"));
-  await writeFile(join(source, "SKILL.md"), "controller v1"); await writeFile(join(source, "references", "guide.md"), "guide");
-  const ownership = new MemoryOwnershipStore(); const registered = new Set<string>();
-  const adapters: SetupClientAdapter[] = ["codex", "claude-code"].map((name) => ({
-    name, supportedScopes: name === "codex" ? ["user"] : ["user", "local", "project"],
-    async inspect(target) { return registered.has(`${target.client}:${target.scope}`) ? { state: "equivalent", fingerprint } : { state: "absent" }; },
-    async apply(target) { registered.add(`${target.client}:${target.scope}`); },
-    async remove(target) { registered.delete(`${target.client}:${target.scope}`); },
-    async verify() { return { ok: true, code: "mcp_verified" }; },
-  }));
-  const { FileSetupSkillInstaller } = await import("../src/setup-skills.js");
-  const skills = new FileSetupSkillInstaller({ packageRoot, configPath, home, cwd });
-  const orchestrator = new SetupOrchestrator({ adapters, ownership, intendedFingerprint: fingerprint, skills });
-  const slot = (target: SetupTarget) => join(target.scope === "project" ? cwd : home, target.client === "codex" ? ".agents" : ".claude", "skills", skill);
-  const run = (operation: SetupOperation = "dry-run", selected: SetupTarget[] = [targets[0]!]) => orchestrator.run({ operation, targets: selected });
-  return { root, home, cwd, source, override, ownership, registered, adapters, skills, orchestrator, slot, run };
-}
-function expectSkill(output: Awaited<ReturnType<SetupOrchestrator["run"]>>, code: string, status: string, target = targets[0]!) {
-  expect(output.findings[1]).toEqual({ target: { ...target, alias: skill }, code, status });
-}
 
 describe("skill ownership validation", () => {
   it("accepts exactly registration and normalized skill records", () => {
@@ -368,7 +330,7 @@ describe("setup controller skills", () => {
   });
   it("recovers pending ownership of an equivalent installed tree", async () => {
     const f = await fixture(); await f.run("apply"); const owned = (await f.ownership.get(skillTarget(targets[0]!)))!;
-    await f.ownership.put({ ...owned, phase: "pending" }); expectSkill(await f.run("apply"), "skill_already_equivalent", "unchanged");
+    await f.ownership.put({ ...owned, phase: "pending" }); expectSkill(await f.run("apply"), "skill_recovered", "ok");
     expect((await f.ownership.get(skillTarget(targets[0]!)))?.phase).toBe("owned");
   });
 });

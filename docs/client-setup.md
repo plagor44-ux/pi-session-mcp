@@ -117,19 +117,26 @@ Skill findings per operation:
 
 - `--dry-run`: `skill_absent` (absent), `skill_equivalent` (unchanged),
   `skill_linked` (unchanged; a link to exactly the effective skill),
-  `skill_update_planned` (planned), `skill_divergent` (divergent),
+  `skill_update_planned` (planned), `skill_recovery_planned` (planned; the
+  ownership record is pending for an update that `--apply` would settle),
+  `skill_divergent` (divergent), `skill_legacy_unverified` (divergent),
   `skill_source_invalid` (failed).
 - `--apply`: `skill_installed` (ok), `skill_already_equivalent` (unchanged),
-  `skill_linked` (unchanged),
+  `skill_recovered` (ok; `--apply` settled an interrupted update and needed no
+  further update), `skill_linked` (unchanged),
   `skill_updated` (ok; setup replaced its own unmodified copy after a package
-  update or a changed override), `skill_divergent`, `skill_source_invalid`,
+  update or a changed override), `skill_divergent`, `skill_legacy_unverified`,
+  `skill_recovery_retained` (divergent), `skill_source_invalid`,
   `skill_install_failed` (failed).
 - `--verify`: `skill_verified` (ok), `skill_missing` and
   `skill_not_equivalent` (failed).
 - `--rollback` and `--remove`: `skill_removed` (ok), `skill_kept_shared`
   (unchanged; the other Claude Code `user` or `local` registration still uses
   the shared directory), `skill_not_owned` (unchanged), `skill_absent` (ok) and
-  `skill_divergent` (a modified copy stays in place).
+  `skill_divergent` (a modified copy stays in place), `skill_legacy_unverified`
+  (a record of 0.8.0 that no trusted reference proves; copy and record stay) and
+  `skill_recovery_retained` (a modified or foreign intermediate directory of an
+  interrupted update stays).
 
 Setup never replaces or deletes a modified installed copy, a skill of the same
 name that it did not install, or a link or non-directory at the skill entry; it
@@ -155,9 +162,14 @@ records the fingerprint of the shipped skill in
 `.pi-session-mcp-bases.json` there. The finding target is
 `skills/override/<name>`; the codes are `skill_customize_planned` (planned),
 `skill_customized` (ok), `skill_override_current` (unchanged),
-`skill_override_outdated` (planned), `skill_base_updated` (ok),
-`skill_not_shipped`, `skill_bases_corrupt`, `skill_override_invalid` and
-`skill_customize_failed` (failed). An existing override is never overwritten.
+`skill_override_outdated` (planned), `skill_base_migration_planned` (planned),
+`skill_base_unverified` (planned), `skill_base_migrated` (ok),
+`skill_base_updated` (ok), `skill_not_shipped`, `skill_bases_corrupt`,
+`skill_override_invalid`, `skill_customize_lock_busy`,
+`skill_customize_lock_unavailable` and `skill_customize_failed` (failed). An
+existing override is never overwritten. `--apply` runs under an exclusive lock
+on the override directory (`.pi-session-mcp-bases.lock`, 30 s wait); the dry-run
+takes no lock and writes nothing.
 After `skill_override_outdated`, `--apply` moves only the recorded base, which
 acknowledges a change you reviewed. Details: [Pi skills](skills.md#customize-and-add-skills).
 
