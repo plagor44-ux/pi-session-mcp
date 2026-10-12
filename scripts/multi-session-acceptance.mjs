@@ -875,6 +875,7 @@ export function evaluateAcceptance(result, scenario) {
   need(!result.timedOut, "timedOut");
   need(!result.spawnFailed, "spawnFailed");
   need(!result.harnessAborted, "harnessAborted");
+  need(!result.analysisFailed, "analysisFailed");
   need(result.resources?.changedAfterRun?.length === 0, "resourcesChanged");
   need(!result.reanalysis || (result.reanalysis.stateChanges?.resources?.length === 0 && result.reanalysis.stateChanges?.fixtures?.length === 0), "stateChangedSinceRun");
   need((result.processes?.serversObserved ?? 0) >= 1, "noServerObserved");
@@ -910,7 +911,7 @@ export function evaluateAcceptance(result, scenario) {
 const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
-export async function runClient(values, { signals = process, budgets = {} } = {}) {
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code) } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
@@ -950,23 +951,47 @@ export async function runClient(values, { signals = process, budgets = {} } = {}
   });
   const { seen } = supervised;
   const durationSeconds = Math.round(supervised.elapsedMs / 1000);
+  const resultPath = join(priv, "results", `${label}.json`);
   let residual = [];
-  let result;
-  try {
-    result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: (list) => { residual = list; } });
-  } catch {
-    // A crash of the analysis still leaves a result on record, and it never passes.
-    result = {
+  /** The result of an analysis that did not finish: on record, and it never passes. */
+  const unfinished = (signal) => {
+    const result = {
       client: values.client, scenario: values.scenario, exitCode: supervised.exitCode,
-      timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted,
+      timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted || signal !== undefined,
       durationSeconds, stderrBytes: supervised.stderrBytes, analysisFailed: true,
-      acceptance: { passed: false, failures: ["analysisFailed"] },
     };
+    if (signal ?? supervised.abortSignal) result.abortSignal = signal ?? supervised.abortSignal;
+    result.acceptance = { passed: false, failures: [...(result.harnessAborted ? ["harnessAborted"] : []), "analysisFailed"] };
+    return result;
+  };
+  // superviseProcess has removed its signal listeners. A signal during the analysis would otherwise end the
+  // harness without a result and without cleanup, and the launch record would then block a new attempt.
+  let interrupted;
+  const onSignal = (signal) => {
+    if (interrupted) return;
+    interrupted = unfinished(signal);
+    try { writeJsonOnce(resultPath, interrupted); }
+    finally { killRecorded([...seen.values(), ...residual]); exit(1); }
+  };
+  const onInt = () => onSignal("SIGINT"); const onTerm = () => onSignal("SIGTERM");
+  signals.on("SIGINT", onInt); signals.on("SIGTERM", onTerm);
+  try {
+    let result;
+    try {
+      result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: (list) => { residual = list; } });
+    } catch {
+      // A crash of the analysis still leaves a result on record, and it never passes.
+      result = unfinished();
+    }
+    // Only reachable when `exit` returns, as in the tests: the interrupted result is already on record.
+    if (interrupted) return interrupted;
+    try { writeJsonOnce(resultPath, result); }
+    // Leftovers are on record now; do not leave this run's own processes behind, also when the analysis failed.
+    finally { killRecorded([...seen.values(), ...residual]); }
+    return result;
+  } finally {
+    signals.off("SIGINT", onInt); signals.off("SIGTERM", onTerm);
   }
-  try { writeJsonOnce(join(priv, "results", `${label}.json`), result); }
-  // Leftovers are on record now; do not leave this run's own processes behind, also when the analysis failed.
-  finally { killRecorded([...seen.values(), ...residual]); }
-  return result;
 }
 
 /** Everything after the supervised controller: transcript, residual processes, transcript analysis, oracles and verdict. */
@@ -1045,7 +1070,7 @@ export function reanalyze(values) {
   return result;
 }
 
-/** The sanitized record: original results first, reanalyses listed separately. */
+/** The sanitized record: original results first, reanalyses listed separately, and every launch with whether it left a result. */
 export function evidence(values) {
   if (!values.run || !values.out) fail("evidence needs --run and --out");
   const priv = join(resolve(values.run), "private");
@@ -1058,6 +1083,8 @@ export function evidence(values) {
     extensions: info.extensions ?? [], resources: info.resources,
     results: list(join(priv, "results")).map(({ value }) => value),
     reanalyses: list(join(priv, "reanalyses")).map(({ name, value }) => ({ file: name.replace(/\.json$/, ""), ...value })),
+    // A launch without a result (a killed harness, an out-of-memory end) stays visible in the published record.
+    launches: list(join(priv, "launches")).map(({ name, value }) => ({ label: name.replace(/\.json$/, ""), launchedAt: value.launchedAt, hasResult: existsSync(join(priv, "results", name)) })),
   }, null, 2);
   for (const marker of [homedir(), info.token, info.candidate, resolve(values.run)]) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
   writeFileSync(resolve(values.out), `${text}\n`);

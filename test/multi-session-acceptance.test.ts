@@ -488,6 +488,41 @@ describe("runs against a synthetic layout with a controlled client", () => {
     await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
   }, 60_000);
 
+  it("records a never-passing result, ends the run's processes and exits when a signal arrives during the analysis", async () => {
+    const run = await buildRun();
+    const signals = new EventEmitter();
+    // The second SIGINT listener is the analysis guard; the first one belonged to the supervision. A microtask
+    // queued at its registration runs before the continuation that would write the analysis result.
+    let registrations = 0;
+    signals.on("newListener", (event) => { if (event === "SIGINT" && ++registrations === 2) queueMicrotask(() => signals.emit("SIGINT")); });
+    const exits: number[] = [];
+    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals, budgets: quick, exit: (code: number) => { exits.push(code); } }), run);
+    expect(exits).toEqual([1]);
+    expect(result).toMatchObject({ harnessAborted: true, abortSignal: "SIGINT", analysisFailed: true, exitCode: 0, timedOut: false });
+    expect(result.acceptance).toEqual({ passed: false, failures: ["harnessAborted", "analysisFailed"] });
+    expect(JSON.parse(readFileSync(join(run.priv, "results", "claude-parallel.json"), "utf8"))).toEqual(result);
+    expect(signals.listenerCount("SIGINT")).toBe(0);
+    expect(signals.listenerCount("SIGTERM")).toBe(0);
+    // A reanalysis of the unfinished result names the failed analysis itself, not only its side effects.
+    expect(h.reanalyze(values(run)).acceptance.failures).toContain("analysisFailed");
+    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
+  }, 60_000);
+
+  it("lists every launch in the evidence and marks one that left no result", async () => {
+    const run = await buildRun();
+    await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run);
+    // An attempt whose harness died before it wrote a result leaves only its launch record.
+    writeFileSync(join(run.priv, "launches", "claude-abort.json"), JSON.stringify({ launchedAt: "2026-10-12T20:00:00.000Z" }));
+    const out = join(run.root, "evidence.json");
+    h.evidence({ run: run.run, out });
+    const record = JSON.parse(readFileSync(out, "utf8"));
+    expect(record.launches).toEqual([
+      { label: "claude-abort", launchedAt: "2026-10-12T20:00:00.000Z", hasResult: false },
+      { label: "claude-parallel", launchedAt: expect.any(String), hasResult: true },
+    ]);
+    expect(record.results.map((result: { scenario: string }) => result.scenario)).toEqual(["parallel"]);
+  }, 60_000);
+
   it("ends the real CLI by itself with a non-zero exit when the client ignores SIGTERM and holds stdout open", async () => {
     const run = await buildRun();
     const bin = join(run.root, "bin");

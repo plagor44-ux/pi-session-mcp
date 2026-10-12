@@ -395,7 +395,11 @@ Pi Session MCP tools; the script never does.
   controller starts, so an attempt that ends without a result is never repeated
   silently. If the analysis after the controller fails, the result is recorded
   as `analysisFailed` and never passes, and the run's own processes are still
-  terminated.
+  terminated. A `SIGINT` or `SIGTERM` that the harness handles during the
+  analysis records the result at once as `harnessAborted` and `analysisFailed`,
+  terminates the run's recorded processes and exits with 1. A harness that is
+  killed outright (`SIGKILL`, out of memory) leaves only the launch record;
+  `evidence` lists it as a launch without a result.
 - Controller skill: from the harness of `3f98104` on, `prepare` installs the
   Claude Code controller skill the way an operator does, with the candidate's
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
@@ -421,9 +425,11 @@ Pi Session MCP tools; the script never does.
   group and to the recorded processes of the run whose PID and start time still
   match, never by name. A process that is only found by its working directory
   inside the run is reported, not killed. The run is complete when the client
-  exits and a bounded drain of its output has finished. The result classifies
-  `timedOut`, `spawnFailed` and `harnessAborted` (`SIGINT` or `SIGTERM` to the
-  harness); the CLI exits 1 for each of them. The original result of a client
+  exits and a bounded drain of its output has finished; a client that the
+  escalation cannot reap still ends the wait and is marked `unterminated`. The
+  result classifies `timedOut`, `spawnFailed`, `harnessAborted` (`SIGINT` or
+  `SIGTERM` to the harness) and `analysisFailed`; the CLI exits 1 for each of
+  them. The original result of a client
   and scenario is written once; a second `run` for the same pair is refused.
 
 ### Scenarios
@@ -468,8 +474,9 @@ Each client runs two invocations, one per scenario:
   list of `failures`, computed mechanically from the checks. `passed` is true
   only when the list is empty. A failure code is listed when any of these
   does not hold:
-  - the controller exit code is 0 (`controllerExit`), and neither `timedOut`,
-    `spawnFailed` nor `harnessAborted` is set;
+  - the controller exit code is 0 (`controllerExit`), neither `timedOut`,
+    `spawnFailed` nor `harnessAborted` is set, and the analysis finished
+    (`analysisFailed`);
   - no bound resource changed after the run (`resourcesChanged`), and for a
     reanalysis no resource or fixture differs from the state recorded at the
     end of the run (`stateChangedSinceRun`);
@@ -516,8 +523,9 @@ Each client runs two invocations, one per scenario:
   fixture or a bound resource differs from that state, the reanalysis fails
   with `stateChangedSinceRun`.
 - `evidence` writes one sanitized JSON record and refuses to write a local path
-  or the token. It lists the original results and the reanalyses separately and
-  includes the extension names and versions and the resource digests.
+  or the token. It lists the original results and the reanalyses separately,
+  lists every launch with whether it left a result, and includes the extension
+  names and versions and the resource digests.
   Transcripts and the configuration stay in the run's private directory and
   are never published.
 
