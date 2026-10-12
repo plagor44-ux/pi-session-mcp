@@ -369,7 +369,7 @@ Each client runs two invocations, one per scenario:
 | Scenario | What the controller does | What is checked |
 | --- | --- | --- |
 | `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
-| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range`; abort `wait` while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); `pi_turn_get` shows the `wait` turn `aborted` before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
+| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); `pi_turn_get` shows the `wait` turn `aborted` before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
 
 ### Independent checks
 

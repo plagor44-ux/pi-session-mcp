@@ -149,6 +149,7 @@ function prepare(values) {
     sourceCommit: head.status === 0 ? head.stdout.trim() : undefined,
     sourceClean: dirty.status === 0 && dirty.stdout.trim() === "",
     entrySha256: sha256(readFileSync(entry)),
+    harnessSha256: sha256(readFileSync(new URL(import.meta.url))),
     configFingerprint: `sha256:${sha256(configBytes)}`,
     profile: { from: values["from-profile"], ...profile },
     preparedAt: new Date().toISOString(),
@@ -175,8 +176,9 @@ function prompt(client, scenario) {
   return [...common,
     "Run these two tasks at the same time, each in its own Pi session:",
     `- WAIT: workspace alias \`${p}-wait\`. Ask the worker to run exactly this shell command in the repository and then report its output: \`sleep 120 && echo late > LATE.txt\`.`,
-    `- RANGE: workspace alias \`${p}-range\` (local copy: ./fixtures/range). Make \`node --test\` pass by implementing \`range\` in \`src/range.js\`; change only that file.`,
-    "Start both turns. About 20 seconds after both were accepted, abort the WAIT session with pi_session_abort while RANGE may still be running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
+    // The deliberate, bounded delay keeps RANGE running while WAIT is aborted.
+    `- RANGE: workspace alias \`${p}-range\` (local copy: ./fixtures/range). Ask the worker to first run the shell command \`sleep 45\` in the repository (a deliberate delay for this test), and then make \`node --test\` pass by implementing \`range\` in \`src/range.js\`; change only that file.`,
+    "Start both turns. About 15 seconds after both were accepted, abort the WAIT session with pi_session_abort while RANGE is still running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
     "Let RANGE finish, verify it yourself (`node --test` in ./fixtures/range, `git -C ./fixtures/range status --short`), then close both sessions.",
     "Finish with a short report: final turn state per task, the abort result, your verification result, and whether all sessions were closed.",
   ].join("\n");
@@ -455,7 +457,7 @@ function evidence(values) {
   const results = readdirSync(join(priv, "results")).sort().map((name) => readJson(join(priv, "results", name)));
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
-    sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256,
+    sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, harnessSha256: info.harnessSha256,
     configFingerprint: info.configFingerprint, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
     results,
   }, null, 2);
