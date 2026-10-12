@@ -1175,3 +1175,32 @@ This record does not cover:
   two customization processes outside the tests, and an operating-system
   signal to the harness during a live analysis. The provider-free tests cover
   these.
+
+After its release, `v0.8.0` was installed for the maintainer on Linux: the npm
+package `pi-session-mcp@0.8.0` in the user's npm prefix, registered for Claude
+Code. Checked on 2026-10-12:
+- Offline Doctor reported `packageVersion` `0.8.0` and no finding.
+- `--verify` for `claude-code:user:pi-session-mcp` reported `mcp_verified`, and
+  `skill_verified` for the controller skill.
+- Codex has no registration of the server on that machine, so `codex:user` was
+  not part of this installation.
+
+Before its release, `v0.8.1` passed Level 1 and the working-tree Level 2 on its
+release candidate `baa6406` on Linux (`x64`), with Node.js `26.11.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.296`, on 2026-10-12:
+- Level 1 on a clean detached checkout: every command exited with `0`.
+  - The test run reported 50 files, 1035 passed and 6 skipped.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 129 files, including the three skills, and no
+    acceptance harness.
+  - Doctor reported `packageVersion` `0.8.1`. With the example configuration
+    its only finding was the placeholder workspace.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. All nine steps passed on all four targets,
+  including the controller skill finding of every step. The real client
+  registrations were unchanged, no process remained, and the built files were
+  unchanged.
+- Apart from the version and documentation, the candidate's sources equal
+  `0c7bad3`. Its built modules have the same dist tree SHA-256
+  (`7b16757f9a1a0318247914f56debe79119a3845e1a1debcf1ad371db3a958fce`) as the
+  final candidate `1e904be` of the multi-session acceptance recorded above.
