@@ -2,9 +2,11 @@
 
 ## Unreleased
 
-This changes the public MCP contract (a new `pi_capabilities_get` field and a
-new error code), so ADR 0003 requires a minor release: the next one is 0.8.0.
-Not yet released.
+## 0.8.0 — 2026-10-12
+
+This is a minor release because the public contract changes, as ADR 0003
+requires: the `skills` field of each execution profile in
+`pi_capabilities_get` and the new error code `skill_load_failed`.
 
 - Execution profiles can select Pi skills. An optional top-level
   `skillCatalog` maps a skill alias to the path of one `SKILL.md` file (or to
