@@ -142,6 +142,14 @@ describe("bounded supervision of the controller", () => {
     expect(result.seen.get("4194398:8")).toMatchObject({ role: "client-descendant", fixture: "wait" });
     expect(h.mergeSighting(undefined, server)).toBe(server);
   }, 20_000);
+
+  it("keeps the ownership of a descendant that outlives the client and is then found only by its working directory", () => {
+    const worker = { pid: 4_194_397, ppid: 4_194_396, pgrp: 4_194_396, state: "S", start: "9", comm: "sleep", fixture: "wait", role: "client-descendant" };
+    const reparented = h.mergeSighting(worker, { ...worker, ppid: 1, role: "run-cwd" });
+    expect(reparented).toMatchObject({ role: "client-descendant", ppid: 1, fixture: "wait" });
+    // A process seen first only by its working directory and later inside the client's tree becomes the run's own.
+    expect(h.mergeSighting({ ...worker, role: "run-cwd" }, worker).role).toBe("client-descendant");
+  });
 });
 
 describe("budget validation", () => {

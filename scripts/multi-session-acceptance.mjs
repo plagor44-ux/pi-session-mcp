@@ -604,14 +604,18 @@ function groupMembers(pgid, notBefore) {
  * an operator's shell could be there too.
  */
 const ownedByRun = (p) => p.pid !== process.pid && ["client", "client-descendant", "server"].includes(p.role);
+const ROLE_RANK = { "run-cwd": 0, "client-descendant": 1, client: 2, server: 3 };
 /**
  * A later sighting of the same process (PID and start time) never loses what an earlier one established. A server
  * that is exiting, or a zombie that its client has not reaped yet, has no command line, environment or working
- * directory left to read, so a sweep in that window sees it only as a descendant of the client.
+ * directory left to read, so a sweep in that window sees it only as a descendant of the client. A descendant that
+ * outlives the client is reparented and would otherwise be found only through its working directory, which is
+ * never killed.
  */
 export function mergeSighting(earlier, later) {
   if (!earlier) return later;
-  return { ...later, role: earlier.role === "server" ? "server" : later.role, fixture: later.fixture ?? earlier.fixture };
+  const role = ROLE_RANK[earlier.role] > ROLE_RANK[later.role] ? earlier.role : later.role;
+  return { ...later, role, fixture: later.fixture ?? earlier.fixture };
 }
 /** SIGKILL for recorded processes that still have the recorded PID and start time. Never by name. */
 export function killRecorded(list) {
