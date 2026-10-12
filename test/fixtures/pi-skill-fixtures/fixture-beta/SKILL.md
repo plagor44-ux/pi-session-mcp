@@ -1,0 +1,6 @@
+---
+name: fixture-beta
+description: SELECTED_BETA_DESCRIPTION_SENTINEL
+---
+
+SKILL_BODY_SECRET_SENTINEL

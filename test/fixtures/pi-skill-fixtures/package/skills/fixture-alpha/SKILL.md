@@ -1,0 +1,6 @@
+---
+name: fixture-alpha
+description: BUNDLED_ALPHA_DESCRIPTION_SENTINEL
+---
+
+PACKAGE_SKILL_BODY_SECRET_SENTINEL

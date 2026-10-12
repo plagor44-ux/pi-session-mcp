@@ -1,0 +1,6 @@
+---
+name: fixture-alpha
+description: COLLISION_DESCRIPTION_SENTINEL
+---
+
+SKILL_BODY_SECRET_SENTINEL

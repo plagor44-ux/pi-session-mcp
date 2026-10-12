@@ -1,0 +1,17 @@
+{
+  "name": "pi-skill-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./index.js"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
+  }
+}

@@ -13,6 +13,8 @@ import {
   DefaultResourceLoader,
   ModelRuntime,
   type PromptOptions,
+  type ResourceLoader,
+  type Skill,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -35,6 +37,7 @@ import {
   type PiTurnOutcome,
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
+import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
 import { composeSessionTools, PROFILE_TOOLS } from "./session-tools.js";
 
 export { PROFILE_TOOLS } from "./session-tools.js";
@@ -49,7 +52,7 @@ export const SESSION_CREATION_TIMEOUT_MS = 10_000;
 export interface SdkPiAdapterDiagnostic {
   readonly level: "error";
   readonly event: "pi_session_creation_failed";
-  readonly stage: "runtime" | "provider" | "model" | "check_auth" | "get_auth" | "availability" | "resource_loader" | "mcp_tools" | "create_session" | "postcheck" | "extension_resolve" | "extension_load" | "extension_bind";
+  readonly stage: "runtime" | "provider" | "model" | "check_auth" | "get_auth" | "availability" | "resource_loader" | "mcp_tools" | "create_session" | "postcheck" | "extension_resolve" | "extension_load" | "extension_bind" | "skill_load";
   readonly code: PiSessionCreationErrorCode;
   readonly executionProfile: string;
   readonly provider: string;
@@ -60,6 +63,8 @@ export interface SdkPiAdapterDiagnostic {
   readonly discoveredToolCount?: number;
   /** `<name>@<version>` of the extension that failed to resolve; never a path. */
   readonly extension?: string;
+  /** The failing configured catalog alias, never a skill-file name or path. */
+  readonly skill?: string;
 }
 
 /** The Pi SDK session-lifecycle API used for profiles with extensions; injectable for tests. */
@@ -328,8 +333,10 @@ function isTextBlock(block: unknown): block is { type: "text"; text: string } {
   return candidate.type === "text" && typeof candidate.text === "string";
 }
 
-/** Resource-loader options for every embedded session: no discovery, skills, templates or themes. */
-function phase0ResourceLoaderOptions(): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
+/** Independently validated skills replace package and extension discovery on every reload. */
+function phase0ResourceLoaderOptions(skills: readonly Skill[]): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
+  // Keep the closure's snapshot private: the SDK may annotate or mutate returned objects.
+  const selected = skills.map((skill) => ({ ...skill, sourceInfo: { ...skill.sourceInfo } }));
   return {
     noExtensions: true,
     noSkills: true,
@@ -340,14 +347,17 @@ function phase0ResourceLoaderOptions(): NonNullable<CreateAgentSessionServicesOp
     appendSystemPrompt: [],
     systemPromptOverride: () => undefined,
     appendSystemPromptOverride: () => [],
+    skillsOverride: () => ({ skills: selected.map((skill) => ({ ...skill, sourceInfo: { ...skill.sourceInfo } })), diagnostics: [] }),
+    promptsOverride: () => ({ prompts: [], diagnostics: [] }),
+    themesOverride: () => ({ themes: [], diagnostics: [] }),
   };
 }
 
-export async function createPhase0ResourceLoader(cwd: string): Promise<{
+export async function createPhase0ResourceLoader(cwd: string, skills: readonly Skill[] = []): Promise<{
   resourceLoader: DefaultResourceLoader; settingsManager: SettingsManager;
 }> {
   const settingsManager = SettingsManager.inMemory(undefined, { projectTrusted: false });
-  const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager, ...phase0ResourceLoaderOptions() });
+  const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager, ...phase0ResourceLoaderOptions(skills) });
   await resourceLoader.reload();
   return { resourceLoader, settingsManager };
 }
@@ -374,6 +384,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     const extensions = input.executionProfile.extensions ?? [];
     if (extensions.length > 0) return this.createWithExtensions(input, extensions);
     const { executionProfile } = input;
+    const skills = await this.loadSkills(input);
     let runtime: ModelRuntime;
     try {
       runtime = await this.getRuntime();
@@ -385,7 +396,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     let resourceLoader: DefaultResourceLoader;
     let settingsManager: SettingsManager;
     try {
-      ({ resourceLoader, settingsManager } = await createPhase0ResourceLoader(input.cwd));
+      ({ resourceLoader, settingsManager } = await createPhase0ResourceLoader(input.cwd, skills));
     } catch {
       throw this.failure(executionProfile, "resource_loader", "pi_session_creation_failed");
     }
@@ -414,7 +425,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }
     return this.admit(session, executionProfile, tools, mcpTools, () => disposeSdkSession(session),
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills);
   }
 
   private async createWithExtensions(
@@ -422,6 +433,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     extensions: readonly ExtensionSpec[],
   ): Promise<PiSessionHandle> {
     const { cwd, executionProfile } = input;
+    const skills = await this.loadSkills(input);
     const directories: string[] = [];
     for (const extension of extensions) {
       try {
@@ -448,14 +460,16 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         agentDir: cwd,
         modelRuntime: runtime,
         settingsManager: SettingsManager.inMemory(undefined, { projectTrusted: false }),
-        resourceLoaderOptions: { ...phase0ResourceLoaderOptions(), additionalExtensionPaths: directories },
+        resourceLoaderOptions: { ...phase0ResourceLoaderOptions(skills), additionalExtensionPaths: directories },
       }));
+      this.checkResources(services.resourceLoader, skills, executionProfile, "extension_load");
       const loaded = services.resourceLoader.getExtensions();
       if (loaded.errors.length > 0 || services.diagnostics.some((diagnostic) => diagnostic.type === "error")) {
         throw new Error("extension load reported errors");
       }
       extensionTools = registeredExtensionTools(services);
-    } catch {
+    } catch (error) {
+      if (error instanceof PiSessionCreationError) throw error;
       throw this.failure(executionProfile, "extension_load", "extension_load_failed");
     }
     const model = await this.resolveVerifiedModel(services.modelRuntime, executionProfile);
@@ -504,13 +518,15 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       }));
       bound = true;
       if (bindErrors > 0) throw new Error("extension hook reported errors while binding");
+      this.checkResources(sessionRuntime.session.resourceLoader, skills, executionProfile, "extension_bind");
       // A `session_start` handler may register a tool that replaces a built-in or granted tool.
       // Tools an extension registers later, during a turn, are not re-checked: allowlisted
       // extensions are trusted code.
       const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services));
       if (!recheck || recheck.length !== tools.length || recheck.some((name, index) => name !== tools[index])) conflict = true;
-    } catch {
+    } catch (error) {
       await cleanUp();
+      if (error instanceof PiSessionCreationError) throw error;
       throw this.failure(executionProfile, "extension_bind", "extension_load_failed");
     }
     if (conflict) {
@@ -518,7 +534,37 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset");
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills);
+  }
+
+  private async loadSkills(input: { cwd: string; executionProfile: ResolvedExecutionProfile }): Promise<Skill[]> {
+    try {
+      return await loadSelectedSkills(input.executionProfile.skills ?? [], input.cwd);
+    } catch (error) {
+      throw this.failure(input.executionProfile, "skill_load", "skill_load_failed",
+        error instanceof PiSkillError && error.alias !== undefined ? { skill: error.alias } : undefined);
+    }
+  }
+
+  private checkResources(
+    loader: ResourceLoader,
+    skills: readonly Skill[],
+    executionProfile: ResolvedExecutionProfile,
+    stage: SdkPiAdapterDiagnostic["stage"],
+  ): void {
+    let actual: Skill[];
+    try { actual = loader.getSkills().skills; }
+    catch { throw this.failure(executionProfile, stage, "skill_load_failed"); }
+    // Compare a multiset so duplicate entries cannot satisfy a selected file twice.
+    const identity = (skill: Skill): string => JSON.stringify([skill.filePath, skill.name]);
+    const expected = skills.map(identity).sort();
+    const received = actual.map(identity).sort();
+    if (expected.length !== received.length || expected.some((entry, index) => entry !== received[index])) {
+      throw this.failure(executionProfile, stage, "skill_load_failed");
+    }
+    if (loader.getPrompts().prompts.length > 0 || loader.getThemes().themes.length > 0) {
+      throw this.failure(executionProfile, stage, "pi_session_creation_failed");
+    }
   }
 
   /** Provider, model, authentication and availability, exactly as configured. */
@@ -589,8 +635,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     toolMismatch: PiSessionCreationErrorCode | undefined,
     // `subset` lets an extension narrow its own active tools; nothing outside the allowlist may be active.
     toolCheck: "exact" | "subset" = "exact",
+    skills: readonly Skill[] = [],
   ): Promise<PiSessionHandle> {
     try {
+      this.checkResources(session.resourceLoader, skills, executionProfile, "postcheck");
       if (session.model?.provider !== executionProfile.provider || session.model.id !== executionProfile.model) {
         throw this.failure(executionProfile, "postcheck", "execution_selection_mismatch");
       }
@@ -634,7 +682,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     executionProfile: ResolvedExecutionProfile,
     stage: SdkPiAdapterDiagnostic["stage"],
     code: PiSessionCreationErrorCode,
-    metadata?: Pick<McpStartupFailure, "serverAlias" | "toolAlias" | "discoveredToolCount"> & { readonly extension?: string },
+    metadata?: Pick<McpStartupFailure, "serverAlias" | "toolAlias" | "discoveredToolCount"> & { readonly extension?: string; readonly skill?: string },
   ): PiSessionCreationError {
     try {
       this.diagnosticSink({
@@ -650,6 +698,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         ...(metadata?.toolAlias === undefined ? {} : { toolAlias: metadata.toolAlias }),
         ...(metadata?.discoveredToolCount === undefined ? {} : { discoveredToolCount: metadata.discoveredToolCount }),
         ...(metadata?.extension === undefined ? {} : { extension: metadata.extension }),
+        ...(metadata?.skill === undefined ? {} : { skill: metadata.skill }),
       });
     } catch {
       // Diagnostics are never allowed to influence session safety.

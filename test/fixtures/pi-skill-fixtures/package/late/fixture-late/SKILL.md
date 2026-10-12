@@ -1,0 +1,6 @@
+---
+name: fixture-late
+description: LATE_DESCRIPTION_SENTINEL
+---
+
+PACKAGE_SKILL_BODY_SECRET_SENTINEL
