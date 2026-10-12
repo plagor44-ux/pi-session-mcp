@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.1 — 2026-10-12
+
 - `updatedAt` of a running turn now follows public SDK activity. It is the time
   of the last observed assistant message start, update or end and tool
   execution start, update or end of that turn, and freezes at the terminal
@@ -86,6 +88,10 @@
   Cursor. Each session reports whether a polled running turn showed
   `updatedAt` beyond `startedAt`. See
   [Acceptance](docs/acceptance.md#multi-session-skill-acceptance). Issue #53.
+- A release now travels in the pull request of the change it ships, with the
+  version, the changelog heading and the pre-release acceptance record; records
+  that need the published release follow with the next change. See
+  [Releasing](docs/releasing.md#prepare-a-release).
 
 ## 0.8.0 — 2026-10-12
 
