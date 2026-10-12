@@ -376,10 +376,26 @@ Pi Session MCP tools; the script never does.
   installed Claude Code controller skill copy, the candidate skill that the
   Codex controller's link points to, the worker skills (`implementation`,
   `review`), the `handshake` skill, the override directory, the run
-  configuration, the Claude MCP configuration, the fixture baselines and the
-  harness itself. `run` rechecks all of them before the launch and again after
-  the run. A change before the launch refuses the run; a change after it fails
-  the result with `resourcesChanged`.
+  configuration, the Claude MCP configuration, the fixture baselines, the
+  harness itself, and the `pi-session-orchestration` copies in the operator's
+  home (`~/.claude/skills` and `~/.agents/skills`, recorded as missing when
+  absent). `run` rechecks all of them before the launch and again after the
+  run. A change before the launch refuses the run; a change after it fails the
+  result with `resourcesChanged`.
+- Home controller skills: Claude Code prefers a personal skill over a project
+  skill of the same name. With `--setting-sources project,local`, as the
+  harness starts it, Claude Code `2.1.296` listed only the project copy when a
+  different personal copy existed (observed on 2026-10-12 with a marker skill);
+  without that flag the personal copy shadowed the project copy. Re-check this
+  when the client version changes. Codex's precedence between its home skills
+  and the run's repository skill is not established, so a Codex run is refused
+  while `~/.agents/skills/pi-session-orchestration` differs from the
+  candidate's skill.
+- Launch record and failed analysis: `run` records the launch once before the
+  controller starts, so an attempt that ends without a result is never repeated
+  silently. If the analysis after the controller fails, the result is recorded
+  as `analysisFailed` and never passes, and the run's own processes are still
+  terminated.
 - Controller skill: from the harness of `3f98104` on, `prepare` installs the
   Claude Code controller skill the way an operator does, with the candidate's
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
