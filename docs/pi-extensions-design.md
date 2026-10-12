@@ -3,6 +3,14 @@
 Status: approved by the owner on 2026-10-11 for implementation. Tracking issue:
 [#34](https://github.com/plagor44-ux/pi-session-mcp/issues/34).
 
+> **Amended by [ADR 0007](adr/0007-profile-skill-selection.md).** This design
+> assumed that `noSkills` and the other `no*` options keep skills, prompt
+> templates and themes out of every session. With Pi SDK 1.1.0 that did not hold
+> for resources that an allowlisted extension package ships. An extension
+> allowlist now makes none of them available; a skill reaches a session only
+> through the operator's `skillCatalog` and the profile's `skills`. See
+> [Pi skills](skills.md).
+
 ## Goal
 
 An operator can allowlist Pi extensions per execution profile. A profile that
@@ -53,8 +61,10 @@ Success means:
 `DefaultResourceLoader` with `noExtensions: true`, no skills, templates or
 themes, and a disabled system prompt. `SdkPiSessionAdapter.create` resolves
 provider, model, authentication and availability against one `ModelRuntime`
-shared by all sessions, and only then builds the resource loader and calls
-`createAgentSession`.
+shared by the sessions of profiles without extensions (a profile with
+`extensions` gets a runtime of its own, see *Session creation*), and only then
+builds the resource loader and calls `createAgentSession`. This describes the
+state before this feature; ADR 0007 later added the skill selection.
 
 Facts about Pi SDK 1.1.0 that shape this design, verified against the
 installed package:
@@ -85,8 +95,11 @@ installed package:
    mismatched npm packages, and `getInstalledPath(source, "user")` falls back
    to a synchronous `npm root -g` on a miss and accepts legacy global
    installs; neither is side-effect free.
-9. `pi-cursor-sdk` and `@cursor/sdk` call `console.log`. In a stdio MCP server
-   such output corrupts the protocol stream.
+9. Skills, prompt templates and themes that an allowlisted extension package
+   ships reached the session although `noSkills` was set (ADR 0007).
+   `loadSkills` removes duplicate skill names before `skillsOverride` runs.
+10. `pi-cursor-sdk` and `@cursor/sdk` call `console.log`. In a stdio MCP server
+    such output corrupts the protocol stream.
 
 The relevant SDK functions are root exports of
 `@earendil-works/pi-coding-agent`: `createAgentSessionServices`,

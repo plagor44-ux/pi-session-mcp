@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+This changes the public MCP contract (a new `pi_capabilities_get` field and a
+new error code), so ADR 0003 requires a minor release: the next one is 0.8.0.
+Not yet released.
+
+- Execution profiles can select Pi skills. An optional top-level
+  `skillCatalog` maps a skill alias to the path of one `SKILL.md` file, and an
+  optional `skills` list in a profile selects catalog aliases. MCP callers still
+  choose only workspace and profile aliases; no tool takes a skill. A session
+  loads exactly the selected skills and validates them at start; a missing,
+  unreadable, oversized or invalid skill, a duplicate Pi skill name, two aliases
+  on one file, or an explicit-only skill (`disable-model-invocation: true`)
+  fails the start with the new error `skill_load_failed`. Every execution
+  profile in `pi_capabilities_get` gains `skills`, the selected catalog aliases
+  (`[]` when none). Doctor gains `skill_missing`, `skill_unreadable` and
+  `skill_duplicate`. Skill file contents are not snapshotted; do not change
+  them while sessions that use them are active. See [Pi
+  skills](docs/skills.md) and [ADR 0007](docs/adr/0007-profile-skill-selection.md).
+  Issue #46.
+- Compatibility change: with Pi SDK 1.1.0, skills that an allowlisted
+  extension package bundles reached a session although `noSkills` was set. An
+  extension allowlist alone now makes none of its skills available. A profile
+  that relied on them needs a catalog entry with the absolute path of the
+  package's `SKILL.md` and a `skills` selection; see the migration section of
+  [Pi skills](docs/skills.md).
+- Prompt templates and themes that extension packages ship are now closed
+  through the SDK's public overrides as well. They were already never expanded
+  for MCP prompts.
+- The package ships three skills under `skills/`: `pi-session-orchestration`
+  for the controlling Claude Code or Codex agent, and `pi-session-implementation`
+  and `pi-session-review` for Pi workers. The example configuration registers
+  the two worker skills.
+
 ## 0.7.1 — 2026-10-11
 
 The public MCP contract is unchanged.

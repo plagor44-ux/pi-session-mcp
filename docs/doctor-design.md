@@ -10,7 +10,7 @@ directory: an npm executable can run from any directory.
 sanitized semver `packageVersion` when metadata is available, ordered `checks`,
 and `exitCode`). Human and JSON output are projections of that same model.
 Subjects are only fixed component names, validated workspace aliases, or
-validated `<profile>:<package>` pairs; paths, configuration values, errors,
+validated `<profile>:<package>` or `<profile>:<skill-alias>` pairs; paths, configuration values, errors,
 credentials, and provider data are never output.
 
 Each check is `{ id, severity, subject, remediation? }`. Severity is `ok`,
@@ -35,7 +35,13 @@ and owners are:
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
 
+| `skill_missing` | The `SKILL.md` file that a profile's selected skill alias names does not exist | `<profile>:<skill-alias>` |
+| `skill_unreadable` | A selected skill path is not a regular file, is larger than 256 KiB, or cannot be read | `<profile>:<skill-alias>` |
+| `skill_duplicate` | Two selected skill aliases of one profile resolve to the same canonical file | `<profile>:<skill-alias>` |
+
 Doctor reads extension manifests from Pi's user install location only; it never installs packages and never imports extension code.
+
+The skill checks run after the extension checks. They look only at file availability: Doctor never reads a skill's frontmatter, never parses or executes it, and the subject carries the catalog alias, never a path. Frontmatter, skill-name rules, name collisions and explicit-only flags (`disable-model-invocation`) are checked only at session start by the Pi SDK contract, so a clean Doctor run does not promise that a skill loads. Unknown or duplicate aliases and two selected aliases with one path are configuration errors and surface as `config_invalid`. See [Pi skills](skills.md).
 
 The Doctor reuses `loadConfig`; it does not duplicate alias, profile, thinking
 level, or read-only-default rules. Workspace values are used only for local

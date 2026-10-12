@@ -156,6 +156,10 @@ Rules:
   `extensions`: a list of at most 8 entries of the form
   `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
   sources, paths and build metadata (`+build`) are rejected. See [Pi extensions](#pi-extensions).
+- A profile may select Pi skills through `skills`: a list of at most 16 aliases
+  from the top-level `skillCatalog`, which maps an alias to the path of one
+  `SKILL.md` file (at most 64 entries). A relative path resolves against the
+  configuration file's directory; `~` is not expanded. See [Pi skills](#pi-skills).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -393,6 +397,47 @@ pin the installed version in the profile:
 - **Cursor sign-in limit.** Without a stored Cursor key, `pi-cursor-sdk`
   reports a placeholder key. Session start succeeds and the first prompt fails
   with `turn_failed`. Store the key with Pi first.
+
+## Pi skills
+
+An execution profile can give its sessions Pi skills that you register in the
+configuration. The catalog maps an alias to one `SKILL.md`; the profile selects
+aliases. MCP callers never choose skills.
+
+```json
+"skillCatalog": {
+  "pi-session-review": "/absolute/path/to/pi-session-mcp/skills/pi-session-review/SKILL.md"
+},
+"executionProfiles": {
+  "safe-readonly": {
+    "default": true,
+    "permissionProfile": "read-only",
+    "provider": "your-configured-provider",
+    "model": "your-configured-model",
+    "thinkingLevel": "medium",
+    "skills": ["pi-session-review"]
+  }
+}
+```
+
+- The package ships the worker skills `pi-session-implementation` and
+  `pi-session-review` and the controller skill `pi-session-orchestration`
+  under `skills/`. The shipped example configuration registers the two worker
+  skills with paths relative to the example file. Once you copy the example to
+  its own directory, replace them with absolute paths into the installation
+  (for an npm installation `$(npm root -g)/pi-session-mcp/skills/…`, written out
+  in full), or remove the `skillCatalog` entry and the profile `skills`. A
+  relative path with no matching file makes Doctor report `skill_missing` and the
+  session start fail with `skill_load_failed`.
+- An extension allowlist alone makes none of a package's skills available. If a
+  profile relied on them, add a catalog entry with the absolute path of the
+  package's `SKILL.md` and select it; see the migration section of [Pi
+  skills](skills.md).
+- A skill file is read by the SDK at session start and later by the model.
+  Do not change skill files while sessions that use them are active; close
+  those sessions first.
+
+The complete rules, errors, Doctor checks and limits are in [Pi skills](skills.md).
 
 ## Upgrade
 
