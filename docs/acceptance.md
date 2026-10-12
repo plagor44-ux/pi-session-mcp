@@ -323,6 +323,74 @@ Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run
 
 Record date, source commit, versions and outcome under Status. No secret, path or prompt content goes into the record.
 
+## Multi-session skill acceptance
+
+A targeted live check for profile skill selection ([skills](skills.md)) and for
+several Pi sessions that one real controller drives at the same time. It is not
+the ten-task Level 3 cycle and does not replace it.
+
+The maintainer script `scripts/multi-session-acceptance.mjs` prepares the run,
+starts the controller and checks the outcome. The controller itself calls the
+Pi Session MCP tools; the script never does.
+
+### Preparation
+
+- Candidate: a separate detached checkout of the commit under test, built with
+  `npm ci`, `npm run build` and `npm run build:cli`. `prepare` records the
+  commit, whether the checkout is clean, and the SHA-256 of `dist/main.js`;
+  `run` refuses a changed entry point.
+- Configuration: `prepare --base-config <operator config> --from-profile
+  <alias>` copies only provider, model and thinking level of one working profile
+  without extensions or MCP servers into a temporary configuration with two
+  profiles: `accept-read` (default, `read-only`, skill `review`) and
+  `accept-code` (`coding`, skills `implementation` and `handshake`). The
+  `handshake` skill is generated per run and holds a random token that no
+  controller prompt contains.
+- Fixtures: four small synthetic git repositories per client (`slug`, `stats`,
+  `wait`, `range`), each a separate workspace alias (`cc-*` for Claude Code,
+  `cx-*` for Codex). Both clients use the same configuration and build.
+- Controller skill: one symbolic link from the controller's working directory
+  to the candidate's `skills/pi-session-orchestration` (`.claude/skills` for
+  Claude Code, `.agents/skills` for Codex). No global skill directory changes.
+- Clients: Claude Code runs as `claude -p` with `--mcp-config`,
+  `--strict-mcp-config`, `--setting-sources project,local`,
+  `--permission-mode dontAsk` and an `--allowedTools` list of the eight tools
+  plus read-only file tools, `sleep`, `node --test` and `git -C`. Codex runs as
+  `codex exec --ignore-user-config --sandbox workspace-write` with the server
+  defined through `-c mcp_servers.pi-candidate.*` and the three per-tool
+  approvals from [client setup](client-setup.md#run-codex-without-prompts).
+  Neither run changes a persistent registration, `HOME` or `CODEX_HOME`, and
+  both use the existing authentication.
+
+### Scenarios
+
+Each client runs two invocations, one per scenario:
+
+| Scenario | What the controller does | What is checked |
+| --- | --- | --- |
+| `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
+| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range`; abort `wait` while `range` runs; verify and close both | `wait` turn `aborted` (not `abort_timeout`); its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
+
+### Independent checks
+
+- The script watches `/proc` during the run and records every process of the
+  controller tree, every server of this run (entry point and configuration
+  path) and every process whose working directory lies inside the run, by PID
+  and start time. After the controller exits, none of them may remain.
+- From the controller transcript it extracts only tool names, aliases, states,
+  timestamps and counts. It scans every Pi Session MCP result, with
+  `assistantText` removed, for local paths, the token and credential markers,
+  and counts mentions in `assistantText` separately.
+- Fixture oracles run on the workspace after the controller exits: `node
+  --test` and `git status` per fixture.
+- `evidence` writes one sanitized JSON record and refuses to write a local path
+  or the token. Transcripts and the configuration stay in the run's private
+  directory and are never published.
+
+A controller that reports success does not count; only the checks above do.
+If a client or its authentication is not available, record that client's part
+as blocked.
+
 ## Evidence rules
 
 - Record only sanitized evidence: statuses, booleans, counts, durations,
