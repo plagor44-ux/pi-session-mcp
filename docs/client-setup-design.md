@@ -240,7 +240,8 @@ fsynced temporary file, a rename and a directory fsync. The lock is released on
 every path. The wait is bounded at 30 seconds (`skill_customize_lock_busy`);
 a lock that cannot be taken is `skill_customize_lock_unavailable`. A killed
 holder releases the lock through the kernel and may leave a stale
-`.pi-session-mcp-bases.json.<hex>.tmp`, which is harmless. The dry-run takes no
+`.pi-session-mcp-bases.json.<hex>.tmp` or a temporary copy directory
+`.<skill>.<hex>.tmp`, which are harmless. The dry-run takes no
 lock and writes nothing: no directory, lock file or temporary file. Every write
 produces version 2 and migrates each legacy value that names a released 0.8.0
 shipped skill; other legacy values are kept as they are.

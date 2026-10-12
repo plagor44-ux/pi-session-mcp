@@ -54,8 +54,8 @@
   the 0.8.0 table and migrated; others stay and report
   `skill_legacy_unverified`. Doctor resolves 0.8.0 bases against the same table,
   and the next `--apply --customize-skill` rewrites the bases file as version 2.
-  0.8.0 rejects the new formats (the bases file as corrupt, the ownership file
-  as invalid), so it never acts on them. See [Upgrade from
+  0.8.0 rejects the new formats as corrupt (the bases file, and the ownership
+  file with `ownership_corrupt`), so it never acts on them. See [Upgrade from
   0.8.0](docs/skills.md#upgrade-from-080).
 - The orchestration skill now says that a successful `pi_session_start` does not
   prove that the provider accepts requests, asks for a bounded observation and

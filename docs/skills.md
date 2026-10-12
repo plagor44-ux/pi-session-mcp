@@ -307,7 +307,9 @@ status `failed` (exit 1), so it is not overlooked.
   reports `skill_installed` or `skill_updated`.
 - `skill_recovery_planned` means that the ownership record is pending for an
   update that `--apply` would settle. The dry-run does not write or delete
-  anything and does not look at the intermediate directories. A divergent or
+  anything and does not look at the intermediate directories, so `--apply` can
+  still find a modified or foreign intermediate, keep it and report
+  `skill_recovery_retained`. A divergent or
   foreign copy keeps `skill_divergent`, and a 0.8.0 record keeps its own code.
 - `skill_kept_shared` means that the other Claude Code registration (`user` or
   `local`) still uses the shared directory. The last one removes the skill.
