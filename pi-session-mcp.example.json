@@ -3,8 +3,8 @@
     "project": "/absolute/path/to/project"
   },
   "skillCatalog": {
-    "pi-session-implementation": "skills/pi-session-implementation/SKILL.md",
-    "pi-session-review": "skills/pi-session-review/SKILL.md"
+    "pi-session-implementation": "builtin:pi-session-implementation",
+    "pi-session-review": "builtin:pi-session-review"
   },
   "executionProfiles": {
     "safe-readonly": {
