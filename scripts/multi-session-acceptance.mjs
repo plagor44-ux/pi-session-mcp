@@ -164,7 +164,7 @@ function prompt(client, scenario) {
     `You are the controller of an acceptance run of the Pi Session MCP server named \`${SERVER}\`. Use your \`pi-session-orchestration\` skill and call the \`${SERVER}\` MCP tools yourself; do not write scripts that call them.`,
     "Start with pi_capabilities_get and state the server version and the configuration fingerprint you saw.",
     "Use the execution profile `accept-code` for every task. Wait 5 to 10 seconds with the shell command `sleep` between polling rounds. Total time budget: 15 minutes.",
-    "Read files and run commands only inside ./fixtures; every other directory of this run is off limits. The operator checks the handshake content; you only check that the file exists.",
+    `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits. The operator checks the handshake content; you only check that the file exists.`,
   ];
   if (scenario === "parallel") return [...common,
     "Run these two tasks in parallel, each in its own Pi session; start both first turns before waiting for either:",
