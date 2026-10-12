@@ -11,7 +11,7 @@ You control Pi worker sessions through the pi-session-mcp tools. You choose only
 
 - Call `pi_capabilities_get` before anything else in a run. Use only the workspace and profile aliases it lists. Never invent an alias or pass a path.
 - Each profile lists `permissionProfile` (`read-only` or `coding`), `extensions` and `skills`. `skills` names the configured skill aliases. That is configuration intent only. It does not prove that a session loaded the skill or that the model will read it.
-- Capabilities do not prove that a provider or model is reachable. The first `pi_session_start` is the real check.
+- Capabilities do not prove that a provider or model is reachable. A successful `pi_session_start` shows that the session was created with the selected provider, model and thinking level, and that local authentication, the extensions, external MCP servers and selected skills passed their start checks. It does not prove that the provider accepts requests: credentials, quota and network show only when a turn runs.
 
 ## 2. Scope each task
 
@@ -56,7 +56,7 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 
 ## 7. Interpret progress and results
 
-- `updatedAt` on a running turn is a last-activity stamp. A stamp that has not moved is not proof of a hang: the model may be thinking or writing a long answer. Judge by your time budget, not by `updatedAt` alone.
+- `updatedAt` on a running turn is the time of the last observed public SDK activity: assistant message start, streaming updates and end, and tool execution start, update and end. Streaming is activity, not evidence of finished or useful work. Work without a public event stays invisible, for example inside an extension's own agent loop or in a long tool call without updates. A stamp that has not moved is therefore no proof of a hang. Judge by your time budget and by the workspace.
 - `completed` is a technical state: the turn ended and returned text. It does not mean the task succeeded. Read `assistantText` and check `truncated`.
 - Never accept a worker report as proof. A worker saying the tests pass is a claim, not evidence.
 
@@ -77,8 +77,9 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - `failed` means `turn_failed`. The error carries no cause. Check the result in the workspace, then retry once in a fresh session with a narrower prompt, or take the task over yourself.
 - `aborted` means the turn stopped. Look at what the workspace contains before reusing it.
 - `pi_session_abort` returns `abort_failed` if the abort was rejected. The turn may still be running. Poll it.
-- `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Poll `pi_turn_get` until it is terminal. If it stays `running`, close the session with `pi_session_close` and treat the workspace as unverified until you inspect it.
-- On `pi_session_start` errors such as `unknown_execution_profile`, `skill_load_failed` or the `extension_*` and `external_mcp_*` codes, do not retry blindly. The cause is configuration. Report it to the operator.
+- `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Decide an observation and cleanup budget before you abort, for example a fixed number of polling rounds within a few minutes. Poll `pi_turn_get` until the turn is terminal or the budget is spent, then close the session with `pi_session_close`. If the close fails or does not finish, stop using that workspace, treat it as unverified and report it. Never wait without a bound.
+- On `pi_session_start` errors, do not retry blindly and do not change the profile. These codes need the operator; a retry cannot fix them: `unknown_execution_profile`, `unknown_workspace`, `skill_load_failed`, `extension_not_installed`, `extension_version_mismatch`, `extension_tool_conflict`, `external_mcp_no_tools`, `external_mcp_grant_tool_missing` and `external_mcp_activation_mismatch`.
+- `external_mcp_unavailable` (an external MCP server that cannot connect, times out or breaks the protocol) and `extension_load_failed` (an invalid package, but also a start timeout) can be transient. Retry at most once after a pause, then report.
 
 ## 10. Close every session
 

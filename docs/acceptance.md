@@ -421,6 +421,25 @@ A controller that reports success does not count; only the checks above do.
 If a client or its authentication is not available, record that client's part
 as blocked.
 
+### Method limits of earlier records
+
+Records made with the harness before it was hardened in a later change (#53)
+have these method limits:
+
+- The scope check used `git status`, which does not show a change that a worker
+  had already committed.
+- The business checks ran the fixture tests inside the worker's workspace,
+  which a worker could have modified.
+- Only the build, the harness and the bytes of the configuration file (through
+  its fingerprint) were bound to the run. The installed controller skill, the
+  contents of the selected worker skills and the fixture baselines were not.
+- After the time limit the harness sent `SIGTERM` and then waited for the
+  client to close without a bound. A hang would have shown as a hang, not as a
+  pass.
+
+These limits do not show that any recorded result was wrong. The records stay
+as recorded; a new run gets a new record.
+
 ## Evidence rules
 
 - Record only sanitized evidence: statuses, booleans, counts, durations,
@@ -837,6 +856,10 @@ These runs do not cover macOS, Codex skill discovery from the user's home
 controller read it from there), the extension profile path live, or more than
 two concurrent sessions.
 
+The multi-session runs above were made with the earlier harness. Its
+[method limits](#method-limits-of-earlier-records) apply to them. They do not
+show that any of these results was wrong.
+
 Before its release, `v0.8.0` passed Level 1 and the working-tree Level 2 on
 its release candidate `6d197a0` on Linux (`x64`), with Node.js `26.11.1`, Codex
 CLI `0.162.1` and Claude Code `2.1.296`, on 2026-10-12:
@@ -854,3 +877,64 @@ CLI `0.162.1` and Claude Code `2.1.296`, on 2026-10-12:
 - Apart from the version, the candidate's sources equal the merge of #48,
   whose final candidate `0ebbaa0` passed the multi-session skill acceptance
   recorded above.
+
+After its release, `v0.8.0` passed Level 1 on a fresh clone of its tag and
+Level 2 in three variants. The release was published on 2026-10-12. The release
+notes do not date the individual checks, and they name no operating system for
+the local runs.
+- Source and tag: the release source and the annotated tag target is
+  `de46896a6cc3aebc61234917c6d8c472003da36b`, the merge of #49 (head
+  `805162ed3c3bcd73113dccabf62656414e3dd9be`). The annotated tag object is
+  `a198292fab7f4ef9bdbd18a0ba40324e45e71e21`. The feature pull request #48
+  (head `a2dc018a22ffa8dd8ff6af5d358f4f57cf7db845`) was merged as
+  `f9e4b6711e9ca0419b2325bec8d6c350ebead5f5`.
+- CI: #48 and #49 passed on Linux, macOS 15 and macOS 26. The
+  [merged-main run](https://github.com/plagor44-ux/pi-session-mcp/actions/runs/38226706157)
+  and the
+  [tag run](https://github.com/plagor44-ux/pi-session-mcp/actions/runs/38226900880)
+  are on record.
+- Level 1 on a fresh clone of the tag, with Node.js `26.11.1` and npm
+  `12.2.0`: every command exited with `0`.
+  - Typecheck, server build and CLI build.
+  - The test run reported 43 files, 884 passed and 5 skipped (macOS-only).
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - Offline Doctor reported `packageVersion` `0.8.0`. With the example
+    configuration its only finding was the placeholder workspace.
+- npm package `pi-session-mcp@0.8.0`, published from a fresh clone of the tag
+  through staged publishing and approved by the maintainer: 125 files, 189.3 kB
+  and the shasum `37f76ab9c3807213b7e6178156992c76f0ff8378`. The tarball
+  downloaded from the registry had the same SHA-1 and SHA-512 integrity.
+- Level 2 ran through `scripts/setup-acceptance.mjs` in three variants: the
+  working tree of the release candidate, a fresh clone of the tag, and the npm
+  package installed into a temporary prefix. Each passed 160 of 160 checks.
+  - The clients were Codex CLI `0.162.1` (`user`) and Claude Code `2.1.296`
+    (`user`, `project`, `local`), in disposable homes.
+  - Every step also checked the controller skill: installed after apply,
+    verified, removed after rollback and remove, with a foreign skill in the
+    same directory untouched.
+  - The real client registrations were unchanged, no process remained, and the
+    build stayed byte-identical.
+- Multi-session skill acceptance: it ran on the branch candidate `0ebbaa0`
+  (recorded above), not on the tag. According to the release notes, its
+  sources equal the release apart from the version and the documentation.
+  Claude Code `2.1.296` and Codex CLI `0.162.1` were the controllers, with Pi
+  SDK `1.1.0` workers. Both the `parallel` scenario (overlapping turns, a
+  same-session follow-up and a skill-only token written by the worker) and the
+  targeted `abort` scenario with a neighbor that kept running passed every
+  check for both clients. The Claude Code controller skill was installed with
+  `setup --apply`, and all catalog skills were `builtin:` references.
+
+This record does not cover:
+- A full ten-task Level 3 cycle. The multi-session check is targeted.
+- A Codex controller that reads the skill from `~/.agents/skills` live (setup
+  installs it there and Level 2 checks the file), the extension profile path
+  live with skills (the SDK contract tests cover it), more than two concurrent
+  sessions, and macOS beyond CI.
+- The contents of skill files: they are not snapshotted, so skill files must
+  not change while sessions use them. The model sees skill paths in its system
+  prompt and may repeat them in its answers.
+- Isolation: skill selection limits the regular skill catalog only. An
+  allowlisted extension stays trusted code, and a `coding` profile is no
+  operating-system sandbox.
+- Package provenance: the npm package has no provenance attestation, because it
+  was published from the maintainer's machine.
