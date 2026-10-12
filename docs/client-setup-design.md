@@ -284,9 +284,9 @@ Stable finding codes are grouped by responsibility:
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
 - controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,
-  `skill_update_planned`, `skill_divergent`, `skill_legacy_unverified`,
-  `skill_source_invalid`;
-- controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_linked`,
+  `skill_update_planned`, `skill_recovery_planned`, `skill_divergent`,
+  `skill_legacy_unverified`, `skill_source_invalid`;
+- controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_recovered`, `skill_linked`,
   `skill_updated`, `skill_divergent`, `skill_legacy_unverified`,
   `skill_recovery_retained`, `skill_source_invalid`,
   `skill_install_failed`;

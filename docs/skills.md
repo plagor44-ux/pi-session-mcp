@@ -222,7 +222,11 @@ the shipped skill and has no base).
   `/bin/flock`; on macOS it uses `O_EXLOCK`. Both need a supported local
   filesystem.
 - A holder that is killed releases the lock through the kernel. It may leave a
-  stale `.pi-session-mcp-bases.json.<hex>.tmp` file, which is harmless.
+  stale hidden temporary bases file `.pi-session-mcp-bases.json.<hex>.tmp` or
+  hidden temporary copy directory `.<skill>.<hex>.tmp` in the override
+  directory. Both are harmless: they are hidden and never resolved as skills.
+  Nothing removes them automatically; you may delete them while no
+  customization runs.
 - The dry-run takes no lock and writes nothing: no directory, lock file or
   temporary file.
 - Doctor stays offline, read-only and lock-free.
@@ -286,8 +290,8 @@ status `failed` (exit 1), so it is not overlooked.
 
 | Operation | Code (status) |
 | --- | --- |
-| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_source_invalid` (failed) |
-| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
+| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_recovery_planned` (planned), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_source_invalid` (failed) |
+| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_recovered` (ok), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
 | `--verify` | `skill_verified` (ok), `skill_missing` (failed), `skill_not_equivalent` (failed) |
 | `--rollback`, `--remove` | `skill_removed` (ok), `skill_kept_shared` (unchanged), `skill_not_owned` (unchanged), `skill_absent` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent) |
 
@@ -296,6 +300,15 @@ status `failed` (exit 1), so it is not overlooked.
   registration was removed.
 - `skill_updated` means that setup replaced its own unmodified copy after a
   package update or a changed override.
+- `skill_recovered` means that `--apply` settled an interrupted update of
+  setup's own copy (it renamed an intermediate into place or deleted one, or
+  finished the pending ownership record) and needed no further update.
+  If the settled copy still needs the new version, `--apply` continues and
+  reports `skill_installed` or `skill_updated`.
+- `skill_recovery_planned` means that the ownership record is pending for an
+  update that `--apply` would settle. The dry-run does not write or delete
+  anything and does not look at the intermediate directories. A divergent or
+  foreign copy keeps `skill_divergent`, and a 0.8.0 record keeps its own code.
 - `skill_kept_shared` means that the other Claude Code registration (`user` or
   `local`) still uses the shared directory. The last one removes the skill.
 - A copy that already equals the effective skill but was not created by `setup`

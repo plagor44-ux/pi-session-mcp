@@ -41,8 +41,12 @@ type Slot =
   | { readonly state: "linked" }
   | TreeSlot;
 interface Location { readonly path: string; readonly owned: SetupTarget }
-/** `settled`: nothing of the transaction is left; `retained`: something stays; `untouched`: the slot is not setup's copy. */
-type Recovery = "settled" | "retained" | "untouched";
+/**
+ * `settled`: nothing of the transaction was left; `recovered`: it was settled and recovery changed
+ * the disk (renamed into the slot or deleted an intermediate); `retained`: something stays;
+ * `untouched`: the slot is not setup's copy.
+ */
+type Recovery = "settled" | "recovered" | "retained" | "untouched";
 interface Intermediates { readonly staging: string; readonly backup: string; readonly trash: string }
 
 const TRANSACTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -174,8 +178,14 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     if (!desired) return finding("skill_source_invalid", "failed");
     try {
       let owned = await ownership.get(ownedTarget);
-      if (operation === "apply" && owned?.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint)
-        && await this.recover("apply", path, name, owned, desired, linkTarget, ownership) === "retained") return finding("skill_recovery_retained", "divergent");
+      let recovered = false;
+      if (operation === "apply" && owned?.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint)) {
+        const outcome = await this.recover("apply", path, name, owned, desired, linkTarget, ownership);
+        if (outcome === "retained") return finding("skill_recovery_retained", "divergent");
+        recovered = outcome === "recovered";
+      }
+      // A dry-run never recovers; it announces the settlement apply would perform for a version 2 transaction.
+      const recoveryPlanned = operation === "dry-run" && owned?.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint) && !hasLegacy(owned);
       const current = await inspectSlot(path, linkTarget);
       if (current.state === "linked") {
         if (operation === "apply" && owned) { healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership); }
@@ -194,12 +204,18 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
         return finding("skill_divergent", "divergent");
       }
       if (current.state === "tree" && current.fingerprint === desired.fingerprint) {
+        if (recoveryPlanned) return finding("skill_recovery_planned", "planned");
         if (operation === "apply" && owned?.phase === "pending") {
           healthy(ownership); await ownership.put(ownedRecord(owned, desired.fingerprint)); healthy(ownership);
+          return finding("skill_recovered", "ok");
         }
+        if (operation === "apply" && recovered) return finding("skill_recovered", "ok");
         return finding(operation === "apply" ? "skill_already_equivalent" : "skill_equivalent", "unchanged");
       }
-      if (operation === "dry-run") return current.state === "absent" ? finding("skill_absent", "absent") : finding("skill_update_planned", "planned");
+      if (operation === "dry-run") {
+        if (recoveryPlanned) return finding("skill_recovery_planned", "planned");
+        return current.state === "absent" ? finding("skill_absent", "absent") : finding("skill_update_planned", "planned");
+      }
       // The pending record is persisted before any intermediate exists. It names the intermediates
       // (transaction id), the target and the replaced copy, so an interrupted update can be
       // recovered, finished or removed from persisted state alone.
@@ -297,9 +313,11 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     // A trash directory with the transaction's name was verified before it was renamed, so on
     // recovery it may be partial. It is deleted after a structural recheck: a real directory,
     // not a link, only regular files and directories, no hidden entries, within the tree limits.
+    let changed = false;
     if (await present(names.trash)) {
       if (await collectPlain(names.trash) === undefined) return "retained";
       await this.discardTrash(names, parent, ownership);
+      changed = true;
     }
     let backup = await inspectSlot(names.backup);
     if (backup.state === "divergent" || (backup.state === "tree" && backup.fingerprint !== previous)) return "retained";
@@ -314,15 +332,17 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
         healthy(ownership); await rename(source, path); healthy(ownership); await syncDirectory(parent); healthy(ownership);
         const restored = await inspectSlot(path);
         if (restored.state !== "tree" || restored.fingerprint !== expected) throw new Error("skill_recovery_mismatch");
+        changed = true;
         if (staging === "complete") staging = "absent"; else backup = { state: "absent" };
       }
     }
-    if (backup.state === "tree") await this.discardBackup(names, backup, parent, ownership);
+    if (backup.state === "tree") { await this.discardBackup(names, backup, parent, ownership); changed = true; }
     if (staging !== "absent") {
       healthy(ownership);
       await removeEntries(names.staging, parent, ownership);
+      changed = true;
     }
-    return "settled";
+    return changed ? "recovered" : "settled";
   }
 }
 

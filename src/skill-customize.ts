@@ -228,6 +228,13 @@ async function copyShippedSkill(files: readonly { readonly path: string; readonl
       try { await handle.writeFile(file.bytes); await handle.sync(); }
       finally { await handle.close(); }
     }
+    // Every directory entry of the temporary tree is durable before the rename and the bases commit.
+    const directories = new Set<string>([temporary]);
+    for (const file of files) {
+      let cursor = dirname(join(temporary, ...file.path.split("/")));
+      while (cursor !== temporary) { directories.add(cursor); cursor = dirname(cursor); }
+    }
+    for (const directory of [...directories].sort((left, right) => right.length - left.length)) await syncDirectory(directory);
     // The override must not appear while the copy runs, and an operator's directory is never replaced.
     if (await lstat(overridePath).then(() => true, (error: unknown) => { if (isMissing(error)) return false; throw error; })) throw new Error("override appeared");
     await rename(temporary, overridePath);

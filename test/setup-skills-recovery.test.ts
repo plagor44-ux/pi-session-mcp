@@ -91,7 +91,7 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
     expect(c.record).toMatchObject({ phase: "pending", replaces: c.v1.fingerprint });
     expect(existsSync(c.slot)).toBe(false);
     expect(await c.text(c.backup)).toBe("controller v1"); expect(await c.text(c.staging)).toBe("controller v2");
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_already_equivalent", status: "unchanged" });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
     await finalState(c, "controller v2");
     expect((await c.run("remove"))[0]).toMatchObject({ code: "skill_removed", status: "ok" });
     await removedState(c);
@@ -116,7 +116,7 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
     const c = await crashAt("installed");
     expect(await c.text(c.slot)).toBe("controller v2"); expect(await c.text(c.backup)).toBe("controller v1");
     expect(c.record.phase).toBe("pending");
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_already_equivalent", status: "unchanged" });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
     await finalState(c, "controller v2");
     expect((await c.run("remove"))[0]).toMatchObject({ code: "skill_removed", status: "ok" });
     await removedState(c);
@@ -125,7 +125,7 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
   it("after the backup was renamed to trash: deletes the trash", async () => {
     const c = await crashAt("trash-renamed");
     expect(existsSync(c.trash)).toBe(true); expect(existsSync(c.backup)).toBe(false); expect(await c.text(c.slot)).toBe("controller v2");
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_already_equivalent" });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
     await finalState(c, "controller v2");
   }, 60_000);
 
@@ -133,7 +133,7 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
     const c = await crashAt("trash-entry-removed");
     const left = await readdir(c.trash);
     expect(left).toHaveLength(1); // the old copy had two entries: SKILL.md and references
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_already_equivalent" });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
     await finalState(c, "controller v2");
   }, 60_000);
 
@@ -147,7 +147,7 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
     const c = await crashAt("before-ownership");
     expect(await c.entries()).toEqual([skill]);
     expect(await c.store.get(ownedTarget)).toMatchObject({ phase: "pending", replaces: c.v1.fingerprint });
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_already_equivalent" });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
     await finalState(c, "controller v2");
     expect((await c.run("remove"))[0]).toMatchObject({ code: "skill_removed", status: "ok" });
     await removedState(c);
@@ -245,6 +245,47 @@ describe("recovery only deletes this transaction's verified directories", () => 
       expectSkill(await x.f.run("apply"), "skill_recovery_retained", "divergent");
       expect(await snapshot(x.parent)).toBe(before);
     }
+  });
+
+  it("plans the recovery of a pending version 2 transaction in a dry-run without writing", async () => {
+    const x = await interrupted(); const staging = x.name(x.id, "staging"); await x.put(staging, "controller v2");
+    const check = async (): Promise<void> => {
+      const before = await snapshot(x.parent);
+      const output = await x.f.run("dry-run");
+      expectSkill(output, "skill_recovery_planned", "planned");
+      expect(JSON.stringify(output)).not.toContain(x.f.root);
+      expect(await snapshot(x.parent)).toBe(before);
+      expect(await x.f.ownership.get(skillTarget(targets[0]!))).toEqual(x.record);
+    };
+    await check(); // the replaced copy is in the slot
+    await rm(x.slot, { recursive: true }); await check(); // the slot is empty, like after the backup rename
+    await mkdir(join(x.slot, "references"), { recursive: true });
+    await writeFile(join(x.slot, "SKILL.md"), "controller v2"); await writeFile(join(x.slot, "references", "guide.md"), "guide v2");
+    await check(); // the target is installed and only the record is pending
+  });
+
+  it("keeps the divergent code in a dry-run when the slot is foreign", async () => {
+    const x = await interrupted();
+    await writeFile(join(x.slot, "SKILL.md"), "operator edit");
+    expectSkill(await x.f.run("dry-run"), "skill_divergent", "divergent");
+  });
+
+  it("reports skill_recovered only when apply settled the transaction without a further update", async () => {
+    const x = await interrupted();
+    await rm(x.slot, { recursive: true }); await mkdir(join(x.slot, "references"), { recursive: true });
+    await writeFile(join(x.slot, "SKILL.md"), "controller v2"); await writeFile(join(x.slot, "references", "guide.md"), "guide v2");
+    const staging = x.name(x.id, "staging"); await x.put(staging, "controller v2");
+    await mkdir(join(staging, "references")); await writeFile(join(staging, "references", "guide.md"), "guide v2");
+    expectSkill(await x.f.run("apply"), "skill_recovered", "ok");
+    expect(existsSync(staging)).toBe(false);
+    expect(await x.f.ownership.get(skillTarget(targets[0]!))).toMatchObject({ phase: "owned", fingerprint: x.v2.fingerprint });
+    expectSkill(await x.f.run("apply"), "skill_already_equivalent", "unchanged");
+  });
+
+  it("keeps skill_updated when apply continues with a normal update after recovery", async () => {
+    const x = await interrupted(); const staging = x.name(x.id, "staging"); await x.put(staging, "controller");
+    expectSkill(await x.f.run("apply"), "skill_updated", "ok");
+    expect(existsSync(staging)).toBe(false);
   });
 
   it("does not recover while the slot is neither empty nor one of setup's copies", async () => {

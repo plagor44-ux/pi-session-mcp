@@ -330,7 +330,7 @@ describe("setup controller skills", () => {
   });
   it("recovers pending ownership of an equivalent installed tree", async () => {
     const f = await fixture(); await f.run("apply"); const owned = (await f.ownership.get(skillTarget(targets[0]!)))!;
-    await f.ownership.put({ ...owned, phase: "pending" }); expectSkill(await f.run("apply"), "skill_already_equivalent", "unchanged");
+    await f.ownership.put({ ...owned, phase: "pending" }); expectSkill(await f.run("apply"), "skill_recovered", "ok");
     expect((await f.ownership.get(skillTarget(targets[0]!)))?.phase).toBe("owned");
   });
 });

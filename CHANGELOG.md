@@ -46,7 +46,9 @@
   Anything modified or foreign stays and is reported as the new code
   `skill_recovery_retained`. A failed update leaves its staging directory until
   the next run settles it. Directories of 0.8.0 updates are never searched for
-  or deleted. Issues #51 and #52.
+  or deleted. When `--apply` settled an interrupted update and needs no further
+  update it reports the new code `skill_recovered`, and a dry-run of a pending
+  update reports `skill_recovery_planned`. Issues #51 and #52.
 - Upgrading from 0.8.0: run `pi-session-mcp-setup` as a dry-run and then with
   `--apply`. Unchanged copies of the 0.8.0 controller skill are proven against
   the 0.8.0 table and migrated; others stay and report
