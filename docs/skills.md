@@ -57,7 +57,10 @@ Two optional parts of `pi-session-mcp.json`:
   like a workspace. It never resolves against a workspace or the shell's
   working directory. `~` is not expanded: write an absolute path.
 - A skill folder needs no `package.json` and no extension. The file can live
-  anywhere the server's OS user can read.
+  anywhere the server's OS user can read. Keep catalog files outside every
+  configured workspace: a `coding` session can change any file in its
+  workspace, and a changed skill reaches other sessions too (see
+  [snapshot semantics](#snapshot-semantics)).
 - The catalog alias is only the public handle. It may differ from the `name` in
   the skill's own frontmatter. Nothing is renamed.
 
@@ -106,6 +109,10 @@ alias in a `skill` field. If the session's actual skill catalog differs from
 the selection after construction, the stage is `postcheck`, or
 `extension_load` and `extension_bind` for a profile with extensions. Neither
 carries a path.
+
+If the session's prompt-template or theme catalog is not empty after
+construction, which the overrides should prevent, the start fails with
+`pi_session_creation_failed`.
 
 Explicit-only skills (`disable-model-invocation: true`) are incompatible in
 this version. Pi hides such skills from the model, and MCP prompts never run

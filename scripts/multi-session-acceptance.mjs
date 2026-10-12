@@ -25,7 +25,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, symlinkSync, writeFileSync,
+  existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
@@ -190,7 +190,8 @@ function command(client, info, priv, controller, values) {
       "--allowedTools", ...allowed, "--setting-sources", "project,local", "--output-format", "stream-json", "--verbose", "--no-session-persistence"] };
   }
   const toml = (value) => JSON.stringify(value);
-  return { file: "codex", args: ["exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "--sandbox", "workspace-write", "-C", controller,
+  // Read-only sandbox: the controller can inspect and test the fixtures but never write them itself.
+  return { file: "codex", args: ["exec", "--json", "--ignore-user-config", "--skip-git-repo-check", "--sandbox", "read-only", "-C", controller,
     ...(values["codex-model"] ? ["-m", values["codex-model"]] : []),
     "-c", `mcp_servers.${SERVER}.command=${toml(info.node)}`,
     "-c", `mcp_servers.${SERVER}.args=[${toml(info.entry)}]`,
@@ -235,6 +236,22 @@ function parseResultText(content) {
   if (typeof text !== "string") return undefined;
   try { return JSON.parse(text); } catch { return undefined; }
 }
+/** Inputs of the controller's own tools (file reads, shell commands), for the private-access check. */
+function controllerActions(client, lines) {
+  const actions = [];
+  for (const line of lines) {
+    let event; try { event = JSON.parse(line); } catch { continue; }
+    if (client === "claude") {
+      for (const item of event?.message?.content ?? []) {
+        if (event.type === "assistant" && item.type === "tool_use" && !item.name?.startsWith(`mcp__${SERVER}__`)) actions.push(JSON.stringify(item.input ?? {}));
+      }
+    } else if (event?.type === "item.completed" && event.item?.type === "command_execution") {
+      actions.push(String(event.item.command ?? ""));
+    }
+  }
+  return actions;
+}
+
 function toolCalls(client, lines) {
   const calls = [];
   const pending = new Map();
@@ -265,16 +282,18 @@ function analyze(client, scenario, calls, info, rawText) {
   const capabilities = calls.find((call) => call.tool === "pi_capabilities_get" && call.result?.ok)?.result;
   const code = capabilities?.executionProfiles?.find((profile) => profile.alias === "accept-code");
   const sessions = new Map();
-  for (const call of calls) if (call.tool === "pi_session_start" && call.result?.ok) sessions.set(call.result.session.id, { workspace: call.result.session.workspace, profile: call.result.session.executionProfile, turns: new Map(), closed: false, abort: undefined, polls: 0 });
-  for (const call of calls) {
+  for (const call of calls) if (call.tool === "pi_session_start" && call.result?.ok) sessions.set(call.result.session.id, { workspace: call.result.session.workspace, profile: call.result.session.executionProfile, turns: new Map(), closed: false, aborts: [], abortedSeenAt: undefined, closedAt: undefined, polls: 0 });
+  calls.forEach((call, index) => {
     const session = sessions.get(call.input?.sessionId);
-    if (!session) continue;
+    if (!session) return;
     const turn = call.result?.turn;
     if (turn?.turnId) session.turns.set(turn.turnId, { ...(session.turns.get(turn.turnId) ?? {}), ...turn });
     if (call.tool === "pi_turn_get") session.polls += 1;
-    if (call.tool === "pi_session_close" && call.result?.ok) session.closed = true;
-    if (call.tool === "pi_session_abort") session.abort = call.result?.ok ? "ok" : call.result?.error?.code ?? "error";
-  }
+    if (call.tool === "pi_turn_get" && turn?.state === "aborted") session.abortedSeenAt ??= index;
+    if (call.tool === "pi_session_close" && call.result?.ok) { session.closed = true; session.closedAt ??= index; }
+    // Every abort result in order: an abort_timeout followed by a successful retry stays visible.
+    if (call.tool === "pi_session_abort") session.aborts.push(call.result?.ok ? "ok" : call.result?.error?.code ?? "error");
+  });
   const task = (name) => [...sessions.values()].find((session) => session.workspace === `${p}-${name}`);
   const turnsOf = (session) => [...(session?.turns.values() ?? [])].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const ms = (value) => (value ? Date.parse(value) : NaN);
@@ -297,33 +316,48 @@ function analyze(client, scenario, calls, info, rawText) {
     acceptCodeSkills: code?.skills,
     toolCalls: counts,
     sessionsStarted: sessions.size,
-    sessions: [...sessions.values()].map((session) => ({ workspace: session.workspace, profile: session.profile, turns: turnsOf(session).map((turn) => turn.state), polls: session.polls, abort: session.abort, closed: session.closed })),
+    sessions: [...sessions.values()].map((session) => ({ workspace: session.workspace, profile: session.profile, turns: turnsOf(session).map((turn) => turn.state), polls: session.polls, aborts: session.aborts, closed: session.closed })),
     firstTurnsOverlapSeconds: Number.isFinite(overlapMs) ? Math.round(overlapMs / 100) / 10 : undefined,
     firstTurnsOverlap: Number.isFinite(overlapMs) && overlapMs > 0,
     tokenInControllerPrompts: prompts.some((text) => text.includes(info.token)),
     tokenInControllerTask: prompt(client, scenario).includes(info.token),
+    // The controller's own reads and commands must never touch the private run directory.
+    controllerTouchedPrivate: controllerActions(client, rawText.split("\n")).some((action) => ["/private", "run.json", "acceptance-handshake", "config.json"].some((marker) => action.includes(marker))),
     structuralLeaks,
     assistantTextMentions,
     controllerTranscriptHasToken: rawText.includes(info.token),
   };
+  result.turnIntervals = Object.fromEntries(SCENARIOS[scenario].tasks.map((name) => [name, turnsOf(task(name)).map((turn) => [turn.startedAt, turn.completedAt])]));
   if (scenario === "parallel") {
     const slugTurns = turnsOf(first);
     result.followUpCompleted = slugTurns.length >= 2 && slugTurns[1].state === "completed";
   } else {
     const wait = turnsOf(first)[0]; const range = turnsOf(second)[0];
     result.abortedTurn = wait?.state === "aborted";
+    result.abortResults = first?.aborts ?? [];
+    result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok");
+    // `aborted` must be observed through pi_turn_get before the session was closed, so close did not cause it.
+    result.abortedBeforeClose = first?.abortedSeenAt !== undefined && (first.closedAt === undefined || first.abortedSeenAt < first.closedAt);
     result.neighborCompleted = range?.state === "completed";
     result.abortWhileNeighborRunning = Boolean(wait && range && ms(wait.completedAt) > ms(range.startedAt) && ms(wait.completedAt) < ms(range.completedAt));
   }
   return result;
 }
 
-function oracle(controller, scenario, info) {
+/** Whether a file was last written inside one of the worker turns (1 s tolerance for clock granularity). */
+function writtenDuring(path, intervals) {
+  const mtime = readSafe(() => statSync(path).mtimeMs);
+  return typeof mtime === "number" && intervals.some(([start, end]) => end !== undefined && mtime >= Date.parse(start) - 1_000 && mtime <= Date.parse(end) + 1_000);
+}
+
+function oracle(controller, scenario, info, intervals = {}) {
   const out = {};
   for (const task of SCENARIOS[scenario].tasks) {
     const dir = join(controller, "fixtures", task);
     const changed = git(dir, "status", "--porcelain", "--untracked-files=all").split("\n").filter(Boolean).map((line) => line.slice(3));
     const check = { onlyAllowedChanges: changed.every((file) => ALLOWED_CHANGES[task].includes(file)), changedFiles: changed.length };
+    // Attribution: every changed file was last written during a worker turn of this task's session.
+    check.changesWrittenDuringWorkerTurns = changed.every((file) => writtenDuring(join(dir, file), intervals[task] ?? []));
     if (task !== "wait") {
       const test = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8", timeout: 60_000 });
       check.testsPass = test.status === 0;
@@ -332,6 +366,7 @@ function oracle(controller, scenario, info) {
       const tests = readFileSync(join(dir, "test", "slug.test.js"), "utf8").match(/\btest\(/g)?.length ?? 0;
       check.addedTest = tests > 3;
       check.handshake = readSafe(() => readFileSync(join(dir, "HANDSHAKE.txt"), "utf8")).trim() === `handshake ${info.token}`;
+      check.handshakeWrittenDuringFollowUp = writtenDuring(join(dir, "HANDSHAKE.txt"), (intervals.slug ?? []).slice(1));
     }
     if (task === "wait") check.lateFileAbsent = !existsSync(join(dir, "LATE.txt"));
     out[task] = check;
@@ -369,7 +404,8 @@ async function runClient(values) {
   writeFileSync(transcript, Buffer.concat(chunks), { mode: 0o600 });
   // Cleanup: every process this run started must be gone, matched by PID and start time.
   let residual = [];
-  for (let waited = 0; waited <= 10_000; waited += 500) {
+  // The server may take up to 15 s for its bounded process shutdown.
+  for (let waited = 0; waited <= 17_000; waited += 500) {
     residual = [...seen.values()].filter(alive).concat(snapshot(-1, run, info).filter((p) => !seen.has(`${p.pid}:${p.start}`)));
     if (residual.length === 0) break;
     await new Promise((done) => setTimeout(done, 500));
@@ -388,8 +424,9 @@ async function runClient(values) {
       residualCommands: [...new Set(residual.map((p) => p.comm))],
     },
     transcript: analyze(values.client, values.scenario, calls, info, rawText),
-    oracle: oracle(controller, values.scenario, info),
   };
+  result.oracle = oracle(controller, values.scenario, info, result.transcript.turnIntervals);
+  delete result.transcript.turnIntervals;
   writeJson(join(priv, "results", `${label}.json`), result);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
@@ -404,7 +441,9 @@ function reanalyze(values) {
   const stored = readJson(join(priv, "results", `${label}.json`));
   const rawText = readFileSync(join(priv, "transcripts", `${label}.jsonl`), "utf8");
   const calls = toolCalls(values.client, rawText.split("\n"));
-  const result = { ...stored, transcript: analyze(values.client, values.scenario, calls, info, rawText), oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info) };
+  const transcript = analyze(values.client, values.scenario, calls, info, rawText);
+  const result = { ...stored, transcript, oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info, transcript.turnIntervals) };
+  delete transcript.turnIntervals;
   writeJson(join(priv, "results", `${label}.json`), result);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

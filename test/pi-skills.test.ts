@@ -27,6 +27,20 @@ describe("selected Pi skills", () => {
     expect(sdkLoad).toHaveBeenCalledExactlyOnceWith({ cwd: root, agentDir: root, skillPaths: selected.map(({ path }) => path), includeDefaults: false });
   });
 
+  it("rejects two aliases on one canonical file itself, without relying on SDK dedupe", async () => {
+    const cwd = await temporaryRoot("pi-skill-canonical-");
+    const linked = join(cwd, "SKILL.md");
+    await symlink(selection("fixture-alpha").path, linked);
+    // A loader that keeps both paths, as an SDK without real-path dedupe would.
+    const keepsBoth = vi.fn((options: Parameters<typeof loadSkills>[0]) => {
+      const [skill] = loadSkills({ ...options, skillPaths: [options.skillPaths[0]!] }).skills;
+      return { skills: options.skillPaths.map((filePath) => ({ ...skill!, filePath })), diagnostics: [] };
+    });
+    await expect(loadSelectedSkills([selection("fixture-alpha", "one"), { alias: "two", path: linked }], cwd, { loadSkills: keepsBoth }))
+      .rejects.toMatchObject({ code: "skill_load_failed", alias: "two" });
+    expect(keepsBoth).not.toHaveBeenCalled();
+  });
+
   it("returns fresh skill and source-info copies on SDK reload", async () => {
     const cwd = await temporaryRoot("pi-skill-copies-");
     const skills = await loadSelectedSkills([selection("fixture-alpha")], cwd);

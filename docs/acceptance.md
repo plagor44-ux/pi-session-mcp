@@ -356,7 +356,7 @@ Pi Session MCP tools; the script never does.
   `--strict-mcp-config`, `--setting-sources project,local`,
   `--permission-mode dontAsk` and an `--allowedTools` list of the eight tools
   plus read-only file tools, `sleep`, `node --test` and `git -C`. Codex runs as
-  `codex exec --ignore-user-config --sandbox workspace-write` with the server
+  `codex exec --ignore-user-config --sandbox read-only` with the server
   defined through `-c mcp_servers.pi-candidate.*` and the three per-tool
   approvals from [client setup](client-setup.md#run-codex-without-prompts).
   Neither run changes a persistent registration, `HOME` or `CODEX_HOME`, and
@@ -369,20 +369,28 @@ Each client runs two invocations, one per scenario:
 | Scenario | What the controller does | What is checked |
 | --- | --- | --- |
 | `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
-| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range`; abort `wait` while `range` runs; verify and close both | `wait` turn `aborted` (not `abort_timeout`); its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
+| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range`; abort `wait` while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); `pi_turn_get` shows the `wait` turn `aborted` before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
 
 ### Independent checks
 
 - The script watches `/proc` during the run and records every process of the
   controller tree, every server of this run (entry point and configuration
   path) and every process whose working directory lies inside the run, by PID
-  and start time. After the controller exits, none of them may remain.
+  and start time. After the controller exits and the server's 15-second
+  shutdown bound has passed, none of them may remain.
 - From the controller transcript it extracts only tool names, aliases, states,
   timestamps and counts. It scans every Pi Session MCP result, with
   `assistantText` removed, for local paths, the token and credential markers,
   and counts mentions in `assistantText` separately.
 - Fixture oracles run on the workspace after the controller exits: `node
-  --test` and `git status` per fixture.
+  --test` and `git status` per fixture. Every changed file must have been last
+  written during a worker turn of its task's session, and `HANDSHAKE.txt`
+  during the follow-up turn, by the server's turn timestamps. So a controller
+  that wrote a file itself fails the run.
+- The controller's own reads and shell commands must not touch the run's
+  private directory, which holds the configuration and the handshake skill.
+  The Codex controller runs in a read-only sandbox and cannot write the
+  fixtures at all; the Claude Code controller gets no write or edit tool.
 - `evidence` writes one sanitized JSON record and refuses to write a local path
   or the token. Transcripts and the configuration stay in the run's private
   directory and are never published.
