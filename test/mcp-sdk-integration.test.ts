@@ -26,6 +26,8 @@ function fixture() {
     sessionId: "fake", model, thinkingLevel: "off", getActiveToolNames: () => state.active,
     subscribe: () => () => undefined, prompt: async () => undefined, abort: async () => undefined,
     dispose: () => { state.disposed++; },
+    // The real loader the adapter built, so the admission check reads the actual skill catalog.
+    get resourceLoader() { return state.options?.resourceLoader; },
   } as unknown as AgentSession;
   const options = {
     modelRuntimeFactory: async () => runtime,
