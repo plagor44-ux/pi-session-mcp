@@ -40,6 +40,9 @@ const SCENARIOS = {
 };
 
 function fail(message, code = 2) { process.stderr.write(`${message}\n`); process.exit(code); }
+const HARNESS_SHA256 = createHash("sha256").update(readFileSync(new URL(import.meta.url))).digest("hex");
+/** A run is bound to the harness that prepared it; another version must not run or re-evaluate it. */
+function sameHarness(info) { if (info.harnessSha256 !== HARNESS_SHA256) fail("this harness differs from the one that prepared the run"); }
 const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
 const writeJson = (path, value) => writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -149,7 +152,7 @@ function prepare(values) {
     sourceCommit: head.status === 0 ? head.stdout.trim() : undefined,
     sourceClean: dirty.status === 0 && dirty.stdout.trim() === "",
     entrySha256: sha256(readFileSync(entry)),
-    harnessSha256: sha256(readFileSync(new URL(import.meta.url))),
+    harnessSha256: HARNESS_SHA256,
     configFingerprint: `sha256:${sha256(configBytes)}`,
     profile: { from: values["from-profile"], ...profile },
     preparedAt: new Date().toISOString(),
@@ -296,6 +299,7 @@ function analyze(client, scenario, calls, info, rawText) {
     if (call.tool === "pi_session_close" && call.result?.ok) { session.closed = true; session.closedAt ??= index; }
     // Every abort result in order: an abort_timeout followed by a successful retry stays visible.
     if (call.tool === "pi_session_abort") session.aborts.push(call.result?.ok ? "ok" : call.result?.error?.code ?? "error");
+    if (call.tool === "pi_session_abort" && call.result?.ok) session.abortOkAt ??= index;
   });
   const task = (name) => [...sessions.values()].find((session) => session.workspace === `${p}-${name}`);
   const turnsOf = (session) => [...(session?.turns.values() ?? [])].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
@@ -323,6 +327,7 @@ function analyze(client, scenario, calls, info, rawText) {
     firstTurnsOverlapSeconds: Number.isFinite(overlapMs) ? Math.round(overlapMs / 100) / 10 : undefined,
     firstTurnsOverlap: Number.isFinite(overlapMs) && overlapMs > 0,
     tokenInControllerPrompts: prompts.some((text) => text.includes(info.token)),
+    privateMarkersInWorkerPrompts: prompts.some((text) => ["/private", "run.json", "config.json", "acceptance-handshake", "SKILL.md"].some((marker) => text.includes(marker))),
     tokenInControllerTask: prompt(client, scenario).includes(info.token),
     // The controller's own reads and commands must never touch the private run directory.
     controllerTouchedPrivate: controllerActions(client, rawText.split("\n")).some((action) => ["/private", "run.json", "acceptance-handshake", "config.json"].some((marker) => action.includes(marker))),
@@ -341,6 +346,7 @@ function analyze(client, scenario, calls, info, rawText) {
     result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok");
     // `aborted` must be observed through pi_turn_get before the session was closed, so close did not cause it.
     result.abortedBeforeClose = first?.abortedSeenAt !== undefined && (first.closedAt === undefined || first.abortedSeenAt < first.closedAt);
+    result.abortBeforeAbortedSeen = first?.abortOkAt !== undefined && first.abortedSeenAt !== undefined && first.abortOkAt < first.abortedSeenAt;
     result.neighborCompleted = range?.state === "completed";
     result.abortWhileNeighborRunning = Boolean(wait && range && ms(wait.completedAt) > ms(range.startedAt) && ms(wait.completedAt) < ms(range.completedAt));
   }
@@ -385,6 +391,7 @@ async function runClient(values) {
   const info = readJson(join(priv, "run.json"));
   const controller = join(run, `controller-${values.client}`);
   const label = `${values.client}-${values.scenario}`;
+  sameHarness(info);
   if (existsSync(join(priv, "results", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
   if (sha256(readFileSync(info.entry)) !== info.entrySha256) fail("the candidate entry point changed since prepare");
   const before = snapshot(-1, run, info).filter((p) => p.role === "server");
@@ -440,6 +447,7 @@ function reanalyze(values) {
   const run = realpathSync(resolve(values.run));
   const priv = join(run, "private");
   const info = readJson(join(priv, "run.json"));
+  sameHarness(info);
   const label = `${values.client}-${values.scenario}`;
   const stored = readJson(join(priv, "results", `${label}.json`));
   const rawText = readFileSync(join(priv, "transcripts", `${label}.jsonl`), "utf8");

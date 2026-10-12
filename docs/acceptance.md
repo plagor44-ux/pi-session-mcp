@@ -369,7 +369,7 @@ Each client runs two invocations, one per scenario:
 | Scenario | What the controller does | What is checked |
 | --- | --- | --- |
 | `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
-| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); `pi_turn_get` shows the `wait` turn `aborted` before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; no late file |
+| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
 
 ### Independent checks
 
@@ -385,12 +385,18 @@ Each client runs two invocations, one per scenario:
 - Fixture oracles run on the workspace after the controller exits: `node
   --test` and `git status` per fixture. Every changed file must have been last
   written during a worker turn of its task's session, and `HANDSHAKE.txt`
-  during the follow-up turn, by the server's turn timestamps. So a controller
-  that wrote a file itself fails the run.
-- The controller's own reads and shell commands must not touch the run's
-  private directory, which holds the configuration and the handshake skill.
-  The Codex controller runs in a read-only sandbox and cannot write the
-  fixtures at all; the Claude Code controller gets no write or edit tool.
+  during the follow-up turn, by the server's turn timestamps. This catches a
+  write outside the worker turns, not one during them.
+- Controller writes are limited by the client restrictions: the Codex
+  controller runs in a read-only sandbox, and the Claude Code controller has no
+  write or edit tool, although its allowed `git -C` could still change a
+  fixture.
+- The handshake token must appear neither in a worker prompt nor anywhere in
+  the controller transcript, and no worker prompt may name a private path or a
+  skill file. The controller's own reads and commands must not name the run's
+  private directory or its files; this is a marker check, not a sandbox.
+- The harness records its own SHA-256 at `prepare` and refuses to run or
+  re-evaluate a run with another version.
 - `evidence` writes one sanitized JSON record and refuses to write a local path
   or the token. Transcripts and the configuration stay in the run's private
   directory and are never published.
@@ -698,7 +704,8 @@ Code `2.1.296`, Codex CLI `0.162.1` and Pi SDK `1.1.0`:
   runs, `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`:
   the commits after `bcef6ba` change only the orchestration skill text, the
   acceptance harness and documentation.
-- Level 1 on `bcef6ba`: every command exited with `0`. The test run reported
+- Level 1 on `bcef6ba`, from the command output of the maintainer's gate run:
+  every command exited with `0`. The test run reported
   40 files, 761 passed and 5 skipped; `npm audit` reported 0 vulnerabilities;
   `npm pack --dry-run` listed the three skills and no harness. The test suite
   passed again on `a086339` with the same counts.
@@ -722,16 +729,23 @@ every check of all four invocations:
 
 | Client | Scenario | Result |
 | --- | --- | --- |
-| Claude Code | `parallel` | First turns overlapped by 25.1 s; follow-up in the same session completed; both fixtures pass their tests with only the allowed files changed, each written during a worker turn; `HANDSHAKE.txt` holds the token and was written during the follow-up turn, although no controller prompt contained the token and the controller never touched the private run directory; both sessions closed |
-| Claude Code | `abort` | First turns overlapped by 23.7 s; one abort, result `ok`; `aborted` seen through `pi_turn_get` before close; the abort fell inside the running interval of the neighbor, which then completed and passes its tests; the worker's `sleep` process was observed and ended; no late file; both sessions closed |
+| Claude Code | `parallel` | First turns overlapped by 25.1 s; follow-up in the same session completed; both fixtures pass their tests with only the allowed files changed, each last written during a worker turn; `HANDSHAKE.txt` holds the token and was written during the follow-up turn, although no worker prompt contained the token and the token never appeared in the controller transcript; no controller action named the private run directory; both sessions closed |
+| Claude Code | `abort` | First turns overlapped by 23.7 s; one abort, result `ok`; `aborted` seen through `pi_turn_get` before close; the abort fell inside the running interval of the neighbor, which then completed and passes its tests; the worker's `sleep 120` was observed running, and at the end of the run it was gone and had written no file; both sessions closed |
 | Codex | `parallel` | As for Claude Code, with an overlap of 24.8 s |
 | Codex | `abort` | As for Claude Code, with an overlap of 22.4 s |
 
-The controllers needed 1 to 6 `pi_turn_get` calls per turn and waited between
-polls with `sleep`. Each invocation took 93 to 156 seconds.
+The controllers made 1 to 6 `pi_turn_get` calls per session and waited between
+polls with `sleep`. Each invocation took 93 to 156 seconds. The run's
+transcripts were also checked afterwards against the criteria the harness
+gained after run 5: in both `abort` invocations the first successful abort came
+before the first `aborted` observation, and no worker prompt named a private
+path or a skill file. Run 5 used the harness of `b6cf624`; the head's harness
+adds these two checks and the run-time checksum check, and changes nothing
+else.
 
 Earlier attempts on the same build, kept on record:
-- Run 1 (Claude Code only, with the harness of `bcef6ba`): `parallel` passed
+- Run 1 (Claude Code only, with the harness of `bcef6ba`, which did not record
+  its checksum yet): `parallel` passed
   every check. In `abort` the abort itself passed (result `ok`, `aborted` seen
   before close, the worker's `sleep` ended, no late file), but the neighbor
   turn had completed about three seconds before the abort, so the run shows no

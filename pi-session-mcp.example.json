@@ -1,6 +1,6 @@
 {
   "workspaces": {
-    "project": "."
+    "project": "/absolute/path/to/project"
   },
   "skillCatalog": {
     "pi-session-implementation": "skills/pi-session-implementation/SKILL.md",
