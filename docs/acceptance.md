@@ -790,3 +790,49 @@ This is a targeted check of skill selection and of two concurrent sessions
 per client. It is not the ten-task Level 3 cycle. It covers neither the
 extension profile path live (the automated SDK contract tests cover it), nor
 `read-only` workers, nor more than two concurrent sessions, nor macOS.
+
+After the owner asked on 2026-10-12 that skills install without manual linking
+and can be adjusted and extended, the same change gained the skill library,
+`builtin:` references, `--customize-skill` and the controller-skill
+installation through `setup`. Its final candidate `0ebbaa0` passed on
+2026-10-12, on Linux (`x64`) with Node.js `26.11.1`, Claude Code `2.1.296`,
+Codex CLI `0.162.1` and Pi SDK `1.1.0`:
+- Level 1 on a clean detached checkout: every command exited with `0`. The
+  test run reported 43 files, 884 passed and 5 skipped; `npm audit` reported 0
+  vulnerabilities; `npm pack --dry-run` listed 125 files with the three skills
+  and no acceptance harness. `git diff --check` from `0cb3c60` reported nothing.
+- Level 2 through `scripts/setup-acceptance.mjs` with the setup of that
+  checkout: 160 of 160 checks passed. All nine steps passed on all four
+  targets, including the controller skill finding of every step, the skill file
+  after steps 3 and 7 and its absence after steps 6 and 9, and a foreign skill
+  that stayed unchanged. The real client registrations were unchanged, no
+  process remained, no report leaked a path, and the build was unchanged.
+  Earlier candidates `24ab13d` and `37034dd` of the same change had passed
+  Level 2 with 160 of 160 as well, before the review fixes that followed them.
+- Multi-session skill acceptance, run 7, with the harness of that checkout
+  (SHA-256 `42d46f86ae617c229568437e6d96c93f965c27778c3e2fde51e1c449ef35fb12`)
+  and the dist tree SHA-256
+  `957dfac67bf0c3c179bff6584b3bda49bedad2fe1642790537f6790b31f5ef37`:
+  - `prepare` installed the Claude Code controller skill with the candidate's
+    `setup --apply` for the controller's project scope: `applied` and
+    `skill_installed`, a regular copy identical to the shipped skill.
+  - The configuration (fingerprint
+    `sha256:b8a341c9ff48ecd7c02f8959b8e4e696f305431945b659ea35d2d98485e948c3`)
+    referenced all three skills with `builtin:`: the two shipped worker skills
+    and the `handshake` skill from the override directory next to it.
+  - All four invocations passed every check: Claude Code `parallel` (first
+    turns overlapped by 21.5 s) and `abort` (22.1 s), Codex `parallel` (22.9 s)
+    and `abort` (18.9 s). In both `parallel` invocations the worker wrote the
+    handshake token, which existed only in the override-directory skill,
+    during the follow-up turn. In both `abort` invocations the one abort
+    returned `ok`, came before the `aborted` observation and fell inside the
+    running neighbor, which completed and passed its tests. No process
+    remained, and no result leaked a path, the token or a credential marker.
+- Run 6 on `cc810c9`, before the last review fixes, had passed every check of
+  all four invocations with the same configuration fingerprint and the
+  setup-installed Claude Code skill.
+
+These runs do not cover macOS, Codex skill discovery from the user's home
+(setup installs it there, and Level 2 checks the file, but no live Codex
+controller read it from there), the extension profile path live, or more than
+two concurrent sessions.
