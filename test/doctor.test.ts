@@ -1,4 +1,4 @@
-import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -328,7 +328,7 @@ describe("offline doctor", () => {
         const root = await skillRoot();
         const overrideDirectory = await temporaryRoot("pi-session-mcp-overrides-");
         const config = async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]), skillOverrideDirectory: overrideDirectory });
-        const writeBases = (bases: Record<string, string>) => writeFile(join(overrideDirectory, SKILL_BASES_FILE), JSON.stringify({ schemaVersion: 1, bases }));
+        const writeBases = (bases: Record<string, string>, schemaVersion = 2) => writeFile(join(overrideDirectory, SKILL_BASES_FILE), JSON.stringify({ schemaVersion, bases }));
         return { root, overrideDirectory, config, writeBases };
       }
 
@@ -347,7 +347,7 @@ describe("offline doctor", () => {
 
       it("warns when the shipped skill changed since the recorded base", async () => {
         const { root, config, writeBases } = await overrideRoot();
-        await writeBases({ review: "0".repeat(64) });
+        await writeBases({ review: `v2:${"0".repeat(64)}` });
         const result = await runDoctor({ packageRoot: root, loadConfig: config });
         expect(overrideChecks(result)).toEqual([{
           id: "skill_override_outdated", severity: "warning", subject: "skill:review",
@@ -358,9 +358,49 @@ describe("offline doctor", () => {
         for (const output of [renderDoctorJson(result), renderDoctorHuman(result)]) expect(output).not.toContain(root);
       });
 
+      describe("legacy bases", () => {
+        const LEGACY = "a".repeat(64);
+        const UNRESOLVED = "b".repeat(64);
+        const unconfirmed = "the recorded base predates version 2 fingerprints and cannot be confirmed; review the shipped skill, then run pi-session-mcp-setup --apply --customize-skill review";
+        const released = (fingerprint: string) => [{ name: "review", release: "0.8.0", legacyFingerprint: LEGACY, fingerprint }];
+
+        it("resolves a legacy base through the released tree and compares the version 2 value", async () => {
+          const { root, overrideDirectory, config, writeBases } = await overrideRoot();
+          const shipped = (await readSkillTree(join(root, "skills", "review"))).fingerprint;
+          await writeBases({ review: LEGACY }, 1);
+          const before = await readFile(join(overrideDirectory, SKILL_BASES_FILE), "utf8");
+          const current = await runDoctor({ packageRoot: root, loadConfig: config, releasedSkillTrees: released(shipped) });
+          expect(overrideChecks(current)).toEqual([{ id: "skill_override_outdated", severity: "ok", subject: "skill:review" }]);
+          const changed = await runDoctor({ packageRoot: root, loadConfig: config, releasedSkillTrees: released(`v2:${"1".repeat(64)}`) });
+          expect(overrideChecks(changed)).toEqual([{
+            id: "skill_override_outdated", severity: "warning", subject: "skill:review",
+            remediation: "review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill review",
+          }]);
+          expect(await readFile(join(overrideDirectory, SKILL_BASES_FILE), "utf8")).toBe(before);
+        });
+
+        it("warns that an unresolvable legacy base cannot be confirmed, in either schema version", async () => {
+          const { root, overrideDirectory, config, writeBases } = await overrideRoot();
+          for (const schemaVersion of [1, 2]) {
+            await writeBases({ review: UNRESOLVED }, schemaVersion);
+            const before = await readFile(join(overrideDirectory, SKILL_BASES_FILE), "utf8");
+            const result = await runDoctor({ packageRoot: root, loadConfig: config, releasedSkillTrees: released(`v2:${"1".repeat(64)}`) });
+            expect(overrideChecks(result)).toEqual([{ id: "skill_override_outdated", severity: "warning", subject: "skill:review", remediation: unconfirmed }]);
+            expect(result.exitCode).toBe(1);
+            expect(await readFile(join(overrideDirectory, SKILL_BASES_FILE), "utf8")).toBe(before);
+          }
+        });
+
+        it("rejects a version 2 fingerprint in a schema version 1 file as corrupt", async () => {
+          const { root, config, writeBases } = await overrideRoot();
+          await writeBases({ review: `v2:${"0".repeat(64)}` }, 1);
+          expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([{ id: "skill_override_outdated", severity: "warning", subject: "skill:bases", remediation: "repair or remove the skill bases file" }]);
+        });
+      });
+
       it("ignores a recorded skill that is no longer shipped", async () => {
         const { root, config, writeBases } = await overrideRoot();
-        await writeBases({ gone: "0".repeat(64) });
+        await writeBases({ gone: `v2:${"0".repeat(64)}` });
         expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([]);
       });
 
@@ -374,7 +414,7 @@ describe("offline doctor", () => {
 
       it("sorts after the other skill checks", async () => {
         const { root, config, writeBases } = await overrideRoot();
-        await writeBases({ review: "0".repeat(64) });
+        await writeBases({ review: `v2:${"0".repeat(64)}` });
         const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await config()), executionProfiles: (await configWithSkills(root, [{ alias: "review", path: join(root, "skills", "review", "SKILL.md") }])()).executionProfiles }) });
         const ids = result.checks.map((check) => check.id).filter((id) => id.startsWith("skill_"));
         expect(ids.at(-1)).toBe("skill_override_outdated");
