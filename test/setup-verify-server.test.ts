@@ -5,7 +5,7 @@
  * separately. A scripted payload cannot notice when they drift apart (#36), so this
  * test lets `setup`'s own launcher and verifier talk to the built server.
  */
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { verifyMcpCapabilities } from "../src/client-adapters/mcp-verifier.js";
@@ -19,16 +19,20 @@ beforeAll(async () => { entry = await compileServerEntry(); }, 150_000);
 afterAll(removeTemporaryRoots);
 
 describe("setup verification against the real server", () => {
-  it("verifies profiles with and without extensions", async () => {
+  it("verifies profiles with and without extensions and skills", async () => {
     const root = await temporaryRoot("pi-session-mcp-setup-verify-");
     const config = join(root, "config.json");
+    await mkdir(join(root, "skills", "review"), { recursive: true });
+    await writeFile(join(root, "skills", "review", "SKILL.md"), "---\nname: review\ndescription: Review changes.\n---\nReview.\n");
     await writeFile(config, JSON.stringify({
       workspaces: { project: root },
+      skillCatalog: { review: "skills/review/SKILL.md" },
       executionProfiles: {
         safe: { default: true, permissionProfile: "read-only", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" },
         "code-ext": {
           default: false, permissionProfile: "coding", provider: "inert-extension", model: "inert-extension-model", thinkingLevel: "high",
           extensions: ["npm:pi-extension-fixture@1.0.0", "npm:@scope/other-extension@1.2.3-beta.1"],
+          skills: ["review"],
         },
       },
     }), { mode: 0o600 });

@@ -22,7 +22,7 @@ export function projectCapabilities(
       .map((alias) => ({ alias })),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
-      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions }) => ({
+      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, skills }) => ({
         alias,
         default: isDefault,
         permissionProfile,
@@ -30,6 +30,7 @@ export function projectCapabilities(
         model,
         thinkingLevel,
         extensions: (extensions ?? []).map((extension) => extension.spec),
+        skills: (skills ?? []).map((skill) => skill.alias),
       })),
   };
 }

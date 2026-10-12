@@ -6,13 +6,14 @@ import { versionFromOutput } from "../src/client-adapters/command.js";
 import { projectCapabilities } from "../src/capabilities.js";
 import { ImmutableMap, type ConfiguredExecutionProfile } from "../src/execution-profile.js";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec, type ExtensionSpec } from "../src/extension-spec.js";
+import { MAX_PROFILE_SKILLS } from "../src/skill-catalog.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import type { CommandRunner } from "../src/client-adapters/index.js";
 
 const intent = { scope: "user" as const, nodePath: "/usr/bin/node", entryPath: "/srv/pi-session-mcp/dist/main.js", configPath: "/etc/pi-session-mcp.json" };
 const TOOL_NAMES = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"] as const;
 const VERIFIED_CONFIGURATION = { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" };
-const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [] };
+const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [], skills: [] };
 const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   ok: true,
   server: { name: "pi-session-mcp", version: PACKAGE_VERSION },
@@ -47,6 +48,10 @@ function capabilitiesWithProfile(profile: Record<string, unknown>): Record<strin
 
 function extensionSpecs(count: number): string[] {
   return Array.from({ length: count }, (_, index) => `npm:ext-${index}@1.0.0`);
+}
+
+function skillAliases(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `skill-${index}`);
 }
 
 function extension(spec: string): ExtensionSpec {
@@ -137,6 +142,14 @@ describe("client adapters", () => {
     ["non-string extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: [1] })],
     ["unpinned extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: ["npm:pi-cursor-sdk@latest"] })],
     ["too many extensions", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: extensionSpecs(MAX_PROFILE_EXTENSIONS + 1) })],
+    ["profile without skills", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: undefined })],
+    ["unknown profile key", capabilitiesWithProfile({ ...VERIFIED_PROFILE, path: "/srv/SKILL.md" })],
+    ["non-array skills", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: "review" })],
+    ["non-string skill", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: [1] })],
+    ["non-alias skill", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: ["/srv/review/SKILL.md"] })],
+    ["uppercase skill alias", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: ["Review"] })],
+    ["duplicate skill", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: ["review", "review"] })],
+    ["too many skills", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: skillAliases(MAX_PROFILE_SKILLS + 1) })],
   ];
   it.each(malformedCapabilities)("rejects %s in the capabilities payload", async (_label, capabilities) => {
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("failed");
@@ -147,10 +160,15 @@ describe("client adapters", () => {
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
   });
 
-  it("verifies the server's own capability projection, including profile extensions", async () => {
+  it("accepts the maximum number of profile skills", async () => {
+    const capabilities = capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: skillAliases(MAX_PROFILE_SKILLS) });
+    expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
+  });
+
+  it("verifies the server's own capability projection, including profile extensions and skills", async () => {
     const profiles: ConfiguredExecutionProfile[] = [
       { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off" },
-      { alias: "code-ext", default: false, permissionProfile: "coding", provider: "fake-ext", model: "fake-ext-model", thinkingLevel: "high", extensions: [extension("npm:pi-cursor-sdk@0.5.3"), extension("npm:@scope/other-ext@1.2.3-beta.1")] },
+      { alias: "code-ext", default: false, permissionProfile: "coding", provider: "fake-ext", model: "fake-ext-model", thinkingLevel: "high", extensions: [extension("npm:pi-cursor-sdk@0.5.3"), extension("npm:@scope/other-ext@1.2.3-beta.1")], skills: [{ alias: "review", path: "/srv/review/SKILL.md" }, { alias: "docs", path: "/srv/docs/SKILL.md" }] },
     ];
     const capabilities = projectCapabilities(
       new ImmutableMap([["repo", "/srv/repo"]]),
