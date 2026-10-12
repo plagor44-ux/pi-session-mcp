@@ -5,8 +5,9 @@
 //   exit-on-term  exits on SIGTERM; one descendant ignores it and keeps the pipe open
 //   leaks-pipe    exits 0 at once; one descendant keeps the pipe open
 //   mutate        edits FAKE_CLIENT_TOUCH, then exits 0
+//   delete        deletes FAKE_CLIENT_TOUCH, then exits 0
 import { spawn } from "node:child_process";
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 
 // The environment wins: a fake client installed as `claude` receives the harness's own arguments.
 const statePath = process.env.FAKE_CLIENT_STATE ?? process.argv[2];
@@ -22,6 +23,9 @@ const publish = (state) => {
 
 if (mode === "mutate") {
   appendFileSync(process.env.FAKE_CLIENT_TOUCH, "\nchanged during the run\n");
+  process.stdout.write("done\n");
+} else if (mode === "delete") {
+  rmSync(process.env.FAKE_CLIENT_TOUCH);
   process.stdout.write("done\n");
 } else {
   if (mode === "ignore-term") process.on("SIGTERM", () => {});

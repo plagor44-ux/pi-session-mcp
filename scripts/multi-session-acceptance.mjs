@@ -148,7 +148,7 @@ const fileSha256 = (path) => { try { return sha256(readFileSync(path)); } catch 
  */
 function gitInFixture(dir, args) {
   const result = spawnSync("git", ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", ...args], {
-    cwd: dir, env: { ...process.env, ...GIT_ENV, GIT_DIR: join(dir, ".git"), GIT_WORK_TREE: dir, GIT_OPTIONAL_LOCKS: "0" },
+    cwd: dir, env: { ...process.env, ...GIT_ENV, GIT_DIR: join(dir, ".git"), GIT_WORK_TREE: dir, GIT_OPTIONAL_LOCKS: "0", GIT_NO_REPLACE_OBJECTS: "1" },
     timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 64 * 1024 * 1024,
   });
   return result.status === 0 && !result.error ? result.stdout : undefined;
@@ -285,7 +285,20 @@ const baselineReader = (priv, client) => (task) => { try { return readJson(basel
  * the controller skill copies, the worker skills, the override directory, the run configuration, the
  * harness and the fixture baselines. Names are path-free so a mismatch can be reported as it is.
  */
-export function computeResources(run, candidate) {
+/**
+ * Controller skills in the operator's home that a client could load instead of the run's own copy. Claude Code
+ * prefers a personal skill over a project skill of the same name; the controller runs with
+ * `--setting-sources project,local`, which on Claude Code 2.1.296 was observed to hide personal skills. Both
+ * copies are bound, so a change during the run is detected, and Codex is refused while its copy differs.
+ */
+export function operatorControllerSkills(home = homedir()) {
+  return {
+    operatorClaudeSkill: treeSha256(join(home, ".claude", "skills", "pi-session-orchestration")),
+    operatorCodexSkill: treeSha256(join(home, ".agents", "skills", "pi-session-orchestration")),
+  };
+}
+
+export function computeResources(run, candidate, home = homedir()) {
   const priv = join(run, "private");
   const codexLink = join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration");
   const candidateSkill = join(candidate, "skills", "pi-session-orchestration");
@@ -309,6 +322,7 @@ export function computeResources(run, candidate) {
     claudeMcpConfiguration: fileSha256(join(priv, "claude-mcp.json")),
     fixtureBaselines: treeSha256(join(priv, "baselines")),
     harness: HARNESS_SHA256,
+    ...operatorControllerSkills(home),
   };
 }
 /** Names of the bound resources that differ from the recorded digests. */
@@ -502,6 +516,8 @@ function command(client, info, priv, controller, values) {
   const text = prompt(client, values.scenario);
   if (client === "claude") {
     const allowed = [...TOOLS.map((tool) => `mcp__${SERVER}__${tool}`), "Read", "Grep", "Glob", "Bash(sleep:*)", "Bash(node --test:*)", "Bash(git -C:*)"];
+    // `--setting-sources project,local` also keeps a personal skill of the same name from shadowing the run's
+    // project copy (observed on Claude Code 2.1.296); see operatorControllerSkills.
     return { file: "claude", args: ["-p", text, "--mcp-config", join(priv, "claude-mcp.json"), "--strict-mcp-config", "--permission-mode", "dontAsk",
       "--allowedTools", ...allowed, "--setting-sources", "project,local", "--output-format", "stream-json", "--verbose", "--no-session-persistence"] };
   }
@@ -834,7 +850,7 @@ export function oracle(controller, scenario, info, intervals = {}, baselineOf = 
       check.businessChecks = runBusinessChecks(task, dir);
     }
     if (task === "slug") {
-      const tests = readFileSync(join(dir, "test", "slug.test.js"), "utf8").match(/\btest\(/g)?.length ?? 0;
+      const tests = readSafe(() => readFileSync(join(dir, "test", "slug.test.js"), "utf8")).match(/\btest\(/g)?.length ?? 0;
       check.addedTest = tests > 3;
       check.handshake = readSafe(() => readFileSync(join(dir, "HANDSHAKE.txt"), "utf8")).trim() === `handshake ${info.token}`;
       check.handshakeWrittenDuringFollowUp = writtenDuring(join(dir, "HANDSHAKE.txt"), (intervals.slug ?? []).slice(1));
@@ -847,7 +863,8 @@ export function oracle(controller, scenario, info, intervals = {}, baselineOf = 
 
 /**
  * The mechanical pass criteria of docs/acceptance.md for one result, as stable path-free codes. `passed` is
- * true only when no code is listed; a result with a reanalysis mark or a changed resource never passes.
+ * true only when no code is listed; a changed resource, or a reanalysis whose state differs from the end of
+ * the original run, never passes.
  */
 export function evaluateAcceptance(result, scenario) {
   const failures = [];
@@ -904,8 +921,14 @@ export async function runClient(values, { signals = process, budgets = {} } = {}
   const controller = join(run, `controller-${values.client}`);
   const label = `${values.client}-${values.scenario}`;
   sameHarness(info);
-  if (existsSync(join(priv, "results", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
+  if (existsSync(join(priv, "results", `${label}.json`)) || existsSync(join(priv, "launches", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
   const baselineOf = baselineReader(priv, values.client);
+  // Codex's precedence between a home skill and the run's repository skill is not established, so a differing
+  // home copy refuses the run instead of leaving open which skill the controller read.
+  if (values.client === "codex") {
+    const home = operatorControllerSkills().operatorCodexSkill;
+    if (home !== "missing" && home !== treeSha256(join(info.candidate, "skills", "pi-session-orchestration"))) fail("a pi-session-orchestration skill in the home's Codex skills differs from the candidate's; Codex could read it instead, so this run is refused");
+  }
   // Everything bound at prepare must be unchanged before the controller starts; the fixtures must still be pristine.
   const changedBefore = resourcesChangedSincePrepare(run, info);
   if (changedBefore.length > 0) fail(`resourcesChanged: ${JSON.stringify(changedBefore)}`);
@@ -918,18 +941,44 @@ export async function runClient(values, { signals = process, budgets = {} } = {}
   if (before.length > 0) fail("a server of this run is already running");
   const { file, args } = command(values.client, info, priv, controller, values);
   const transcript = join(priv, "transcripts", `${label}.jsonl`);
+  // A launch is on record before the controller starts, so an attempt that ends without a result is never repeated silently.
+  mkdirSync(join(priv, "launches"), { recursive: true, mode: 0o700 });
+  writeJsonOnce(join(priv, "launches", `${label}.json`), { launchedAt: new Date().toISOString() });
   const supervised = await superviseProcess({
     file, args, cwd: controller, budgets: { ...budgets, timeoutMs }, signals,
     scan: (rootPid) => snapshot(rootPid, run, info),
   });
   const { seen } = supervised;
   const durationSeconds = Math.round(supervised.elapsedMs / 1000);
+  let residual = [];
+  let result;
+  try {
+    result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: (list) => { residual = list; } });
+  } catch {
+    // A crash of the analysis still leaves a result on record, and it never passes.
+    result = {
+      client: values.client, scenario: values.scenario, exitCode: supervised.exitCode,
+      timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted,
+      durationSeconds, stderrBytes: supervised.stderrBytes, analysisFailed: true,
+      acceptance: { passed: false, failures: ["analysisFailed"] },
+    };
+  }
+  try { writeJsonOnce(join(priv, "results", `${label}.json`), result); }
+  // Leftovers are on record now; do not leave this run's own processes behind, also when the analysis failed.
+  finally { killRecorded([...seen.values(), ...residual]); }
+  return result;
+}
+
+/** Everything after the supervised controller: transcript, residual processes, transcript analysis, oracles and verdict. */
+async function analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: reportResidual }) {
+  const { seen } = supervised;
   writeFileSync(transcript, supervised.output, { mode: 0o600 });
   // Cleanup: every process this run started must be gone, matched by PID and start time.
   let residual = [];
   // The server may take up to 15 s for its bounded process shutdown.
   for (let waited = 0; waited <= 17_000 && !supervised.spawnFailed; waited += 500) {
     residual = [...seen.values()].filter(alive).concat(snapshot(-1, run, info).filter((p) => !seen.has(`${p.pid}:${p.start}`)));
+    reportResidual(residual);
     if (residual.length === 0) break;
     await new Promise((done) => setTimeout(done, 500));
   }
@@ -958,9 +1007,6 @@ export async function runClient(values, { signals = process, budgets = {} } = {}
   result.resources = { changedBeforeLaunch: [], changedAfterRun: resourcesChangedSincePrepare(run, info) };
   result.endState = endStateOf(run, info, values.client, values.scenario);
   result.acceptance = evaluateAcceptance(result, values.scenario);
-  writeJsonOnce(join(priv, "results", `${label}.json`), result);
-  // Leftovers are on record now; do not leave this run's own processes behind.
-  killRecorded(residual);
   return result;
 }
 
@@ -1030,7 +1076,7 @@ async function main(argv) {
     const result = await runClient(values);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     // A run that ended through the supervisor's own timeout, spawn failure or abort is not a clean finish.
-    if (result.timedOut || result.spawnFailed || result.harnessAborted) process.exitCode = 1;
+    if (result.timedOut || result.spawnFailed || result.harnessAborted || result.analysisFailed) process.exitCode = 1;
   } else if (subcommand === "reanalyze") process.stdout.write(`${JSON.stringify(reanalyze(values), null, 2)}\n`);
   else if (subcommand === "evidence") evidence(values);
   else fail("usage: multi-session-acceptance.mjs prepare|run|reanalyze|evidence ...");

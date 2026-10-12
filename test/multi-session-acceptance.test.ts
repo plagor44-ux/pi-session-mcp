@@ -344,7 +344,7 @@ describe("bound resources", () => {
     const run = await buildRun();
     expect(Object.keys(run.info.resources).sort()).toEqual([
       "candidateBuild", "claudeMcpConfiguration", "codexControllerSkill", "controllerSkill", "fixtureBaselines", "handshakeSkill", "harness",
-      "overrideDirectory", "runConfiguration", "workerSkillImplementation", "workerSkillReview",
+      "operatorClaudeSkill", "operatorCodexSkill", "overrideDirectory", "runConfiguration", "workerSkillImplementation", "workerSkillReview",
     ]);
     expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate))).toEqual([]);
   });
@@ -363,6 +363,32 @@ describe("bound resources", () => {
     ["a fixture baseline", ["fixtureBaselines"], (r) => appendFileSync(join(r.priv, "baselines", "claude", "slug.json"), " ")],
     ["the candidate build", ["candidateBuild"], (r) => appendFileSync(join(r.candidate, "dist", "other.js"), "// changed\n")],
   ];
+  it("binds the operator's own controller skill copies, which a client could load instead", async () => {
+    const run = await buildRun();
+    const home = join(run.root, "home");
+    const personal = join(home, ".claude", "skills", "pi-session-orchestration");
+    expect(h.operatorControllerSkills(home)).toEqual({ operatorClaudeSkill: "missing", operatorCodexSkill: "missing" });
+    mkdirSync(personal, { recursive: true });
+    writeFileSync(join(personal, "SKILL.md"), "operator copy\n");
+    const recorded = h.computeResources(run.run, run.candidate, home);
+    appendFileSync(join(personal, "SKILL.md"), "edited\n");
+    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, home))).toEqual(["operatorClaudeSkill"]);
+  });
+
+  it("refuses a Codex run while a differing controller skill sits in the home's Codex skills", async () => {
+    const run = await buildRun();
+    const home = join(run.root, "home");
+    const codexHomeSkill = join(home, ".agents", "skills", "pi-session-orchestration");
+    mkdirSync(codexHomeSkill, { recursive: true });
+    writeFileSync(join(codexHomeSkill, "SKILL.md"), "an older copy\n");
+    const saved = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      await expect(h.runClient({ run: run.run, client: "codex", scenario: "parallel" }, { signals: new EventEmitter() })).rejects.toThrow("Codex could read it instead");
+    } finally { if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved; }
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+  });
+
   it.each(cases)("reports %s by name", async (_label, expected, mutate) => {
     const run = await buildRun();
     mutate(run);
@@ -371,11 +397,11 @@ describe("bound resources", () => {
 });
 
 describe("runs against a synthetic layout with a controlled client", () => {
-  async function withFakeClient<T>(mode: string, body: (context: { statePath: string; touched: string }) => Promise<T>, run: Awaited<ReturnType<typeof buildRun>>): Promise<T> {
+  async function withFakeClient<T>(mode: string, body: (context: { statePath: string; touched: string }) => Promise<T>, run: Awaited<ReturnType<typeof buildRun>>, touch?: string): Promise<T> {
     const bin = join(run.root, "bin");
     mkdirSync(bin, { recursive: true });
     writeFileSync(join(bin, "claude"), `#!${process.execPath}\nimport(${JSON.stringify(stubbornClient)});\n`, { mode: 0o755 });
-    const touched = join(run.run, "controller-claude", ".claude", "skills", "pi-session-orchestration", "SKILL.md");
+    const touched = touch ?? join(run.run, "controller-claude", ".claude", "skills", "pi-session-orchestration", "SKILL.md");
     const saved = { PATH: process.env.PATH, MODE: process.env.FAKE_CLIENT_MODE, STATE: process.env.FAKE_CLIENT_STATE, TOUCH: process.env.FAKE_CLIENT_TOUCH };
     const statePath = join(run.root, "client-state.json");
     process.env.PATH = `${bin}:${saved.PATH ?? ""}`; process.env.FAKE_CLIENT_MODE = mode; process.env.FAKE_CLIENT_STATE = statePath; process.env.FAKE_CLIENT_TOUCH = touched;
@@ -446,6 +472,20 @@ describe("runs against a synthetic layout with a controlled client", () => {
     expect(record.extensions).toEqual([]);
     const text = readFileSync(out, "utf8");
     for (const secret of [run.info.token, run.run, run.candidate]) expect(text).not.toContain(secret);
+  }, 60_000);
+
+  it("keeps a failing result and the launch record when the worker deleted a file the oracle reads", async () => {
+    const run = await buildRun();
+    const slugTest = join(run.controller("claude"), "fixtures", "slug", "test", "slug.test.js");
+    const result = await withFakeClient<any>("delete", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run, slugTest);
+    expect(result.analysisFailed).toBeUndefined();
+    expect(result.oracle.slug.addedTest).toBe(false);
+    // The file is in the slug scope, so only the missing test fails the run, not the scope check.
+    expect(result.acceptance.failures).toContain("slug:followUp");
+    expect(result.acceptance.passed).toBe(false);
+    expect(readdirSync(join(run.priv, "results"))).toEqual(["claude-parallel.json"]);
+    expect(readdirSync(join(run.priv, "launches"))).toEqual(["claude-parallel.json"]);
+    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
   }, 60_000);
 
   it("ends the real CLI by itself with a non-zero exit when the client ignores SIGTERM and holds stdout open", async () => {
