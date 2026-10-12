@@ -128,6 +128,20 @@ describe("bounded supervision of the controller", () => {
     expect(signals.listenerCount("SIGINT")).toBe(0);
     expect(signals.listenerCount("SIGTERM")).toBe(0);
   }, 20_000);
+
+  it("keeps a server and a fixture that an earlier sweep established when a later sweep can no longer read them", async () => {
+    // PIDs above the kernel's maximum never exist, so nothing here is alive or killed.
+    const server = { pid: 4_194_399, ppid: 1, pgrp: 1, state: "S", start: "7", comm: "node", fixture: undefined, role: "server" };
+    const sleeper = { pid: 4_194_398, ppid: 1, pgrp: 1, state: "S", start: "8", comm: "sleep", fixture: "wait", role: "client-descendant" };
+    let sweeps = 0;
+    // From the second sweep on, both look like exiting or zombie processes: no command line, environment or cwd.
+    const scan = () => (sweeps++ === 0 ? [server, sleeper] : [{ ...server, state: "Z", role: "client-descendant" }, { ...sleeper, state: "Z", fixture: undefined }]);
+    const result = await h.superviseProcess({ file: process.execPath, args: ["-e", "setTimeout(() => {}, 300)"], budgets: { timeoutMs: 10_000, intervalMs: 20 }, scan, signals: new EventEmitter() });
+    expect(sweeps).toBeGreaterThan(2);
+    expect(result.seen.get("4194399:7")).toMatchObject({ role: "server", state: "Z" });
+    expect(result.seen.get("4194398:8")).toMatchObject({ role: "client-descendant", fixture: "wait" });
+    expect(h.mergeSighting(undefined, server)).toBe(server);
+  }, 20_000);
 });
 
 describe("budget validation", () => {
@@ -516,6 +530,22 @@ describe("runs against a synthetic layout with a controlled client", () => {
     const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run, { "timeout-min": "0.01" }), { signals, budgets: quick, exit: () => {} }), run);
     expect(result).toMatchObject({ timedOut: true, harnessAborted: true, abortSignal: "SIGINT", analysisFailed: true });
     expect(result.acceptance).toEqual({ passed: false, failures: ["timedOut", "harnessAborted", "analysisFailed"] });
+  }, 60_000);
+
+  it("records the signal that ended the supervision, not a later one during the analysis", async () => {
+    const run = await buildRun();
+    const signals = new EventEmitter();
+    let registrations = 0;
+    signals.on("newListener", (event) => {
+      if (event !== "SIGINT") return;
+      registrations += 1;
+      // First registration: the supervision, which a SIGTERM ends. Second: the analysis guard, which a SIGINT hits.
+      if (registrations === 1) setTimeout(() => signals.emit("SIGTERM"), 200);
+      if (registrations === 2) queueMicrotask(() => signals.emit("SIGINT"));
+    });
+    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run), { signals, budgets: quick, exit: () => {} }), run);
+    expect(result).toMatchObject({ harnessAborted: true, abortSignal: "SIGTERM", analysisFailed: true, timedOut: false });
+    expect(result.acceptance).toEqual({ passed: false, failures: ["harnessAborted", "analysisFailed"] });
   }, 60_000);
 
   it("lists every launch in the evidence and marks one that left no result", async () => {

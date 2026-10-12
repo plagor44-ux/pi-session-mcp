@@ -604,6 +604,15 @@ function groupMembers(pgid, notBefore) {
  * an operator's shell could be there too.
  */
 const ownedByRun = (p) => p.pid !== process.pid && ["client", "client-descendant", "server"].includes(p.role);
+/**
+ * A later sighting of the same process (PID and start time) never loses what an earlier one established. A server
+ * that is exiting, or a zombie that its client has not reaped yet, has no command line, environment or working
+ * directory left to read, so a sweep in that window sees it only as a descendant of the client.
+ */
+export function mergeSighting(earlier, later) {
+  if (!earlier) return later;
+  return { ...later, role: earlier.role === "server" ? "server" : later.role, fixture: later.fixture ?? earlier.fixture };
+}
 /** SIGKILL for recorded processes that still have the recorded PID and start time. Never by name. */
 export function killRecorded(list) {
   let killed = 0;
@@ -657,7 +666,10 @@ export async function superviseProcess({ file, args = [], cwd, env, budgets = {}
     return true;
   };
   const within = (promise, ms) => new Promise((done) => { const t = setTimeout(() => { timers.delete(t); done(false); }, ms); timers.add(t); promise.then(() => { clearTimeout(t); timers.delete(t); done(true); }); });
-  const sweep = () => { if (pgid === undefined) return; try { for (const p of scan(pgid)) seen.set(`${p.pid}:${p.start}`, p); } catch { /* a racing /proc read */ } };
+  const sweep = () => {
+    if (pgid === undefined) return;
+    try { for (const p of scan(pgid)) { const key = `${p.pid}:${p.start}`; seen.set(key, mergeSighting(seen.get(key), p)); } } catch { /* a racing /proc read */ }
+  };
   const ownAlive = () => [...seen.values()].filter((p) => ownedByRun(p) && alive(p));
   const gone = () => state.exited && groupMembers(pgid, childStart).length === 0 && ownAlive().length === 0;
   const signalGroup = (signal) => {

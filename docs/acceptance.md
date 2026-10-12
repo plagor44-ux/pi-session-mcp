@@ -447,8 +447,11 @@ Each client runs two invocations, one per scenario:
 - The script watches `/proc` during the run and records every process of the
   controller tree, every server of this run (entry point and configuration
   path) and every process whose working directory lies inside the run, by PID
-  and start time. After the controller exits and the server's 15-second
-  shutdown bound has passed, none of them may remain.
+  and start time. A later sighting of a process never drops its server role
+  or its fixture: an exiting server, or a zombie its client has not reaped yet,
+  has no command line, environment or working directory left to read. After
+  the controller exits and the server's 15-second shutdown bound has passed,
+  none of them may remain.
 - From the controller transcript it extracts only tool names, aliases, states,
   timestamps and counts. It scans every Pi Session MCP result, with
   `assistantText` removed, for local paths, the token and credential markers,
