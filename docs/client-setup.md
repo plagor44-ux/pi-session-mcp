@@ -190,7 +190,7 @@ Claude Code enforces each tool's declared JSON Schema (`additionalProperties: fa
 ## Expected flow and lifecycle deadlines
 
 1. Call `pi_capabilities_get` with `{}` and select explicit workspace and read-only execution-profile aliases from the returned config-derived lists.
-2. Call `pi_session_start` with those aliases. The server resolves the configured provider/model through its one `ModelRuntime`, checks existing local Pi authentication and availability, creates with explicit model/thinking/tools, and verifies the effective SDK result.
+2. Call `pi_session_start` with those aliases. The server resolves the configured provider/model through its shared `ModelRuntime` (a profile with extensions gets a fresh runtime for each session), loads and validates the profile's selected skills, checks existing local Pi authentication and availability, creates with explicit model/thinking/tools, and verifies the effective SDK result.
 3. Call `pi_session_prompt` with the returned `sessionId` and a read-only prompt. It returns after accepted preflight with a `turnId` in `running` state.
 4. Poll `pi_turn_get` with that `sessionId` and `turnId` until `completed`, `failed`, or `aborted`, with a deadline no longer than three minutes. There is no `pi_turn_wait` tool.
 5. Call `pi_session_close` when the session is no longer needed.
@@ -246,7 +246,7 @@ Poll `pi_turn_get` for at most three minutes. If it does not become terminal, re
 
 ### A prompt fails immediately after a provider config or credential change
 
-`pi_session_prompt` reads the configured provider/model through one `ModelRuntime` that is created once and cached for the lifetime of the Pi Session MCP server process; the underlying SDK reads `~/.pi/agent/models.json` only at that creation. Editing that file (for example adding or fixing a provider API key) does not take effect in an already-running server process, and a resulting turn typically fails (`turn_failed`) within milliseconds rather than after a real provider round trip. Restart or reconnect the MCP server (which restarts the process) after any provider config or credential change, then retry.
+For profiles without extensions, `pi_session_prompt` reads the configured provider/model through one `ModelRuntime` that is created once and cached for the lifetime of the Pi Session MCP server process (a profile with extensions creates a fresh runtime when each session starts); the underlying SDK reads `~/.pi/agent/models.json` only at that creation. Editing that file (for example adding or fixing a provider API key) does not take effect in an already-running server process, and a resulting turn typically fails (`turn_failed`) within milliseconds rather than after a real provider round trip. Restart or reconnect the MCP server (which restarts the process) after any provider config or credential change, then retry.
 
 ### Session cleanup
 

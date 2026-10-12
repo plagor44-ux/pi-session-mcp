@@ -169,6 +169,11 @@ prompt text. This is not a sandbox.
 No MCP tool and no tool argument takes a skill. `pi_session_start` and
 `pi_session_prompt` are unchanged.
 
+Pi lists each available skill to the model with the absolute path of its
+`SKILL.md`, so that the model can read it. The model may repeat that path in
+its answer. Capabilities, errors and diagnostics stay path-free, but completed
+`assistantText` is model output and is not sanitized.
+
 ## Migration: profiles that relied on package skills
 
 With Pi SDK 1.1.0, an allowlisted extension package's bundled skills reached
@@ -229,4 +234,51 @@ you update.
 
 ## Using the orchestration skill in Claude Code and Codex
 
-<!-- client-install: filled by orchestrator after verifying client conventions -->
+The orchestration skill is for the controlling agent, not for a Pi worker. Use
+the one canonical copy from this package; do not keep edited per-client copies.
+Both clients follow symbolic links to a skill directory, so a link keeps the
+client on the shipped text. Find the installed copy with
+`"$(npm root -g)/pi-session-mcp/skills/pi-session-orchestration"`, or use the
+`skills/` directory of a checkout.
+
+Do not replace an existing local skill of the same name without checking it
+first. Neither client needs a skill to call the Pi Session MCP tools; the skill
+only describes the working method.
+
+### Claude Code
+
+Claude Code discovers personal skills in `~/.claude/skills/<name>/SKILL.md` and
+project skills in `.claude/skills/<name>/SKILL.md` of the directory it starts in
+and its parents up to the repository root
+([Claude Code skills](https://code.claude.com/docs/en/skills)). A skill entry may
+be a symbolic link to a directory elsewhere.
+
+- For one project: link
+  `<project>/.claude/skills/pi-session-orchestration` to the installed
+  directory.
+- For all projects: link `~/.claude/skills/pi-session-orchestration` instead.
+- For a single run without changing either location: start Claude Code with
+  `--add-dir <dir>`, where `<dir>/.claude/skills/pi-session-orchestration` is
+  the link. Claude Code loads skills from added directories
+  ([permissions](https://code.claude.com/docs/en/permissions)).
+
+### Codex
+
+Codex discovers repository skills in `.agents/skills` of the working directory
+and its parents up to the repository root, and user skills in
+`~/.agents/skills` ([Codex skills](https://learn.chatgpt.com/docs/build-skills)).
+It follows symbolic links to skill directories. Codex has no option that adds a
+skill directory for a single run, so link
+`<repository>/.agents/skills/pi-session-orchestration` for one repository, or
+`~/.agents/skills/pi-session-orchestration` for all of them.
+
+Headless `codex exec` runs still need the per-tool approvals for
+`pi_session_prompt`, `pi_session_abort` and `pi_session_close` that
+[client setup](client-setup.md#run-codex-without-prompts) describes.
+
+### Pi workers
+
+Pi workers never discover skills on their own in Pi Session MCP. Register the
+two worker skills in `skillCatalog` and select them on profiles, as described
+above. Do not select the orchestration skill for a Pi worker: a worker has
+only the tools of its profile and is not a controller of other Pi sessions.
