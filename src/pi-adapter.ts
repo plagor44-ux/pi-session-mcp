@@ -66,10 +66,12 @@ export interface PiSessionHandle {
   /** Only whitelisted, post-verified selection metadata may cross the adapter boundary. */
   readonly appliedSelection: PiAppliedSelection;
   /**
-   * `onActivity` is an optional content-free liveness callback, invoked after a completed
-   * tool execution and after a completed assistant message. It receives no event payload
-   * and must only be used for timestamping; it never carries tool names, arguments,
-   * results, text, paths, or credentials.
+   * `onActivity` is an optional content-free liveness callback, invoked on observed public
+   * SDK activity of the running prompt: assistant message start, update and end, and tool
+   * execution start, update and end. Streaming is activity, not evidence of finished or
+   * useful work, and internal work without a public event stays invisible. It receives no
+   * event payload and must only be used for timestamping; it never carries tool names,
+   * arguments, results, text, paths, or credentials.
    */
   prompt(text: string, preflight: (accepted: boolean) => void, onActivity?: () => void): Promise<PiTurnOutcome>;
   abort(): Promise<void>;

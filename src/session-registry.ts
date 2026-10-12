@@ -9,10 +9,11 @@ export interface SessionView {
   state: SessionState; createdAt: string; updatedAt: string; lastError?: string;
 }
 /**
- * `updatedAt` is the registry's own last-activity stamp: while a turn runs it advances on a
- * completed tool execution or completed assistant message, then freezes at the terminal
- * transition. It is a liveness lower bound, not a progress count, and does not prove that a
- * silent turn is healthy.
+ * `updatedAt` is the time of the last observed public SDK activity of the turn (assistant
+ * message start, update and end; tool execution start, update and end), then freezes at the
+ * terminal transition. Streaming is activity, not evidence of finished or useful work, and
+ * internal work without a public event stays invisible. It is a liveness lower bound, not a
+ * progress count, and does not prove that a silent turn is healthy.
  */
 export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; assistantText?: string; truncated?: boolean; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
 export interface PromptResult { session: SessionView; turn: TurnView; }
@@ -242,8 +243,9 @@ export class SessionRegistry {
   private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; }
   private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; }
   /**
-   * Liveness only. A completed tool execution or assistant message advances this turn,
-   * never another turn or the session. Activity after accepted preflight but before
+   * Liveness only. Observed public SDK activity (assistant message start, update and end; tool
+   * execution start, update and end) advances this turn, never another turn or the session.
+   * Streaming is activity, not evidence of finished or useful work. Activity after accepted preflight but before
    * publication is stamped and applied only if the turn is published; callbacks before
    * acceptance or after terminal cleanup cannot publish or revive a turn.
    */

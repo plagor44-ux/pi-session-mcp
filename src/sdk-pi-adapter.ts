@@ -263,11 +263,30 @@ class SdkHandle implements PiSessionHandle {
       if (!onActivity) return;
       try { onActivity(); } catch { /* Liveness reporting is best effort and content-free. */ }
     };
+    // Activity is the public SDK stream of this prompt: assistant message start, update and end, and
+    // tool execution start, update and end. Only the event discriminant and the message role are
+    // inspected: delta text, thinking, tool arguments and partial results are never read, stored or
+    // forwarded. Streaming is activity, not evidence of finished work; only the last assistant
+    // `message_end` is the answer, and the terminal state comes from the completion paths below.
     const unsubscribe = this.session.subscribe((event: AgentSessionEvent) => {
-      if (event.type === "tool_execution_end") reportActivity();
-      else if (event.type === "message_end" && isAssistantMessage(event.message)) {
-        finalAssistant = event.message;
-        reportActivity();
+      switch (event.type) {
+        case "tool_execution_start":
+        case "tool_execution_update":
+        case "tool_execution_end":
+          reportActivity();
+          break;
+        case "message_start":
+        case "message_update":
+          if (hasAssistantRole(event.message)) reportActivity();
+          break;
+        case "message_end":
+          if (isAssistantMessage(event.message)) {
+            finalAssistant = event.message;
+            reportActivity();
+          }
+          break;
+        default:
+          break;
       }
     });
     let preflightSeen = false;
@@ -325,6 +344,11 @@ function isAssistantMessage(message: unknown): message is { role: "assistant"; c
   if (!message || typeof message !== "object") return false;
   const candidate = message as { role?: unknown; content?: unknown };
   return candidate.role === "assistant" && Array.isArray(candidate.content);
+}
+
+/** Role check only: streaming messages are never inspected for content. */
+function hasAssistantRole(message: unknown): boolean {
+  return typeof message === "object" && message !== null && (message as { role?: unknown }).role === "assistant";
 }
 
 function isTextBlock(block: unknown): block is { type: "text"; text: string } {
