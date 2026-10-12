@@ -346,18 +346,40 @@ Pi Session MCP tools; the script never does.
   from the harness of `cc810c9` on, a SHA-256 over every built module in
   `dist/`; `run` refuses a changed build.
 - Configuration: `prepare --base-config <operator config> --from-profile
-  <alias>` copies only provider, model and thinking level of one working profile
-  without extensions or MCP servers into a temporary configuration with two
-  profiles: `accept-read` (default, `read-only`, skill `review`) and
+  <alias>` copies only provider, model and thinking level of the one explicitly
+  selected profile into a run configuration with two profiles: `accept-read` (default, `read-only`, skill `review`) and
   `accept-code` (`coding`, skills `implementation` and `handshake`). From the
   harness of `3f98104` on, all three are `builtin:` references: the two worker
   skills ship with the candidate, and the `handshake` skill sits in the
   override directory `skills/` next to the run configuration, so the run also
   exercises library resolution. The `handshake` skill is generated per run and
-  holds a random token that no controller prompt contains.
+  holds a random token that no controller prompt contains. A profile with
+  `mcpServers` is always rejected. A profile with `extensions` is rejected
+  unless `--with-extensions` is given; with it, `prepare` also copies exactly
+  that profile's extension allowlist (1 to 8 distinct exact
+  `npm:<name>@<version>` pins) into both run profiles and installs nothing.
+  `--with-extensions` on a profile without extensions is rejected. Nothing else
+  is copied: the run has its own workspaces and skills.
+- Working directory: `--work-dir` (default `~/.cache/pi-session-mcp-acceptance`)
+  must not be inside a temporary directory (the system temporary directory,
+  `/tmp`, `/var/tmp` or `/dev/shm`), because Codex refuses helper binaries
+  there.
 - Fixtures: four small synthetic git repositories per client (`slug`, `stats`,
   `wait`, `range`), each a separate workspace alias (`cc-*` for Claude Code,
   `cx-*` for Codex). Both clients use the same configuration and build.
+- Fixture baselines: when it creates a fixture, `prepare` stores its initial
+  commit and a manifest of its files (path, type, mode, SHA-256; without
+  `.git/`) under the run's private directory, never inside the worker's
+  workspace. `run` refuses a fixture that differs from its baseline before the
+  launch.
+- Bound resources: `prepare` records a digest of the candidate build, the
+  installed Claude Code controller skill copy, the candidate skill that the
+  Codex controller's link points to, the worker skills (`implementation`,
+  `review`), the `handshake` skill, the override directory, the run
+  configuration, the Claude MCP configuration, the fixture baselines and the
+  harness itself. `run` rechecks all of them before the launch and again after
+  the run. A change before the launch refuses the run; a change after it fails
+  the result with `resourcesChanged`.
 - Controller skill: from the harness of `3f98104` on, `prepare` installs the
   Claude Code controller skill the way an operator does, with the candidate's
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
@@ -377,6 +399,16 @@ Pi Session MCP tools; the script never does.
   approvals from [client setup](client-setup.md#run-codex-without-prompts).
   Neither run changes a persistent registration, `HOME` or `CODEX_HOME`, and
   both use the existing authentication.
+- Time limit: `run --timeout-min` takes a number above 0 and at most 180
+  (default 25). After the limit the harness sends `SIGTERM` to the client's
+  process group and waits up to 10 seconds. It then sends `SIGKILL` to that
+  group and to the recorded processes of the run whose PID and start time still
+  match, never by name. A process that is only found by its working directory
+  inside the run is reported, not killed. The run is complete when the client
+  exits and a bounded drain of its output has finished. The result classifies
+  `timedOut`, `spawnFailed` and `harnessAborted` (`SIGINT` or `SIGTERM` to the
+  harness); the CLI exits 1 for each of them. The original result of a client
+  and scenario is written once; a second `run` for the same pair is refused.
 
 ### Scenarios
 
@@ -398,11 +430,59 @@ Each client runs two invocations, one per scenario:
   timestamps and counts. It scans every Pi Session MCP result, with
   `assistantText` removed, for local paths, the token and credential markers,
   and counts mentions in `assistantText` separately.
-- Fixture oracles run on the workspace after the controller exits: `node
-  --test` and `git status` per fixture. Every changed file must have been last
-  written during a worker turn of its task's session, and `HANDSHAKE.txt`
-  during the follow-up turn, by the server's turn timestamps. This catches a
-  write outside the worker turns, not one during them.
+- Scope: after the controller exits, each fixture is compared with its
+  baseline in three independent ways: the working tree against the manifest
+  (including untracked, ignored, deleted, renamed and mode-changed files), the
+  index against the base commit, and `HEAD` against the base commit. A change
+  that a worker committed therefore counts. The union of changed paths must lie
+  inside the files allowed for that task. A missing or unreadable baseline,
+  `.git` or base commit fails the check; it is never read as clean. Git runs
+  pinned to the fixture with hooks and `fsmonitor` switched off.
+- Business checks: besides the fixture's own `node --test`, the harness runs
+  its own cases per fixture (`slug`, `stats`, `range`) against the worker's
+  module in a separate `node` process, because a worker could have edited the
+  tests it is judged by. For `stats` one case passes a frozen input array, so
+  an implementation that sorts its input in place fails. The fixture's tests
+  and the business checks must both pass.
+- Every changed file must have been last written during a worker turn of its
+  task's session, and `HANDSHAKE.txt` during the follow-up turn, by the
+  server's turn timestamps. This catches a write outside the worker turns, not
+  one during them.
+- Acceptance verdict: each result carries `acceptance` with `passed` and a
+  list of `failures`, computed mechanically from the checks. `passed` is true
+  only when the list is empty. A failure code is listed when any of these
+  does not hold:
+  - the controller exit code is 0 (`controllerExit`), and neither `timedOut`,
+    `spawnFailed` nor `harnessAborted` is set;
+  - no bound resource changed after the run (`resourcesChanged`), and for a
+    reanalysis no resource or fixture differs from the state recorded at the
+    end of the run (`stateChangedSinceRun`);
+  - at least one server of the run was observed (`noServerObserved`) and no
+    process of the run remains (`residualProcesses`);
+  - the controller called `pi_capabilities_get` first (`capabilitiesNotFirst`),
+    saw the candidate version and configuration fingerprint
+    (`candidateNotConfirmed`) and saw exactly the skills `implementation` and
+    `handshake` on `accept-code` (`workerSkills`);
+  - the structural leak scan found nothing (`structuralLeaks`), the token
+    appears nowhere it must not (`tokenExposed`), and no worker prompt or
+    controller action touched a private marker (`privateAccess`);
+  - at least two sessions started and all were closed (`sessionsNotClosed`);
+  - `parallel`: both first turns completed (`firstTurnsNotCompleted`), they
+    overlapped (`noOverlap`) and the follow-up completed
+    (`followUpNotCompleted`);
+  - `abort`: the `wait` turn ended `aborted` after only successful aborts
+    (`abortFailed`), in the required order and before its session closed
+    (`abortOrder`), and `range` completed with the abort inside its running
+    interval (`neighborNotRunningDuringAbort`);
+  - per fixture: only allowed changes (`<task>:changes`), every change written
+    during a worker turn (`<task>:attribution`), fixture tests and business
+    checks passing (`<task>:tests`), for `slug` the added test and the
+    handshake (`slug:followUp`), for `wait` no late file (`wait:lateFile`),
+    and an oracle for every task of the scenario (`oracleMissing`).
+- Liveness observation: for each turn of a session, `turnLiveness` records the
+  number of `pi_turn_get` polls that saw the turn `running` and whether
+  `updatedAt` exceeded `startedAt` while it was running. This is an
+  observation, not a pass criterion.
 - Controller writes are limited by the client restrictions: the Codex
   controller runs in a read-only sandbox, and the Claude Code controller has no
   write or edit tool, although its allowed `git -C` could still change a
@@ -413,18 +493,27 @@ Each client runs two invocations, one per scenario:
   private directory or its files; this is a marker check, not a sandbox.
 - The harness records its own SHA-256 at `prepare` and refuses to run or
   re-evaluate a run with another version.
+- `reanalyze` recomputes the transcript analysis and the checks of a finished
+  run and never overwrites the original result: it writes a numbered
+  reanalysis file. At the end of each run the harness records the state of
+  the fixtures (working tree, `HEAD`, index) and of the bound resources. If a
+  fixture or a bound resource differs from that state, the reanalysis fails
+  with `stateChangedSinceRun`.
 - `evidence` writes one sanitized JSON record and refuses to write a local path
-  or the token. Transcripts and the configuration stay in the run's private
-  directory and are never published.
+  or the token. It lists the original results and the reanalyses separately and
+  includes the extension names and versions and the resource digests.
+  Transcripts and the configuration stay in the run's private directory and
+  are never published.
 
-A controller that reports success does not count; only the checks above do.
+A controller that reports success does not count; only the checks above and
+the `acceptance` verdict derived from them do.
 If a client or its authentication is not available, record that client's part
 as blocked.
 
 ### Method limits of earlier records
 
-Records made with the harness before it was hardened in a later change (#53)
-have these method limits:
+Records made with the harness before it was hardened in #53 have these method
+limits, which that change removed:
 
 - The scope check used `git status`, which does not show a change that a worker
   had already committed.

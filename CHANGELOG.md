@@ -62,7 +62,19 @@
   last observed public SDK activity. `docs/acceptance.md` records the v0.8.0
   post-release acceptance and names the method limits of earlier multi-session
   records. Issue #54.
-<!-- harness entry (#53) follows -->
+- The multi-session acceptance harness (`scripts/multi-session-acceptance.mjs`,
+  not in the npm package) now ends a run within validated time bounds and
+  terminates only processes that provably belong to it (PID and start time). It
+  checks scope against a baseline stored outside the worker workspace (working
+  tree, index and HEAD, so committed changes count) and adds its own business
+  checks to the fixture tests. It binds the build, the controller and worker
+  skills, the override directory, the configuration, the fixture baselines and
+  itself at `prepare` and rechecks them before launch and after the run, writes
+  each original result once, and records reanalyses separately. `prepare
+  --with-extensions` copies the exact extension allowlist of a selected profile
+  for extension providers such as Cursor. Each session reports whether a polled
+  running turn showed `updatedAt` beyond `startedAt`. See
+  [Acceptance](docs/acceptance.md#multi-session-skill-acceptance). Issue #53.
 
 ## 0.8.0 — 2026-10-12
 
