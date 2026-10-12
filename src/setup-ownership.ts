@@ -5,6 +5,7 @@ import { dirname } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import { acquireSetupGuardian } from "./setup-process.js";
 import { assertSupportedFilesystem, currentSetupPlatform, openLockedDarwin, type SetupPlatform } from "./setup-platform.js";
+import { SKILL_NAME_PATTERN } from "./skill-library.js";
 import type { SetupTarget } from "./setup-result.js";
 
 export interface OwnershipRecord {
@@ -13,6 +14,11 @@ export interface OwnershipRecord {
   readonly previous: "absent" | "equivalent";
   readonly phase: "pending" | "owned";
   readonly transactionId: string;
+  /**
+   * Skill records only, while pending: the fingerprint of setup's own copy that the pending
+   * update replaces, so an interrupted update can still be completed or removed.
+   */
+  readonly replaces?: string;
 }
 
 export interface RegistrationSnapshot {
@@ -172,7 +178,30 @@ async function syncDirectory(path: string): Promise<void> {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 
-function isRecord(value: unknown): value is OwnershipRecord { if (!value || typeof value !== "object") return false; const x = value as Record<string, unknown>; if (!exactKeys(x, ["target", "fingerprint", "previous", "phase", "transactionId"])) return false; const t = x.target; if (!t || typeof t !== "object") return false; const target = t as Record<string, unknown>; if (!exactKeys(target, ["client", "scope", "alias"])) return false; const client = target.client; const scope = target.scope; return (client === "codex" || client === "claude-code") && typeof scope === "string" && (client === "codex" ? scope === "user" : ["user", "project", "local"].includes(scope)) && target.alias === "pi-session-mcp" && typeof x.fingerprint === "string" && /^[a-f0-9]{64}$/.test(x.fingerprint) && (x.phase === "pending" || x.phase === "owned") && x.previous === "absent" && typeof x.transactionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.transactionId); }
+/** `skill:<name>` for a home slot; `skill:<name>@<16 hex>` for a project slot bound to an opaque project identity. */
+const SKILL_RECORD_ALIAS = /^skill:([^@]+)(?:@([0-9a-f]{16}))?$/;
+
+export function isRecord(value: unknown): value is OwnershipRecord {
+  if (!value || typeof value !== "object") return false;
+  const x = value as Record<string, unknown>;
+  const keys = ["target", "fingerprint", "previous", "phase", "transactionId"];
+  if (!exactKeys(x, keys) && !exactKeys(x, [...keys, "replaces"])) return false;
+  if (!x.target || typeof x.target !== "object") return false;
+  const target = x.target as Record<string, unknown>;
+  if (!exactKeys(target, ["client", "scope", "alias"])) return false;
+  const { client, scope, alias } = target;
+  const registration = alias === "pi-session-mcp" &&
+    (client === "codex" ? scope === "user" : client === "claude-code" && typeof scope === "string" && ["user", "project", "local"].includes(scope));
+  const skillAlias = typeof alias === "string" ? SKILL_RECORD_ALIAS.exec(alias) : null;
+  const skill = skillAlias !== null && SKILL_NAME_PATTERN.test(skillAlias[1]!) &&
+    (client === "codex" ? scope === "user" && skillAlias[2] === undefined
+      : client === "claude-code" && ((scope === "user" && skillAlias[2] === undefined) || (scope === "project" && skillAlias[2] !== undefined)));
+  // `replaces` belongs only to a pending skill record.
+  if ("replaces" in x && !(skill && x.phase === "pending" && typeof x.replaces === "string" && /^[a-f0-9]{64}$/.test(x.replaces))) return false;
+  return (registration || skill) && typeof x.fingerprint === "string" && /^[a-f0-9]{64}$/.test(x.fingerprint) &&
+    (x.phase === "pending" || x.phase === "owned") && x.previous === "absent" &&
+    typeof x.transactionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.transactionId);
+}
 
 function exactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean { const keys = Object.keys(value).sort(); return keys.length === expected.length && [...expected].sort().every((key, index) => keys[index] === key); }
 

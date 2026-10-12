@@ -1,0 +1,6 @@
+---
+name: fixture-bundled
+description: BUNDLED_DESCRIPTION_SENTINEL
+---
+
+PACKAGE_SKILL_BODY_SECRET_SENTINEL

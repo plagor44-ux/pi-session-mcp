@@ -14,12 +14,14 @@ Pi Session MCP is a local, stdio-only MCP server. An MCP client starts
 Nothing listens on a network port, no daemon runs between client sessions, and
 session state exists only in the memory of that child process.
 
-An installation consists of three locations:
+An installation consists of these locations:
 
 | What | Location | Notes |
 | --- | --- | --- |
 | Package | the npm global prefix, or a dedicated directory per release such as `~/.local/share/pi-session-mcp/releases/<tag>` | The built server, `setup` and Doctor. |
 | Configuration | a file outside the package, for example `~/.config/pi-session-mcp/pi-session-mcp.json` | Operator-owned, mode `0600`, never committed. |
+| Skill overrides (optional) | the `skills/` directory next to the configuration file, for example `~/.config/pi-session-mcp/skills/` | Your own or customized skills, plus `.pi-session-mcp-bases.json`. Created by you or by `setup --customize-skill`. See [Pi skills](#pi-skills). |
+| Controller skill | `~/.agents/skills/pi-session-orchestration` (Codex), `~/.claude/skills/pi-session-orchestration` or `<project>/.claude/skills/pi-session-orchestration` (Claude Code) | Written by `setup --apply`; see [Register a client](#4-register-a-client). |
 | Setup ownership state | `~/.local/state/pi-session-mcp/ownership.json` | Written by `setup` only. Path-free and secret-free. |
 
 Never register a development checkout. A registered client launches
@@ -156,6 +158,13 @@ Rules:
   `extensions`: a list of at most 8 entries of the form
   `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`
   sources, paths and build metadata (`+build`) are rejected. See [Pi extensions](#pi-extensions).
+- A profile may select Pi skills through `skills`: a list of at most 16 aliases
+  from the top-level `skillCatalog`, which maps an alias to `builtin:<name>`
+  (a skill of the package or of your override directory) or to the path of one
+  `SKILL.md` file (at most 64 entries). A relative path resolves against the
+  configuration file's directory; `~` is not expanded. The example already uses
+  `builtin:` for the two worker skills, so you need not change its skill
+  entries. See [Pi skills](#pi-skills).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -217,6 +226,10 @@ pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
 pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
+`--apply` also installs the controller skill `pi-session-orchestration` for the
+target, after the registration, so the client knows how to drive Pi worker
+sessions. See [Controller skill](#controller-skill).
+
 `setup` changes a Codex registration only through `codex mcp add` and
 `codex mcp remove`, and Codex rewrites `config.toml` on each of them. Codex CLI
 `0.162.0` groups all `[mcp_servers.*]` tables together and drops a comment
@@ -224,12 +237,14 @@ directly above such a table; settings are preserved. If your `config.toml`
 contains comments worth keeping, copy it before `--apply`, `--rollback` or
 `--remove` on `codex:user:pi-session-mcp`.
 
-Each report has one line for the operation with its overall status, and one line
-per target with a finding in the form `status (code)`:
+Each report has one line for the operation with its overall status, and per
+target two lines with a finding in the form `status (code)`: the registration
+and the controller skill, whose alias is `pi-session-orchestration`:
 
 ```text
 dry-run: planned
 claude-code/user/pi-session-mcp: absent (absent)
+claude-code/user/pi-session-orchestration: absent (skill_absent)
 ```
 
 Expected results:
@@ -237,8 +252,11 @@ Expected results:
 | Operation | Overall | Finding | Meaning |
 | --- | --- | --- | --- |
 | `--dry-run` | `planned` | `absent (absent)` | No registration exists. Apply will add one. |
+| `--dry-run` | `planned` | `absent (skill_absent)` | The controller skill is not installed. Apply will install it. |
 | `--apply` | `ok` | `ok (applied)` | The registration was added and is now owned by `setup`. |
+| `--apply` | `ok` | `ok (skill_installed)` | The controller skill was copied into the client's skill directory and is owned by `setup`. |
 | `--verify` | `ok` | `ok (mcp_verified)` | Doctor passed, the registration equals the intended one, and a direct MCP handshake listed the eight tools and answered `pi_capabilities_get`. |
+| `--verify` | `ok` | `ok (skill_verified)` | The installed skill equals the effective skill. |
 
 Verify never starts a session and never contacts a provider. Add `--json` to
 any operation for the sanitized JSON report. Exit status `0` is success, `1` an
@@ -254,6 +272,39 @@ If a registration already exists, `setup` never replaces it:
 
 Start a new client session after registering. The client launches the server on
 demand; there is nothing to start by hand.
+
+### Controller skill
+
+`--apply` copies the effective `pi-session-orchestration` skill (your override
+if you have one, else the shipped skill) as a real copy to the client's skill
+directory, where the client discovers it without further steps:
+
+| Target | Skill directory |
+| --- | --- |
+| `codex:user:pi-session-mcp` | `~/.agents/skills/pi-session-orchestration` |
+| `claude-code:user:pi-session-mcp`, `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` (one shared directory) |
+| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration`, where `<project>` is the directory in which you run `setup` |
+
+- `setup` never replaces or deletes a modified installed copy, hidden files
+  inside it (macOS Finder's `.DS_Store` counts too), a skill of the same name
+  that it did not install, or a link or non-directory entry. It reports
+  `skill_divergent`; the registration is still made, but the overall status is
+  `failed`. A link to exactly the effective skill is accepted as your own
+  (`skill_linked`). Inside a project, any link below the project root counts as
+  divergent.
+- A package update or a changed override replaces setup's own unmodified copy on
+  the next `--apply` (`skill_updated`). `--remove` and `--rollback` delete it
+  again (`skill_removed`), except while the other Claude Code registration of
+  the shared directory still uses it (`skill_kept_shared`).
+- To change the skill, do not edit the installed copy. Run
+  `pi-session-mcp-setup --apply --customize-skill pi-session-orchestration`,
+  edit the override it creates, and run `--apply` for the target again.
+- Setup installs only this one skill into clients. Worker skills are for Pi
+  profiles; additional controller skills of your own belong in the clients'
+  native skill directories.
+
+The codes and the rules are in [Pi skills](skills.md#install-the-orchestration-skill-into-codex-and-claude-code)
+and the [setup lifecycle design](client-setup-design.md#skill-installation).
 
 ### Register without setup
 
@@ -277,7 +328,11 @@ acceptance level covers this path.
    directory: in an npm installation `echo "$(npm root -g)/pi-session-mcp"`
    prints that directory, in a release checkout it is the checkout. Write the
    resulting absolute path into the command; a substitution inside the single
-   quotes of the Codex example would not be expanded.
+   quotes of the Codex example would not be expanded. A manual registration
+   installs no skill. To use the controller skill, copy (do not link) the
+   directory `skills/pi-session-orchestration` of the package to the client's
+   skill directory listed under [Controller skill](#controller-skill), and
+   repeat the copy after an upgrade.
 3. Check the registration. These checks are not a replacement for
    `setup --verify`: it also performs a bounded direct MCP handshake, and
    outside `setup` nothing does that yet. The last check below depends on the
@@ -394,12 +449,69 @@ pin the installed version in the profile:
   reports a placeholder key. Session start succeeds and the first prompt fails
   with `turn_failed`. Store the key with Pi first.
 
+## Pi skills
+
+An execution profile can give its sessions Pi skills. The package ships two
+worker skills, `pi-session-implementation` and `pi-session-review`, and the
+controller skill `pi-session-orchestration`, in its `skills/` directory. The
+catalog maps an alias to a skill; the profile selects aliases. MCP callers never
+choose skills.
+
+```json
+"skillCatalog": {
+  "pi-session-review": "builtin:pi-session-review"
+},
+"executionProfiles": {
+  "safe-readonly": {
+    "default": true,
+    "permissionProfile": "read-only",
+    "provider": "your-configured-provider",
+    "model": "your-configured-model",
+    "thinkingLevel": "medium",
+    "skills": ["pi-session-review"]
+  }
+}
+```
+
+- `builtin:<name>` resolves to your override
+  `<directory of the configuration file>/skills/<name>/SKILL.md` if it exists,
+  else to the shipped skill. The shipped example configuration already uses
+  `builtin:pi-session-implementation` and `builtin:pi-session-review`, so the
+  copied example needs no path edits for skills. Adding or removing an override
+  needs a server restart, like any configuration change.
+- To adjust a shipped skill, run `pi-session-mcp-setup --customize-skill <name>`
+  (a dry-run) and then `pi-session-mcp-setup --apply --customize-skill <name>`
+  with `PI_SESSION_MCP_CONFIG` set. It copies the shipped skill into the
+  override directory as a starting point and never overwrites an existing
+  override. Edit the copy, then restart the server. To add a skill of your own,
+  create `<override dir>/<new-name>/SKILL.md` and reference it as
+  `builtin:<new-name>`; no command is needed. After a package update, Doctor
+  warns with `skill_override_outdated` when a shipped skill changed since you
+  copied it.
+- A `builtin:` name with no override and no shipped skill makes Doctor report
+  `skill_missing` and the session start fail with `skill_load_failed`.
+- An extension allowlist alone makes none of a package's skills available. If a
+  profile relied on them, add a catalog entry with the absolute path of the
+  package's `SKILL.md` and select it; see the migration section of [Pi
+  skills](skills.md).
+- A skill file is read by the SDK at session start and later by the model.
+  Do not change skill files while sessions that use them are active; close
+  those sessions first.
+
+The complete rules, errors, Doctor checks and limits are in [Pi skills](skills.md).
+
 ## Upgrade
 
 `setup` binds each owned registration to the package manifests and to every
 built runtime file, so the old version must remove its registration before the
 new one applies. Read the [changelog](../CHANGELOG.md) before upgrading; it
 records changes that affect operators, such as renamed provider keys.
+
+Removing the registration also removes the controller skill that setup
+installed, unless you modified it, and `--apply` for the new version installs
+the new text. A package update that changes a shipped skill does not touch an
+override of yours; Doctor warns with `skill_override_outdated` so that you can
+review the change.
 
 ### npm installation
 
@@ -465,7 +577,12 @@ npm uninstall -g pi-session-mcp
 same owned removal and reports `rolled_back`; use it to undo an apply. After
 every target reports `removed`, uninstall the package or delete the release
 directory, and delete the configuration file and
-`~/.local/state/pi-session-mcp/`.
+`~/.local/state/pi-session-mcp/`. The same call removes the controller skill
+that `setup` installed (`skill_removed`). It keeps a copy that you modified
+(`skill_divergent`) and the shared Claude Code directory while the other
+Claude Code registration is still owned (`skill_kept_shared`). Your override
+directory `skills/` next to the configuration file is yours: delete it with the
+configuration file if you no longer need it.
 
 ## When something fails
 

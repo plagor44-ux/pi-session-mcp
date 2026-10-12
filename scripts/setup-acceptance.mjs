@@ -287,6 +287,13 @@ const tick = () => new Promise((done) => setImmediate(done));
 const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 // ---- lifecycle -----------------------------------------------------------
+const CONTROLLER_SKILL = "pi-session-orchestration";
+const SKILL_SEQUENCE = [
+  ["skill_absent", "absent"], ["skill_absent", "absent"],
+  ["skill_installed", "ok"], ["skill_already_equivalent", "unchanged"],
+  ["skill_verified", "ok"], ["skill_removed", "ok"],
+  ["skill_installed", "ok"], ["skill_verified", "ok"], ["skill_removed", "ok"],
+];
 const SEQUENCE = [
   { n: 1, flag: null, overall: "planned", status: "absent", code: "absent" },
   { n: 2, flag: "--dry-run", overall: "planned", status: "absent", code: "absent" },
@@ -311,6 +318,16 @@ const SENTINELS = [
   { client: "claude-code", scope: "project", name: "acceptance-sentinel-project", argv: ["claude", "mcp", "add", "--scope", "project", "acceptance-sentinel-project", "--", "/bin/true"] },
   { client: "claude-code", scope: "local", name: "acceptance-sentinel-local", argv: ["claude", "mcp", "add", "--scope", "local", "acceptance-sentinel-local", "--", "/bin/true"] },
 ].filter((s) => CLIENTS.includes(s.client));
+
+function skillParent(t) {
+  return join(t.scope === "project" ? project : homes[t.client], t.client === "codex" ? ".agents" : ".claude", "skills");
+}
+const skillFile = (t) => join(skillParent(t), CONTROLLER_SKILL, "SKILL.md");
+const foreignSkillFile = (t) => join(skillParent(t), "acceptance-foreign-skill", "SKILL.md");
+const FOREIGN_SKILL_CONTENT = "foreign skill sentinel\n";
+function foreignSkillUnchanged(t) {
+  try { return readFileSync(foreignSkillFile(t), "utf8") === FOREIGN_SKILL_CONTENT; } catch { return false; }
+}
 
 function prepareEnvironment() {
   for (const dir of [ROOT, project, ...CLIENTS.map((c) => homes[c]), ...(CLIENTS.includes("codex") ? [codexHome] : [])]) {
@@ -345,6 +362,10 @@ function recordVersions(result, buildDir) {
 }
 
 function addSentinels(result) {
+  for (const t of TARGETS) {
+    mkdirSync(dirname(foreignSkillFile(t)), { recursive: true, mode: 0o755 });
+    writeFileSync(foreignSkillFile(t), FOREIGN_SKILL_CONTENT, { mode: 0o644 });
+  }
   for (const s of SENTINELS) {
     const r = run(s.client, s.argv);
     const added = check(r.status === 0 && present(s.client, s.scope, s.name));
@@ -358,22 +379,31 @@ function runStep(t, step, reports, stateBeforeStep1) {
   reports.push(r.stdout);
   let parsed;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = undefined; }
-  const finding = parsed?.findings?.length === 1 ? parsed.findings[0] : undefined;
+  const finding = parsed?.findings?.length === 2 ? parsed.findings[0] : undefined;
+  const skillFinding = parsed?.findings?.length === 2 ? parsed.findings[1] : undefined;
+  const [skillCode, skillStatus] = SKILL_SEQUENCE[step.n - 1];
   const observed = {
     overall: parsed?.status ?? null,
     status: finding?.status ?? null,
     code: finding?.code ?? null,
+    skillStatus: skillFinding?.status ?? null,
+    skillCode: skillFinding?.code ?? null,
+    skillTargetMatches: skillFinding ? skillFinding.target.client === t.client && skillFinding.target.scope === t.scope && skillFinding.target.alias === CONTROLLER_SKILL : false,
     exit: r.status,
     findingCount: parsed?.findings?.length ?? null,
     targetMatches: finding ? finding.target.client === t.client && finding.target.scope === t.scope && finding.target.alias === ALIAS : false,
   };
   const pass = check(
     observed.overall === step.overall && observed.status === step.status && observed.code === step.code &&
-    observed.exit === 0 && observed.findingCount === 1 && observed.targetMatches && !r.error && !r.signal,
+    observed.exit === 0 && observed.findingCount === 2 && observed.targetMatches &&
+    observed.skillCode === skillCode && observed.skillStatus === skillStatus && observed.skillTargetMatches && !r.error && !r.signal,
   );
-  const record = { step: step.n, operation: step.flag ?? "default", expected: { overall: step.overall, status: step.status, code: step.code, exit: 0 }, observed, pass };
+  const record = { step: step.n, operation: step.flag ?? "default", expected: { overall: step.overall, status: step.status, code: step.code, skillCode, skillStatus, exit: 0 }, observed, pass };
   if (step.n === 1 || step.n === 2) record.clientStateUnchanged = check(clientState(t.client) === stateBeforeStep1);
   if (step.n === 3 || step.n === 7) record.registrationPresentAfter = check(present(t.client, t.scope, ALIAS));
+  if (step.n === 3 || step.n === 7) record.skillPresentAfter = check(existsSync(skillFile(t)));
+  if (step.n === 6 || step.n === 9) record.skillAbsentAfter = check(!existsSync(skillFile(t)));
+  record.foreignSkillUnchanged = check(foreignSkillUnchanged(t));
   if (step.n === 6) record.registrationAbsentAfter = check(!present(t.client, t.scope, ALIAS));
   return record;
 }
@@ -385,6 +415,8 @@ async function runTarget(t, reports) {
   // after step 9
   entry.postconditions = {
     registrationAbsent: check(!present(t.client, t.scope, ALIAS)),
+    skillAbsent: check(!existsSync(skillFile(t))),
+    foreignSkillUnchanged: check(foreignSkillUnchanged(t)),
     sentinelPresent: check(SENTINELS.filter((s) => s.client === t.client).every((s) => present(s.client, s.scope, s.name))),
     ...ownershipChecks(t.client),
   };
@@ -395,6 +427,8 @@ function checkFinalState(result) {
   for (const client of CLIENTS) {
     result.finalChecks.push({
       client,
+      skillsAbsentEverySlot: check(TARGETS.filter((t) => t.client === client).every((t) => !existsSync(skillFile(t)))),
+      foreignSkillsUnchanged: check(TARGETS.filter((t) => t.client === client).every(foreignSkillUnchanged)),
       registrationAbsentEveryScope: check(TARGETS.filter((t) => t.client === client).every((t) => !present(t.client, t.scope, ALIAS))),
       sentinelsPresent: check(SENTINELS.filter((s) => s.client === client).every((s) => present(s.client, s.scope, s.name))),
       ...ownershipChecks(client),

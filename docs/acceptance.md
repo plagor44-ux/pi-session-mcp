@@ -97,7 +97,12 @@ env -i HOME="$DISPOSABLE_HOME" PATH="$PATH" PI_SESSION_MCP_CONFIG="$ACCEPTANCE_C
 ### Pass criteria
 
 - All nine operations report the expected overall status, finding and exit
-  status.
+  status. From the change that tracks #46 on, every operation also reports the
+  controller skill finding (`skill_absent` twice, `skill_installed`,
+  `skill_already_equivalent`, `skill_verified`, `skill_removed`,
+  `skill_installed`, `skill_verified`, `skill_removed`); the skill file exists
+  after steps 3 and 7 and is gone after steps 6 and 9; a foreign skill placed
+  in the same skill directory stays unchanged throughout.
 - Steps 1 and 2 leave the client state unchanged.
 - After step 9 the `pi-session-mcp` registration is absent, the sentinel is still
   present, and the ownership record set is empty. The ownership directory has
@@ -322,6 +327,99 @@ Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run
 5. Record how the Cursor local runtime starts its child processes (inherited or piped stdio).
 
 Record date, source commit, versions and outcome under Status. No secret, path or prompt content goes into the record.
+
+## Multi-session skill acceptance
+
+A targeted live check for profile skill selection ([skills](skills.md)) and for
+several Pi sessions that one real controller drives at the same time. It is not
+the ten-task Level 3 cycle and does not replace it.
+
+The maintainer script `scripts/multi-session-acceptance.mjs` prepares the run,
+starts the controller and checks the outcome. The controller itself calls the
+Pi Session MCP tools; the script never does.
+
+### Preparation
+
+- Candidate: a separate detached checkout of the commit under test, built with
+  `npm ci`, `npm run build` and `npm run build:cli`. `prepare` records the
+  commit, whether the checkout is clean, the SHA-256 of `dist/main.js` and,
+  from the harness of `cc810c9` on, a SHA-256 over every built module in
+  `dist/`; `run` refuses a changed build.
+- Configuration: `prepare --base-config <operator config> --from-profile
+  <alias>` copies only provider, model and thinking level of one working profile
+  without extensions or MCP servers into a temporary configuration with two
+  profiles: `accept-read` (default, `read-only`, skill `review`) and
+  `accept-code` (`coding`, skills `implementation` and `handshake`). From the
+  harness of `3f98104` on, all three are `builtin:` references: the two worker
+  skills ship with the candidate, and the `handshake` skill sits in the
+  override directory `skills/` next to the run configuration, so the run also
+  exercises library resolution. The `handshake` skill is generated per run and
+  holds a random token that no controller prompt contains.
+- Fixtures: four small synthetic git repositories per client (`slug`, `stats`,
+  `wait`, `range`), each a separate workspace alias (`cc-*` for Claude Code,
+  `cx-*` for Codex). Both clients use the same configuration and build.
+- Controller skill: from the harness of `3f98104` on, `prepare` installs the
+  Claude Code controller skill the way an operator does, with the candidate's
+  `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
+  the controller's directory. The setup step runs with a disposable `HOME`, so
+  setup state and client files of that step never touch the real home; it must
+  report `applied` and `skill_installed` and leave a regular copy identical to
+  the shipped skill. Codex installs skills only in the user's home, which the
+  run must not change, so the Codex controller gets one run-scoped symbolic link
+  in `.agents/skills` of its directory. Earlier runs linked both. No global
+  skill directory changes.
+- Clients: Claude Code runs as `claude -p` with `--mcp-config`,
+  `--strict-mcp-config`, `--setting-sources project,local`,
+  `--permission-mode dontAsk` and an `--allowedTools` list of the eight tools
+  plus read-only file tools, `sleep`, `node --test` and `git -C`. Codex runs as
+  `codex exec --ignore-user-config --sandbox read-only` with the server
+  defined through `-c mcp_servers.pi-candidate.*` and the three per-tool
+  approvals from [client setup](client-setup.md#run-codex-without-prompts).
+  Neither run changes a persistent registration, `HOME` or `CODEX_HOME`, and
+  both use the existing authentication.
+
+### Scenarios
+
+Each client runs two invocations, one per scenario:
+
+| Scenario | What the controller does | What is checked |
+| --- | --- | --- |
+| `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
+| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
+
+### Independent checks
+
+- The script watches `/proc` during the run and records every process of the
+  controller tree, every server of this run (entry point and configuration
+  path) and every process whose working directory lies inside the run, by PID
+  and start time. After the controller exits and the server's 15-second
+  shutdown bound has passed, none of them may remain.
+- From the controller transcript it extracts only tool names, aliases, states,
+  timestamps and counts. It scans every Pi Session MCP result, with
+  `assistantText` removed, for local paths, the token and credential markers,
+  and counts mentions in `assistantText` separately.
+- Fixture oracles run on the workspace after the controller exits: `node
+  --test` and `git status` per fixture. Every changed file must have been last
+  written during a worker turn of its task's session, and `HANDSHAKE.txt`
+  during the follow-up turn, by the server's turn timestamps. This catches a
+  write outside the worker turns, not one during them.
+- Controller writes are limited by the client restrictions: the Codex
+  controller runs in a read-only sandbox, and the Claude Code controller has no
+  write or edit tool, although its allowed `git -C` could still change a
+  fixture.
+- The handshake token must appear neither in a worker prompt nor anywhere in
+  the controller transcript, and no worker prompt may name a private path or a
+  skill file. The controller's own reads and commands must not name the run's
+  private directory or its files; this is a marker check, not a sandbox.
+- The harness records its own SHA-256 at `prepare` and refuses to run or
+  re-evaluate a run with another version.
+- `evidence` writes one sanitized JSON record and refuses to write a local path
+  or the token. Transcripts and the configuration stay in the run's private
+  directory and are never published.
+
+A controller that reports success does not count; only the checks above do.
+If a client or its authentication is not available, record that client's part
+as blocked.
 
 ## Evidence rules
 
@@ -612,3 +710,129 @@ Pi extension live check with the operator's configuration on 2026-10-11:
   prompt.
 - Two Cursor sessions completed in parallel.
 - No process remained, and no foreign line reached the MCP stdout.
+
+Profile skill selection (#46) passed a multi-session skill acceptance with Claude
+Code and Codex on 2026-10-12, on Linux (`x64`) with Node.js `26.11.1`, Claude
+Code `2.1.296`, Codex CLI `0.162.1` and Pi SDK `1.1.0`:
+- Candidate: detached checkouts of `bcef6ba` (runs 1 to 3), `a086339` (run 4)
+  and `b6cf624` (run 5), each clean and built with `npm ci`, `npm run build`
+  and `npm run build:cli`. `dist/main.js` has the same SHA-256 in all five
+  runs, `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`:
+  the commits after `bcef6ba` change only the orchestration skill text, the
+  acceptance harness and documentation.
+- Level 1 on `bcef6ba`, from the command output of the maintainer's gate run:
+  every command exited with `0`. The test run reported
+  40 files, 761 passed and 5 skipped; `npm audit` reported 0 vulnerabilities;
+  `npm pack --dry-run` listed the three skills and no harness. The test suite
+  passed again on `a086339` with the same counts.
+- Configuration: the same bytes in every run, fingerprint
+  `sha256:b754f0f5e4702d81d99183817abb379eeed2fb5733f93373852eb827ec16d687`,
+  with the profiles `accept-read` and `accept-code` derived from an OpenAI
+  `gpt-6-luna` profile with thinking level `low`, and the fixture aliases
+  `cc-slug`, `cc-stats`, `cc-wait`, `cc-range`, `cx-slug`, `cx-stats`, `cx-wait`
+  and `cx-range`. Offline Doctor reported no finding for it.
+- Every invocation confirmed the candidate's version and this fingerprint
+  through `pi_capabilities_get` as its first call, and saw the skills
+  `implementation` and `handshake` on `accept-code`. Exactly one server of the
+  run was observed per invocation, and no process of the controller tree, the
+  server or the fixtures remained afterwards. No Pi Session MCP result
+  contained a local path, the token or a credential marker, and no
+  `assistantText` mentioned one.
+
+Run 5, on `b6cf624` with the harness of that commit (SHA-256
+`ca851130bbade9f0b2700a43059b7ac3ce349dad40ad2b647133f950a408c719`), passed
+every check of all four invocations:
+
+| Client | Scenario | Result |
+| --- | --- | --- |
+| Claude Code | `parallel` | First turns overlapped by 25.1 s; follow-up in the same session completed; both fixtures pass their tests with only the allowed files changed, each last written during a worker turn; `HANDSHAKE.txt` holds the token and was written during the follow-up turn, although no worker prompt contained the token and the token never appeared in the controller transcript; no controller action named the private run directory; both sessions closed |
+| Claude Code | `abort` | First turns overlapped by 23.7 s; one abort, result `ok`; `aborted` seen through `pi_turn_get` before close; the abort fell inside the running interval of the neighbor, which then completed and passes its tests; the worker's `sleep 120` was observed running, and at the end of the run it was gone and had written no file; both sessions closed |
+| Codex | `parallel` | As for Claude Code, with an overlap of 24.8 s |
+| Codex | `abort` | As for Claude Code, with an overlap of 22.4 s |
+
+The controllers made 1 to 6 `pi_turn_get` calls per session and waited between
+polls with `sleep`. Each invocation took 93 to 156 seconds. The run's
+transcripts were also checked afterwards against the criteria the harness
+gained after run 5: in both `abort` invocations the first successful abort came
+before the first `aborted` observation, and no worker prompt named a private
+path or a skill file. Run 5 used the harness of `b6cf624`; the head's harness
+adds these two checks and the run-time checksum check, and changes nothing
+else.
+
+Earlier attempts on the same build, kept on record:
+- Run 1 (Claude Code only, with the harness of `bcef6ba`, which did not record
+  its checksum yet): `parallel` passed
+  every check. In `abort` the abort itself passed (result `ok`, `aborted` seen
+  before close, the worker's `sleep` ended, no late file), but the neighbor
+  turn had completed about three seconds before the abort, so the run shows no
+  neighbor that keeps running. The neighbor task now starts with a bounded
+  `sleep 45` and the abort comes after about 15 seconds.
+- Run 2: three invocations passed every check. In Codex `parallel` every
+  functional check passed, including the handshake written during the
+  follow-up turn with a token that no prompt contained, but the controller
+  then read the run's private handshake skill to confirm the token. The
+  controller prompt now confines reads and commands to the fixtures.
+- Run 3: three invocations passed every check. In Codex `abort` the abort, the
+  running neighbor and cleanup passed, but the controller told both workers to
+  "follow configured handshake instructions" because capabilities listed a
+  `handshake` skill, so both fixtures got an extra `HANDSHAKE.txt`. The
+  orchestration skill now says that a listed skill is not a task.
+- Run 4 (`a086339`): three invocations passed every check. The Codex
+  `parallel` controller read the fixtures-only rule as excluding its own skill
+  directory, worked from `./fixtures`, and stopped after
+  `pi_capabilities_get` without starting a session. The rule now allows the
+  controller's own skill directory.
+
+No run showed a Pi Session MCP defect. The deviations were controller
+behavior and harness wording.
+
+This is a targeted check of skill selection and of two concurrent sessions
+per client. It is not the ten-task Level 3 cycle. It covers neither the
+extension profile path live (the automated SDK contract tests cover it), nor
+`read-only` workers, nor more than two concurrent sessions, nor macOS.
+
+After the owner asked on 2026-10-12 that skills install without manual linking
+and can be adjusted and extended, the same change gained the skill library,
+`builtin:` references, `--customize-skill` and the controller-skill
+installation through `setup`. Its final candidate `0ebbaa0` passed on
+2026-10-12, on Linux (`x64`) with Node.js `26.11.1`, Claude Code `2.1.296`,
+Codex CLI `0.162.1` and Pi SDK `1.1.0`:
+- Level 1 on a clean detached checkout: every command exited with `0`. The
+  test run reported 43 files, 884 passed and 5 skipped; `npm audit` reported 0
+  vulnerabilities; `npm pack --dry-run` listed 125 files with the three skills
+  and no acceptance harness. `git diff --check` from `0cb3c60` reported nothing.
+- Level 2 through `scripts/setup-acceptance.mjs` with the setup of that
+  checkout: 160 of 160 checks passed. All nine steps passed on all four
+  targets, including the controller skill finding of every step, the skill file
+  after steps 3 and 7 and its absence after steps 6 and 9, and a foreign skill
+  that stayed unchanged. The real client registrations were unchanged, no
+  process remained, no report leaked a path, and the build was unchanged.
+  Earlier candidates `24ab13d` and `37034dd` of the same change had passed
+  Level 2 with 160 of 160 as well, before the review fixes that followed them.
+- Multi-session skill acceptance, run 7, with the harness of that checkout
+  (SHA-256 `42d46f86ae617c229568437e6d96c93f965c27778c3e2fde51e1c449ef35fb12`)
+  and the dist tree SHA-256
+  `957dfac67bf0c3c179bff6584b3bda49bedad2fe1642790537f6790b31f5ef37`:
+  - `prepare` installed the Claude Code controller skill with the candidate's
+    `setup --apply` for the controller's project scope: `applied` and
+    `skill_installed`, a regular copy identical to the shipped skill.
+  - The configuration (fingerprint
+    `sha256:b8a341c9ff48ecd7c02f8959b8e4e696f305431945b659ea35d2d98485e948c3`)
+    referenced all three skills with `builtin:`: the two shipped worker skills
+    and the `handshake` skill from the override directory next to it.
+  - All four invocations passed every check: Claude Code `parallel` (first
+    turns overlapped by 21.5 s) and `abort` (22.1 s), Codex `parallel` (22.9 s)
+    and `abort` (18.9 s). In both `parallel` invocations the worker wrote the
+    handshake token, which existed only in the override-directory skill,
+    during the follow-up turn. In both `abort` invocations the one abort
+    returned `ok`, came before the `aborted` observation and fell inside the
+    running neighbor, which completed and passed its tests. No process
+    remained, and no result leaked a path, the token or a credential marker.
+- Run 6 on `cc810c9`, before the last review fixes, had passed every check of
+  all four invocations with the same configuration fingerprint and the
+  setup-installed Claude Code skill.
+
+These runs do not cover macOS, Codex skill discovery from the user's home
+(setup installs it there, and Level 2 checks the file, but no live Codex
+controller read it from there), the extension profile path live, or more than
+two concurrent sessions.

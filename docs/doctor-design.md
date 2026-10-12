@@ -10,7 +10,7 @@ directory: an npm executable can run from any directory.
 sanitized semver `packageVersion` when metadata is available, ordered `checks`,
 and `exitCode`). Human and JSON output are projections of that same model.
 Subjects are only fixed component names, validated workspace aliases, or
-validated `<profile>:<package>` pairs; paths, configuration values, errors,
+validated `<profile>:<package>`, `<profile>:<skill-alias>` or `skill:<name>` pairs; paths, configuration values, errors,
 credentials, and provider data are never output.
 
 Each check is `{ id, severity, subject, remediation? }`. Severity is `ok`,
@@ -34,8 +34,16 @@ and owners are:
 | `workspace_not_writable` | A workspace is not writable while a coding profile can target it | validated workspace alias |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
+| `skill_missing` | The `SKILL.md` file that a profile's selected skill alias names does not exist; a `builtin:<name>` value that matches no override and no shipped skill resolves to the shipped location and is reported here | `<profile>:<skill-alias>` |
+| `skill_unreadable` | A selected skill path is not a regular file, is larger than 256 KiB, or cannot be read | `<profile>:<skill-alias>` |
+| `skill_duplicate` | Two selected skill aliases of one profile resolve to the same canonical file | `<profile>:<skill-alias>` |
+| `skill_override_outdated` | Warning. The current fingerprint of a shipped skill differs from the base recorded in the skill bases file next to the configuration file, or the bases file is corrupt | `skill:<name>`, or `skill:bases` for a corrupt file |
 
 Doctor reads extension manifests from Pi's user install location only; it never installs packages and never imports extension code.
+
+The skill checks run after the extension checks. They look only at file availability: Doctor never reads a skill's frontmatter, never parses or executes it, and the subject carries the catalog alias, never a path. Frontmatter, skill-name rules, name collisions and explicit-only flags (`disable-model-invocation`) are checked only at session start by the Pi SDK contract, so a clean Doctor run does not promise that a skill loads. Unknown or duplicate aliases and two selected aliases with one path are configuration errors and surface as `config_invalid`. See [Pi skills](skills.md).
+
+`skill_override_outdated` concerns the operator's skill overrides, not a profile. It is `ok` for a recorded base that still matches the shipped skill, and a warning (exit status 1, never blocking `setup`) when the shipped skill changed after the operator ran `pi-session-mcp-setup --customize-skill <name>`; its remediation names `pi-session-mcp-setup --apply --customize-skill <name>` to acknowledge a reviewed change. Only skills with a recorded base are compared, and a recorded name that is no longer shipped is skipped. A corrupt bases file yields a warning with the subject `skill:bases`. Doctor reads the bases file and the shipped skill files only; nothing is executed and the subject is a validated skill name, never a path. The check sorts after `skill_duplicate`.
 
 The Doctor reuses `loadConfig`; it does not duplicate alias, profile, thinking
 level, or read-only-default rules. Workspace values are used only for local

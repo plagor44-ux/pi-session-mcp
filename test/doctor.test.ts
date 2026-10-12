@@ -1,9 +1,12 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
 import { ConfigError, type ConfigurationMetadata } from "../src/config.js";
+import { MAX_SKILL_FILE_BYTES } from "../src/skill-catalog.js";
+import { SKILL_BASES_FILE } from "../src/skill-customize.js";
+import { readSkillTree } from "../src/skill-library.js";
 import { parseDoctorArgs, renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorFileSystem } from "../src/doctor.js";
 
 function fsFor(paths: { readonly files?: readonly string[]; readonly dirs?: readonly string[]; readonly unreadable?: readonly string[]; readonly unwritable?: readonly string[] }): DoctorFileSystem {
@@ -36,6 +39,7 @@ const healthyConfig = async () => ({
   }]]),
   defaultExecutionProfile: "safe",
   configuration: TEST_CONFIGURATION,
+  skillOverrideDirectory: "/hidden/skills",
 });
 
 afterAll(removeTemporaryRoots);
@@ -212,5 +216,170 @@ describe("offline doctor", () => {
     const resolveExtension = vi.fn(async () => "/hidden/extension");
     await runDoctor({ packageRoot: "/root", fileSystem: extensionFs(), loadConfig: healthyConfig, resolveExtension });
     expect(resolveExtension).not.toHaveBeenCalled();
+  });
+
+  describe("skill checks", () => {
+    const skillChecks = (result: Awaited<ReturnType<typeof runDoctor>>) => result.checks.filter((check) => check.id.startsWith("skill_"));
+    async function skillRoot() {
+      const root = await temporaryRoot("pi-session-mcp-skills-");
+      await writeFile(join(root, "package.json"), JSON.stringify({ version: "1.2.3", engines: { node: ">=22.19.0" } }));
+      await mkdir(join(root, "dist"));
+      await writeFile(join(root, "dist", "main.js"), "export {};\n");
+      await mkdir(join(root, "skills", "review"), { recursive: true });
+      await writeFile(join(root, "skills", "review", "SKILL.md"), "---\nname: review\n---\nbody\n");
+      return root;
+    }
+    const configWithSkills = (root: string, skills: ReadonlyArray<{ alias: string; path: string }>) => async () => {
+      const base = await healthyConfig();
+      return { ...base, workspaces: new Map([["repo", root]]), executionProfiles: new Map([["safe", { ...base.executionProfiles.get("safe")!, skills }]]) };
+    };
+    const IDS = ["skill_missing", "skill_unreadable", "skill_duplicate"];
+
+    it("reports a readable skill file as ok on all three checks", async () => {
+      const root = await skillRoot();
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "review", path: join(root, "skills", "review", "SKILL.md") }]) });
+      expect(skillChecks(result)).toEqual(IDS.map((id) => ({ id, severity: "ok", subject: "safe:review" })));
+      expect(result.checks.slice(-3).map((check) => check.id)).toEqual(IDS);
+    });
+
+    it("never touches the skill checks when no profile selects a skill", async () => {
+      const result = await runDoctor({ packageRoot: "/root", fileSystem: fsFor({ files: ["/root/dist/main.js"], dirs: ["/hidden/workspace"] }), loadConfig: healthyConfig });
+      expect(skillChecks(result)).toEqual([]);
+    });
+
+    it("reports a missing file as skill_missing without a path", async () => {
+      const root = await skillRoot();
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "gone", path: join(root, "skills", "gone", "SKILL.md") }]) });
+      expect(skillChecks(result)).toEqual([{ id: "skill_missing", severity: "error", subject: "safe:gone", remediation: "create the skill file or fix its skillCatalog entry" }]);
+      expect(result.exitCode).toBe(2);
+    });
+
+    it("reports a directory in place of the file as skill_unreadable", async () => {
+      const root = await skillRoot();
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "dir", path: join(root, "skills", "review") }]) });
+      expect(skillChecks(result)).toEqual([
+        { id: "skill_missing", severity: "ok", subject: "safe:dir" },
+        { id: "skill_unreadable", severity: "error", subject: "safe:dir", remediation: "point the skillCatalog entry to a readable SKILL.md within the size limit" },
+      ]);
+    });
+
+    it("reports an oversized file as skill_unreadable and accepts one at the limit", async () => {
+      const root = await skillRoot();
+      await mkdir(join(root, "skills", "big"), { recursive: true });
+      await mkdir(join(root, "skills", "exact"), { recursive: true });
+      await writeFile(join(root, "skills", "big", "SKILL.md"), Buffer.alloc(MAX_SKILL_FILE_BYTES + 1, 97));
+      await writeFile(join(root, "skills", "exact", "SKILL.md"), Buffer.alloc(MAX_SKILL_FILE_BYTES, 97));
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "big", path: join(root, "skills", "big", "SKILL.md") }, { alias: "exact", path: join(root, "skills", "exact", "SKILL.md") }]) });
+      expect(result.checks).toContainEqual(expect.objectContaining({ id: "skill_unreadable", severity: "error", subject: "safe:big" }));
+      expect(result.checks).toContainEqual({ id: "skill_unreadable", severity: "ok", subject: "safe:exact" });
+    });
+
+    it("reports an unreadable file through an injected file system", async () => {
+      const base = fsFor({ files: ["/root/dist/main.js", "/hidden/skills/a/SKILL.md"], dirs: ["/hidden/workspace"], unreadable: ["/hidden/skills/a/SKILL.md"] });
+      const result = await runDoctor({ packageRoot: "/root", fileSystem: base, loadConfig: configWithSkills("/hidden/workspace", [{ alias: "locked", path: "/hidden/skills/a/SKILL.md" }]) });
+      expect(skillChecks(result)).toEqual([
+        { id: "skill_missing", severity: "ok", subject: "safe:locked" },
+        { id: "skill_unreadable", severity: "error", subject: "safe:locked", remediation: "point the skillCatalog entry to a readable SKILL.md within the size limit" },
+      ]);
+    });
+
+    it("reports an unreadable real file when its mode forbids reading", async () => {
+      if (process.getuid?.() === 0) return;
+      const root = await skillRoot();
+      const file = join(root, "skills", "review", "SKILL.md");
+      await chmod(file, 0o000);
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "review", path: file }]) });
+      expect(result.checks).toContainEqual(expect.objectContaining({ id: "skill_unreadable", severity: "error", subject: "safe:review" }));
+    });
+
+    it("reports two selections of the same canonical file on the later alias", async () => {
+      const root = await skillRoot();
+      const file = join(root, "skills", "review", "SKILL.md");
+      await mkdir(join(root, "skills", "alias"), { recursive: true });
+      await symlink(file, join(root, "skills", "alias", "SKILL.md"));
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [{ alias: "first", path: file }, { alias: "second", path: join(root, "skills", "alias", "SKILL.md") }]) });
+      const duplicates = result.checks.filter((check) => check.id === "skill_duplicate");
+      expect(duplicates).toEqual([
+        { id: "skill_duplicate", severity: "ok", subject: "safe:first" },
+        { id: "skill_duplicate", severity: "error", subject: "safe:second", remediation: "select each skill file only once per profile" },
+      ]);
+    });
+
+    it("keeps paths and file names out of human and JSON output", async () => {
+      const root = await skillRoot();
+      const file = join(root, "skills", "review", "SKILL.md");
+      await mkdir(join(root, "skills", "alias"), { recursive: true });
+      await symlink(file, join(root, "skills", "alias", "SKILL.md"));
+      const result = await runDoctor({ packageRoot: root, loadConfig: configWithSkills(root, [
+        { alias: "first", path: file }, { alias: "second", path: join(root, "skills", "alias", "SKILL.md") },
+        { alias: "gone", path: join(root, "skills", "gone", "SKILL.md") }, { alias: "dir", path: join(root, "skills", "review") },
+      ]) });
+      for (const output of [renderDoctorJson(result), renderDoctorHuman(result)]) {
+        expect(output).not.toContain(root);
+        expect(output).not.toContain("SKILL.md\"");
+        expect(output).not.toMatch(/skills\/|body/);
+      }
+      expect(renderDoctorHuman(result)).toContain("ERROR skill_duplicate [safe:second]: select each skill file only once per profile");
+    });
+
+    describe("skill_override_outdated", () => {
+      const overrideChecks = (result: Awaited<ReturnType<typeof runDoctor>>) => result.checks.filter((check) => check.id === "skill_override_outdated");
+      async function overrideRoot() {
+        const root = await skillRoot();
+        const overrideDirectory = await temporaryRoot("pi-session-mcp-overrides-");
+        const config = async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]), skillOverrideDirectory: overrideDirectory });
+        const writeBases = (bases: Record<string, string>) => writeFile(join(overrideDirectory, SKILL_BASES_FILE), JSON.stringify({ schemaVersion: 1, bases }));
+        return { root, overrideDirectory, config, writeBases };
+      }
+
+      it("adds nothing without a bases file", async () => {
+        const { root, config } = await overrideRoot();
+        expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([]);
+      });
+
+      it("reports an up-to-date skill as ok", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: (await readSkillTree(join(root, "skills", "review"))).fingerprint });
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{ id: "skill_override_outdated", severity: "ok", subject: "skill:review" }]);
+        expect(result.exitCode).toBe(0);
+      });
+
+      it("warns when the shipped skill changed since the recorded base", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: "0".repeat(64) });
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{
+          id: "skill_override_outdated", severity: "warning", subject: "skill:review",
+          remediation: "review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill review",
+        }]);
+        expect(result.exitCode).toBe(1);
+        expect(result.ok).toBe(true);
+        for (const output of [renderDoctorJson(result), renderDoctorHuman(result)]) expect(output).not.toContain(root);
+      });
+
+      it("ignores a recorded skill that is no longer shipped", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ gone: "0".repeat(64) });
+        expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([]);
+      });
+
+      it("warns about a corrupt bases file without echoing it", async () => {
+        const { root, overrideDirectory, config } = await overrideRoot();
+        await writeFile(join(overrideDirectory, SKILL_BASES_FILE), "SECRET-not-json");
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{ id: "skill_override_outdated", severity: "warning", subject: "skill:bases", remediation: "repair or remove the skill bases file" }]);
+        expect(renderDoctorJson(result)).not.toContain("SECRET");
+      });
+
+      it("sorts after the other skill checks", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: "0".repeat(64) });
+        const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await config()), executionProfiles: (await configWithSkills(root, [{ alias: "review", path: join(root, "skills", "review", "SKILL.md") }])()).executionProfiles }) });
+        const ids = result.checks.map((check) => check.id).filter((id) => id.startsWith("skill_"));
+        expect(ids.at(-1)).toBe("skill_override_outdated");
+        expect(ids.indexOf("skill_duplicate")).toBeLessThan(ids.indexOf("skill_override_outdated"));
+      });
+    });
   });
 });

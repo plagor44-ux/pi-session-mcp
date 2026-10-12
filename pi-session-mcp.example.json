@@ -1,6 +1,10 @@
 {
   "workspaces": {
-    "project": "."
+    "project": "/absolute/path/to/project"
+  },
+  "skillCatalog": {
+    "pi-session-implementation": "builtin:pi-session-implementation",
+    "pi-session-review": "builtin:pi-session-review"
   },
   "executionProfiles": {
     "safe-readonly": {
@@ -8,14 +12,16 @@
       "permissionProfile": "read-only",
       "provider": "example-provider",
       "model": "example-model",
-      "thinkingLevel": "medium"
+      "thinkingLevel": "medium",
+      "skills": ["pi-session-review"]
     },
     "coding-example": {
       "default": false,
       "permissionProfile": "coding",
       "provider": "another-example-provider",
       "model": "another-example-model",
-      "thinkingLevel": "high"
+      "thinkingLevel": "high",
+      "skills": ["pi-session-implementation"]
     }
   }
 }

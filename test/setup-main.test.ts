@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -204,4 +204,76 @@ describe("setup executable", () => {
       }
     }
   }, 15_000);
+
+  describe("--customize-skill", () => {
+    function captureStdout(): string[] {
+      const writes: string[] = [];
+      vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+      return writes;
+    }
+    async function customizeFixture() {
+      const root = await temporaryRoot("pi-session-mcp-main-customize-");
+      const packageRoot = join(root, "package");
+      await mkdir(join(packageRoot, "skills", "review"), { recursive: true });
+      await writeFile(join(packageRoot, "skills", "review", "SKILL.md"), "---\nname: review\n---\n");
+      await mkdir(join(root, "config"));
+      const configPath = join(root, "config", "config.json");
+      await writeFile(configPath, "{}");
+      return { root, packageRoot, configPath, override: join(root, "config", "skills") };
+    }
+
+    it.each([
+      [["--json", "--customize-skill"]],
+      [["--json", "--customize-skill", "a", "--customize-skill", "b"]],
+      [["--json", "--customize-skill", "a", "--target", "codex:user:pi-session-mcp"]],
+      [["--json", "--verify", "--customize-skill", "a"]],
+    ])("rejects the misuse %j with exit 64", async (argv) => {
+      const writes = captureStdout();
+      expect(await main(argv)).toBe(64);
+      expect(JSON.parse(writes.join(""))).toMatchObject({ status: "failed", exitCode: 64, findings: [{ code: "usage_invalid" }] });
+    });
+
+    it("requires configuration and reports the skill target", async () => {
+      delete process.env.PI_SESSION_MCP_CONFIG;
+      const writes = captureStdout();
+      const createSetup = vi.fn(async (): Promise<never> => { throw new Error("must_not_start"); });
+      expect(await main(["--json", "--customize-skill", "review"], { createSetup })).toBe(1);
+      expect(JSON.parse(writes.join(""))).toMatchObject({ operation: "dry-run", findings: [{ target: { client: "skills", scope: "override", alias: "review" }, code: "config_required" }] });
+      expect(createSetup).not.toHaveBeenCalled();
+    });
+
+    it("keeps the platform check", async () => {
+      process.env.PI_SESSION_MCP_CONFIG = "/SECRET/config.json";
+      const writes = captureStdout();
+      vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+      expect(await main(["--json", "--apply", "--customize-skill", "review"])).toBe(1);
+      const output = writes.join("");
+      expect(JSON.parse(output)).toMatchObject({ operation: "apply", findings: [{ target: { client: "skills", alias: "review" }, code: "platform_unsupported" }] });
+      expect(output).not.toMatch(/SECRET|config\.json/);
+    });
+
+    it.skipIf(!currentSetupPlatform())("plans in a dry run and copies only with --apply, without creating a setup", async () => {
+      const { packageRoot, configPath, override } = await customizeFixture();
+      process.env.PI_SESSION_MCP_CONFIG = configPath;
+      const createSetup = vi.fn(async (): Promise<never> => { throw new Error("must_not_start"); });
+      const writes = captureStdout();
+      expect(await main(["--json", "--customize-skill", "review"], { packageRoot, createSetup })).toBe(0);
+      expect(JSON.parse(writes.splice(0).join(""))).toMatchObject({ operation: "dry-run", status: "planned", findings: [{ target: { client: "skills", scope: "override", alias: "review" }, status: "planned", code: "skill_customize_planned" }] });
+      await expect(stat(override)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await main(["--json", "--apply", "--customize-skill", "review"], { packageRoot, createSetup })).toBe(0);
+      const output = writes.splice(0).join("");
+      expect(JSON.parse(output)).toMatchObject({ operation: "apply", findings: [{ status: "ok", code: "skill_customized" }] });
+      expect(output).not.toContain(configPath);
+      expect(await readFile(join(override, "review", "SKILL.md"), "utf8")).toBe("---\nname: review\n---\n");
+      expect(createSetup).not.toHaveBeenCalled();
+    });
+
+    it.skipIf(!currentSetupPlatform())("reports a skill that is not shipped with exit 1 and prints the human form", async () => {
+      const { packageRoot, configPath } = await customizeFixture();
+      process.env.PI_SESSION_MCP_CONFIG = configPath;
+      const writes = captureStdout();
+      expect(await main(["--apply", "--customize-skill", "nope"], { packageRoot })).toBe(1);
+      expect(writes.join("")).toContain("skills/override/nope: failed (skill_not_shipped)");
+    });
+  });
 });

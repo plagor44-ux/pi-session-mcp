@@ -24,10 +24,13 @@ async function packedPaths(): Promise<string[]> {
 }
 
 describe("package contents", () => {
-  it("ships the operator documentation without implementation plans, sources or tests", async () => {
+  it("ships the operator documentation and the worker skills without implementation plans, sources or tests", async () => {
     const paths = await packedPaths();
     expect(paths).toEqual(expect.arrayContaining([
       "README.md", "CHANGELOG.md", "docs/installation.md", "docs/tool-contracts.md", "docs/adr/0006-pi-extension-allowlist.md",
+    ]));
+    expect(paths).toEqual(expect.arrayContaining([
+      "skills/pi-session-orchestration/SKILL.md", "skills/pi-session-implementation/SKILL.md", "skills/pi-session-review/SKILL.md",
     ]));
     expect(paths.filter((path) => path.startsWith("docs/superpowers/"))).toEqual([]);
     expect(paths.filter((path) => path.startsWith("src/") || path.startsWith("test/") || path === "package-lock.json")).toEqual([]);

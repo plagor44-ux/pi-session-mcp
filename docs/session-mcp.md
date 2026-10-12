@@ -7,8 +7,13 @@ the Pi session, supplies their definitions as `customTools`, and includes the
 names in Pi's explicit active `tools` list. The selected tools are verified again
 before the session is returned.
 
-Global/project extensions remain disabled (`noExtensions: true`). Installing
-`pi-mcp-adapter` globally is neither required nor sufficient for this integration.
+Global and project extensions are never auto-discovered; only the extensions
+that a profile allowlists load (see [Pi extensions](installation.md#pi-extensions)).
+Installing `pi-mcp-adapter` globally is neither required nor sufficient for this
+integration. Skills are likewise never auto-discovered; a profile gets only the
+skills it selects from the operator's catalog (see [Pi skills](skills.md)).
+Granting an external MCP tool through `mcpServers` and selecting a skill are
+independent: a skill grants no tool.
 There is no automatic import of global MCP configuration or ambient credentials.
 Profiles without `mcpServers` keep their existing built-in tool sets and launch
 no MCP child process. The public `pi_session_start` input remains unchanged: callers

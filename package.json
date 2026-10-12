@@ -29,6 +29,7 @@
     ".pi-session-mcp-cli/",
     "scripts/doctor.mjs",
     "pi-session-mcp.example.json",
+    "skills/",
     "docs/",
     "!docs/superpowers/",
     "CHANGELOG.md",

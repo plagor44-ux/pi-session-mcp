@@ -1,9 +1,12 @@
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, type AppConfig } from "./config.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
+import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
+import { readSkillBases, SkillBasesError } from "./skill-customize.js";
+import { readSkillTree, shippedSkillsDirectory } from "./skill-library.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
@@ -11,7 +14,8 @@ export type DoctorCheckId =
   | "node_version_unsupported" | "package_metadata_unreadable" | "build_missing"
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
-  | "workspace_not_writable" | "extension_missing" | "extension_version_mismatch";
+  | "workspace_not_writable" | "extension_missing" | "extension_version_mismatch"
+  | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
 
 export interface DoctorCheck {
   readonly id: DoctorCheckId;
@@ -31,8 +35,10 @@ export interface DoctorResult {
 export interface DoctorPackageMetadata { readonly version: string; readonly engines?: { readonly node?: string }; readonly lockVersion?: string; readonly expectedVersion?: string; }
 export interface DoctorFileSystem {
   readonly readFile: (path: string, encoding: "utf8") => Promise<string>;
-  readonly stat: (path: string) => Promise<{ readonly isDirectory: () => boolean; readonly isFile: () => boolean; readonly mtimeMs?: number }>;
+  readonly stat: (path: string) => Promise<{ readonly isDirectory: () => boolean; readonly isFile: () => boolean; readonly mtimeMs?: number; readonly size?: number }>;
   readonly access: (path: string, mode: number) => Promise<void>;
+  /** Canonical path; defaults to the real file system when an injected fake omits it. */
+  readonly realpath?: (path: string) => Promise<string>;
 }
 export interface DoctorDependencies {
   readonly packageRoot?: string;
@@ -45,7 +51,7 @@ export interface DoctorDependencies {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -85,6 +91,30 @@ async function productionBuildInputMtimes(root: string): Promise<number[]> {
   try { await visit(join(root, "src")); }
   catch (error) { if (!isMissing(error)) throw error; }
   return mtimes;
+}
+
+/**
+ * Compares the shipped skills with the fingerprints recorded when the operator copied them.
+ * Reads only the bases file and the shipped files; nothing is executed or changed.
+ */
+async function skillOverrideChecks(overrideDirectory: string | undefined, shippedDirectory: string): Promise<DoctorCheck[]> {
+  if (overrideDirectory === undefined) return [];
+  let bases: Readonly<Record<string, string>>;
+  try { bases = await readSkillBases(overrideDirectory); }
+  catch (error) {
+    if (error instanceof SkillBasesError) return [warning("skill_override_outdated", "skill:bases", "repair or remove the skill bases file")];
+    throw error;
+  }
+  const checks: DoctorCheck[] = [];
+  for (const [name, base] of Object.entries(bases).sort(([a], [b]) => a.localeCompare(b))) {
+    let fingerprint: string;
+    try { fingerprint = (await readSkillTree(join(shippedDirectory, name))).fingerprint; }
+    catch { continue; }
+    checks.push(fingerprint === base
+      ? ok("skill_override_outdated", `skill:${name}`)
+      : warning("skill_override_outdated", `skill:${name}`, `review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill ${name}`));
+  }
+  return checks;
 }
 
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
@@ -173,6 +203,29 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
+  if (config) {
+    for (const [alias, profile] of [...config.executionProfiles].sort(([a], [b]) => a.localeCompare(b))) {
+      const canonical = new Set<string>();
+      for (const skill of profile.skills ?? []) {
+        const subject = `${alias}:${skill.alias}`;
+        let real: string;
+        try {
+          const info = await fs.stat(skill.path);
+          if (!info.isFile() || (info.size ?? 0) > MAX_SKILL_FILE_BYTES) throw new Error("unusable skill file");
+          await fs.access(skill.path, constants.R_OK);
+          real = await (fs.realpath ?? realpath)(skill.path);
+        } catch (error) {
+          if (isMissing(error)) checks.push(failure("skill_missing", subject, "create the skill file or fix its skillCatalog entry"));
+          else checks.push(ok("skill_missing", subject), failure("skill_unreadable", subject, "point the skillCatalog entry to a readable SKILL.md within the size limit"));
+          continue;
+        }
+        checks.push(ok("skill_missing", subject), ok("skill_unreadable", subject));
+        if (canonical.has(real)) checks.push(failure("skill_duplicate", subject, "select each skill file only once per profile"));
+        else { canonical.add(real); checks.push(ok("skill_duplicate", subject)); }
+      }
+    }
+  }
+  if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot)));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
   const hasError = checks.some((check) => check.severity === "error");

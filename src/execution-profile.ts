@@ -1,5 +1,6 @@
 import type { ExtensionSpec } from "./extension-spec.js";
 import { snapshotMcpServers, type McpServers } from "./mcp-config.js";
+import type { SkillSelection } from "./skill-catalog.js";
 
 export const ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 
@@ -16,6 +17,8 @@ export interface ConfiguredExecutionProfile {
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
+  /** The selected catalog skills in configured order; absent when the profile selects none. */
+  readonly skills?: readonly SkillSelection[];
 }
 
 /** The immutable, server-side selection passed to the Pi adapter. */
@@ -27,6 +30,7 @@ export interface ResolvedExecutionProfile {
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
+  readonly skills?: readonly SkillSelection[];
 }
 
 export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile): ResolvedExecutionProfile {
@@ -38,6 +42,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
     thinkingLevel: profile.thinkingLevel,
     ...(profile.mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(profile.mcpServers) }),
     ...(profile.extensions === undefined ? {} : { extensions: profile.extensions }),
+    ...(profile.skills === undefined ? {} : { skills: profile.skills }),
   });
 }
 

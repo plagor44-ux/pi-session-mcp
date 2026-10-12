@@ -71,7 +71,7 @@ describe("MCP contracts", () => {
         workspaces: { items: { required: ["alias"], additionalProperties: false } },
         executionProfiles: {
           items: {
-            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions"],
+            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "skills"],
             additionalProperties: false,
           },
         },
@@ -112,11 +112,11 @@ describe("MCP contracts", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [],
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], skills: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [],
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], skills: [],
         },
       ],
     });
@@ -336,6 +336,7 @@ describe("MCP contracts", () => {
     ["external_mcp_no_tools", "Configured external MCP server returned no tools"],
     ["external_mcp_grant_tool_missing", "Configured external MCP grant is missing from discovery"],
     ["external_mcp_activation_mismatch", "Configured external MCP tools could not be activated"],
+    ["skill_load_failed", "Configured Pi skill could not be loaded"],
   ] as const)("projects %s with consistent sanitized public representations", async (code, message) => {
     const connected = await client();
     const sentinel = "SECRET_PRIVATE_PATH_CHILD_STDERR";

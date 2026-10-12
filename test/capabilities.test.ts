@@ -20,6 +20,7 @@ describe("configuration capability projection", () => {
         alias: "zeta-profile", default: false, permissionProfile: "coding",
         provider: "provider-z", model: "model-z", thinkingLevel: "high",
         extensions: [{ spec: "npm:ext@1.0.0", name: "ext", version: "1.0.0" }],
+        skills: [{ alias: "zeta-review", path: "/private/SKILL_PATH_SENTINEL/review/SKILL.md" }, { alias: "alpha-docs", path: "/private/SKILL_PATH_SENTINEL/docs/SKILL.md" }],
       }],
       ["alpha-profile", {
         alias: "alpha-profile", default: true, permissionProfile: "read-only",
@@ -37,15 +38,15 @@ describe("configuration capability projection", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [],
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], skills: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"],
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"], skills: ["zeta-review", "alpha-docs"],
         },
       ],
     });
-    expect(JSON.stringify(capabilities)).not.toMatch(/private|TOKEN_SENTINEL|API_KEY_SENTINEL/);
+    expect(JSON.stringify(capabilities)).not.toMatch(/private|TOKEN_SENTINEL|API_KEY_SENTINEL|SKILL_PATH_SENTINEL|SKILL\.md/);
   });
 
   it("projects only captured memory with an exact key set on every call", () => {

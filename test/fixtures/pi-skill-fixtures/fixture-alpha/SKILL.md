@@ -1,0 +1,6 @@
+---
+name: fixture-alpha
+description: SELECTED_ALPHA_DESCRIPTION_SENTINEL
+---
+
+SKILL_BODY_SECRET_SENTINEL

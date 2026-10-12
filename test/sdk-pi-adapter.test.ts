@@ -46,12 +46,21 @@ function runtimeFixture() {
   return { runtime: runtime as unknown as ModelRuntime, resolvedModel, ...runtime };
 }
 
+function emptyResourceFixture() {
+  return {
+    getSkills: () => ({ skills: [], diagnostics: [] }),
+    getPrompts: () => ({ prompts: [], diagnostics: [] }),
+    getThemes: () => ({ themes: [], diagnostics: [] }),
+  };
+}
+
 function sessionFixture(options: { provider?: string; model?: string; thinkingLevel?: ResolvedExecutionProfile["thinkingLevel"] } = {}) {
   const dispose = vi.fn();
   const session = {
     sessionId: "sdk-test",
     model: model(options.provider ?? profile.provider, options.model ?? profile.model),
     thinkingLevel: options.thinkingLevel ?? profile.thinkingLevel,
+    resourceLoader: emptyResourceFixture(),
     subscribe: vi.fn(() => () => undefined),
     prompt: vi.fn(async () => undefined),
     abort: vi.fn(async () => undefined),
@@ -398,6 +407,7 @@ function activitySessionFixture() {
     sessionId: "sdk-activity",
     model: model(),
     thinkingLevel: profile.thinkingLevel,
+    resourceLoader: emptyResourceFixture(),
     subscribe: vi.fn((next: (event: unknown) => void) => {
       listener = next;
       return () => { listener = undefined; unsubscribe(); };
@@ -584,6 +594,7 @@ function extensionHarness(options: {
     cwd: "/hidden/workspace", agentDir: "/hidden/workspace", modelRuntime: fixture.runtime, settingsManager: {},
     diagnostics: options.diagnosticError ? [{ type: "error", message: "hidden" }] : [],
     resourceLoader: {
+      ...emptyResourceFixture(),
       getExtensions: () => ({
         extensions: toolMaps.map((tools) => ({ tools })),
         errors: Array.from({ length: options.loadErrors ?? 0 }, () => ({ path: "/hidden", error: "hidden" })),

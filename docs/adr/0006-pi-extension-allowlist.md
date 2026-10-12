@@ -3,6 +3,9 @@
 **Status:** Accepted (2026-10-11). Issue #34. Design:
 [Pi extensions design](../pi-extensions-design.md).
 
+Amended by [ADR 0007](0007-profile-skill-selection.md) for skills that extension
+packages ship.
+
 ## Context
 
 Embedded sessions loaded no Pi extensions. Providers that exist only as Pi
