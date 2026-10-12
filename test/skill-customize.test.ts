@@ -131,7 +131,9 @@ describe("skill customization", () => {
     await writeFile(join(override, "review"), "a file");
     expect(finding(await run("review", true))).toMatchObject({ status: "failed", code: "skill_override_invalid" });
     await rm(join(override, "review"));
+    // A link to a complete, valid skill is still refused: the override entry itself must be a directory.
     await mkdir(join(root, "elsewhere"));
+    await writeFile(join(root, "elsewhere", "SKILL.md"), "---\nname: review\ndescription: Linked.\n---\n");
     await symlink(join(root, "elsewhere"), join(override, "review"));
     expect(finding(await run("review", true))).toMatchObject({ status: "failed", code: "skill_override_invalid" });
     await rm(join(override, "review"));

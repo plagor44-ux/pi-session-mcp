@@ -83,12 +83,22 @@ export class SkillTreeError extends Error {
   }
 }
 
+export interface ReadSkillTreeOptions {
+  /**
+   * `skip` (default) ignores entries whose name starts with `.`, as for a source tree. `reject`
+   * fails on them, for an installed copy: setup never writes hidden entries, so one there is
+   * operator content that a fingerprint over the visible files would not protect.
+   */
+  readonly hidden?: "skip" | "reject";
+}
+
 /**
  * Reads the regular files below a skill directory in a stable order. Entries whose name starts
- * with `.` are skipped. A symbolic link or special file inside the tree, a missing `SKILL.md`,
- * or more than the file and byte limits fail, so the tree can be copied and compared exactly.
+ * with `.` are skipped or rejected (see options). A symbolic link or special file inside the
+ * tree, a missing `SKILL.md`, or more than the file and byte limits fail, so the tree can be
+ * copied and compared exactly.
  */
-export async function readSkillTree(directory: string): Promise<SkillTree> {
+export async function readSkillTree(directory: string, options: ReadSkillTreeOptions = {}): Promise<SkillTree> {
   let root: string;
   try { root = await realpath(directory); }
   catch { throw new SkillTreeError("skill_tree_missing"); }
@@ -100,7 +110,10 @@ export async function readSkillTree(directory: string): Promise<SkillTree> {
     try { entries = await readdir(current, { withFileTypes: true }); }
     catch { throw new SkillTreeError("skill_tree_invalid"); }
     for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
-      if (entry.name.startsWith(".")) continue;
+      if (entry.name.startsWith(".")) {
+        if (options.hidden === "reject") throw new SkillTreeError("skill_tree_invalid");
+        continue;
+      }
       const path = join(current, entry.name);
       const relativePath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
       const info = await lstat(path);

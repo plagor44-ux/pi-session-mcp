@@ -246,8 +246,8 @@ status `failed` (exit 1), so it is not overlooked.
 
 | Operation | Code (status) |
 | --- | --- |
-| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_update_planned` (planned), `skill_divergent` (divergent), `skill_source_invalid` (failed) |
-| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
+| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_divergent` (divergent), `skill_source_invalid` (failed) |
+| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
 | `--verify` | `skill_verified` (ok), `skill_missing` (failed), `skill_not_equivalent` (failed) |
 | `--rollback`, `--remove` | `skill_removed` (ok), `skill_kept_shared` (unchanged), `skill_not_owned` (unchanged), `skill_absent` (ok), `skill_divergent` (divergent) |
 
@@ -271,7 +271,20 @@ Setup reports `skill_divergent` and leaves the entry alone when it finds:
 - an installed copy that was modified after setup wrote it;
 - a skill of the same name that setup did not install and that differs from the
   effective skill;
-- a link or a non-directory at the skill entry.
+- any entry whose name starts with `.` inside an installed copy, such as your
+  own notes: setup never writes such entries, so it treats them as yours;
+- a link at the skill entry that points anywhere but the effective skill, or a
+  non-directory there.
+
+A link at the skill entry that points exactly at the effective skill (your
+override, else the shipped skill) is your own equivalent setup: setup reports
+`skill_linked` (unchanged), `--verify` reports `skill_verified`, and removal
+leaves the link alone (`skill_not_owned`).
+
+If an update is interrupted, for example by a full disk or a signal, setup still
+recognizes the old copy as its own: the next `--apply` finishes the update and
+`--remove` deletes it. A project copy belongs to its project: setup records an
+opaque project identity, so a `--remove` in another project never deletes it.
 
 Links in the path to the entry are handled by place. In your home directory,
 the client's skill directory may be your own link, for example into a dotfiles

@@ -23,6 +23,8 @@ export const isSupportedTarget = (target: SetupTarget): boolean =>
 
 export class SetupOrchestrator {
   private readonly ownership: OwnershipStore;
+  /** Apply results that the up-front plan refused: nothing was applied, so no skill is touched. */
+  private readonly refusedApplies = new WeakSet<SetupResult>();
   constructor(private readonly dependencies: SetupDependencies) { this.ownership = dependencies.ownership ?? new MemoryOwnershipStore(); }
   async run(request: SetupRequest): Promise<SetupResult> {
     const operation = request.operation ?? "dry-run";
@@ -37,7 +39,7 @@ export class SetupOrchestrator {
   /** Registration planning gates apply; skill divergence must not block registration. */
   private async withSkills(registrations: SetupResult, ownership: OwnershipAccess): Promise<SetupResult> {
     const skills = this.dependencies.skills;
-    if (!skills) return registrations;
+    if (!skills || this.refusedApplies.has(registrations)) return registrations;
     const findings: SetupFinding[] = [];
     for (const finding of registrations.findings) {
       findings.push(finding);
@@ -90,7 +92,9 @@ export class SetupOrchestrator {
       const findings = plan.findings.map((finding) => finding.status === "divergent" && finding.code === "divergent"
         ? { ...finding, code: "divergence_requires_replacement" }
         : finding);
-      return result("apply", findings, "failed");
+      const refused = result("apply", findings, "failed");
+      this.refusedApplies.add(refused);
+      return refused;
     }
     const findings: SetupFinding[] = [];
     for (const target of targets) {

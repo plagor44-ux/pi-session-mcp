@@ -116,9 +116,11 @@ claude-code/user/pi-session-orchestration: ok (skill_installed)
 Skill findings per operation:
 
 - `--dry-run`: `skill_absent` (absent), `skill_equivalent` (unchanged),
+  `skill_linked` (unchanged; a link to exactly the effective skill),
   `skill_update_planned` (planned), `skill_divergent` (divergent),
   `skill_source_invalid` (failed).
 - `--apply`: `skill_installed` (ok), `skill_already_equivalent` (unchanged),
+  `skill_linked` (unchanged),
   `skill_updated` (ok; setup replaced its own unmodified copy after a package
   update or a changed override), `skill_divergent`, `skill_source_invalid`,
   `skill_install_failed` (failed).

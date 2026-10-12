@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { CONTROLLER_SKILLS, readSkillTree, resolveLibrarySkill, skillOverrideDirectory, type SkillTree } from "./skill-library.js";
@@ -8,7 +8,10 @@ import type { SetupFinding, SetupOperation, SetupStatus, SetupTarget } from "./s
 export interface SetupSkillInstaller {
   /** Called under the registration's ownership transaction for every mutation. */
   run(operation: SetupOperation, target: SetupTarget, ownership: OwnershipAccess): Promise<readonly SetupFinding[]>;
-  /** Whether setup owns an installed skill in the slot of this registration target. */
+  /**
+   * Whether setup still owns an installed skill of exactly this registration target, so that a
+   * remove may finish the skill cleanup after the registration is already gone.
+   */
   owns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean>;
 }
 export interface SetupSkillRoots {
@@ -17,8 +20,18 @@ export interface SetupSkillRoots {
   readonly home: string;
   readonly cwd: string;
 }
-type Slot = { readonly state: "absent" } | { readonly state: "divergent" } |
-  { readonly state: "tree"; readonly fingerprint: string; readonly dev: number; readonly ino: number };
+type Slot =
+  | { readonly state: "absent" }
+  | { readonly state: "divergent" }
+  /** A link to exactly the effective library skill: the operator's own, equivalent, never owned. */
+  | { readonly state: "linked" }
+  | { readonly state: "tree"; readonly fingerprint: string; readonly dev: number; readonly ino: number };
+interface Location { readonly path: string; readonly owned: SetupTarget }
+
+/** Whether a fingerprint is setup's own copy: the owned one, or the one a pending update replaces. */
+function ownsFingerprint(record: OwnershipRecord, fingerprint: string): boolean {
+  return fingerprint === record.fingerprint || (record.phase === "pending" && record.replaces === fingerprint);
+}
 
 /** Paths remain internal. Ownership identifies a client slot, never its location. */
 export class FileSetupSkillInstaller implements SetupSkillInstaller {
@@ -31,38 +44,47 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
   }
 
   async owns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean> {
-    for (const name of CONTROLLER_SKILLS) if (await ownership.get(this.ownedTarget(target, name))) return true;
+    // Claude Code user and local share one slot: while the other registration exists, its skill
+    // is not this target's to clean up.
+    if (target.client === "claude-code" && target.scope !== "project"
+      && await ownership.get({ ...target, scope: target.scope === "local" ? "user" : "local" })) return false;
+    for (const name of CONTROLLER_SKILLS) if (await ownership.get((await this.location(target, name)).owned)) return true;
     return false;
   }
 
-  private async slot(target: SetupTarget, name: string): Promise<string> {
+  /**
+   * The slot path and its ownership key. A project may be untrusted: only its root is
+   * canonicalized, and a link below it (for example `.claude` pointing elsewhere) makes the
+   * slot divergent, so setup never writes outside the project. In the operator's home the
+   * client's skills directory may be the operator's own link, for example into a dotfiles
+   * checkout, so it is followed. The skill entry itself is never followed in either place.
+   * A project slot's ownership is bound to an opaque, path-free identity of the project, so a
+   * remove in another project never touches this project's copy.
+   */
+  private async location(target: SetupTarget, name: string): Promise<Location> {
     const client = target.client === "codex" ? ".agents" : ".claude";
-    // A project may be untrusted: only its root is canonicalized, and a link below it (for
-    // example `.claude` pointing elsewhere) makes the slot divergent, so setup never writes
-    // outside the project. In the operator's home the client's skills directory may be the
-    // operator's own link, for example into a dotfiles checkout, so it is followed. The skill
-    // entry itself is never followed in either place.
-    if (target.scope === "project") return join(await realpath(this.roots.cwd), client, "skills", name);
-    return join(await canonicalExisting(join(this.roots.home, client, "skills")), name);
+    if (target.scope === "project") {
+      const project = await realpath(this.roots.cwd);
+      const identity = createHash("sha256").update(project).digest("hex").slice(0, 16);
+      return { path: join(project, client, "skills", name), owned: { client: target.client, scope: "project", alias: `skill:${name}@${identity}` } };
+    }
+    return { path: join(await canonicalExisting(join(this.roots.home, client, "skills")), name), owned: { client: target.client, scope: "user", alias: `skill:${name}` } };
   }
-  private ownedTarget(target: SetupTarget, name: string): SetupTarget {
-    return { client: target.client, scope: target.scope === "project" ? "project" : "user", alias: `skill:${name}` };
-  }
-  private desired(name: string): Promise<SkillTree> {
-    const library = resolveLibrarySkill(name, { overrideDirectory: skillOverrideDirectory(this.roots.configPath), packageRoot: this.roots.packageRoot });
-    if (!library) throw new Error("skill_source_invalid");
-    return readSkillTree(library.directory);
+  private library(name: string) {
+    return resolveLibrarySkill(name, { overrideDirectory: skillOverrideDirectory(this.roots.configPath), packageRoot: this.roots.packageRoot });
   }
   private async skill(operation: SetupOperation, target: SetupTarget, name: string, ownership: OwnershipAccess): Promise<SetupFinding> {
     const finding = (code: string, status: SetupStatus): SetupFinding => ({ target: { ...target, alias: name }, code, status });
-    let path: string;
-    try { path = await this.slot(target, name); }
+    let location: Location;
+    try { location = await this.location(target, name); }
     catch {
       return finding(operation === "verify" ? "skill_missing" :
         operation === "dry-run" ? "skill_source_invalid" :
         operation === "apply" ? "skill_install_failed" : "skill_divergent", operation === "remove" || operation === "rollback" ? "divergent" : "failed");
     }
-    const ownedTarget = this.ownedTarget(target, name);
+    const { path, owned: ownedTarget } = location;
+    const library = this.library(name);
+    const linkTarget = library ? await realpath(library.directory).catch(() => undefined) : undefined;
     if (operation === "remove" || operation === "rollback") {
       try {
         const owned = await ownership.get(ownedTarget);
@@ -71,14 +93,14 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
           const other = await ownership.get({ ...target, scope: target.scope === "local" ? "user" : "local" });
           if (other?.phase === "owned") return finding("skill_kept_shared", "unchanged");
         }
-        const current = await inspectSlot(path);
+        const current = await inspectSlot(path, linkTarget);
         if (current.state === "absent") {
           healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership);
           return finding("skill_absent", "ok");
         }
-        if (current.state !== "tree" || current.fingerprint !== owned.fingerprint) return finding("skill_divergent", "divergent");
+        if (current.state !== "tree" || !ownsFingerprint(owned, current.fingerprint)) return finding("skill_divergent", "divergent");
         healthy(ownership);
-        if (!await sameSlot(path, current)) return finding("skill_divergent", "divergent");
+        if (!await sameSlot(path, current, linkTarget)) return finding("skill_divergent", "divergent");
         healthy(ownership); await rm(path, { recursive: true }); healthy(ownership);
         await syncDirectory(dirname(path)); healthy(ownership);
         await ownership.delete(ownedTarget); healthy(ownership);
@@ -86,38 +108,50 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
       } catch { return finding("skill_divergent", "divergent"); }
     }
     if (operation === "verify") {
-      const current = await inspectSlot(path);
+      const current = await inspectSlot(path, linkTarget);
       if (current.state === "absent") return finding("skill_missing", "failed");
+      if (current.state === "linked") return finding("skill_verified", "ok");
       try {
-        const desired = await this.desired(name);
+        if (!library) throw new Error("skill_source_invalid");
+        const desired = await readSkillTree(library.directory);
         return current.state === "tree" && current.fingerprint === desired.fingerprint
           ? finding("skill_verified", "ok") : finding("skill_not_equivalent", "failed");
       } catch { return finding("skill_not_equivalent", "failed"); }
     }
     let desired: SkillTree;
-    try { desired = await this.desired(name); }
-    catch { return finding("skill_source_invalid", "failed"); }
     try {
-      const current = await inspectSlot(path);
+      if (!library) throw new Error("skill_source_invalid");
+      desired = await readSkillTree(library.directory);
+    } catch { return finding("skill_source_invalid", "failed"); }
+    try {
+      const current = await inspectSlot(path, linkTarget);
       const owned = await ownership.get(ownedTarget);
-      // An owned copy modified by the user is divergent, even if it matches a new source.
-      const modified = owned && current.state === "tree" && current.fingerprint !== owned.fingerprint;
-      if (current.state === "divergent" || modified) return finding("skill_divergent", "divergent");
+      if (current.state === "linked") return finding("skill_linked", "unchanged");
+      if (current.state === "divergent") return finding("skill_divergent", "divergent");
+      // A copy setup did not write, or its own copy modified since, is never replaced.
+      if (current.state === "tree" && (!owned || !ownsFingerprint(owned, current.fingerprint))) {
+        if (!owned && current.fingerprint === desired.fingerprint) return finding(operation === "apply" ? "skill_already_equivalent" : "skill_equivalent", "unchanged");
+        return finding("skill_divergent", "divergent");
+      }
       if (current.state === "tree" && current.fingerprint === desired.fingerprint) {
         if (operation === "apply" && owned?.phase === "pending") {
-          healthy(ownership); await ownership.put({ ...owned, phase: "owned" }); healthy(ownership);
+          healthy(ownership); await ownership.put(ownedRecord(owned, desired.fingerprint)); healthy(ownership);
         }
         return finding(operation === "apply" ? "skill_already_equivalent" : "skill_equivalent", "unchanged");
       }
-      if (current.state === "tree" && (!owned || owned.phase !== "owned")) return finding("skill_divergent", "divergent");
       if (operation === "dry-run") return current.state === "absent" ? finding("skill_absent", "absent") : finding("skill_update_planned", "planned");
-      const pending: OwnershipRecord = { target: ownedTarget, fingerprint: desired.fingerprint, previous: "absent", phase: "pending", transactionId: randomUUID() };
+      // The pending record keeps the replaced fingerprint, so an interrupted update leaves a copy
+      // that setup can still finish or remove.
+      const pending: OwnershipRecord = {
+        target: ownedTarget, fingerprint: desired.fingerprint, previous: "absent", phase: "pending", transactionId: randomUUID(),
+        ...(current.state === "tree" ? { replaces: current.fingerprint } : {}),
+      };
       healthy(ownership); await ownership.put(pending); healthy(ownership);
       await this.replace(path, name, desired, current, ownership);
       healthy(ownership);
       const after = await inspectSlot(path);
       if (after.state !== "tree" || after.fingerprint !== desired.fingerprint) throw new Error("skill_post_install_mismatch");
-      healthy(ownership); await ownership.put({ ...pending, phase: "owned" }); healthy(ownership);
+      healthy(ownership); await ownership.put(ownedRecord(pending, desired.fingerprint)); healthy(ownership);
       return finding(current.state === "absent" ? "skill_installed" : "skill_updated", "ok");
     } catch { return finding(operation === "apply" ? "skill_install_failed" : "skill_source_invalid", "failed"); }
   }
@@ -163,6 +197,11 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
 
 function healthy(ownership: OwnershipAccess): void { ownership.assertHealthy?.(); }
 
+/** The owned form of a record, without the replaced fingerprint of a finished update. */
+function ownedRecord(record: OwnershipRecord, fingerprint: string): OwnershipRecord {
+  return { target: record.target, fingerprint, previous: record.previous, phase: "owned", transactionId: record.transactionId };
+}
+
 /** The real path of the nearest existing ancestor, with the not yet existing tail appended. */
 async function canonicalExisting(path: string): Promise<string> {
   const missing: string[] = [];
@@ -185,19 +224,23 @@ async function safeParents(directory: string): Promise<void> {
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("skill_parent_invalid");
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
 }
-async function inspectSlot(path: string): Promise<Slot> {
+async function inspectSlot(path: string, linkTarget?: string): Promise<Slot> {
   try {
     await safeParents(dirname(path));
     const info = await lstat(path);
-    if (!info.isDirectory() || info.isSymbolicLink()) return { state: "divergent" };
-    const tree = await readSkillTree(path);
+    if (info.isSymbolicLink()) {
+      return linkTarget !== undefined && await realpath(path).then((target) => target === linkTarget, () => false) ? { state: "linked" } : { state: "divergent" };
+    }
+    if (!info.isDirectory()) return { state: "divergent" };
+    // Hidden entries are operator content: setup never writes them, and the fingerprint would not protect them.
+    const tree = await readSkillTree(path, { hidden: "reject" });
     const after = await lstat(path);
     if (!after.isDirectory() || after.isSymbolicLink() || after.dev !== info.dev || after.ino !== info.ino) return { state: "divergent" };
     return { state: "tree", fingerprint: tree.fingerprint, dev: info.dev, ino: info.ino };
   } catch (error) { return { state: (error as NodeJS.ErrnoException).code === "ENOENT" ? "absent" : "divergent" }; }
 }
-async function sameSlot(path: string, expected: Slot): Promise<boolean> {
-  const actual = await inspectSlot(path);
+async function sameSlot(path: string, expected: Slot, linkTarget?: string): Promise<boolean> {
+  const actual = await inspectSlot(path, linkTarget);
   return expected.state === "absent" ? actual.state === "absent" :
     expected.state === "tree" && actual.state === "tree" && actual.fingerprint === expected.fingerprint && actual.dev === expected.dev && actual.ino === expected.ino;
 }

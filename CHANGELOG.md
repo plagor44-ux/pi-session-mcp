@@ -61,11 +61,14 @@ Not yet released.
   Claude Code `user` and `local` `~/.claude/skills/` (one shared directory),
   Claude Code `project` `<project>/.claude/skills/`. The ownership record holds
   only a content fingerprint. Setup never replaces or deletes a modified copy, a
-  foreign skill of the same name or a linked or non-directory entry
-  (`skill_divergent`), and inside a project it never follows a link. Every
+  foreign skill of the same name, hidden operator files inside the copy, or a
+  linked or non-directory entry (`skill_divergent`); a link to exactly the
+  effective skill is accepted as the operator's own (`skill_linked`). Inside a
+  project setup never follows a link, and a project copy is bound to its
+  project. Every
   setup result has a second finding per target with the alias
   `pi-session-orchestration`; the new codes are `skill_absent`,
-  `skill_equivalent`, `skill_update_planned`, `skill_source_invalid`,
+  `skill_equivalent`, `skill_linked`, `skill_update_planned`, `skill_source_invalid`,
   `skill_installed`, `skill_already_equivalent`, `skill_updated`,
   `skill_install_failed`, `skill_verified`, `skill_missing`,
   `skill_not_equivalent`, `skill_removed`, `skill_kept_shared`,

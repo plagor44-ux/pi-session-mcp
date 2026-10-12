@@ -89,15 +89,19 @@ is a SHA-256 over the sorted relative paths and contents.
 | `claude-code:user`, `claude-code:local` | `~/.claude/skills/pi-session-orchestration` (one shared slot) |
 | `claude-code:project` | `<project>/.claude/skills/pi-session-orchestration` (the directory in which setup runs) |
 
-**Ownership records.** One record per client slot with the alias
-`skill:pi-session-orchestration` holds the target client, the scope kind
-(`project` or `user`, so Claude Code `user` and `local` share a record), the
-phase and a content fingerprint, nothing else. It is path-free and secret-free
-like every record. Because it is path-free, the project record is per client,
-not per project directory, and describes the project copy that setup touched
-last. The `pending` phase is written before the first filesystem change and
-promoted to `owned` after a post-install inspection. A later run finds a
-`pending` record whose slot already equals the source and promotes it.
+**Ownership records.** One record per client slot holds the target client,
+the scope kind (`project` or `user`, so Claude Code `user` and `local` share a
+record), the phase and a content fingerprint, nothing else. A home slot uses the
+alias `skill:pi-session-orchestration`. A project slot uses
+`skill:pi-session-orchestration@<id>`, where `<id>` is the first 16 hex digits
+of a SHA-256 over the project's real path: an opaque identity, not a path, so a
+`--remove` in another project never touches this project's copy. The `pending`
+phase is written before the first filesystem change and promoted to `owned`
+after a post-install inspection. During an update, the pending record also
+keeps the fingerprint of the copy it replaces (`replaces`), so an interrupted
+update leaves a copy that setup still recognizes as its own: the next
+`--apply` finishes the update and `--remove` deletes it. A later run that finds
+a `pending` record whose slot already equals the source promotes it.
 
 **Atomic copy.** Setup creates missing parent directories (mode `0755`), stages
 the tree in a temporary directory in the slot's parent (files `0644`, each file
@@ -111,14 +115,23 @@ The slot is never edited in place.
 **Divergence rules.** Setup never replaces or deletes, and reports
 `skill_divergent` for:
 
-- an installed copy whose fingerprint differs from the owned record, even if it
-  happens to equal the new source;
-- a copy that differs from the source without an `owned` record (a foreign
-  skill of the same name, or an unfinished `pending` transaction);
-- a link or non-directory at the skill entry, or a tree that cannot be read.
+- an installed copy whose fingerprint differs from setup's own copy (the
+  owned fingerprint, or the one a pending update replaces), even if it happens
+  to equal the new source;
+- a copy that differs from the source without a record (a foreign skill of the
+  same name);
+- any entry whose name starts with `.` inside the installed copy: setup never
+  writes such entries, so they are operator content that the fingerprint over
+  the visible files would not protect;
+- a link to anything other than the effective skill, a non-directory at the
+  skill entry, or a tree that cannot be read.
 
 A copy that equals the source stays unowned when no record exists
-(`skill_equivalent` or `skill_already_equivalent`). An unmodified owned copy
+(`skill_equivalent` or `skill_already_equivalent`). A link at the skill entry
+whose real path is exactly the effective library skill directory (your
+override, else the shipped skill) is the operator's own equivalent setup:
+`--dry-run` and `--apply` report `skill_linked` (unchanged), `--verify` reports
+`skill_verified`, and removal leaves it alone (`skill_not_owned`). An unmodified owned copy
 that differs from the source is replaced after a package update or a changed
 override (`skill_update_planned`, `skill_updated`).
 
@@ -144,8 +157,10 @@ example after an interruption or a `skill_divergent`. When the registration
 record is gone but setup still owns the skill of that target, `--remove` and
 `--rollback` run once more for that target. They first prove that the
 registration is absent and then report the registration as removed and clean up
-the skill. They never run for a target whose skill setup does not own, and an
-unowned live registration stays untouched (`ownership_unavailable`).
+the skill. They never run for a target whose skill setup does not own, nor for
+a Claude Code `user` or `local` target while the other one of the two is still
+registered, and an unowned live registration stays untouched
+(`ownership_unavailable`).
 
 Skill reports carry only client, scope, the alias `pi-session-orchestration`,
 status and a stable code. No skill content, fingerprint or path leaves setup.
@@ -189,9 +204,9 @@ Stable finding codes are grouped by responsibility:
   `mcp_unsupported`, `mcp_timeout`, `mcp_failed`;
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
-- controller skill, dry-run: `skill_absent`, `skill_equivalent`,
+- controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,
   `skill_update_planned`, `skill_divergent`, `skill_source_invalid`;
-- controller skill, apply: `skill_installed`, `skill_already_equivalent`,
+- controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_linked`,
   `skill_updated`, `skill_divergent`, `skill_source_invalid`,
   `skill_install_failed`;
 - controller skill, verify: `skill_verified`, `skill_missing`,

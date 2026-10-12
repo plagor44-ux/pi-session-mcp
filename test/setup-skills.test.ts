@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { existsSync, writeFileSync } from "node:fs";
-import { chmod, lstat, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, realpathSync, writeFileSync } from "node:fs";
+import { chmod, lstat, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { isRecord } from "../src/setup-ownership.js";
@@ -17,7 +17,11 @@ const targets: SetupTarget[] = [
   { client: "codex", scope: "user", alias: "pi-session-mcp" },
   ...["user", "local", "project"].map((scope) => ({ client: "claude-code", scope, alias: "pi-session-mcp" })),
 ];
-const skillTarget = (target: SetupTarget): SetupTarget => ({ ...target, scope: target.scope === "local" ? "user" : target.scope, alias: `skill:${skill}` });
+const projectIdentity = (cwd: string): string => createHash("sha256").update(realpathSync(cwd)).digest("hex").slice(0, 16);
+const skillTarget = (target: SetupTarget, cwd = "/"): SetupTarget => ({
+  ...target, scope: target.scope === "local" ? "user" : target.scope,
+  alias: target.scope === "project" ? `skill:${skill}@${projectIdentity(cwd)}` : `skill:${skill}`,
+});
 async function fixture(linkedRoots = false) {
   const root = await temporaryRoot("pi-setup-skills-");
   const anchor = linkedRoots ? join(root, "alias") : root;
@@ -62,7 +66,12 @@ describe("skill ownership validation", () => {
       { ...record.target, alias: "skill:Bad" }, { ...record.target, alias: "skill:" },
       { ...record.target, alias: `skill:${"a".repeat(65)}` },
       { ...skillTarget(targets[1]!), scope: "local" },
+      { ...skillTarget(targets[3]!), alias: `skill:${skill}` }, { ...skillTarget(targets[0]!), alias: `skill:${skill}@0123456789abcdef` },
     ]) expect(isRecord({ ...record, target })).toBe(false);
+    expect(isRecord({ ...record, phase: "pending", replaces: fingerprint })).toBe(true);
+    expect(isRecord({ ...record, replaces: fingerprint })).toBe(false);
+    expect(isRecord({ ...record, phase: "pending", replaces: "bad" })).toBe(false);
+    expect(isRecord({ target: targets[0], fingerprint, previous: "absent", phase: "pending", transactionId: randomUUID(), replaces: fingerprint })).toBe(false);
     for (const change of [{ fingerprint: "path/secret" }, { previous: "equivalent" }, { phase: "bad" }, { transactionId: "bad" }, { path: "/secret" }]) expect(isRecord({ ...record, ...change })).toBe(false);
   });
 });
@@ -76,12 +85,12 @@ describe("setup controller skills", () => {
     expectSkill(await f.run("apply", [target]), "skill_installed", "ok", target);
     expect(await readFile(join(slot, "SKILL.md"), "utf8")).toBe("controller v1");
     expect(await readFile(join(slot, "references", "guide.md"), "utf8")).toBe("guide");
-    expect((await f.ownership.get(skillTarget(target)))?.phase).toBe("owned");
+    expect((await f.ownership.get(skillTarget(target, f.cwd)))?.phase).toBe("owned");
     expect((await stat(slot)).mode & 0o777).toBe(0o755);
     expectSkill(await f.run("apply", [target]), "skill_already_equivalent", "unchanged", target);
     expectSkill(await f.run("verify", [target]), "skill_verified", "ok", target);
     expectSkill(await f.run("remove", [target]), "skill_removed", "ok", target);
-    expect(existsSync(slot)).toBe(false); expect(await f.ownership.get(skillTarget(target))).toBeUndefined();
+    expect(existsSync(slot)).toBe(false); expect(await f.ownership.get(skillTarget(target, f.cwd))).toBeUndefined();
     expect(await readFile(sentinel, "utf8")).toBe("foreign");
   });
   it("supports trusted home/project ancestors reached through system-style symlinks", async () => {
@@ -116,7 +125,7 @@ describe("setup controller skills", () => {
     const f = await fixture(); const slot = f.slot(targets[0]!);
     if (kind === "modified") await f.run("apply");
     await mkdir(join(slot, ".."), { recursive: true });
-    if (kind === "symlink") await symlink(f.source, slot);
+    if (kind === "symlink") { const elsewhere = join(f.root, "elsewhere"); await mkdir(elsewhere); await writeFile(join(elsewhere, "SKILL.md"), "elsewhere"); await symlink(elsewhere, slot); }
     else if (kind === "file") await writeFile(slot, "foreign file");
     else { await mkdir(slot, { recursive: true }); await writeFile(join(slot, "SKILL.md"), "foreign content"); if (kind === "invalid-tree") await symlink(join(f.source, "SKILL.md"), join(slot, "linked.md")); }
     expectSkill(await f.run(), "skill_divergent", "divergent");
@@ -145,6 +154,83 @@ describe("setup controller skills", () => {
     await rm(join(f.cwd, ".claude")); await mkdir(join(f.cwd, ".claude")); await symlink(outside, join(f.cwd, ".claude", "skills"));
     expectSkill(await f.run("apply", [project]), "skill_divergent", "divergent", project);
     expect(await readdir(outside)).toEqual([]);
+  });
+  it("finishes or removes its own copy after an interrupted update", async () => {
+    if (process.getuid?.() === 0) return;
+    const f = await fixture(); await f.run("apply"); const slot = f.slot(targets[0]!);
+    await mkdir(f.override, { recursive: true }); await writeFile(join(f.override, "SKILL.md"), "controller v2");
+    await chmod(join(slot, ".."), 0o555);
+    try { expectSkill(await f.run("apply"), "skill_install_failed", "failed"); }
+    finally { await chmod(join(slot, ".."), 0o755); }
+    expect(await readFile(join(slot, "SKILL.md"), "utf8")).toBe("controller v1");
+    expect((await f.ownership.get(skillTarget(targets[0]!)))?.phase).toBe("pending");
+    expectSkill(await f.run("apply"), "skill_updated", "ok");
+    expect(await readFile(join(slot, "SKILL.md"), "utf8")).toBe("controller v2");
+    expectSkill(await f.run("remove"), "skill_removed", "ok"); expect(existsSync(slot)).toBe(false);
+  });
+  it("removes setup's old copy when the interrupted update is abandoned", async () => {
+    if (process.getuid?.() === 0) return;
+    const f = await fixture(); await f.run("apply"); const slot = f.slot(targets[0]!);
+    await mkdir(f.override, { recursive: true }); await writeFile(join(f.override, "SKILL.md"), "controller v2");
+    await chmod(join(slot, ".."), 0o555);
+    try { await f.run("apply"); } finally { await chmod(join(slot, ".."), 0o755); }
+    expectSkill(await f.run("remove"), "skill_removed", "ok"); expect(existsSync(slot)).toBe(false);
+  });
+  it("never deletes hidden operator content inside its own copy", async () => {
+    const f = await fixture(); await f.run("apply"); const slot = f.slot(targets[0]!);
+    await writeFile(join(slot, ".operator-notes"), "keep");
+    await mkdir(f.override, { recursive: true }); await writeFile(join(f.override, "SKILL.md"), "controller v2");
+    expectSkill(await f.run("apply"), "skill_divergent", "divergent");
+    expectSkill(await f.run("remove"), "skill_divergent", "divergent");
+    expect(await readFile(join(slot, ".operator-notes"), "utf8")).toBe("keep");
+  });
+  it("accepts an operator link to the effective library skill as equivalent and never owns it", async () => {
+    const f = await fixture(); const slot = f.slot(targets[0]!);
+    await mkdir(join(slot, ".."), { recursive: true }); await symlink(f.source, slot);
+    expectSkill(await f.run(), "skill_linked", "unchanged");
+    const applied = await f.run("apply"); expectSkill(applied, "skill_linked", "unchanged"); expect(applied.exitCode).toBe(0);
+    expectSkill(await f.run("verify"), "skill_verified", "ok");
+    expectSkill(await f.run("remove"), "skill_not_owned", "unchanged");
+    expect((await lstat(slot)).isSymbolicLink()).toBe(true);
+  });
+  it("installs no skill when the plan refuses the apply", async () => {
+    const f = await fixture(); f.registered.add("codex:user");
+    const divergent = { ...f.adapters[1]!, async inspect() { return { state: "divergent" as const }; } };
+    const { FileSetupSkillInstaller } = await import("../src/setup-skills.js");
+    const orchestrator = new SetupOrchestrator({ adapters: [f.adapters[0]!, divergent], ownership: f.ownership, intendedFingerprint: fingerprint, skills: f.skills as InstanceType<typeof FileSetupSkillInstaller> });
+    const output = await orchestrator.run({ operation: "apply", targets: [targets[0]!, targets[1]!] });
+    expect(output.status).toBe("failed"); expect(output.findings.every((finding) => finding.target.alias === "pi-session-mcp")).toBe(true);
+    expect(existsSync(f.slot(targets[0]!))).toBe(false);
+  });
+  it("does not report a never-configured Claude Code local target as removed through the shared slot", async () => {
+    const f = await fixture(); const user = targets.find((target) => target.client === "claude-code" && target.scope === "user")!;
+    const local = targets.find((target) => target.scope === "local")!;
+    await f.run("apply", [user]);
+    const output = await f.run("remove", [local]);
+    expect(output.findings).toEqual([{ target: local, status: "failed", code: "ownership_unavailable" }]);
+    expect(existsSync(f.slot(user))).toBe(true);
+  });
+  it("binds project skill ownership to its project", async () => {
+    const f = await fixture(); const project = targets.find((target) => target.scope === "project")!;
+    await f.run("apply", [project]);
+    const other = join(f.root, "other-project"); await mkdir(join(other, ".claude", "skills", skill), { recursive: true });
+    await writeFile(join(other, ".claude", "skills", skill, "SKILL.md"), "controller v1");
+    await mkdir(join(other, ".claude", "skills", skill, "references")); await writeFile(join(other, ".claude", "skills", skill, "references", "guide.md"), "guide");
+    const { FileSetupSkillInstaller } = await import("../src/setup-skills.js");
+    const elsewhere = new SetupOrchestrator({ adapters: f.adapters, ownership: f.ownership, intendedFingerprint: fingerprint,
+      skills: new FileSetupSkillInstaller({ packageRoot: join(f.root, "package"), configPath: join(f.root, "config", "config.json"), home: f.home, cwd: other }) });
+    expectSkill(await elsewhere.run({ operation: "remove", targets: [project] }), "skill_not_owned", "unchanged", project);
+    expect(await readFile(join(other, ".claude", "skills", skill, "SKILL.md"), "utf8")).toBe("controller v1");
+    expect((await f.ownership.get(skillTarget(project, f.cwd)))?.phase).toBe("owned");
+    expect(existsSync(f.slot(project))).toBe(true);
+  });
+  it("never removes through a link that appeared inside a project after the install", async () => {
+    const f = await fixture(); const project = targets.find((target) => target.scope === "project")!;
+    await f.run("apply", [project]);
+    const outside = join(f.root, "outside-copy"); await rm(outside, { recursive: true, force: true });
+    await rename(join(f.cwd, ".claude"), outside); await symlink(outside, join(f.cwd, ".claude"));
+    expectSkill(await f.run("remove", [project]), "skill_divergent", "divergent", project);
+    expect(await readFile(join(outside, "skills", skill, "SKILL.md"), "utf8")).toBe("controller v1");
   });
   it("reports remove of a never-installed target as missing ownership", async () => {
     const f = await fixture();
