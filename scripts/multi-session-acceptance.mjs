@@ -408,7 +408,7 @@ export function prepare(values) {
   writeFileSync(join(priv, "config.json"), configBytes, { mode: 0o600 });
   const node = process.execPath;
   writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: { PI_SESSION_MCP_CONFIG: join(priv, "config.json") } } } });
-  const claudeSkillSetup = installClaudeSkill(candidate, run, priv);
+  const claudeSkillSetup = installClaudeSkill(candidate, run, priv, Boolean(extensions));
   const packageJson = readJson(join(candidate, "package.json"));
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: candidate, encoding: "utf8" });
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: candidate, encoding: "utf8" });
@@ -437,13 +437,23 @@ export function prepare(values) {
  * and the client's own files go to a disposable home, so no real registration changes; the
  * controller later runs with the real home and only reads the project skill.
  */
-function installClaudeSkill(candidate, run, priv) {
+/**
+ * The environment of the candidate's setup in its disposable home. Setup's Doctor resolves allowlisted
+ * extensions from Pi's install, which the disposable home lacks, so an extension profile gets the operator's
+ * Pi agent directory through `PI_CODING_AGENT_DIR`. Doctor only reads extension manifests there.
+ */
+export function setupEnvironment(home, path, configPath, withExtensions, env = process.env) {
+  const agentDir = env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent");
+  return [`HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${configPath}`, ...(withExtensions ? [`PI_CODING_AGENT_DIR=${agentDir}`] : [])];
+}
+
+function installClaudeSkill(candidate, run, priv, withExtensions) {
   const home = join(run, "setup-home");
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const claude = spawnSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim();
   if (!claude) fail("claude is not on PATH");
   const path = [...new Set([dirname(process.execPath), dirname(claude), "/usr/bin", "/bin"])].join(":");
-  const setup = spawnSync("env", ["-i", `HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${join(priv, "config.json")}`,
+  const setup = spawnSync("env", ["-i", ...setupEnvironment(home, path, join(priv, "config.json"), withExtensions),
     process.execPath, join(candidate, "dist", "setup-main.js"), "--apply", "--json", "--target", "claude-code:project:pi-session-mcp"],
   { cwd: join(run, "controller-claude"), encoding: "utf8", timeout: 120_000 });
   let parsed; try { parsed = JSON.parse(setup.stdout); } catch { parsed = undefined; }

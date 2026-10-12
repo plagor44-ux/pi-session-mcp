@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events";
 import {
   appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -492,6 +493,13 @@ describe("extension allowlist", () => {
     const bad: unknown[] = [undefined, "npm:x@1.0.0", [], ["npm:x@^1.0.0"], ["npm:x@latest"], ["npm:x@1.0"], ["npm:x@1.0.0+build"], ["git+https://example.invalid/x.git"],
       ["./local"], ["x@1.0.0"], [7], ["npm:x@1.0.0", "npm:x@1.0.1"], Array.from({ length: 9 }, (_, i) => `npm:e${i}@1.0.0`)];
     for (const list of bad) expect(() => h.parseExtensionAllowlist(list), JSON.stringify(list)).toThrow(h.HarnessFailure);
+  });
+
+  it("points setup's Doctor at Pi's install only for an extension profile", () => {
+    const base = ["HOME=/run/h", "PATH=/usr/bin", "PI_SESSION_MCP_CONFIG=/run/c.json"];
+    expect(h.setupEnvironment("/run/h", "/usr/bin", "/run/c.json", false, {})).toEqual(base);
+    expect(h.setupEnvironment("/run/h", "/usr/bin", "/run/c.json", true, { PI_CODING_AGENT_DIR: "/opt/pi-agent" })).toEqual([...base, "PI_CODING_AGENT_DIR=/opt/pi-agent"]);
+    expect(h.setupEnvironment("/run/h", "/usr/bin", "/run/c.json", true, {})).toEqual([...base, `PI_CODING_AGENT_DIR=${join(homedir(), ".pi", "agent")}`]);
   });
 
   async function prepareFailure(profile: Record<string, unknown>, flags: Record<string, boolean>): Promise<string> {
