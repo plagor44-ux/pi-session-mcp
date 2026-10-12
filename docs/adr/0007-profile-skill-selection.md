@@ -74,8 +74,11 @@ profile.
   `skill_missing`, `skill_unreadable` (not a regular file, over 256 KiB, or not
   readable) and `skill_duplicate`. Frontmatter, name rules, collisions and
   explicit-only flags are checked only at session start.
-- **Diagnostics.** Stderr gets the new stage `skill_load` and an optional
-  `skill` field with the catalog alias, never a path.
+- **Diagnostics.** Stderr gets the new stage `skill_load` for a selected file
+  that fails validation, with an optional `skill` field holding the catalog
+  alias. A catalog that differs from the selection after construction reports
+  the existing stages `postcheck`, `extension_load` or `extension_bind`. No
+  diagnostic carries a path.
 - **Snapshot semantics.** Profile and skill selection are fixed per session.
   The content is not snapshotted: the SDK keeps file paths and later reads may
   see changed files. Operators manage skill files and companion files, do not

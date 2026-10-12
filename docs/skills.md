@@ -100,8 +100,12 @@ not be loaded`) if:
 - the skill sets `disable-model-invocation: true`.
 
 The message is fixed. It never contains a path, a skill name or SDK text.
-Stderr gets a structured diagnostic with the stage `skill_load` and the
-catalog alias in a `skill` field, never a path.
+Stderr gets a structured diagnostic. A selected file that fails validation
+reports the stage `skill_load` and, when one alias is to blame, that catalog
+alias in a `skill` field. If the session's actual skill catalog differs from
+the selection after construction, the stage is `postcheck`, or
+`extension_load` and `extension_bind` for a profile with extensions. Neither
+carries a path.
 
 Explicit-only skills (`disable-model-invocation: true`) are incompatible in
 this version. Pi hides such skills from the model, and MCP prompts never run
