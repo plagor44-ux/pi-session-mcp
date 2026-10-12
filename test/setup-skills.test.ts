@@ -136,6 +136,16 @@ describe("setup controller skills", () => {
     expectSkill(await f.run("remove"), "skill_removed", "ok");
     expect(await readdir(join(dotfiles, "skills"))).toEqual([]);
   });
+  it("never follows a link inside an untrusted project", async () => {
+    const f = await fixture(); const outside = join(f.root, "outside-project"); await mkdir(outside);
+    await symlink(outside, join(f.cwd, ".claude"));
+    const project = targets.find((target) => target.scope === "project")!;
+    expectSkill(await f.run("apply", [project]), "skill_divergent", "divergent", project);
+    expect(await readdir(outside)).toEqual([]);
+    await rm(join(f.cwd, ".claude")); await mkdir(join(f.cwd, ".claude")); await symlink(outside, join(f.cwd, ".claude", "skills"));
+    expectSkill(await f.run("apply", [project]), "skill_divergent", "divergent", project);
+    expect(await readdir(outside)).toEqual([]);
+  });
   it("reports remove of a never-installed target as missing ownership", async () => {
     const f = await fixture();
     const output = await f.run("remove");

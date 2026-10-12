@@ -36,10 +36,14 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
   }
 
   private async slot(target: SetupTarget, name: string): Promise<string> {
-    // The client's skills directory may be the operator's own link, for example into a dotfiles
-    // checkout, so it is canonicalized; the skill entry itself is never followed.
-    const skills = join(target.scope === "project" ? this.roots.cwd : this.roots.home, target.client === "codex" ? ".agents" : ".claude", "skills");
-    return join(await canonicalExisting(skills), name);
+    const client = target.client === "codex" ? ".agents" : ".claude";
+    // A project may be untrusted: only its root is canonicalized, and a link below it (for
+    // example `.claude` pointing elsewhere) makes the slot divergent, so setup never writes
+    // outside the project. In the operator's home the client's skills directory may be the
+    // operator's own link, for example into a dotfiles checkout, so it is followed. The skill
+    // entry itself is never followed in either place.
+    if (target.scope === "project") return join(await realpath(this.roots.cwd), client, "skills", name);
+    return join(await canonicalExisting(join(this.roots.home, client, "skills")), name);
   }
   private ownedTarget(target: SetupTarget, name: string): SetupTarget {
     return { client: target.client, scope: target.scope === "project" ? "project" : "user", alias: `skill:${name}` };
