@@ -90,6 +90,75 @@ bounded direct MCP `initialize`, `tools/list`, and
 `pi_capabilities_get({})` check. It never starts a session or invokes
 a provider.
 
+### Controller skill
+
+Besides the registration, `--apply` installs the controller skill
+`pi-session-orchestration` for each target, as a real copy of the effective
+skill: your override in the skill library if you have one, else the skill
+shipped in the package ([Pi skills](skills.md)). Clients discover it without
+further steps.
+
+| Target | Where the skill goes |
+| --- | --- |
+| `codex:user:pi-session-mcp` | `~/.agents/skills/pi-session-orchestration` |
+| `claude-code:user:pi-session-mcp`, `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` (one shared directory) |
+| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration`, where `<project>` is the directory in which setup runs |
+
+Every result therefore has a second finding per target, with the same client
+and scope and the alias `pi-session-orchestration`:
+
+```text
+apply: ok
+claude-code/user/pi-session-mcp: ok (applied)
+claude-code/user/pi-session-orchestration: ok (skill_installed)
+```
+
+Skill findings per operation:
+
+- `--dry-run`: `skill_absent` (absent), `skill_equivalent` (unchanged),
+  `skill_update_planned` (planned), `skill_divergent` (divergent),
+  `skill_source_invalid` (failed).
+- `--apply`: `skill_installed` (ok), `skill_already_equivalent` (unchanged),
+  `skill_updated` (ok; setup replaced its own unmodified copy after a package
+  update or a changed override), `skill_divergent`, `skill_source_invalid`,
+  `skill_install_failed` (failed).
+- `--verify`: `skill_verified` (ok), `skill_missing` and
+  `skill_not_equivalent` (failed).
+- `--rollback` and `--remove`: `skill_removed` (ok), `skill_kept_shared`
+  (unchanged; the other Claude Code `user` or `local` registration still uses
+  the shared directory), `skill_not_owned` (unchanged), `skill_absent` (ok) and
+  `skill_divergent` (a modified copy stays in place).
+
+Setup never replaces or deletes a modified installed copy, a skill of the same
+name that it did not install, or a link or non-directory at the skill entry; it
+reports `skill_divergent`. That does not block the registration, but it makes
+the overall status `failed` (exit 1). Never edit the installed copy. To
+customize the skill, run `--apply --customize-skill pi-session-orchestration`,
+edit the override, and run `--apply` for the target again. Design and trust
+rules: [setup lifecycle design](client-setup-design.md#skill-installation).
+
+Setup installs only `pi-session-orchestration` into clients. Worker skills are
+for Pi profiles and are selected through `builtin:` entries in `skillCatalog`.
+
+### Customize a shipped skill
+
+```bash
+npm run --silent setup -- --customize-skill pi-session-review
+npm run --silent setup -- --apply --customize-skill pi-session-review
+```
+
+This works without `--target` and needs `PI_SESSION_MCP_CONFIG`. It copies the
+shipped skill into the `skills/` directory next to the configuration file and
+records the fingerprint of the shipped skill in
+`.pi-session-mcp-bases.json` there. The finding target is
+`skills/override/<name>`; the codes are `skill_customize_planned` (planned),
+`skill_customized` (ok), `skill_override_current` (unchanged),
+`skill_override_outdated` (planned), `skill_base_updated` (ok),
+`skill_not_shipped`, `skill_bases_corrupt`, `skill_override_invalid` and
+`skill_customize_failed` (failed). An existing override is never overwritten.
+After `skill_override_outdated`, `--apply` moves only the recorded base, which
+acknowledges a change you reviewed. Details: [Pi skills](skills.md#customize-and-add-skills).
+
 ## Local configuration
 
 Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
@@ -118,7 +187,7 @@ Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
 }
 ```
 
-Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers` and `extensions` described in [Installation](installation.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
+Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions` and `skills` described in [Installation](installation.md) and [Pi skills](skills.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
 
 Use placeholders until a locally available provider/model pair is known. Do not put keys, tokens, credential objects, headers, base URLs, or authentication paths in this file.
 

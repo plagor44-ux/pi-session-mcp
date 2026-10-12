@@ -7,7 +7,8 @@ new error code), so ADR 0003 requires a minor release: the next one is 0.8.0.
 Not yet released.
 
 - Execution profiles can select Pi skills. An optional top-level
-  `skillCatalog` maps a skill alias to the path of one `SKILL.md` file, and an
+  `skillCatalog` maps a skill alias to the path of one `SKILL.md` file (or to
+  `builtin:<name>`, see below), and an
   optional `skills` list in a profile selects catalog aliases. MCP callers still
   choose only workspace and profile aliases; no tool takes a skill. A session
   loads exactly the selected skills and validates them at start; a missing,
@@ -32,7 +33,50 @@ Not yet released.
 - The package ships three skills under `skills/`: `pi-session-orchestration`
   for the controlling Claude Code or Codex agent, and `pi-session-implementation`
   and `pi-session-review` for Pi workers. The example configuration registers
-  the two worker skills.
+  the two worker skills with `builtin:` references, so a copied example needs
+  no path edits for skills.
+- Skill library and `builtin:`. A `skillCatalog` value `builtin:<name>` names a
+  skill of the library: the operator's override
+  `<configuration directory>/skills/<name>/SKILL.md` if it exists, else the
+  skill shipped in the package. Resolution happens when the configuration
+  loads, so adding or removing an override needs a restart. A name that matches
+  neither keeps the shipped location, so Doctor reports `skill_missing` and a
+  session start fails with `skill_load_failed`. A malformed `builtin:` name makes
+  the configuration invalid.
+- `pi-session-mcp-setup --customize-skill <name>` (a dry-run; `--apply` writes)
+  copies a shipped skill into the override directory as a starting point and
+  records the shipped fingerprint in `.pi-session-mcp-bases.json`. It never
+  overwrites an existing override. Findings use the target
+  `skills/override/<name>` and the new codes `skill_customize_planned`,
+  `skill_customized`, `skill_override_current`, `skill_override_outdated`,
+  `skill_base_updated`, `skill_not_shipped`, `skill_bases_corrupt`,
+  `skill_override_invalid` and `skill_customize_failed`. After a package
+  update changed a shipped skill, `--apply --customize-skill <name>` moves only
+  the recorded base once you reviewed the change; it never touches your files.
+  A new skill needs no command: create `<override dir>/<name>/SKILL.md` and
+  reference it as `builtin:<name>`.
+- `pi-session-mcp-setup --apply` now also installs the controller skill
+  `pi-session-orchestration` for each target, after the registration, as a real
+  copy of the effective skill (override, else shipped): Codex `~/.agents/skills/`,
+  Claude Code `user` and `local` `~/.claude/skills/` (one shared directory),
+  Claude Code `project` `<project>/.claude/skills/`. The ownership record holds
+  only a content fingerprint. Setup never replaces or deletes a modified copy, a
+  foreign skill of the same name or a linked or non-directory entry
+  (`skill_divergent`), and inside a project it never follows a link. Every
+  setup result has a second finding per target with the alias
+  `pi-session-orchestration`; the new codes are `skill_absent`,
+  `skill_equivalent`, `skill_update_planned`, `skill_source_invalid`,
+  `skill_installed`, `skill_already_equivalent`, `skill_updated`,
+  `skill_install_failed`, `skill_verified`, `skill_missing`,
+  `skill_not_equivalent`, `skill_removed`, `skill_kept_shared`,
+  `skill_not_owned` and `skill_divergent`. A divergent skill does not block the
+  registration but makes the overall status `failed`. `--remove` and
+  `--rollback` remove an unmodified copy, and a retry still cleans up a skill
+  that setup owns after the registration is gone. Manual symlinking of the
+  skill is no longer needed.
+- Doctor gains the warning `skill_override_outdated` (subject `skill:<name>`,
+  or `skill:bases` for a corrupt bases file) when a shipped skill changed since
+  the operator copied it.
 - Maintainers get `scripts/multi-session-acceptance.mjs`, a live check in which
   a real Claude Code or Codex controller drives two concurrent Pi sessions
   with selected skills, including a targeted abort. It is not part of the npm

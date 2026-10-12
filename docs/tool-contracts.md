@@ -53,7 +53,7 @@ The former `profile` input is rejected; it is not reinterpreted as an execution-
 
 Successful session metadata is a whitelist: `id`, `workspace`, `executionProfile`, `profile`, `provider`, `model`, `thinkingLevel`, `state`, `createdAt`, and `updatedAt`. `profile` remains derived permission metadata (`read-only` or `coding`) for compatibility; it is not client-selectable. Provider, model, and thinking level are projected only after SDK post-verification.
 
-The selected skills of an execution profile are never an input. A session loads exactly the skills that the profile selects from the operator's skill catalog, validated at start; a failure is `skill_load_failed`. See [Pi skills](skills.md).
+The selected skills of an execution profile are never an input. A session loads exactly the skills that the profile selects from the operator's skill catalog, validated at start; a failure is `skill_load_failed`. A catalog value is the path of one `SKILL.md` or `builtin:<name>`, which names a skill of the skill library: the operator's override next to the configuration file if it exists, else the skill shipped in the package. It is resolved when the server loads the configuration, and the value never appears in tool output. See [Pi skills](skills.md).
 
 ## Deterministic MCP errors
 
@@ -75,7 +75,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_version_mismatch` | Pi's installed extension package has another version than the configured one. |
 | `extension_load_failed` | A configured extension has an invalid manifest, failed to load or failed to bind. |
 | `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
-| `skill_load_failed` | A skill that the profile selects could not be loaded: a missing, unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
+| `skill_load_failed` | A skill that the profile selects could not be loaded: a missing (also a `builtin:` name that matches no override and no shipped skill), unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 
@@ -85,7 +85,7 @@ Invalid execution-profile configuration prevents startup, so it cannot be an MCP
 
 | Startup diagnostic code | Meaning |
 | --- | --- |
-| `invalid_execution_profile_config` | The execution-profile configuration violates its invariants or strict shape, including an unknown or duplicate selected skill alias, two selected skill aliases with the same path, or an invalid `skillCatalog` entry. |
+| `invalid_execution_profile_config` | The execution-profile configuration violates its invariants or strict shape, including an unknown or duplicate selected skill alias, two selected skill aliases with the same path, or an invalid `skillCatalog` entry (including a malformed `builtin:` name). |
 | `invalid_thinking_level` | A configured thinking level is outside the supported enum. |
 
 `pi_session_prompt` returns `{session,turn}` only after successful Pi preflight. Preflight is bounded at 5,000 ms; a missing callback, hanging prompt acceptance, or timeout returns `prompt_timeout` / `Pi prompt preflight timed out` and creates no public turn. Late settlement may only release the unpublished operation's quarantine; it cannot publish a turn. `pi_session_abort` waits at most 5,000 ms per caller for one shared SDK abort attempt and returns `abort_timeout` / `Pi abort timed out` without claiming the turn was aborted. Rejection/failure remain `prompt_rejected`/`abort_failed`. Close allows at most 5,000 ms for abort cleanup, then performs best-effort disposal and removes the public registry entry; it remains idempotent through the retained tombstone. Registry shutdown rejects new starts, allows 12,000 ms, and disposes a handle from a late-resolving start instead of admitting it. Process shutdown, started by `SIGINT`, `SIGTERM`, or stdin EOF, allows 15,000 ms, attempts transport cleanup even after registry failure/timeout, then explicitly exits the process. These boundaries do not guarantee graceful cancellation of a provider request. `pi_turn_get` returns a `TurnView` with `turnId`, `sessionId`, state, timestamps, and `completedAt` for terminal turns. Completed views add normalized final `assistantText` and `truncated`; failed views contain only `{code:"turn_failed",message:"Pi turn failed"}`. Final assistant text is capped at 64 KiB UTF-8 bytes, each active session retains at most 20 turns, and close removes its turn data.

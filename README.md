@@ -18,7 +18,7 @@ Reasons to do that:
 - **Follow-up turns keep their context.** A session stays open across prompts, so a follow-up question does not pay for the same exploration twice.
 - **You set the limits, not the agent.** The client can only pick from the workspaces and profiles in your configuration file. It cannot name a directory, a model, a provider or a permission level, and the default profile is read-only.
 - **Exactly the extra tools a task needs.** A profile can grant individual tools of local stdio MCP servers to its sessions, and nothing else from those servers.
-- **Role instructions you control.** A profile can select Pi skills from a catalog in your configuration, such as the implementation and review skills this package ships. The client cannot choose skills. The package also ships an orchestration skill for the controlling agent.
+- **Role instructions you control.** A profile can select Pi skills from a catalog in your configuration, such as the implementation and review skills this package ships, or your own versions of them. The client cannot choose skills. The package also ships an orchestration skill for the controlling agent, which `setup` installs into Claude Code and Codex.
 - **Predictable to automate.** Sessions and turns have a small set of states and stable error codes. Results contain no paths, credentials, prompts or raw provider errors.
 - **Small footprint.** No daemon, no network listener and no stored state. An offline `doctor` checks an installation, and `setup` registers, verifies and removes the server reproducibly.
 
@@ -77,9 +77,17 @@ pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
 pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
-Use `codex:user:pi-session-mcp` for Codex. The example configuration contains placeholders only: replace the workspace, provider and model with real local values, and never add credentials to the file. The example also registers the two worker skills with paths relative to the example file; after you copy it, change them to absolute paths into the installation or remove them (see [Pi skills](docs/skills.md)).
+Use `codex:user:pi-session-mcp` for Codex. The example configuration contains placeholders only: replace the workspace, provider and model with real local values, and never add credentials to the file. The example also registers the two worker skills with `builtin:` references, which resolve to the skills in the package, so the copied example needs no path edits for skills (see [Pi skills](docs/skills.md)).
 
-`pi-session-mcp-doctor` is an offline health check. `pi-session-mcp-setup` plans by default, changes a client registration only with an explicit operation, and never replaces an existing divergent registration. Neither needs credentials, a provider or a model.
+`--apply` registers the server and also installs the controller skill `pi-session-orchestration` for that client, so the agent knows how to drive Pi worker sessions: Claude Code `user` and `local` get `~/.claude/skills/`, Claude Code `project` gets `.claude/skills/` of the project, and Codex gets `~/.agents/skills/`. Setup never replaces a skill it did not install or that you modified. To adjust a skill, copy it into the override directory next to your configuration file and edit the copy:
+
+```bash
+pi-session-mcp-setup --apply --customize-skill pi-session-review
+```
+
+To add a skill of your own, create `skills/<name>/SKILL.md` next to the configuration file and reference it as `builtin:<name>`. Do not edit the installed package or the installed copy in the client.
+
+`pi-session-mcp-doctor` is an offline health check. `pi-session-mcp-setup` plans by default, changes a client registration or skill only with an explicit operation, and never replaces an existing divergent registration or a skill it did not install. Neither needs credentials, a provider or a model.
 
 The [installation guide](docs/installation.md) also covers installing from a release tag with the exact locked dependency tree, the configuration rules, existing registrations, configuration changes, upgrades and removal.
 
@@ -105,7 +113,7 @@ The [installation guide](docs/installation.md) also covers installing from a rel
 - A workspace alias maps to a directory. Clients can select aliases only.
 - An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`.
 - A profile can grant individual tools of local stdio MCP servers to its sessions; see [External MCP tools in embedded sessions](docs/session-mcp.md).
-- An optional top-level `skillCatalog` maps skill aliases to `SKILL.md` files, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
+- An optional top-level `skillCatalog` maps skill aliases to `builtin:<name>` (a skill of the package or of your override directory) or to a `SKILL.md` file, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
 - The server reads the file once at startup. Start a new client session after changing it.
 
 ## Run it by hand
