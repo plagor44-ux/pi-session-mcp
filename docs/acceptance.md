@@ -836,3 +836,21 @@ These runs do not cover macOS, Codex skill discovery from the user's home
 (setup installs it there, and Level 2 checks the file, but no live Codex
 controller read it from there), the extension profile path live, or more than
 two concurrent sessions.
+
+Before its release, `v0.8.0` passed Level 1 and the working-tree Level 2 on
+its release candidate `6d197a0` on Linux (`x64`), with Node.js `26.11.1`, Codex
+CLI `0.162.1` and Claude Code `2.1.296`, on 2026-10-12:
+- Level 1: every command exited with `0`.
+  - The test run reported 43 files, 884 passed and 5 skipped.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 125 files, including the three skills.
+  - Doctor reported `packageVersion` `0.8.0`. With the example
+    configuration its only finding was the missing placeholder workspace.
+- Level 2 ran through `scripts/setup-acceptance.mjs` on the candidate's
+  working tree: 160 of 160 checks passed. All nine steps passed on all four
+  targets, including the controller skill finding of every step. The real
+  client registrations were unchanged, no process remained, and the built
+  files were unchanged.
+- Apart from the version, the candidate's sources equal the merge of #48,
+  whose final candidate `0ebbaa0` passed the multi-session skill acceptance
+  recorded above.
