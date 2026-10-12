@@ -30,7 +30,7 @@ describe("skill customization", () => {
   it("plans without writing in a dry run", async () => {
     const { run, finding, override } = await fixture();
     const outcome = await run("review", false);
-    expect(outcome).toMatchObject({ operation: "dry-run", status: "ok", exitCode: 0 });
+    expect(outcome).toMatchObject({ operation: "dry-run", status: "planned", exitCode: 0 });
     expect(finding(outcome)).toEqual({ target: { client: "skills", scope: "override", alias: "review" }, status: "planned", code: "skill_customize_planned" });
     await expect(stat(override)).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -83,7 +83,7 @@ describe("skill customization", () => {
     await writeFile(join(shipped, "SKILL.md"), "---\nname: review\ndescription: Shipped v2.\n---\n");
     const dry = await run("review", false);
     expect(finding(dry)).toMatchObject({ status: "planned", code: "skill_override_outdated" });
-    expect(dry.status).toBe("ok");
+    expect(dry.status).toBe("planned");
     expect((await readSkillBases(override)).review).not.toBe((await readSkillTree(shipped)).fingerprint);
     const applied = await run("review", true);
     expect(finding(applied)).toMatchObject({ status: "ok", code: "skill_base_updated" });

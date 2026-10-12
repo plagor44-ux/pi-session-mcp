@@ -258,7 +258,7 @@ describe("setup executable", () => {
       const createSetup = vi.fn(async (): Promise<never> => { throw new Error("must_not_start"); });
       const writes = captureStdout();
       expect(await main(["--json", "--customize-skill", "review"], { packageRoot, createSetup })).toBe(0);
-      expect(JSON.parse(writes.splice(0).join(""))).toMatchObject({ operation: "dry-run", status: "ok", findings: [{ target: { client: "skills", scope: "override", alias: "review" }, status: "planned", code: "skill_customize_planned" }] });
+      expect(JSON.parse(writes.splice(0).join(""))).toMatchObject({ operation: "dry-run", status: "planned", findings: [{ target: { client: "skills", scope: "override", alias: "review" }, status: "planned", code: "skill_customize_planned" }] });
       await expect(stat(override)).rejects.toMatchObject({ code: "ENOENT" });
       expect(await main(["--json", "--apply", "--customize-skill", "review"], { packageRoot, createSetup })).toBe(0);
       const output = writes.splice(0).join("");

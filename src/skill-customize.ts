@@ -90,7 +90,8 @@ function report(request: SkillCustomizeRequest, status: SetupStatus, code: strin
   const alias = SKILL_NAME_PATTERN.test(request.name) ? request.name : "invalid";
   const target: SetupTarget = { client: "skills", scope: "override", alias };
   const finding: SetupFinding = { target, status, code };
-  return result(request.apply ? "apply" : "dry-run", [finding]);
+  // A planned change reports `planned` overall, like a registration dry-run.
+  return result(request.apply ? "apply" : "dry-run", [finding], status === "planned" ? "planned" : undefined);
 }
 
 export async function customizeSkill(request: SkillCustomizeRequest): Promise<SetupResult> {
