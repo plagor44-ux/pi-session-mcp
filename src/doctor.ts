@@ -5,6 +5,8 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
+import { readSkillBases, SkillBasesError } from "./skill-customize.js";
+import { readSkillTree, shippedSkillsDirectory } from "./skill-library.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
@@ -13,7 +15,7 @@ export type DoctorCheckId =
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "extension_missing" | "extension_version_mismatch"
-  | "skill_missing" | "skill_unreadable" | "skill_duplicate";
+  | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
 
 export interface DoctorCheck {
   readonly id: DoctorCheckId;
@@ -49,7 +51,7 @@ export interface DoctorDependencies {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -89,6 +91,30 @@ async function productionBuildInputMtimes(root: string): Promise<number[]> {
   try { await visit(join(root, "src")); }
   catch (error) { if (!isMissing(error)) throw error; }
   return mtimes;
+}
+
+/**
+ * Compares the shipped skills with the fingerprints recorded when the operator copied them.
+ * Reads only the bases file and the shipped files; nothing is executed or changed.
+ */
+async function skillOverrideChecks(overrideDirectory: string | undefined, shippedDirectory: string): Promise<DoctorCheck[]> {
+  if (overrideDirectory === undefined) return [];
+  let bases: Readonly<Record<string, string>>;
+  try { bases = await readSkillBases(overrideDirectory); }
+  catch (error) {
+    if (error instanceof SkillBasesError) return [warning("skill_override_outdated", "skill:bases", "repair or remove the skill bases file")];
+    throw error;
+  }
+  const checks: DoctorCheck[] = [];
+  for (const [name, base] of Object.entries(bases).sort(([a], [b]) => a.localeCompare(b))) {
+    let fingerprint: string;
+    try { fingerprint = (await readSkillTree(join(shippedDirectory, name))).fingerprint; }
+    catch { continue; }
+    checks.push(fingerprint === base
+      ? ok("skill_override_outdated", `skill:${name}`)
+      : warning("skill_override_outdated", `skill:${name}`, `review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill ${name}`));
+  }
+  return checks;
 }
 
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
@@ -199,6 +225,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
+  if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot)));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
   const hasError = checks.some((check) => check.severity === "error");

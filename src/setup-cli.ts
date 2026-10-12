@@ -2,11 +2,16 @@ import { SetupOrchestrator, type SetupRequest } from "./setup.js";
 import type { SetupOperation, SetupResult, SetupTarget } from "./setup-result.js";
 
 /** Small argv adapter; command execution remains injected in SetupClientAdapter. */
-export interface SetupCliRequest extends SetupRequest { readonly json: boolean; }
+export interface SetupCliRequest extends SetupRequest {
+  readonly json: boolean;
+  /** `--customize-skill <name>`: copies a shipped skill into the override directory instead of touching clients. */
+  readonly customizeSkill?: string;
+}
 export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   let operation: SetupOperation | undefined;
   let json = false;
   const targets: SetupTarget[] = [];
+  let customizeSkill: string | undefined;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--json") { if (json) throw new Error("json_repeated"); json = true; continue; }
@@ -22,7 +27,19 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       targets.push({ client: parts[0]!, scope: parts[1]!, alias: parts[2]! });
       continue;
     }
+    if (argument === "--customize-skill") {
+      if (customizeSkill !== undefined) throw new Error("customize_skill_repeated");
+      const value = argv[++index];
+      if (value === undefined || value === "" || value.startsWith("-")) throw new Error("customize_skill_invalid");
+      customizeSkill = value;
+      continue;
+    }
     throw new Error("argument_unsupported");
+  }
+  if (customizeSkill !== undefined) {
+    // Skill customization is a dry-run or an explicit apply; it never targets a client.
+    if (targets.length > 0 || (operation !== undefined && operation !== "dry-run" && operation !== "apply")) throw new Error("customize_skill_combination");
+    return operation ? { operation, targets, json, customizeSkill } : { targets, json, customizeSkill };
   }
   return operation ? { operation, targets, json } : { targets, json };
 }

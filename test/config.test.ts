@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError, loadConfig } from "../src/config.js";
+import { shippedSkillsDirectory } from "../src/skill-library.js";
 
 afterAll(removeTemporaryRoots);
 
@@ -265,6 +266,55 @@ describe("skill catalog and profile skills", () => {
     } catch (error) { thrown = error; }
     expect(thrown).toMatchObject({ name: "ConfigError", code: "invalid_execution_profile_config" });
     if (path.length > 0) expect(`${String(thrown)} ${JSON.stringify(thrown)}`).not.toContain(path);
+  });
+
+  describe("builtin library skills", () => {
+    const shipped = (name: string) => join(shippedSkillsDirectory(), name, "SKILL.md");
+    const builtin = (value: string) => ({ skillCatalog: { lib: value }, executionProfiles: { safe: { ...safe, skills: ["lib"] } } });
+
+    it("resolves builtin:<name> to the shipped file, whatever the shell's directory", async () => {
+      const originalDirectory = process.cwd();
+      const { config } = await load(builtin("builtin:pi-session-review"));
+      process.chdir(await temporaryRoot("pi-session-mcp-skills-cwd-"));
+      try {
+        const loaded = await config();
+        expect(loaded.executionProfiles.get("safe")?.skills).toEqual([{ alias: "lib", path: shipped("pi-session-review") }]);
+      } finally { process.chdir(originalDirectory); }
+    });
+
+    it("lets an override next to the configuration file win and exposes the override directory", async () => {
+      const { base, config } = await load(builtin("builtin:pi-session-review"));
+      await mkdir(join(base, "skills", "pi-session-review"), { recursive: true });
+      await writeFile(join(base, "skills", "pi-session-review", "SKILL.md"), "---\nname: pi-session-review\n---\n");
+      const loaded = await config();
+      expect(loaded.executionProfiles.get("safe")?.skills).toEqual([{ alias: "lib", path: join(base, "skills", "pi-session-review", "SKILL.md") }]);
+      expect(loaded.skillOverrideDirectory).toBe(join(base, "skills"));
+    });
+
+    it("resolves an override-only name and keeps the shipped location for a missing skill", async () => {
+      const { base, config } = await load({
+        skillCatalog: { own: "builtin:own-skill", gone: "builtin:not-a-skill" },
+        executionProfiles: { safe: { ...safe, skills: ["own", "gone"] } },
+      });
+      await mkdir(join(base, "skills", "own-skill"), { recursive: true });
+      await writeFile(join(base, "skills", "own-skill", "SKILL.md"), "x");
+      expect((await config()).executionProfiles.get("safe")?.skills).toEqual([
+        { alias: "own", path: join(base, "skills", "own-skill", "SKILL.md") },
+        { alias: "gone", path: shipped("not-a-skill") },
+      ]);
+    });
+
+    it("still rejects two aliases that resolve to the same file", async () => {
+      const { config } = await load({
+        skillCatalog: { one: "builtin:pi-session-review", two: shipped("pi-session-review") },
+        executionProfiles: { safe: { ...safe, skills: ["one", "two"] } },
+      });
+      await expect(config()).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+    });
+
+    it.each(["builtin:", "builtin:Review", "builtin:a/b", "builtin:../x", "builtin:-x", "builtin:x-", "builtin:a--b", "builtin:" + "a".repeat(65), "builtin:review/SKILL.md", "Builtin:review", "builtin: review"])("rejects the invalid value %j", async (value) => {
+      await expect((await load(builtin(value))).config()).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+    });
   });
 
   it("limits the catalog size", async () => {

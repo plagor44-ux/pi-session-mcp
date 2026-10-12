@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "./extension-spec.js";
 import { isMcpServers, snapshotMcpServers, type McpServers } from "./mcp-config.js";
-import { isSkillCatalogPath, MAX_PROFILE_SKILLS, MAX_SKILL_CATALOG_ENTRIES, type SkillSelection } from "./skill-catalog.js";
+import { builtinSkillName, isSkillCatalogPath, MAX_PROFILE_SKILLS, MAX_SKILL_CATALOG_ENTRIES, type SkillSelection } from "./skill-catalog.js";
 import {
   ALIAS_PATTERN,
   ImmutableMap,
@@ -12,6 +12,7 @@ import {
   type PermissionProfile,
   type ThinkingLevel,
 } from "./execution-profile.js";
+import { builtinSkillPath, skillOverrideDirectory } from "./skill-library.js";
 
 const alias = z.string().regex(ALIAS_PATTERN);
 const permissionProfile = z.enum(["read-only", "coding"] satisfies [PermissionProfile, PermissionProfile]);
@@ -92,6 +93,8 @@ export interface AppConfig {
   readonly executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>;
   readonly defaultExecutionProfile: string;
   readonly configuration: ConfigurationMetadata;
+  /** Absolute skill override directory next to the configuration file. Internal; never projected. */
+  readonly skillOverrideDirectory: string;
 }
 
 function configurationFingerprint(bytes: Uint8Array): `sha256:${string}` {
@@ -102,10 +105,15 @@ function configurationFingerprint(bytes: Uint8Array): `sha256:${string}` {
  * Resolves a profile's selection against the catalog. Catalog paths resolve like workspaces,
  * against the configuration file's directory. Two selected aliases on the same path would
  * load one skill twice under different public names, so they invalidate the configuration.
+ * A `builtin:<name>` value resolves to the library skill: the operator's override, else the shipped one.
  */
-function resolveSkillSelection(selected: readonly string[] | undefined, catalog: Readonly<Record<string, string>>, base: string): readonly SkillSelection[] | undefined {
+function resolveSkillSelection(selected: readonly string[] | undefined, catalog: Readonly<Record<string, string>>, base: string, overrideDirectory: string): readonly SkillSelection[] | undefined {
   if (selected === undefined || selected.length === 0) return undefined;
-  const skills = selected.map((skill) => Object.freeze({ alias: skill, path: resolve(base, catalog[skill]!) }));
+  const resolveEntry = (value: string): string => {
+    const builtin = builtinSkillName(value);
+    return builtin === undefined ? resolve(base, value) : builtinSkillPath(builtin, { overrideDirectory });
+  };
+  const skills = selected.map((skill) => Object.freeze({ alias: skill, path: resolveEntry(catalog[skill]!) }));
   if (new Set(skills.map((skill) => skill.path)).size !== skills.length) throw new ConfigError("invalid_execution_profile_config");
   return Object.freeze(skills);
 }
@@ -136,10 +144,11 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
     throw error;
   }
   const base = dirname(absoluteConfig);
+  const overrideDirectory = skillOverrideDirectory(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
   const catalog = parsed.skillCatalog ?? {};
   const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, skills, ...value }]) => {
-    const selection = resolveSkillSelection(skills, catalog, base);
+    const selection = resolveSkillSelection(skills, catalog, base, overrideDirectory);
     return [key, Object.freeze({
       alias: key, ...value,
       ...(mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(mcpServers) }),
@@ -149,5 +158,5 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   }));
   const defaultEntry = [...executionProfiles].find(([, profile]) => profile.default);
   if (!defaultEntry) throw new Error("Execution profile configuration is invalid");
-  return { workspaces, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration };
+  return { workspaces, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, skillOverrideDirectory: overrideDirectory };
 }

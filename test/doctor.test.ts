@@ -5,6 +5,8 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
 import { ConfigError, type ConfigurationMetadata } from "../src/config.js";
 import { MAX_SKILL_FILE_BYTES } from "../src/skill-catalog.js";
+import { SKILL_BASES_FILE } from "../src/skill-customize.js";
+import { readSkillTree } from "../src/skill-library.js";
 import { parseDoctorArgs, renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorFileSystem } from "../src/doctor.js";
 
 function fsFor(paths: { readonly files?: readonly string[]; readonly dirs?: readonly string[]; readonly unreadable?: readonly string[]; readonly unwritable?: readonly string[] }): DoctorFileSystem {
@@ -37,6 +39,7 @@ const healthyConfig = async () => ({
   }]]),
   defaultExecutionProfile: "safe",
   configuration: TEST_CONFIGURATION,
+  skillOverrideDirectory: "/hidden/skills",
 });
 
 afterAll(removeTemporaryRoots);
@@ -317,6 +320,66 @@ describe("offline doctor", () => {
         expect(output).not.toMatch(/skills\/|body/);
       }
       expect(renderDoctorHuman(result)).toContain("ERROR skill_duplicate [safe:second]: select each skill file only once per profile");
+    });
+
+    describe("skill_override_outdated", () => {
+      const overrideChecks = (result: Awaited<ReturnType<typeof runDoctor>>) => result.checks.filter((check) => check.id === "skill_override_outdated");
+      async function overrideRoot() {
+        const root = await skillRoot();
+        const overrideDirectory = await temporaryRoot("pi-session-mcp-overrides-");
+        const config = async () => ({ ...(await healthyConfig()), workspaces: new Map([["repo", root]]), skillOverrideDirectory: overrideDirectory });
+        const writeBases = (bases: Record<string, string>) => writeFile(join(overrideDirectory, SKILL_BASES_FILE), JSON.stringify({ schemaVersion: 1, bases }));
+        return { root, overrideDirectory, config, writeBases };
+      }
+
+      it("adds nothing without a bases file", async () => {
+        const { root, config } = await overrideRoot();
+        expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([]);
+      });
+
+      it("reports an up-to-date skill as ok", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: (await readSkillTree(join(root, "skills", "review"))).fingerprint });
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{ id: "skill_override_outdated", severity: "ok", subject: "skill:review" }]);
+        expect(result.exitCode).toBe(0);
+      });
+
+      it("warns when the shipped skill changed since the recorded base", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: "0".repeat(64) });
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{
+          id: "skill_override_outdated", severity: "warning", subject: "skill:review",
+          remediation: "review the changed shipped skill, then run pi-session-mcp-setup --apply --customize-skill review",
+        }]);
+        expect(result.exitCode).toBe(1);
+        expect(result.ok).toBe(true);
+        for (const output of [renderDoctorJson(result), renderDoctorHuman(result)]) expect(output).not.toContain(root);
+      });
+
+      it("ignores a recorded skill that is no longer shipped", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ gone: "0".repeat(64) });
+        expect(overrideChecks(await runDoctor({ packageRoot: root, loadConfig: config }))).toEqual([]);
+      });
+
+      it("warns about a corrupt bases file without echoing it", async () => {
+        const { root, overrideDirectory, config } = await overrideRoot();
+        await writeFile(join(overrideDirectory, SKILL_BASES_FILE), "SECRET-not-json");
+        const result = await runDoctor({ packageRoot: root, loadConfig: config });
+        expect(overrideChecks(result)).toEqual([{ id: "skill_override_outdated", severity: "warning", subject: "skill:bases", remediation: "repair or remove the skill bases file" }]);
+        expect(renderDoctorJson(result)).not.toContain("SECRET");
+      });
+
+      it("sorts after the other skill checks", async () => {
+        const { root, config, writeBases } = await overrideRoot();
+        await writeBases({ review: "0".repeat(64) });
+        const result = await runDoctor({ packageRoot: root, loadConfig: async () => ({ ...(await config()), executionProfiles: (await configWithSkills(root, [{ alias: "review", path: join(root, "skills", "review", "SKILL.md") }])()).executionProfiles }) });
+        const ids = result.checks.map((check) => check.id).filter((id) => id.startsWith("skill_"));
+        expect(ids.at(-1)).toBe("skill_override_outdated");
+        expect(ids.indexOf("skill_duplicate")).toBeLessThan(ids.indexOf("skill_override_outdated"));
+      });
     });
   });
 });
