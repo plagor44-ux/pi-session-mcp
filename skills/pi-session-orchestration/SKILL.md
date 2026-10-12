@@ -31,6 +31,7 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 - Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
+- A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
 - Every concurrently writing worker needs its own prepared worktree workspace alias on the base commit you specified. Never let two writers share an alias. Read-only workers may share one.
 - A session's workspace and profile are fixed at start. Never try to switch them; start a new session instead.
 - The profile's tools set the limit. A skill grants no rights. If no listed profile can do the task, stop and report that instead of picking a more powerful one than needed.
@@ -44,7 +45,7 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 - Start all independent tasks (`pi_session_start`, then `pi_session_prompt`) before you wait on any of them.
 - A prompt call returns a running turn at once. Do not block on one task while others sit unstarted.
 - A session accepts one running turn. A second prompt on a running session fails with `session_running`.
-- Put the full task in the prompt: goal, base commit, change area, checks, expected report. The worker cannot see your conversation.
+- Put the full task in the prompt: goal, base commit, change area, checks, expected report. Add nothing the task does not ask for. The worker cannot see your conversation.
 
 ## 6. Poll with pauses
 
@@ -63,7 +64,7 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 
 Before you close a task or integrate anything:
 
-- inspect the actual files and diff in the worker's workspace,
+- inspect the actual files and diff in the worker's workspace, and stay within the paths you were given: do not search the machine for other files to confirm a result,
 - run the relevant tests and checks yourself,
 - compare the result with the scope you wrote down,
 - reject or send back work that is outside the change area or unverified.
