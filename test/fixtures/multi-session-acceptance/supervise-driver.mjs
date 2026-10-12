@@ -13,7 +13,7 @@ const statePath = join(dir, "state.json");
 const signals = new EventEmitter();
 const budgets = { timeoutMs: 2500, graceMs: 600, killWaitMs: 2000, drainMs: 600, intervalMs: 50 };
 const info = { entry: join(dir, "no-such-entry.js") };
-const scan = (rootPid) => snapshot(rootPid, dir, info);
+const scan = (rootPid, rootStart) => snapshot(rootPid, dir, info, rootStart);
 let poll;
 let options;
 if (mode === "spawn-failure") options = { file: join(dir, "no-such-client") };

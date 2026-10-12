@@ -545,20 +545,26 @@ export function procInfo(pid) {
 export const alive = ({ pid, start }) => { const now = procInfo(pid); return now?.start === start && now.state !== "Z"; };
 function readSafe(read) { try { return read(); } catch { return ""; } }
 
-export function snapshot(rootPid, run, info) {
+/**
+ * The processes of the run: the controller's tree, the run's servers and processes working inside the run. With
+ * `rootStart` the controller is matched by PID and start time, so a PID that the kernel reuses after the client
+ * exited never makes a foreign process, or its children, the run's own.
+ */
+export function snapshot(rootPid, run, info, rootStart) {
   const all = new Map();
   for (const name of readdirSync("/proc")) if (/^\d+$/.test(name)) { const p = procInfo(Number(name)); if (p) all.set(p.pid, p); }
+  const isRoot = (pid) => pid === rootPid && (rootStart === undefined || all.get(pid)?.start === rootStart);
   const found = [];
   for (const p of all.values()) {
-    let ancestor = p.ppid; let fromClient = p.pid === rootPid;
-    for (let hops = 0; ancestor > 1 && hops < 64 && !fromClient; hops += 1) { if (ancestor === rootPid) fromClient = true; ancestor = all.get(ancestor)?.ppid ?? 0; }
+    let ancestor = p.ppid; let fromClient = isRoot(p.pid);
+    for (let hops = 0; ancestor > 1 && hops < 64 && !fromClient; hops += 1) { if (isRoot(ancestor)) fromClient = true; ancestor = all.get(ancestor)?.ppid ?? 0; }
     const cmdline = readSafe(() => readFileSync(`/proc/${p.pid}/cmdline`, "utf8"));
     const isServer = cmdline.includes(info.entry) && readSafe(() => readFileSync(`/proc/${p.pid}/environ`, "utf8")).split("\0").includes(`PI_SESSION_MCP_CONFIG=${join(run, "private", "config.json")}`);
     const cwd = readSafe(() => readlinkSync(`/proc/${p.pid}/cwd`));
     const inRun = cwd !== "" && inside(cwd, run);
     // The fixture a process works in, for example `wait` for the worker's long shell command.
     const fixture = inRun ? relative(run, cwd).split("/").slice(1).join("/").match(/^fixtures\/([a-z]+)/)?.[1] : undefined;
-    if (fromClient || isServer || inRun) found.push({ ...p, fixture, role: isServer ? "server" : p.pid === rootPid ? "client" : fromClient ? "client-descendant" : "run-cwd" });
+    if (fromClient || isServer || inRun) found.push({ ...p, fixture, role: isServer ? "server" : isRoot(p.pid) ? "client" : fromClient ? "client-descendant" : "run-cwd" });
   }
   return found;
 }
@@ -634,7 +640,8 @@ export function killRecorded(list) {
  * them open. A spawn failure and SIGINT/SIGTERM delivered to the harness (through `signals`) end the run the
  * same way and are classified. Every timer, interval and listener is gone when the promise settles.
  *
- * `scan(rootPid)` lists the processes belonging to the run; the interval records them by PID and start time.
+ * `scan(rootPid, rootStart)` lists the processes belonging to the run; the interval records them by PID and
+ * start time. Without the client's start time nothing is recorded, since its PID alone proves nothing.
  */
 export async function superviseProcess({ file, args = [], cwd, env, budgets = {}, scan = () => [], signals = process }) {
   const b = validateBudgets(budgets);
@@ -671,8 +678,8 @@ export async function superviseProcess({ file, args = [], cwd, env, budgets = {}
   };
   const within = (promise, ms) => new Promise((done) => { const t = setTimeout(() => { timers.delete(t); done(false); }, ms); timers.add(t); promise.then(() => { clearTimeout(t); timers.delete(t); done(true); }); });
   const sweep = () => {
-    if (pgid === undefined) return;
-    try { for (const p of scan(pgid)) { const key = `${p.pid}:${p.start}`; seen.set(key, mergeSighting(seen.get(key), p)); } } catch { /* a racing /proc read */ }
+    if (pgid === undefined || childStart === undefined) return;
+    try { for (const p of scan(pgid, childStart)) { const key = `${p.pid}:${p.start}`; seen.set(key, mergeSighting(seen.get(key), p)); } } catch { /* a racing /proc read */ }
   };
   const ownAlive = () => [...seen.values()].filter((p) => ownedByRun(p) && alive(p));
   const gone = () => state.exited && groupMembers(pgid, childStart).length === 0 && ownAlive().length === 0;
@@ -963,7 +970,7 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   writeJsonOnce(join(priv, "launches", `${label}.json`), { launchedAt: new Date().toISOString() });
   const supervised = await superviseProcess({
     file, args, cwd: controller, budgets: { ...budgets, timeoutMs }, signals,
-    scan: (rootPid) => snapshot(rootPid, run, info),
+    scan: (rootPid, rootStart) => snapshot(rootPid, run, info, rootStart),
   });
   const { seen } = supervised;
   const durationSeconds = Math.round(supervised.elapsedMs / 1000);

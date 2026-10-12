@@ -150,6 +150,16 @@ describe("bounded supervision of the controller", () => {
     // A process seen first only by its working directory and later inside the client's tree becomes the run's own.
     expect(h.mergeSighting({ ...worker, role: "run-cwd" }, worker).role).toBe("client-descendant");
   });
+
+  it("takes a PID for the client only with the client's start time", async () => {
+    const dir = await temporaryRoot("msa-root-");
+    const info = { entry: join(dir, "no-such-entry.js") };
+    const self = h.procInfo(process.pid);
+    // This test process stands in for the client: with its own start time it is the root of the run's tree.
+    expect(h.snapshot(process.pid, dir, info, self.start).find((p: Recorded) => p.pid === process.pid)?.role).toBe("client");
+    // A reused PID has another start time: neither that process nor anything below it belongs to the run.
+    expect(h.snapshot(process.pid, dir, info, `${self.start}0`).filter((p: { role: string }) => p.role === "client" || p.role === "client-descendant")).toEqual([]);
+  });
 });
 
 describe("budget validation", () => {
