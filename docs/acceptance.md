@@ -688,3 +688,75 @@ Pi extension live check with the operator's configuration on 2026-10-11:
   prompt.
 - Two Cursor sessions completed in parallel.
 - No process remained, and no foreign line reached the MCP stdout.
+
+Profile skill selection (#46) passed a multi-session skill acceptance with Claude
+Code and Codex on 2026-10-12, on Linux (`x64`) with Node.js `26.11.1`, Claude
+Code `2.1.296`, Codex CLI `0.162.1` and Pi SDK `1.1.0`:
+- Candidate: detached checkouts of `bcef6ba` (runs 1 to 3), `a086339` (run 4)
+  and `b6cf624` (run 5), each clean and built with `npm ci`, `npm run build`
+  and `npm run build:cli`. `dist/main.js` has the same SHA-256 in all five
+  runs, `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`:
+  the commits after `bcef6ba` change only the orchestration skill text, the
+  acceptance harness and documentation.
+- Level 1 on `bcef6ba`: every command exited with `0`. The test run reported
+  40 files, 761 passed and 5 skipped; `npm audit` reported 0 vulnerabilities;
+  `npm pack --dry-run` listed the three skills and no harness. The test suite
+  passed again on `a086339` with the same counts.
+- Configuration: the same bytes in every run, fingerprint
+  `sha256:b754f0f5e4702d81d99183817abb379eeed2fb5733f93373852eb827ec16d687`,
+  with the profiles `accept-read` and `accept-code` derived from an OpenAI
+  `gpt-6-luna` profile with thinking level `low`, and the fixture aliases
+  `cc-slug`, `cc-stats`, `cc-wait`, `cc-range`, `cx-slug`, `cx-stats`, `cx-wait`
+  and `cx-range`. Offline Doctor reported no finding for it.
+- Every invocation confirmed the candidate's version and this fingerprint
+  through `pi_capabilities_get` as its first call, and saw the skills
+  `implementation` and `handshake` on `accept-code`. Exactly one server of the
+  run was observed per invocation, and no process of the controller tree, the
+  server or the fixtures remained afterwards. No Pi Session MCP result
+  contained a local path, the token or a credential marker, and no
+  `assistantText` mentioned one.
+
+Run 5, on `b6cf624` with the harness of that commit (SHA-256
+`ca851130bbade9f0b2700a43059b7ac3ce349dad40ad2b647133f950a408c719`), passed
+every check of all four invocations:
+
+| Client | Scenario | Result |
+| --- | --- | --- |
+| Claude Code | `parallel` | First turns overlapped by 25.1 s; follow-up in the same session completed; both fixtures pass their tests with only the allowed files changed, each written during a worker turn; `HANDSHAKE.txt` holds the token and was written during the follow-up turn, although no controller prompt contained the token and the controller never touched the private run directory; both sessions closed |
+| Claude Code | `abort` | First turns overlapped by 23.7 s; one abort, result `ok`; `aborted` seen through `pi_turn_get` before close; the abort fell inside the running interval of the neighbor, which then completed and passes its tests; the worker's `sleep` process was observed and ended; no late file; both sessions closed |
+| Codex | `parallel` | As for Claude Code, with an overlap of 24.8 s |
+| Codex | `abort` | As for Claude Code, with an overlap of 22.4 s |
+
+The controllers needed 1 to 6 `pi_turn_get` calls per turn and waited between
+polls with `sleep`. Each invocation took 93 to 156 seconds.
+
+Earlier attempts on the same build, kept on record:
+- Run 1 (Claude Code only, with the harness of `bcef6ba`): `parallel` passed
+  every check. In `abort` the abort itself passed (result `ok`, `aborted` seen
+  before close, the worker's `sleep` ended, no late file), but the neighbor
+  turn had completed about three seconds before the abort, so the run shows no
+  neighbor that keeps running. The neighbor task now starts with a bounded
+  `sleep 45` and the abort comes after about 15 seconds.
+- Run 2: three invocations passed every check. In Codex `parallel` every
+  functional check passed, including the handshake written during the
+  follow-up turn with a token that no prompt contained, but the controller
+  then read the run's private handshake skill to confirm the token. The
+  controller prompt now confines reads and commands to the fixtures.
+- Run 3: three invocations passed every check. In Codex `abort` the abort, the
+  running neighbor and cleanup passed, but the controller told both workers to
+  "follow configured handshake instructions" because capabilities listed a
+  `handshake` skill, so both fixtures got an extra `HANDSHAKE.txt`. The
+  orchestration skill now says that a listed skill is not a task.
+- Run 4 (`a086339`): three invocations passed every check. The Codex
+  `parallel` controller read the fixtures-only rule as excluding its own skill
+  directory, worked from `./fixtures`, and stopped after
+  `pi_capabilities_get` without starting a session. The rule now allows the
+  controller's own skill directory.
+
+No run showed a Pi Session MCP defect. The deviations were controller
+behavior and harness wording.
+
+This is a targeted check of skill selection and of two concurrent sessions
+per client. It is not the ten-task Level 3 cycle. It covers neither the
+extension profile path live (the automated SDK contract tests cover it), nor
+`read-only` workers, nor more than two concurrent sessions, nor macOS.

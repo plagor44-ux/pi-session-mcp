@@ -33,6 +33,10 @@ Not yet released.
   for the controlling Claude Code or Codex agent, and `pi-session-implementation`
   and `pi-session-review` for Pi workers. The example configuration registers
   the two worker skills.
+- Maintainers get `scripts/multi-session-acceptance.mjs`, a live check in which
+  a real Claude Code or Codex controller drives two concurrent Pi sessions
+  with selected skills, including a targeted abort. It is not part of the npm
+  package; see [acceptance](docs/acceptance.md#multi-session-skill-acceptance).
 
 ## 0.7.1 — 2026-10-11
 
