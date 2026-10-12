@@ -397,9 +397,10 @@ Pi Session MCP tools; the script never does.
   as `analysisFailed` and never passes, and the run's own processes are still
   terminated. A `SIGINT` or `SIGTERM` that the harness handles during the
   analysis records the result at once as `harnessAborted` and `analysisFailed`,
-  terminates the run's recorded processes and exits with 1. A harness that is
-  killed outright (`SIGKILL`, out of memory) leaves only the launch record;
-  `evidence` lists it as a launch without a result.
+  keeps the supervision's flags (`timedOut`, `spawnFailed`, `unterminated`),
+  terminates the run's recorded processes and exits with 1. A harness that ends
+  without handling a signal (for example `SIGKILL`, `SIGHUP` or out of memory)
+  writes no result; `evidence` lists its launch as one without a result.
 - Controller skill: from the harness of `3f98104` on, `prepare` installs the
   Claude Code controller skill the way an operator does, with the candidate's
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in

@@ -960,8 +960,12 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
       timedOut: supervised.timedOut, spawnFailed: supervised.spawnFailed, harnessAborted: supervised.harnessAborted || signal !== undefined,
       durationSeconds, stderrBytes: supervised.stderrBytes, analysisFailed: true,
     };
-    if (signal ?? supervised.abortSignal) result.abortSignal = signal ?? supervised.abortSignal;
-    result.acceptance = { passed: false, failures: [...(result.harnessAborted ? ["harnessAborted"] : []), "analysisFailed"] };
+    // The first signal that ended the run stays the recorded one.
+    if (supervised.abortSignal ?? signal) result.abortSignal = supervised.abortSignal ?? signal;
+    if (supervised.unterminated) result.unterminated = true;
+    if (supervised.drainDestroyed) result.drainDestroyed = true;
+    const failures = Object.entries({ timedOut: result.timedOut, spawnFailed: result.spawnFailed, harnessAborted: result.harnessAborted }).filter(([, set]) => set).map(([code]) => code);
+    result.acceptance = { passed: false, failures: [...failures, "analysisFailed"] };
     return result;
   };
   // superviseProcess has removed its signal listeners. A signal during the analysis would otherwise end the

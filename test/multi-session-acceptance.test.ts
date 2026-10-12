@@ -508,6 +508,16 @@ describe("runs against a synthetic layout with a controlled client", () => {
     await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
   }, 60_000);
 
+  it("keeps the supervision's classification in a result recorded after a signal during the analysis", async () => {
+    const run = await buildRun();
+    const signals = new EventEmitter();
+    let registrations = 0;
+    signals.on("newListener", (event) => { if (event === "SIGINT" && ++registrations === 2) queueMicrotask(() => signals.emit("SIGINT")); });
+    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run, { "timeout-min": "0.01" }), { signals, budgets: quick, exit: () => {} }), run);
+    expect(result).toMatchObject({ timedOut: true, harnessAborted: true, abortSignal: "SIGINT", analysisFailed: true });
+    expect(result.acceptance).toEqual({ passed: false, failures: ["timedOut", "harnessAborted", "analysisFailed"] });
+  }, 60_000);
+
   it("lists every launch in the evidence and marks one that left no result", async () => {
     const run = await buildRun();
     await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run);
