@@ -5,7 +5,7 @@ import { dirname } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import { acquireSetupGuardian } from "./setup-process.js";
 import { assertSupportedFilesystem, currentSetupPlatform, openLockedDarwin, type SetupPlatform } from "./setup-platform.js";
-import { SKILL_NAME_PATTERN } from "./skill-library.js";
+import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, SKILL_NAME_PATTERN, SKILL_TREE_FINGERPRINT_PATTERN } from "./skill-library.js";
 import type { SetupTarget } from "./setup-result.js";
 
 export interface OwnershipRecord {
@@ -16,7 +16,10 @@ export interface OwnershipRecord {
   readonly transactionId: string;
   /**
    * Skill records only, while pending: the fingerprint of setup's own copy that the pending
-   * update replaces, so an interrupted update can still be completed or removed.
+   * update replaces, so an interrupted update can still be completed or removed. The
+   * transaction id also names the update's intermediate directories, so recovery needs no path.
+   * Skill fingerprints are `v2:` values; a bare 64-hex value is a record that 0.8.0 wrote and
+   * names a tree only once a trusted reference proves it.
    */
   readonly replaces?: string;
 }
@@ -196,9 +199,12 @@ export function isRecord(value: unknown): value is OwnershipRecord {
   const skill = skillAlias !== null && SKILL_NAME_PATTERN.test(skillAlias[1]!) &&
     (client === "codex" ? scope === "user" && skillAlias[2] === undefined
       : client === "claude-code" && ((scope === "user" && skillAlias[2] === undefined) || (scope === "project" && skillAlias[2] !== undefined)));
+  // A registration fingerprint is a snapshot hash; a skill fingerprint is a version 2 tree value or a 0.8.0 legacy one.
+  const validFingerprint = (value: unknown): boolean => typeof value === "string" &&
+    (skill ? SKILL_TREE_FINGERPRINT_PATTERN.test(value) || LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(value) : /^[a-f0-9]{64}$/.test(value));
   // `replaces` belongs only to a pending skill record.
-  if ("replaces" in x && !(skill && x.phase === "pending" && typeof x.replaces === "string" && /^[a-f0-9]{64}$/.test(x.replaces))) return false;
-  return (registration || skill) && typeof x.fingerprint === "string" && /^[a-f0-9]{64}$/.test(x.fingerprint) &&
+  if ("replaces" in x && !(skill && x.phase === "pending" && validFingerprint(x.replaces))) return false;
+  return (registration || skill) && validFingerprint(x.fingerprint) &&
     (x.phase === "pending" || x.phase === "owned") && x.previous === "absent" &&
     typeof x.transactionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.transactionId);
 }

@@ -1,7 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, mkdir, open, realpath, rename, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import { CONTROLLER_SKILLS, readSkillTree, resolveLibrarySkill, skillOverrideDirectory, type SkillTree } from "./skill-library.js";
+import { lstat, mkdir, open, readdir, readFile, realpath, rename, rm, rmdir } from "node:fs/promises";
+import { basename, dirname, join, posix } from "node:path";
+import {
+  CONTROLLER_SKILLS, LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, MAX_SKILL_TREE_BYTES, MAX_SKILL_TREE_FILES, provesLegacyFingerprint,
+  RELEASED_SKILL_TREES, readSkillTree, resolveLibrarySkill, SKILL_TREE_FINGERPRINT_PATTERN, skillOverrideDirectory,
+  type ReleasedSkillTree, type SkillTree,
+} from "./skill-library.js";
 import type { OwnershipAccess, OwnershipRecord } from "./setup-ownership.js";
 import type { SetupFinding, SetupOperation, SetupStatus, SetupTarget } from "./setup-result.js";
 
@@ -20,22 +24,51 @@ export interface SetupSkillRoots {
   readonly home: string;
   readonly cwd: string;
 }
+/** The crash-relevant points of an update, in order. Only a test seam observes them. */
+export type SkillCheckpoint =
+  | "staged" | "backup-renamed" | "installed" | "trash-renamed" | "trash-entry-removed" | "trash-deleted" | "before-ownership";
+export interface SetupSkillDependencies {
+  /** Trusted released trees that prove 0.8.0 records; defaults to the shipped table. */
+  readonly released?: readonly ReleasedSkillTree[];
+  /** Test seam, called after each step in `SkillCheckpoint` completed; defaults to a no-op. */
+  readonly checkpoint?: (step: SkillCheckpoint) => void | Promise<void>;
+}
+type TreeSlot = { readonly state: "tree"; readonly fingerprint: string; readonly dev: number; readonly ino: number };
 type Slot =
   | { readonly state: "absent" }
   | { readonly state: "divergent" }
   /** A link to exactly the effective library skill: the operator's own, equivalent, never owned. */
   | { readonly state: "linked" }
-  | { readonly state: "tree"; readonly fingerprint: string; readonly dev: number; readonly ino: number };
+  | TreeSlot;
 interface Location { readonly path: string; readonly owned: SetupTarget }
+/** `settled`: nothing of the transaction is left; `retained`: something stays; `untouched`: the slot is not setup's copy. */
+type Recovery = "settled" | "retained" | "untouched";
+interface Intermediates { readonly staging: string; readonly backup: string; readonly trash: string }
 
-/** Whether a fingerprint is setup's own copy: the owned one, or the one a pending update replaces. */
+const TRANSACTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_TREE_DEPTH = 8;
+const MAX_TREE_ENTRIES = 256;
+
+/** Whether a version 2 fingerprint is setup's own copy: the owned one, or the one a pending update replaces. */
 function ownsFingerprint(record: OwnershipRecord, fingerprint: string): boolean {
   return fingerprint === record.fingerprint || (record.phase === "pending" && record.replaces === fingerprint);
+}
+const isLegacy = (value: string | undefined): value is string => value !== undefined && LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(value);
+const hasLegacy = (record: OwnershipRecord): boolean => isLegacy(record.fingerprint) || isLegacy(record.replaces);
+
+/**
+ * Every intermediate directory of an update is named after the pending record's transaction id
+ * in the slot's parent, so recovery derives them from persisted state and never searches.
+ */
+function intermediates(path: string, name: string, transactionId: string): Intermediates {
+  if (!TRANSACTION_ID.test(transactionId)) throw new Error("skill_transaction_invalid");
+  const base = join(dirname(path), `.pi-session-mcp-${name}-${transactionId}`);
+  return { staging: `${base}.staging`, backup: `${base}.backup`, trash: `${base}.trash` };
 }
 
 /** Paths remain internal. Ownership identifies a client slot, never its location. */
 export class FileSetupSkillInstaller implements SetupSkillInstaller {
-  constructor(private readonly roots: SetupSkillRoots) {}
+  constructor(private readonly roots: SetupSkillRoots, private readonly dependencies: SetupSkillDependencies = {}) {}
 
   async run(operation: SetupOperation, target: SetupTarget, ownership: OwnershipAccess): Promise<readonly SetupFinding[]> {
     const findings: SetupFinding[] = [];
@@ -51,6 +84,8 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     for (const name of CONTROLLER_SKILLS) if (await ownership.get((await this.location(target, name)).owned)) return true;
     return false;
   }
+
+  private async step(step: SkillCheckpoint): Promise<void> { await this.dependencies.checkpoint?.(step); }
 
   /**
    * The slot path and its ownership key. A project may be untrusted: only its root is
@@ -73,6 +108,17 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
   private library(name: string) {
     return resolveLibrarySkill(name, { overrideDirectory: skillOverrideDirectory(this.roots.configPath), packageRoot: this.roots.packageRoot });
   }
+
+  /**
+   * Whether the record names this installed tree: its version 2 value, or a 0.8.0 value that a
+   * trusted reference proves for exactly these bytes. A bare legacy value never proves identity.
+   */
+  private ownsTree(name: string, record: OwnershipRecord, slot: TreeSlot, references: readonly SkillTree[]): boolean {
+    if (ownsFingerprint(record, slot.fingerprint)) return true;
+    const named = record.phase === "pending" ? [record.fingerprint, record.replaces] : [record.fingerprint];
+    return named.some((value) => isLegacy(value) && provesLegacyFingerprint(name, value, slot, references, this.dependencies.released ?? RELEASED_SKILL_TREES));
+  }
+
   private async skill(operation: SetupOperation, target: SetupTarget, name: string, ownership: OwnershipAccess): Promise<SetupFinding> {
     const finding = (code: string, status: SetupStatus): SetupFinding => ({ target: { ...target, alias: name }, code, status });
     let location: Location;
@@ -84,9 +130,10 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     }
     const { path, owned: ownedTarget } = location;
     const library = this.library(name);
-    // Only a usable library skill can stand behind an accepted link; otherwise verify and apply would disagree.
-    const usable = library ? await readSkillTree(library.directory).then(() => true, () => false) : false;
-    const linkTarget = usable ? await realpath(library!.directory).catch(() => undefined) : undefined;
+    // Only a usable library skill can stand behind an accepted link or a legacy proof; otherwise verify and apply would disagree.
+    const desired = library ? await readSkillTree(library.directory).catch(() => undefined) : undefined;
+    const linkTarget = desired ? await realpath(library!.directory).catch(() => undefined) : undefined;
+    const references: readonly SkillTree[] = desired ? [desired] : [];
     if (operation === "remove" || operation === "rollback") {
       try {
         const owned = await ownership.get(ownedTarget);
@@ -95,6 +142,8 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
           const other = await ownership.get({ ...target, scope: target.scope === "local" ? "user" : "local" });
           if (other?.phase === "owned") return finding("skill_kept_shared", "unchanged");
         }
+        if (owned.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint)
+          && await this.recover(operation, path, name, owned, desired, linkTarget, ownership) === "retained") return finding("skill_recovery_retained", "divergent");
         const current = await inspectSlot(path, linkTarget);
         if (current.state === "absent") {
           healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership);
@@ -105,7 +154,8 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
           healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership);
           return finding("skill_not_owned", "unchanged");
         }
-        if (current.state !== "tree" || !ownsFingerprint(owned, current.fingerprint)) return finding("skill_divergent", "divergent");
+        if (current.state !== "tree") return finding("skill_divergent", "divergent");
+        if (!this.ownsTree(name, owned, current, references)) return finding(hasLegacy(owned) ? "skill_legacy_unverified" : "skill_divergent", "divergent");
         healthy(ownership);
         if (!await sameSlot(path, current, linkTarget)) return finding("skill_divergent", "divergent");
         healthy(ownership); await rm(path, { recursive: true }); healthy(ownership);
@@ -118,26 +168,26 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
       const current = await inspectSlot(path, linkTarget);
       if (current.state === "absent") return finding("skill_missing", "failed");
       if (current.state === "linked") return finding("skill_verified", "ok");
-      try {
-        if (!library) throw new Error("skill_source_invalid");
-        const desired = await readSkillTree(library.directory);
-        return current.state === "tree" && current.fingerprint === desired.fingerprint
-          ? finding("skill_verified", "ok") : finding("skill_not_equivalent", "failed");
-      } catch { return finding("skill_not_equivalent", "failed"); }
+      return desired && current.state === "tree" && current.fingerprint === desired.fingerprint
+        ? finding("skill_verified", "ok") : finding("skill_not_equivalent", "failed");
     }
-    let desired: SkillTree;
+    if (!desired) return finding("skill_source_invalid", "failed");
     try {
-      if (!library) throw new Error("skill_source_invalid");
-      desired = await readSkillTree(library.directory);
-    } catch { return finding("skill_source_invalid", "failed"); }
-    try {
+      let owned = await ownership.get(ownedTarget);
+      if (operation === "apply" && owned?.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint)
+        && await this.recover("apply", path, name, owned, desired, linkTarget, ownership) === "retained") return finding("skill_recovery_retained", "divergent");
       const current = await inspectSlot(path, linkTarget);
-      const owned = await ownership.get(ownedTarget);
       if (current.state === "linked") {
         if (operation === "apply" && owned) { healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership); }
         return finding("skill_linked", "unchanged");
       }
       if (current.state === "divergent") return finding("skill_divergent", "divergent");
+      if (owned && current.state === "tree" && hasLegacy(owned)) {
+        // A record from 0.8.0: it names the slot only if a trusted reference proves these exact bytes.
+        if (!this.ownsTree(name, owned, current, references)) return finding("skill_legacy_unverified", "divergent");
+        owned = { target: ownedTarget, fingerprint: current.fingerprint, previous: owned.previous, phase: "owned", transactionId: owned.transactionId };
+        if (operation === "apply") { healthy(ownership); await ownership.put(owned); healthy(ownership); }
+      }
       // A copy setup did not write, or its own copy modified since, is never replaced.
       if (current.state === "tree" && (!owned || !ownsFingerprint(owned, current.fingerprint))) {
         if (!owned && current.fingerprint === desired.fingerprint) return finding(operation === "apply" ? "skill_already_equivalent" : "skill_equivalent", "unchanged");
@@ -150,58 +200,129 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
         return finding(operation === "apply" ? "skill_already_equivalent" : "skill_equivalent", "unchanged");
       }
       if (operation === "dry-run") return current.state === "absent" ? finding("skill_absent", "absent") : finding("skill_update_planned", "planned");
-      // The pending record keeps the replaced fingerprint, so an interrupted update leaves a copy
-      // that setup can still finish or remove.
+      // The pending record is persisted before any intermediate exists. It names the intermediates
+      // (transaction id), the target and the replaced copy, so an interrupted update can be
+      // recovered, finished or removed from persisted state alone.
       const pending: OwnershipRecord = {
         target: ownedTarget, fingerprint: desired.fingerprint, previous: "absent", phase: "pending", transactionId: randomUUID(),
         ...(current.state === "tree" ? { replaces: current.fingerprint } : {}),
       };
       healthy(ownership); await ownership.put(pending); healthy(ownership);
-      await this.replace(path, name, desired, current, ownership);
+      await this.replace(path, name, desired, current, pending, ownership);
       healthy(ownership);
       const after = await inspectSlot(path);
       if (after.state !== "tree" || after.fingerprint !== desired.fingerprint) throw new Error("skill_post_install_mismatch");
+      await this.step("before-ownership");
       healthy(ownership); await ownership.put(ownedRecord(pending, desired.fingerprint)); healthy(ownership);
       return finding(current.state === "absent" ? "skill_installed" : "skill_updated", "ok");
     } catch { return finding(operation === "apply" ? "skill_install_failed" : "skill_source_invalid", "failed"); }
   }
 
-  private async replace(path: string, name: string, desired: SkillTree, current: Slot, ownership: OwnershipAccess): Promise<void> {
+  /**
+   * Installs the new tree through the transaction's own intermediates. A failure leaves them for
+   * recovery; nothing here deletes by guess.
+   */
+  private async replace(path: string, name: string, desired: SkillTree, current: Slot, record: OwnershipRecord, ownership: OwnershipAccess): Promise<void> {
     const parent = dirname(path);
+    const names = intermediates(path, name, record.transactionId);
     healthy(ownership); await ensureParents(parent, ownership); healthy(ownership);
-    const temporary = join(parent, `.pi-session-mcp-${name}-${randomUUID()}`);
-    const backup = join(parent, `.pi-session-mcp-${name}-${randomUUID()}`);
-    let staged = false;
-    try {
-      healthy(ownership); await mkdir(temporary, { mode: 0o755 }); staged = true;
-      for (const file of desired.files) {
-        healthy(ownership);
-        const destination = join(temporary, ...file.path.split("/"));
-        await ensureParents(dirname(destination), ownership);
-        healthy(ownership);
-        const handle = await open(destination, "wx", 0o644);
-        try { await handle.writeFile(file.bytes); await handle.sync(); } finally { await handle.close(); }
-      }
-      await syncTreeDirectories(temporary, desired, ownership);
+    healthy(ownership); await mkdir(names.staging, { mode: 0o755 });
+    for (const file of desired.files) {
       healthy(ownership);
-      if (!await sameSlot(path, current)) throw new Error("skill_slot_changed");
+      const destination = join(names.staging, ...file.path.split("/"));
+      await ensureParents(dirname(destination), ownership);
       healthy(ownership);
-      if (current.state === "tree") {
-        await rename(path, backup); healthy(ownership); await syncDirectory(parent); healthy(ownership);
-      }
-      await rename(temporary, path); staged = false;
-      healthy(ownership); await syncDirectory(parent); healthy(ownership);
-      const after = await inspectSlot(path);
-      if (after.state !== "tree" || after.fingerprint !== desired.fingerprint) throw new Error("skill_post_install_mismatch");
-      if (current.state === "tree") {
-        // Delete only the exact old tree moved by this transaction.
-        if (!await sameSlot(backup, current)) throw new Error("skill_backup_changed");
-        healthy(ownership); await rm(backup, { recursive: true }); healthy(ownership); await syncDirectory(parent);
-      }
-    } finally {
-      // An unhealthy fence retains staged/backup content for conservative recovery.
-      if (staged) { healthy(ownership); await rm(temporary, { recursive: true, force: true }); }
+      const handle = await open(destination, "wx", 0o644);
+      try { await handle.writeFile(file.bytes); await handle.sync(); } finally { await handle.close(); }
     }
+    await syncTreeDirectories(names.staging, desired, ownership);
+    await this.step("staged");
+    healthy(ownership);
+    if (!await sameSlot(path, current)) throw new Error("skill_slot_changed");
+    healthy(ownership);
+    if (current.state === "tree") {
+      // A rename onto an existing empty directory would replace it silently.
+      if (await present(names.backup)) throw new Error("skill_backup_exists");
+      await rename(path, names.backup); healthy(ownership); await syncDirectory(parent); healthy(ownership);
+      await this.step("backup-renamed");
+    }
+    await rename(names.staging, path);
+    healthy(ownership); await syncDirectory(parent); healthy(ownership);
+    await this.step("installed");
+    const after = await inspectSlot(path);
+    if (after.state !== "tree" || after.fingerprint !== desired.fingerprint) throw new Error("skill_post_install_mismatch");
+    if (current.state === "tree") await this.discardBackup(names, current, parent, ownership);
+  }
+
+  /**
+   * Deletes the backup only after it is verified to be the exact old copy: it is renamed to the
+   * transaction's trash name first, so the deletion never leaves an unverifiable partial tree
+   * under the backup name.
+   */
+  private async discardBackup(names: Intermediates, backup: TreeSlot, parent: string, ownership: OwnershipAccess): Promise<void> {
+    if (await present(names.trash)) throw new Error("skill_trash_exists");
+    if (!await sameSlot(names.backup, backup)) throw new Error("skill_backup_changed");
+    healthy(ownership); await rename(names.backup, names.trash); healthy(ownership); await syncDirectory(parent); healthy(ownership);
+    await this.step("trash-renamed");
+    await this.discardTrash(names, parent, ownership);
+    await this.step("trash-deleted");
+  }
+
+  /** Deletes the transaction's trash entry by entry, so a crash leaves only a smaller partial tree. */
+  private async discardTrash(names: Intermediates, parent: string, ownership: OwnershipAccess): Promise<void> {
+    await removeEntries(names.trash, parent, ownership, () => this.step("trash-entry-removed"));
+  }
+
+  /**
+   * Settles an interrupted update of the pending record's transaction, inside the ownership
+   * transaction. Only directories with this transaction's exact names are examined, and only
+   * verified ones are deleted: the backup must equal the replaced copy, the staging directory
+   * the target or an interrupted write of it. Anything else stays and is reported.
+   *
+   * apply, slot absent: a complete staging directory is renamed into the slot (forward);
+   * otherwise a verified backup is moved back. remove and rollback do not restore, they delete
+   * what is verified and leave the slot to the caller.
+   */
+  private async recover(
+    operation: "apply" | "remove" | "rollback", path: string, name: string, record: OwnershipRecord,
+    library: SkillTree | undefined, linkTarget: string | undefined, ownership: OwnershipAccess,
+  ): Promise<Recovery> {
+    const parent = dirname(path);
+    const names = intermediates(path, name, record.transactionId);
+    const target = record.fingerprint;
+    const previous = record.replaces !== undefined && SKILL_TREE_FINGERPRINT_PATTERN.test(record.replaces) ? record.replaces : undefined;
+    const slot = await inspectSlot(path, linkTarget);
+    // Only an empty slot, a link or one of setup's two copies can have intermediates of this transaction settled.
+    if (slot.state === "divergent" || (slot.state === "tree" && slot.fingerprint !== target && slot.fingerprint !== previous)) return "untouched";
+    // A trash directory with the transaction's name was verified before it was renamed, so on
+    // recovery it may be partial. It is deleted after a structural recheck: a real directory,
+    // not a link, only regular files and directories, no hidden entries, within the tree limits.
+    if (await present(names.trash)) {
+      if (await collectPlain(names.trash) === undefined) return "retained";
+      await this.discardTrash(names, parent, ownership);
+    }
+    let backup = await inspectSlot(names.backup);
+    if (backup.state === "divergent" || (backup.state === "tree" && backup.fingerprint !== previous)) return "retained";
+    let staging = await classifyStaging(names.staging, target, library);
+    if (staging === "foreign") return "retained";
+    if (operation === "apply" && slot.state === "absent") {
+      if (staging === "complete" || backup.state === "tree") {
+        const source = staging === "complete" ? names.staging : names.backup;
+        const expected = staging === "complete" ? target : previous;
+        healthy(ownership);
+        if (!await sameSlot(path, slot)) throw new Error("skill_slot_changed");
+        healthy(ownership); await rename(source, path); healthy(ownership); await syncDirectory(parent); healthy(ownership);
+        const restored = await inspectSlot(path);
+        if (restored.state !== "tree" || restored.fingerprint !== expected) throw new Error("skill_recovery_mismatch");
+        if (staging === "complete") staging = "absent"; else backup = { state: "absent" };
+      }
+    }
+    if (backup.state === "tree") await this.discardBackup(names, backup, parent, ownership);
+    if (staging !== "absent") {
+      healthy(ownership);
+      await removeEntries(names.staging, parent, ownership);
+    }
+    return "settled";
   }
 }
 
@@ -253,6 +374,76 @@ async function sameSlot(path: string, expected: Slot, linkTarget?: string): Prom
   const actual = await inspectSlot(path, linkTarget);
   return expected.state === "absent" ? actual.state === "absent" :
     expected.state === "tree" && actual.state === "tree" && actual.fingerprint === expected.fingerprint && actual.dev === expected.dev && actual.ino === expected.ino;
+}
+async function present(path: string): Promise<boolean> {
+  try { await lstat(path); return true; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+}
+
+/**
+ * The regular files and directories (relative, `/` separated) below a directory, or undefined
+ * unless it is a real directory with only regular files and directories, no hidden entry, and
+ * within the tree limits. A link or special file is never followed or counted as plain.
+ */
+async function collectPlain(root: string): Promise<{ readonly files: string[]; readonly directories: string[] } | undefined> {
+  const files: string[] = []; const directories: string[] = [];
+  let bytes = 0; let entries = 0;
+  const visit = async (current: string, prefix: string, depth: number): Promise<boolean> => {
+    if (depth > MAX_TREE_DEPTH) return false;
+    for (const entry of await readdir(current)) {
+      if (entry.startsWith(".") || ++entries > MAX_TREE_ENTRIES) return false;
+      const path = join(current, entry); const relative = prefix === "" ? entry : `${prefix}/${entry}`;
+      const info = await lstat(path);
+      if (info.isDirectory()) { directories.push(relative); if (!await visit(path, relative, depth + 1)) return false; continue; }
+      if (!info.isFile()) return false;
+      bytes += info.size;
+      if (files.length + 1 > MAX_SKILL_TREE_FILES || bytes > MAX_SKILL_TREE_BYTES) return false;
+      files.push(relative);
+    }
+    return true;
+  };
+  try {
+    const info = await lstat(root);
+    return info.isDirectory() && await visit(root, "", 0) ? { files, directories } : undefined;
+  } catch { return undefined; }
+}
+
+/**
+ * How a staging directory of the pending record relates to its target: `complete` (its tree
+ * equals the target fingerprint), `partial` (an interrupted write: every entry is a regular file
+ * of the target tree whose content equals that file or a prefix of it, or a directory on the path
+ * of one, checked only against the current library tree when it is the record's target),
+ * `absent`, or `foreign`, which is never deleted.
+ */
+async function classifyStaging(staging: string, target: string, library: SkillTree | undefined): Promise<"absent" | "complete" | "partial" | "foreign"> {
+  const staged = await inspectSlot(staging);
+  if (staged.state === "absent") return "absent";
+  if (staged.state === "tree" && staged.fingerprint === target) return "complete";
+  if (!library || library.fingerprint !== target) return "foreign";
+  const plain = await collectPlain(staging);
+  if (!plain) return "foreign";
+  const expected = new Map(library.files.map((file) => [file.path, file.bytes]));
+  const ancestors = new Set<string>();
+  for (const file of library.files) for (let cursor = posix.dirname(file.path); cursor !== "."; cursor = posix.dirname(cursor)) ancestors.add(cursor);
+  if (!plain.directories.every((directory) => ancestors.has(directory))) return "foreign";
+  for (const file of plain.files) {
+    const bytes = expected.get(file);
+    if (!bytes) return "foreign";
+    const content = await readFile(join(staging, ...file.split("/")));
+    if (content.length > bytes.length || !bytes.subarray(0, content.length).equals(content)) return "foreign";
+  }
+  return "partial";
+}
+
+/** Removes a verified directory entry by entry and then itself, with directory fsyncs, so a crash leaves a smaller partial tree. */
+async function removeEntries(directory: string, parent: string, ownership: OwnershipAccess, afterEntry?: () => Promise<void>): Promise<void> {
+  for (const entry of await readdir(directory)) {
+    healthy(ownership); await rm(join(directory, entry), { recursive: true }); healthy(ownership);
+    await syncDirectory(directory);
+    await afterEntry?.();
+  }
+  healthy(ownership); await rmdir(directory); healthy(ownership);
+  await syncDirectory(parent); healthy(ownership);
 }
 async function ensureParents(directory: string, ownership: OwnershipAccess): Promise<void> {
   if (dirname(directory) !== directory) await ensureParents(dirname(directory), ownership);

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
-import { DurableOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
+import { DurableOwnershipStore, isRecord, type OwnershipRecord } from "../src/setup-ownership.js";
 import { currentSetupPlatform } from "../src/setup-platform.js";
 import { cleanupFixtureProcesses, expectProcessTerminated, isLockHeld, processState, readPidIfPresent, readTextIfPresent, signalFixtureProcess, stopFixtureGuardian, stopFixtureProcess, waitForPidFile } from "./process-fixture.js";
 
@@ -347,5 +347,36 @@ describe("durable setup ownership platform gate", () => {
       await expect(new DurableOwnershipStore(join(directory, "state", "ownership.json")).transaction(async () => undefined)).rejects.toThrow("platform_unsupported");
       expect(existsSync(join(directory, "state"))).toBe(false);
     } finally { vi.restoreAllMocks(); }
+  });
+});
+
+describe("ownership record fingerprints", () => {
+  const v2 = `v2:${"b".repeat(64)}`; const legacy = "a".repeat(64);
+  const registration = { client: "codex", scope: "user", alias: "pi-session-mcp" };
+  const skillRecord = { client: "codex", scope: "user", alias: "skill:pi-session-orchestration" };
+  const record = (target: object, fingerprint: string, extra: object = {}): unknown =>
+    ({ target, fingerprint, previous: "absent", phase: "owned", transactionId: randomUUID(), ...extra });
+
+  it("accepts version 2 and legacy values for skill records, in fingerprint and replaces", () => {
+    for (const fingerprint of [v2, legacy]) {
+      expect(isRecord(record(skillRecord, fingerprint))).toBe(true);
+      for (const replaces of [v2, legacy]) expect(isRecord(record(skillRecord, fingerprint, { phase: "pending", replaces }))).toBe(true);
+    }
+  });
+  it("keeps exactly 64 hex for registration records", () => {
+    expect(isRecord(record(registration, legacy))).toBe(true);
+    expect(isRecord(record(registration, v2))).toBe(false);
+  });
+  it("rejects malformed values and unknown fields", () => {
+    for (const bad of [`v2:${"b".repeat(63)}`, `v3:${"b".repeat(64)}`, `V2:${"b".repeat(64)}`, `v2:${"B".repeat(64)}`, "v2:", "b".repeat(63), `${legacy}0`, ` ${legacy}`, ""]) {
+      expect(isRecord(record(skillRecord, bad))).toBe(false);
+      expect(isRecord(record(skillRecord, v2, { phase: "pending", replaces: bad }))).toBe(false);
+    }
+    expect(isRecord(record(skillRecord, v2, { replaces: v2 }))).toBe(false);
+    expect(isRecord(record(registration, legacy, { phase: "pending", replaces: legacy }))).toBe(false);
+    for (const extra of [{ path: "/secret" }, { staging: "x" }, { backup: true }]) {
+      expect(isRecord(record(skillRecord, v2, extra))).toBe(false);
+      expect(isRecord(record(skillRecord, v2, { phase: "pending", replaces: v2, ...extra }))).toBe(false);
+    }
   });
 });
