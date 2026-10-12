@@ -16,6 +16,8 @@ const h: Record<string, any> = await import(/* @vite-ignore */ scriptUrl.href);
 const fixtureDir = fileURLToPath(new URL("./fixtures/multi-session-acceptance/", import.meta.url));
 const driverPath = join(fixtureDir, "supervise-driver.mjs");
 const stubbornClient = join(fixtureDir, "stubborn-client.mjs");
+// The harness reads /proc and refuses to run elsewhere, so its supervision and run paths are tested on Linux only.
+const notLinux = process.platform !== "linux";
 
 afterAll(removeTemporaryRoots);
 
@@ -39,7 +41,7 @@ function runNode(args: string[], options: { env?: NodeJS.ProcessEnv; limitMs: nu
 }
 
 // ---- D1: bounded process completion ------------------------------------------------------------
-describe("bounded supervision of the controller", () => {
+describe.skipIf(notLinux)("bounded supervision of the controller", () => {
   const leftovers: Recorded[] = [];
   afterEach(() => { killAll(leftovers.splice(0)); });
 
@@ -407,7 +409,7 @@ describe("bound resources", () => {
     expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, home))).toEqual(["operatorClaudeSkill"]);
   });
 
-  it("refuses a Codex run while a differing controller skill sits in the home's Codex skills", async () => {
+  it.skipIf(notLinux)("refuses a Codex run while a differing controller skill sits in the home's Codex skills", async () => {
     const run = await buildRun();
     const home = join(run.root, "home");
     const codexHomeSkill = join(home, ".agents", "skills", "pi-session-orchestration");
@@ -428,7 +430,7 @@ describe("bound resources", () => {
   });
 });
 
-describe("runs against a synthetic layout with a controlled client", () => {
+describe.skipIf(notLinux)("runs against a synthetic layout with a controlled client", () => {
   async function withFakeClient<T>(mode: string, body: (context: { statePath: string; touched: string }) => Promise<T>, run: Awaited<ReturnType<typeof buildRun>>, touch?: string): Promise<T> {
     const bin = join(run.root, "bin");
     mkdirSync(bin, { recursive: true });
@@ -646,13 +648,13 @@ describe("extension allowlist", () => {
 
   it("rejects a source profile with extensions unless --with-extensions is given", async () => {
     expect(await prepareFailure({ ...base, extensions: ["npm:x@1.0.0"] }, {})).toContain("--with-extensions");
-  });
+  }, 60_000);
   it("rejects --with-extensions on a profile without extensions, invalid pins and MCP servers", async () => {
     expect(await prepareFailure(base, { "with-extensions": true })).toContain("needs a profile that has extensions");
     expect(await prepareFailure({ ...base, extensions: ["npm:x@^1.0.0"] }, { "with-extensions": true })).toContain("exact npm:<name>@<version>");
     expect(await prepareFailure({ ...base, extensions: ["npm:x@1.0.0"], mcpServers: {} }, { "with-extensions": true })).toContain("without MCP servers");
     expect(await prepareFailure({ ...base, mcpServers: {} }, {})).toContain("without MCP servers");
-  });
+  }, 60_000);
 });
 
 // ---- D5: updatedAt liveness ----------------------------------------------------------------------

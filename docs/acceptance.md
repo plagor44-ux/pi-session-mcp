@@ -1068,7 +1068,7 @@ Linux (`x64`) with Node.js `26.11.1`, Claude Code `2.1.296`, Codex CLI
   built `dist/` and `.pi-session-mcp-cli/` are byte-identical for every
   candidate below (`0f7c376`, `06471b5`, `cb6e949` and `1e904be`): the commits
   after `0f7c376` change only the acceptance harness, its tests and
-  documentation. After `1e904be` the change adds only this record.
+  documentation. The commits after `1e904be` change only tests and documentation.
 - Level 1 on that checkout: every command exited with `0`. The test run
   reported 50 files, 1035 passed and 6 skipped; `npm audit` and
   `npm audit --omit=dev` reported 0 vulnerabilities; `npm pack --dry-run`
