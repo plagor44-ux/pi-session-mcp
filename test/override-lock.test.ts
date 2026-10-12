@@ -24,7 +24,9 @@ describe("platform gate", () => {
     const root = await directory();
     expect(await failure(acquireOverrideLock(root, { platform: "linux", isTrustedBinary: () => false }))).toBe("override_lock_unavailable");
     expect(await failure(acquireOverrideLock(root, { platform: "linux", flockCandidates: [], isTrustedBinary: () => true }))).toBe("override_lock_unavailable");
-    expect(await failure(acquireOverrideLock(root, { readStatfs: async () => ({ type: 0 }) }))).toBe("override_lock_unavailable");
+    expect(await failure(acquireOverrideLock(root, { platform: "linux", isTrustedBinary: () => true, readStatfs: async () => ({ type: 0 }) }))).toBe("override_lock_unavailable");
+    // macOS: the directory must share the filesystem type of `/`.
+    expect(await failure(acquireOverrideLock(root, { platform: "darwin", readStatfs: async (path) => ({ type: path === "/" ? 1 : 2 }) }))).toBe("override_lock_unavailable");
     expect(await readdir(root)).toEqual([]);
   });
 

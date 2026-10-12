@@ -298,7 +298,13 @@ describe("skill customization transaction", () => {
 
   it("fails closed with skill_customize_lock_unavailable and writes no copy or bases", async () => {
     const { apply, override } = await twoSkills();
-    for (const lock of [{ platform: "win32" as const }, { isTrustedBinary: () => false }, { readStatfs: async () => ({ type: 0 }) }]) {
+    const unavailable = [
+      { platform: "win32" as const },
+      { platform: "linux" as const, isTrustedBinary: () => false },
+      { platform: "linux" as const, isTrustedBinary: () => true, readStatfs: async () => ({ type: 0 }) },
+      { platform: "darwin" as const, readStatfs: async (path: string) => ({ type: path === "/" ? 1 : 2 }) },
+    ];
+    for (const lock of unavailable) {
       const outcome = await apply("review", { lock });
       expect(outcome.findings[0]).toMatchObject({ status: "failed", code: "skill_customize_lock_unavailable" });
       expect(await entries(override)).toEqual([]);
