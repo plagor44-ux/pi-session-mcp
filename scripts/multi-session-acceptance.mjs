@@ -28,7 +28,7 @@ import {
   existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { parseArgs } from "node:util";
 
 const SERVER = "pi-candidate";
@@ -121,18 +121,21 @@ function prepare(values) {
       writeFixture(dir, FIXTURES[task]);
       workspaces[`${prefix}-${task}`] = relative(priv, dir);
     }
-    // Run-scoped skill for the controller: one link to the canonical source, nothing global.
-    const skillRoot = client === "claude" ? join(controller, ".claude", "skills") : join(controller, ".agents", "skills");
-    mkdirSync(skillRoot, { recursive: true });
-    symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(skillRoot, "pi-session-orchestration"));
   }
+  // Codex installs skills only in the user's home, which this run must not change, so the
+  // Codex controller gets a run-scoped link to the candidate's skill in its repository skills.
+  const codexSkills = join(run, "controller-codex", ".agents", "skills");
+  mkdirSync(codexSkills, { recursive: true });
+  symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(codexSkills, "pi-session-orchestration"));
   const profile = { provider: source.provider, model: source.model, thinkingLevel: source.thinkingLevel };
   const config = {
     workspaces,
+    // Library references: the shipped worker skills, and the handshake skill from the override
+    // directory `skills/` next to this configuration.
     skillCatalog: {
-      implementation: join(candidate, "skills", "pi-session-implementation", "SKILL.md"),
-      review: join(candidate, "skills", "pi-session-review", "SKILL.md"),
-      handshake: "skills/acceptance-handshake/SKILL.md",
+      implementation: "builtin:pi-session-implementation",
+      review: "builtin:pi-session-review",
+      handshake: "builtin:acceptance-handshake",
     },
     executionProfiles: {
       "accept-read": { default: true, permissionProfile: "read-only", ...profile, skills: ["review"] },
@@ -143,6 +146,7 @@ function prepare(values) {
   writeFileSync(join(priv, "config.json"), configBytes, { mode: 0o600 });
   const node = process.execPath;
   writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: { PI_SESSION_MCP_CONFIG: join(priv, "config.json") } } } });
+  const claudeSkillSetup = installClaudeSkill(candidate, run, priv);
   const packageJson = readJson(join(candidate, "package.json"));
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: candidate, encoding: "utf8" });
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: candidate, encoding: "utf8" });
@@ -154,10 +158,40 @@ function prepare(values) {
     entrySha256: sha256(readFileSync(entry)),
     harnessSha256: HARNESS_SHA256,
     configFingerprint: `sha256:${sha256(configBytes)}`,
+    claudeSkillSetup,
     profile: { from: values["from-profile"], ...profile },
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
+}
+
+/**
+ * Installs the Claude Code controller skill the way an operator does: the candidate's
+ * `pi-session-mcp-setup --apply` for the project scope of the controller directory. Setup state
+ * and the client's own files go to a disposable home, so no real registration changes; the
+ * controller later runs with the real home and only reads the project skill.
+ */
+function installClaudeSkill(candidate, run, priv) {
+  const home = join(run, "setup-home");
+  mkdirSync(home, { recursive: true, mode: 0o700 });
+  const claude = spawnSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim();
+  if (!claude) fail("claude is not on PATH");
+  const path = [...new Set([dirname(process.execPath), dirname(claude), "/usr/bin", "/bin"])].join(":");
+  const setup = spawnSync("env", ["-i", `HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${join(priv, "config.json")}`,
+    process.execPath, join(candidate, "dist", "setup-main.js"), "--apply", "--json", "--target", "claude-code:project:pi-session-mcp"],
+  { cwd: join(run, "controller-claude"), encoding: "utf8", timeout: 120_000 });
+  let parsed; try { parsed = JSON.parse(setup.stdout); } catch { parsed = undefined; }
+  const codes = (parsed?.findings ?? []).map((finding) => `${finding.target.alias}:${finding.code}`);
+  const installed = join(run, "controller-claude", ".claude", "skills", "pi-session-orchestration", "SKILL.md");
+  const copied = readSafe(() => readFileSync(installed));
+  const shipped = readFileSync(join(candidate, "skills", "pi-session-orchestration", "SKILL.md"));
+  const result = {
+    exitCode: setup.status, codes,
+    installedAsCopy: Boolean(copied) && !readSafe(() => readlinkSync(join(run, "controller-claude", ".claude", "skills", "pi-session-orchestration"))),
+    matchesShipped: Boolean(copied) && Buffer.compare(copied, shipped) === 0,
+  };
+  if (setup.status !== 0 || !result.installedAsCopy || !result.matchesShipped) fail(`setup did not install the Claude Code skill: ${JSON.stringify(result)}`);
+  return result;
 }
 
 // ---- controller prompts -----------------------------------------------------------
@@ -467,7 +501,7 @@ function evidence(values) {
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
     sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, harnessSha256: info.harnessSha256,
-    configFingerprint: info.configFingerprint, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
+    configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
     results,
   }, null, 2);
   for (const marker of [homedir(), info.token, info.candidate, resolve(values.run)]) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
