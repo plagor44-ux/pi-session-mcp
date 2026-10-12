@@ -198,3 +198,79 @@ describe("execution profile extensions", () => {
     await expect(loadProfiles({ safe: { ...safe, extensions } })).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
   });
 });
+
+describe("skill catalog and profile skills", () => {
+  const safe = { default: true, permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off" };
+
+  async function load(value: Record<string, unknown>, directory = "config dir") {
+    const root = await temporaryRoot("pi-session-mcp-skills-");
+    await mkdir(join(root, directory));
+    const path = join(root, directory, "config.json");
+    await writeFile(path, JSON.stringify({ workspaces: { repo: "." }, ...value }));
+    return { root, base: join(root, directory), config: () => loadConfig(path) };
+  }
+
+  it("resolves selected skills against the configuration directory in configured order", async () => {
+    const originalDirectory = process.cwd();
+    const { base, config } = await load({
+      skillCatalog: { review: "skills/review/SKILL.md", plan: "../shared/plan/SKILL.md", other: "/abs/other/SKILL.md" },
+      executionProfiles: { safe: { ...safe, skills: ["plan", "review"] }, bare: { ...safe, default: false } },
+    });
+    // The shell's directory never takes part in the resolution.
+    process.chdir(await temporaryRoot("pi-session-mcp-skills-cwd-"));
+    try {
+      const loaded = await config();
+      expect(loaded.executionProfiles.get("safe")?.skills).toEqual([
+        { alias: "plan", path: resolve(base, "../shared/plan/SKILL.md") },
+        { alias: "review", path: resolve(base, "skills/review/SKILL.md") },
+      ]);
+      expect(Object.isFrozen(loaded.executionProfiles.get("safe")?.skills)).toBe(true);
+      expect(loaded.executionProfiles.get("bare")).not.toHaveProperty("skills");
+    } finally { process.chdir(originalDirectory); }
+  });
+
+  it("treats a missing catalog as empty and an empty selection as no skills", async () => {
+    const loaded = await (await load({ executionProfiles: { safe: { ...safe, skills: [] } } })).config();
+    expect(loaded.executionProfiles.get("safe")).not.toHaveProperty("skills");
+    await expect((await load({ executionProfiles: { safe: { ...safe, skills: ["review"] } } })).config())
+      .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
+
+  it.each([
+    ["an unknown alias", { review: "r/SKILL.md" }, ["missing"]],
+    ["a duplicate alias", { review: "r/SKILL.md" }, ["review", "review"]],
+    ["two aliases on the same resolved path", { review: "r/SKILL.md", again: "./r/../r/SKILL.md" }, ["review", "again"]],
+    ["too many skills", Object.fromEntries(Array.from({ length: 17 }, (_, index) => [`s${index}`, `s${index}/SKILL.md`])), Array.from({ length: 17 }, (_, index) => `s${index}`)],
+    ["an invalid alias", { Review: "r/SKILL.md" }, ["Review"]],
+  ])("rejects %s", async (_name, skillCatalog, skills) => {
+    await expect((await load({ skillCatalog, executionProfiles: { safe: { ...safe, skills } } })).config())
+      .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
+
+  it.each([
+    ["a directory", "skills/review"],
+    ["another file name", "skills/review/README.md"],
+    ["a lowercase file name", "skills/review/skill.md"],
+    ["a URL", "https://example.invalid/SKILL.md"],
+    ["an npm source", "npm:pkg/SKILL.md"],
+    ["a git source", "git+ssh://host/repo/SKILL.md"],
+    ["a home shorthand", "~/skills/SKILL.md"],
+    ["a glob", "skills/*/SKILL.md"],
+    ["a backslash path", "skills\\review\\SKILL.md"],
+    ["an empty path", ""],
+  ])("rejects a catalog entry that is %s without exposing it", async (_name, path) => {
+    let thrown: unknown;
+    try {
+      await (await load({ skillCatalog: { review: path }, executionProfiles: { safe } })).config();
+    } catch (error) { thrown = error; }
+    expect(thrown).toMatchObject({ name: "ConfigError", code: "invalid_execution_profile_config" });
+    if (path.length > 0) expect(`${String(thrown)} ${JSON.stringify(thrown)}`).not.toContain(path);
+  });
+
+  it("limits the catalog size", async () => {
+    const skillCatalog = Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`s${index}`, `s${index}/SKILL.md`]));
+    await expect((await load({ skillCatalog, executionProfiles: { safe } })).config()).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+    delete skillCatalog.s64;
+    await expect((await load({ skillCatalog, executionProfiles: { safe } })).config()).resolves.toBeDefined();
+  });
+});

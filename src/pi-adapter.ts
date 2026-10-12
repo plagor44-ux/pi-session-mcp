@@ -29,6 +29,7 @@ export type PiSessionCreationErrorCode =
   | "extension_version_mismatch"
   | "extension_load_failed"
   | "extension_tool_conflict"
+  | "skill_load_failed"
   | "pi_session_creation_failed";
 
 const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> = {
@@ -47,6 +48,7 @@ const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> =
   extension_version_mismatch: "Configured Pi extension version is not installed",
   extension_load_failed: "Configured Pi extension could not be loaded",
   extension_tool_conflict: "Configured Pi extension tools conflict",
+  skill_load_failed: "Configured Pi skill could not be loaded",
   pi_session_creation_failed: "Pi session creation failed",
 };
 
