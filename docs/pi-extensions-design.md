@@ -263,6 +263,17 @@ and step 6 leaves no session to dispose.
 - **UI and flags.** No UI context is bound; extension UI calls return the
   SDK's no-op results. `extensionFlagValues` is empty, so extension flags keep
   their defaults.
+- **Turn liveness.** The `updatedAt` of a running turn follows the public SDK
+  events of the prompt: assistant message start, update and end, and tool
+  execution start, update and end. An extension provider with its own agent
+  loop, such as `pi-cursor-sdk`, therefore advances `updatedAt` whenever it
+  publishes streaming updates. Its internal steps that publish no public
+  event stay invisible, so an unchanged `updatedAt` is no proof of a hang, and
+  streaming is no evidence of finished or useful work. Only the event type and
+  the message role are inspected; no delta, thinking block, tool argument or
+  partial result is stored or projected, and the answer still comes only from
+  the final assistant message. See [Tool
+  contracts](tool-contracts.md).
 
 ### Lifecycle and close
 

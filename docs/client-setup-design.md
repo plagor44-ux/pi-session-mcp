@@ -79,7 +79,12 @@ findings make the overall result `failed`, like any other finding.
 bounded reader: regular files only, at most 32 files, 1 MiB and 8 levels, no
 links or special files inside the tree, entries whose name starts with `.`
 skipped. A missing or unusable source is `skill_source_invalid`. The fingerprint
-is a SHA-256 over the sorted relative paths and contents.
+is version 2 (`src/skill-library.ts`): `v2:` and a SHA-256 over a domain and
+version tag, the file count, and per file in path byte order the length-prefixed
+UTF-8 path and the length-prefixed content. Version 1 (0.8.0) hashed
+`path NUL content NUL` per file and was ambiguous, because content may contain
+NUL bytes. A version 1 value never proves identity alone (see *Legacy records*
+below).
 
 **Slots.** A slot is the skill directory a client reads:
 
@@ -97,20 +102,63 @@ alias `skill:pi-session-orchestration`. A project slot uses
 of a SHA-256 over the project's real path: an opaque identity, not a path, so a
 `--remove` in another project never touches this project's copy. The `pending`
 phase is written before the first filesystem change and promoted to `owned`
-after a post-install inspection. During an update, the pending record also
-keeps the fingerprint of the copy it replaces (`replaces`), so an interrupted
-update leaves a copy that setup still recognizes as its own: the next
-`--apply` finishes the update and `--remove` deletes it. A later run that finds
-a `pending` record whose slot already equals the source promotes it.
+after a post-install inspection. Skill records hold `v2:` values in
+`fingerprint` and `replaces`; registration records keep their 64-hex snapshot
+hash. During an update, the pending record also keeps the fingerprint of the
+copy it replaces (`replaces`), so an interrupted update leaves a copy that
+setup still recognizes as its own: the next `--apply` finishes the update and
+`--remove` deletes it. A later run that finds a `pending` record whose slot
+already equals the source promotes it.
 
 **Atomic copy.** Setup creates missing parent directories (mode `0755`), stages
-the tree in a temporary directory in the slot's parent (files `0644`, each file
+the tree in a staging directory in the slot's parent (files `0644`, each file
 and directory fsynced), and re-checks that the slot is unchanged
 (fingerprint, device and inode). It then renames the exact old tree to a backup
-name, renames the staged directory into place, inspects the result, and deletes
-the backup only if it is still the exact old tree it moved. An unhealthy
-ownership fence retains staged and backup content for conservative recovery.
-The slot is never edited in place.
+name, renames the staged directory into place, inspects the result, verifies
+that the backup is still the exact old tree it moved, renames it to a trash
+name and deletes the trash entry by entry. The slot is never edited in place.
+
+**Intermediates and recovery.** The three intermediate directories are named
+after the pending record's transaction id, in the slot's parent:
+`.pi-session-mcp-<skill>-<transactionId>.staging`, `.backup` and `.trash`.
+Recovery derives them from the persisted record and never searches. The order
+is: pending record, staging, backup rename, install, verify backup, rename to
+trash, delete the trash entry by entry, owned record. `--apply`, `--remove` and
+`--rollback` settle a pending transaction first, inside the ownership
+transaction, and only when the slot is empty, a link, or one of setup's two
+copies:
+
+- A trash directory is deleted after a structural recheck: a real directory,
+  regular files and directories only, no hidden entries, within the tree
+  limits. It may be partial, because it was verified before the rename.
+- The backup must equal the replaced copy; the staging directory must equal
+  the target or be an interrupted write of it. A partially written staging
+  directory counts only when every file is a prefix-consistent part of the
+  current library tree and that tree is the record's target.
+- `--apply` with an empty slot finishes forward with a complete staging
+  directory, else moves the verified backup back. `--remove` and `--rollback`
+  delete the verified intermediates and leave the slot to the removal.
+- Anything modified or foreign stays and is reported as
+  `skill_recovery_retained` (divergent). A failed update leaves its staging
+  directory until the next run settles it, and an unhealthy ownership fence
+  retains intermediates the same way.
+- Random-name directories of 0.8.0 updates are never searched for or deleted;
+  an operator may remove them by hand.
+- `--dry-run` and `--verify` do not report leftover intermediates.
+
+**Legacy records.** A skill record whose `fingerprint` or `replaces` is a bare
+64-hex value was written by 0.8.0. It names the slot only if a trusted
+reference has that version 1 value and is byte-identical, by its version 2
+fingerprint, to the installed copy. The references are the shipped skills of
+0.8.0 (a fixed table in `src/skill-library.ts`) and the current library tree.
+When proven, `--apply` migrates the record to version 2 and then updates the
+copy as usual; `--remove` removes the proven copy. Otherwise `--dry-run`,
+`--apply`, `--remove` and `--rollback` report `skill_legacy_unverified`
+(divergent) and change neither the copy nor the record. The operator inspects
+the copy and, if it is unchanged setup content that is no longer needed,
+deletes it; an absent slot clears the record on the next operation. The
+intermediates of an interrupted 0.8.0 update cannot be derived and are not
+recovered.
 
 **Divergence rules.** Setup never replaces or deletes, and reports
 `skill_divergent` for:
@@ -118,6 +166,8 @@ The slot is never edited in place.
 - an installed copy whose fingerprint differs from setup's own copy (the
   owned fingerprint, or the one a pending update replaces), even if it happens
   to equal the new source;
+- an installed copy that a 0.8.0 record names but no trusted reference proves
+  (`skill_legacy_unverified`);
 - a copy that differs from the source without a record (a foreign skill of the
   same name);
 - any entry whose name starts with `.` inside the installed copy: setup never
@@ -171,11 +221,40 @@ status and a stable code. No skill content, fingerprint or path leaves setup.
 `src/skill-customize.ts`) does not touch clients and takes no ownership lock. It
 copies a shipped skill into the override directory `skills/` next to the
 configuration file and records the shipped fingerprint under the skill name in
-`<override dir>/.pi-session-mcp-bases.json` (`{"schemaVersion":1,"bases":{...}}`,
-strictly validated, at most 64 KiB, replaced atomically). The copy is staged in
+`<override dir>/.pi-session-mcp-bases.json`
+(`{"schemaVersion":2,"bases":{"<name>":"<fingerprint>"}}`, strictly validated,
+at most 64 KiB). A value is a `v2:` fingerprint or a legacy 64-hex value that
+could not be migrated. A version 1 file is still read. The copy is staged in
 a temporary directory and renamed into place; an existing override is never
 overwritten. A changed shipped skill is only reported (`skill_override_outdated`);
-`--apply` then moves the recorded base and nothing else. It cannot be combined
+`--apply` then moves the recorded base and nothing else.
+
+`--apply` is a cross-process transaction per override directory
+(`src/override-lock.ts`). It takes an exclusive kernel lock on the stable lock
+file `<override dir>/.pi-session-mcp-bases.lock` (mode `0600`, never deleted;
+on Linux the trusted util-linux `flock` at `/usr/bin/flock` or `/bin/flock`, on
+macOS `O_EXLOCK`; the same supported local filesystems as the ownership
+state). Under the lock it re-reads and validates the bases file, copies the
+skill if no override exists, merges the base and writes the file atomically: an
+fsynced temporary file, a rename and a directory fsync. The lock is released on
+every path. The wait is bounded at 30 seconds (`skill_customize_lock_busy`);
+a lock that cannot be taken is `skill_customize_lock_unavailable`. A killed
+holder releases the lock through the kernel and may leave a stale
+`.pi-session-mcp-bases.json.<hex>.tmp`, which is harmless. The dry-run takes no
+lock and writes nothing: no directory, lock file or temporary file. Every write
+produces version 2 and migrates each legacy value that names a released 0.8.0
+shipped skill; other legacy values are kept as they are.
+
+Decisions for an existing legacy base: if it names the current shipped skill,
+the dry-run reports `skill_base_migration_planned` and `--apply` reports
+`skill_base_migrated`; if it names no released shipped skill, the dry-run
+reports `skill_base_unverified` and `--apply` acknowledges it as
+`skill_base_updated`; if it names another released skill, the result is
+`skill_override_outdated`. An existing override that equals the shipped skill
+but has no base completes a customization whose bases commit failed
+(`skill_customize_planned`, `skill_customized`). Of two concurrent applies for
+the same skill, one reports `skill_customized` and the other
+`skill_override_current`. Doctor stays offline, read-only and lock-free. It cannot be combined
 with `--target`, `--verify`, `--rollback` or `--remove`. The finding target is
 `{ client: "skills", scope: "override", alias: <name> }`; the alias is the
 skill name only if it is valid, else `invalid`.
@@ -205,17 +284,23 @@ Stable finding codes are grouped by responsibility:
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
 - controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,
-  `skill_update_planned`, `skill_divergent`, `skill_source_invalid`;
+  `skill_update_planned`, `skill_divergent`, `skill_legacy_unverified`,
+  `skill_source_invalid`;
 - controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_linked`,
-  `skill_updated`, `skill_divergent`, `skill_source_invalid`,
+  `skill_updated`, `skill_divergent`, `skill_legacy_unverified`,
+  `skill_recovery_retained`, `skill_source_invalid`,
   `skill_install_failed`;
 - controller skill, verify: `skill_verified`, `skill_missing`,
   `skill_not_equivalent`;
 - controller skill, rollback/removal: `skill_removed`, `skill_kept_shared`,
-  `skill_not_owned`, `skill_absent`, `skill_divergent`;
+  `skill_not_owned`, `skill_absent`, `skill_divergent`,
+  `skill_legacy_unverified`, `skill_recovery_retained`;
 - skill customization: `skill_customize_planned`, `skill_customized`,
-  `skill_override_current`, `skill_override_outdated`, `skill_base_updated`,
-  `skill_not_shipped`, `skill_bases_corrupt`, `skill_override_invalid`,
+  `skill_override_current`, `skill_override_outdated`,
+  `skill_base_migration_planned`, `skill_base_migrated`,
+  `skill_base_unverified`, `skill_base_updated`, `skill_not_shipped`,
+  `skill_bases_corrupt`, `skill_override_invalid`,
+  `skill_customize_lock_busy`, `skill_customize_lock_unavailable`,
   `skill_customize_failed`.
 
 The public statuses are `planned`, `ok`, `unchanged`, `absent`, `divergent`,

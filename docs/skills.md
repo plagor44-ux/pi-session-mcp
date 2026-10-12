@@ -12,8 +12,9 @@ The package ships three skills and keeps them in a skill library together with
 the operator's own overrides. `pi-session-mcp-setup --apply` also installs the
 controller skill into Claude Code and Codex. Nothing needs to be linked by hand.
 Sections: [Configuration](#configuration), [The skill library](#the-skill-library),
-[Customize and add skills](#customize-and-add-skills) and [Install the
-orchestration skill into Codex and Claude Code](#install-the-orchestration-skill-into-codex-and-claude-code).
+[Customize and add skills](#customize-and-add-skills), [Install the
+orchestration skill into Codex and Claude Code](#install-the-orchestration-skill-into-codex-and-claude-code)
+and [Upgrade from 0.8.0](#upgrade-from-080).
 
 ## Configuration
 
@@ -175,7 +176,9 @@ override is picked up, and start new sessions.
   usage errors (exit 64).
 - It requires `PI_SESSION_MCP_CONFIG` (otherwise `config_required`) and the
   same platform as the rest of `setup`: Linux or macOS, otherwise
-  `platform_unsupported`. It takes no ownership lock.
+  `platform_unsupported`. It takes no ownership lock. `--apply` takes the
+  [override lock](#concurrent-runs-and-the-override-lock); the dry-run takes no
+  lock.
 - It never overwrites an existing override and never edits your files.
 - Only regular files are copied: at most 32 files, 1 MiB and 8 directory
   levels, no links, and entries whose name starts with `.` are skipped.
@@ -184,15 +187,52 @@ The finding target is `{ client: "skills", scope: "override", alias: <name> }`:
 
 | Code | Status | Meaning |
 | --- | --- | --- |
-| `skill_customize_planned` | planned | Dry-run: no override exists; `--apply` would copy the shipped skill. |
-| `skill_customized` | ok | The override was created and its base recorded. |
-| `skill_override_current` | unchanged | The override exists and its recorded base equals the current shipped skill. |
-| `skill_override_outdated` | planned | The shipped skill changed since the copy, or no base is recorded for the existing override. |
-| `skill_base_updated` | ok | `--apply` after `skill_override_outdated`: only the recorded base moved. |
+| `skill_customize_planned` | planned | Dry-run: no override exists, or an existing override equals the shipped skill but has no recorded base; `--apply` would copy the shipped skill if it is absent and record the base. |
+| `skill_customized` | ok | The override was created and its base recorded, or an existing override that equals the shipped skill got its missing base. The second case completes a customization whose bases commit failed. |
+| `skill_override_current` | unchanged | The override exists and its recorded base equals the current shipped skill. Of two concurrent applies for the same skill, the later one reports this. |
+| `skill_override_outdated` | planned | The shipped skill changed since the copy, or no base is recorded for an existing override that differs from the shipped skill, or a 0.8.0 base names a released shipped skill that is not the current one. |
+| `skill_base_migration_planned` | planned | Dry-run: a 0.8.0 base names the current shipped skill; `--apply` would record it as a version 2 base. |
+| `skill_base_migrated` | ok | `--apply` after `skill_base_migration_planned`: the base is recorded as version 2. |
+| `skill_base_unverified` | planned | Dry-run: a 0.8.0 base names no released shipped skill, so it cannot be confirmed. `--apply` records the current shipped skill as the base after you reviewed it. |
+| `skill_base_updated` | ok | `--apply` after `skill_override_outdated` or `skill_base_unverified`: only the recorded base moved. |
 | `skill_not_shipped` | failed | The name is not valid or the package ships no such skill. |
 | `skill_bases_corrupt` | failed | The bases file is not valid. Repair or remove it. |
 | `skill_override_invalid` | failed | The override entry is not a directory, or its tree is unusable (no `SKILL.md`, a link, too large). |
+| `skill_customize_lock_busy` | failed | Another run held the override lock for the whole wait of 30 seconds. Run the command again. |
+| `skill_customize_lock_unavailable` | failed | The lock cannot be taken: the platform, the filesystem or the `flock` binary is not supported. |
 | `skill_customize_failed` | failed | Any other failure while copying or recording. |
+
+### Concurrent runs and the override lock
+
+`--apply --customize-skill` is one transaction per override directory. It takes
+an exclusive kernel lock on `<override dir>/.pi-session-mcp-bases.lock` (mode
+`0600`, never deleted), reads and validates the bases file under the lock,
+copies the shipped skill if no override exists, merges the base, and replaces
+the bases file atomically: an fsynced temporary file, a rename and a directory
+fsync. The lock is released on every path. Two runs for different skills
+therefore cannot lose each other's base. If the commit of the bases file
+fails, the previous file stays; a retry then completes the customization
+without overwriting your files (`skill_customized` for an override that equals
+the shipped skill and has no base).
+
+- The lock wait is bounded at 30 seconds, then the result is
+  `skill_customize_lock_busy`. A lock that cannot be taken at all is
+  `skill_customize_lock_unavailable`.
+- On Linux the lock needs the trusted util-linux `flock` at `/usr/bin/flock` or
+  `/bin/flock`; on macOS it uses `O_EXLOCK`. Both need a supported local
+  filesystem.
+- A holder that is killed releases the lock through the kernel. It may leave a
+  stale `.pi-session-mcp-bases.json.<hex>.tmp` file, which is harmless.
+- The dry-run takes no lock and writes nothing: no directory, lock file or
+  temporary file.
+- Doctor stays offline, read-only and lock-free.
+
+The bases file is `{"schemaVersion":2,"bases":{"<name>":"<fingerprint>"}}`. A
+value is a `v2:` fingerprint, or a legacy 64-hex value that could not be
+migrated. A version 1 file (0.8.0) is still read. Every write produces version
+2 and migrates each legacy value that names a released 0.8.0 shipped skill; any
+other legacy value is kept as it is. See [Upgrade from
+0.8.0](#upgrade-from-080).
 
 ### Follow a changed shipped skill
 
@@ -246,10 +286,10 @@ status `failed` (exit 1), so it is not overlooked.
 
 | Operation | Code (status) |
 | --- | --- |
-| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_divergent` (divergent), `skill_source_invalid` (failed) |
-| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
+| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_source_invalid` (failed) |
+| `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
 | `--verify` | `skill_verified` (ok), `skill_missing` (failed), `skill_not_equivalent` (failed) |
-| `--rollback`, `--remove` | `skill_removed` (ok), `skill_kept_shared` (unchanged), `skill_not_owned` (unchanged), `skill_absent` (ok), `skill_divergent` (divergent) |
+| `--rollback`, `--remove` | `skill_removed` (ok), `skill_kept_shared` (unchanged), `skill_not_owned` (unchanged), `skill_absent` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent) |
 
 - `--apply` installs the skill only when the registration finding is `ok` or
   `unchanged`; `--rollback` and `--remove` handle it only after the
@@ -285,16 +325,46 @@ leaves the link alone (`skill_not_owned`). If you replace setup's own copy with
 such a link, setup forgets its copy on the next `--apply` or `--remove`. A link
 counts only while the effective skill itself is valid.
 
-If an update is interrupted, for example by a full disk or a signal, setup still
-recognizes the old copy as its own: the next `--apply` finishes the update and
-`--remove` deletes it. A project copy belongs to its project: setup records an
-opaque project identity, so a `--remove` in another project never deletes it.
+A project copy belongs to its project: setup records an opaque project
+identity, so a `--remove` in another project never deletes it.
 
 Links in the path to the entry are handled by place. In your home directory,
 the client's skill directory may be your own link, for example into a dotfiles
 checkout, and is followed. Inside a project, which may be untrusted, any link
 below the project root makes the entry divergent, so setup never writes outside
 the project.
+
+### Interrupted updates
+
+An update first writes a pending ownership record, then works in intermediate
+directories in the parent of the skill directory. They are named after the
+record's transaction id: `.pi-session-mcp-<skill>-<transactionId>.staging`,
+`.backup` and `.trash`. The order is: pending record, staging directory, rename
+of the old copy to the backup, install, verification, rename of the backup to
+the trash, deletion of the trash entry by entry, owned record.
+
+If an update is interrupted, for example by a full disk or a signal, setup
+still recognizes the old copy as its own. `--apply`, `--remove` and
+`--rollback` settle a pending transaction first:
+
+- `--apply` finishes forward when a complete staging directory is left, or
+  moves the verified backup back, and then continues.
+- `--remove` and `--rollback` delete the verified intermediates and then remove
+  the copy as usual.
+- A partial trash directory is deleted after a structural recheck (real
+  directories and regular files only, no hidden entries, within the tree
+  limits).
+- A partially written staging directory is deleted only when every file in it
+  is a prefix-consistent part of the current library tree, and that tree is the
+  record's target.
+- Anything modified or foreign stays and is reported as
+  `skill_recovery_retained` (divergent). Inspect the directory and delete it
+  yourself if it is not yours.
+
+A failed update leaves its staging directory until the next run settles it.
+The directories of updates by 0.8.0 had random names. Setup never searches for
+or deletes them; you may delete them by hand. `--dry-run` and `--verify` do not
+report leftover intermediates.
 
 ### Customize the controller skill
 
@@ -395,7 +465,8 @@ A fourth check concerns overrides, not profiles:
 
 | ID | Severity | Subject | Condition |
 | --- | --- | --- | --- |
-| `skill_override_outdated` | warning | `skill:<name>` | The shipped skill's current fingerprint differs from the base recorded in `<override dir>/.pi-session-mcp-bases.json`. |
+| `skill_override_outdated` | warning | `skill:<name>` | The shipped skill's current fingerprint differs from the base recorded in `<override dir>/.pi-session-mcp-bases.json`. A 0.8.0 base counts as the released shipped skill that it names. |
+| `skill_override_outdated` | warning | `skill:<name>` | The recorded base is a 0.8.0 value that names no released shipped skill. The remediation says that the base predates version 2 fingerprints and cannot be confirmed: review the shipped skill, then run `pi-session-mcp-setup --apply --customize-skill <name>`. |
 | `skill_override_outdated` | warning | `skill:bases` | The bases file is corrupt. |
 
 It is `ok` for a recorded base that still matches. The remediation for a
@@ -464,6 +535,49 @@ Pi lists each available skill to the model with the absolute path of its
 `SKILL.md`, so that the model can read it. The model may repeat that path in
 its answer. Capabilities, errors and diagnostics stay path-free, but completed
 `assistantText` is model output and is not sanitized.
+
+## Upgrade from 0.8.0
+
+### Skill tree fingerprints
+
+A fingerprint identifies a skill tree by content. Version 2, stored as
+`v2:<64 hex>`, is a SHA-256 over a domain and version tag, the file count, and
+for each file in path byte order the length-prefixed UTF-8 path and the
+length-prefixed content. The size and file type limits are unchanged. Version 1
+(0.8.0) hashed `path NUL content NUL` for each file. Content may contain NUL
+bytes, so two different trees could share a version 1 value.
+
+A version 1 value never proves identity alone. It counts only when a trusted
+reference has that version 1 value and is byte-identical, by its version 2
+value, to the tree in question. The trusted references are the shipped skills of
+the 0.8.0 release (a fixed table in the code) and, for setup's installed copies,
+the current library tree.
+
+### What to do after the upgrade
+
+1. Run `pi-session-mcp-setup` as a dry-run for your targets, then with
+   `--apply`. An unchanged copy of the 0.8.0 controller skill is proven against
+   the 0.8.0 table, its ownership record is migrated, and the copy is updated to
+   the new shipped skill. A copy that cannot be proven stays untouched, and
+   dry-run, apply, remove and rollback report `skill_legacy_unverified` for it.
+   Inspect the copy. If it is unchanged setup content that you no longer need,
+   delete it yourself and run the operation again: an absent slot clears the
+   record. Otherwise keep it.
+2. For customized skills, Doctor resolves 0.8.0 bases against the 0.8.0 table.
+   The next `--apply --customize-skill` for any skill rewrites the bases file as
+   version 2.
+
+Ownership records of skill copies hold `v2:` values in `fingerprint` and
+`replaces`. Registration records are unchanged.
+
+### Downgrade
+
+0.8.0 rejects the new formats, so it never acts on them. It treats a version 2
+bases file as corrupt (`skill_bases_corrupt`, and the Doctor warning with the
+subject `skill:bases`). It validates the ownership file as a whole and treats a
+skill record with a `v2:` value as invalid, so it rejects the entire file as
+corrupt, registration records included. Before you run 0.8.0 again, repair or
+remove those files.
 
 ## Migration: profiles that relied on package skills
 

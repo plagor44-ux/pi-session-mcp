@@ -2,6 +2,68 @@
 
 ## Unreleased
 
+- `updatedAt` of a running turn now follows public SDK activity. It is the time
+  of the last observed assistant message start, update or end and tool
+  execution start, update or end of that turn, and freezes at the terminal
+  transition. Before, it advanced only after a completed tool execution or a
+  completed assistant message, so a turn of an extension provider with its own
+  agent loop, such as `pi-cursor-sdk`, kept `updatedAt == startedAt` while it
+  streamed. Streaming is activity, not evidence of finished or useful work, and
+  work without a public event stays invisible, so an unchanged `updatedAt` is
+  still no proof of a hang. No event content is stored or projected, and the
+  answer still comes only from the final assistant message. See [tool
+  contracts](docs/tool-contracts.md). Issue #47.
+- Skill tree fingerprints are now version 2 (`v2:` and 64 hex digits), an
+  unambiguous encoding with explicit lengths. Version 1 of 0.8.0 hashed
+  `path NUL content NUL` and could give two different trees the same value,
+  because content may contain NUL bytes. A version 1 value never proves
+  identity alone: it counts only when a trusted reference (the shipped skills of
+  0.8.0, or for setup's installed copies the current library tree) has that
+  value and is byte-identical to the tree in question. Issue #51.
+- Skill customization is now serialized across processes. `--apply
+  --customize-skill` takes an exclusive kernel lock on
+  `<override dir>/.pi-session-mcp-bases.lock`, re-reads the bases file under the
+  lock and replaces it atomically, so two runs for different skills no longer
+  lose a base. The wait is bounded at 30 seconds. New codes:
+  `skill_customize_lock_busy` and `skill_customize_lock_unavailable`. The
+  dry-run takes no lock and writes nothing. The bases file is now schema version
+  2; version 1 files are still read, and every write migrates each legacy value
+  that names a released 0.8.0 shipped skill. New codes for a legacy base:
+  `skill_base_migration_planned` and `skill_base_migrated` (it names the current
+  shipped skill), and `skill_base_unverified` (it names no released skill; the
+  Doctor warning `skill_override_outdated` says that the base cannot be
+  confirmed). `skill_customize_planned` and `skill_customized` now also complete
+  a customization whose bases commit failed. See [Pi
+  skills](docs/skills.md#concurrent-runs-and-the-override-lock). Issue #50.
+- Setup's installed skill copies. Ownership records of skill copies now hold
+  version 2 fingerprints. A record that 0.8.0 wrote is migrated only when a
+  trusted reference proves the copy's exact bytes; otherwise dry-run, apply,
+  remove and rollback report the new code `skill_legacy_unverified` and change
+  neither the copy nor the record. Updates now name their intermediate
+  directories after the pending record's transaction id
+  (`.pi-session-mcp-<skill>-<transactionId>.staging`, `.backup`, `.trash`), and
+  `--apply`, `--remove` and `--rollback` first settle an interrupted update.
+  Anything modified or foreign stays and is reported as the new code
+  `skill_recovery_retained`. A failed update leaves its staging directory until
+  the next run settles it. Directories of 0.8.0 updates are never searched for
+  or deleted. Issues #51 and #52.
+- Upgrading from 0.8.0: run `pi-session-mcp-setup` as a dry-run and then with
+  `--apply`. Unchanged copies of the 0.8.0 controller skill are proven against
+  the 0.8.0 table and migrated; others stay and report
+  `skill_legacy_unverified`. Doctor resolves 0.8.0 bases against the same table,
+  and the next `--apply --customize-skill` rewrites the bases file as version 2.
+  0.8.0 rejects the new formats (the bases file as corrupt, the ownership file
+  as invalid), so it never acts on them. See [Upgrade from
+  0.8.0](docs/skills.md#upgrade-from-080).
+- The orchestration skill now says that a successful `pi_session_start` does not
+  prove that the provider accepts requests, asks for a bounded observation and
+  cleanup budget after `abort_timeout`, separates start errors that need the
+  operator from ones that can be transient, and describes `updatedAt` as the
+  last observed public SDK activity. `docs/acceptance.md` records the v0.8.0
+  post-release acceptance and names the method limits of earlier multi-session
+  records. Issue #54.
+<!-- harness entry (#53) follows -->
+
 ## 0.8.0 — 2026-10-12
 
 This is a minor release because the public contract changes, as ADR 0003
