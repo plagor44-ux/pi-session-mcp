@@ -1056,3 +1056,122 @@ This record does not cover:
   operating-system sandbox.
 - Package provenance: the npm package has no provenance attestation, because it
   was published from the maintainer's machine.
+
+The post-0.8.0 stabilization (#47 and #50 to #54) passed on 2026-10-12, on
+Linux (`x64`) with Node.js `26.11.1`, Claude Code `2.1.296`, Codex CLI
+`0.162.1`, Pi SDK `1.1.0` and `pi-cursor-sdk@0.5.3`:
+- Candidate: a clean detached checkout of `1e904be`, built with `npm ci`,
+  `npm run build` and `npm run build:cli`. `dist/main.js` has the SHA-256
+  `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`, and the
+  dist tree the SHA-256
+  `7b16757f9a1a0318247914f56debe79119a3845e1a1debcf1ad371db3a958fce`. The
+  built `dist/` and `.pi-session-mcp-cli/` are byte-identical for every
+  candidate below (`0f7c376`, `06471b5`, `cb6e949` and `1e904be`): the commits
+  after `0f7c376` change only the acceptance harness, its tests and
+  documentation. After `1e904be` the change adds only this record.
+- Level 1 on that checkout: every command exited with `0`. The test run
+  reported 50 files, 1035 passed and 6 skipped; `npm audit` and
+  `npm audit --omit=dev` reported 0 vulnerabilities; `npm pack --dry-run`
+  listed 129 files with the three skills and no acceptance harness;
+  `git diff --check` and `git status --short` printed nothing.
+- Level 2 through `scripts/setup-acceptance.mjs` with the setup of that
+  checkout: 160 of 160 checks passed. All nine steps passed on all four
+  targets. The real client registrations were unchanged, no process remained,
+  no report leaked a path, and the build was unchanged. `06471b5` and
+  `cb6e949` had passed 160 of 160 as well.
+- Multi-session skill acceptance, run 4, with the harness of that checkout
+  (SHA-256 `e694c9be2779aae164ced0b771db035dac64f136160cc98d2c9e9cf63b629afe`):
+  - `prepare --with-extensions` derived the configuration from the operator's
+    Cursor profile: provider `cursor`, model `composer-2.5`, thinking level
+    `off` and the exact allowlist `npm:pi-cursor-sdk@0.5.3` on both run
+    profiles. Nothing else was copied. Fingerprint
+    `sha256:05a3fb00f9a1bb57b891d4cfe273aa19e1a716c0d17d2d24097e4225dbea4142`.
+  - `prepare` installed the Claude Code controller skill with the candidate's
+    `setup --apply`: `applied` and `skill_installed`, a regular copy identical
+    to the shipped skill.
+  - Every invocation confirmed the candidate and the fingerprint through
+    `pi_capabilities_get` as its first call, saw the skills `implementation`
+    and `handshake` on `accept-code`, and had exactly one server of the run
+    observed. No process remained, no bound resource changed, and no Pi
+    Session MCP result contained a local path, the token or a credential
+    marker.
+  - Both Claude Code invocations, the required part, and Codex `parallel`
+    passed every check. Codex `abort` failed one check (`range:changes`); every
+    other check of it passed.
+
+| Client | Scenario | Result |
+| --- | --- | --- |
+| Claude Code | `parallel` | Passed. First turns of two Cursor sessions overlapped by 20.4 s; follow-up in the same session completed; both fixtures pass their tests and the business checks with only the allowed files changed, each last written during a worker turn; `HANDSHAKE.txt` holds the token and was written during the follow-up turn, although no prompt contained the token |
+| Claude Code | `abort` | Passed. First turns overlapped by 21.5 s; one abort, result `ok`; `aborted` seen through `pi_turn_get` after the abort and before close; the abort fell inside the running interval of the neighbor, which completed and passes its tests; the worker's `sleep` was observed running, and at the end of the run it was gone and had written no file; both sessions closed |
+| Codex | `parallel` | Passed, as for Claude Code, with an overlap of 21.1 s |
+| Codex | `abort` | Failed with `range:changes`. The abort, its order, the running neighbor, cleanup and the neighbor's tests and business checks passed (overlap 19.2 s). The `range` worker also wrote `HANDSHAKE.txt`: the controller's prompt said "Change only src/range.js" and did not mention a handshake, so the Cursor worker applied the `handshake` skill of its profile on its own. The scope check caught it, as intended. This is worker behavior, not a Pi Session MCP defect |
+
+The controllers made 5 to 7 `pi_turn_get` calls per invocation, and each
+invocation took 90 to 127 seconds.
+
+- Turn liveness (#47): in every Cursor turn that a controller polled while it
+  was `running`, `updatedAt` had moved past `startedAt`: 7 of 7 turns in run
+  4, 31 of 31 in runs 1 to 4. Turns that no poll saw running are not counted.
+  This shows public stream events reaching `updatedAt` before the turn ended.
+  It does not show progress, and work without a public event stays
+  invisible.
+- Controller skill use, checked in the private transcripts of runs 1, 3 and
+  4:
+  - Each Claude Code invocation invoked its skill once and loaded the copy
+    that setup had installed for the candidate. A phrase that only the
+    candidate's skill contains appeared, and none from the operator's personal
+    copy in `~/.claude/skills`, which is the 0.8.0 skill. So the personal copy
+    did not shadow the project copy.
+  - Each Codex invocation read the candidate's skill through the run-scoped
+    link with one shell command.
+  - The handshake token, which only the override-directory skill held, shows
+    that the worker skills reached the Cursor sessions.
+
+Earlier attempts on the same build, kept on record:
+- Before a reboot, on `0f7c376`:
+  - Level 1 passed, with 1028 tests passed and 6 skipped, and the working-tree
+    Level 2 passed 160 of 160.
+  - Claude Code `parallel` passed every check, with an overlap of 52.2 s.
+  - Claude Code `abort` failed with `sessionsNotClosed`, `abortFailed`,
+    `abortOrder`, `neighborNotRunningDuringAbort` and `range:tests`: neither
+    `pi_session_start` started a session. At that time the operator's Pi agent
+    directory was not writable, because `/home` had run out of Btrfs metadata
+    space. The run directory was on a memory-backed file system and was lost in
+    the reboot, so only the maintainer's summaries remain: there is no evidence
+    file, and the exact start error is not on record.
+- Run 1 on `0f7c376`, with the harness SHA-256
+  `9135f8d9a3d904172475e2fd0d5fce762613a8683a642b53642167572e02ab91`: all four
+  invocations passed every check. The overlaps were 29.0 s and 22.2 s for
+  Claude Code (`parallel`, `abort`) and 22.8 s and 26.5 s for Codex.
+- Run 2 on `06471b5`, with the harness SHA-256
+  `d63b03065b28f3714ee2e9f76d722053c835f080b3a6edc96e1aab0031a0eadc`:
+  - Codex `parallel` passed.
+  - The other three invocations failed only with `noServerObserved`, and every
+    other check passed, including the aborts, the running neighbors and the
+    absence of residual processes.
+  - The cause was in the harness. It replaced a process's earlier sighting on
+    every sweep, so a sweep that caught the server while its client was ending
+    it (exiting or an unreaped zombie, with nothing left to read) recorded it as
+    a plain descendant of the client. `cb6e949` keeps the server role.
+- Run 3 on `cb6e949`, with the harness SHA-256
+  `9f62535c3cb28506595ba72e5bafad772df71f473b4711799724186a946713b9`: Level 2
+  passed 160 of 160, and all four invocations passed every check. The overlaps
+  were 22.8 s and 22.2 s for Claude Code and 24.2 s and 18.6 s for Codex. One
+  `assistantText` in Codex `parallel` named the absolute path of the worker's
+  own `HANDSHAKE.txt`; `assistantText` is the worker's free text, counted
+  separately, and not a structural leak. The two harness commits after it keep
+  a process's ownership across sightings and match the client by PID and
+  start time.
+
+This record does not cover:
+- macOS beyond CI, or a ten-task Level 3 cycle.
+- A Codex controller that reads the skill from a copy setup installed in
+  `~/.agents/skills`, because the run must not change the operator's home.
+  Codex read the candidate's skill through a run-scoped link, and Level 2
+  checks the installed file.
+- A third concurrent session, a `read-only` worker, or more than two
+  concurrent sessions.
+- A real crash in the middle of a setup skill update, a real contention of
+  two customization processes outside the tests, and an operating-system
+  signal to the harness during a live analysis. The provider-free tests cover
+  these.
