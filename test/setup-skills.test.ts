@@ -193,6 +193,22 @@ describe("setup controller skills", () => {
     expectSkill(await f.run("remove"), "skill_not_owned", "unchanged");
     expect((await lstat(slot)).isSymbolicLink()).toBe(true);
   });
+  it("forgets its own copy once the operator replaced it with a link to the effective skill", async () => {
+    const f = await fixture(); await f.run("apply"); const slot = f.slot(targets[0]!);
+    await rm(slot, { recursive: true }); await symlink(f.source, slot);
+    expectSkill(await f.run("apply"), "skill_linked", "unchanged");
+    expect(await f.ownership.get(skillTarget(targets[0]!))).toBeUndefined();
+    await f.run("apply"); await rm(slot); await f.run("apply"); await rm(slot, { recursive: true }); await symlink(f.source, slot);
+    const removed = await f.run("remove"); expectSkill(removed, "skill_not_owned", "unchanged"); expect(removed.exitCode).toBe(0);
+    expect(await f.ownership.get(skillTarget(targets[0]!))).toBeUndefined(); expect((await lstat(slot)).isSymbolicLink()).toBe(true);
+  });
+  it("never accepts a link to an unusable library skill", async () => {
+    const f = await fixture(); const slot = f.slot(targets[0]!);
+    await symlink("/etc/hostname", join(f.source, "outside.md"));
+    await mkdir(join(slot, ".."), { recursive: true }); await symlink(f.source, slot);
+    expectSkill(await f.run("apply"), "skill_source_invalid", "failed");
+    expectSkill(await f.run("verify"), "skill_not_equivalent", "failed");
+  });
   it("installs no skill when the plan refuses the apply", async () => {
     const f = await fixture(); f.registered.add("codex:user");
     const divergent = { ...f.adapters[1]!, async inspect() { return { state: "divergent" as const }; } };
@@ -249,8 +265,13 @@ describe("setup controller skills", () => {
   it.each(["remove", "rollback"] as const)("%s leaves an owned slot replaced by a symlink alone", async (operation) => {
     const f = await fixture(); await f.run("apply"); const slot = f.slot(targets[0]!);
     await rm(slot, { recursive: true }); await symlink(f.source, slot);
-    expectSkill(await f.run(operation), "skill_divergent", "divergent");
+    expectSkill(await f.run(operation), "skill_not_owned", "unchanged");
     expect((await lstat(slot)).isSymbolicLink()).toBe(true); expect(await readFile(join(f.source, "SKILL.md"), "utf8")).toBe("controller v1");
+    const g = await fixture(); await g.run("apply"); const other = g.slot(targets[0]!); const elsewhere = join(g.root, "elsewhere");
+    await mkdir(elsewhere); await writeFile(join(elsewhere, "SKILL.md"), "elsewhere");
+    await rm(other, { recursive: true }); await symlink(elsewhere, other);
+    expectSkill(await g.run(operation), "skill_divergent", "divergent");
+    expect((await lstat(other)).isSymbolicLink()).toBe(true); expect(await readFile(join(elsewhere, "SKILL.md"), "utf8")).toBe("elsewhere");
   });
   it("never adopts a foreign equivalent skill", async () => {
     const f = await fixture(); const slot = f.slot(targets[0]!); await mkdir(join(slot, "references"), { recursive: true });

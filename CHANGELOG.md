@@ -65,9 +65,9 @@ Not yet released.
   linked or non-directory entry (`skill_divergent`); a link to exactly the
   effective skill is accepted as the operator's own (`skill_linked`). Inside a
   project setup never follows a link, and a project copy is bound to its
-  project. Every
-  setup result has a second finding per target with the alias
-  `pi-session-orchestration`; the new codes are `skill_absent`,
+  project. A setup result has a second finding per target with the alias
+  `pi-session-orchestration` whenever the skill step runs (not for an apply
+  that the plan refuses or a registration that failed); the new codes are `skill_absent`,
   `skill_equivalent`, `skill_linked`, `skill_update_planned`, `skill_source_invalid`,
   `skill_installed`, `skill_already_equivalent`, `skill_updated`,
   `skill_install_failed`, `skill_verified`, `skill_missing`,

@@ -97,7 +97,12 @@ env -i HOME="$DISPOSABLE_HOME" PATH="$PATH" PI_SESSION_MCP_CONFIG="$ACCEPTANCE_C
 ### Pass criteria
 
 - All nine operations report the expected overall status, finding and exit
-  status.
+  status. From the change that tracks #46 on, every operation also reports the
+  controller skill finding (`skill_absent` twice, `skill_installed`,
+  `skill_already_equivalent`, `skill_verified`, `skill_removed`,
+  `skill_installed`, `skill_verified`, `skill_removed`); the skill file exists
+  after steps 3 and 7 and is gone after steps 6 and 9; a foreign skill placed
+  in the same skill directory stays unchanged throughout.
 - Steps 1 and 2 leave the client state unchanged.
 - After step 9 the `pi-session-mcp` registration is absent, the sentinel is still
   present, and the ownership record set is empty. The ownership directory has
@@ -337,21 +342,32 @@ Pi Session MCP tools; the script never does.
 
 - Candidate: a separate detached checkout of the commit under test, built with
   `npm ci`, `npm run build` and `npm run build:cli`. `prepare` records the
-  commit, whether the checkout is clean, and the SHA-256 of `dist/main.js`;
-  `run` refuses a changed entry point.
+  commit, whether the checkout is clean, the SHA-256 of `dist/main.js` and,
+  from the harness of `cc810c9` on, a SHA-256 over every built module in
+  `dist/`; `run` refuses a changed build.
 - Configuration: `prepare --base-config <operator config> --from-profile
   <alias>` copies only provider, model and thinking level of one working profile
   without extensions or MCP servers into a temporary configuration with two
   profiles: `accept-read` (default, `read-only`, skill `review`) and
-  `accept-code` (`coding`, skills `implementation` and `handshake`). The
-  `handshake` skill is generated per run and holds a random token that no
-  controller prompt contains.
+  `accept-code` (`coding`, skills `implementation` and `handshake`). From the
+  harness of `3f98104` on, all three are `builtin:` references: the two worker
+  skills ship with the candidate, and the `handshake` skill sits in the
+  override directory `skills/` next to the run configuration, so the run also
+  exercises library resolution. The `handshake` skill is generated per run and
+  holds a random token that no controller prompt contains.
 - Fixtures: four small synthetic git repositories per client (`slug`, `stats`,
   `wait`, `range`), each a separate workspace alias (`cc-*` for Claude Code,
   `cx-*` for Codex). Both clients use the same configuration and build.
-- Controller skill: one symbolic link from the controller's working directory
-  to the candidate's `skills/pi-session-orchestration` (`.claude/skills` for
-  Claude Code, `.agents/skills` for Codex). No global skill directory changes.
+- Controller skill: from the harness of `3f98104` on, `prepare` installs the
+  Claude Code controller skill the way an operator does, with the candidate's
+  `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
+  the controller's directory. The setup step runs with a disposable `HOME`, so
+  setup state and client files of that step never touch the real home; it must
+  report `applied` and `skill_installed` and leave a regular copy identical to
+  the shipped skill. Codex installs skills only in the user's home, which the
+  run must not change, so the Codex controller gets one run-scoped symbolic link
+  in `.agents/skills` of its directory. Earlier runs linked both. No global
+  skill directory changes.
 - Clients: Claude Code runs as `claude -p` with `--mcp-config`,
   `--strict-mcp-config`, `--setting-sources project,local`,
   `--permission-mode dontAsk` and an `--allowedTools` list of the eight tools

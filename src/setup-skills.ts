@@ -84,7 +84,9 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     }
     const { path, owned: ownedTarget } = location;
     const library = this.library(name);
-    const linkTarget = library ? await realpath(library.directory).catch(() => undefined) : undefined;
+    // Only a usable library skill can stand behind an accepted link; otherwise verify and apply would disagree.
+    const usable = library ? await readSkillTree(library.directory).then(() => true, () => false) : false;
+    const linkTarget = usable ? await realpath(library!.directory).catch(() => undefined) : undefined;
     if (operation === "remove" || operation === "rollback") {
       try {
         const owned = await ownership.get(ownedTarget);
@@ -97,6 +99,11 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
         if (current.state === "absent") {
           healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership);
           return finding("skill_absent", "ok");
+        }
+        if (current.state === "linked") {
+          // The operator replaced setup's copy with their own link: the record is stale, the link stays.
+          healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership);
+          return finding("skill_not_owned", "unchanged");
         }
         if (current.state !== "tree" || !ownsFingerprint(owned, current.fingerprint)) return finding("skill_divergent", "divergent");
         healthy(ownership);
@@ -126,7 +133,10 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     try {
       const current = await inspectSlot(path, linkTarget);
       const owned = await ownership.get(ownedTarget);
-      if (current.state === "linked") return finding("skill_linked", "unchanged");
+      if (current.state === "linked") {
+        if (operation === "apply" && owned) { healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership); }
+        return finding("skill_linked", "unchanged");
+      }
       if (current.state === "divergent") return finding("skill_divergent", "divergent");
       // A copy setup did not write, or its own copy modified since, is never replaced.
       if (current.state === "tree" && (!owned || !ownsFingerprint(owned, current.fingerprint))) {

@@ -272,14 +272,18 @@ Setup reports `skill_divergent` and leaves the entry alone when it finds:
 - a skill of the same name that setup did not install and that differs from the
   effective skill;
 - any entry whose name starts with `.` inside an installed copy, such as your
-  own notes: setup never writes such entries, so it treats them as yours;
+  own notes or a `.DS_Store` that macOS Finder adds: setup never writes such
+  entries, so it treats them as yours; delete them to let setup manage the copy
+  again;
 - a link at the skill entry that points anywhere but the effective skill, or a
   non-directory there.
 
 A link at the skill entry that points exactly at the effective skill (your
 override, else the shipped skill) is your own equivalent setup: setup reports
 `skill_linked` (unchanged), `--verify` reports `skill_verified`, and removal
-leaves the link alone (`skill_not_owned`).
+leaves the link alone (`skill_not_owned`). If you replace setup's own copy with
+such a link, setup forgets its copy on the next `--apply` or `--remove`. A link
+counts only while the effective skill itself is valid.
 
 If an update is interrupted, for example by a full disk or a signal, setup still
 recognizes the old copy as its own: the next `--apply` finishes the update and

@@ -91,7 +91,7 @@ is a SHA-256 over the sorted relative paths and contents.
 
 **Ownership records.** One record per client slot holds the target client,
 the scope kind (`project` or `user`, so Claude Code `user` and `local` share a
-record), the phase and a content fingerprint, nothing else. A home slot uses the
+record), the phase and a content fingerprint, plus `replaces` during an update (see below). A home slot uses the
 alias `skill:pi-session-orchestration`. A project slot uses
 `skill:pi-session-orchestration@<id>`, where `<id>` is the first 16 hex digits
 of a SHA-256 over the project's real path: an opaque identity, not a path, so a

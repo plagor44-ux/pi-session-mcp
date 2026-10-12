@@ -142,10 +142,13 @@ customization, and `builtin:` references in the Pi skill catalog.
   to `~/.agents/skills/`, Claude Code `user` and `local` share
   `~/.claude/skills/`, and Claude Code `project` goes to
   `<project>/.claude/skills/`, the directory setup runs in. Ownership records
-  (`skill:<name>` per client slot) hold only a content fingerprint. Setup never
-  replaces or deletes a modified installed copy, a foreign skill of the same
-  name or a linked or non-directory entry; it reports `skill_divergent`, which
-  does not block the registration. In the home directory the client's skills
+  hold only a content fingerprint and, while an update is pending, the
+  fingerprint it replaces; a project record is bound to an opaque project
+  identity, never a path. Setup never replaces or deletes a modified installed
+  copy, hidden operator entries inside it, a foreign skill of the same name or a
+  linked or non-directory entry; it reports `skill_divergent`, which does not
+  block the registration. A link to exactly the effective skill is the
+  operator's own equivalent setup (`skill_linked`) and is never owned. In the home directory the client's skills
   directory may be the operator's own link and is followed. Inside a project,
   which may be untrusted, any link below the project root makes the slot
   divergent, so setup never writes outside the project. Setup installs only

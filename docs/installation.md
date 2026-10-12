@@ -285,11 +285,13 @@ directory, where the client discovers it without further steps:
 | `claude-code:user:pi-session-mcp`, `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` (one shared directory) |
 | `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration`, where `<project>` is the directory in which you run `setup` |
 
-- `setup` never replaces or deletes a modified installed copy, a skill of the
-  same name that it did not install, or a link or non-directory entry. It
-  reports `skill_divergent`; the registration is still made, but the overall
-  status is `failed`. Inside a project, any link below the project root counts
-  as divergent.
+- `setup` never replaces or deletes a modified installed copy, hidden files
+  inside it (macOS Finder's `.DS_Store` counts too), a skill of the same name
+  that it did not install, or a link or non-directory entry. It reports
+  `skill_divergent`; the registration is still made, but the overall status is
+  `failed`. A link to exactly the effective skill is accepted as your own
+  (`skill_linked`). Inside a project, any link below the project root counts as
+  divergent.
 - A package update or a changed override replaces setup's own unmodified copy on
   the next `--apply` (`skill_updated`). `--remove` and `--rollback` delete it
   again (`skill_removed`), except while the other Claude Code registration of
