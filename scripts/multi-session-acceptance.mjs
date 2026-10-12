@@ -76,6 +76,20 @@ const FIXTURES = {
 };
 const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] };
 
+/** SHA-256 over every built runtime module, so evidence binds to all of dist/, not just its entry. */
+function distTreeSha256(candidate) {
+  const hash = createHash("sha256");
+  const walk = (dir, prefix) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(join(dir, entry.name), rel);
+      else if (entry.isFile() && entry.name.endsWith(".js")) hash.update(rel).update("\0").update(readFileSync(join(dir, entry.name))).update("\0");
+    }
+  };
+  walk(join(candidate, "dist"), "");
+  return hash.digest("hex");
+}
+
 function writeFixture(dir, files) {
   for (const [name, content] of Object.entries(files)) {
     mkdirSync(join(dir, name, ".."), { recursive: true });
@@ -156,6 +170,7 @@ function prepare(values) {
     sourceCommit: head.status === 0 ? head.stdout.trim() : undefined,
     sourceClean: dirty.status === 0 && dirty.stdout.trim() === "",
     entrySha256: sha256(readFileSync(entry)),
+    distSha256: distTreeSha256(candidate),
     harnessSha256: HARNESS_SHA256,
     configFingerprint: `sha256:${sha256(configBytes)}`,
     claudeSkillSetup,
@@ -427,7 +442,7 @@ async function runClient(values) {
   const label = `${values.client}-${values.scenario}`;
   sameHarness(info);
   if (existsSync(join(priv, "results", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
-  if (sha256(readFileSync(info.entry)) !== info.entrySha256) fail("the candidate entry point changed since prepare");
+  if (sha256(readFileSync(info.entry)) !== info.entrySha256 || distTreeSha256(info.candidate) !== info.distSha256) fail("the candidate build changed since prepare");
   const before = snapshot(-1, run, info).filter((p) => p.role === "server");
   if (before.length > 0) fail("a server of this run is already running");
   const { file, args } = command(values.client, info, priv, controller, values);
@@ -500,7 +515,7 @@ function evidence(values) {
   const results = readdirSync(join(priv, "results")).sort().map((name) => readJson(join(priv, "results", name)));
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
-    sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, harnessSha256: info.harnessSha256,
+    sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, distSha256: info.distSha256, harnessSha256: info.harnessSha256,
     configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
     results,
   }, null, 2);
