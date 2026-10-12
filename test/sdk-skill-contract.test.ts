@@ -1,7 +1,7 @@
 import { cp, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ModelRuntime, type AgentSession, type AgentSessionServices, type AgentSessionRuntime, type ResourceLoader, createAgentSession, createAgentSessionServices, createAgentSessionFromServices, createAgentSessionRuntime } from "@earendil-works/pi-coding-agent";
+import { DefaultResourceLoader, ModelRuntime, SettingsManager, type AgentSession, type AgentSessionServices, type AgentSessionRuntime, type ResourceLoader, createAgentSession, createAgentSessionServices, createAgentSessionFromServices, createAgentSessionRuntime } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseExtensionSpec } from "../src/extension-spec.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
@@ -96,6 +96,21 @@ function catalog(report: Report): string {
 }
 
 describe("Pi SDK selected skill contract", () => {
+  // Guards the negative tests below against passing vacuously: the fixture package must really
+  // reach the SDK's skill and prompt catalogs through the path that the override closes.
+  it("control: without overrides, Pi SDK loads package skills and prompts despite noSkills", async () => {
+    const h = await harness(true);
+    const loader = new DefaultResourceLoader({
+      cwd: h.cwd, agentDir: h.cwd, settingsManager: SettingsManager.inMemory(undefined, { projectTrusted: false }),
+      noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, additionalExtensionPaths: [h.packageDir],
+    });
+    await loader.reload();
+    expect(loader.getSkills().skills.map((skill) => skill.name).sort()).toEqual(["fixture-alpha", "fixture-bundled"]);
+    expect(loader.getPrompts().prompts.length).toBeGreaterThan(0);
+    loader.extendResources({ skillPaths: [{ path: join(h.packageDir, "late/fixture-late/SKILL.md"), metadata: { source: "fixture", scope: "temporary", origin: "top-level" } }] });
+    expect(loader.getSkills().skills.map((skill) => skill.name)).toContain("fixture-late");
+  });
+
   it("loads plain skill folders without an extension package (1)", async () => {
     const h = await harness();
     const session = await h.registry.start("repo", h.profile([selected("fixture-alpha")]));
