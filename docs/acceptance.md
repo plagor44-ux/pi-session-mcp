@@ -34,7 +34,7 @@ Run on a clean checkout of the exact source under test:
 npm ci
 npm run typecheck
 npm run build:cli
-npm test
+NODE_OPTIONS=--unhandled-rejections=strict npm test
 npm run build
 npm audit
 git diff --check
@@ -365,8 +365,12 @@ Pi Session MCP tools; the script never does.
   `dist/`; `run` refuses a changed build.
 - Configuration: `prepare --base-config <operator config> --from-profile
   <alias>` copies only provider, model and thinking level of the one explicitly
-  selected profile into a run configuration with two profiles: `accept-read` (default, `read-only`, skill `review`) and
-  `accept-code` (`coding`, skills `implementation` and `handshake`). From the
+  selected profile into a run configuration with the profiles `accept-read` (default, `read-only`, skill `review`) and
+  `accept-code` (`coding`). From the Sprint 2 harness (#68) on, `accept-code`
+  selects exactly `implementation` and is used for every task except `slug`,
+  and a second coding profile `accept-code-handshake` selects `implementation`
+  and `handshake` and is used only for the `slug` session; before, `accept-code`
+  carried both skills for every task. From the
   harness of `3f98104` on, all three are `builtin:` references: the two worker
   skills ship with the candidate, and the `handshake` skill sits in the
   override directory `skills/` next to the run configuration, so the run also
@@ -375,7 +379,7 @@ Pi Session MCP tools; the script never does.
   `mcpServers` is always rejected. A profile with `extensions` is rejected
   unless `--with-extensions` is given; with it, `prepare` also copies exactly
   that profile's extension allowlist (1 to 8 distinct exact
-  `npm:<name>@<version>` pins) into both run profiles and installs nothing.
+  `npm:<name>@<version>` pins) into every run profile and installs nothing.
   `--with-extensions` on a profile without extensions is rejected. Nothing else
   is copied: the run has its own workspaces and skills.
 - Working directory: `--work-dir` (default `~/.cache/pi-session-mcp-acceptance`)
@@ -399,7 +403,21 @@ Pi Session MCP tools; the script never does.
   home (`~/.claude/skills` and `~/.agents/skills`, recorded as missing when
   absent). `run` rechecks all of them before the launch and again after the
   run. A change before the launch refuses the run; a change after it fails the
-  result with `resourcesChanged`.
+  result with `resourcesChanged`. From the Sprint 2 harness (#66, #67) on it
+  also binds, under path-free names: per allowlisted extension the tree of its
+  real package root (`extension:<name>`) and the whole npm installation of
+  Pi's agent directory, with dependencies, `package.json` and lockfile
+  (`extensionNpmInstallation`, `none` without extensions); and every Codex
+  skill source besides the run's own link: `$CODEX_HOME/skills` with the
+  bundled `.system` skills (`codexHomeSkills`), all of `~/.agents/skills`
+  (`homeAgentsSkills`), `/etc/codex/skills` (`etcCodexSkills`) and the
+  `.agents/skills` of every ancestor of the Codex controller's directory
+  (`codexAncestorSkills`). A missing source is recorded as `missing`. A link in
+  place of a bound directory binds the content it leads to; links inside a
+  bound tree are hashed as links and not followed. `prepare` resolves Pi's
+  agent directory (`PI_CODING_AGENT_DIR`, else `~/.pi/agent`) and `CODEX_HOME`
+  (else `~/.codex`) once and records both only in the run's private data; they
+  never appear in a result or the evidence.
 - Home controller skills: Claude Code prefers a personal skill over a project
   skill of the same name. With `--setting-sources project,local`, as the
   harness starts it, Claude Code `2.1.296` listed only the project copy when a
@@ -407,8 +425,11 @@ Pi Session MCP tools; the script never does.
   without that flag the personal copy shadowed the project copy. Re-check this
   when the client version changes. Codex's precedence between its home skills
   and the run's repository skill is not established, so a Codex run is refused
-  while `~/.agents/skills/pi-session-orchestration` differs from the
-  candidate's skill.
+  while a `pi-session-orchestration` directory in any bound Codex skill source
+  (`$CODEX_HOME/skills`, `~/.agents/skills`, `/etc/codex/skills` or an
+  ancestor's `.agents/skills`) differs from the candidate's skill; an equal copy
+  or none is allowed. Before the Sprint 2 harness only
+  `~/.agents/skills/pi-session-orchestration` was checked.
 - Launch record and failed analysis: `run` records the launch once before the
   controller starts, so an attempt that ends without a result is never repeated
   silently. If the analysis after the controller fails, the result is recorded
@@ -428,7 +449,10 @@ Pi Session MCP tools; the script never does.
   the shipped skill. Codex installs skills only in the user's home, which the
   run must not change, so the Codex controller gets one run-scoped symbolic link
   in `.agents/skills` of its directory. Earlier runs linked both. No global
-  skill directory changes.
+  skill directory changes. From the Sprint 2 harness (#67) on, the evidence
+  records per client the kind of controller skill, `installed` for Claude Code
+  and `linked` for Codex, with its tree digest and without paths
+  (`controllerSkills`).
 - Clients: Claude Code runs as `claude -p` with `--mcp-config`,
   `--strict-mcp-config`, `--setting-sources project,local`,
   `--permission-mode dontAsk` and an `--allowedTools` list of the eight tools
@@ -436,8 +460,13 @@ Pi Session MCP tools; the script never does.
   `codex exec --ignore-user-config --sandbox read-only` with the server
   defined through `-c mcp_servers.pi-candidate.*` and the three per-tool
   approvals from [client setup](client-setup.md#run-codex-without-prompts).
-  Neither run changes a persistent registration, `HOME` or `CODEX_HOME`, and
-  both use the existing authentication.
+  Neither run changes a persistent registration, `HOME` or the contents of
+  `CODEX_HOME`, and both use the existing authentication. From the Sprint 2
+  harness (#66, #67) on, the Codex controller runs with exactly the
+  `CODEX_HOME` that `prepare` recorded, whatever the launching environment
+  holds, and the server of both clients receives the recorded Pi agent
+  directory as `PI_CODING_AGENT_DIR`, so the bound extension directory is the
+  one the server loads from.
 - Time limit: `run --timeout-min` takes a number above 0 and at most 180
   (default 25). After the limit the harness sends `SIGTERM` to the client's
   process group and waits up to 10 seconds. It then sends `SIGKILL` to that
@@ -457,8 +486,8 @@ Each client runs two invocations, one per scenario:
 
 | Scenario | What the controller does | What is checked |
 | --- | --- | --- |
-| `parallel` | Capabilities first; two sessions of `accept-code` on `slug` and `stats`; both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of `accept-code`; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
-| `abort` | Two sessions on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
+| `parallel` | Capabilities first; a session of `accept-code-handshake` on `slug` and one of `accept-code` on `stats` (before the Sprint 2 harness: `accept-code` for both); both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of both coding profiles and the profile of each session; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
+| `abort` | Two sessions of `accept-code` on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
 
 ### Independent checks
 
@@ -507,8 +536,12 @@ Each client runs two invocations, one per scenario:
     process of the run remains (`residualProcesses`);
   - the controller called `pi_capabilities_get` first (`capabilitiesNotFirst`),
     saw the candidate version and configuration fingerprint
-    (`candidateNotConfirmed`) and saw exactly the skills `implementation` and
-    `handshake` on `accept-code` (`workerSkills`);
+    (`candidateNotConfirmed`), saw exactly the skill `implementation` on
+    `accept-code` and exactly `implementation` and `handshake` on
+    `accept-code-handshake`, and only the `slug` session used
+    `accept-code-handshake` while every other session used `accept-code`
+    (`workerSkills`; before the Sprint 2 harness: exactly `implementation` and
+    `handshake` on `accept-code`);
   - the structural leak scan found nothing (`structuralLeaks`), the token
     appears nowhere it must not (`tokenExposed`), and no worker prompt or
     controller action touched a private marker (`privateAccess`);
@@ -548,7 +581,8 @@ Each client runs two invocations, one per scenario:
 - `evidence` writes one sanitized JSON record and refuses to write a local path
   or the token. It lists the original results and the reanalyses separately,
   lists every launch with whether it left a result, and includes the extension
-  names and versions and the resource digests.
+  names and versions, the resource digests, the profiles and, from the Sprint 2
+  harness on, the controller skill kinds and digests.
   Transcripts and the configuration stay in the run's private directory and
   are never published.
 
@@ -572,6 +606,19 @@ limits, which that change removed:
 - After the time limit the harness sent `SIGTERM` and then waited for the
   client to close without a bound. A hang would have shown as a hang, not as a
   pass.
+
+Records made with the harness before Sprint 2 (#66, #67, #68) have these
+further method limits:
+
+- Pi extensions were bound by name and version only, not by the package
+  contents the server loaded, and the run's server did not receive the agent
+  directory explicitly.
+- For Codex, only `~/.agents/skills/pi-session-orchestration` was checked;
+  `$CODEX_HOME/skills`, `/etc/codex/skills`, other home skills and ancestor
+  `.agents/skills` were neither bound nor excluded, and the controller
+  inherited `CODEX_HOME` from the launching environment.
+- The `handshake` skill was offered to every task's worker; this is how the
+  v0.8.1 Codex `abort` run's worker could apply it to an unrequested file.
 
 These limits do not show that any recorded result was wrong. The records stay
 as recorded; a new run gets a new record.

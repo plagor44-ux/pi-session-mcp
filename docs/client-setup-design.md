@@ -311,7 +311,7 @@ dry-run already separates these states the same way.
 
 Codex and Claude Code are separate adapters with explicit supported scopes and documented capability fixtures. Unknown output fails closed with stable codes. Absolute paths are passed only to client commands where required and are never included in results, logs, or ownership metadata. Client command diagnostics must be reduced to stable codes before crossing this boundary.
 
-Human and JSON output derive from one `schemaVersion: 1` result. Exit code `0` is success, `1` is an operational or reconciliation failure, `64` is command-line misuse, and interrupted setup returns `130` for `SIGINT` or `143` for `SIGTERM` only after the guardian cleanup path has completed or retained the fence. Automatic replacement of a divergent registration is deliberately unsupported.
+Human and JSON output derive from one `schemaVersion: 1` result; this version is the setup report's own, not the package version or the MCP tool contract (see [Versions](tool-contracts.md#versions)). Exit code `0` is success, `1` is an operational or reconciliation failure, `64` is command-line misuse, and interrupted setup returns `130` for `SIGINT` or `143` for `SIGTERM` only after the guardian cleanup path has completed or retained the fence. Automatic replacement of a divergent registration is deliberately unsupported.
 
 Stable finding codes are grouped by responsibility:
 
