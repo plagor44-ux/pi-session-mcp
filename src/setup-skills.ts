@@ -311,6 +311,7 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
    * verified ones are deleted: the backup must equal the replaced copy, the staging directory
    * the target or an interrupted write of it, the trash the complete replaced copy. Anything
    * else stays and is reported, including a partial or changed trash.
+   * A proven trash is still deleted when a later intermediate (backup or staging) is retained.
    *
    * apply, slot absent: a complete staging directory is renamed into the slot (forward);
    * otherwise a verified backup is moved back. remove and rollback do not restore, they delete

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -269,6 +269,20 @@ describe("recovery only deletes this transaction's verified directories", () => 
       expectSkill(await x.f.run("apply"), "skill_recovery_retained", "divergent");
       expect(await snapshot(x.parent)).toBe(before);
     }
+  });
+
+  it("deletes a proven trash in apply although a modified backup beside it is retained", async () => {
+    const x = await interrupted(); const trash = x.name(x.id, "trash"); const backup = x.name(x.id, "backup");
+    await cp(x.slot, trash, { recursive: true }); // a complete, unchanged copy of the replaced tree
+    expect((await readSkillTree(trash)).fingerprint).toBe(x.v1.fingerprint);
+    await x.put(backup, "operator edit");
+    const slot = await snapshot(x.slot); const edited = await snapshot(backup); const before = await snapshot(x.parent);
+    expectSkill(await x.f.run("dry-run"), "skill_recovery_retained", "divergent");
+    expect(await snapshot(x.parent)).toBe(before); expect(await x.f.ownership.get(skillTarget(targets[0]!))).toEqual(x.record);
+    expectSkill(await x.f.run("apply"), "skill_recovery_retained", "divergent");
+    expect(existsSync(trash)).toBe(false); // the proven trash is gone, as before the shared classification
+    expect(await snapshot(backup)).toBe(edited); expect(await snapshot(x.slot)).toBe(slot);
+    expect(await x.f.ownership.get(skillTarget(targets[0]!))).toEqual(x.record);
   });
 
   it("plans the recovery of a pending version 2 transaction in a dry-run without writing", async () => {
