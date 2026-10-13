@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
-  appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 // The maintainer script is plain ESM without declarations; the tests use its exports untyped on purpose.
@@ -16,10 +16,24 @@ const h: Record<string, any> = await import(/* @vite-ignore */ scriptUrl.href);
 const fixtureDir = fileURLToPath(new URL("./fixtures/multi-session-acceptance/", import.meta.url));
 const driverPath = join(fixtureDir, "supervise-driver.mjs");
 const stubbornClient = join(fixtureDir, "stubborn-client.mjs");
+const cliDriver = join(fixtureDir, "cli-driver.mjs");
+const setupStub = join(fixtureDir, "setup-stub.mjs");
 // The harness reads /proc and refuses to run elsewhere, so its supervision and run paths are tested on Linux only.
 const notLinux = process.platform !== "linux";
 
 afterAll(removeTemporaryRoots);
+
+// Safety net: a launch that a test expects to be refused must never reach a real client or a model. Stand-ins
+// named `claude` and `codex` come first on PATH for the whole file; tests that need a working client put their own before them.
+let pathBeforeGuard: string | undefined;
+beforeAll(async () => {
+  const guard = join(await temporaryRoot("msa-guard-"), "bin");
+  mkdirSync(guard, { recursive: true });
+  for (const name of ["claude", "codex"]) writeFileSync(join(guard, name), "#!/bin/sh\nexit 97\n", { mode: 0o755 });
+  pathBeforeGuard = process.env.PATH;
+  process.env.PATH = `${guard}:${pathBeforeGuard ?? ""}`;
+});
+afterAll(() => { if (pathBeforeGuard === undefined) delete process.env.PATH; else process.env.PATH = pathBeforeGuard; });
 
 interface Recorded { pid: number; start: string }
 const readState = (path: string): { leader: Recorded; children: Recorded[] } => JSON.parse(readFileSync(path, "utf8"));
@@ -330,8 +344,16 @@ describe("changes against the fixed baseline", () => {
 });
 
 // ---- synthetic run layout ------------------------------------------------------------------------
-async function buildRun() {
+const EXTENSION = "pi-test-ext";
+/**
+ * A synthetic prepared run. `home` and `agentDir` live inside the temporary root, so no test reads the operator's
+ * home or Pi directory; `context` is what the harness needs to recompute the bound resources.
+ */
+async function buildRun({ extensions = false }: { extensions?: boolean } = {}) {
   const root = realpathSync(await temporaryRoot("msa-run-"));
+  const home = join(root, "home");
+  const agentDir = join(root, "pi-agent");
+  mkdirSync(home, { recursive: true });
   const candidate = join(root, "candidate");
   const run = join(root, "run");
   const priv = join(run, "private");
@@ -340,6 +362,13 @@ async function buildRun() {
   put(join(candidate, "dist", "main.js"), "// stub entry\n");
   put(join(candidate, "dist", "other.js"), "// stub module\n");
   for (const name of ["pi-session-orchestration", "pi-session-implementation", "pi-session-review"]) put(join(candidate, "skills", name, "SKILL.md"), `# ${name}\n`);
+  if (extensions) {
+    put(join(agentDir, "npm", "package.json"), `{ "dependencies": { "${EXTENSION}": "1.0.0" } }\n`);
+    put(join(agentDir, "npm", "package-lock.json"), "{ \"lockfileVersion\": 3 }\n");
+    put(join(agentDir, "npm", "node_modules", EXTENSION, "package.json"), `{ "name": "${EXTENSION}", "version": "1.0.0", "pi": { "extensions": ["index.js"] } }\n`);
+    put(join(agentDir, "npm", "node_modules", EXTENSION, "index.js"), "export default () => {};\n");
+    put(join(agentDir, "npm", "node_modules", "dep", "index.js"), "export const dep = 1;\n");
+  }
   put(join(priv, "config.json"), "{ \"workspaces\": {} }\n");
   put(join(priv, "claude-mcp.json"), "{ \"mcpServers\": {} }\n");
   put(join(priv, "skills", "acceptance-handshake", "SKILL.md"), "# handshake\n");
@@ -357,16 +386,18 @@ async function buildRun() {
   mkdirSync(join(run, "controller-codex", ".agents", "skills"), { recursive: true });
   symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration"));
   const token = "ACCEPTANCE-TOKEN-0123456789";
+  const extensionList = extensions ? [{ name: EXTENSION, version: "1.0.0" }] : [];
+  const context = { home, agentDir, extensions: extensionList };
   const info = {
     runId: "skills-test", candidate, entry: join(candidate, "dist", "main.js"), node: process.execPath, token, version: "0.0.0-test",
     sourceClean: true, entrySha256: "x", distSha256: h.distTreeSha256(candidate), harnessSha256: h.HARNESS_SHA256, configFingerprint: "sha256:test",
     claudeSkillSetup: { exitCode: 0, codes: [], installedAsCopy: true, matchesShipped: true },
-    profile: { from: "p", provider: "synthetic", model: "m", thinkingLevel: "off" }, extensions: [], preparedAt: new Date().toISOString(),
-    resources: h.computeResources(run, candidate),
+    profile: { from: "p", provider: "synthetic", model: "m", thinkingLevel: "off" }, extensions: extensionList, agentDir, preparedAt: new Date().toISOString(),
+    resources: h.computeResources(run, candidate, context),
   };
   writeFileSync(join(priv, "run.json"), `${JSON.stringify(info, null, 2)}\n`);
   return {
-    root, candidate, run, priv, info,
+    root, candidate, run, priv, info, home, agentDir, context,
     controller: (client: string) => join(run, `controller-${client}`),
     baselineOf: (client: string) => (task: string) => JSON.parse(readFileSync(join(priv, "baselines", client, `${task}.json`), "utf8")),
   };
@@ -377,10 +408,12 @@ describe("bound resources", () => {
   it("records a digest for every resource the acceptance relies on", async () => {
     const run = await buildRun();
     expect(Object.keys(run.info.resources).sort()).toEqual([
-      "candidateBuild", "claudeMcpConfiguration", "codexControllerSkill", "controllerSkill", "fixtureBaselines", "handshakeSkill", "harness",
+      "candidateBuild", "claudeMcpConfiguration", "codexControllerSkill", "controllerSkill", "extensionNpmInstallation", "fixtureBaselines", "handshakeSkill", "harness",
       "operatorClaudeSkill", "operatorCodexSkill", "overrideDirectory", "runConfiguration", "workerSkillImplementation", "workerSkillReview",
     ]);
-    expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate))).toEqual([]);
+    // Without extensions the extension binding is one stable value, whatever sits in the agent directory.
+    expect(run.info.resources.extensionNpmInstallation).toBe("none");
+    expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate, run.context))).toEqual([]);
   });
 
   const cases: Array<[string, string[], (r: Awaited<ReturnType<typeof buildRun>>) => void]> = [
@@ -404,9 +437,9 @@ describe("bound resources", () => {
     expect(h.operatorControllerSkills(home)).toEqual({ operatorClaudeSkill: "missing", operatorCodexSkill: "missing" });
     mkdirSync(personal, { recursive: true });
     writeFileSync(join(personal, "SKILL.md"), "operator copy\n");
-    const recorded = h.computeResources(run.run, run.candidate, home);
+    const recorded = h.computeResources(run.run, run.candidate, { ...run.context, home });
     appendFileSync(join(personal, "SKILL.md"), "edited\n");
-    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, home))).toEqual(["operatorClaudeSkill"]);
+    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, { ...run.context, home }))).toEqual(["operatorClaudeSkill"]);
   });
 
   it.skipIf(notLinux)("refuses a Codex run while a differing controller skill sits in the home's Codex skills", async () => {
@@ -415,19 +448,135 @@ describe("bound resources", () => {
     const codexHomeSkill = join(home, ".agents", "skills", "pi-session-orchestration");
     mkdirSync(codexHomeSkill, { recursive: true });
     writeFileSync(join(codexHomeSkill, "SKILL.md"), "an older copy\n");
-    const saved = process.env.HOME;
-    process.env.HOME = home;
-    try {
-      await expect(h.runClient({ run: run.run, client: "codex", scenario: "parallel" }, { signals: new EventEmitter() })).rejects.toThrow("Codex could read it instead");
-    } finally { if (saved === undefined) delete process.env.HOME; else process.env.HOME = saved; }
+    await expect(h.runClient({ run: run.run, client: "codex", scenario: "parallel" }, { signals: new EventEmitter(), home })).rejects.toThrow("Codex could read it instead");
     expect(readdirSync(join(run.priv, "results"))).toEqual([]);
   });
 
   it.each(cases)("reports %s by name", async (_label, expected, mutate) => {
     const run = await buildRun();
     mutate(run);
-    expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate))).toEqual(expected);
+    expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate, run.context))).toEqual(expected);
   });
+});
+
+// ---- #66: the loaded extension package contents -----------------------------------------------------
+describe("extension package binding", () => {
+  type Run = Awaited<ReturnType<typeof buildRun>>;
+  const packageKey = `extension:${EXTENSION}`;
+  const npm = (r: Run) => join(r.agentDir, "npm");
+  const mutations: Array<[string, string[], (r: Run) => void]> = [
+    ["a file of the extension package", [packageKey, "extensionNpmInstallation"], (r) => appendFileSync(join(npm(r), "node_modules", EXTENSION, "index.js"), "// changed\n")],
+    ["a file added to the extension package", [packageKey, "extensionNpmInstallation"], (r) => writeFileSync(join(npm(r), "node_modules", EXTENSION, "extra.js"), "x")],
+    ["a dependency file", ["extensionNpmInstallation"], (r) => appendFileSync(join(npm(r), "node_modules", "dep", "index.js"), "// changed\n")],
+    ["the npm manifest", ["extensionNpmInstallation"], (r) => appendFileSync(join(npm(r), "package.json"), " ")],
+    ["the npm lockfile", ["extensionNpmInstallation"], (r) => appendFileSync(join(npm(r), "package-lock.json"), " ")],
+  ];
+
+  it("binds each extension package and the npm installation under path-free keys", async () => {
+    const run = await buildRun({ extensions: true });
+    expect(Object.keys(run.info.resources).filter((name) => name.startsWith("extension")).sort()).toEqual([packageKey, "extensionNpmInstallation"]);
+    expect(run.info.resources[packageKey]).toMatch(/^[0-9a-f]{64}$/);
+    expect(run.info.resources.extensionNpmInstallation).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(run.info.resources)).not.toContain(run.agentDir);
+  });
+
+  it.each(mutations)("reports %s by name", async (_label, expected, mutate) => {
+    const run = await buildRun({ extensions: true });
+    mutate(run);
+    expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate, run.context))).toEqual(expected);
+  });
+
+  it("binds the real package root when the package is a link, so a change behind the link is reported", async () => {
+    const run = await buildRun({ extensions: true });
+    const source = join(run.root, "extension-source");
+    const installed = join(npm(run), "node_modules", EXTENSION);
+    renameSync(installed, source);
+    symlinkSync(source, installed);
+    const recorded = h.computeResources(run.run, run.candidate, run.context);
+    appendFileSync(join(source, "index.js"), "// changed behind the link\n");
+    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, run.context))).toEqual([packageKey]);
+  });
+
+  it("reports an extension package that is gone as missing", async () => {
+    const run = await buildRun({ extensions: true });
+    rmSync(join(npm(run), "node_modules", EXTENSION), { recursive: true });
+    const now = h.computeResources(run.run, run.candidate, run.context);
+    expect(now[packageKey]).toBe("missing");
+    expect(h.changedResources(run.info.resources, now)).toContain(packageKey);
+  });
+
+  it("resolves the agent directory once from the environment, its home form or the SDK default", async () => {
+    const run = await buildRun({ extensions: true });
+    const link = join(run.root, "agent-link");
+    symlinkSync(run.agentDir, link);
+    expect(h.resolveAgentDirectory({ PI_CODING_AGENT_DIR: link }, run.home)).toBe(run.agentDir);
+    expect(h.resolveAgentDirectory({ PI_CODING_AGENT_DIR: "~/custom-agent" }, run.home)).toBe(join(run.home, "custom-agent"));
+    expect(h.resolveAgentDirectory({}, run.home)).toBe(join(run.home, ".pi", "agent"));
+    expect(h.resolveAgentDirectory({ PI_CODING_AGENT_DIR: "" }, run.home)).toBe(join(run.home, ".pi", "agent"));
+  });
+});
+
+// ---- #66: prepare passes the bound agent directory to the server of both clients ---------------------
+describe("prepare binds the agent directory", () => {
+  type Run = Awaited<ReturnType<typeof buildRun>>;
+  /** Runs the real `prepare` against a synthetic candidate with a stand-in setup and a fake `claude`; nothing leaves the temporary root. */
+  async function prepareRun(run: Run, { withExtensions, env }: { withExtensions: boolean; env: Record<string, string> }) {
+    copyFileSync(setupStub, join(run.candidate, "dist", "setup-main.js"));
+    const bin = join(run.root, "bin");
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    const baseConfig = join(run.root, "base.json");
+    writeFileSync(baseConfig, JSON.stringify({ executionProfiles: { source: { provider: "p", model: "m", thinkingLevel: "off", permissionProfile: "read-only", default: true, ...(withExtensions ? { extensions: [`npm:${EXTENSION}@1.0.0`] } : {}) } } }));
+    const savedPath = process.env.PATH; const write = process.stdout.write.bind(process.stdout);
+    let printed = "";
+    process.env.PATH = `${bin}:${savedPath ?? ""}`;
+    process.stdout.write = ((chunk: string) => { printed += chunk; return true; }) as typeof process.stdout.write;
+    try {
+      h.prepare({ candidate: run.candidate, "base-config": baseConfig, "from-profile": "source", "work-dir": join(run.root, "work"), ...(withExtensions ? { "with-extensions": true } : {}) },
+        { env, home: run.home, temporaryDirs: [] });
+    } finally { process.stdout.write = write; if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath; }
+    const runDir = printed.trim();
+    const priv = join(runDir, "private");
+    const info = JSON.parse(readFileSync(join(priv, "run.json"), "utf8"));
+    return { runDir, priv, info, setupEnv: JSON.parse(readFileSync(join(runDir, "setup-env.json"), "utf8")) };
+  }
+
+  it("gives both clients' servers the resolved PI_CODING_AGENT_DIR and binds the extension contents", async () => {
+    const run = await buildRun({ extensions: true });
+    const link = join(run.root, "agent-link");
+    symlinkSync(run.agentDir, link);
+    // The environment names a link; the prepared run records and passes the real directory.
+    const prepared = await prepareRun(run, { withExtensions: true, env: { PI_CODING_AGENT_DIR: link } });
+    expect(prepared.info.agentDir).toBe(run.agentDir);
+    const claudeServer = JSON.parse(readFileSync(join(prepared.priv, "claude-mcp.json"), "utf8")).mcpServers["pi-candidate"];
+    expect(claudeServer.env).toEqual({ PI_SESSION_MCP_CONFIG: join(prepared.priv, "config.json"), PI_CODING_AGENT_DIR: run.agentDir });
+    const codexArgs: string[] = h.command("codex", prepared.info, prepared.priv, join(prepared.runDir, "controller-codex"), { scenario: "parallel" }).args;
+    expect(codexArgs).toContain(`mcp_servers.pi-candidate.env={PI_SESSION_MCP_CONFIG=${JSON.stringify(join(prepared.priv, "config.json"))},PI_CODING_AGENT_DIR=${JSON.stringify(run.agentDir)}}`);
+    // setup's Doctor looks at the same directory
+    expect(prepared.setupEnv.PI_CODING_AGENT_DIR).toBe(run.agentDir);
+    expect(prepared.info.extensions).toEqual([{ name: EXTENSION, version: "1.0.0" }]);
+    expect(Object.keys(prepared.info.resources).filter((name) => name.startsWith("extension")).sort()).toEqual([`extension:${EXTENSION}`, "extensionNpmInstallation"]);
+    expect(h.changedResources(prepared.info.resources, h.computeResources(prepared.runDir, prepared.info.candidate, { home: run.home, agentDir: prepared.info.agentDir, extensions: prepared.info.extensions }))).toEqual([]);
+    // the recorded directory is private: the evidence names neither it nor the run
+    const out = join(run.root, "evidence.json");
+    h.evidence({ run: prepared.runDir, out });
+    const text = readFileSync(out, "utf8");
+    for (const secret of [run.agentDir, run.root, prepared.info.token]) expect(text).not.toContain(secret);
+    expect(JSON.parse(text).resources.extensionNpmInstallation).toBe(prepared.info.resources.extensionNpmInstallation);
+  }, 60_000);
+
+  it("passes the default agent directory to both clients without extensions and binds nothing of it", async () => {
+    const run = await buildRun();
+    const prepared = await prepareRun(run, { withExtensions: false, env: {} });
+    const expected = join(run.home, ".pi", "agent");
+    expect(prepared.info.agentDir).toBe(expected);
+    expect(JSON.parse(readFileSync(join(prepared.priv, "claude-mcp.json"), "utf8")).mcpServers["pi-candidate"].env.PI_CODING_AGENT_DIR).toBe(expected);
+    const codexArgs: string[] = h.command("codex", prepared.info, prepared.priv, join(prepared.runDir, "controller-codex"), { scenario: "parallel" }).args;
+    expect(codexArgs.find((arg) => arg.startsWith("mcp_servers.pi-candidate.env="))).toContain(`PI_CODING_AGENT_DIR=${JSON.stringify(expected)}`);
+    expect(prepared.info.resources.extensionNpmInstallation).toBe("none");
+    expect(Object.keys(prepared.info.resources).filter((name) => name.startsWith("extension:"))).toEqual([]);
+    expect(prepared.setupEnv.PI_CODING_AGENT_DIR).toBeNull();
+  }, 60_000);
 });
 
 describe.skipIf(notLinux)("runs against a synthetic layout with a controlled client", () => {
@@ -447,24 +596,58 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
   }
   const values = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, string> = {}) => ({ run: run.run, client: "claude", scenario: "parallel", ...extra });
   const quick = { graceMs: 300, killWaitMs: 2_000, drainMs: 300 };
+  // Every launch reads the operator-machine inputs from the run's temporary home.
+  const launch = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, unknown> = {}) => ({ signals: new EventEmitter(), budgets: quick, home: run.home, ...extra });
+  const reanalyze = (run: Awaited<ReturnType<typeof buildRun>>) => h.reanalyze(values(run), { home: run.home });
 
   it("refuses to launch when a bound resource changed after prepare", async () => {
     const run = await buildRun();
     appendFileSync(join(run.candidate, "skills", "pi-session-review", "SKILL.md"), "x");
-    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow('resourcesChanged: ["workerSkillReview"]');
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow('resourcesChanged: ["workerSkillReview"]');
     expect(readdirSync(join(run.priv, "results"))).toEqual([]);
   });
+
+  it("refuses to launch when an extension file changed after prepare, and records nothing", async () => {
+    const run = await buildRun({ extensions: true });
+    appendFileSync(join(run.agentDir, "npm", "node_modules", EXTENSION, "index.js"), "// changed\n");
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow(`resourcesChanged: ${JSON.stringify([`extension:${EXTENSION}`, "extensionNpmInstallation"])}`);
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    expect(existsSync(join(run.priv, "launches"))).toBe(false);
+  });
+
+  it.each([
+    ["a dependency file", (r: Awaited<ReturnType<typeof buildRun>>) => join(r.agentDir, "npm", "node_modules", "dep", "index.js")],
+    ["the npm lockfile", (r: Awaited<ReturnType<typeof buildRun>>) => join(r.agentDir, "npm", "package-lock.json")],
+  ])("refuses to launch when %s changed after prepare", async (_label, file) => {
+    const run = await buildRun({ extensions: true });
+    appendFileSync(file(run), "\n");
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow('resourcesChanged: ["extensionNpmInstallation"]');
+  });
+
+  it.each([
+    ["an extension file", [`extension:${EXTENSION}`, "extensionNpmInstallation"], (r: Awaited<ReturnType<typeof buildRun>>) => join(r.agentDir, "npm", "node_modules", EXTENSION, "index.js")],
+    ["a dependency file", ["extensionNpmInstallation"], (r: Awaited<ReturnType<typeof buildRun>>) => join(r.agentDir, "npm", "node_modules", "dep", "index.js")],
+    ["the npm lockfile", ["extensionNpmInstallation"], (r: Awaited<ReturnType<typeof buildRun>>) => join(r.agentDir, "npm", "package-lock.json")],
+  ])("fails the result with resourcesChanged when %s changed during the run", async (_label, expected, file) => {
+    const run = await buildRun({ extensions: true });
+    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), launch(run)), run, file(run));
+    expect(result.resources).toEqual({ changedBeforeLaunch: [], changedAfterRun: expected });
+    expect(result.acceptance.passed).toBe(false);
+    expect(result.acceptance.failures).toContain("resourcesChanged");
+    // a reanalysis finds the same drift and the original state alike
+    expect(reanalyze(run).resources.changedAfterRun).toEqual(expected);
+  }, 60_000);
 
   it("refuses to launch on a fixture that already differs from its baseline", async () => {
     const run = await buildRun();
     writeFileSync(join(run.controller("claude"), "fixtures", "stats", "stray.txt"), "x");
-    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow('fixturesChanged: ["stats"]');
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow('fixturesChanged: ["stats"]');
   });
 
   it("records a resource that changed during the run, never passes it, and keeps the original result across reanalyses", async () => {
     const run = await buildRun();
     const resultPath = join(run.priv, "results", "claude-parallel.json");
-    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run);
+    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), launch(run)), run);
     expect(result.resources).toEqual({ changedBeforeLaunch: [], changedAfterRun: ["controllerSkill"] });
     expect(result.acceptance.passed).toBe(false);
     expect(result.acceptance.failures).toContain("resourcesChanged");
@@ -472,10 +655,10 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(result.timedOut).toBe(false);
     const original = readFileSync(resultPath, "utf8");
     // the original result is written once, never replaced
-    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow("already ran");
     expect(readFileSync(resultPath, "utf8")).toBe(original);
 
-    const first = h.reanalyze(values(run));
+    const first = reanalyze(run);
     expect(readFileSync(resultPath, "utf8")).toBe(original);
     expect(readdirSync(join(run.priv, "reanalyses"))).toEqual(["claude-parallel-001.json"]);
     expect(first.reanalysis.stateChanges).toEqual({ resources: [], fixtures: [] });
@@ -483,13 +666,13 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
 
     // a fixture changed after the original run: marked, cannot pass
     writeFileSync(join(run.controller("claude"), "fixtures", "stats", "after.txt"), "x");
-    const second = h.reanalyze(values(run));
+    const second = reanalyze(run);
     expect(second.reanalysis.stateChanges.fixtures).toEqual(["stats"]);
     expect(second.acceptance.passed).toBe(false);
     expect(second.acceptance.failures).toContain("stateChangedSinceRun");
     // a bound resource changed after the original run
     appendFileSync(join(run.priv, "config.json"), " ");
-    const third = h.reanalyze(values(run));
+    const third = reanalyze(run);
     expect(third.reanalysis.stateChanges.resources).toEqual(["runConfiguration"]);
     expect(third.resources.changedAfterRun).toContain("runConfiguration");
     expect(readFileSync(resultPath, "utf8")).toBe(original);
@@ -511,7 +694,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
   it("keeps a failing result and the launch record when the worker deleted a file the oracle reads", async () => {
     const run = await buildRun();
     const slugTest = join(run.controller("claude"), "fixtures", "slug", "test", "slug.test.js");
-    const result = await withFakeClient<any>("delete", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run, slugTest);
+    const result = await withFakeClient<any>("delete", () => h.runClient(values(run), launch(run)), run, slugTest);
     expect(result.analysisFailed).toBeUndefined();
     expect(result.oracle.slug.addedTest).toBe(false);
     // The file is in the slug scope, so only the missing test fails the run, not the scope check.
@@ -519,7 +702,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(result.acceptance.passed).toBe(false);
     expect(readdirSync(join(run.priv, "results"))).toEqual(["claude-parallel.json"]);
     expect(readdirSync(join(run.priv, "launches"))).toEqual(["claude-parallel.json"]);
-    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow("already ran");
   }, 60_000);
 
   it("records a never-passing result, ends the run's processes and exits when a signal arrives during the analysis", async () => {
@@ -530,7 +713,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     let registrations = 0;
     signals.on("newListener", (event) => { if (event === "SIGINT" && ++registrations === 2) queueMicrotask(() => signals.emit("SIGINT")); });
     const exits: number[] = [];
-    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals, budgets: quick, exit: (code: number) => { exits.push(code); } }), run);
+    const result = await withFakeClient<any>("mutate", () => h.runClient(values(run), launch(run, { signals, exit: (code: number) => { exits.push(code); } })), run);
     expect(exits).toEqual([1]);
     expect(result).toMatchObject({ harnessAborted: true, abortSignal: "SIGINT", analysisFailed: true, exitCode: 0, timedOut: false });
     expect(result.acceptance).toEqual({ passed: false, failures: ["harnessAborted", "analysisFailed"] });
@@ -538,8 +721,8 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(signals.listenerCount("SIGINT")).toBe(0);
     expect(signals.listenerCount("SIGTERM")).toBe(0);
     // A reanalysis of the unfinished result names the failed analysis itself, not only its side effects.
-    expect(h.reanalyze(values(run)).acceptance.failures).toContain("analysisFailed");
-    await expect(h.runClient(values(run), { signals: new EventEmitter(), budgets: quick })).rejects.toThrow("already ran");
+    expect(reanalyze(run).acceptance.failures).toContain("analysisFailed");
+    await expect(h.runClient(values(run), launch(run))).rejects.toThrow("already ran");
   }, 60_000);
 
   it("keeps the supervision's classification in a result recorded after a signal during the analysis", async () => {
@@ -547,7 +730,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     const signals = new EventEmitter();
     let registrations = 0;
     signals.on("newListener", (event) => { if (event === "SIGINT" && ++registrations === 2) queueMicrotask(() => signals.emit("SIGINT")); });
-    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run, { "timeout-min": "0.01" }), { signals, budgets: quick, exit: () => {} }), run);
+    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run, { "timeout-min": "0.01" }), launch(run, { signals, exit: () => {} })), run);
     expect(result).toMatchObject({ timedOut: true, harnessAborted: true, abortSignal: "SIGINT", analysisFailed: true });
     expect(result.acceptance).toEqual({ passed: false, failures: ["timedOut", "harnessAborted", "analysisFailed"] });
   }, 60_000);
@@ -563,14 +746,14 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
       if (registrations === 1) setTimeout(() => signals.emit("SIGTERM"), 200);
       if (registrations === 2) queueMicrotask(() => signals.emit("SIGINT"));
     });
-    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run), { signals, budgets: quick, exit: () => {} }), run);
+    const result = await withFakeClient<any>("ignore-term", () => h.runClient(values(run), launch(run, { signals, exit: () => {} })), run);
     expect(result).toMatchObject({ harnessAborted: true, abortSignal: "SIGTERM", analysisFailed: true, timedOut: false });
     expect(result.acceptance).toEqual({ passed: false, failures: ["harnessAborted", "analysisFailed"] });
   }, 60_000);
 
   it("lists every launch in the evidence and marks one that left no result", async () => {
     const run = await buildRun();
-    await withFakeClient<any>("mutate", () => h.runClient(values(run), { signals: new EventEmitter(), budgets: quick }), run);
+    await withFakeClient<any>("mutate", () => h.runClient(values(run), launch(run)), run);
     // An attempt whose harness died before it wrote a result leaves only its launch record.
     writeFileSync(join(run.priv, "launches", "claude-abort.json"), JSON.stringify({ launchedAt: "2026-10-12T20:00:00.000Z" }));
     const out = join(run.root, "evidence.json");
@@ -583,7 +766,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(record.results.map((result: { scenario: string }) => result.scenario)).toEqual(["parallel"]);
   }, 60_000);
 
-  it("ends the real CLI by itself with a non-zero exit when the client ignores SIGTERM and holds stdout open", async () => {
+  it("ends the CLI entry by itself with a non-zero exit when the client ignores SIGTERM and holds stdout open", async () => {
     const run = await buildRun();
     const bin = join(run.root, "bin");
     mkdirSync(bin, { recursive: true });
@@ -592,7 +775,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`, FAKE_CLIENT_MODE: "ignore-term", FAKE_CLIENT_STATE: statePath };
     let processes: Recorded[] = [];
     try {
-      const result = await runNode([scriptPath, "run", "--run", run.run, "--client", "claude", "--scenario", "parallel", "--timeout-min", "0.05"], { env, limitMs: 60_000 });
+      const result = await runNode([cliDriver, run.home, "run", "--run", run.run, "--client", "claude", "--scenario", "parallel", "--timeout-min", "0.05"], { env, limitMs: 60_000 });
       if (existsSync(statePath)) processes = recordedProcesses(statePath);
       expect(result.code, result.stderr).toBe(1);
       expect(result.wallMs).toBeLessThan(40_000);

@@ -140,6 +140,13 @@ export function treeSha256(dir) {
   try { return sha256(JSON.stringify(manifestOf(dir))); } catch { return "unreadable"; }
 }
 const fileSha256 = (path) => { try { return sha256(readFileSync(path)); } catch { return "missing"; } };
+/** Like treeSha256, but a symbolic link in place of the directory also binds the content it leads to. */
+export function linkedTreeSha256(dir) {
+  let top; try { top = lstatSync(dir); } catch { return "missing"; }
+  if (!top.isSymbolicLink()) return treeSha256(dir);
+  let real; try { real = realpathSync(dir); } catch { return treeSha256(dir); }
+  return sha256(`symlink\0${readlinkSync(dir)}\0${treeSha256(real)}`);
+}
 
 /**
  * Runs git against a worker-controlled repository. GIT_DIR and GIT_WORK_TREE pin it to the fixture so a
@@ -298,7 +305,42 @@ export function operatorControllerSkills(home = homedir()) {
   };
 }
 
-export function computeResources(run, candidate, home = homedir()) {
+/** `~` and `~/...` expand against `home`; the result is absolute, and its real path where it exists. */
+function resolveDirectory(configured, fallback, home) {
+  const raw = configured ? (configured === "~" ? home : configured.startsWith("~/") ? join(home, configured.slice(2)) : configured) : fallback;
+  const absolute = resolve(raw);
+  try { return realpathSync(absolute); } catch { return absolute; }
+}
+/** Pi's agent directory as the server resolves it: `PI_CODING_AGENT_DIR`, else `~/.pi/agent`. Resolved once, at prepare. */
+export function resolveAgentDirectory(env = process.env, home = homedir()) {
+  return resolveDirectory(env.PI_CODING_AGENT_DIR, join(home, ".pi", "agent"), home);
+}
+/** The environment of the run's MCP server in both clients: its configuration and the bound Pi agent directory. */
+export function serverEnvironment(configPath, agentDir) {
+  return { PI_SESSION_MCP_CONFIG: configPath, PI_CODING_AGENT_DIR: agentDir };
+}
+
+/**
+ * The extension package contents the server loads: one digest per allowlisted package (its real root below Pi's
+ * npm installation) and one for the whole npm installation, which covers dependencies, `package.json` and the
+ * lockfile. Without extensions the npm digest is the stable `none`. Keys are path-free.
+ */
+export function extensionResources(agentDir, extensions) {
+  if (extensions.length === 0) return { extensionNpmInstallation: "none" };
+  if (!agentDir) return { extensionNpmInstallation: "unset", ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, "unset"])) };
+  const packageRoot = (name) => { try { return treeSha256(realpathSync(join(agentDir, "npm", "node_modules", name))); } catch { return "missing"; } };
+  return {
+    extensionNpmInstallation: linkedTreeSha256(join(agentDir, "npm")),
+    ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, packageRoot(name)])),
+  };
+}
+
+/**
+ * `context` carries what the run recorded privately at prepare (`agentDir`, `extensions`) and, for tests, the
+ * injectable `home`.
+ */
+export function computeResources(run, candidate, context = {}) {
+  const { home = homedir(), agentDir, extensions = [] } = context;
   const priv = join(run, "private");
   const codexLink = join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration");
   const candidateSkill = join(candidate, "skills", "pi-session-orchestration");
@@ -323,20 +365,23 @@ export function computeResources(run, candidate, home = homedir()) {
     fixtureBaselines: treeSha256(join(priv, "baselines")),
     harness: HARNESS_SHA256,
     ...operatorControllerSkills(home),
+    ...extensionResources(agentDir, extensions),
   };
 }
 /** Names of the bound resources that differ from the recorded digests. */
 export function changedResources(recorded, current) {
   return [...new Set([...Object.keys(recorded ?? {}), ...Object.keys(current)])].filter((name) => recorded?.[name] !== current[name]).sort();
 }
-function resourcesChangedSincePrepare(run, info) {
+/** What `computeResources` needs from the run's private record, plus the injectable `home`. */
+const boundContext = (info, context = {}) => ({ agentDir: info.agentDir, extensions: info.extensions ?? [], ...context });
+function resourcesChangedSincePrepare(run, info, context) {
   if (!info.resources) fail("the run has no recorded resource digests; prepare a new run");
-  return changedResources(info.resources, computeResources(run, info.candidate));
+  return changedResources(info.resources, computeResources(run, info.candidate, boundContext(info, context)));
 }
 /** State at the end of a run: bound resources plus the fixtures of the scenario. A reanalysis must find the same. */
-export function endStateOf(run, info, client, scenario) {
+export function endStateOf(run, info, client, scenario, context) {
   const fixtures = Object.fromEntries(SCENARIOS[scenario].tasks.map((task) => [task, fixtureStateSha256(join(run, `controller-${client}`, "fixtures", task))]));
-  return { resources: computeResources(run, info.candidate), fixtures };
+  return { resources: computeResources(run, info.candidate, boundContext(info, context)), fixtures };
 }
 export function endStateChanges(recorded, current) {
   const fixtures = [...new Set([...Object.keys(recorded?.fixtures ?? {}), ...Object.keys(current.fixtures)])].filter((task) => recorded?.fixtures?.[task] !== current.fixtures[task]).sort();
@@ -357,7 +402,11 @@ export function parseExtensionAllowlist(list) {
   return parsed;
 }
 
-export function prepare(values) {
+/**
+ * `context` is for tests: the environment and home to resolve the Pi agent directory from, and the directories that
+ * count as temporary.
+ */
+export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"] } = {}) {
   if (!values.candidate || !values["base-config"] || !values["from-profile"]) fail("prepare needs --candidate, --base-config and --from-profile");
   const candidate = realpathSync(resolve(values.candidate));
   const entry = join(candidate, "dist", "main.js");
@@ -371,8 +420,10 @@ export function prepare(values) {
   if (source.extensions && !values["with-extensions"]) fail("the profile has extensions; pass --with-extensions to copy exactly its allowlist, or choose another profile");
   if (values["with-extensions"] && !source.extensions) fail("--with-extensions needs a profile that has extensions");
   const extensions = values["with-extensions"] ? parseExtensionAllowlist(source.extensions) : undefined;
-  const workDir = resolve(values["work-dir"] ?? join(homedir(), ".cache", "pi-session-mcp-acceptance"));
-  if ([tmpdir(), "/tmp", "/var/tmp", "/dev/shm"].some((dir) => inside(workDir, dir))) fail("--work-dir must not be inside a temporary directory: Codex refuses helper binaries there");
+  const workDir = resolve(values["work-dir"] ?? join(home, ".cache", "pi-session-mcp-acceptance"));
+  if (temporaryDirs.some((dir) => inside(workDir, dir))) fail("--work-dir must not be inside a temporary directory: Codex refuses helper binaries there");
+  // Resolved once: the server gets this directory explicitly, so the directory that is bound is the one it loads from.
+  const agentDir = resolveAgentDirectory(env, home);
   const runId = `skills-${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
   const run = join(workDir, runId);
   const priv = join(run, "private");
@@ -421,8 +472,9 @@ export function prepare(values) {
   const configBytes = Buffer.from(`${JSON.stringify(config, null, 2)}\n`);
   writeFileSync(join(priv, "config.json"), configBytes, { mode: 0o600 });
   const node = process.execPath;
-  writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: { PI_SESSION_MCP_CONFIG: join(priv, "config.json") } } } });
-  const claudeSkillSetup = installClaudeSkill(candidate, run, priv, Boolean(extensions));
+  writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: serverEnvironment(join(priv, "config.json"), agentDir) } } });
+  const claudeSkillSetup = installClaudeSkill(candidate, run, priv, Boolean(extensions), agentDir);
+  const extensionList = (extensions ?? []).map(({ name, version }) => ({ name, version }));
   const packageJson = readJson(join(candidate, "package.json"));
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: candidate, encoding: "utf8" });
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: candidate, encoding: "utf8" });
@@ -438,8 +490,10 @@ export function prepare(values) {
     claudeSkillSetup,
     profile: { from: values["from-profile"], provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel },
     // Names and versions only; the pins themselves are what the configuration holds.
-    extensions: (extensions ?? []).map(({ name, version }) => ({ name, version })),
-    resources: computeResources(run, candidate),
+    extensions: extensionList,
+    // Private: where the server loads extensions from.
+    agentDir,
+    resources: computeResources(run, candidate, { home, agentDir, extensions: extensionList }),
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
@@ -461,13 +515,13 @@ export function setupEnvironment(home, path, configPath, withExtensions, env = p
   return [`HOME=${home}`, `PATH=${path}`, `PI_SESSION_MCP_CONFIG=${configPath}`, ...(withExtensions ? [`PI_CODING_AGENT_DIR=${agentDir}`] : [])];
 }
 
-function installClaudeSkill(candidate, run, priv, withExtensions) {
+function installClaudeSkill(candidate, run, priv, withExtensions, agentDir) {
   const home = join(run, "setup-home");
   mkdirSync(home, { recursive: true, mode: 0o700 });
   const claude = spawnSync("sh", ["-c", "command -v claude"], { encoding: "utf8" }).stdout.trim();
   if (!claude) fail("claude is not on PATH");
   const path = [...new Set([dirname(process.execPath), dirname(claude), "/usr/bin", "/bin"])].join(":");
-  const setup = spawnSync("env", ["-i", ...setupEnvironment(home, path, join(priv, "config.json"), withExtensions),
+  const setup = spawnSync("env", ["-i", ...setupEnvironment(home, path, join(priv, "config.json"), withExtensions, { PI_CODING_AGENT_DIR: agentDir }),
     process.execPath, join(candidate, "dist", "setup-main.js"), "--apply", "--json", "--target", "claude-code:project:pi-session-mcp"],
   { cwd: join(run, "controller-claude"), encoding: "utf8", timeout: 120_000 });
   let parsed; try { parsed = JSON.parse(setup.stdout); } catch { parsed = undefined; }
@@ -512,7 +566,7 @@ function prompt(client, scenario) {
   ].join("\n");
 }
 
-function command(client, info, priv, controller, values) {
+export function command(client, info, priv, controller, values) {
   const text = prompt(client, values.scenario);
   if (client === "claude") {
     const allowed = [...TOOLS.map((tool) => `mcp__${SERVER}__${tool}`), "Read", "Grep", "Glob", "Bash(sleep:*)", "Bash(node --test:*)", "Bash(git -C:*)"];
@@ -527,7 +581,7 @@ function command(client, info, priv, controller, values) {
     ...(values["codex-model"] ? ["-m", values["codex-model"]] : []),
     "-c", `mcp_servers.${SERVER}.command=${toml(info.node)}`,
     "-c", `mcp_servers.${SERVER}.args=[${toml(info.entry)}]`,
-    "-c", `mcp_servers.${SERVER}.env={PI_SESSION_MCP_CONFIG=${toml(join(priv, "config.json"))}}`,
+    "-c", `mcp_servers.${SERVER}.env={${Object.entries(serverEnvironment(join(priv, "config.json"), info.agentDir)).map(([key, value]) => `${key}=${toml(value)}`).join(",")}}`,
     ...["pi_session_prompt", "pi_session_abort", "pi_session_close"].flatMap((tool) => ["-c", `mcp_servers.${SERVER}.tools.${tool}.approval_mode="approve"`]),
     text] };
 }
@@ -934,7 +988,7 @@ export function evaluateAcceptance(result, scenario) {
 const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
-export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code) } = {}) {
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir() } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
@@ -945,16 +999,18 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   const controller = join(run, `controller-${values.client}`);
   const label = `${values.client}-${values.scenario}`;
   sameHarness(info);
+  if (typeof info.agentDir !== "string") fail("the run has no recorded agent directory; prepare a new run");
   if (existsSync(join(priv, "results", `${label}.json`)) || existsSync(join(priv, "launches", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
   const baselineOf = baselineReader(priv, values.client);
   // Codex's precedence between a home skill and the run's repository skill is not established, so a differing
   // home copy refuses the run instead of leaving open which skill the controller read.
   if (values.client === "codex") {
-    const home = operatorControllerSkills().operatorCodexSkill;
-    if (home !== "missing" && home !== treeSha256(join(info.candidate, "skills", "pi-session-orchestration"))) fail("a pi-session-orchestration skill in the home's Codex skills differs from the candidate's; Codex could read it instead, so this run is refused");
+    const homeCopy = operatorControllerSkills(home).operatorCodexSkill;
+    if (homeCopy !== "missing" && homeCopy !== treeSha256(join(info.candidate, "skills", "pi-session-orchestration"))) fail("a pi-session-orchestration skill in the home's Codex skills differs from the candidate's; Codex could read it instead, so this run is refused");
   }
   // Everything bound at prepare must be unchanged before the controller starts; the fixtures must still be pristine.
-  const changedBefore = resourcesChangedSincePrepare(run, info);
+  const context = { home };
+  const changedBefore = resourcesChangedSincePrepare(run, info, context);
   if (changedBefore.length > 0) fail(`resourcesChanged: ${JSON.stringify(changedBefore)}`);
   const dirtyFixtures = SCENARIOS[values.scenario].tasks.filter((task) => {
     const comparison = compareToBaseline(join(controller, "fixtures", task), baselineOf(task), []);
@@ -1005,7 +1061,7 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   try {
     let result;
     try {
-      result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: (list) => { residual = list; } });
+      result = await analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, context, residual: (list) => { residual = list; } });
     } catch {
       // A crash of the analysis still leaves a result on record, and it never passes.
       result = unfinished();
@@ -1022,7 +1078,7 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
 }
 
 /** Everything after the supervised controller: transcript, residual processes, transcript analysis, oracles and verdict. */
-async function analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, residual: reportResidual }) {
+async function analyzeRun({ values, info, run, priv, controller, label, baselineOf, supervised, durationSeconds, transcript, context, residual: reportResidual }) {
   const { seen } = supervised;
   writeFileSync(transcript, supervised.output, { mode: 0o600 });
   // Cleanup: every process this run started must be gone, matched by PID and start time.
@@ -1056,8 +1112,8 @@ async function analyzeRun({ values, info, run, priv, controller, label, baseline
   result.oracle = oracle(controller, values.scenario, info, result.transcript.turnIntervals, baselineOf);
   delete result.transcript.turnIntervals;
   // Recheck after the controller finished: a change since prepare must never be accepted.
-  result.resources = { changedBeforeLaunch: [], changedAfterRun: resourcesChangedSincePrepare(run, info) };
-  result.endState = endStateOf(run, info, values.client, values.scenario);
+  result.resources = { changedBeforeLaunch: [], changedAfterRun: resourcesChangedSincePrepare(run, info, context) };
+  result.endState = endStateOf(run, info, values.client, values.scenario, context);
   result.acceptance = evaluateAcceptance(result, values.scenario);
   return result;
 }
@@ -1067,7 +1123,7 @@ async function analyzeRun({ values, info, run, priv, controller, label, baseline
  * outcome goes to a separate file. A reanalysis whose fixtures or bound resources differ from the state recorded
  * at the end of the original run is marked and cannot pass.
  */
-export function reanalyze(values) {
+export function reanalyze(values, context = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("reanalyze needs --run, --client and --scenario");
   const run = realpathSync(resolve(values.run));
   const priv = join(run, "private");
@@ -1078,11 +1134,11 @@ export function reanalyze(values) {
   const rawText = readFileSync(join(priv, "transcripts", `${label}.jsonl`), "utf8");
   const calls = toolCalls(values.client, rawText.split("\n"));
   const transcript = analyze(values.client, values.scenario, calls, info, rawText);
-  const stateChanges = endStateChanges(stored.endState, endStateOf(run, info, values.client, values.scenario));
+  const stateChanges = endStateChanges(stored.endState, endStateOf(run, info, values.client, values.scenario, context));
   const result = {
     ...stored, transcript,
     oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info, transcript.turnIntervals, baselineReader(priv, values.client)),
-    resources: { changedBeforeLaunch: stored.resources?.changedBeforeLaunch ?? [], changedAfterRun: resourcesChangedSincePrepare(run, info) },
+    resources: { changedBeforeLaunch: stored.resources?.changedBeforeLaunch ?? [], changedAfterRun: resourcesChangedSincePrepare(run, info, context) },
     reanalysis: { of: label, stateChanges, analyzedAt: new Date().toISOString() },
   };
   delete transcript.turnIntervals;
@@ -1113,7 +1169,7 @@ export function evidence(values) {
     // A launch without a result (a killed harness, an out-of-memory end) stays visible in the published record.
     launches: list(join(priv, "launches")).map(({ name, value }) => ({ label: name.replace(/\.json$/, ""), launchedAt: value.launchedAt, hasResult: existsSync(join(priv, "results", name)) })),
   }, null, 2);
-  for (const marker of [homedir(), info.token, info.candidate, resolve(values.run)]) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
+  for (const marker of [homedir(), info.token, info.candidate, info.agentDir, resolve(values.run)].filter(Boolean)) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
   writeFileSync(resolve(values.out), `${text}\n`);
 }
 
@@ -1121,17 +1177,18 @@ const OPTIONS = {
   candidate: { type: "string" }, "base-config": { type: "string" }, "from-profile": { type: "string" }, "work-dir": { type: "string" }, "with-extensions": { type: "boolean" },
   run: { type: "string" }, client: { type: "string" }, scenario: { type: "string" }, "timeout-min": { type: "string" }, "codex-model": { type: "string" }, out: { type: "string" },
 };
-async function main(argv) {
+/** The CLI entry. `context` (tests only) injects what the subcommands read from the operator's machine. */
+export async function main(argv, context = {}) {
   const [subcommand, ...rest] = argv;
   let values;
   try { ({ values } = parseArgs({ args: rest, options: OPTIONS })); } catch (error) { fail(error.message); }
-  if (subcommand === "prepare") prepare(values);
+  if (subcommand === "prepare") prepare(values, context);
   else if (subcommand === "run") {
-    const result = await runClient(values);
+    const result = await runClient(values, context);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     // A run that ended through the supervisor's own timeout, spawn failure or abort is not a clean finish.
     if (result.timedOut || result.spawnFailed || result.harnessAborted || result.analysisFailed) process.exitCode = 1;
-  } else if (subcommand === "reanalyze") process.stdout.write(`${JSON.stringify(reanalyze(values), null, 2)}\n`);
+  } else if (subcommand === "reanalyze") process.stdout.write(`${JSON.stringify(reanalyze(values, context), null, 2)}\n`);
   else if (subcommand === "evidence") evidence(values);
   else fail("usage: multi-session-acceptance.mjs prepare|run|reanalyze|evidence ...");
 }
