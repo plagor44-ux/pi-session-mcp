@@ -882,6 +882,17 @@ describe("incomplete bindings", () => {
     expect(h.unboundResources(run.info.resources, now)).toEqual([...extensionKeys, name].sort());
   });
 
+  // The per-source cases above each build one run; the aggregate needs no build: all six keys incomplete at once.
+  it("lists all four Codex sources and both extension keys when every one of them is incomplete", () => {
+    const keys = ["codexHomeSkills", "homeAgentsSkills", "etcCodexSkills", "codexAncestorSkills", "extensionNpmInstallation", `extension:${EXTENSION}`];
+    const digest = "0".repeat(64);
+    const recorded = Object.fromEntries([...keys.map((key) => [key, digest]), ["controllerSkill", digest], ["runConfiguration", digest]]);
+    const current = Object.fromEntries([...keys.map((key, index) => [key, index % 2 === 0 ? "tooLarge" : "unreadable"]), ["controllerSkill", digest], ["runConfiguration", digest]]);
+    expect(h.unboundResources(recorded, current)).toEqual([...keys].sort());
+    // a recorded value that is incomplete counts as well, whatever the current one says
+    expect(h.unboundResources(Object.fromEntries(keys.map((key) => [key, "tooLarge"])), Object.fromEntries(keys.map((key) => [key, digest])))).toEqual([...keys].sort());
+  });
+
   it.skipIf(!notRoot)("keeps an unreadable controller skill visible in the Codex link key", async () => {
     const run = await buildRun();
     const skill = join(run.candidate, "skills", "pi-session-orchestration");
