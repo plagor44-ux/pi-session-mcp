@@ -416,8 +416,8 @@ const sources: Array<[string, string, (r: Run) => string]> = [
   ["codexAncestorSkills", ".agents/skills of the run directory", (r) => join(r.run, ".agents", "skills")],
 ];
 /** The prepared state includes whatever the test placed before this call, as if it had been there at prepare. */
-const rerecord = (r: Run) => {
-  r.info.resources = h.computeResources(r.run, r.candidate, r.context);
+const rerecord = (r: Run, extra: Record<string, unknown> = {}) => {
+  r.info.resources = h.computeResources(r.run, r.candidate, { ...r.context, ...extra });
   writeFileSync(join(r.priv, "run.json"), `${JSON.stringify(r.info, null, 2)}\n`);
 };
 const orchestration = "pi-session-orchestration";
@@ -629,6 +629,28 @@ describe("extension package binding", () => {
   });
 });
 
+/** Runs the real `prepare` against a synthetic candidate with a stand-in setup and a fake `claude`; nothing leaves the temporary root. */
+async function prepareRun(run: Run, { withExtensions, env, context = {} }: { withExtensions: boolean; env: Record<string, string>; context?: Record<string, unknown> }) {
+  copyFileSync(setupStub, join(run.candidate, "dist", "setup-main.js"));
+  const bin = join(run.root, "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const baseConfig = join(run.root, "base.json");
+  writeFileSync(baseConfig, JSON.stringify({ executionProfiles: { source: { provider: "p", model: "m", thinkingLevel: "off", permissionProfile: "read-only", default: true, ...(withExtensions ? { extensions: [`npm:${EXTENSION}@1.0.0`] } : {}) } } }));
+  const savedPath = process.env.PATH; const write = process.stdout.write.bind(process.stdout);
+  let printed = "";
+  process.env.PATH = `${bin}:${savedPath ?? ""}`;
+  process.stdout.write = ((chunk: string) => { printed += chunk; return true; }) as typeof process.stdout.write;
+  try {
+    h.prepare({ candidate: run.candidate, "base-config": baseConfig, "from-profile": "source", "work-dir": join(run.root, "work"), ...(withExtensions ? { "with-extensions": true } : {}) },
+      { env, home: run.home, temporaryDirs: [], etcCodexSkills: run.etc, ancestorBoundary: run.root, ...context });
+  } finally { process.stdout.write = write; if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath; }
+  const runDir = printed.trim();
+  const priv = join(runDir, "private");
+  const info = JSON.parse(readFileSync(join(priv, "run.json"), "utf8"));
+  return { runDir, priv, info, setupEnv: JSON.parse(readFileSync(join(runDir, "setup-env.json"), "utf8")) };
+}
+
 // ---- #66, #67: content behind links -------------------------------------------------------------------
 describe("binding digest", () => {
   const recompute = (r: Run) => h.computeResources(r.run, r.candidate, r.context);
@@ -738,30 +760,93 @@ describe("binding digest", () => {
   });
 });
 
-// ---- #66: prepare passes the bound agent directory to the server of both clients ---------------------
-describe("prepare binds the agent directory", () => {
-  /** Runs the real `prepare` against a synthetic candidate with a stand-in setup and a fake `claude`; nothing leaves the temporary root. */
-  async function prepareRun(run: Run, { withExtensions, env }: { withExtensions: boolean; env: Record<string, string> }) {
-    copyFileSync(setupStub, join(run.candidate, "dist", "setup-main.js"));
-    const bin = join(run.root, "bin");
-    mkdirSync(bin, { recursive: true });
-    writeFileSync(join(bin, "claude"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
-    const baseConfig = join(run.root, "base.json");
-    writeFileSync(baseConfig, JSON.stringify({ executionProfiles: { source: { provider: "p", model: "m", thinkingLevel: "off", permissionProfile: "read-only", default: true, ...(withExtensions ? { extensions: [`npm:${EXTENSION}@1.0.0`] } : {}) } } }));
-    const savedPath = process.env.PATH; const write = process.stdout.write.bind(process.stdout);
-    let printed = "";
-    process.env.PATH = `${bin}:${savedPath ?? ""}`;
-    process.stdout.write = ((chunk: string) => { printed += chunk; return true; }) as typeof process.stdout.write;
+// ---- #66, #67: a binding that is not complete binds nothing -----------------------------------------
+describe("incomplete bindings", () => {
+  const notRoot = process.getuid?.() !== 0;
+  const threeFiles = (dir: string) => { for (const name of ["a", "b", "c"]) put(join(dir, "skill", name), name); };
+
+  it("treats only unreadable and tooLarge as incomplete, and keeps the determinate values legitimate", () => {
+    expect(h.unboundResources({ a: "unreadable", b: "x", c: "missing" }, { a: "unreadable", b: "tooLarge", c: "none", d: "notDirectory", e: "0".repeat(64) })).toEqual(["a", "b"]);
+    expect(h.unboundResources({ a: "missing", b: "none" }, { a: "missing", b: "none", c: "notDirectory", d: "unset" })).toEqual([]);
+    expect(h.unboundResources(undefined, { a: "tooLarge" })).toEqual(["a"]);
+  });
+
+  it("keeps an incomplete value visible in every key, also in the composed ones", async () => {
+    const run = await buildRun({ extensions: true });
+    threeFiles(join(run.home, ".agents", "skills"));
+    threeFiles(join(run.root, ".agents", "skills"));
+    threeFiles(join(run.codexHome, "skills"));
+    threeFiles(run.etc);
+    const now = h.computeResources(run.run, run.candidate, { ...run.context, boundLimit: 1 });
+    for (const key of ["extensionNpmInstallation", `extension:${EXTENSION}`, "codexHomeSkills", "homeAgentsSkills", "etcCodexSkills", "codexAncestorSkills"]) expect(now[key], key).toBe("tooLarge");
+    expect(h.unboundResources(run.info.resources, now)).toEqual([`extension:${EXTENSION}`, "codexAncestorSkills", "codexHomeSkills", "etcCodexSkills", "extensionNpmInstallation", "homeAgentsSkills"].sort());
+  });
+
+  it.skipIf(!notRoot)("keeps an unreadable controller skill visible in the Codex link key", async () => {
+    const run = await buildRun();
+    const skill = join(run.candidate, "skills", "pi-session-orchestration");
+    put(join(skill, "inner", "f"), "x");
+    chmodSync(join(skill, "inner"), 0);
     try {
-      h.prepare({ candidate: run.candidate, "base-config": baseConfig, "from-profile": "source", "work-dir": join(run.root, "work"), ...(withExtensions ? { "with-extensions": true } : {}) },
-        { env, home: run.home, temporaryDirs: [], etcCodexSkills: run.etc, ancestorBoundary: run.root });
-    } finally { process.stdout.write = write; if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath; }
-    const runDir = printed.trim();
-    const priv = join(runDir, "private");
-    const info = JSON.parse(readFileSync(join(priv, "run.json"), "utf8"));
-    return { runDir, priv, info, setupEnv: JSON.parse(readFileSync(join(runDir, "setup-env.json"), "utf8")) };
+      const now = h.computeResources(run.run, run.candidate, run.context);
+      expect(now.codexControllerSkill).toBe("unreadable");
+      expect(h.unboundResources(run.info.resources, now)).toEqual(expect.arrayContaining(["codexControllerSkill"]));
+    } finally { chmodSync(join(skill, "inner"), 0o700); }
+  });
+
+  it("an incomplete value stays equal while the content under it changes, and still cannot pass", async () => {
+    const run = await buildRun();
+    threeFiles(join(run.home, ".agents", "skills"));
+    rerecord(run, { boundLimit: 1 });
+    expect(run.info.resources.homeAgentsSkills).toBe("tooLarge");
+    appendFileSync(join(run.home, ".agents", "skills", "skill", "a"), "changed under an incomplete binding\n");
+    const now = h.computeResources(run.run, run.candidate, { ...run.context, boundLimit: 1 });
+    expect(h.changedResources(run.info.resources, now)).toEqual([]);
+    expect(h.unboundResources(run.info.resources, now)).toEqual(["homeAgentsSkills"]);
+  });
+
+  const passing = () => ({
+    client: "claude", exitCode: 0, timedOut: false, spawnFailed: false, harnessAborted: false, resources: { changedAfterRun: [] }, unboundResources: [] as string[],
+    processes: { serversObserved: 1, residualByRole: {} },
+    transcript: { capabilitiesFirst: true, candidateConfirmed: true, acceptCodeSkills: ["implementation"], acceptCodeHandshakeSkills: ["implementation", "handshake"],
+      structuralLeaks: 0, tokenInControllerPrompts: false, tokenInControllerTask: false, controllerTranscriptHasToken: false, privateMarkersInWorkerPrompts: false, controllerTouchedPrivate: false,
+      sessionsStarted: 2, sessions: [{ workspace: "cc-slug", profile: "accept-code-handshake", closed: true, turns: ["completed"] }, { workspace: "cc-stats", profile: "accept-code", closed: true, turns: ["completed"] }], firstTurnsOverlap: true, followUpCompleted: true },
+    oracle: { slug: { onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true, testsPass: true, businessChecks: true, addedTest: true, handshake: true, handshakeWrittenDuringFollowUp: true },
+      stats: { onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true, testsPass: true, businessChecks: true } },
+  });
+
+  it("adds resourcesUnbound to the verdict for an unbound resource, or for a result that does not say", () => {
+    expect(h.evaluateAcceptance(passing(), "parallel")).toEqual({ passed: true, failures: [] });
+    expect(h.evaluateAcceptance({ ...passing(), unboundResources: ["homeAgentsSkills"] }, "parallel")).toEqual({ passed: false, failures: ["resourcesUnbound"] });
+    const silent: Record<string, unknown> = passing();
+    delete silent.unboundResources;
+    expect(h.evaluateAcceptance(silent, "parallel").failures).toEqual(["resourcesUnbound"]);
+  });
+
+  async function prepareFails(context: Record<string, unknown>, place: (run: Run) => void): Promise<string> {
+    const run = await buildRun();
+    place(run);
+    try { await prepareRun(run, { withExtensions: false, env: {}, context }); } catch (error) { return (error as Error).message; }
+    return "";
   }
 
+  it("refuses to prepare a run whose bound source is too large to bind, naming the key", async () => {
+    const message = await prepareFails({ boundLimit: 1 }, (run) => threeFiles(join(run.home, ".agents", "skills")));
+    expect(message).toContain('"homeAgentsSkills"');
+    expect(message).toContain("cannot be read completely");
+  }, 60_000);
+
+  it.skipIf(!notRoot)("refuses to prepare a run whose bound source is unreadable, naming the key", async () => {
+    let locked = "";
+    try {
+      const message = await prepareFails({}, (run) => { locked = join(run.home, ".agents", "skills", "locked"); put(join(locked, "f"), "x"); chmodSync(locked, 0); });
+      expect(message).toContain('"homeAgentsSkills"');
+    } finally { if (locked) chmodSync(locked, 0o700); }
+  }, 60_000);
+});
+
+// ---- #66: prepare passes the bound agent directory to the server of both clients ---------------------
+describe("prepare binds the agent directory", () => {
   it("gives both clients' servers the resolved PI_CODING_AGENT_DIR and binds the extension contents", async () => {
     const run = await buildRun({ extensions: true });
     const link = join(run.root, "agent-link");
@@ -877,7 +962,7 @@ describe("handshake profile split", () => {
   const session = (workspace: string, profile: string) => ({ workspace, profile, closed: true, turns: ["completed"] });
   const passing = (overrides: Record<string, unknown> = {}) => ({
     client: "claude", exitCode: 0, timedOut: false, spawnFailed: false, harnessAborted: false,
-    resources: { changedAfterRun: [] }, processes: { serversObserved: 1, residualByRole: {} },
+    resources: { changedAfterRun: [] }, unboundResources: [], processes: { serversObserved: 1, residualByRole: {} },
     transcript: {
       capabilitiesFirst: true, candidateConfirmed: true, acceptCodeSkills: ["implementation"], acceptCodeHandshakeSkills: ["implementation", "handshake"],
       structuralLeaks: 0, tokenInControllerPrompts: false, tokenInControllerTask: false, controllerTranscriptHasToken: false, privateMarkersInWorkerPrompts: false, controllerTouchedPrivate: false,
@@ -1014,6 +1099,28 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
       await withFakeClient<any>("record-env", () => h.runClient(values(run), launch(run)), run);
       expect(JSON.parse(readFileSync(join(run.root, "client-state.json"), "utf8"))).toEqual({ CODEX_HOME: join(run.root, "another-codex-home") });
     } finally { if (saved === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = saved; }
+  }, 60_000);
+
+  it("refuses to launch while a bound resource is unbound, although its value did not change", async () => {
+    const run = await buildRun();
+    for (const name of ["a", "b", "c"]) put(join(run.home, ".agents", "skills", "skill", name), name);
+    rerecord(run, { boundLimit: 1 });
+    appendFileSync(join(run.home, ".agents", "skills", "skill", "a"), "changed\n");
+    await expect(h.runClient(values(run), launch(run, { boundLimit: 1 }))).rejects.toThrow('resourcesUnbound: ["homeAgentsSkills"]');
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    expect(existsSync(join(run.priv, "launches"))).toBe(false);
+  });
+
+  it("lets a reanalysis find a resource that became unbound after a clean run, and never pass it", async () => {
+    const run = await buildRun();
+    for (const name of ["a", "b"]) put(join(run.home, ".agents", "skills", "skill", name), name);
+    rerecord(run);
+    const clean = await withFakeClient<any>("record-env", () => h.runClient(values(run), launch(run)), run);
+    expect(clean.unboundResources).toEqual([]);
+    const again = h.reanalyze(values(run), { home: run.home, etcCodexSkills: run.etc, ancestorBoundary: run.root, boundLimit: 1 });
+    expect(again.unboundResources).toEqual(["homeAgentsSkills"]);
+    expect(again.acceptance.passed).toBe(false);
+    expect(again.acceptance.failures).toContain("resourcesUnbound");
   }, 60_000);
 
   it("refuses to launch when a bound resource changed after prepare", async () => {

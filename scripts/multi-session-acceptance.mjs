@@ -483,26 +483,29 @@ export function controllerSkillRecord(run, candidate) {
  * npm installation) and one for the whole npm installation, which covers dependencies, `package.json` and the
  * lockfile. Without extensions the npm digest is the stable `none`. Keys are path-free.
  */
-export function extensionResources(agentDir, extensions) {
+export function extensionResources(agentDir, extensions, limit = BOUND_ENTRY_LIMIT) {
   if (extensions.length === 0) return { extensionNpmInstallation: "none" };
   if (!agentDir) return { extensionNpmInstallation: "unset", ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, "unset"])) };
-  const packageRoot = (name) => { try { return boundTreeSha256(realpathSync(join(agentDir, "npm", "node_modules", name))); } catch { return "missing"; } };
+  const packageRoot = (name) => { try { return boundTreeSha256(realpathSync(join(agentDir, "npm", "node_modules", name)), { limit }); } catch { return "missing"; } };
   return {
-    extensionNpmInstallation: boundTreeSha256(join(agentDir, "npm")),
+    extensionNpmInstallation: boundTreeSha256(join(agentDir, "npm"), { limit }),
     ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, packageRoot(name)])),
   };
 }
 
 /**
  * `context` carries what the run recorded privately at prepare (`agentDir`, `codexHome`, `extensions`) and, for
- * tests, the injectable `home` and `etcCodexSkills`.
+ * tests, the injectable `home` and `etcCodexSkills`, `ancestorBoundary` and `boundLimit`.
  */
 export function computeResources(run, candidate, context = {}) {
-  const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary } = context;
+  const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary, boundLimit } = context;
   const priv = join(run, "private");
   const link = codexControllerLink(run, candidate);
-  const codexSkill = link.status === "linked" ? sha256(`linked\0${link.tree}`) : link.status;
+  // A value that is not a hash (`unreadable`, `tooLarge`) must stay visible in the key, never be hashed into one.
+  const codexSkill = link.status !== "linked" ? link.status : isIncomplete(link.tree) ? link.tree : sha256(`linked\0${link.tree}`);
   const sources = codexSkillSources(run, { home, codexHome, etcCodexSkills, ancestorBoundary });
+  const bound = (dir) => boundTreeSha256(dir, { limit: boundLimit });
+  const ancestors = sources.codexAncestorSkills.map(bound);
   let build = "missing";
   try { build = sha256(`${sha256(readFileSync(join(candidate, "dist", "main.js")))}\n${distTreeSha256(candidate)}`); } catch { /* stays missing */ }
   return {
@@ -519,22 +522,34 @@ export function computeResources(run, candidate, context = {}) {
     harness: HARNESS_SHA256,
     ...operatorControllerSkills(home),
     // Every other place a Codex controller may read skills from. Without a recorded CODEX_HOME that source is `unset`.
-    codexHomeSkills: codexHome ? boundTreeSha256(sources.codexHomeSkills[0]) : "unset",
-    homeAgentsSkills: boundTreeSha256(sources.homeAgentsSkills[0]),
-    etcCodexSkills: boundTreeSha256(sources.etcCodexSkills[0]),
-    codexAncestorSkills: sha256(JSON.stringify(sources.codexAncestorSkills.map((dir) => boundTreeSha256(dir)))),
-    ...extensionResources(agentDir, extensions),
+    codexHomeSkills: codexHome ? bound(sources.codexHomeSkills[0]) : "unset",
+    homeAgentsSkills: bound(sources.homeAgentsSkills[0]),
+    etcCodexSkills: bound(sources.etcCodexSkills[0]),
+    codexAncestorSkills: ancestors.find(isIncomplete) ?? sha256(JSON.stringify(ancestors)),
+    ...extensionResources(agentDir, extensions, boundLimit),
   };
 }
 /** Names of the bound resources that differ from the recorded digests. */
 export function changedResources(recorded, current) {
   return [...new Set([...Object.keys(recorded ?? {}), ...Object.keys(current)])].filter((name) => recorded?.[name] !== current[name]).sort();
 }
-/** What `computeResources` needs from the run's private record, plus the injectable `home` and `etcCodexSkills`. */
+/**
+ * A value that says the resource could not be read completely (`unreadable`) or was too large to digest (`tooLarge`)
+ * binds nothing: content under it can change while the value stays equal. `missing`, `none`, `notDirectory` and a
+ * dangling top-level link are determinate and stay legitimate.
+ */
+export const isIncomplete = (value) => value === "unreadable" || value === "tooLarge";
+/** Names of the resources whose recorded or current value is incomplete. */
+export function unboundResources(recorded, current) {
+  return [...new Set([...Object.keys(recorded ?? {}), ...Object.keys(current)])].filter((name) => isIncomplete(recorded?.[name]) || isIncomplete(current[name])).sort();
+}
+/** What `computeResources` needs from the run's private record, plus the injectable `home`, `etcCodexSkills`, `ancestorBoundary` and `boundLimit`. */
 const boundContext = (info, context = {}) => ({ agentDir: info.agentDir, codexHome: info.codexHome, extensions: info.extensions ?? [], ...context });
-function resourcesChangedSincePrepare(run, info, context) {
+/** Resources that changed since prepare and resources that are unbound (recorded or current value incomplete). */
+function resourceReport(run, info, context) {
   if (!info.resources) fail("the run has no recorded resource digests; prepare a new run");
-  return changedResources(info.resources, computeResources(run, info.candidate, boundContext(info, context)));
+  const current = computeResources(run, info.candidate, boundContext(info, context));
+  return { changed: changedResources(info.resources, current), unbound: unboundResources(info.resources, current) };
 }
 /** State at the end of a run: bound resources plus the fixtures of the scenario. A reanalysis must find the same. */
 export function endStateOf(run, info, client, scenario, context) {
@@ -564,7 +579,7 @@ export function parseExtensionAllowlist(list) {
  * `context` is for tests: the environment and home to resolve the Pi agent directory and `CODEX_HOME` from, the
  * directories that count as temporary, the Codex system skills directory and where the ancestor search stops.
  */
-export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"], etcCodexSkills, ancestorBoundary } = {}) {
+export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"], etcCodexSkills, ancestorBoundary, boundLimit } = {}) {
   if (!values.candidate || !values["base-config"] || !values["from-profile"]) fail("prepare needs --candidate, --base-config and --from-profile");
   const candidate = realpathSync(resolve(values.candidate));
   const entry = join(candidate, "dist", "main.js");
@@ -637,6 +652,10 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
   writeJson(join(priv, "claude-mcp.json"), { mcpServers: { [SERVER]: { command: node, args: [entry], env: serverEnvironment(join(priv, "config.json"), agentDir) } } });
   const claudeSkillSetup = installClaudeSkill(candidate, run, priv, Boolean(extensions), agentDir);
   const extensionList = (extensions ?? []).map(({ name, version }) => ({ name, version }));
+  const resources = computeResources(run, candidate, { home, etcCodexSkills, ancestorBoundary, boundLimit, agentDir, codexHome, extensions: extensionList });
+  // A bound source that cannot be read completely would let content change without notice; do not prepare such a run.
+  const unbound = unboundResources(undefined, resources);
+  if (unbound.length > 0) fail(`these bound resources cannot be read completely and would bind nothing: ${JSON.stringify(unbound)}`);
   const packageJson = readJson(join(candidate, "package.json"));
   const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: candidate, encoding: "utf8" });
   const dirty = spawnSync("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: candidate, encoding: "utf8" });
@@ -657,7 +676,7 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
     agentDir, codexHome,
     // Per client the kind of controller skill and its digest, path-free, for the evidence.
     controllerSkills: controllerSkillRecord(run, candidate),
-    resources: computeResources(run, candidate, { home, etcCodexSkills, ancestorBoundary, agentDir, codexHome, extensions: extensionList }),
+    resources,
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
@@ -1123,6 +1142,8 @@ export function evaluateAcceptance(result, scenario) {
   need(!result.harnessAborted, "harnessAborted");
   need(!result.analysisFailed, "analysisFailed");
   need(result.resources?.changedAfterRun?.length === 0, "resourcesChanged");
+  // A bound resource whose recorded or final value is incomplete (unreadable, tooLarge) binds nothing.
+  need(Array.isArray(result.unboundResources) && result.unboundResources.length === 0, "resourcesUnbound");
   need(!result.reanalysis || (result.reanalysis.stateChanges?.resources?.length === 0 && result.reanalysis.stateChanges?.fixtures?.length === 0), "stateChangedSinceRun");
   need((result.processes?.serversObserved ?? 0) >= 1, "noServerObserved");
   need(Object.keys(result.processes?.residualByRole ?? {}).length === 0, "residualProcesses");
@@ -1160,7 +1181,7 @@ export function evaluateAcceptance(result, scenario) {
 const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
-export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary } = {}) {
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary, boundLimit } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
@@ -1176,14 +1197,15 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   const baselineOf = baselineReader(priv, values.client);
   // Codex's precedence between its other skill sources and the run's repository skill is not established, so a differing
   // copy in any of them refuses the run instead of leaving open which skill the controller read. An equal copy or none is fine.
-  const context = { home, etcCodexSkills, ancestorBoundary };
+  const context = { home, etcCodexSkills, ancestorBoundary, boundLimit };
   if (values.client === "codex") {
     const differing = differingCodexControllerSkills(run, info.candidate, { ...context, codexHome: info.codexHome });
     if (differing.length > 0) fail(`a pi-session-orchestration skill in a Codex skill source (${differing.join(", ")}) differs from the candidate's; Codex could read it instead, so this run is refused`);
   }
   // Everything bound at prepare must be unchanged before the controller starts; the fixtures must still be pristine.
-  const changedBefore = resourcesChangedSincePrepare(run, info, context);
-  if (changedBefore.length > 0) fail(`resourcesChanged: ${JSON.stringify(changedBefore)}`);
+  const prepared = resourceReport(run, info, context);
+  if (prepared.unbound.length > 0) fail(`resourcesUnbound: ${JSON.stringify(prepared.unbound)}`);
+  if (prepared.changed.length > 0) fail(`resourcesChanged: ${JSON.stringify(prepared.changed)}`);
   const dirtyFixtures = SCENARIOS[values.scenario].tasks.filter((task) => {
     const comparison = compareToBaseline(join(controller, "fixtures", task), baselineOf(task), []);
     return !comparison.ok || comparison.changed.size > 0;
@@ -1286,7 +1308,9 @@ async function analyzeRun({ values, info, run, priv, controller, label, baseline
   result.oracle = oracle(controller, values.scenario, info, result.transcript.turnIntervals, baselineOf);
   delete result.transcript.turnIntervals;
   // Recheck after the controller finished: a change since prepare must never be accepted.
-  result.resources = { changedBeforeLaunch: [], changedAfterRun: resourcesChangedSincePrepare(run, info, context) };
+  const after = resourceReport(run, info, context);
+  result.resources = { changedBeforeLaunch: [], changedAfterRun: after.changed };
+  result.unboundResources = after.unbound;
   result.endState = endStateOf(run, info, values.client, values.scenario, context);
   result.acceptance = evaluateAcceptance(result, values.scenario);
   return result;
@@ -1309,10 +1333,12 @@ export function reanalyze(values, context = {}) {
   const calls = toolCalls(values.client, rawText.split("\n"));
   const transcript = analyze(values.client, values.scenario, calls, info, rawText);
   const stateChanges = endStateChanges(stored.endState, endStateOf(run, info, values.client, values.scenario, context));
+  const report = resourceReport(run, info, context);
   const result = {
     ...stored, transcript,
     oracle: oracle(join(run, `controller-${values.client}`), values.scenario, info, transcript.turnIntervals, baselineReader(priv, values.client)),
-    resources: { changedBeforeLaunch: stored.resources?.changedBeforeLaunch ?? [], changedAfterRun: resourcesChangedSincePrepare(run, info, context) },
+    resources: { changedBeforeLaunch: stored.resources?.changedBeforeLaunch ?? [], changedAfterRun: report.changed },
+    unboundResources: report.unbound,
     reanalysis: { of: label, stateChanges, analyzedAt: new Date().toISOString() },
   };
   delete transcript.turnIntervals;
