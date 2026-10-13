@@ -405,17 +405,63 @@ export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSk
     codexAncestorSkills: codexAncestorSkillDirs(join(run, "controller-codex"), ancestorBoundary),
   };
 }
-/** The `name:` a skill declares in the frontmatter of its SKILL.md, if any. */
+const YAML_ESCAPES = { 0: "\0", a: "\x07", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r", e: "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", N: "\x85", _: "\xa0", L: " ", P: " " };
+/**
+ * The `name:` scalar of a SKILL.md header, read the way YAML does for plain, single-quoted and double-quoted scalars (a
+ * ` #` comment outside quotes is dropped). `{status: "named", name}`, `{status: "none"}` for a file without frontmatter or
+ * without a top-level `name`, and `{status: "indeterminate"}` whenever the name cannot be determined: an unclosed
+ * frontmatter, a duplicate key, an empty value, a block or flow scalar, a multi-line scalar, malformed quoting.
+ */
+export function skillNameFromHeader(text) {
+  const indeterminate = { status: "indeterminate" };
+  const body = text.replace(/^﻿/, "");
+  if (!/^---[ \t]*\r?\n/.test(body)) return { status: "none" };
+  const lines = body.split(/\r?\n/).slice(1);
+  const end = lines.findIndex((line) => /^---[ \t]*$/.test(line));
+  if (end < 0) return indeterminate;
+  const front = lines.slice(0, end);
+  const key = /^(?:name|"name"|'name')[ \t]*:/;
+  const at = front.flatMap((line, index) => (key.test(line) ? [index] : []));
+  if (at.length === 0) return { status: "none" };
+  if (at.length > 1) return indeterminate;
+  const next = front[at[0] + 1];
+  if (next !== undefined && /^[ \t]+\S/.test(next) && !/^[ \t]+#/.test(next)) return indeterminate;
+  const rest = front[at[0]].replace(key, "").replace(/^[ \t]+/, "");
+  if (rest === "" || rest.startsWith("#") || "|>&*!%@`[{".includes(rest[0])) return indeterminate;
+  if (rest[0] === '"' || rest[0] === "'") {
+    const quote = rest[0];
+    let name = ""; let i = 1; let closed = false;
+    for (; i < rest.length && !closed; i += 1) {
+      const ch = rest[i];
+      if (ch === quote) {
+        if (quote === "'" && rest[i + 1] === "'") { name += "'"; i += 1; } else closed = true;
+      } else if (ch === "\\" && quote === '"') {
+        const escape = rest[i + 1];
+        if (escape !== undefined && Object.hasOwn(YAML_ESCAPES, escape)) { name += YAML_ESCAPES[escape]; i += 1; } else if (escape === "x" || escape === "u" || escape === "U") {
+          const digits = { x: 2, u: 4, U: 8 }[escape];
+          const hex = rest.slice(i + 2, i + 2 + digits);
+          if (!new RegExp(`^[0-9a-fA-F]{${digits}}$`).test(hex) || Number.parseInt(hex, 16) > 0x10ffff) return indeterminate;
+          name += String.fromCodePoint(Number.parseInt(hex, 16)); i += 1 + digits;
+        } else return indeterminate;
+      } else name += ch;
+    }
+    // after the closing quote only blanks or a comment that starts with whitespace may follow
+    return closed && /^(?:[ \t]*|[ \t]+#.*)$/.test(rest.slice(i)) ? { status: "named", name } : indeterminate;
+  }
+  const comment = /[ \t]#/.exec(rest);
+  const name = (comment ? rest.slice(0, comment.index) : rest).trimEnd();
+  return name.includes(": ") || name.endsWith(":") ? indeterminate : { status: "named", name };
+}
+/** What the SKILL.md in `dir` declares as its name; no file is `none`, a file that cannot be read is `indeterminate`. */
 function declaredSkillName(skillFile) {
-  let text; try { text = readFileSync(skillFile, "utf8").slice(0, 16_384); } catch { return undefined; }
-  const frontmatter = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
-  const line = frontmatter ? /^name:[ \t]*(.+?)[ \t]*$/m.exec(frontmatter[1]) : null;
-  return line?.[1].replace(/^(["'])(.*)\1$/, "$2");
+  let text;
+  try { text = readFileSync(skillFile, "utf8").slice(0, 16_384); } catch (error) { return error?.code === "ENOENT" ? { status: "none" } : { status: "indeterminate" }; }
+  return skillNameFromHeader(text);
 }
 /**
  * The real paths of every controller skill below a skill source: a directory named `pi-session-orchestration`, or one
  * whose SKILL.md declares that `name:`. Hidden directories such as `.system` are searched, and links are followed (each
- * real directory once, so cycles end). A walk that cannot finish ends in a sentinel (`tooLarge`, `unreadable`) in `sentinel`.
+ * real directory once, so cycles end). A walk that cannot finish, or a skill whose name cannot be determined, sets `sentinel` (`tooLarge`, `unreadable`, `indeterminate`).
  */
 export function findControllerSkills(source, { limit = BOUND_ENTRY_LIMIT } = {}) {
   const out = { found: [], sentinel: undefined };
@@ -423,7 +469,10 @@ export function findControllerSkills(source, { limit = BOUND_ENTRY_LIMIT } = {})
   const visited = new Set();
   let count = 0;
   const consider = (path, name) => {
-    if (name === CONTROLLER_SKILL || declaredSkillName(join(path, "SKILL.md")) === CONTROLLER_SKILL) out.found.push(realpathSync(path));
+    const declared = declaredSkillName(join(path, "SKILL.md"));
+    // A skill whose name cannot be determined might be the controller skill; the source counts as differing.
+    if (declared.status === "indeterminate") out.sentinel ??= "indeterminate";
+    if (name === CONTROLLER_SKILL || (declared.status === "named" && declared.name === CONTROLLER_SKILL)) out.found.push(realpathSync(path));
   };
   const walk = (dir) => {
     visited.add(dir);

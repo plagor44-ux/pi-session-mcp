@@ -429,6 +429,10 @@ const variants: Array<[string, string, (r: Run) => void]> = [
   ["a differing copy nested below another skill", "homeAgentsSkills", (r) => put(join(r.home, ".agents", "skills", "bundle", "nested", orchestration, "SKILL.md"), "an older copy\n")],
   ["a differently named directory declaring the name", "etcCodexSkills", (r) => put(join(r.etc, "renamed", "SKILL.md"), `---\nname: ${orchestration}\ndescription: x\n---\nolder\n`)],
   ["a differently named directory declaring the quoted name", "codexAncestorSkills", (r) => put(join(r.root, ".agents", "skills", "renamed", "SKILL.md"), `---\nname: "${orchestration}"\n---\nolder\n`)],
+  ["a plain name followed by a comment", "etcCodexSkills", (r) => put(join(r.etc, "commented", "SKILL.md"), `---\nname: ${orchestration} # the orchestrator\n---\nolder\n`)],
+  ["a quoted name followed by a comment", "homeAgentsSkills", (r) => put(join(r.home, ".agents", "skills", "commented", "SKILL.md"), `---\nname: '${orchestration}'   # the orchestrator\n---\nolder\n`)],
+  ["a name that cannot be determined (unterminated quote)", "codexHomeSkills", (r) => put(join(r.codexHome, "skills", "odd", "SKILL.md"), `---\nname: "${orchestration}\n---\nx\n`)],
+  ["a name that cannot be determined (block scalar)", "codexAncestorSkills", (r) => put(join(r.root, ".agents", "skills", "odd", "SKILL.md"), `---\nname: >-\n  ${orchestration}\n---\nx\n`)],
   ["a symlinked copy that differs", "homeAgentsSkills", (r) => { put(join(r.root, "other-copy", "SKILL.md"), "other\n"); mkdirSync(join(r.home, ".agents", "skills"), { recursive: true }); symlinkSync(join(r.root, "other-copy"), join(r.home, ".agents", "skills", orchestration)); }],
   ["a differently named symlink to a copy that declares the name and differs", "codexHomeSkills", (r) => { put(join(r.root, "declared-copy", "SKILL.md"), `---\nname: ${orchestration}\n---\nolder\n`); mkdirSync(join(r.codexHome, "skills"), { recursive: true }); symlinkSync(join(r.root, "declared-copy"), join(r.codexHome, "skills", "alias")); }],
 ];
@@ -494,6 +498,38 @@ describe("bound resources", () => {
     const run = await buildRun();
     place(run);
     expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([name]);
+  });
+
+  const header = (...lines: string[]) => `---\n${lines.join("\n")}\n---\nbody\n`;
+  it.each([
+    ["a plain name", header("name: pi-session-orchestration"), { status: "named", name: "pi-session-orchestration" }],
+    ["a plain name with a comment", header("name: pi-session-orchestration # the orchestrator"), { status: "named", name: "pi-session-orchestration" }],
+    ["a double-quoted name with a comment", header('name: "pi-session-orchestration" # c'), { status: "named", name: "pi-session-orchestration" }],
+    ["a single-quoted name with a comment", header("name: 'pi-session-orchestration' \t# c"), { status: "named", name: "pi-session-orchestration" }],
+    ["a double-quoted name with an escape", header('name: "pi-session\\u002dorchestration"'), { status: "named", name: "pi-session-orchestration" }],
+    ["a single-quoted name with a doubled quote", header("name: 'it''s'"), { status: "named", name: "it's" }],
+    ["a hash that is part of a plain scalar", header("name: pi-session-orchestration#v2"), { status: "named", name: "pi-session-orchestration#v2" }],
+    ["a hash inside quotes", header('name: "a # b"'), { status: "named", name: "a # b" }],
+    ["a name among other keys", header("description: x", "name: other", "metadata:", "  name: pi-session-orchestration"), { status: "named", name: "other" }],
+    ["no name key", header("description: x"), { status: "none" }],
+    ["a nested name only", header("metadata:", "  name: pi-session-orchestration"), { status: "none" }],
+    ["no frontmatter", "# pi-session-orchestration\n", { status: "none" }],
+    ["an unterminated quote", header('name: "pi-session-orchestration'), { status: "indeterminate" }],
+    ["text after the closing quote", header('name: "pi-session-orchestration" more'), { status: "indeterminate" }],
+    ["a comment glued to the closing quote", header("name: 'x'# c"), { status: "indeterminate" }],
+    ["a bad escape", header('name: "a\\qb"'), { status: "indeterminate" }],
+    ["a block scalar", header("name: |", "  pi-session-orchestration"), { status: "indeterminate" }],
+    ["a folded scalar", header("name: >-", "  pi-session-orchestration"), { status: "indeterminate" }],
+    ["a multi-line plain scalar", header("name: pi-session", "  -orchestration"), { status: "indeterminate" }],
+    ["an empty value", header("name:"), { status: "indeterminate" }],
+    ["only a comment as value", header("name: # pi-session-orchestration"), { status: "indeterminate" }],
+    ["a flow sequence", header("name: [pi-session-orchestration]"), { status: "indeterminate" }],
+    ["an alias", header("name: *anchor"), { status: "indeterminate" }],
+    ["a mapping indicator inside a plain scalar", header("name: a: b"), { status: "indeterminate" }],
+    ["a duplicate key", header("name: a", "name: pi-session-orchestration"), { status: "indeterminate" }],
+    ["frontmatter that never closes", "---\nname: pi-session-orchestration\n", { status: "indeterminate" }],
+  ])("reads the name of %s as YAML does", (_label, text, expected) => {
+    expect(h.skillNameFromHeader(text)).toEqual(expected);
   });
 
   it("allows an equal symlinked copy, an equal copy under another name and unrelated skills", async () => {
