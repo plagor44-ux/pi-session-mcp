@@ -389,7 +389,7 @@ async function buildRun({ extensions = false }: { extensions?: boolean } = {}) {
   symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration"));
   const token = "ACCEPTANCE-TOKEN-0123456789";
   const extensionList = extensions ? [{ name: EXTENSION, version: "1.0.0" }] : [];
-  const context = { home, agentDir, codexHome, etcCodexSkills: etc, extensions: extensionList };
+  const context = { home, agentDir, codexHome, etcCodexSkills: etc, ancestorBoundary: root, extensions: extensionList };
   const info = {
     runId: "skills-test", candidate, entry: join(candidate, "dist", "main.js"), node: process.execPath, token, version: "0.0.0-test",
     sourceClean: true, entrySha256: "x", distSha256: h.distTreeSha256(candidate), harnessSha256: h.HARNESS_SHA256, configFingerprint: "sha256:test",
@@ -537,6 +537,17 @@ describe("bound resources", () => {
     expect(h.resolveCodexHome({ CODEX_HOME: link }, run.home)).toBe(run.codexHome);
     expect(h.resolveCodexHome({ CODEX_HOME: "~/elsewhere" }, run.home)).toBe(join(run.home, "elsewhere"));
     expect(h.resolveCodexHome({}, run.home)).toBe(join(run.home, ".codex"));
+  });
+
+  it("reads only inside the test's temporary root: every skill source the harness computes lies there", async () => {
+    const run = await buildRun({ extensions: true });
+    const everything = Object.values(h.codexSkillSources(run.run, run.context)).flat() as string[];
+    expect(everything).toHaveLength(5);
+    for (const dir of [...everything, run.home, run.agentDir, run.codexHome, run.etc]) expect(h.inside(dir, run.root), dir).toBe(true);
+    // the search stops at the boundary, which is the last ancestor listed; without one it runs up to the file system root
+    expect(h.codexAncestorSkillDirs(join(run.run, "controller-codex"), run.root).at(-1)).toBe(join(run.root, ".agents", "skills"));
+    expect(h.codexAncestorSkillDirs(join(run.run, "controller-codex")).at(-1)).toBe(join("/", ".agents", "skills"));
+    expect(h.codexSkillSources(run.run, { ...run.context, ancestorBoundary: undefined }).codexAncestorSkills.some((dir: string) => !h.inside(dir, run.root))).toBe(true);
   });
 
   it("records per client the controller skill kind and its digest without paths", async () => {
@@ -743,7 +754,7 @@ describe("prepare binds the agent directory", () => {
     process.stdout.write = ((chunk: string) => { printed += chunk; return true; }) as typeof process.stdout.write;
     try {
       h.prepare({ candidate: run.candidate, "base-config": baseConfig, "from-profile": "source", "work-dir": join(run.root, "work"), ...(withExtensions ? { "with-extensions": true } : {}) },
-        { env, home: run.home, temporaryDirs: [] });
+        { env, home: run.home, temporaryDirs: [], etcCodexSkills: run.etc, ancestorBoundary: run.root });
     } finally { process.stdout.write = write; if (savedPath === undefined) delete process.env.PATH; else process.env.PATH = savedPath; }
     const runDir = printed.trim();
     const priv = join(runDir, "private");
@@ -755,11 +766,18 @@ describe("prepare binds the agent directory", () => {
     const run = await buildRun({ extensions: true });
     const link = join(run.root, "agent-link");
     symlinkSync(run.agentDir, link);
+    // Codex skill sources with content, so that a prepare which read other directories would record other digests.
+    put(join(run.etc, "present", "SKILL.md"), "x\n");
+    put(join(run.root, ".agents", "skills", "present", "SKILL.md"), "x\n");
     // The environment names a link; the prepared run records and passes the real directory.
     const prepared = await prepareRun(run, { withExtensions: true, env: { PI_CODING_AGENT_DIR: link, CODEX_HOME: join(run.root, "prepared-codex-home") } });
     expect(prepared.info.agentDir).toBe(run.agentDir);
     // CODEX_HOME is resolved once and recorded privately; the bound Codex skill sources use it
     expect(prepared.info.codexHome).toBe(join(run.root, "prepared-codex-home"));
+    // prepare reads the injected system skills and stops the ancestor search at the injected boundary
+    expect(prepared.info.resources.etcCodexSkills).toBe(h.boundTreeSha256(run.etc));
+    expect(prepared.info.resources.etcCodexSkills).toMatch(/^[0-9a-f]{64}$/);
+    for (const dir of Object.values(h.codexSkillSources(prepared.runDir, { ...run.context, codexHome: prepared.info.codexHome })).flat() as string[]) expect(h.inside(dir, run.root), dir).toBe(true);
     const claudeServer = JSON.parse(readFileSync(join(prepared.priv, "claude-mcp.json"), "utf8")).mcpServers["pi-candidate"];
     expect(claudeServer.env).toEqual({ PI_SESSION_MCP_CONFIG: join(prepared.priv, "config.json"), PI_CODING_AGENT_DIR: run.agentDir });
     const codexArgs: string[] = h.command("codex", prepared.info, prepared.priv, join(prepared.runDir, "controller-codex"), { scenario: "parallel" }).args;
@@ -768,7 +786,7 @@ describe("prepare binds the agent directory", () => {
     expect(prepared.setupEnv.PI_CODING_AGENT_DIR).toBe(run.agentDir);
     expect(prepared.info.extensions).toEqual([{ name: EXTENSION, version: "1.0.0" }]);
     expect(Object.keys(prepared.info.resources).filter((name) => name.startsWith("extension")).sort()).toEqual([`extension:${EXTENSION}`, "extensionNpmInstallation"]);
-    expect(h.changedResources(prepared.info.resources, h.computeResources(prepared.runDir, prepared.info.candidate, { home: run.home, etcCodexSkills: run.etc, agentDir: prepared.info.agentDir, codexHome: prepared.info.codexHome, extensions: prepared.info.extensions }))).toEqual([]);
+    expect(h.changedResources(prepared.info.resources, h.computeResources(prepared.runDir, prepared.info.candidate, { home: run.home, etcCodexSkills: run.etc, ancestorBoundary: run.root, agentDir: prepared.info.agentDir, codexHome: prepared.info.codexHome, extensions: prepared.info.extensions }))).toEqual([]);
     // the recorded directory is private: the evidence names neither it nor the run
     const out = join(run.root, "evidence.json");
     h.evidence({ run: prepared.runDir, out });
@@ -916,8 +934,8 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
   const values = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, string> = {}) => ({ run: run.run, client: "claude", scenario: "parallel", ...extra });
   const quick = { graceMs: 300, killWaitMs: 2_000, drainMs: 300 };
   // Every launch reads the operator-machine inputs from the run's temporary home.
-  const launch = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, unknown> = {}) => ({ signals: new EventEmitter(), budgets: quick, home: run.home, etcCodexSkills: run.etc, ...extra });
-  const reanalyze = (run: Awaited<ReturnType<typeof buildRun>>) => h.reanalyze(values(run), { home: run.home, etcCodexSkills: run.etc });
+  const launch = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, unknown> = {}) => ({ signals: new EventEmitter(), budgets: quick, home: run.home, etcCodexSkills: run.etc, ancestorBoundary: run.root, ...extra });
+  const reanalyze = (run: Awaited<ReturnType<typeof buildRun>>) => h.reanalyze(values(run), { home: run.home, etcCodexSkills: run.etc, ancestorBoundary: run.root });
 
   it.each(sources)("refuses a Codex run before launch while a differing controller skill sits in %s (%s)", async (name, _label, dir) => {
     const run = await buildRun();
@@ -984,7 +1002,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
       expect(result.resources).toEqual({ changedBeforeLaunch: [], changedAfterRun: [] });
       // the other directory was never bound: its skills do not change the run
       put(join(other, "skills", "late", "SKILL.md"), "x");
-      expect(h.reanalyze(codexValues(run), { home: run.home, etcCodexSkills: run.etc }).resources.changedAfterRun).toEqual([]);
+      expect(h.reanalyze(codexValues(run), { home: run.home, etcCodexSkills: run.etc, ancestorBoundary: run.root }).resources.changedAfterRun).toEqual([]);
     } finally { if (saved === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = saved; }
   }, 60_000);
 
@@ -1174,7 +1192,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}`, FAKE_CLIENT_MODE: "ignore-term", FAKE_CLIENT_STATE: statePath };
     let processes: Recorded[] = [];
     try {
-      const result = await runNode([cliDriver, run.home, "run", "--run", run.run, "--client", "claude", "--scenario", "parallel", "--timeout-min", "0.05"], { env, limitMs: 60_000 });
+      const result = await runNode([cliDriver, run.home, run.etc, run.root, "run", "--run", run.run, "--client", "claude", "--scenario", "parallel", "--timeout-min", "0.05"], { env, limitMs: 60_000 });
       if (existsSync(statePath)) processes = recordedProcesses(statePath);
       expect(result.code, result.stderr).toBe(1);
       expect(result.wallMs).toBeLessThan(40_000);

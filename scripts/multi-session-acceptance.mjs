@@ -379,13 +379,16 @@ export function serverEnvironment(configPath, agentDir) {
 export const ETC_CODEX_SKILLS = "/etc/codex/skills";
 const CONTROLLER_SKILL = "pi-session-orchestration";
 
-/** `.agents/skills` of every ancestor of the Codex controller's directory, nearest first. */
-export function codexAncestorSkillDirs(controller) {
+/**
+ * `.agents/skills` of every ancestor of the Codex controller's directory, nearest first, up to `/`. Tests pass their
+ * temporary root as `boundary`, which is the last directory listed.
+ */
+export function codexAncestorSkillDirs(controller, boundary) {
   let real; try { real = realpathSync(controller); } catch { real = resolve(controller); }
   const dirs = [];
   for (let dir = dirname(real); ; dir = dirname(dir)) {
     dirs.push(join(dir, ".agents", "skills"));
-    if (dirname(dir) === dir) break;
+    if (dirname(dir) === dir || dir === boundary) break;
   }
   return dirs;
 }
@@ -394,12 +397,12 @@ export function codexAncestorSkillDirs(controller) {
  * `$CODEX_HOME/skills` (with the bundled `.system` skills), the home's `.agents/skills` (all of it), the system
  * skills and the `.agents/skills` of the controller directory's ancestors.
  */
-export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSkills = ETC_CODEX_SKILLS } = {}) {
+export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary } = {}) {
   return {
     codexHomeSkills: codexHome ? [join(codexHome, "skills")] : [],
     homeAgentsSkills: [join(home, ".agents", "skills")],
     etcCodexSkills: [etcCodexSkills],
-    codexAncestorSkills: codexAncestorSkillDirs(join(run, "controller-codex")),
+    codexAncestorSkills: codexAncestorSkillDirs(join(run, "controller-codex"), ancestorBoundary),
   };
 }
 /** The `name:` a skill declares in the frontmatter of its SKILL.md, if any. */
@@ -495,11 +498,11 @@ export function extensionResources(agentDir, extensions) {
  * tests, the injectable `home` and `etcCodexSkills`.
  */
 export function computeResources(run, candidate, context = {}) {
-  const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS } = context;
+  const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary } = context;
   const priv = join(run, "private");
   const link = codexControllerLink(run, candidate);
   const codexSkill = link.status === "linked" ? sha256(`linked\0${link.tree}`) : link.status;
-  const sources = codexSkillSources(run, { home, codexHome, etcCodexSkills });
+  const sources = codexSkillSources(run, { home, codexHome, etcCodexSkills, ancestorBoundary });
   let build = "missing";
   try { build = sha256(`${sha256(readFileSync(join(candidate, "dist", "main.js")))}\n${distTreeSha256(candidate)}`); } catch { /* stays missing */ }
   return {
@@ -558,10 +561,10 @@ export function parseExtensionAllowlist(list) {
 }
 
 /**
- * `context` is for tests: the environment and home to resolve the Pi agent directory and `CODEX_HOME` from, and the
- * directories that count as temporary.
+ * `context` is for tests: the environment and home to resolve the Pi agent directory and `CODEX_HOME` from, the
+ * directories that count as temporary, the Codex system skills directory and where the ancestor search stops.
  */
-export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"] } = {}) {
+export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"], etcCodexSkills, ancestorBoundary } = {}) {
   if (!values.candidate || !values["base-config"] || !values["from-profile"]) fail("prepare needs --candidate, --base-config and --from-profile");
   const candidate = realpathSync(resolve(values.candidate));
   const entry = join(candidate, "dist", "main.js");
@@ -654,7 +657,7 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
     agentDir, codexHome,
     // Per client the kind of controller skill and its digest, path-free, for the evidence.
     controllerSkills: controllerSkillRecord(run, candidate),
-    resources: computeResources(run, candidate, { home, agentDir, codexHome, extensions: extensionList }),
+    resources: computeResources(run, candidate, { home, etcCodexSkills, ancestorBoundary, agentDir, codexHome, extensions: extensionList }),
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
@@ -1157,7 +1160,7 @@ export function evaluateAcceptance(result, scenario) {
 const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
-export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS } = {}) {
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
@@ -1173,7 +1176,7 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   const baselineOf = baselineReader(priv, values.client);
   // Codex's precedence between its other skill sources and the run's repository skill is not established, so a differing
   // copy in any of them refuses the run instead of leaving open which skill the controller read. An equal copy or none is fine.
-  const context = { home, etcCodexSkills };
+  const context = { home, etcCodexSkills, ancestorBoundary };
   if (values.client === "codex") {
     const differing = differingCodexControllerSkills(run, info.candidate, { ...context, codexHome: info.codexHome });
     if (differing.length > 0) fail(`a pi-session-orchestration skill in a Codex skill source (${differing.join(", ")}) differs from the candidate's; Codex could read it instead, so this run is refused`);
