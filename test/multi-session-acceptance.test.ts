@@ -559,7 +559,8 @@ describe("extension package binding", () => {
     symlinkSync(source, installed);
     const recorded = h.computeResources(run.run, run.candidate, run.context);
     appendFileSync(join(source, "index.js"), "// changed behind the link\n");
-    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, run.context))).toEqual([packageKey]);
+    // the package root is bound by its real path, and the npm installation now binds the content behind the link too
+    expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, run.context))).toEqual([packageKey, "extensionNpmInstallation"]);
   });
 
   it("reports an extension package that is gone as missing", async () => {
@@ -578,6 +579,115 @@ describe("extension package binding", () => {
     expect(h.resolveAgentDirectory({ PI_CODING_AGENT_DIR: "~/custom-agent" }, run.home)).toBe(join(run.home, "custom-agent"));
     expect(h.resolveAgentDirectory({}, run.home)).toBe(join(run.home, ".pi", "agent"));
     expect(h.resolveAgentDirectory({ PI_CODING_AGENT_DIR: "" }, run.home)).toBe(join(run.home, ".pi", "agent"));
+  });
+});
+
+// ---- #66, #67: content behind links -------------------------------------------------------------------
+describe("binding digest", () => {
+  const recompute = (r: Run) => h.computeResources(r.run, r.candidate, r.context);
+
+  it("invalidates the run when a file changes behind a linked dependency outside the npm installation", async () => {
+    const run = await buildRun({ extensions: true });
+    const outside = join(run.root, "outside-dep");
+    put(join(outside, "index.js"), "export const outside = 1;\n");
+    symlinkSync(outside, join(run.agentDir, "npm", "node_modules", "linked-dep"));
+    rerecord(run);
+    expect(h.changedResources(run.info.resources, recompute(run))).toEqual([]);
+    appendFileSync(join(outside, "index.js"), "// changed behind the link\n");
+    expect(h.changedResources(run.info.resources, recompute(run))).toEqual(["extensionNpmInstallation"]);
+  });
+
+  it("invalidates the extension too when its own package links to content outside", async () => {
+    const run = await buildRun({ extensions: true });
+    const vendor = join(run.root, "vendor");
+    put(join(vendor, "lib.js"), "export const lib = 1;\n");
+    symlinkSync(vendor, join(run.agentDir, "npm", "node_modules", EXTENSION, "vendor"));
+    rerecord(run);
+    appendFileSync(join(vendor, "lib.js"), "// changed\n");
+    expect(h.changedResources(run.info.resources, recompute(run))).toEqual([`extension:${EXTENSION}`, "extensionNpmInstallation"]);
+  });
+
+  it("invalidates the run when a file changes behind a linked skill in the home's .agents/skills", async () => {
+    const run = await buildRun();
+    const outside = join(run.root, "outside-skill");
+    put(join(outside, "SKILL.md"), "---\nname: linked\n---\n");
+    mkdirSync(join(run.home, ".agents", "skills"), { recursive: true });
+    symlinkSync(outside, join(run.home, ".agents", "skills", "linked"));
+    rerecord(run);
+    appendFileSync(join(outside, "SKILL.md"), "changed\n");
+    expect(h.changedResources(run.info.resources, recompute(run))).toEqual(["homeAgentsSkills"]);
+  });
+
+  it("binds a linked skill in each of the other Codex sources", async () => {
+    for (const [name, , dir] of sources) {
+      const run = await buildRun();
+      const outside = join(run.root, "outside-skill");
+      put(join(outside, "SKILL.md"), "x\n");
+      mkdirSync(dir(run), { recursive: true });
+      symlinkSync(outside, join(dir(run), "linked"));
+      rerecord(run);
+      appendFileSync(join(outside, "SKILL.md"), "changed\n");
+      expect(h.changedResources(run.info.resources, recompute(run)), name).toEqual([name]);
+    }
+  });
+
+  it("notices a dangling link that starts to resolve", async () => {
+    const run = await buildRun({ extensions: true });
+    const later = join(run.root, "later-dep");
+    symlinkSync(later, join(run.agentDir, "npm", "node_modules", "later"));
+    rerecord(run);
+    put(join(later, "index.js"), "x");
+    expect(h.changedResources(run.info.resources, recompute(run))).toEqual(["extensionNpmInstallation"]);
+  });
+
+  it("terminates on link cycles, outside and inside the root, and is stable", async () => {
+    const run = await buildRun({ extensions: true });
+    const npm = join(run.agentDir, "npm");
+    const outside = join(run.root, "outside-cycle");
+    put(join(outside, "a.js"), "a");
+    symlinkSync(outside, join(outside, "self"));
+    symlinkSync(npm, join(outside, "back-to-root"));
+    symlinkSync(outside, join(npm, "node_modules", "cycle"));
+    symlinkSync(npm, join(npm, "node_modules", "dep", "up"));
+    const first = h.boundTreeSha256(npm);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+    expect(h.boundTreeSha256(npm)).toBe(first);
+    // content behind the cycle is still bound
+    appendFileSync(join(outside, "a.js"), "b");
+    expect(h.boundTreeSha256(npm)).not.toBe(first);
+  });
+
+  it("needs only the text of a link that resolves inside the root", async () => {
+    const run = await buildRun({ extensions: true });
+    const npm = join(run.agentDir, "npm");
+    symlinkSync("dep", join(npm, "node_modules", "alias"));
+    const withAlias = h.boundTreeSha256(npm);
+    expect(h.boundTreeSha256(npm)).toBe(withAlias);
+    // the target is hashed as part of the root, once
+    appendFileSync(join(npm, "node_modules", "dep", "index.js"), "// c\n");
+    expect(h.boundTreeSha256(npm)).not.toBe(withAlias);
+    // retargeting the link inside the root is a change as well
+    const before = h.boundTreeSha256(npm);
+    rmSync(join(npm, "node_modules", "alias"));
+    symlinkSync(join("..", "node_modules", EXTENSION), join(npm, "node_modules", "alias"));
+    expect(h.boundTreeSha256(npm)).not.toBe(before);
+  });
+
+  it("ends with a sentinel, never with an exception, for missing, wrong, unreadable and oversized trees", async () => {
+    const root = realpathSync(await temporaryRoot("msa-bound-"));
+    expect(h.boundTreeSha256(join(root, "nothing"))).toBe("missing");
+    put(join(root, "file"), "x");
+    expect(h.boundTreeSha256(join(root, "file"))).toBe("notDirectory");
+    for (const name of ["a", "b", "c"]) put(join(root, "big", name), name);
+    expect(h.boundTreeSha256(join(root, "big"), { limit: 2 })).toBe("tooLarge");
+    expect(h.boundTreeSha256(join(root, "big"), { limit: 3 })).toMatch(/^[0-9a-f]{64}$/);
+    symlinkSync(join(root, "gone"), join(root, "dangling-top"));
+    expect(h.boundTreeSha256(join(root, "dangling-top"))).toMatch(/^[0-9a-f]{64}$/);
+    if (process.getuid?.() !== 0) {
+      put(join(root, "locked", "inner", "f"), "x");
+      chmodSync(join(root, "locked", "inner"), 0);
+      try { expect(h.boundTreeSha256(join(root, "locked"))).toBe("unreadable"); } finally { chmodSync(join(root, "locked", "inner"), 0o700); }
+    }
   });
 });
 

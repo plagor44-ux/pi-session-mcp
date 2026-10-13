@@ -145,12 +145,59 @@ export function treeSha256(dir) {
   try { return sha256(JSON.stringify(manifestOf(dir))); } catch { return "unreadable"; }
 }
 const fileSha256 = (path) => { try { return sha256(readFileSync(path)); } catch { return "missing"; } };
-/** Like treeSha256, but a symbolic link in place of the directory also binds the content it leads to. */
-export function linkedTreeSha256(dir) {
+// ---- binding digest: a tree plus the content that links lead to outside of it ----------------------------
+export const BOUND_ENTRY_LIMIT = 200_000;
+/** A determinate result of the binding digest that is not a hash: the digest ends with this value instead of throwing. */
+class BoundSentinel extends Error { constructor(code) { super(code); this.code = code; } }
+const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+
+/** One directory (by real path): files by content and mode, links by their text and, outside `root`, by what they lead to. */
+function boundDirectory(root, state) {
+  state.visited.add(root);
+  const entries = [];
+  const linkEntry = (full, path) => {
+    const text = readlinkSync(full);
+    let real; try { real = realpathSync(full); } catch { return { path, type: "symlink", text, target: "dangling" }; }
+    // A link that stays inside the root needs only its text: the target is hashed as part of the root.
+    if (inside(real, root)) return { path, type: "symlink", text, target: "inside" };
+    const target = statSync(real);
+    if (target.isDirectory()) return { path, type: "symlink", text, target: state.visited.has(real) ? "seen" : { directory: boundDirectory(real, state) } };
+    if (target.isFile()) return { path, type: "symlink", text, target: { file: sha256(readFileSync(real)) } };
+    return { path, type: "symlink", text, target: "other" };
+  };
+  const walk = (current, prefix) => {
+    for (const entry of readdirSync(current, { withFileTypes: true }).sort(byName)) {
+      if (++state.count > state.limit) throw new BoundSentinel("tooLarge");
+      const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) walk(full, rel);
+      else if (entry.isSymbolicLink()) entries.push(linkEntry(full, rel));
+      else if (entry.isFile()) entries.push({ path: rel, type: "file", mode: statSync(full).mode & 0o777, sha256: sha256(readFileSync(full)) });
+      else entries.push({ path: rel, type: "other" });
+    }
+  };
+  walk(root, "");
+  return sha256(JSON.stringify(entries));
+}
+/**
+ * One digest for a directory the run relies on, including what its links lead to. The tree is walked without
+ * following links. Every link entry records its text; when its real path lies outside the bound root it also
+ * records the content behind it (file bytes, or this digest of the target directory, recursively). A link that
+ * resolves inside the root needs only its text. Real paths already visited, links in cycles included, are recorded
+ * as `seen`, so the walk ends. A top-level link also binds its text and the content of its target.
+ * Sentinels instead of hashes: `missing`, `notDirectory`, `unreadable` and `tooLarge` (more than `limit` entries).
+ */
+export function boundTreeSha256(dir, { limit = BOUND_ENTRY_LIMIT } = {}) {
   let top; try { top = lstatSync(dir); } catch { return "missing"; }
-  if (!top.isSymbolicLink()) return treeSha256(dir);
-  let real; try { real = realpathSync(dir); } catch { return treeSha256(dir); }
-  return sha256(`symlink\0${readlinkSync(dir)}\0${treeSha256(real)}`);
+  const state = { count: 0, limit, visited: new Set() };
+  try {
+    if (top.isSymbolicLink()) {
+      const text = readlinkSync(dir);
+      let real; try { real = realpathSync(dir); } catch { return sha256(`symlink\0${text}\0dangling`); }
+      return statSync(real).isDirectory() ? sha256(`symlink\0${text}\0${boundDirectory(real, state)}`) : "notDirectory";
+    }
+    return top.isDirectory() ? boundDirectory(dir, state) : "notDirectory";
+  } catch (error) { return error instanceof BoundSentinel ? error.code : "unreadable"; }
 }
 
 /**
@@ -386,9 +433,9 @@ export function controllerSkillRecord(run, candidate) {
 export function extensionResources(agentDir, extensions) {
   if (extensions.length === 0) return { extensionNpmInstallation: "none" };
   if (!agentDir) return { extensionNpmInstallation: "unset", ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, "unset"])) };
-  const packageRoot = (name) => { try { return treeSha256(realpathSync(join(agentDir, "npm", "node_modules", name))); } catch { return "missing"; } };
+  const packageRoot = (name) => { try { return boundTreeSha256(realpathSync(join(agentDir, "npm", "node_modules", name))); } catch { return "missing"; } };
   return {
-    extensionNpmInstallation: linkedTreeSha256(join(agentDir, "npm")),
+    extensionNpmInstallation: boundTreeSha256(join(agentDir, "npm")),
     ...Object.fromEntries(extensions.map(({ name }) => [`extension:${name}`, packageRoot(name)])),
   };
 }
@@ -419,10 +466,10 @@ export function computeResources(run, candidate, context = {}) {
     harness: HARNESS_SHA256,
     ...operatorControllerSkills(home),
     // Every other place a Codex controller may read skills from. Without a recorded CODEX_HOME that source is `unset`.
-    codexHomeSkills: codexHome ? linkedTreeSha256(sources.codexHomeSkills[0]) : "unset",
-    homeAgentsSkills: linkedTreeSha256(sources.homeAgentsSkills[0]),
-    etcCodexSkills: linkedTreeSha256(sources.etcCodexSkills[0]),
-    codexAncestorSkills: sha256(JSON.stringify(sources.codexAncestorSkills.map(linkedTreeSha256))),
+    codexHomeSkills: codexHome ? boundTreeSha256(sources.codexHomeSkills[0]) : "unset",
+    homeAgentsSkills: boundTreeSha256(sources.homeAgentsSkills[0]),
+    etcCodexSkills: boundTreeSha256(sources.etcCodexSkills[0]),
+    codexAncestorSkills: sha256(JSON.stringify(sources.codexAncestorSkills.map((dir) => boundTreeSha256(dir)))),
     ...extensionResources(agentDir, extensions),
   };
 }
