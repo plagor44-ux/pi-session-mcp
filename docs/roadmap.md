@@ -28,28 +28,30 @@ Updated 2026-10-13. Base main `b145f8c32cca76d23628ac8830069cee5ccbaece`
   [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (R02) as
   completed. Details are in the closure section of the
   [Sprint 1 file](sprints/2026-10-13-s1-correctness.md#closure).
-- Sprint 2 is in progress. Its status, owners, criteria and evidence are in the
-  [Sprint 2 file](sprints/2026-10-13-s2-evidence.md); nothing in it is
-  verified yet.
+- Sprint 2 is in its exit gate on branch `fix/s2-evidence`, not yet merged.
+  Its tasks are verified on native Linux (native gate, Pi SDK canary, Level 2)
+  and by two independent reviews; the final-head CI and the maintainer's merge
+  decision are outstanding. Status, owners, criteria and evidence are in the
+  [Sprint 2 file](sprints/2026-10-13-s2-evidence.md). Its issues stay open
+  until the merge.
 - [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), the dry-run
-  that announces a recovery that apply retains, was carried into Sprint 2 and
-  is still open.
+  that announced a recovery that apply retains, is fixed on that branch.
 
 ### Sprint 2 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
-| R04 orchestration skill start-code classification | [#62](https://github.com/plagor44-ux/pi-session-mcp/issues/62) | in progress |
-| R13 bind loaded extension contents (harness) | [#66](https://github.com/plagor44-ux/pi-session-mcp/issues/66) | in progress |
-| R14 bind Codex skill sources (harness) | [#67](https://github.com/plagor44-ux/pi-session-mcp/issues/67) | in progress |
-| Handshake offered only where needed (harness) | [#68](https://github.com/plagor44-ux/pi-session-mcp/issues/68) | in progress |
-| Dry-run predicts a retained intermediate | [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) | in progress |
-| R16 strict unhandled rejections in CI | [#63](https://github.com/plagor44-ux/pi-session-mcp/issues/63) | in progress |
-| R20 delivery status of the historical plans | [#64](https://github.com/plagor44-ux/pi-session-mcp/issues/64) | in progress |
-| R23 acceptance and versioning wording | [#65](https://github.com/plagor44-ux/pi-session-mcp/issues/65) | in progress |
+| R04 orchestration skill start-code classification | [#62](https://github.com/plagor44-ux/pi-session-mcp/issues/62) | verified; not merged |
+| R13 bind loaded extension contents (harness) | [#66](https://github.com/plagor44-ux/pi-session-mcp/issues/66) | verified; not merged |
+| R14 bind Codex skill sources (harness) | [#67](https://github.com/plagor44-ux/pi-session-mcp/issues/67) | verified; not merged |
+| Handshake offered only where needed (harness) | [#68](https://github.com/plagor44-ux/pi-session-mcp/issues/68) | verified; not merged |
+| Dry-run predicts a retained intermediate | [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) | verified on native Linux and Level 2; not merged |
+| R16 strict unhandled rejections in CI | [#63](https://github.com/plagor44-ux/pi-session-mcp/issues/63) | implemented; takes effect in the pull request's CI |
+| R20 delivery status of the historical plans | [#64](https://github.com/plagor44-ux/pi-session-mcp/issues/64) | verified; not merged |
+| R23 acceptance and versioning wording | [#65](https://github.com/plagor44-ux/pi-session-mcp/issues/65) | verified; not merged |
 | R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; the Sprint 2 file holds a proposed text |
 | R15 explicit unverified code for an unreadable start time | None | not included; entry condition in the Sprint 2 file |
-| Current-source Pi SDK canary on the frozen candidate | None | planned |
+| Current-source Pi SDK canary on the frozen candidate | None | verified: Pi SDK 1.2.0 compatible with the candidate; pin 1.1.0 unchanged |
 
 R19 and R21 were delivered in Sprint 1 and by #58.
 

@@ -1429,6 +1429,9 @@ during a skill update (the interruption tests use a checkpoint and SIGKILL,
 the counterexamples a scripted checkpoint), and any model behavior. A dry-run
 of a pending recovery can still announce a recovery that apply retains; that
 is tracked as [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60).
+Note added in Sprint 2: #60 changes this dry-run behavior; see the
+[Sprint 2 checks](#sprint-2-evidence-checks-2026-10-13). The Sprint 1 record
+above is unchanged.
 
 Open gates that Sprint 1 does not close:
 - Level 3: no full ten-task cycle on Pi SDK `1.x`, and none for the profile
@@ -1438,3 +1441,46 @@ Open gates that Sprint 1 does not close:
 - Live discovery of the Codex home skill that setup installs.
 - Multi-session operation beyond two sessions, including a third concurrent
   worker and a `read-only` worker.
+
+## Sprint 2 evidence checks (2026-10-13)
+
+These checks belong to [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60),
+[#62](https://github.com/plagor44-ux/pi-session-mcp/issues/62),
+[#63](https://github.com/plagor44-ux/pi-session-mcp/issues/63) and the harness
+issues [#66](https://github.com/plagor44-ux/pi-session-mcp/issues/66),
+[#67](https://github.com/plagor44-ux/pi-session-mcp/issues/67) and
+[#68](https://github.com/plagor44-ux/pi-session-mcp/issues/68). They ran on
+2026-10-13 on branch `fix/s2-evidence`, before merge and without a release.
+The [Sprint 2 file](sprints/2026-10-13-s2-evidence.md) holds the commands,
+before-fix evidence, every gate run and the review rounds.
+
+Source: base main `b145f8c`; final runtime candidate `923a393`, the last commit
+that changes `src/`, `scripts/`, `test/`, `skills/` or CI; native Linux
+(x64), Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1`, Claude Code
+`2.1.296`. No provider, model or credential was used.
+
+Provider-free (Level 1), on the documentation head `07f56b6` of that runtime:
+`npm ci`, typecheck, `build:cli`,
+`NODE_OPTIONS=--unhandled-rejections=strict npm test` (54 files; 1300 passed,
+6 skipped, 0 failed; no unhandled error), build, `npm audit` and
+`npm audit --omit=dev` (0 vulnerabilities), `git diff --check` and a clean
+status all exited with `0`. On the unfixed base, the new #60 counterexamples
+failed 14 of 23 on the defect itself (`skill_recovery_planned` where
+`skill_recovery_retained` was required).
+
+Pi SDK canary: the published `1.2.0` is compatible with the candidate's
+sources (typecheck and the 12 SDK-facing test files passed); the pin stays
+`1.1.0`. This is not an SDK update.
+
+Real clients without a model (Level 2): `scripts/setup-acceptance.mjs` passed
+160 of 160 checks, exit `0`, on the build that the final head also produces
+(`dist` JS tree SHA-256 `f85bf73ee8c0ddb2270d8d6040feffbc49f018d2e6ab6253fffb828654a389df`),
+for `codex:user` and `claude-code:user`, `project` and `local`; real
+registrations unchanged, no remaining process, no path leak.
+
+The multi-session harness changes (#66, #67, #68) were verified with
+provider-free tests only: no live multi-session run used them yet. A live run
+belongs to Sprint 3.
+
+Open gates that Sprint 2 does not close: the final-head CI of the pull request,
+a live run with the new harness bindings, and every Sprint 1 open gate above.

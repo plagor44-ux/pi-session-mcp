@@ -31,15 +31,19 @@
   `startup_failed` diagnostics mean that no MCP server is available. The MCP
   tool contract and the error codes are unchanged. Issue #62.
 - Acceptance harness (maintainer script `scripts/multi-session-acceptance.mjs`,
-  not part of the npm package and not the package runtime): the run binds the
-  contents of the loaded Pi extensions and the agent directory (#66), binds
-  the Codex skill sources and `CODEX_HOME` (#67), and offers the handshake test
-  skill only to the task that needs it through a separate profile (#68). See
-  [acceptance](docs/acceptance.md#multi-session-skill-acceptance).
+  not part of the npm package and not the package runtime): a run binds the
+  contents of the loaded Pi extensions, Pi's npm installation and the
+  candidate's skills, including content behind links, and passes the agent
+  directory to its server (#66); it binds every Codex skill source, launches
+  Codex with the recorded `CODEX_HOME` and refuses a run when any source holds
+  a differing controller skill, found by directory or declared name (#67); an
+  unreadable or too large bound resource refuses the run and fails the verdict
+  with the new code `resourcesUnbound` (#66, #67); and the handshake test skill
+  is offered only to the task that needs it, through a separate profile (#68).
+  See [acceptance](docs/acceptance.md#multi-session-skill-acceptance).
 - CI: the test step runs with `NODE_OPTIONS=--unhandled-rejections=strict` on
-  the existing matrix, as the local command in
-  [CONTRIBUTING](CONTRIBUTING.md) and [Releasing](docs/releasing.md) already
-  did. Issue #63.
+  the existing matrix, the same command that README, [CONTRIBUTING](CONTRIBUTING.md),
+  [Releasing](docs/releasing.md) and acceptance now name. Issue #63.
 - Documentation: delivery-status notes on the historical macOS and Pi
   extension plans (#64); acceptance wording that separates targeted
   multi-session evidence from a Level 3 cycle, and one definition of the
