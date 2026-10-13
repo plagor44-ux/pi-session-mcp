@@ -1130,15 +1130,20 @@ describe("trio scenario: fixture and prompt", () => {
       expect(lineWith(text, "- WAIT:")).toContain("sleep 120 && echo late > LATE.txt");
       expect(lineWith(text, "- REVIEW:")).toContain(`execution profile \`accept-read\`, workspace alias \`${prefix}-review\``);
       expect(lineWith(text, "- REVIEW:")).toContain("must not change anything");
+      expect(lineWith(text, "- REVIEW:")).toContain("enumerated review");
+      expect(lineWith(text, "- REVIEW:")).toContain("one numbered finding per exported function, each with a line reference");
       expect(text).toContain("Read files and run commands only inside ./fixtures");
     }
   });
 
-  it("starts all three first turns before waiting, aborts WAIT about 15 seconds later and closes all three sessions", () => {
+  it("starts REVIEW, SLUG and WAIT in that order before waiting, aborts WAIT about 5 seconds after its turn and closes all three sessions", () => {
     for (const client of ["claude", "codex"]) {
       const text = promptOf(client, "trio");
-      expect(text).toContain("start all three first turns before waiting for any of them");
-      expect(text).toContain("About 15 seconds after all three turns were accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running.");
+      expect(text).toContain("Start the first turns in this order, REVIEW, then SLUG, then WAIT, and start all three before waiting for any of them");
+      expect(text.indexOf("- REVIEW:")).toBeLessThan(text.indexOf("- SLUG:"));
+      expect(text.indexOf("- SLUG:")).toBeLessThan(text.indexOf("- WAIT:"));
+      expect(text).toContain("About 5 seconds after the WAIT turn was accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running.");
+      expect(text).not.toContain("15 seconds");
       expect(text).toContain("an `abort_timeout` error is not a successful abort");
       expect(text).toContain("Verify SLUG yourself");
       expect(text).toContain("check that REVIEW changed nothing");

@@ -866,12 +866,13 @@ function prompt(client, scenario) {
     "Finish with a short report: per task the final turn state, whether your own verification passed, and whether all sessions were closed.",
   ].join("\n");
   if (scenario === "trio") return [...common,
-    "Run these three tasks at the same time, each in its own Pi session; start all three first turns before waiting for any of them:",
+    // REVIEW first and the shortest wait: the reviewer has no shell delay and must still run when WAIT is aborted.
+    "Run these three tasks at the same time, each in its own Pi session. Start the first turns in this order, REVIEW, then SLUG, then WAIT, and start all three before waiting for any of them:",
+    `- REVIEW: execution profile \`${READ_PROFILE}\`, workspace alias \`${p}-review\` (local copy: ./fixtures/review). Ask the worker for an enumerated review of the finished, frozen implementation in \`src/chunk.js\` and its tests: one numbered finding per exported function, each with a line reference, after reading every file in the repository. The review is read-only; the worker must not change anything.`,
     // The deliberate, bounded delay keeps SLUG running while WAIT is aborted.
     `- SLUG: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Ask the worker to first run the shell command \`sleep 45\` in the repository (a deliberate delay for this test), and then make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
     `- WAIT: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-wait\`. Ask the worker to run exactly this shell command in the repository and then report its output: \`sleep 120 && echo late > LATE.txt\`.`,
-    `- REVIEW: execution profile \`${READ_PROFILE}\`, workspace alias \`${p}-review\` (local copy: ./fixtures/review). Ask the worker to review the finished, frozen implementation \`src/chunk.js\` and its tests: read every file in the repository, then report concrete findings. The review is read-only; the worker must not change anything.`,
-    "About 15 seconds after all three turns were accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
+    "About 5 seconds after the WAIT turn was accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
     "Let SLUG and REVIEW finish. Verify SLUG yourself (`node --test` in ./fixtures/slug, `git -C ./fixtures/slug status --short`), check that REVIEW changed nothing (`git -C ./fixtures/review status --short`), then close all three sessions.",
     "Finish with a short report: final turn state per task, the abort result, the findings of the review, your verification result, and whether all sessions were closed.",
   ].join("\n");
