@@ -30,21 +30,25 @@ Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
   pull-request head. Tracked as
   [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) and fixed in
   Sprint 3.
-- Sprint 3 is in its exit gate on branch `fix/s3-live-acceptance`, not yet
-  merged: the first ten-task Level 3 cycle on Pi SDK `1.x` was accepted
-  (10 of 10), R06 and R07 passed, and R08 passed for Codex while Claude Code
-  failed one timing criterion (#74). The maintainer chose `explore-fast` and
-  `code-deepseek` as the profiles intended for use (R09), all Linux items now,
-  a 0.8.2 release pull request after the live runs, and a runbook for the
-  blocked Mac items. Status and evidence are in the
+- Sprint 3 is closed: [#75](https://github.com/plagor44-ux/pi-session-mcp/pull/75)
+  was merged on 2026-10-13 as `f636e6e` with green CI on Linux, macOS 15
+  and macOS 26, also on main; it closed #70 and #71. The first ten-task Level 3
+  cycle on Pi SDK `1.x` was accepted (10 of 10, with the maintainer's intended
+  profiles `explore-fast` and `code-deepseek`); R06 and R07 passed; R08
+  passed for Codex while Claude Code failed one timing criterion
+  ([#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74)). R10 and R11
+  are blocked on the work Mac, with a runbook. See the
   [Sprint 3 file](sprints/2026-10-13-s3-live-usage.md).
+- Release 0.8.2 is prepared in its own pull request: it carries #59, #56, #60
+  and the #62 skill change to npm under an unchanged MCP contract. Merge, tag
+  and publication are maintainer decisions.
 - Sprint 4 decision inputs for the conditional items R12, R15, R17 and R18 are recorded in the [Sprint 4 decision inputs](sprints/2026-10-13-s4-decision-inputs.md) ([#72](https://github.com/plagor44-ux/pi-session-mcp/issues/72)): R12, R15 and R17 not met, R18 not determinable as of 2026-10-13; this is input, not the Sprint 4 decision.
 
 ### Sprint 3 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
-| Harness tests time out on macOS | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | implemented; the pull request CI on macOS decides |
+| Harness tests time out on macOS | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | verified: CI green on macOS 15 and 26, also on main |
 | R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | partially verified: Codex passed, Claude Code failed on timing only; follow-up [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) |
 | R05 / R09 ten-task Level 3 cycle | None (acceptance) | verified: accepted, 10 of 10 tasks |
 | R06 new Codex abort run | None (acceptance) | verified |
@@ -54,8 +58,8 @@ Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
 
 Status words: planned, in progress, implemented (code exists), verified (named
 criteria met with evidence), blocked, failed (ran and missed its criteria; kept
-on record). Sprint 3 closes only with its evidence, its pull request's CI and
-the merge; Sprint 4 starts after that gate.
+on record). Sprint 3 is closed; Sprint 4 decides the next investment
+from the evidence of Sprints 1 to 3 and the decision inputs.
 
 ## Sprints and exit gates
 

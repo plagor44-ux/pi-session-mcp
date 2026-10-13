@@ -237,6 +237,19 @@ Then Sprint 4 decides from the evidence of Sprints 1–3 and the
 [Sprint 4 decision inputs](https://github.com/plagor44-ux/pi-session-mcp/pull/73)
 prepared in parallel.
 
+## Closure
+
+Sprint 3 closed on 2026-10-13. Pull request
+[#75](https://github.com/plagor44-ux/pi-session-mcp/pull/75) was merged as
+`f636e6e` after its final-head CI passed on Linux, macOS 15 and macOS 26 (run
+`38462141219`); the CI run on main (`38465781209`) passed on the same
+matrix, so #70 holds on main too. The merge closed #70 and #71 as completed.
+The Sprint 4 decision inputs
+([#73](https://github.com/plagor44-ux/pi-session-mcp/pull/73), #72) followed
+as `166ffef`, also with green CI on main. Open from this sprint: #74, R10 and
+R11 on the work Mac, and R22. The 0.8.2 release is prepared in its own pull
+request.
+
 ## Appendix: macOS runbook (R10, R11)
 
 Light checks only; no full test suite and no parallel model work on the work
