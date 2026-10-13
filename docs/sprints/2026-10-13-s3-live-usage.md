@@ -47,10 +47,10 @@ happened and did not meet its criteria; it stays on record).
 
 | Task | Issue | How | Status |
 | --- | --- | --- | --- |
-| Harness tests time out on macOS (main CI after #69) | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | One fixture build per case | in_progress |
-| R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | `trio` scenario of the multi-session harness, then one live run per controller | in_progress |
-| R05 / R09 ten-task Level 3 cycle | None (acceptance) | Private per-cycle driver, as [acceptance](../acceptance.md#level-3-live-two-client-acceptance) prescribes; pre-registered | in_progress |
-| R06 new Codex abort run | None (acceptance) | Multi-session harness at the base commit, `abort` scenario, Codex | planned |
+| Harness tests time out on macOS (main CI after #69) | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | One fixture build per case | implemented; the pull request CI on macOS decides |
+| R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | `trio` scenario of the multi-session harness, then one live run per controller | partially verified: Codex passed; Claude Code failed on timing only ([#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74)) |
+| R05 / R09 ten-task Level 3 cycle | None (acceptance) | Private per-cycle driver, as [acceptance](../acceptance.md#level-3-live-two-client-acceptance) prescribes; pre-registered | verified (10/10, all gate conditions) |
+| R06 new Codex abort run | None (acceptance) | Multi-session harness at the base commit, `abort` scenario, Codex | verified |
 | R07 Codex discovery of the setup-installed skill | None (acceptance) | One real Codex run in an isolated home | verified |
 | R10 / R11 current macOS Level 2 and smoke | None | Runbook below | blocked (work Mac not reachable) |
 
@@ -106,14 +106,123 @@ use the profiles without it. The disposable Codex home is a conservative
 isolation choice: the operator home holds no `pi-session-orchestration` copy in
 `~/.agents/skills`.
 
-### R06, Level 3, R08
+### R06: new Codex abort run
 
-Pending.
+`scripts/multi-session-acceptance.mjs` at the base commit (harness SHA-256
+prefix `7c43cc8a`), `prepare --from-profile code-deepseek` (DeepSeek
+`deepseek-flash`, thinking `high`), then one `run --client codex --scenario
+abort`, with a disposable home and the operator's `CODEX_HOME` and Pi agent
+directory passed explicitly. Codex CLI `0.162.1`, Node.js `26.11.1`, Linux
+x64. Started 2026-10-13 19:30 UTC, 100 s.
+
+- `acceptance.passed: true`, no failure code. The `wait` turn ended `aborted`,
+  the `range` turn `completed` with its tests passing, and both fixtures
+  changed only allowed files: the strict scope oracle (`range:changes`) that
+  failed the v0.8.1 Codex abort run passed unchanged.
+- Both sessions closed, no residual process, no bound resource changed or
+  unbound, no structural leak, the handshake token appeared nowhere.
+- The sanitized evidence record contains no path.
+
+### R05 / R09: ten-task Level 3 cycle
+
+Private per-cycle driver (SHA-256 prefix `c160a9e5`), pre-registered as
+recorded above. Candidate: detached checkout of `0aae639`, clean, package
+`0.8.1`, `dist/main.js` SHA-256 `47875d38…`. Clients Claude Code `2.1.296`
+and Codex CLI `0.162.1`; Node.js `26.11.1`; Linux x64. Worker profiles
+`l3-read` (OpenAI `gpt-6-luna`, `low`, read-only) and `l3-code` (DeepSeek
+`deepseek-flash`, `high`, coding). Claude Code ran with the operator home,
+Codex with a disposable home; both runs share the pre-registration digest
+`8645f3a4…`.
+
+- Preflight: both profiles answered PONG through the candidate server and
+  closed; the server exited with empty stderr.
+- Six invocations, strictly sequential, 19:33–19:40 UTC (56–94 s each):
+
+  | Client | Read-only analysis | Read-only follow-up | Coding change | Coding follow-up | Abort and recovery |
+  | --- | --- | --- | --- | --- | --- |
+  | Claude Code | intended | intended | intended | intended | intended |
+  | Codex | intended | intended | intended | intended | intended |
+
+- Verdict: accepted, 10 of 10 tasks, and all 16 gate conditions true: both
+  clients complete discovery, start, prompt, result and close; a useful
+  second turn; a bounded, independently verified coding workflow (barrier
+  snapshots taken after each coding turn and before the next prompt, fixture
+  tests and hidden business checks on the snapshots, only the allowed files
+  changed); no change outside the approved diff; no public leak; no session or
+  process left after a verified close; stable, sanitized lifecycle errors;
+  bound resources unchanged and complete; Level 1 green for the release source
+  (native Linux on `0aae639`: typecheck, strict `npm test` with 54 files, 1300
+  passed and 6 skipped, `npm audit` 0).
+- The coding barrier worked for both clients, including inside Codex's
+  read-only sandbox.
+- Liveness and polling: every turn was seen `running` in at most one
+  `pi_turn_get` poll, and whenever it was, `updatedAt` had advanced past
+  `startedAt`. Both clients waited between polls with `sleep`. This is no
+  evidence for the bounded-wait revisit trigger of ADR 0003.
+
+Limits: one cycle, one provider pair, Linux only. The worker profiles do not
+include the operator profiles' read-only `codegraph_explore` MCP grant. The
+ten tasks are deliberately small and qualify the control path, not model
+capability on larger work. No live run failed with `noServerObserved`, so this
+sprint adds no input for R15.
+
+### R08: three concurrent sessions with a read-only reviewer
+
+`scripts/multi-session-acceptance.mjs` of this sprint's branch at `63d5ff7`
+(harness SHA-256 prefix `bb1620ad`), reviewed before the runs (see
+[Independent review](#independent-review)); candidate `0aae639`; `prepare
+--from-profile code-deepseek` (DeepSeek `deepseek-flash`, `high`, for both
+`accept-code` and `accept-read`); one `trio` run per controller, Claude Code
+with the operator home, Codex with a disposable home. 2026-10-13, 20:13–20:17
+UTC.
+
+| Controller | Result | Duration | Notes |
+| --- | --- | --- | --- |
+| Codex `0.162.1` | passed, no failure code | 102 s | Three sessions on their expected aliases and profiles; all first turns overlapped; `wait` aborted by one successful, on-target abort while `slug` and `review` were running; `slug` tests passed within `src/slug.js`; the `review` fixture unchanged in working tree, index and `HEAD`; all closed; no residual process, leak or resource change |
+| Claude Code `2.1.296` | failed: `neighborsNotRunningDuringAbort` only | 118 s | Every other criterion passed as for Codex. The `review` turn completed after 10.7 s, 6.7 s before the abort of `wait`, which came about 10 s after the `wait` turn started instead of the requested about 5 s; `slug` was still running |
+
+The failure is a timing outcome of the scenario design, not a session-control
+defect; it stays on record and was not repeated, as decided for this sprint.
+Follow-up: [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74).
+Three concurrent sessions, a read-only reviewer of a frozen result and a
+neighbor abort are therefore accepted for Codex; for Claude Code everything
+except the reviewer still running at the abort is shown.
+
+## Independent review
+
+The harness changes for #70 and #71 were reviewed before the R08 runs by two
+read-only reviewers who did not write them:
+
+| Reviewer | Round | Verdict | Outcome |
+| --- | --- | --- | --- |
+| Claude family | 1 | approve with nits | An abort on a neighbor with `abort_timeout` was not judged; the reviewer started last and could finish before the abort; a looser `slug` scope in `trio`; an end-state-only read-only oracle; missing `analyze`-to-verdict tests; one test with two fixture builds. All addressed: `c80383f` to `63d5ff7`; the end-state limit is documented. |
+| OpenAI family (Pi `review` profile) | 1 | changes requested | A failed abort with an unknown session id disappeared from the verdict (concrete false pass), also in the existing `abort` scenario; lost aggregate coverage in the #70 split. Fixed: every `pi_session_abort` call is judged in `abort` and `trio` (new code `offTargetAbort`); an aggregate test. |
+| OpenAI family | 2 | approve | No new finding. |
+
+The stricter abort rule also applies to `abort`. The recorded R06 run was
+checked by hand against it: its transcript holds one abort call, on its own
+started session, with an ok result.
 
 ## Open gates
 
-- Every pending task above; the Sprint 3 pull request's CI and its merge.
-- R10/R11 on the work Mac.
+- This sprint's pull request CI (Linux, macOS 15, macOS 26), which also shows
+  whether #70 removed the `macos-15` timeout, and the maintainer's merge.
+- [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74): the `trio`
+  timing with Claude Code as controller (entry condition in the issue).
+- R10 and R11 on the work Mac ([runbook](#appendix-macos-runbook-r10-r11)).
+- R22 (external ChatGPT project instructions) stays blocked on an operator
+  action.
+
+## Next step
+
+After the merge, the 0.8.2 release pull request follows, as the maintainer
+decided: version, changelog heading and pre-release acceptance on the release
+candidate. It carries #59, #56 and #60, which the published 0.8.1 does not
+have (0.8.1 still deletes a partial trash), and the #62 skill change; the MCP
+contract is unchanged. Merge, tag and publication stay maintainer decisions.
+Then Sprint 4 decides from the evidence of Sprints 1–3 and the
+[Sprint 4 decision inputs](https://github.com/plagor44-ux/pi-session-mcp/pull/73)
+prepared in parallel.
 
 ## Appendix: macOS runbook (R10, R11)
 

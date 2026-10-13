@@ -386,9 +386,11 @@ Pi Session MCP tools; the script never does.
   must not be inside a temporary directory (the system temporary directory,
   `/tmp`, `/var/tmp` or `/dev/shm`), because Codex refuses helper binaries
   there.
-- Fixtures: four small synthetic git repositories per client (`slug`, `stats`,
-  `wait`, `range`), each a separate workspace alias (`cc-*` for Claude Code,
-  `cx-*` for Codex). Both clients use the same configuration and build.
+- Fixtures: five small synthetic git repositories per client (`slug`, `stats`,
+  `wait`, `range` and, from the Sprint 3 harness (#71) on, `review`), each a
+  separate workspace alias (`cc-*` for Claude Code, `cx-*` for Codex). `review`
+  holds a finished, frozen implementation that only the read-only reviewer of
+  `trio` uses. Both clients use the same configuration and build.
 - Fixture baselines: when it creates a fixture, `prepare` stores its initial
   commit and a manifest of its files (path, type, mode, SHA-256; without
   `.git/`) under the run's private directory, never inside the worker's
@@ -512,12 +514,14 @@ Pi Session MCP tools; the script never does.
 
 ### Scenarios
 
-Each client runs two invocations, one per scenario:
+Each client runs one invocation per scenario: `parallel` and `abort`, and from
+the Sprint 3 harness (#71) on also `trio`:
 
 | Scenario | What the controller does | What is checked |
 | --- | --- | --- |
 | `parallel` | Capabilities first; a session of `accept-code-handshake` on `slug` and one of `accept-code` on `stats` (before the Sprint 2 harness: `accept-code` for both); both first turns started before waiting; one follow-up in the `slug` session that adds a test and completes the handshake from the worker's skills; own verification; close both | Candidate version and configuration fingerprint seen through capabilities; `skills` of both coding profiles and the profile of each session; first turns overlap by the server's `startedAt` and `completedAt`; follow-up completed; tests pass and only allowed files changed; handshake file holds the token although no prompt contained it |
-| `abort` | Two sessions of `accept-code` on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every abort result is `ok` (an `abort_timeout` stays on record even after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
+| `abort` | Two sessions of `accept-code` on `wait` (a bounded `sleep 120` command) and `range` (a bounded `sleep 45`, then the change); abort `wait` about 15 seconds after both turns started, while `range` runs; verify and close both | Every `pi_session_abort` call of the transcript is `ok` and targets the `wait` session (an `abort_timeout`, an unknown session id or an abort on `range` stays on record and fails, also after a retry); the first successful abort comes before `pi_turn_get` shows the `wait` turn `aborted`, and both before its session is closed; its abort time lies inside the running interval of `range`; `range` completed and verified; at the end of the run no late file exists and no worker `sleep` remains |
+| `trio` | Capabilities first; three sessions whose first turns start in the order `review`, `slug`, `wait`, all before waiting for any: `accept-read` on `review` (an enumerated read-only review of the frozen `review` fixture, one finding per exported function with a line reference), `accept-code` on `slug` (a bounded `sleep 45`, then the change, only in `src/slug.js`) and on `wait` (a bounded `sleep 120`); abort `wait` about 5 seconds after its turn was accepted, while `slug` and `review` run; own verification of `slug`; confirm `review` changed nothing; close all three; no handshake | Candidate version and configuration fingerprint seen through capabilities; three sessions, each on its expected alias and profile; `accept-read` offers exactly `review` and only the `review` session used it; all three first turns overlap; every `pi_session_abort` call is `ok` and on `wait`, the first successful abort comes before `wait` is seen `aborted`, both before close; the abort lies inside the running intervals of both `slug` and `review`; `slug` and `review` completed; `slug` tests pass; the `review` fixture is byte-identical in working tree, index and `HEAD`, with no empty directory; `wait` leaves no late file; no worker `sleep` remains |
 
 ### Independent checks
 
@@ -573,7 +577,10 @@ Each client runs two invocations, one per scenario:
     `accept-code-handshake`, and only the `slug` session used
     `accept-code-handshake` while every other session used `accept-code`
     (`workerSkills`; before the Sprint 2 harness: exactly `implementation` and
-    `handshake` on `accept-code`);
+    `handshake` on `accept-code`). In `trio` there is no handshake: `slug` and
+    `wait` use `accept-code`, `accept-read` offers exactly `review`, and only the
+    `review` session may use `accept-read`; in `parallel` and `abort` no session
+    uses `accept-read`;
   - the structural leak scan found nothing (`structuralLeaks`), the token
     appears nowhere it must not (`tokenExposed`), and no worker prompt or
     controller action touched a private marker (`privateAccess`);
@@ -582,13 +589,31 @@ Each client runs two invocations, one per scenario:
     overlapped (`noOverlap`) and the follow-up completed
     (`followUpNotCompleted`);
   - `abort`: the `wait` turn ended `aborted` after only successful aborts
-    (`abortFailed`), in the required order and before its session closed
+    (`abortFailed`), every abort call on the `wait` session
+    (`offTargetAbort`), in the required order and before its session closed
     (`abortOrder`), and `range` completed with the abort inside its running
     interval (`neighborNotRunningDuringAbort`);
+  - `trio`: exactly three sessions started (`sessionsNotStarted`), each on its
+    expected workspace alias and profile (`sessionAssociation`); the `slug` and
+    `review` first turns completed (`firstTurnsNotCompleted`) and all three
+    first turns overlapped (`noOverlap`); the `wait` turn ended `aborted` after
+    only successful aborts (`abortFailed`) and only on `wait`
+    (`offTargetAbort`), in the required order and before
+    close (`abortOrder`), with the abort inside the running intervals of both
+    `slug` and `review` (`neighborsNotRunningDuringAbort`); the `review` fixture
+    is unchanged in working tree, index and `HEAD`, `HEAD` is still its base
+    commit, and no empty directory appeared (`review:readOnly`); the `slug`
+    task of `trio` may change only `src/slug.js`, while `test/slug.test.js`
+    and `HANDSHAKE.txt` stay allowed in `parallel` only. The read-only check
+    compares the end state with the baseline, so a write reverted before the
+    end, a `git stash`, new refs or branches and directory-mode changes are not
+    seen; the read-only profile is the actual guard;
   - per fixture: only allowed changes (`<task>:changes`), every change written
     during a worker turn (`<task>:attribution`), fixture tests and business
-    checks passing (`<task>:tests`), for `slug` the added test and the
-    handshake (`slug:followUp`), for `wait` no late file (`wait:lateFile`),
+    checks passing (`<task>:tests`), for `slug` in `parallel` the added test
+    and the handshake (`slug:followUp`), for `review` the read-only invariance
+    (`review:readOnly`) instead of tests, for `wait` no late file
+    (`wait:lateFile`),
     and an oracle for every task of the scenario (`oracleMissing`).
 - Liveness observation: for each turn of a session, `turnLiveness` records the
   number of `pi_turn_get` polls that saw the turn `running` and whether
@@ -1484,3 +1509,44 @@ belongs to Sprint 3.
 
 Open gates that Sprint 2 does not close: the final-head CI of the pull request,
 a live run with the new harness bindings, and every Sprint 1 open gate above.
+
+## Sprint 3 live acceptance (2026-10-13)
+
+Recorded on 2026-10-13 against main `0aae639` (package `0.8.1` plus the
+unreleased Sprint 1 and 2 changes; `dist/main.js` SHA-256 `47875d38…`), on
+native Linux x64 with Node.js `26.11.1`, Claude Code `2.1.296` and Codex CLI
+`0.162.1`. The [Sprint 3 file](sprints/2026-10-13-s3-live-usage.md) holds the
+pre-registration, every command and the review rounds. Worker profiles are
+the maintainer's intended pair, copied without its read-only external MCP
+grant: read-only OpenAI `gpt-6-luna` (`low`) and coding DeepSeek
+`deepseek-flash` (`high`).
+
+Level 3 (R05, R09): one ten-task cycle with both controllers, pre-registered,
+strictly sequential. Accepted: 10 of 10 tasks reached their intended outcome
+and every gate condition held, including the coding barrier for both clients
+(in Codex's read-only sandbox too), read-only invariance, no change outside the
+approved diff, no public leak, no session or process left after a verified
+close, and Level 1 green for the release source. Every running turn was seen
+in at most one `pi_turn_get` poll. This is the first full cycle on Pi SDK `1.x`;
+it covers this provider pair on Linux only.
+
+Targeted multi-session evidence (not Level 3), with
+`scripts/multi-session-acceptance.mjs`:
+
+- R06, Codex `abort` (DeepSeek workers): passed, including the strict scope
+  oracle that failed the v0.8.1 Codex abort run.
+- R08, `trio` (three concurrent sessions, a read-only reviewer of a frozen
+  fixture, a neighbor abort): Codex passed; Claude Code failed only
+  `neighborsNotRunningDuringAbort`, because the read-only review finished 6.7 s
+  before the abort. The failed run stays on record
+  ([#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74)).
+
+Real client discovery (R07): a real Codex run in an isolated home found the
+controller skill that setup had installed as a regular copy, named that copy's
+path and quoted a line that exists only in the revision under test; no manual
+link was needed.
+
+Not established: macOS (R10, R11; runbook in the Sprint 3 file), other
+providers and models, the operator profiles' external MCP grant, larger tasks,
+more than three concurrent sessions, and the `trio` timing with Claude Code as
+controller.
