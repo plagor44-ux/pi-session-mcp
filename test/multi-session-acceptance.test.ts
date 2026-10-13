@@ -1097,8 +1097,90 @@ describe("handshake profile split", () => {
   });
 
   it("keeps the scope allowance for the handshake file strict: only the slug task may write it", () => {
-    expect(h.ALLOWED_CHANGES).toEqual({ slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] });
+    expect(h.ALLOWED_CHANGES).toEqual({ slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"], review: [] });
   });
+});
+
+// ---- #71: the trio scenario: fixture, profiles and prompt -------------------------------------------------
+describe("trio scenario: fixture and prompt", () => {
+  const info = { node: process.execPath, entry: "/entry.js", agentDir: "/agent" };
+  const promptOf = (client: string, scenario: string): string => {
+    const args = h.command(client, info, "/private", "/controller", { scenario }).args as string[];
+    return (client === "claude" ? args[1] : args.at(-1)) as string;
+  };
+  const lineWith = (text: string, needle: string) => text.split("\n").find((line) => line.includes(needle)) ?? "";
+
+  it("defines a finished review fixture that nobody may change", async () => {
+    expect(Object.keys(h.FIXTURES.review).sort()).toEqual(["README.md", "package.json", "src/chunk.js", "test/chunk.test.js"]);
+    expect(h.ALLOWED_CHANGES.review).toEqual([]);
+    const { dir, baseline } = await fixtureWithBaseline("review");
+    // finished: its own tests pass as committed, and the harness defines no business check for it
+    const tests = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8", env: { PATH: process.env.PATH ?? "" } });
+    expect(tests.status, tests.stdout + tests.stderr).toBe(0);
+    expect(h.BUSINESS_CHECKS.review).toBeUndefined();
+    expect(compare(dir, baseline, "review")).toMatchObject({ ok: true, error: undefined, sources: { workingTree: 0, index: 0, head: 0 } });
+  });
+
+  it("names the profile and workspace alias of each session in the prompt of both clients", () => {
+    for (const [client, prefix] of [["claude", "cc"], ["codex", "cx"]] as const) {
+      const text = promptOf(client, "trio");
+      expect(lineWith(text, "Use the execution profile")).toContain("`accept-code` for the SLUG and WAIT sessions and `accept-read` for the REVIEW session");
+      expect(lineWith(text, "- SLUG:")).toContain(`execution profile \`accept-code\`, workspace alias \`${prefix}-slug\``);
+      expect(lineWith(text, "- WAIT:")).toContain(`execution profile \`accept-code\`, workspace alias \`${prefix}-wait\``);
+      expect(lineWith(text, "- WAIT:")).toContain("sleep 120 && echo late > LATE.txt");
+      expect(lineWith(text, "- REVIEW:")).toContain(`execution profile \`accept-read\`, workspace alias \`${prefix}-review\``);
+      expect(lineWith(text, "- REVIEW:")).toContain("must not change anything");
+      expect(text).toContain("Read files and run commands only inside ./fixtures");
+    }
+  });
+
+  it("starts all three first turns before waiting, aborts WAIT about 15 seconds later and closes all three sessions", () => {
+    for (const client of ["claude", "codex"]) {
+      const text = promptOf(client, "trio");
+      expect(text).toContain("start all three first turns before waiting for any of them");
+      expect(text).toContain("About 15 seconds after all three turns were accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running.");
+      expect(text).toContain("an `abort_timeout` error is not a successful abort");
+      expect(text).toContain("Verify SLUG yourself");
+      expect(text).toContain("check that REVIEW changed nothing");
+      expect(text).toContain("close all three sessions");
+    }
+  });
+
+  it("does not mention the handshake, and offers the handshake profile to no session", () => {
+    for (const client of ["claude", "codex"]) {
+      const text = promptOf(client, "trio");
+      expect(text).not.toMatch(/handshake/i);
+      expect(text).not.toContain("accept-code-handshake");
+      expect(text).not.toContain("follow-up");
+    }
+  });
+
+  it("leaves the prompts of the other scenarios without trio wording", () => {
+    for (const client of ["claude", "codex"]) {
+      for (const scenario of ["parallel", "abort"]) {
+        const text = promptOf(client, scenario);
+        expect(text, scenario).not.toContain("accept-read");
+        expect(text, scenario).not.toContain("REVIEW");
+        expect(text, scenario).not.toContain("fixtures/review");
+      }
+      expect(promptOf(client, "abort")).toContain("Use the execution profile `accept-code` for every task.");
+    }
+  });
+
+  it("prepares the review fixture, its baseline and its workspace alias for both clients, with the read-only profile unchanged", async () => {
+    const run = await buildRun();
+    const prepared = await prepareRun(run, { withExtensions: false, env: {} });
+    const config = JSON.parse(readFileSync(join(prepared.priv, "config.json"), "utf8"));
+    expect(config.executionProfiles["accept-read"]).toMatchObject({ permissionProfile: "read-only", default: true, skills: ["review"] });
+    for (const [client, prefix] of [["claude", "cc"], ["codex", "cx"]] as const) {
+      const dir = join(prepared.runDir, `controller-${client}`, "fixtures", "review");
+      expect(join(prepared.priv, config.workspaces[`${prefix}-review`])).toBe(dir);
+      expect(readdirSync(dir).sort()).toEqual([".git", "README.md", "package.json", "src", "test"]);
+      const baseline = JSON.parse(readFileSync(join(prepared.priv, "baselines", client, "review.json"), "utf8"));
+      expect(baseline.manifest.map((entry: { path: string }) => entry.path)).toEqual(Object.keys(h.FIXTURES.review).sort());
+      expect(compare(dir, baseline, "review")).toMatchObject({ ok: true, sources: { workingTree: 0, index: 0, head: 0 } });
+    }
+  }, 60_000);
 });
 
 describe.skipIf(notLinux)("runs against a synthetic layout with a controlled client", () => {

@@ -39,10 +39,13 @@ import { parseArgs } from "node:util";
 const SERVER = "pi-candidate";
 const TOOLS = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"];
 const CLIENTS = { claude: "cc", codex: "cx" };
-// Two coding profiles: every task gets `accept-code`; only the slug session also gets the handshake skill.
+// Two coding profiles: every task gets `accept-code`; only the slug session of `parallel` also gets the handshake skill.
+// The read-only profile `accept-read` (skill `review`) is for the reviewer of `trio` and for no other session.
 export const CODE_PROFILE = "accept-code";
 export const HANDSHAKE_PROFILE = "accept-code-handshake";
+export const READ_PROFILE = "accept-read";
 export const CODE_SKILLS = ["implementation"];
+export const READ_SKILLS = ["review"];
 export const HANDSHAKE_SKILLS = ["implementation", "handshake"];
 const SCENARIOS = {
   parallel: { tasks: ["slug", "stats"] },
@@ -92,8 +95,15 @@ export const FIXTURES = {
     "src/range.js": "/** Integers from start (inclusive) to end (exclusive) by a positive step (default 1). */\nexport function range(start, end, step = 1) {\n  throw new Error(\"not implemented\");\n}\n",
     "test/range.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { range } from \"../src/range.js\";\n\ntest(\"default step\", () => assert.deepEqual(range(0, 4), [0, 1, 2, 3]));\ntest(\"custom step\", () => assert.deepEqual(range(1, 10, 3), [1, 4, 7]));\ntest(\"empty\", () => assert.deepEqual(range(5, 5), []));\ntest(\"bad step\", () => assert.throws(() => range(0, 3, 0), RangeError));\n",
   },
+  // A finished, frozen implementation for the read-only reviewer of `trio`; nobody may change it.
+  review: {
+    "README.md": "Finished implementation of `chunk`. It is frozen: it is reviewed, never changed.\n",
+    "package.json": `{ "name": "fixture-review", "private": true, "type": "module", "scripts": { "test": "node --test" } }\n`,
+    "src/chunk.js": "/** Splits a list into consecutive chunks of at most `size` items; `size` must be a positive integer. */\nexport function chunk(list, size) {\n  if (!Number.isInteger(size) || size < 1) throw new RangeError(\"size must be a positive integer\");\n  const chunks = [];\n  for (let index = 0; index < list.length; index += size) chunks.push(list.slice(index, index + size));\n  return chunks;\n}\n",
+    "test/chunk.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { chunk } from \"../src/chunk.js\";\n\ntest(\"splits evenly\", () => assert.deepEqual(chunk([1, 2, 3, 4], 2), [[1, 2], [3, 4]]));\ntest(\"keeps a shorter last chunk\", () => assert.deepEqual(chunk([1, 2, 3], 2), [[1, 2], [3]]));\ntest(\"empty list\", () => assert.deepEqual(chunk([], 3), []));\ntest(\"bad size\", () => assert.throws(() => chunk([1], 0), RangeError));\n",
+  },
 };
-export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] };
+export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"], review: [] };
 
 /** SHA-256 over every built runtime module, so evidence binds to all of dist/, not just its entry. */
 export function distTreeSha256(candidate) {
@@ -838,7 +848,9 @@ function prompt(client, scenario) {
     "Start with pi_capabilities_get and state the server version and the configuration fingerprint you saw.",
     scenario === "parallel"
       ? `Use the execution profile \`${HANDSHAKE_PROFILE}\` for the SLUG session and \`${CODE_PROFILE}\` for the STATS session; no other session uses \`${HANDSHAKE_PROFILE}\`. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
-      : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
+      : scenario === "trio"
+        ? `Use the execution profile \`${CODE_PROFILE}\` for the SLUG and WAIT sessions and \`${READ_PROFILE}\` for the REVIEW session. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
+        : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
     `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits.`,
   ];
   if (scenario === "parallel") return [...common,
@@ -850,6 +862,16 @@ function prompt(client, scenario) {
     "After the first SLUG turn succeeded, send one follow-up prompt in the same SLUG session: add one more test case to `test/slug.test.js` for a string with leading and trailing whitespace (it must pass), and complete the acceptance handshake described in the worker's available skills.",
     "Verify every result yourself before closing (read the changed files, run `node --test` in the fixture directory, check `git -C <fixture> status --short`). Close every session you started.",
     "Finish with a short report: per task the final turn state, whether your own verification passed, and whether all sessions were closed.",
+  ].join("\n");
+  if (scenario === "trio") return [...common,
+    "Run these three tasks at the same time, each in its own Pi session; start all three first turns before waiting for any of them:",
+    // The deliberate, bounded delay keeps SLUG running while WAIT is aborted.
+    `- SLUG: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Ask the worker to first run the shell command \`sleep 45\` in the repository (a deliberate delay for this test), and then make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
+    `- WAIT: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-wait\`. Ask the worker to run exactly this shell command in the repository and then report its output: \`sleep 120 && echo late > LATE.txt\`.`,
+    `- REVIEW: execution profile \`${READ_PROFILE}\`, workspace alias \`${p}-review\` (local copy: ./fixtures/review). Ask the worker to review the finished, frozen implementation \`src/chunk.js\` and its tests: read every file in the repository, then report concrete findings. The review is read-only; the worker must not change anything.`,
+    "About 15 seconds after all three turns were accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
+    "Let SLUG and REVIEW finish. Verify SLUG yourself (`node --test` in ./fixtures/slug, `git -C ./fixtures/slug status --short`), check that REVIEW changed nothing (`git -C ./fixtures/review status --short`), then close all three sessions.",
+    "Finish with a short report: final turn state per task, the abort result, the findings of the review, your verification result, and whether all sessions were closed.",
   ].join("\n");
   return [...common,
     "Run these two tasks at the same time, each in its own Pi session:",
