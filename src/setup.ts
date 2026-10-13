@@ -142,11 +142,16 @@ export class SetupOrchestrator {
       let owned: OwnershipRecord | undefined;
       try { owned = await ownership.get(target); } catch { findings.push({ target, status: "failed", code: "ownership_unavailable" }); continue; }
       if (owned && owned.fingerprint !== this.dependencies.intendedFingerprint) { findings.push({ target, status: "failed", code: "release_binding_mismatch" }); continue; }
-      const doctor = this.dependencies.doctor ? await this.safe(() => this.dependencies.doctor!.check()) : { ok: true, code: "doctor_skipped" };
+      if (this.dependencies.doctor) {
+        const doctor = await this.safe(() => this.dependencies.doctor!.check());
+        if (!doctor?.ok) { findings.push({ target, status: "failed", code: doctor?.code ?? "doctor_failed" }); continue; }
+      }
       const inspected = await this.safe(() => adapter.inspect(target, this.dependencies.intendedFingerprint));
-      const equivalent = inspected?.state === "equivalent" && inspected.fingerprint === this.dependencies.intendedFingerprint;
-      const verified = equivalent ? await this.safe(() => adapter.verify(target)) : undefined;
-      findings.push({ target, status: doctor?.ok && equivalent && verified?.ok ? "ok" : "failed", code: !doctor?.ok ? doctor?.code ?? "doctor_failed" : !equivalent ? "registration_not_equivalent" : verified?.code ?? "verify_failed" });
+      if (!inspected) { findings.push({ target, status: "failed", code: "inspect_failed" }); continue; }
+      if (inspected.state === "unsupported") { findings.push({ target, status: "unsupported", code: "unsupported" }); continue; }
+      if (inspected.state !== "equivalent" || inspected.fingerprint !== this.dependencies.intendedFingerprint) { findings.push({ target, status: "failed", code: "registration_not_equivalent" }); continue; }
+      const verified = await this.safe(() => adapter.verify(target));
+      findings.push({ target, status: verified?.ok ? "ok" : "failed", code: verified?.code ?? "verify_failed" });
     }
     return result("verify", findings);
   }
