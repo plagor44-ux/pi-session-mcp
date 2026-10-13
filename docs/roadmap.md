@@ -12,33 +12,40 @@ they are implemented or that their gates passed.
 
 ## Current state
 
-Updated 2026-10-13 on main `3e360dd672cbffcce2913a5cf9f6333a0262f077`.
+Updated 2026-10-13. Base main `3e360dd672cbffcce2913a5cf9f6333a0262f077`;
+Sprint 1 work is on branch `fix/59-56-s1-correctness`, not yet merged.
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
   [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57). That does not
   complete the rest of the backlog.
-- R01 is tracked as [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59).
-  It is not fixed yet.
-- R02 is [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56). The
-  docs merge had closed it although the code was unchanged; it is open again
-  and not fixed yet.
-- Sprint 1 is in progress. Its status, task owners, acceptance criteria and
-  evidence are in the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
-  Nothing in it is verified until that file records the evidence.
+- R01 is [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) and
+  R02 is [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56). Both
+  are fixed on the Sprint 1 branch and verified on native Linux; #56 also with
+  real clients. Both issues stay open until the pull request is merged. (#56
+  had been closed once by the documentation merge although the code was
+  unchanged.)
+- Sprint 1 is in its exit gate: the final-head CI matrix and the maintainer's
+  merge decision are outstanding. Status, owners, criteria and evidence are in
+  the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
+- The independent review left one follow-up outside Sprint 1:
+  [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), a dry-run
+  that announces a recovery that apply retains.
 
 ### Sprint 1 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
-| R01 recovery retains unprovable trash | [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) | in progress |
-| R02 verify diagnostics | [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) | in progress |
-| R03 native QA gate | None; delivered in the Sprint 1 pull request | planned; needs the integrated candidate |
-| R19 v0.8.1 evidence carry-over | None; delivered in the Sprint 1 pull request | in progress |
+| R01 recovery retains unprovable trash | [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) | verified on native Linux; final-head CI pending; not merged |
+| R02 verify diagnostics | [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) | verified on native Linux and with real clients; final-head CI pending; not merged |
+| R03 native QA gate | None; delivered in the Sprint 1 pull request | verified on native Linux for the runtime candidate |
+| R19 v0.8.1 evidence carry-over | None; delivered in the Sprint 1 pull request | verified against the release notes |
 | R21 consolidated roadmap | [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57), [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58) | delivered (documentation only) |
 
 Status words: planned, in progress, implemented (code exists), verified (named
-criteria met with evidence), blocked. No sprint is complete.
+criteria met with evidence), blocked. No sprint is complete: Sprint 1 closes
+only with passing final-head CI and the merge, and Sprint 2 starts after that
+gate.
 
 ## Sprints and exit gates
 

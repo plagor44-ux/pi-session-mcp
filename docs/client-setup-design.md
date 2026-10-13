@@ -138,7 +138,10 @@ copies:
   never proves ownership of the contents. This deliberately replaces the
   earlier automatic deletion of partial trash trees; continuing a partial
   deletion would need additional durable evidence, and no journal is added
-  for it.
+  for it. The fingerprint covers the paths and contents of regular files, not
+  empty directories or file modes, so an empty directory or a mode change
+  inside an otherwise complete trash does not prevent its deletion; no file
+  content is lost that way.
 - The backup must equal the replaced copy; the staging directory must equal
   the target or be an interrupted write of it. A partially written staging
   directory counts only when every file is a prefix-consistent part of the
@@ -147,16 +150,19 @@ copies:
   directory, else moves the verified backup back. `--remove` and `--rollback`
   delete the verified intermediates and leave the slot to the removal.
 - Anything modified or foreign, the trash directory included, stays and is
-  reported as `skill_recovery_retained` (divergent). The pending record, the
-  slot and the other intermediates then stay unchanged, and nothing is
-  reported as settled. A failed update leaves its staging directory until the
+  reported as `skill_recovery_retained` (divergent). The pending record and
+  the slot then stay unchanged, and nothing is reported as settled. A
+  retained trash stops recovery before any other intermediate is touched; a
+  retained backup or staging directory can follow the deletion of a proven
+  own trash. A failed update leaves its staging directory until the
   next run settles it, and an unhealthy ownership fence retains intermediates
   the same way.
 - Operator settlement of a retained trash directory: inspect the
   `.pi-session-mcp-<skill>-<transactionId>.trash` directory next to the slot,
   move any own content elsewhere, delete that directory, and rerun the same
   setup command. A dry-run still announces `skill_recovery_planned` without
-  inspecting intermediates, so an apply can still retain.
+  inspecting intermediates, so an apply can still retain
+  ([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60)).
 - Random-name directories of 0.8.0 updates are never searched for or deleted;
   an operator may remove them by hand.
 - `--dry-run` and `--verify` do not report leftover intermediates.

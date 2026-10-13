@@ -1280,21 +1280,51 @@ Limitations and failures stated in the notes:
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
 (recovery keeps unprovable trash) and
 [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (verify
-diagnostics) and to the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
-They are not yet run. Every result below is `pending`; nothing here is a claim
-that a fix works. Each result will be bound to the exact source commit, the
-command and the exit code, as the evidence rules require.
+diagnostics). They were run on 2026-10-13 against the Sprint 1 branch
+`fix/59-56-s1-correctness`, before merge and without a release. The
+[Sprint 1 file](sprints/2026-10-13-s1-correctness.md) holds the commands,
+source binding, before-fix evidence and review findings in full.
 
-| Level | Check | Result |
+Source: base main `3e360dd`; runtime candidate
+`fa32c22b573ff0bb0b920813bd9520bb79b025f4`, the last commit that changes `src/`
+or `test/`. Native Linux (x64), Node.js `26.11.1`, npm `12.2.0`, Codex CLI
+`0.162.1`, Claude Code `2.1.296`. No provider, model or credential was used.
+
+Provider-free (Level 1), on `fa32c22`:
+
+| Check | Exit | Result |
 | --- | --- | --- |
-| 1 | Native Linux gate on the integrated candidate: `npm ci`, `npm run typecheck`, `npm run build:cli`, `NODE_OPTIONS=--unhandled-rejections=strict npm test`, `npm run build`, `npm audit`, `npm audit --omit=dev`, `git diff --check`, clean `git status --short`, `npm pack --dry-run`, relative-link check | pending |
-| 1 | #59 counterexamples for `apply`, `remove` and `rollback`: an added regular file and modified content of an existing file in the transaction's trash survive and report `skill_recovery_retained` (divergent); a partial or empty trash and a trash without a usable replaced fingerprint are retained; a complete, unchanged own trash is deleted and the transaction settles; other transactions' intermediates and 0.8.0 names are untouched | pending |
-| 1 | #56 counterexamples: `unsupported` and `inspect_failed` instead of `registration_not_equivalent`; absent, divergent and differently fingerprinted registrations keep `registration_not_equivalent`; a failed Doctor ends verify before inspection and handshake; precedence of unknown client, ownership and release binding; no mutation and no handshake in any failure case; exit status `1` | pending |
-| 2 | Existing setup acceptance (`scripts/setup-acceptance.mjs`) on the targets actually available, with the new verify negative cases recorded separately | pending |
-| CI | Final head on the Linux, macOS 15 and macOS 26 matrix | pending |
+| `npm ci`, `npm run typecheck`, `npm run build:cli`, `npm run build` | 0 each | |
+| `NODE_OPTIONS=--unhandled-rejections=strict npm test` | 0 | 52 files passed; 1121 tests passed, 6 skipped, 0 failed; no unhandled error |
+| `npm audit`, `npm audit --omit=dev` | 0 each | 0 vulnerabilities |
+| `git diff --check`, `git status --short` | 0 each | clean |
+| #59 counterexamples for `apply`, `remove` and `rollback` (`test/setup-skills-trash-preservation.test.ts`) and the adapted SIGKILL recovery tests | 0 | All pass. On the unfixed base 24 of the 30 counterexamples failed on the defect itself (`skill_recovered` or `skill_removed` where `skill_recovery_retained` was required). |
+| #56 counterexamples (`test/setup-verify-diagnostics.test.ts`) | 0 | All 53 pass. On the unfixed base 19 failed on the defect itself (`registration_not_equivalent` for unsupported and throwing inspections, and inspection or handshake after a failed Doctor). |
 
-A failed check stays on record, as does the distinction between a regression
-of the candidate and an unmet platform prerequisite.
+On the documentation head that followed, `npm pack --dry-run` listed 132 files
+without `src/`, `test/`, lockfile or implementation plans, and a relative link
+and anchor check of the changed documentation found no problem.
+
+Real clients without a model (Level 2), on the build of the same runtime
+sources (`dist/main.js` SHA-256 `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`):
+
+- `scripts/setup-acceptance.mjs`: 160 of 160 checks passed, exit `0`, for
+  `codex:user` and `claude-code:user`, `project` and `local` in disposable
+  homes. Real registrations unchanged, no remaining process, no path leak,
+  build unchanged.
+- New #56 negative case, outside the harness: with the client CLI not on
+  `PATH`, `--verify` reported `unsupported (unsupported)` in human and JSON
+  form and `--dry-run` reported `unsupported (unsupported)`, each with exit
+  `1`, for Codex `user` and Claude Code `user`. The registration was unchanged
+  during these steps, and no output contained a path. The same steps on the
+  built base reproduced #56 (`registration_not_equivalent`).
+
+Not established by these checks: the result on macOS (only CI covers it
+there), the final pull-request head's CI matrix, a real operating-system crash
+during a skill update (the interruption tests use a checkpoint and SIGKILL,
+the counterexamples a scripted checkpoint), and any model behavior. A dry-run
+of a pending recovery can still announce a recovery that apply retains; that
+is tracked as [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60).
 
 Open gates that Sprint 1 does not close:
 - Level 3: no full ten-task cycle on Pi SDK `1.x`, and none for the profile

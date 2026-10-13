@@ -373,14 +373,20 @@ still recognizes the old copy as its own. `--apply`, `--remove` and
   deletion, including an empty one), a modified or added-to one, a foreign one,
   and any trash when the record names no usable replaced fingerprint are
   retained, because their contents cannot be proven to be setup's own. A
-  directory name or a structural check alone never proves that.
+  directory name or a structural check alone never proves that. The
+  fingerprint covers the paths and contents of regular files, not empty
+  directories or file modes: an empty directory or a mode change inside an
+  otherwise complete trash is deleted with it, but no file content is lost.
 - A partially written staging directory is deleted only when every file in it
   is a prefix-consistent part of the current library tree, and that tree is the
   record's target.
 - Anything modified or foreign stays and is reported as
   `skill_recovery_retained` (divergent). This includes the trash directory.
-  A retained intermediate leaves the pending record, the skill directory and
-  the other intermediates unchanged, and nothing is reported as settled.
+  A retained intermediate leaves the pending record and the skill directory
+  unchanged, and nothing is reported as settled. A retained trash directory
+  stops recovery before any other intermediate is touched; a retained backup
+  or staging directory can follow the deletion of a proven own trash
+  directory.
 
 To settle a retained trash directory:
 
@@ -391,7 +397,9 @@ To settle a retained trash directory:
 4. Run the same setup command again.
 
 `--dry-run` still announces `skill_recovery_planned` without inspecting the
-intermediates, so a later `--apply` can still retain one. Setup deliberately no
+intermediates, so a later `--apply` can still retain one
+([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) tracks making
+the dry-run predict that). Setup deliberately no
 longer deletes a partial trash tree automatically; before this rule it did
 after a structural recheck.
 
