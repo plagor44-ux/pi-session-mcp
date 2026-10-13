@@ -18,6 +18,7 @@ const driverPath = join(fixtureDir, "supervise-driver.mjs");
 const stubbornClient = join(fixtureDir, "stubborn-client.mjs");
 const cliDriver = join(fixtureDir, "cli-driver.mjs");
 const setupStub = join(fixtureDir, "setup-stub.mjs");
+const skillHeaderDriver = join(fixtureDir, "skill-header-driver.mjs");
 // The harness reads /proc and refuses to run elsewhere, so its supervision and run paths are tested on Linux only.
 const notLinux = process.platform !== "linux";
 
@@ -550,27 +551,35 @@ describe("bound resources", () => {
 
   const mkfifo = (path: string) => { mkdirSync(join(path, ".."), { recursive: true }); expect(spawnSync("mkfifo", [path]).status).toBe(0); };
 
+  /** One discovery function in its own process under a 5 s watchdog: a blocking read fails here instead of hanging the worker. */
+  const inChild = (mode: string, argument: string) => {
+    const started = Date.now();
+    const child = spawnSync(process.execPath, [skillHeaderDriver, mode, argument], { encoding: "utf8", timeout: 5_000, killSignal: "SIGKILL" });
+    expect(child.error?.message ?? "", `${mode} must finish within the watchdog (a blocking read of a FIFO would not)`).toBe("");
+    expect(child.status, child.stderr).toBe(0);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    return JSON.parse(child.stdout);
+  };
+
   it("reports a FIFO named SKILL.md as indeterminate without opening it, and refuses the source", async () => {
     const run = await buildRun();
     mkfifo(join(run.etc, "pipe", "SKILL.md"));
-    const started = Date.now();
-    // a blocking open or read of the FIFO would hang here until the test times out
-    expect(h.findControllerSkills(run.etc)).toEqual({ found: [], sentinel: "indeterminate" });
-    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual(["etcCodexSkills"]);
-    expect(Date.now() - started).toBeLessThan(2_000);
-  }, 10_000);
+    expect(inChild("find", run.etc)).toEqual({ found: [], sentinel: "indeterminate" });
+    expect(inChild("header", join(run.etc, "pipe", "SKILL.md"))).toEqual({ indeterminate: true });
+    expect(inChild("differing", JSON.stringify({ run: run.run, candidate: run.candidate, context: run.context }))).toEqual(["etcCodexSkills"]);
+  }, 30_000);
 
   it("reports a link named SKILL.md that leads to a FIFO, or nowhere, as indeterminate", async () => {
     const run = await buildRun();
     mkfifo(join(run.root, "elsewhere", "pipe"));
     mkdirSync(join(run.etc, "linked-pipe"), { recursive: true });
     symlinkSync(join(run.root, "elsewhere", "pipe"), join(run.etc, "linked-pipe", "SKILL.md"));
-    expect(h.findControllerSkills(run.etc).sentinel).toBe("indeterminate");
+    expect(inChild("find", run.etc).sentinel).toBe("indeterminate");
     const dangling = await buildRun();
     mkdirSync(join(dangling.etc, "gone"), { recursive: true });
     symlinkSync(join(dangling.root, "no-such-file"), join(dangling.etc, "gone", "SKILL.md"));
-    expect(h.findControllerSkills(dangling.etc).sentinel).toBe("indeterminate");
-  }, 10_000);
+    expect(inChild("find", dangling.etc).sentinel).toBe("indeterminate");
+  }, 30_000);
 
   it("reads a SKILL.md through a link to a regular file, and only its first 16 KiB", async () => {
     const run = await buildRun();
