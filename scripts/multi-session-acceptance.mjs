@@ -1172,6 +1172,12 @@ export function analyze(client, scenario, calls, info, rawText) {
     if (call.tool === "pi_session_abort" && call.result?.ok) session.abortOkAt ??= index;
   });
   const task = (name) => [...sessions.values()].find((session) => session.workspace === `${p}-${name}`);
+  // Every abort call of the transcript is judged, also one on an unknown session id or on a neighbor: a failed or
+  // misdirected abort never disappears behind the successful one. `abortOk` needs all of them `ok`; the calls that
+  // do not target the aborted session are counted separately.
+  const abortCalls = calls.filter((call) => call.tool === "pi_session_abort");
+  const allAbortsOk = abortCalls.every((call) => call.result?.ok === true);
+  const offTargetAborts = (target) => abortCalls.filter((call) => !target || sessions.get(call.input?.sessionId) !== target).length;
   const turnsOf = (session) => [...(session?.turns.values() ?? [])].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const ms = (value) => (value ? Date.parse(value) : NaN);
   const [first, second] = SCENARIOS[scenario].tasks.map(task);
@@ -1218,7 +1224,8 @@ export function analyze(client, scenario, calls, info, rawText) {
     result.acceptReadSkills = profileSkills(READ_PROFILE);
     result.abortedTurn = waitTurn?.state === "aborted";
     result.abortResults = wait?.aborts ?? [];
-    result.abortOk = (wait?.aborts.length ?? 0) >= 1 && wait.aborts.every((code) => code === "ok");
+    result.abortOk = (wait?.aborts.length ?? 0) >= 1 && wait.aborts.every((code) => code === "ok") && allAbortsOk;
+    result.offTargetAborts = offTargetAborts(wait);
     result.abortedBeforeClose = wait?.abortedSeenAt !== undefined && (wait.closedAt === undefined || wait.abortedSeenAt < wait.closedAt);
     result.abortBeforeAbortedSeen = wait?.abortOkAt !== undefined && wait.abortedSeenAt !== undefined && wait.abortOkAt < wait.abortedSeenAt;
     // The abort ended the WAIT turn while the turns of both others were running.
@@ -1228,7 +1235,8 @@ export function analyze(client, scenario, calls, info, rawText) {
     const wait = turnsOf(first)[0]; const range = turnsOf(second)[0];
     result.abortedTurn = wait?.state === "aborted";
     result.abortResults = first?.aborts ?? [];
-    result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok");
+    result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok") && allAbortsOk;
+    result.offTargetAborts = offTargetAborts(first);
     // `aborted` must be observed through pi_turn_get before the session was closed, so close did not cause it.
     result.abortedBeforeClose = first?.abortedSeenAt !== undefined && (first.closedAt === undefined || first.abortedSeenAt < first.closedAt);
     result.abortBeforeAbortedSeen = first?.abortOkAt !== undefined && first.abortedSeenAt !== undefined && first.abortOkAt < first.abortedSeenAt;
@@ -1346,10 +1354,12 @@ export function evaluateAcceptance(result, scenario) {
     need(state("slug") === "completed" && state("review") === "completed", "firstTurnsNotCompleted");
     need(t.firstTurnsOverlap === true, "noOverlap");
     need(t.abortedTurn === true && t.abortOk === true, "abortFailed");
+    need(t.offTargetAborts === 0, "offTargetAbort");
     need(t.abortedBeforeClose === true && t.abortBeforeAbortedSeen === true, "abortOrder");
     need(t.abortWhileNeighborsRunning === true, "neighborsNotRunningDuringAbort");
   } else {
     need(t.abortedTurn === true && t.abortOk === true, "abortFailed");
+    need(t.offTargetAborts === 0, "offTargetAbort");
     need(t.abortedBeforeClose === true && t.abortBeforeAbortedSeen === true, "abortOrder");
     need(t.neighborCompleted === true && t.abortWhileNeighborRunning === true, "neighborNotRunningDuringAbort");
   }

@@ -1090,7 +1090,7 @@ describe("handshake profile split", () => {
   });
 
   it("fails the skill criterion in the abort scenario when any task used the handshake profile", () => {
-    const abort = (profiles: [string, string]) => ({ ...passing({ sessions: [session("cc-wait", profiles[0]), session("cc-range", profiles[1])], abortedTurn: true, abortOk: true, abortedBeforeClose: true, abortBeforeAbortedSeen: true, neighborCompleted: true, abortWhileNeighborRunning: true }),
+    const abort = (profiles: [string, string]) => ({ ...passing({ sessions: [session("cc-wait", profiles[0]), session("cc-range", profiles[1])], abortedTurn: true, abortOk: true, abortedBeforeClose: true, abortBeforeAbortedSeen: true, offTargetAborts: 0, neighborCompleted: true, abortWhileNeighborRunning: true }),
       oracle: { wait: { onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true, lateFileAbsent: true }, range: check() } });
     expect(h.evaluateAcceptance(abort(["accept-code", "accept-code"]), "abort")).toEqual({ passed: true, failures: [] });
     expect(h.evaluateAcceptance(abort(["accept-code", "accept-code-handshake"]), "abort").failures).toEqual(["workerSkills"]);
@@ -1183,6 +1183,55 @@ describe("trio scenario: fixture and prompt", () => {
   }, 60_000);
 });
 
+// ---- #71 review: every abort call of the abort scenario is judged ----------------------------------------------------
+describe("abort scenario: every abort call is judged", () => {
+  const id = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
+  const turnId = (n: number) => `10000000-0000-4000-8000-00000000000${n}`;
+  const at = (seconds: number) => new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString();
+  const analysisInfo = { candidate: "/nowhere", token: "tok", version: "1", configFingerprint: "f" };
+  const abortAnalysis = (extra: Array<{ target: "wait" | "range" | "unknown"; code: string }>) => {
+    const turn = (n: number, state: string, done: boolean, start: number, end: number) => ({ ok: true, turn: { turnId: turnId(n), sessionId: id(n), state, startedAt: at(start), updatedAt: at(start), ...(done ? { completedAt: at(end) } : {}) } });
+    const target = (name: string) => (name === "wait" ? id(1) : name === "range" ? id(2) : "99999999-9999-4999-8999-999999999999");
+    return h.analyze("claude", "abort", [
+      { tool: "pi_capabilities_get", input: {}, result: { ok: true, server: { version: "1" }, configuration: { fingerprint: "f" }, executionProfiles: [{ alias: "accept-code", skills: ["implementation"] }] } },
+      { tool: "pi_session_start", input: {}, result: { ok: true, session: { id: id(1), workspace: "cc-wait", executionProfile: "accept-code" } } },
+      { tool: "pi_session_start", input: {}, result: { ok: true, session: { id: id(2), workspace: "cc-range", executionProfile: "accept-code" } } },
+      { tool: "pi_session_prompt", input: { sessionId: id(1), prompt: "p" }, result: turn(1, "running", false, 0, 0) },
+      { tool: "pi_session_prompt", input: { sessionId: id(2), prompt: "p" }, result: turn(2, "running", false, 1, 0) },
+      ...extra.map(({ target: name, code }) => ({ tool: "pi_session_abort", input: { sessionId: target(name) }, result: code === "ok" ? { ok: true } : { ok: false, error: { code } } })),
+      { tool: "pi_session_abort", input: { sessionId: id(1) }, result: { ok: true } },
+      { tool: "pi_turn_get", input: { sessionId: id(1), turnId: turnId(1) }, result: turn(1, "aborted", true, 0, 16) },
+      { tool: "pi_turn_get", input: { sessionId: id(2), turnId: turnId(2) }, result: turn(2, "completed", true, 1, 50) },
+      { tool: "pi_session_close", input: { sessionId: id(1) }, result: { ok: true } },
+      { tool: "pi_session_close", input: { sessionId: id(2) }, result: { ok: true } },
+    ], analysisInfo, "");
+  };
+  const verdict = (analysis: Record<string, any>) => {
+    const { turnIntervals: _intervals, ...facts } = analysis;
+    const check = { onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true };
+    return h.evaluateAcceptance({
+      client: "claude", exitCode: 0, timedOut: false, spawnFailed: false, harnessAborted: false, resources: { changedAfterRun: [] }, unboundResources: [], processes: { serversObserved: 1, residualByRole: {} },
+      transcript: { ...facts, acceptCodeSkills: ["implementation"], acceptCodeHandshakeSkills: ["implementation", "handshake"], structuralLeaks: 0, tokenInControllerPrompts: false, tokenInControllerTask: false, controllerTranscriptHasToken: false, privateMarkersInWorkerPrompts: false, controllerTouchedPrivate: false },
+      oracle: { wait: { ...check, lateFileAbsent: true }, range: { ...check, testsPass: true, businessChecks: true } },
+    }, "abort");
+  };
+
+  it("passes the single successful abort on the wait session", () => {
+    const analysis = abortAnalysis([]);
+    expect(analysis).toMatchObject({ abortOk: true, offTargetAborts: 0, abortResults: ["ok"] });
+    expect(verdict(analysis)).toEqual({ passed: true, failures: [] });
+  });
+
+  it.each([
+    ["an unknown_session abort before the successful abort", [{ target: "unknown" as const, code: "unknown_session" }], ["abortFailed", "offTargetAbort"]],
+    ["an abort_timeout on the range neighbor", [{ target: "range" as const, code: "abort_timeout" }], ["abortFailed", "offTargetAbort"]],
+    ["a successful abort on the range neighbor", [{ target: "range" as const, code: "ok" }], ["offTargetAbort"]],
+    ["an abort_timeout on wait followed by the successful retry", [{ target: "wait" as const, code: "abort_timeout" }], ["abortFailed"]],
+  ])("fails %s", (_label, extra, expected) => {
+    expect(verdict(abortAnalysis(extra)).failures).toEqual(expected);
+  });
+});
+
 // ---- #71: the trio scenario: transcript analysis, oracle and criteria ----------------------------------------------
 describe("trio scenario: criteria", () => {
   const ids = { slug: "00000000-0000-4000-8000-000000000001", wait: "00000000-0000-4000-8000-000000000002", review: "00000000-0000-4000-8000-000000000003" };
@@ -1194,7 +1243,7 @@ describe("trio scenario: criteria", () => {
   interface Timeline { start: number; end: number; state: string }
 
   /** A synthetic transcript of a controller run: starts at 0, 1 and 2 s; the abort of wait at 17 s; slug and review end later. */
-  function transcript(overrides: { turns?: Partial<Record<Name, Partial<Timeline>>>; abort?: Array<"ok" | "abort_timeout">; profile?: Partial<Record<Name, string>>; skipClose?: Name[]; capabilities?: Array<{ alias: string; skills: string[] }>; workspace?: Partial<Record<Name, string>> } = {}) {
+  function transcript(overrides: { turns?: Partial<Record<Name, Partial<Timeline>>>; abort?: Array<"ok" | "abort_timeout">; profile?: Partial<Record<Name, string>>; skipClose?: Name[]; capabilities?: Array<{ alias: string; skills: string[] }>; workspace?: Partial<Record<Name, string>>; extraAborts?: Array<{ target: Name | "unknown"; code: string }> } = {}) {
     const turns: Record<Name, Timeline> = {
       slug: { start: 0, end: 40, state: "completed" }, wait: { start: 1, end: 17, state: "aborted" }, review: { start: 2, end: 30, state: "completed" },
       ...Object.fromEntries(Object.entries(overrides.turns ?? {}).map(([name, value]) => [name, { ...({ slug: { start: 0, end: 40, state: "completed" }, wait: { start: 1, end: 17, state: "aborted" }, review: { start: 2, end: 30, state: "completed" } } as Record<string, Timeline>)[name], ...value }])),
@@ -1207,6 +1256,8 @@ describe("trio scenario: criteria", () => {
         { alias: "accept-read", skills: ["review"] }, { alias: "accept-code", skills: ["implementation"] }, { alias: "accept-code-handshake", skills: ["implementation", "handshake"] }] } },
       ...names.map((name) => ({ tool: "pi_session_start", input: {}, result: { ok: true, session: { id: ids[name], workspace: overrides.workspace?.[name] ?? `cc-${name}`, executionProfile: profile(name) } } })),
       ...names.map((name) => ({ tool: "pi_session_prompt", input: { sessionId: ids[name], prompt: "p" }, result: turn(name, "running", false) })),
+      // Aborts before the one on wait: on another session, or on an id that was never started.
+      ...(overrides.extraAborts ?? []).map(({ target, code }) => ({ tool: "pi_session_abort", input: { sessionId: target === "unknown" ? "99999999-9999-4999-8999-999999999999" : ids[target] }, result: code === "ok" ? { ok: true } : { ok: false, error: { code } } })),
       ...(overrides.abort ?? ["ok"]).map((code) => ({ tool: "pi_session_abort", input: { sessionId: ids.wait }, result: code === "ok" ? { ok: true } : { ok: false, error: { code } } })),
       ...names.map((name) => ({ tool: "pi_turn_get", input: { sessionId: ids[name], turnId: turnIds[name] }, result: turn(name, turns[name].state, true) })),
       ...names.filter((name) => !overrides.skipClose?.includes(name)).map((name) => ({ tool: "pi_session_close", input: { sessionId: ids[name] }, result: { ok: true } })),
@@ -1218,7 +1269,7 @@ describe("trio scenario: criteria", () => {
     const analysis = transcript();
     expect(analysis).toMatchObject({
       sessionsStarted: 3, firstTurnsOverlap: true, firstTurnsOverlapSeconds: 15, acceptReadSkills: ["review"], acceptCodeSkills: ["implementation"],
-      abortedTurn: true, abortOk: true, abortResults: ["ok"], abortedBeforeClose: true, abortBeforeAbortedSeen: true, abortWhileNeighborsRunning: true,
+      abortedTurn: true, abortOk: true, offTargetAborts: 0, abortResults: ["ok"], abortedBeforeClose: true, abortBeforeAbortedSeen: true, abortWhileNeighborsRunning: true,
     });
     expect(analysis.sessions.map((session: { workspace: string; profile: string; closed: boolean; turns: string[] }) => [session.workspace, session.profile, session.closed, session.turns])).toEqual([
       ["cc-slug", "accept-code", true, ["completed"]], ["cc-wait", "accept-code", true, ["aborted"]], ["cc-review", "accept-read", true, ["completed"]],
@@ -1249,6 +1300,27 @@ describe("trio scenario: criteria", () => {
     expect(transcript({ abort: [] })).toMatchObject({ abortOk: false, abortResults: [] });
   });
 
+  // #71 review: every abort call is judged, also one on an unknown session or on a neighbor.
+  it.each([
+    ["an unknown_session abort before the successful wait abort", { extraAborts: [{ target: "unknown" as const, code: "unknown_session" }] }],
+    ["an abort_timeout on the slug neighbor", { extraAborts: [{ target: "slug" as const, code: "abort_timeout" }] }],
+    ["an abort_timeout on the review neighbor", { extraAborts: [{ target: "review" as const, code: "abort_timeout" }] }],
+  ])("fails abortFailed and offTargetAbort in the trio for %s", (_label, overrides) => {
+    const analysis = transcript(overrides);
+    expect(analysis).toMatchObject({ abortOk: false, offTargetAborts: 1 });
+    // the wait session itself saw one successful abort: the failed call is only visible through the transcript totals
+    expect(analysis.abortResults).toEqual(["ok"]);
+  });
+
+  it("counts a successful abort on a neighbor as off target, without calling the abort failed", () => {
+    expect(transcript({ extraAborts: [{ target: "review", code: "ok" }] })).toMatchObject({ abortOk: true, offTargetAborts: 1 });
+  });
+
+  it("counts every abort call, and still passes the single successful wait abort", () => {
+    expect(transcript()).toMatchObject({ abortOk: true, offTargetAborts: 0 });
+    expect(transcript({ extraAborts: [{ target: "unknown", code: "unknown_session" }, { target: "slug", code: "ok" }] })).toMatchObject({ abortOk: false, offTargetAborts: 2 });
+  });
+
   it("reads the skills of accept-read from the capabilities the controller saw", () => {
     expect(transcript({ capabilities: [{ alias: "accept-read", skills: ["review", "implementation"] }] }).acceptReadSkills).toEqual(["review", "implementation"]);
     expect(transcript({ capabilities: [{ alias: "accept-code", skills: ["implementation"] }] }).acceptReadSkills).toBeUndefined();
@@ -1271,7 +1343,7 @@ describe("trio scenario: criteria", () => {
       capabilitiesFirst: true, candidateConfirmed: true, acceptCodeSkills: ["implementation"], acceptCodeHandshakeSkills: ["implementation", "handshake"], acceptReadSkills: ["review"],
       structuralLeaks: 0, tokenInControllerPrompts: false, tokenInControllerTask: false, controllerTranscriptHasToken: false, privateMarkersInWorkerPrompts: false, controllerTouchedPrivate: false,
       sessionsStarted: 3, sessions: [sessionOf("cc-slug", "accept-code"), sessionOf("cc-wait", "accept-code", "aborted"), sessionOf("cc-review", "accept-read")], firstTurnsOverlap: true,
-      abortedTurn: true, abortOk: true, abortedBeforeClose: true, abortBeforeAbortedSeen: true, abortWhileNeighborsRunning: true,
+      abortedTurn: true, abortOk: true, offTargetAborts: 0, abortedBeforeClose: true, abortBeforeAbortedSeen: true, abortWhileNeighborsRunning: true,
       ...overrides,
     },
     oracle: {
@@ -1329,6 +1401,8 @@ describe("trio scenario: criteria", () => {
     ["an abort answered after the aborted state was seen", { abortBeforeAbortedSeen: false }, ["abortOrder"]],
     ["an abort outside the running intervals of the neighbors", { abortWhileNeighborsRunning: false }, ["neighborsNotRunningDuringAbort"]],
     ["an abort fact that is missing", { abortWhileNeighborsRunning: undefined }, ["neighborsNotRunningDuringAbort"]],
+    ["an abort call on another session", { offTargetAborts: 1 }, ["offTargetAbort"]],
+    ["an off-target abort fact that is missing", { offTargetAborts: undefined }, ["offTargetAbort"]],
   ])("fails %s", (_label, overrides, expected) => {
     expect(failures(trio(overrides as Record<string, unknown>))).toEqual(expected);
   });
@@ -1373,13 +1447,37 @@ describe("trio scenario: criteria", () => {
     expect(h.evaluateAcceptance(parallel(), "parallel")).toEqual({ passed: true, failures: [] });
     // the reviewer's profile stays forbidden for every session of parallel and abort
     expect(h.evaluateAcceptance(parallel({ sessions: [sessionOf("cc-slug", "accept-code-handshake"), sessionOf("cc-stats", "accept-read")] }), "parallel").failures).toEqual(["workerSkills"]);
-    const abort = (overrides: Record<string, unknown> = {}) => ({ ...trio(), transcript: { ...trio().transcript, acceptReadSkills: undefined, sessionsStarted: 2, neighborCompleted: true, abortWhileNeighborRunning: true,
+    const abort = (overrides: Record<string, unknown> = {}) => ({ ...trio(), transcript: { ...trio().transcript, acceptReadSkills: undefined, sessionsStarted: 2, neighborCompleted: true, abortWhileNeighborRunning: true, offTargetAborts: 0,
       sessions: [sessionOf("cc-wait", "accept-code", "aborted"), sessionOf("cc-range", "accept-code")], ...overrides },
     oracle: { wait: passingCheck({ lateFileAbsent: true }), range: check() } });
     expect(h.evaluateAcceptance(abort(), "abort")).toEqual({ passed: true, failures: [] });
     expect(h.evaluateAcceptance(abort({ sessions: [sessionOf("cc-wait", "accept-code", "aborted"), sessionOf("cc-range", "accept-read")] }), "abort").failures).toEqual(["workerSkills"]);
     // a trio fact does not rescue or fail an abort run
     expect(h.evaluateAcceptance(abort({ abortWhileNeighborRunning: false }), "abort").failures).toEqual(["neighborNotRunningDuringAbort"]);
+  });
+
+  // ---- the analysis output feeds the verdict (D) ----
+  /** The result of a run whose transcript facts come from `analyze`, with everything else clean. */
+  const analyzed = (analysis: Record<string, any>, oracle: Record<string, unknown> = {}) => {
+    const clean = trio();
+    const { turnIntervals: _intervals, ...facts } = analysis;
+    return { ...clean, transcript: { ...clean.transcript, ...facts }, oracle: { ...clean.oracle, ...oracle } };
+  };
+
+  it("passes the analysis of a clean trio transcript through the verdict", () => {
+    expect(h.evaluateAcceptance(analyzed(transcript()), "trio")).toEqual({ passed: true, failures: [] });
+  });
+
+  it.each([
+    ["the reviewer on cc-stats", { workspace: { review: "cc-stats" } }, ["workerSkills", "sessionAssociation", "firstTurnsNotCompleted", "noOverlap", "neighborsNotRunningDuringAbort"]],
+    ["the reviewer on the coding profile", { profile: { review: "accept-code" } }, ["workerSkills", "sessionAssociation"]],
+    ["a writer on the reading profile", { profile: { slug: "accept-read" } }, ["workerSkills", "sessionAssociation"]],
+    ["an unclosed reviewer session", { skipClose: ["review"] as Array<"review"> }, ["sessionsNotClosed"]],
+    ["an unknown_session abort before the wait abort", { extraAborts: [{ target: "unknown" as const, code: "unknown_session" }] }, ["abortFailed", "offTargetAbort"]],
+    ["a neighbor abort answered abort_timeout", { extraAborts: [{ target: "slug" as const, code: "abort_timeout" }] }, ["abortFailed", "offTargetAbort"]],
+    ["a successful abort on a neighbor", { extraAborts: [{ target: "review" as const, code: "ok" }] }, ["offTargetAbort"]],
+  ])("fails the verdict of the analysis for %s", (_label, overrides, expected) => {
+    expect(h.evaluateAcceptance(analyzed(transcript(overrides)), "trio").failures).toEqual(expected);
   });
 
   // ---- the read-only invariance oracle, on real fixtures ----
