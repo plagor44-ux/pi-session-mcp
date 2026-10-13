@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
-  appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  appendFileSync, chmodSync, closeSync, copyFileSync, cpSync, existsSync, ftruncateSync, openSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -531,6 +531,46 @@ describe("bound resources", () => {
   ])("reads the name of %s as YAML does", (_label, text, expected) => {
     expect(h.skillNameFromHeader(text)).toEqual(expected);
   });
+
+  const mkfifo = (path: string) => { mkdirSync(join(path, ".."), { recursive: true }); expect(spawnSync("mkfifo", [path]).status).toBe(0); };
+
+  it("reports a FIFO named SKILL.md as indeterminate without opening it, and refuses the source", async () => {
+    const run = await buildRun();
+    mkfifo(join(run.etc, "pipe", "SKILL.md"));
+    const started = Date.now();
+    // a blocking open or read of the FIFO would hang here until the test times out
+    expect(h.findControllerSkills(run.etc)).toEqual({ found: [], sentinel: "indeterminate" });
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual(["etcCodexSkills"]);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  }, 10_000);
+
+  it("reports a link named SKILL.md that leads to a FIFO, or nowhere, as indeterminate", async () => {
+    const run = await buildRun();
+    mkfifo(join(run.root, "elsewhere", "pipe"));
+    mkdirSync(join(run.etc, "linked-pipe"), { recursive: true });
+    symlinkSync(join(run.root, "elsewhere", "pipe"), join(run.etc, "linked-pipe", "SKILL.md"));
+    expect(h.findControllerSkills(run.etc).sentinel).toBe("indeterminate");
+    const dangling = await buildRun();
+    mkdirSync(join(dangling.etc, "gone"), { recursive: true });
+    symlinkSync(join(dangling.root, "no-such-file"), join(dangling.etc, "gone", "SKILL.md"));
+    expect(h.findControllerSkills(dangling.etc).sentinel).toBe("indeterminate");
+  }, 10_000);
+
+  it("reads a SKILL.md through a link to a regular file, and only its first 16 KiB", async () => {
+    const run = await buildRun();
+    put(join(run.root, "real-skill-file"), `---\nname: ${orchestration}\n---\nbody\n`);
+    mkdirSync(join(run.etc, "via-link"), { recursive: true });
+    symlinkSync(join(run.root, "real-skill-file"), join(run.etc, "via-link", "SKILL.md"));
+    expect(h.findControllerSkills(run.etc).found).toEqual([join(run.etc, "via-link")]);
+    // A sparse file larger than readFileSync can load: only the header is read, so the declared name is found.
+    const big = join(run.etc, "big-skill", "SKILL.md");
+    put(big, `---\nname: ${orchestration}\ndescription: x\n---\n`);
+    const fd = openSync(big, "r+");
+    try { ftruncateSync(fd, 3 * 1024 ** 3); } finally { closeSync(fd); }
+    const found = h.findControllerSkills(join(run.etc, "big-skill", ".."), { limit: 100 });
+    expect(found.found).toContain(join(run.etc, "big-skill"));
+    expect(h.readSkillHeader(big).text).toHaveLength(16_384);
+  }, 20_000);
 
   it("allows an equal symlinked copy, an equal copy under another name and unrelated skills", async () => {
     const run = await buildRun();

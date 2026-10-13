@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
-  existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync, symlinkSync, writeFileSync,
+  closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, statSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
@@ -452,11 +452,37 @@ export function skillNameFromHeader(text) {
   const name = (comment ? rest.slice(0, comment.index) : rest).trimEnd();
   return name.includes(": ") || name.endsWith(":") ? indeterminate : { status: "named", name };
 }
-/** What the SKILL.md in `dir` declares as its name; no file is `none`, a file that cannot be read is `indeterminate`. */
+export const SKILL_HEADER_BYTES = 16_384;
+/**
+ * The first 16 KiB of a SKILL.md, or `{absent}` when there is none, or `{indeterminate}` when it cannot be read
+ * safely. The type is checked before anything is opened: a final link is resolved and its target must be a regular file
+ * (a FIFO, socket or device is never opened), and the descriptor is checked again after opening against a swap. Only a
+ * fixed buffer is read, so a huge or endless file costs nothing.
+ */
+export function readSkillHeader(file) {
+  const indeterminate = { indeterminate: true };
+  let type; let real = file;
+  try { type = lstatSync(file); } catch (error) { return error?.code === "ENOENT" ? { absent: true } : indeterminate; }
+  if (type.isSymbolicLink()) { try { real = realpathSync(file); type = lstatSync(real); } catch { return indeterminate; } }
+  if (!type.isFile()) return indeterminate;
+  let fd; try { fd = openSync(real, constants.O_RDONLY | constants.O_NONBLOCK); } catch { return indeterminate; }
+  try {
+    if (!fstatSync(fd).isFile()) return indeterminate;
+    const buffer = Buffer.alloc(SKILL_HEADER_BYTES);
+    let length = 0;
+    while (length < buffer.length) {
+      const read = readSync(fd, buffer, length, buffer.length - length, null);
+      if (read === 0) break;
+      length += read;
+    }
+    return { text: buffer.toString("utf8", 0, length) };
+  } catch { return indeterminate; } finally { closeSync(fd); }
+}
+/** What the SKILL.md in `dir` declares as its name; no file is `none`, a file that cannot be read safely is `indeterminate`. */
 function declaredSkillName(skillFile) {
-  let text;
-  try { text = readFileSync(skillFile, "utf8").slice(0, 16_384); } catch (error) { return error?.code === "ENOENT" ? { status: "none" } : { status: "indeterminate" }; }
-  return skillNameFromHeader(text);
+  const header = readSkillHeader(skillFile);
+  if (header.absent) return { status: "none" };
+  return header.indeterminate ? { status: "indeterminate" } : skillNameFromHeader(header.text);
 }
 /**
  * The real paths of every controller skill below a skill source: a directory named `pi-session-orchestration`, or one
