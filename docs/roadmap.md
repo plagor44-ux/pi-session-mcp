@@ -38,6 +38,7 @@ Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
   a 0.8.2 release pull request after the live runs, and a runbook for the
   blocked Mac items. Status and evidence are in the
   [Sprint 3 file](sprints/2026-10-13-s3-live-usage.md).
+- Sprint 4 decision inputs for the conditional items R12, R15, R17 and R18 are recorded in the [Sprint 4 decision inputs](sprints/2026-10-13-s4-decision-inputs.md) ([#72](https://github.com/plagor44-ux/pi-session-mcp/issues/72)): R12, R15 and R17 not met, R18 not determinable as of 2026-10-13; this is input, not the Sprint 4 decision.
 
 ### Sprint 3 task status
 
