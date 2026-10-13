@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
-  appendFileSync, chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
+  appendFileSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -345,6 +345,7 @@ describe("changes against the fixed baseline", () => {
 
 // ---- synthetic run layout ------------------------------------------------------------------------
 const EXTENSION = "pi-test-ext";
+const put = (path: string, content: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, content); };
 /**
  * A synthetic prepared run. `home` and `agentDir` live inside the temporary root, so no test reads the operator's
  * home or Pi directory; `context` is what the harness needs to recompute the bound resources.
@@ -353,11 +354,12 @@ async function buildRun({ extensions = false }: { extensions?: boolean } = {}) {
   const root = realpathSync(await temporaryRoot("msa-run-"));
   const home = join(root, "home");
   const agentDir = join(root, "pi-agent");
+  const codexHome = join(root, "codex-home");
+  const etc = join(root, "etc-codex-skills");
   mkdirSync(home, { recursive: true });
   const candidate = join(root, "candidate");
   const run = join(root, "run");
   const priv = join(run, "private");
-  const put = (path: string, content: string) => { mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, content); };
   put(join(candidate, "package.json"), "{ \"version\": \"0.0.0-test\" }\n");
   put(join(candidate, "dist", "main.js"), "// stub entry\n");
   put(join(candidate, "dist", "other.js"), "// stub module\n");
@@ -387,30 +389,52 @@ async function buildRun({ extensions = false }: { extensions?: boolean } = {}) {
   symlinkSync(join(candidate, "skills", "pi-session-orchestration"), join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration"));
   const token = "ACCEPTANCE-TOKEN-0123456789";
   const extensionList = extensions ? [{ name: EXTENSION, version: "1.0.0" }] : [];
-  const context = { home, agentDir, extensions: extensionList };
+  const context = { home, agentDir, codexHome, etcCodexSkills: etc, extensions: extensionList };
   const info = {
     runId: "skills-test", candidate, entry: join(candidate, "dist", "main.js"), node: process.execPath, token, version: "0.0.0-test",
     sourceClean: true, entrySha256: "x", distSha256: h.distTreeSha256(candidate), harnessSha256: h.HARNESS_SHA256, configFingerprint: "sha256:test",
     claudeSkillSetup: { exitCode: 0, codes: [], installedAsCopy: true, matchesShipped: true },
-    profile: { from: "p", provider: "synthetic", model: "m", thinkingLevel: "off" }, extensions: extensionList, agentDir, preparedAt: new Date().toISOString(),
+    profile: { from: "p", provider: "synthetic", model: "m", thinkingLevel: "off" }, extensions: extensionList, agentDir, codexHome, preparedAt: new Date().toISOString(),
+    controllerSkills: h.controllerSkillRecord(run, candidate),
     resources: h.computeResources(run, candidate, context),
   };
   writeFileSync(join(priv, "run.json"), `${JSON.stringify(info, null, 2)}\n`);
   return {
-    root, candidate, run, priv, info, home, agentDir, context,
+    root, candidate, run, priv, info, home, agentDir, codexHome, etc, context,
     controller: (client: string) => join(run, `controller-${client}`),
     baselineOf: (client: string) => (task: string) => JSON.parse(readFileSync(join(priv, "baselines", client, `${task}.json`), "utf8")),
   };
 }
+
+// ---- #67: every Codex skill source ----------------------------------------------------------------
+type Run = Awaited<ReturnType<typeof buildRun>>;
+const sources: Array<[string, string, (r: Run) => string]> = [
+  ["codexHomeSkills", "$CODEX_HOME/skills", (r) => join(r.codexHome, "skills")],
+  ["homeAgentsSkills", "the home's .agents/skills", (r) => join(r.home, ".agents", "skills")],
+  ["etcCodexSkills", "/etc/codex/skills", (r) => r.etc],
+  ["codexAncestorSkills", ".agents/skills of an ancestor of the controller directory", (r) => join(r.root, ".agents", "skills")],
+  ["codexAncestorSkills", ".agents/skills of the run directory", (r) => join(r.run, ".agents", "skills")],
+];
+/** The prepared state includes whatever the test placed before this call, as if it had been there at prepare. */
+const rerecord = (r: Run) => {
+  r.info.resources = h.computeResources(r.run, r.candidate, r.context);
+  writeFileSync(join(r.priv, "run.json"), `${JSON.stringify(r.info, null, 2)}\n`);
+};
+const orchestration = "pi-session-orchestration";
+const codexValues = (r: Run) => ({ run: r.run, client: "codex", scenario: "parallel" });
 
 // ---- D3: bound resources and preserved findings --------------------------------------------------
 describe("bound resources", () => {
   it("records a digest for every resource the acceptance relies on", async () => {
     const run = await buildRun();
     expect(Object.keys(run.info.resources).sort()).toEqual([
-      "candidateBuild", "claudeMcpConfiguration", "codexControllerSkill", "controllerSkill", "extensionNpmInstallation", "fixtureBaselines", "handshakeSkill", "harness",
+      "candidateBuild", "claudeMcpConfiguration", "codexAncestorSkills", "codexControllerSkill", "codexHomeSkills", "controllerSkill", "etcCodexSkills",
+      "extensionNpmInstallation", "fixtureBaselines", "handshakeSkill", "harness", "homeAgentsSkills",
       "operatorClaudeSkill", "operatorCodexSkill", "overrideDirectory", "runConfiguration", "workerSkillImplementation", "workerSkillReview",
     ]);
+    // A Codex skill source that does not exist is a stable value, not a failure.
+    expect(run.info.resources).toMatchObject({ codexHomeSkills: "missing", homeAgentsSkills: "missing", etcCodexSkills: "missing" });
+    expect(run.info.resources.codexAncestorSkills).toMatch(/^[0-9a-f]{64}$/);
     // Without extensions the extension binding is one stable value, whatever sits in the agent directory.
     expect(run.info.resources.extensionNpmInstallation).toBe("none");
     expect(h.changedResources(run.info.resources, h.computeResources(run.run, run.candidate, run.context))).toEqual([]);
@@ -429,6 +453,12 @@ describe("bound resources", () => {
     ["the Claude Code MCP configuration", ["claudeMcpConfiguration"], (r) => appendFileSync(join(r.priv, "claude-mcp.json"), " ")],
     ["a fixture baseline", ["fixtureBaselines"], (r) => appendFileSync(join(r.priv, "baselines", "claude", "slug.json"), " ")],
     ["the candidate build", ["candidateBuild"], (r) => appendFileSync(join(r.candidate, "dist", "other.js"), "// changed\n")],
+    ["a skill added to $CODEX_HOME/skills", ["codexHomeSkills"], (r) => put(join(r.codexHome, "skills", "other", "SKILL.md"), "x")],
+    ["a bundled .system skill of $CODEX_HOME", ["codexHomeSkills"], (r) => put(join(r.codexHome, "skills", ".system", "bundled", "SKILL.md"), "x")],
+    ["a skill added to the home's .agents/skills", ["homeAgentsSkills"], (r) => put(join(r.home, ".agents", "skills", "other", "SKILL.md"), "x")],
+    ["a skill added to /etc/codex/skills", ["etcCodexSkills"], (r) => put(join(r.etc, "other", "SKILL.md"), "x")],
+    ["a skill added to .agents/skills of an ancestor of the controller directory", ["codexAncestorSkills"], (r) => put(join(r.root, ".agents", "skills", "other", "SKILL.md"), "x")],
+    ["a skill added to .agents/skills of the run directory", ["codexAncestorSkills"], (r) => put(join(r.run, ".agents", "skills", "other", "SKILL.md"), "x")],
   ];
   it("binds the operator's own controller skill copies, which a client could load instead", async () => {
     const run = await buildRun();
@@ -442,14 +472,50 @@ describe("bound resources", () => {
     expect(h.changedResources(recorded, h.computeResources(run.run, run.candidate, { ...run.context, home }))).toEqual(["operatorClaudeSkill"]);
   });
 
-  it.skipIf(notLinux)("refuses a Codex run while a differing controller skill sits in the home's Codex skills", async () => {
+  it("names every source that holds a differing controller skill, and also refuses a copy with an extra file", async () => {
     const run = await buildRun();
-    const home = join(run.root, "home");
-    const codexHomeSkill = join(home, ".agents", "skills", "pi-session-orchestration");
-    mkdirSync(codexHomeSkill, { recursive: true });
-    writeFileSync(join(codexHomeSkill, "SKILL.md"), "an older copy\n");
-    await expect(h.runClient({ run: run.run, client: "codex", scenario: "parallel" }, { signals: new EventEmitter(), home })).rejects.toThrow("Codex could read it instead");
-    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    cpSync(join(run.candidate, "skills", orchestration), join(run.etc, orchestration), { recursive: true });
+    writeFileSync(join(run.etc, orchestration, "extra.md"), "x");
+    put(join(run.codexHome, "skills", orchestration, "SKILL.md"), "other\n");
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual(["codexHomeSkills", "etcCodexSkills"]);
+  });
+
+  it("allows an equal copy of the controller skill, and none, in every source", async () => {
+    const run = await buildRun();
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([]);
+    for (const [, , dir] of sources) cpSync(join(run.candidate, "skills", orchestration), join(dir(run), orchestration), { recursive: true });
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([]);
+  });
+
+  it("ignores skills other than the controller skill when deciding on a refusal", async () => {
+    const run = await buildRun();
+    for (const [, , dir] of sources) put(join(dir(run), "unrelated", "SKILL.md"), "x\n");
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([]);
+  });
+
+  it("resolves CODEX_HOME once from the environment, its home form or the default", async () => {
+    const run = await buildRun();
+    const link = join(run.root, "codex-link");
+    mkdirSync(run.codexHome, { recursive: true });
+    symlinkSync(run.codexHome, link);
+    expect(h.resolveCodexHome({ CODEX_HOME: link }, run.home)).toBe(run.codexHome);
+    expect(h.resolveCodexHome({ CODEX_HOME: "~/elsewhere" }, run.home)).toBe(join(run.home, "elsewhere"));
+    expect(h.resolveCodexHome({}, run.home)).toBe(join(run.home, ".codex"));
+  });
+
+  it("records per client the controller skill kind and its digest without paths", async () => {
+    const run = await buildRun();
+    const tree = h.treeSha256(join(run.candidate, "skills", orchestration));
+    expect(run.info.controllerSkills).toEqual({
+      claude: { kind: "installed", treeSha256: h.treeSha256(join(run.run, "controller-claude", ".claude", "skills", orchestration)) },
+      codex: { kind: "linked", treeSha256: tree },
+    });
+    expect(JSON.stringify(run.info.controllerSkills)).not.toContain(run.root);
+    // a link that points elsewhere is not recorded as the candidate's skill
+    const link = join(run.run, "controller-codex", ".agents", "skills", orchestration);
+    rmSync(link);
+    symlinkSync(join(run.candidate, "skills", "pi-session-review"), link);
+    expect(h.controllerSkillRecord(run.run, run.candidate).codex).toEqual({ kind: "linked", treeSha256: "wrongTarget" });
   });
 
   it.each(cases)("reports %s by name", async (_label, expected, mutate) => {
@@ -461,7 +527,6 @@ describe("bound resources", () => {
 
 // ---- #66: the loaded extension package contents -----------------------------------------------------
 describe("extension package binding", () => {
-  type Run = Awaited<ReturnType<typeof buildRun>>;
   const packageKey = `extension:${EXTENSION}`;
   const npm = (r: Run) => join(r.agentDir, "npm");
   const mutations: Array<[string, string[], (r: Run) => void]> = [
@@ -518,7 +583,6 @@ describe("extension package binding", () => {
 
 // ---- #66: prepare passes the bound agent directory to the server of both clients ---------------------
 describe("prepare binds the agent directory", () => {
-  type Run = Awaited<ReturnType<typeof buildRun>>;
   /** Runs the real `prepare` against a synthetic candidate with a stand-in setup and a fake `claude`; nothing leaves the temporary root. */
   async function prepareRun(run: Run, { withExtensions, env }: { withExtensions: boolean; env: Record<string, string> }) {
     copyFileSync(setupStub, join(run.candidate, "dist", "setup-main.js"));
@@ -546,8 +610,10 @@ describe("prepare binds the agent directory", () => {
     const link = join(run.root, "agent-link");
     symlinkSync(run.agentDir, link);
     // The environment names a link; the prepared run records and passes the real directory.
-    const prepared = await prepareRun(run, { withExtensions: true, env: { PI_CODING_AGENT_DIR: link } });
+    const prepared = await prepareRun(run, { withExtensions: true, env: { PI_CODING_AGENT_DIR: link, CODEX_HOME: join(run.root, "prepared-codex-home") } });
     expect(prepared.info.agentDir).toBe(run.agentDir);
+    // CODEX_HOME is resolved once and recorded privately; the bound Codex skill sources use it
+    expect(prepared.info.codexHome).toBe(join(run.root, "prepared-codex-home"));
     const claudeServer = JSON.parse(readFileSync(join(prepared.priv, "claude-mcp.json"), "utf8")).mcpServers["pi-candidate"];
     expect(claudeServer.env).toEqual({ PI_SESSION_MCP_CONFIG: join(prepared.priv, "config.json"), PI_CODING_AGENT_DIR: run.agentDir });
     const codexArgs: string[] = h.command("codex", prepared.info, prepared.priv, join(prepared.runDir, "controller-codex"), { scenario: "parallel" }).args;
@@ -556,13 +622,16 @@ describe("prepare binds the agent directory", () => {
     expect(prepared.setupEnv.PI_CODING_AGENT_DIR).toBe(run.agentDir);
     expect(prepared.info.extensions).toEqual([{ name: EXTENSION, version: "1.0.0" }]);
     expect(Object.keys(prepared.info.resources).filter((name) => name.startsWith("extension")).sort()).toEqual([`extension:${EXTENSION}`, "extensionNpmInstallation"]);
-    expect(h.changedResources(prepared.info.resources, h.computeResources(prepared.runDir, prepared.info.candidate, { home: run.home, agentDir: prepared.info.agentDir, extensions: prepared.info.extensions }))).toEqual([]);
+    expect(h.changedResources(prepared.info.resources, h.computeResources(prepared.runDir, prepared.info.candidate, { home: run.home, etcCodexSkills: run.etc, agentDir: prepared.info.agentDir, codexHome: prepared.info.codexHome, extensions: prepared.info.extensions }))).toEqual([]);
     // the recorded directory is private: the evidence names neither it nor the run
     const out = join(run.root, "evidence.json");
     h.evidence({ run: prepared.runDir, out });
     const text = readFileSync(out, "utf8");
-    for (const secret of [run.agentDir, run.root, prepared.info.token]) expect(text).not.toContain(secret);
+    for (const secret of [run.agentDir, prepared.info.codexHome, run.root, prepared.info.token]) expect(text).not.toContain(secret);
     expect(JSON.parse(text).resources.extensionNpmInstallation).toBe(prepared.info.resources.extensionNpmInstallation);
+    // per client: the kind of controller skill and its digest
+    const shipped = h.treeSha256(join(run.candidate, "skills", orchestration));
+    expect(JSON.parse(text).controllerSkills).toEqual({ claude: { kind: "installed", treeSha256: shipped }, codex: { kind: "linked", treeSha256: shipped } });
   }, 60_000);
 
   it("passes the default agent directory to both clients without extensions and binds nothing of it", async () => {
@@ -570,6 +639,7 @@ describe("prepare binds the agent directory", () => {
     const prepared = await prepareRun(run, { withExtensions: false, env: {} });
     const expected = join(run.home, ".pi", "agent");
     expect(prepared.info.agentDir).toBe(expected);
+    expect(prepared.info.codexHome).toBe(join(run.home, ".codex"));
     expect(JSON.parse(readFileSync(join(prepared.priv, "claude-mcp.json"), "utf8")).mcpServers["pi-candidate"].env.PI_CODING_AGENT_DIR).toBe(expected);
     const codexArgs: string[] = h.command("codex", prepared.info, prepared.priv, join(prepared.runDir, "controller-codex"), { scenario: "parallel" }).args;
     expect(codexArgs.find((arg) => arg.startsWith("mcp_servers.pi-candidate.env="))).toContain(`PI_CODING_AGENT_DIR=${JSON.stringify(expected)}`);
@@ -580,10 +650,10 @@ describe("prepare binds the agent directory", () => {
 });
 
 describe.skipIf(notLinux)("runs against a synthetic layout with a controlled client", () => {
-  async function withFakeClient<T>(mode: string, body: (context: { statePath: string; touched: string }) => Promise<T>, run: Awaited<ReturnType<typeof buildRun>>, touch?: string): Promise<T> {
+  async function withFakeClient<T>(mode: string, body: (context: { statePath: string; touched: string }) => Promise<T>, run: Awaited<ReturnType<typeof buildRun>>, touch?: string, client = "claude"): Promise<T> {
     const bin = join(run.root, "bin");
     mkdirSync(bin, { recursive: true });
-    writeFileSync(join(bin, "claude"), `#!${process.execPath}\nimport(${JSON.stringify(stubbornClient)});\n`, { mode: 0o755 });
+    writeFileSync(join(bin, client), `#!${process.execPath}\nimport(${JSON.stringify(stubbornClient)});\n`, { mode: 0o755 });
     const touched = touch ?? join(run.run, "controller-claude", ".claude", "skills", "pi-session-orchestration", "SKILL.md");
     const saved = { PATH: process.env.PATH, MODE: process.env.FAKE_CLIENT_MODE, STATE: process.env.FAKE_CLIENT_STATE, TOUCH: process.env.FAKE_CLIENT_TOUCH };
     const statePath = join(run.root, "client-state.json");
@@ -597,8 +667,78 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
   const values = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, string> = {}) => ({ run: run.run, client: "claude", scenario: "parallel", ...extra });
   const quick = { graceMs: 300, killWaitMs: 2_000, drainMs: 300 };
   // Every launch reads the operator-machine inputs from the run's temporary home.
-  const launch = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, unknown> = {}) => ({ signals: new EventEmitter(), budgets: quick, home: run.home, ...extra });
-  const reanalyze = (run: Awaited<ReturnType<typeof buildRun>>) => h.reanalyze(values(run), { home: run.home });
+  const launch = (run: Awaited<ReturnType<typeof buildRun>>, extra: Record<string, unknown> = {}) => ({ signals: new EventEmitter(), budgets: quick, home: run.home, etcCodexSkills: run.etc, ...extra });
+  const reanalyze = (run: Awaited<ReturnType<typeof buildRun>>) => h.reanalyze(values(run), { home: run.home, etcCodexSkills: run.etc });
+
+  it.each(sources)("refuses a Codex run before launch while a differing controller skill sits in %s (%s)", async (name, _label, dir) => {
+    const run = await buildRun();
+    put(join(dir(run), orchestration, "SKILL.md"), "an older copy\n");
+    rerecord(run);
+    await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow(`Codex skill source (${name})`);
+    await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow("Codex could read it instead");
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    expect(existsSync(join(run.priv, "launches"))).toBe(false);
+  });
+
+  it.each(sources)("launches a Codex run while an equal controller skill sits in %s (%s)", async (_name, _label, dir) => {
+    const run = await buildRun();
+    cpSync(join(run.candidate, "skills", orchestration), join(dir(run), orchestration), { recursive: true });
+    rerecord(run);
+    const result = await withFakeClient<any>("record-env", () => h.runClient(codexValues(run), launch(run)), run, undefined, "codex");
+    expect(result.exitCode).toBe(0);
+    expect(result.resources).toEqual({ changedBeforeLaunch: [], changedAfterRun: [] });
+  }, 60_000);
+
+  it("does not apply the Codex refusal to a Claude Code run", async () => {
+    const run = await buildRun();
+    put(join(run.etc, orchestration, "SKILL.md"), "an older copy\n");
+    put(join(run.home, ".agents", "skills", orchestration, "SKILL.md"), "an older copy\n");
+    rerecord(run);
+    const result = await withFakeClient<any>("record-env", () => h.runClient(values(run), launch(run)), run);
+    expect(result.exitCode).toBe(0);
+    expect(result.resources.changedAfterRun).toEqual([]);
+  }, 60_000);
+
+  it("refuses to launch a Codex run when a Codex skill source changed after prepare", async () => {
+    const run = await buildRun();
+    put(join(run.etc, "other", "SKILL.md"), "x");
+    await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow('resourcesChanged: ["etcCodexSkills"]');
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+  });
+
+  it("fails a Codex run whose recorded CODEX_HOME gained a bundled skill during the run", async () => {
+    const run = await buildRun();
+    mkdirSync(join(run.codexHome, "skills", ".system", "late"), { recursive: true });
+    rerecord(run);
+    const result = await withFakeClient<any>("mutate", () => h.runClient(codexValues(run), launch(run)), run, join(run.codexHome, "skills", ".system", "late", "SKILL.md"), "codex");
+    expect(result.resources.changedAfterRun).toEqual(["codexHomeSkills"]);
+    expect(result.acceptance.failures).toContain("resourcesChanged");
+  }, 60_000);
+
+  it("starts the Codex controller with the CODEX_HOME recorded at prepare, whatever the launching environment holds", async () => {
+    const run = await buildRun();
+    const other = join(run.root, "another-codex-home");
+    const saved = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = other;
+    try {
+      const result = await withFakeClient<any>("record-env", () => h.runClient(codexValues(run), launch(run)), run, undefined, "codex");
+      expect(JSON.parse(readFileSync(join(run.root, "client-state.json"), "utf8"))).toEqual({ CODEX_HOME: run.codexHome });
+      expect(result.resources).toEqual({ changedBeforeLaunch: [], changedAfterRun: [] });
+      // the other directory was never bound: its skills do not change the run
+      put(join(other, "skills", "late", "SKILL.md"), "x");
+      expect(h.reanalyze(codexValues(run), { home: run.home, etcCodexSkills: run.etc }).resources.changedAfterRun).toEqual([]);
+    } finally { if (saved === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = saved; }
+  }, 60_000);
+
+  it("leaves the environment of a Claude Code controller as it was launched", async () => {
+    const run = await buildRun();
+    const saved = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = join(run.root, "another-codex-home");
+    try {
+      await withFakeClient<any>("record-env", () => h.runClient(values(run), launch(run)), run);
+      expect(JSON.parse(readFileSync(join(run.root, "client-state.json"), "utf8"))).toEqual({ CODEX_HOME: join(run.root, "another-codex-home") });
+    } finally { if (saved === undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME = saved; }
+  }, 60_000);
 
   it("refuses to launch when a bound resource changed after prepare", async () => {
     const run = await buildRun();

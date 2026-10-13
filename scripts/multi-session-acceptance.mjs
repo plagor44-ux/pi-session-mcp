@@ -315,9 +315,62 @@ function resolveDirectory(configured, fallback, home) {
 export function resolveAgentDirectory(env = process.env, home = homedir()) {
   return resolveDirectory(env.PI_CODING_AGENT_DIR, join(home, ".pi", "agent"), home);
 }
+/** Codex's home as the client resolves it: `CODEX_HOME`, else `~/.codex`. Resolved once, at prepare. */
+export function resolveCodexHome(env = process.env, home = homedir()) {
+  return resolveDirectory(env.CODEX_HOME, join(home, ".codex"), home);
+}
 /** The environment of the run's MCP server in both clients: its configuration and the bound Pi agent directory. */
 export function serverEnvironment(configPath, agentDir) {
   return { PI_SESSION_MCP_CONFIG: configPath, PI_CODING_AGENT_DIR: agentDir };
+}
+
+export const ETC_CODEX_SKILLS = "/etc/codex/skills";
+const CONTROLLER_SKILL = "pi-session-orchestration";
+
+/** `.agents/skills` of every ancestor of the Codex controller's directory, nearest first. */
+export function codexAncestorSkillDirs(controller) {
+  let real; try { real = realpathSync(controller); } catch { real = resolve(controller); }
+  const dirs = [];
+  for (let dir = dirname(real); ; dir = dirname(dir)) {
+    dirs.push(join(dir, ".agents", "skills"));
+    if (dirname(dir) === dir) break;
+  }
+  return dirs;
+}
+/**
+ * Every directory a Codex controller may read skills from besides its own run-scoped link, by path-free name:
+ * `$CODEX_HOME/skills` (with the bundled `.system` skills), the home's `.agents/skills` (all of it), the system
+ * skills and the `.agents/skills` of the controller directory's ancestors.
+ */
+export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSkills = ETC_CODEX_SKILLS } = {}) {
+  return {
+    codexHomeSkills: codexHome ? [join(codexHome, "skills")] : [],
+    homeAgentsSkills: [join(home, ".agents", "skills")],
+    etcCodexSkills: [etcCodexSkills],
+    codexAncestorSkills: codexAncestorSkillDirs(join(run, "controller-codex")),
+  };
+}
+/** Names of the Codex skill sources that hold a controller skill differing from the candidate's; an equal copy or none is fine. */
+export function differingCodexControllerSkills(run, candidate, context = {}) {
+  const shipped = treeSha256(join(candidate, "skills", CONTROLLER_SKILL));
+  return Object.entries(codexSkillSources(run, context))
+    .filter(([, dirs]) => dirs.some((dir) => { const found = treeSha256(join(dir, CONTROLLER_SKILL)); return found !== "missing" && found !== shipped; }))
+    .map(([name]) => name);
+}
+/** The link in the Codex controller's directory: what it points at and, when that is the candidate's skill, its tree digest. */
+function codexControllerLink(run, candidate) {
+  const link = join(run, "controller-codex", ".agents", "skills", CONTROLLER_SKILL);
+  const skill = join(candidate, "skills", CONTROLLER_SKILL);
+  // The link must point at the candidate's own skill; its content is what the Codex controller reads.
+  try { return resolve(dirname(link), readlinkSync(link)) === skill ? { status: "linked", tree: treeSha256(skill) } : { status: "wrongTarget" }; } catch { return { status: "missing" }; }
+}
+/** Per client the kind of controller skill and its tree digest, without paths: Claude Code reads an installed copy, Codex a run-scoped link. */
+export function controllerSkillRecord(run, candidate) {
+  const link = codexControllerLink(run, candidate);
+  return {
+    claude: { kind: "installed", treeSha256: treeSha256(join(run, "controller-claude", ".claude", "skills", CONTROLLER_SKILL)) },
+    codex: { kind: "linked", treeSha256: link.status === "linked" ? link.tree : link.status },
+  };
 }
 
 /**
@@ -336,25 +389,20 @@ export function extensionResources(agentDir, extensions) {
 }
 
 /**
- * `context` carries what the run recorded privately at prepare (`agentDir`, `extensions`) and, for tests, the
- * injectable `home`.
+ * `context` carries what the run recorded privately at prepare (`agentDir`, `codexHome`, `extensions`) and, for
+ * tests, the injectable `home` and `etcCodexSkills`.
  */
 export function computeResources(run, candidate, context = {}) {
-  const { home = homedir(), agentDir, extensions = [] } = context;
+  const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS } = context;
   const priv = join(run, "private");
-  const codexLink = join(run, "controller-codex", ".agents", "skills", "pi-session-orchestration");
-  const candidateSkill = join(candidate, "skills", "pi-session-orchestration");
-  let codexSkill = "missing";
-  try {
-    const target = readlinkSync(codexLink);
-    // The link must point at the candidate's own skill; its content is what the Codex controller reads.
-    codexSkill = resolve(dirname(codexLink), target) === candidateSkill ? sha256(`linked\0${treeSha256(candidateSkill)}`) : "wrongTarget";
-  } catch { /* stays missing */ }
+  const link = codexControllerLink(run, candidate);
+  const codexSkill = link.status === "linked" ? sha256(`linked\0${link.tree}`) : link.status;
+  const sources = codexSkillSources(run, { home, codexHome, etcCodexSkills });
   let build = "missing";
   try { build = sha256(`${sha256(readFileSync(join(candidate, "dist", "main.js")))}\n${distTreeSha256(candidate)}`); } catch { /* stays missing */ }
   return {
     candidateBuild: build,
-    controllerSkill: treeSha256(join(run, "controller-claude", ".claude", "skills", "pi-session-orchestration")),
+    controllerSkill: treeSha256(join(run, "controller-claude", ".claude", "skills", CONTROLLER_SKILL)),
     codexControllerSkill: codexSkill,
     workerSkillImplementation: treeSha256(join(candidate, "skills", "pi-session-implementation")),
     workerSkillReview: treeSha256(join(candidate, "skills", "pi-session-review")),
@@ -365,6 +413,11 @@ export function computeResources(run, candidate, context = {}) {
     fixtureBaselines: treeSha256(join(priv, "baselines")),
     harness: HARNESS_SHA256,
     ...operatorControllerSkills(home),
+    // Every other place a Codex controller may read skills from. Without a recorded CODEX_HOME that source is `unset`.
+    codexHomeSkills: codexHome ? linkedTreeSha256(sources.codexHomeSkills[0]) : "unset",
+    homeAgentsSkills: linkedTreeSha256(sources.homeAgentsSkills[0]),
+    etcCodexSkills: linkedTreeSha256(sources.etcCodexSkills[0]),
+    codexAncestorSkills: sha256(JSON.stringify(sources.codexAncestorSkills.map(linkedTreeSha256))),
     ...extensionResources(agentDir, extensions),
   };
 }
@@ -372,8 +425,8 @@ export function computeResources(run, candidate, context = {}) {
 export function changedResources(recorded, current) {
   return [...new Set([...Object.keys(recorded ?? {}), ...Object.keys(current)])].filter((name) => recorded?.[name] !== current[name]).sort();
 }
-/** What `computeResources` needs from the run's private record, plus the injectable `home`. */
-const boundContext = (info, context = {}) => ({ agentDir: info.agentDir, extensions: info.extensions ?? [], ...context });
+/** What `computeResources` needs from the run's private record, plus the injectable `home` and `etcCodexSkills`. */
+const boundContext = (info, context = {}) => ({ agentDir: info.agentDir, codexHome: info.codexHome, extensions: info.extensions ?? [], ...context });
 function resourcesChangedSincePrepare(run, info, context) {
   if (!info.resources) fail("the run has no recorded resource digests; prepare a new run");
   return changedResources(info.resources, computeResources(run, info.candidate, boundContext(info, context)));
@@ -403,8 +456,8 @@ export function parseExtensionAllowlist(list) {
 }
 
 /**
- * `context` is for tests: the environment and home to resolve the Pi agent directory from, and the directories that
- * count as temporary.
+ * `context` is for tests: the environment and home to resolve the Pi agent directory and `CODEX_HOME` from, and the
+ * directories that count as temporary.
  */
 export function prepare(values, { env = process.env, home = homedir(), temporaryDirs = [tmpdir(), "/tmp", "/var/tmp", "/dev/shm"] } = {}) {
   if (!values.candidate || !values["base-config"] || !values["from-profile"]) fail("prepare needs --candidate, --base-config and --from-profile");
@@ -422,8 +475,10 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
   const extensions = values["with-extensions"] ? parseExtensionAllowlist(source.extensions) : undefined;
   const workDir = resolve(values["work-dir"] ?? join(home, ".cache", "pi-session-mcp-acceptance"));
   if (temporaryDirs.some((dir) => inside(workDir, dir))) fail("--work-dir must not be inside a temporary directory: Codex refuses helper binaries there");
-  // Resolved once: the server gets this directory explicitly, so the directory that is bound is the one it loads from.
+  // Resolved once: the server gets this directory explicitly, so the directory that is bound is the one it loads from,
+  // and the Codex controller runs with exactly this CODEX_HOME.
   const agentDir = resolveAgentDirectory(env, home);
+  const codexHome = resolveCodexHome(env, home);
   const runId = `skills-${new Date().toISOString().replace(/[-:]/g, "").slice(0, 15)}-${randomBytes(3).toString("hex")}`;
   const run = join(workDir, runId);
   const priv = join(run, "private");
@@ -491,9 +546,11 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
     profile: { from: values["from-profile"], provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel },
     // Names and versions only; the pins themselves are what the configuration holds.
     extensions: extensionList,
-    // Private: where the server loads extensions from.
-    agentDir,
-    resources: computeResources(run, candidate, { home, agentDir, extensions: extensionList }),
+    // Private: where the server loads extensions from and which CODEX_HOME the Codex controller gets.
+    agentDir, codexHome,
+    // Per client the kind of controller skill and its digest, path-free, for the evidence.
+    controllerSkills: controllerSkillRecord(run, candidate),
+    resources: computeResources(run, candidate, { home, agentDir, codexHome, extensions: extensionList }),
     preparedAt: new Date().toISOString(),
   });
   process.stdout.write(`${run}\n`);
@@ -988,7 +1045,7 @@ export function evaluateAcceptance(result, scenario) {
 const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p.role] ?? 0) + 1 }), {});
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
-export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir() } = {}) {
+export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS } = {}) {
   if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
@@ -999,17 +1056,17 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   const controller = join(run, `controller-${values.client}`);
   const label = `${values.client}-${values.scenario}`;
   sameHarness(info);
-  if (typeof info.agentDir !== "string") fail("the run has no recorded agent directory; prepare a new run");
+  if (typeof info.agentDir !== "string" || typeof info.codexHome !== "string") fail("the run has no recorded agent directory or CODEX_HOME; prepare a new run");
   if (existsSync(join(priv, "results", `${label}.json`)) || existsSync(join(priv, "launches", `${label}.json`))) fail("this client and scenario already ran; prepare a new run for a new attempt");
   const baselineOf = baselineReader(priv, values.client);
-  // Codex's precedence between a home skill and the run's repository skill is not established, so a differing
-  // home copy refuses the run instead of leaving open which skill the controller read.
+  // Codex's precedence between its other skill sources and the run's repository skill is not established, so a differing
+  // copy in any of them refuses the run instead of leaving open which skill the controller read. An equal copy or none is fine.
+  const context = { home, etcCodexSkills };
   if (values.client === "codex") {
-    const homeCopy = operatorControllerSkills(home).operatorCodexSkill;
-    if (homeCopy !== "missing" && homeCopy !== treeSha256(join(info.candidate, "skills", "pi-session-orchestration"))) fail("a pi-session-orchestration skill in the home's Codex skills differs from the candidate's; Codex could read it instead, so this run is refused");
+    const differing = differingCodexControllerSkills(run, info.candidate, { ...context, codexHome: info.codexHome });
+    if (differing.length > 0) fail(`a pi-session-orchestration skill in a Codex skill source (${differing.join(", ")}) differs from the candidate's; Codex could read it instead, so this run is refused`);
   }
   // Everything bound at prepare must be unchanged before the controller starts; the fixtures must still be pristine.
-  const context = { home };
   const changedBefore = resourcesChangedSincePrepare(run, info, context);
   if (changedBefore.length > 0) fail(`resourcesChanged: ${JSON.stringify(changedBefore)}`);
   const dirtyFixtures = SCENARIOS[values.scenario].tasks.filter((task) => {
@@ -1027,6 +1084,8 @@ export async function runClient(values, { signals = process, budgets = {}, exit 
   const supervised = await superviseProcess({
     file, args, cwd: controller, budgets: { ...budgets, timeoutMs }, signals,
     scan: (rootPid, rootStart) => snapshot(rootPid, run, info, rootStart),
+    // The Codex controller runs with exactly the CODEX_HOME that prepare recorded, whatever the launching environment holds.
+    ...(values.client === "codex" ? { env: { ...process.env, CODEX_HOME: info.codexHome } } : {}),
   });
   const { seen } = supervised;
   const durationSeconds = Math.round(supervised.elapsedMs / 1000);
@@ -1162,14 +1221,14 @@ export function evidence(values) {
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
     sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, distSha256: info.distSha256, harnessSha256: info.harnessSha256,
-    configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
+    configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, controllerSkills: info.controllerSkills, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
     extensions: info.extensions ?? [], resources: info.resources,
     results: list(join(priv, "results")).map(({ value }) => value),
     reanalyses: list(join(priv, "reanalyses")).map(({ name, value }) => ({ file: name.replace(/\.json$/, ""), ...value })),
     // A launch without a result (a killed harness, an out-of-memory end) stays visible in the published record.
     launches: list(join(priv, "launches")).map(({ name, value }) => ({ label: name.replace(/\.json$/, ""), launchedAt: value.launchedAt, hasResult: existsSync(join(priv, "results", name)) })),
   }, null, 2);
-  for (const marker of [homedir(), info.token, info.candidate, info.agentDir, resolve(values.run)].filter(Boolean)) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
+  for (const marker of [homedir(), info.token, info.candidate, info.agentDir, info.codexHome, resolve(values.run)].filter(Boolean)) if (text.includes(marker)) fail("refusing to write evidence that contains a local path or the token", 1);
   writeFileSync(resolve(values.out), `${text}\n`);
 }
 
