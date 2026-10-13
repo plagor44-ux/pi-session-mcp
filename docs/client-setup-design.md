@@ -160,9 +160,11 @@ copies:
 - Operator settlement of a retained trash directory: inspect the
   `.pi-session-mcp-<skill>-<transactionId>.trash` directory next to the slot,
   move any own content elsewhere, delete that directory, and rerun the same
-  setup command. A dry-run still announces `skill_recovery_planned` without
-  inspecting intermediates, so an apply can still retain
-  ([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60)).
+  setup command.
+- For a pending version 2 transaction, `--dry-run` reports
+  `skill_recovery_retained` (divergent, exit 1) whenever `--apply` would
+  retain an intermediate, using the same read-only classification as the
+  recovery, and otherwise `skill_recovery_planned`. A dry-run never writes.
 - Random-name directories of 0.8.0 updates are never searched for or deleted;
   an operator may remove them by hand.
 - `--dry-run` and `--verify` do not report leftover intermediates.
@@ -329,8 +331,9 @@ Stable finding codes are grouped by responsibility:
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
 - controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,
-  `skill_update_planned`, `skill_recovery_planned`, `skill_divergent`,
-  `skill_legacy_unverified`, `skill_source_invalid`;
+  `skill_update_planned`, `skill_recovery_planned`,
+  `skill_recovery_retained`, `skill_divergent`, `skill_legacy_unverified`,
+  `skill_source_invalid`;
 - controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_recovered`, `skill_linked`,
   `skill_updated`, `skill_divergent`, `skill_legacy_unverified`,
   `skill_recovery_retained`, `skill_source_invalid`,

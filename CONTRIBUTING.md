@@ -14,12 +14,14 @@ Linux or macOS and Node.js 22.19.0 or newer:
 npm ci
 npm run typecheck
 npm run build:cli
-npm test
+NODE_OPTIONS=--unhandled-rejections=strict npm test
 npm run build
 ```
 
-Tests use a fake Pi adapter or a scripted model. They need no provider
-credentials and no network access beyond the npm registry.
+The strict option makes an unhandled promise rejection fail the test run, and
+CI runs the tests with the same setting. Tests use a fake Pi adapter or a
+scripted model. They need no provider credentials and no network access beyond
+the npm registry.
 
 ## Rules
 

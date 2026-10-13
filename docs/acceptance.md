@@ -16,6 +16,16 @@ Provider-free tests exercise the real Pi SDK and real stdio child processes with
 a scripted model. They do not establish live client or model acceptance. State
 only what was run.
 
+Targeted live checks are not a level. The [Pi extension live
+check](#pi-extension-live-check) and the [multi-session skill
+acceptance](#multi-session-skill-acceptance) use a real provider and model on one
+path with one or two sessions: the first drives the server with a scripted
+client, the second with one real controller. They are not a Level 3 cycle,
+do not count towards its [gate](#gate) and do not replace it. A record of one
+of them never says that Level 3 passed. What a package version, the MCP tool
+contract and a setup report `schemaVersion` identify is defined in [tool
+contracts](tool-contracts.md#versions).
+
 ## Level 1: repository checks
 
 Run on a clean checkout of the exact source under test:
@@ -316,6 +326,11 @@ external MCP grants, and client restart or resume.
 A narrower live check can cover a single path. It must state its scope and does
 not count as a ten-task cycle.
 
+This applies to the two-session records below: the extension live check
+started two sessions and the multi-session acceptance drives two concurrent
+sessions from one controller. Both are targeted evidence, not a Level 3 cycle,
+and no number of such runs adds up to the gate.
+
 ## Pi extension live check
 
 Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run it from a working tree (`npm run build`, then `node dist/main.js`) with a temporary configuration, passed through `PI_SESSION_MCP_CONFIG`, whose profile names `"extensions": ["npm:pi-cursor-sdk@0.5.3"]` and a Cursor model from Pi's catalog.
@@ -327,6 +342,9 @@ Manual, on a machine with Pi, `pi-cursor-sdk@0.5.3` and a stored Cursor key. Run
 5. Record how the Cursor local runtime starts its child processes (inherited or piped stdio).
 
 Record date, source commit, versions and outcome under Status. No secret, path or prompt content goes into the record.
+
+This check is targeted. Its two parallel sessions show that the extension path
+works for the recorded build, provider and model. They are not a Level 3 cycle.
 
 ## Multi-session skill acceptance
 
@@ -572,6 +590,13 @@ as recorded; a new run gets a new record.
 - Name what a run does not cover.
 
 ## Status
+
+Targeted records below, the Pi extension live check and the multi-session
+skill acceptance with one or two concurrent sessions, are not Level 3 cycles
+even where they used a real controller or a real model. The wording "passed all
+three levels" refers to earlier private cycles only; the full ten-task Level 3
+cycle has not been repeated on Pi SDK `1.x`. This note adds no result and
+changes none.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The

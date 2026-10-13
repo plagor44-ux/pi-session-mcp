@@ -1,5 +1,19 @@
 # macOS Setup Platform Implementation Plan
 
+> **Delivery status (2026-10-13).** Historical plan. Its work is delivered, so
+> do not execute it again. The checkboxes below are historical and were not
+> maintained; do not read an unchecked box as open work.
+>
+> | Plan tasks | Delivered by | State |
+> | --- | --- | --- |
+> | 1-8: platform module, runner, launcher and guardian, ownership store, platform-neutral tests, signal and ownership integration tests, server stdin-EOF lifecycle, CI on Linux and macOS, documentation, [ADR 0005](../../adr/0005-macos-setup-platform.md) and the agent rule | [#33](https://github.com/plagor44-ux/pi-session-mcp/pull/33), merged 2026-10-11; issue [#32](https://github.com/plagor44-ux/pi-session-mcp/issues/32) closed as completed | Delivered; the audit's reconciliation maps tasks 1-8 to #33 as a whole and does not assign single tasks to single commits |
+>
+> Actual remainder: real Codex acceptance on a Mac (Codex was not installed on
+> the Mac of the recorded run), the current 0.8.x skill paths on macOS, which CI
+> covers but real hardware has not accepted, and this status note itself. See
+> [acceptance](../../acceptance.md#macos), the [roadmap](../../roadmap.md) and
+> the [audit](../../reviews/2026-10-13-post-0.8.1-audit.md#plan-and-adr-reconciliation).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The `pi-session-mcp-setup` lifecycle (`--dry-run`, `--apply`,

@@ -290,7 +290,7 @@ status `failed` (exit 1), so it is not overlooked.
 
 | Operation | Code (status) |
 | --- | --- |
-| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_recovery_planned` (planned), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_source_invalid` (failed) |
+| `--dry-run` | `skill_absent` (absent), `skill_equivalent` (unchanged), `skill_linked` (unchanged), `skill_update_planned` (planned), `skill_recovery_planned` (planned), `skill_recovery_retained` (divergent), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_source_invalid` (failed) |
 | `--apply` | `skill_installed` (ok), `skill_already_equivalent` (unchanged), `skill_recovered` (ok), `skill_linked` (unchanged), `skill_updated` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent), `skill_source_invalid` (failed), `skill_install_failed` (failed) |
 | `--verify` | `skill_verified` (ok), `skill_missing` (failed), `skill_not_equivalent` (failed) |
 | `--rollback`, `--remove` | `skill_removed` (ok), `skill_kept_shared` (unchanged), `skill_not_owned` (unchanged), `skill_absent` (ok), `skill_divergent` (divergent), `skill_legacy_unverified` (divergent), `skill_recovery_retained` (divergent) |
@@ -306,11 +306,12 @@ status `failed` (exit 1), so it is not overlooked.
   If the settled copy still needs the new version, `--apply` continues and
   reports `skill_installed` or `skill_updated`.
 - `skill_recovery_planned` means that the ownership record is pending for an
-  update that `--apply` would settle. The dry-run does not write or delete
-  anything and does not look at the intermediate directories, so `--apply` can
-  still find a modified or foreign intermediate, keep it and report
-  `skill_recovery_retained`. A divergent or
-  foreign copy keeps `skill_divergent`, and a 0.8.0 record keeps its own code.
+  update that `--apply` would settle, and that the read-only classification
+  found no intermediate that `--apply` would retain. The dry-run does not
+  write or delete anything. In the dry-run, `skill_recovery_retained`
+  (divergent, exit 1) means that the same classification found an
+  intermediate that `--apply` would retain. A divergent or foreign copy keeps
+  `skill_divergent`, and a 0.8.0 record keeps its own code.
 - `skill_kept_shared` means that the other Claude Code registration (`user` or
   `local`) still uses the shared directory. The last one removes the skill.
 - A copy that already equals the effective skill but was not created by `setup`
@@ -396,12 +397,12 @@ To settle a retained trash directory:
 3. Delete that directory.
 4. Run the same setup command again.
 
-`--dry-run` still announces `skill_recovery_planned` without inspecting the
-intermediates, so a later `--apply` can still retain one
-([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) tracks making
-the dry-run predict that). Setup deliberately no
-longer deletes a partial trash tree automatically; before this rule it did
-after a structural recheck.
+For a pending version 2 transaction, `--dry-run` reports
+`skill_recovery_retained` (divergent, exit 1) when `--apply` would retain an
+intermediate, using the same read-only classification as the recovery, and
+otherwise `skill_recovery_planned`. It never writes or deletes anything.
+Setup deliberately no longer deletes a partial trash tree automatically;
+before this rule it did after a structural recheck.
 
 A failed update leaves its staging directory until the next run settles it.
 The directories of updates by 0.8.0 had random names. Setup never searches for

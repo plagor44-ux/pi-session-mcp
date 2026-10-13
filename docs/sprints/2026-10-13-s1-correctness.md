@@ -329,3 +329,27 @@ request; merging it closes #59 and #56. Then Sprint 2 begins under the entry
 conditions in the [roadmap](../roadmap.md): R04, R13/R14 resource binding,
 R16 strict CI and the R19–R23 documentation, with #60 as a candidate bounded
 fix. Its proposed window shifts with the Sprint 1 gate.
+
+## Closure
+
+Added on 2026-10-13 after the merge. The sections above are the record as of
+the exit gate and are not rewritten; where they say that final-head CI and the
+merge are pending, this section supersedes them.
+
+- Merge: pull request [#61](https://github.com/plagor44-ux/pi-session-mcp/pull/61)
+  was merged on 2026-10-13 as `b145f8c32cca76d23628ac8830069cee5ccbaece`.
+- Final-head CI on the pull request head `186186d`: run `38389636823`
+  (`pull_request`) and run `38389630496` (`push`) both succeeded on
+  `ubuntu-latest`, `macos-15`, `macos-26` and the `verify` job.
+- CI on main: run `38402514112` on `b145f8c` succeeded on the same matrix.
+- Issues: [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) (R01)
+  and [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (R02) were
+  closed as completed by the merge.
+- Carried into Sprint 2: [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60),
+  the dry-run prediction of a retained intermediate, is still open. The other
+  open gates above (R05 to R11 and, from Sprint 2, R16, R20, R22 and R23)
+  are not closed by this merge; they belong to the later sprints in the
+  [roadmap](../roadmap.md). Sprint 2 is tracked in the
+  [Sprint 2 file](2026-10-13-s2-evidence.md).
+- A green final-head CI matrix does not add platform evidence beyond what CI
+  runs. Current macOS Level 2 on real hardware and Level 3 remain open.
