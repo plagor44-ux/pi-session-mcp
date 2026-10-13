@@ -12,53 +12,49 @@ mean they are implemented or that their gates passed.
 
 ## Current state
 
-Updated 2026-10-13. Base main `b145f8c32cca76d23628ac8830069cee5ccbaece`
-(the merge of Sprint 1).
+Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
+(the merge of Sprint 2).
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
-  [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57). That does not
-  complete the rest of the backlog.
-- Sprint 1 is closed. Pull request
-  [#61](https://github.com/plagor44-ux/pi-session-mcp/pull/61) was merged on
-  2026-10-13 as `b145f8c`. Its final-head CI runs (`38389636823` and
-  `38389630496`) and the CI run on main (`38402514112`) succeeded on
-  `ubuntu-latest`, `macos-15`, `macos-26` and `verify`. It closed
-  [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) (R01) and
-  [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (R02) as
-  completed. Details are in the closure section of the
+  [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57).
+- Sprint 1 is closed: [#61](https://github.com/plagor44-ux/pi-session-mcp/pull/61),
+  merged as `b145f8c`, closed #59 (R01) and #56 (R02). See the
   [Sprint 1 file](sprints/2026-10-13-s1-correctness.md#closure).
-- Sprint 2 is in its exit gate on branch `fix/s2-evidence`, not yet merged.
-  Its tasks are verified on native Linux (native gate, Pi SDK canary, Level 2)
-  and by two independent reviews; the final-head CI and the maintainer's merge
-  decision are outstanding. Status, owners, criteria and evidence are in the
-  [Sprint 2 file](sprints/2026-10-13-s2-evidence.md). Its issues stay open
-  until the merge.
-- [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), the dry-run
-  that announced a recovery that apply retains, is fixed on that branch.
+- Sprint 2 is closed: [#69](https://github.com/plagor44-ux/pi-session-mcp/pull/69)
+  was merged on 2026-10-13 as `0aae639`, after its final-head CI passed on
+  Linux, macOS 15 and macOS 26. It closed #60, #62, #63, #64, #65, #66, #67
+  and #68 as completed. See the [Sprint 2 file](sprints/2026-10-13-s2-evidence.md).
+  The main CI run on the merge commit then failed on `macos-15` in one harness
+  test that timed out on the slow runner; the tree is identical to the green
+  pull-request head. Tracked as
+  [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) and fixed in
+  Sprint 3.
+- Sprint 3 is in its exit gate on branch `fix/s3-live-acceptance`, not yet
+  merged: the first ten-task Level 3 cycle on Pi SDK `1.x` was accepted
+  (10 of 10), R06 and R07 passed, and R08 passed for Codex while Claude Code
+  failed one timing criterion (#74). The maintainer chose `explore-fast` and
+  `code-deepseek` as the profiles intended for use (R09), all Linux items now,
+  a 0.8.2 release pull request after the live runs, and a runbook for the
+  blocked Mac items. Status and evidence are in the
+  [Sprint 3 file](sprints/2026-10-13-s3-live-usage.md).
 
-### Sprint 2 task status
+### Sprint 3 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
-| R04 orchestration skill start-code classification | [#62](https://github.com/plagor44-ux/pi-session-mcp/issues/62) | verified; not merged |
-| R13 bind loaded extension contents (harness) | [#66](https://github.com/plagor44-ux/pi-session-mcp/issues/66) | verified; not merged |
-| R14 bind Codex skill sources (harness) | [#67](https://github.com/plagor44-ux/pi-session-mcp/issues/67) | verified; not merged |
-| Handshake offered only where needed (harness) | [#68](https://github.com/plagor44-ux/pi-session-mcp/issues/68) | verified; not merged |
-| Dry-run predicts a retained intermediate | [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) | verified on native Linux and Level 2; not merged |
-| R16 strict unhandled rejections in CI | [#63](https://github.com/plagor44-ux/pi-session-mcp/issues/63) | implemented; takes effect in the pull request's CI |
-| R20 delivery status of the historical plans | [#64](https://github.com/plagor44-ux/pi-session-mcp/issues/64) | verified; not merged |
-| R23 acceptance and versioning wording | [#65](https://github.com/plagor44-ux/pi-session-mcp/issues/65) | verified; not merged |
-| R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; the Sprint 2 file holds a proposed text |
-| R15 explicit unverified code for an unreadable start time | None | not included; entry condition in the Sprint 2 file |
-| Current-source Pi SDK canary on the frozen candidate | None | verified: Pi SDK 1.2.0 compatible with the candidate; pin 1.1.0 unchanged |
-
-R19 and R21 were delivered in Sprint 1 and by #58.
+| Harness tests time out on macOS | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | implemented; the pull request CI on macOS decides |
+| R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | partially verified: Codex passed, Claude Code failed on timing only; follow-up [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) |
+| R05 / R09 ten-task Level 3 cycle | None (acceptance) | verified: accepted, 10 of 10 tasks |
+| R06 new Codex abort run | None (acceptance) | verified |
+| R07 Codex discovery of the setup-installed skill | None (acceptance) | verified |
+| R10 / R11 current macOS Level 2 and smoke | None | blocked: work Mac not reachable; runbook in the Sprint 3 file |
+| R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; proposal in the Sprint 2 file |
 
 Status words: planned, in progress, implemented (code exists), verified (named
-criteria met with evidence), blocked. Sprint 2 closes only with its evidence,
-a passing final-head CI, the independent review and the merge; Sprint 3 starts
-after that gate.
+criteria met with evidence), blocked, failed (ran and missed its criteria; kept
+on record). Sprint 3 closes only with its evidence, its pull request's CI and
+the merge; Sprint 4 starts after that gate.
 
 ## Sprints and exit gates
 

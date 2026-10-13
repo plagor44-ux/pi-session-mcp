@@ -11,7 +11,7 @@
 //   node scripts/multi-session-acceptance.mjs prepare --candidate <dir> \
 //     --base-config <file> --from-profile <alias> [--with-extensions] [--work-dir <dir>]
 //   node scripts/multi-session-acceptance.mjs run --run <run dir> \
-//     --client claude|codex --scenario parallel|abort [--timeout-min <n>] [--codex-model <id>]
+//     --client claude|codex --scenario parallel|abort|trio [--timeout-min <n>] [--codex-model <id>]
 //   node scripts/multi-session-acceptance.mjs reanalyze --run <run dir> --client <c> --scenario <s>
 //   node scripts/multi-session-acceptance.mjs evidence --run <run dir> --out <file>
 //
@@ -39,14 +39,19 @@ import { parseArgs } from "node:util";
 const SERVER = "pi-candidate";
 const TOOLS = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"];
 const CLIENTS = { claude: "cc", codex: "cx" };
-// Two coding profiles: every task gets `accept-code`; only the slug session also gets the handshake skill.
+// Two coding profiles: every task gets `accept-code`; only the slug session of `parallel` also gets the handshake skill.
+// The read-only profile `accept-read` (skill `review`) is for the reviewer of `trio` and for no other session.
 export const CODE_PROFILE = "accept-code";
 export const HANDSHAKE_PROFILE = "accept-code-handshake";
+export const READ_PROFILE = "accept-read";
 export const CODE_SKILLS = ["implementation"];
+export const READ_SKILLS = ["review"];
 export const HANDSHAKE_SKILLS = ["implementation", "handshake"];
 const SCENARIOS = {
   parallel: { tasks: ["slug", "stats"] },
   abort: { tasks: ["wait", "range"] },
+  // Two writers (`slug` completes, `wait` is aborted next to the others) and a read-only reviewer of a frozen fixture.
+  trio: { tasks: ["slug", "wait", "review"] },
 };
 
 /** A classified, path-free failure of the harness; the CLI entry turns it into an exit code. */
@@ -92,8 +97,23 @@ export const FIXTURES = {
     "src/range.js": "/** Integers from start (inclusive) to end (exclusive) by a positive step (default 1). */\nexport function range(start, end, step = 1) {\n  throw new Error(\"not implemented\");\n}\n",
     "test/range.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { range } from \"../src/range.js\";\n\ntest(\"default step\", () => assert.deepEqual(range(0, 4), [0, 1, 2, 3]));\ntest(\"custom step\", () => assert.deepEqual(range(1, 10, 3), [1, 4, 7]));\ntest(\"empty\", () => assert.deepEqual(range(5, 5), []));\ntest(\"bad step\", () => assert.throws(() => range(0, 3, 0), RangeError));\n",
   },
+  // A finished, frozen implementation for the read-only reviewer of `trio`; nobody may change it.
+  review: {
+    "README.md": "Finished implementation of `chunk`. It is frozen: it is reviewed, never changed.\n",
+    "package.json": `{ "name": "fixture-review", "private": true, "type": "module", "scripts": { "test": "node --test" } }\n`,
+    "src/chunk.js": "/** Splits a list into consecutive chunks of at most `size` items; `size` must be a positive integer. */\nexport function chunk(list, size) {\n  if (!Number.isInteger(size) || size < 1) throw new RangeError(\"size must be a positive integer\");\n  const chunks = [];\n  for (let index = 0; index < list.length; index += size) chunks.push(list.slice(index, index + size));\n  return chunks;\n}\n",
+    "test/chunk.test.js": "import assert from \"node:assert/strict\";\nimport { test } from \"node:test\";\nimport { chunk } from \"../src/chunk.js\";\n\ntest(\"splits evenly\", () => assert.deepEqual(chunk([1, 2, 3, 4], 2), [[1, 2], [3, 4]]));\ntest(\"keeps a shorter last chunk\", () => assert.deepEqual(chunk([1, 2, 3], 2), [[1, 2], [3]]));\ntest(\"empty list\", () => assert.deepEqual(chunk([], 3), []));\ntest(\"bad size\", () => assert.throws(() => chunk([1], 0), RangeError));\n",
+  },
 };
-export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] };
+export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"], review: [] };
+
+/**
+ * The files a task may change in a scenario. `trio` has neither a follow-up turn nor a handshake, so its slug task may
+ * change `src/slug.js` only; every other case keeps `ALLOWED_CHANGES`.
+ */
+export function allowedChanges(task, scenario) {
+  return scenario === "trio" && task === "slug" ? ["src/slug.js"] : ALLOWED_CHANGES[task];
+}
 
 /** SHA-256 over every built runtime module, so evidence binds to all of dist/, not just its entry. */
 export function distTreeSha256(candidate) {
@@ -838,7 +858,9 @@ function prompt(client, scenario) {
     "Start with pi_capabilities_get and state the server version and the configuration fingerprint you saw.",
     scenario === "parallel"
       ? `Use the execution profile \`${HANDSHAKE_PROFILE}\` for the SLUG session and \`${CODE_PROFILE}\` for the STATS session; no other session uses \`${HANDSHAKE_PROFILE}\`. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
-      : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
+      : scenario === "trio"
+        ? `Use the execution profile \`${CODE_PROFILE}\` for the SLUG and WAIT sessions and \`${READ_PROFILE}\` for the REVIEW session. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
+        : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
     `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits.`,
   ];
   if (scenario === "parallel") return [...common,
@@ -850,6 +872,17 @@ function prompt(client, scenario) {
     "After the first SLUG turn succeeded, send one follow-up prompt in the same SLUG session: add one more test case to `test/slug.test.js` for a string with leading and trailing whitespace (it must pass), and complete the acceptance handshake described in the worker's available skills.",
     "Verify every result yourself before closing (read the changed files, run `node --test` in the fixture directory, check `git -C <fixture> status --short`). Close every session you started.",
     "Finish with a short report: per task the final turn state, whether your own verification passed, and whether all sessions were closed.",
+  ].join("\n");
+  if (scenario === "trio") return [...common,
+    // REVIEW first and the shortest wait: the reviewer has no shell delay and must still run when WAIT is aborted.
+    "Run these three tasks at the same time, each in its own Pi session. Start the first turns in this order, REVIEW, then SLUG, then WAIT, and start all three before waiting for any of them:",
+    `- REVIEW: execution profile \`${READ_PROFILE}\`, workspace alias \`${p}-review\` (local copy: ./fixtures/review). Ask the worker for an enumerated review of the finished, frozen implementation in \`src/chunk.js\` and its tests: one numbered finding per exported function, each with a line reference, after reading every file in the repository. The review is read-only; the worker must not change anything.`,
+    // The deliberate, bounded delay keeps SLUG running while WAIT is aborted.
+    `- SLUG: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Ask the worker to first run the shell command \`sleep 45\` in the repository (a deliberate delay for this test), and then make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
+    `- WAIT: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-wait\`. Ask the worker to run exactly this shell command in the repository and then report its output: \`sleep 120 && echo late > LATE.txt\`.`,
+    "About 5 seconds after the WAIT turn was accepted, abort the WAIT session with pi_session_abort while SLUG and REVIEW are still running. Confirm that the WAIT turn ends as `aborted`; an `abort_timeout` error is not a successful abort and must be reported as such.",
+    "Let SLUG and REVIEW finish. Verify SLUG yourself (`node --test` in ./fixtures/slug, `git -C ./fixtures/slug status --short`), check that REVIEW changed nothing (`git -C ./fixtures/review status --short`), then close all three sessions.",
+    "Finish with a short report: final turn state per task, the abort result, the findings of the review, your verification result, and whether all sessions were closed.",
   ].join("\n");
   return [...common,
     "Run these two tasks at the same time, each in its own Pi session:",
@@ -1148,11 +1181,18 @@ export function analyze(client, scenario, calls, info, rawText) {
     if (call.tool === "pi_session_abort" && call.result?.ok) session.abortOkAt ??= index;
   });
   const task = (name) => [...sessions.values()].find((session) => session.workspace === `${p}-${name}`);
+  // Every abort call of the transcript is judged, also one on an unknown session id or on a neighbor: a failed or
+  // misdirected abort never disappears behind the successful one. `abortOk` needs all of them `ok`; the calls that
+  // do not target the aborted session are counted separately.
+  const abortCalls = calls.filter((call) => call.tool === "pi_session_abort");
+  const allAbortsOk = abortCalls.every((call) => call.result?.ok === true);
+  const offTargetAborts = (target) => abortCalls.filter((call) => !target || sessions.get(call.input?.sessionId) !== target).length;
   const turnsOf = (session) => [...(session?.turns.values() ?? [])].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   const ms = (value) => (value ? Date.parse(value) : NaN);
   const [first, second] = SCENARIOS[scenario].tasks.map(task);
-  const a = turnsOf(first)[0]; const b = turnsOf(second)[0];
-  const overlapMs = a && b ? Math.min(ms(a.completedAt), ms(b.completedAt)) - Math.max(ms(a.startedAt), ms(b.startedAt)) : NaN;
+  // The first turns of every task of the scenario have one instant in common (two tasks, or three in `trio`).
+  const firstTurns = SCENARIOS[scenario].tasks.map((name) => turnsOf(task(name))[0]);
+  const overlapMs = firstTurns.every(Boolean) ? Math.min(...firstTurns.map((turn) => ms(turn.completedAt))) - Math.max(...firstTurns.map((turn) => ms(turn.startedAt))) : NaN;
   const prompts = calls.filter((call) => call.tool === "pi_session_prompt").map((call) => String(call.input?.prompt ?? ""));
   // Structural leak scan: every pi tool result, assistant text removed (model output is counted separately).
   const leakMarkers = [homedir(), info.candidate, info.token, "sk-", "Bearer ", "PI_SESSION_MCP_CONFIG", "config.json", "SKILL.md"];
@@ -1187,11 +1227,25 @@ export function analyze(client, scenario, calls, info, rawText) {
   if (scenario === "parallel") {
     const slugTurns = turnsOf(first);
     result.followUpCompleted = slugTurns.length >= 2 && slugTurns[1].state === "completed";
+  } else if (scenario === "trio") {
+    const wait = task("wait"); const waitTurn = turnsOf(wait)[0];
+    // Only the reviewer's profile has the `review` skill; the controller saw it in the capabilities.
+    result.acceptReadSkills = profileSkills(READ_PROFILE);
+    result.abortedTurn = waitTurn?.state === "aborted";
+    result.abortResults = wait?.aborts ?? [];
+    result.abortOk = (wait?.aborts.length ?? 0) >= 1 && wait.aborts.every((code) => code === "ok") && allAbortsOk;
+    result.offTargetAborts = offTargetAborts(wait);
+    result.abortedBeforeClose = wait?.abortedSeenAt !== undefined && (wait.closedAt === undefined || wait.abortedSeenAt < wait.closedAt);
+    result.abortBeforeAbortedSeen = wait?.abortOkAt !== undefined && wait.abortedSeenAt !== undefined && wait.abortOkAt < wait.abortedSeenAt;
+    // The abort ended the WAIT turn while the turns of both others were running.
+    const neighbors = ["slug", "review"].map((name) => turnsOf(task(name))[0]);
+    result.abortWhileNeighborsRunning = Boolean(waitTurn && neighbors.every((turn) => turn && ms(waitTurn.completedAt) > ms(turn.startedAt) && ms(waitTurn.completedAt) < ms(turn.completedAt)));
   } else {
     const wait = turnsOf(first)[0]; const range = turnsOf(second)[0];
     result.abortedTurn = wait?.state === "aborted";
     result.abortResults = first?.aborts ?? [];
-    result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok");
+    result.abortOk = (first?.aborts.length ?? 0) >= 1 && first.aborts.every((code) => code === "ok") && allAbortsOk;
+    result.offTargetAborts = offTargetAborts(first);
     // `aborted` must be observed through pi_turn_get before the session was closed, so close did not cause it.
     result.abortedBeforeClose = first?.abortedSeenAt !== undefined && (first.closedAt === undefined || first.abortedSeenAt < first.closedAt);
     result.abortBeforeAbortedSeen = first?.abortOkAt !== undefined && first.abortedSeenAt !== undefined && first.abortOkAt < first.abortedSeenAt;
@@ -1207,23 +1261,49 @@ export function writtenDuring(path, intervals) {
   return typeof mtime === "number" && intervals.some(([start, end]) => end !== undefined && mtime >= Date.parse(start) - 1_000 && mtime <= Date.parse(end) + 1_000);
 }
 
+/** True for a directory below `dir` (outside `.git`) that holds nothing: a change that no manifest or git comparison sees. */
+function hasEmptyDirectory(dir) {
+  const walk = (current, top) => {
+    const entries = readdirSync(current, { withFileTypes: true }).filter((entry) => !(top && entry.name === ".git"));
+    if (entries.length === 0 && !top) return true;
+    return entries.some((entry) => entry.isDirectory() && walk(join(current, entry.name), false));
+  };
+  return walk(dir, true);
+}
+
+/**
+ * Read-only invariance of a fixture: working tree, index and `HEAD` are exactly the baseline. Beyond the path
+ * comparison it requires `HEAD` to still be the base commit (an empty commit moves it without changing a path)
+ * and no empty directory (a created directory leaves no path in the manifest or in git).
+ */
+export function unchangedSinceBaseline(dir, baseline, comparison) {
+  // `changed` is the union of the working tree, the index and HEAD against the baseline; an error is never "unchanged".
+  if (comparison.error || comparison.changed.size !== 0) return false;
+  const current = gitInFixture(dir, ["rev-parse", "--verify", "HEAD^{commit}"]);
+  if (!current || current.toString("utf8").trim() !== baseline.commit) return false;
+  try { return !hasEmptyDirectory(dir); } catch { return false; }
+}
+
 export function oracle(controller, scenario, info, intervals = {}, baselineOf = () => undefined) {
   const out = {};
   for (const task of SCENARIOS[scenario].tasks) {
     const dir = join(controller, "fixtures", task);
     // Against the fixed baseline: working tree, HEAD and index. `git status` alone misses committed changes.
-    const comparison = compareToBaseline(dir, baselineOf(task), ALLOWED_CHANGES[task]);
+    const comparison = compareToBaseline(dir, baselineOf(task), allowedChanges(task, scenario));
     const changed = [...comparison.changed];
     const check = { onlyAllowedChanges: comparison.ok, baselineError: comparison.error, changedFiles: changed.length, changeSources: comparison.sources };
     // Attribution: every changed file was last written during a worker turn of this task's session.
     check.changesWrittenDuringWorkerTurns = changed.every((file) => writtenDuring(join(dir, file), intervals[task] ?? []));
-    if (task !== "wait") {
+    // The reviewer's fixture is frozen: tests are not rerun there; the invariance below is the oracle.
+    if (task !== "wait" && task !== "review") {
       const test = spawnSync(process.execPath, ["--test"], { cwd: dir, encoding: "utf8", timeout: 60_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
       check.testsPass = test.status === 0;
       // The worker may edit the tests it is judged by, so the harness brings its own cases.
       check.businessChecks = runBusinessChecks(task, dir);
     }
-    if (task === "slug") {
+    if (task === "review") check.readOnlyInvariant = unchangedSinceBaseline(dir, baselineOf(task), comparison);
+    // Only `parallel` has a follow-up turn and the handshake.
+    if (task === "slug" && scenario === "parallel") {
       const tests = readSafe(() => readFileSync(join(dir, "test", "slug.test.js"), "utf8")).match(/\btest\(/g)?.length ?? 0;
       check.addedTest = tests > 3;
       check.handshake = readSafe(() => readFileSync(join(dir, "HANDSHAKE.txt"), "utf8")).trim() === `handshake ${info.token}`;
@@ -1259,8 +1339,12 @@ export function evaluateAcceptance(result, scenario) {
   need(t.capabilitiesFirst === true, "capabilitiesNotFirst");
   need(t.candidateConfirmed === true, "candidateNotConfirmed");
   // Both coding profiles offer exactly their skills, and only the slug session ran on the profile with the handshake.
-  const expectedProfile = (workspace) => (workspace === `${prefix}-slug` ? HANDSHAKE_PROFILE : CODE_PROFILE);
+  // In `trio` there is no handshake: slug and wait use `accept-code`, and `accept-read` (exactly `review`) is the reviewer's alone.
+  const expectedProfile = scenario === "trio"
+    ? (workspace) => (workspace === `${prefix}-review` ? READ_PROFILE : CODE_PROFILE)
+    : (workspace) => (workspace === `${prefix}-slug` ? HANDSHAKE_PROFILE : CODE_PROFILE);
   need(JSON.stringify(t.acceptCodeSkills) === JSON.stringify(CODE_SKILLS) && JSON.stringify(t.acceptCodeHandshakeSkills) === JSON.stringify(HANDSHAKE_SKILLS)
+    && (scenario !== "trio" || JSON.stringify(t.acceptReadSkills) === JSON.stringify(READ_SKILLS))
     && (t.sessions ?? []).every((session) => session.profile === expectedProfile(session.workspace)), "workerSkills");
   need(t.structuralLeaks === 0, "structuralLeaks");
   need(t.tokenInControllerPrompts === false && t.tokenInControllerTask === false && t.controllerTranscriptHasToken === false, "tokenExposed");
@@ -1271,16 +1355,29 @@ export function evaluateAcceptance(result, scenario) {
     need(state("slug") === "completed" && state("stats") === "completed", "firstTurnsNotCompleted");
     need(t.firstTurnsOverlap === true, "noOverlap");
     need(t.followUpCompleted === true, "followUpNotCompleted");
+  } else if (scenario === "trio") {
+    // Association: exactly the three expected sessions, each on its workspace alias with the expected profile.
+    const sessions = t.sessions ?? [];
+    need(t.sessionsStarted === 3 && sessions.length === 3, "sessionsNotStarted");
+    need(SCENARIOS.trio.tasks.every((name) => sessions.filter((session) => session.workspace === `${prefix}-${name}` && session.profile === expectedProfile(session.workspace)).length === 1) && sessions.length === 3, "sessionAssociation");
+    need(state("slug") === "completed" && state("review") === "completed", "firstTurnsNotCompleted");
+    need(t.firstTurnsOverlap === true, "noOverlap");
+    need(t.abortedTurn === true && t.abortOk === true, "abortFailed");
+    need(t.offTargetAborts === 0, "offTargetAbort");
+    need(t.abortedBeforeClose === true && t.abortBeforeAbortedSeen === true, "abortOrder");
+    need(t.abortWhileNeighborsRunning === true, "neighborsNotRunningDuringAbort");
   } else {
     need(t.abortedTurn === true && t.abortOk === true, "abortFailed");
+    need(t.offTargetAborts === 0, "offTargetAbort");
     need(t.abortedBeforeClose === true && t.abortBeforeAbortedSeen === true, "abortOrder");
     need(t.neighborCompleted === true && t.abortWhileNeighborRunning === true, "neighborNotRunningDuringAbort");
   }
   for (const [task, check] of Object.entries(result.oracle ?? {})) {
     need(check.onlyAllowedChanges === true, `${task}:changes`);
     need(check.changesWrittenDuringWorkerTurns === true, `${task}:attribution`);
-    if (task !== "wait") need(check.testsPass === true && check.businessChecks === true, `${task}:tests`);
-    if (task === "slug") need(check.addedTest === true && check.handshake === true && check.handshakeWrittenDuringFollowUp === true, "slug:followUp");
+    if (task !== "wait" && task !== "review") need(check.testsPass === true && check.businessChecks === true, `${task}:tests`);
+    if (task === "review") need(check.readOnlyInvariant === true, "review:readOnly");
+    if (task === "slug" && scenario === "parallel") need(check.addedTest === true && check.handshake === true && check.handshakeWrittenDuringFollowUp === true, "slug:followUp");
     if (task === "wait") need(check.lateFileAbsent === true, "wait:lateFile");
   }
   need(Object.keys(result.oracle ?? {}).length === SCENARIOS[scenario].tasks.length, "oracleMissing");
@@ -1291,7 +1388,7 @@ const roleCounts = (list) => list.reduce((acc, p) => ({ ...acc, [p.role]: (acc[p
 
 /** Launches the controller under supervision and returns the sanitized result; the original result is written once. */
 export async function runClient(values, { signals = process, budgets = {}, exit = (code) => process.exit(code), home = homedir(), etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary, boundLimit } = {}) {
-  if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort");
+  if (!values.run || !CLIENTS[values.client] || !SCENARIOS[values.scenario]) fail("run needs --run, --client claude|codex and --scenario parallel|abort|trio");
   if (process.platform !== "linux") fail("run reads /proc and supports Linux only");
   const timeoutMs = Math.round(parseTimeoutMinutes(values["timeout-min"]) * 60_000);
   validateBudgets({ ...budgets, timeoutMs });

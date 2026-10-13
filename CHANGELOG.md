@@ -41,6 +41,18 @@
   with the new code `resourcesUnbound` (#66, #67); and the handshake test skill
   is offered only to the task that needs it, through a separate profile (#68).
   See [acceptance](docs/acceptance.md#multi-session-skill-acceptance).
+- Acceptance harness: a `trio` scenario runs three concurrent sessions from one
+  controller, two writers and a read-only reviewer of a frozen fixture, with a
+  neighbor abort (#71). `abort` and `trio` now judge every `pi_session_abort`
+  call, so an abort that fails or does not target the `wait` session fails the
+  run (new code `offTargetAbort`); `abort` is stricter than before (#71).
+  Harness tests that built several runs inside one test no longer time out on
+  slow macOS runners (#70).
+- Documentation: the Sprint 3 status file
+  ([`docs/sprints/2026-10-13-s3-live-usage.md`](docs/sprints/2026-10-13-s3-live-usage.md))
+  with the first ten-task Level 3 cycle on Pi SDK `1.x`, the R06, R07 and R08
+  live records and a macOS runbook; the Sprint 3 section of
+  [acceptance](docs/acceptance.md#sprint-3-live-acceptance-2026-10-13).
 - CI: the test step runs with `NODE_OPTIONS=--unhandled-rejections=strict` on
   the existing matrix, the same command that README, [CONTRIBUTING](CONTRIBUTING.md),
   [Releasing](docs/releasing.md) and acceptance now name. Issue #63.
