@@ -406,11 +406,47 @@ export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSk
   };
 }
 const YAML_ESCAPES = { 0: "\0", a: "\x07", b: "\b", t: "\t", "\t": "\t", n: "\n", v: "\v", f: "\f", r: "\r", e: "\x1b", " ": " ", '"': '"', "/": "/", "\\": "\\", N: "\x85", _: "\xa0", L: " ", P: " " };
+/** A single- or double-quoted YAML scalar at the start of `text`: its value and what follows the closing quote, or undefined if malformed. */
+function quotedScalar(text) {
+  const quote = text[0];
+  let value = ""; let i = 1; let closed = false;
+  for (; i < text.length && !closed; i += 1) {
+    const ch = text[i];
+    if (ch === quote) {
+      if (quote === "'" && text[i + 1] === "'") { value += "'"; i += 1; } else closed = true;
+    } else if (ch === "\\" && quote === '"') {
+      const escape = text[i + 1];
+      if (escape !== undefined && Object.hasOwn(YAML_ESCAPES, escape)) { value += YAML_ESCAPES[escape]; i += 1; } else if (escape === "x" || escape === "u" || escape === "U") {
+        const digits = { x: 2, u: 4, U: 8 }[escape];
+        const hex = text.slice(i + 2, i + 2 + digits);
+        if (!new RegExp(`^[0-9a-fA-F]{${digits}}$`).test(hex) || Number.parseInt(hex, 16) > 0x10ffff) return undefined;
+        value += String.fromCodePoint(Number.parseInt(hex, 16)); i += 1 + digits;
+      } else return undefined;
+    } else value += ch;
+  }
+  return closed ? { value, tail: text.slice(i) } : undefined;
+}
+/** One block-mapping entry (`key: rest`) without its indentation, or undefined when the text is not one. */
+function mappingEntry(text) {
+  if (text[0] === '"' || text[0] === "'") {
+    const quoted = quotedScalar(text);
+    const after = quoted ? /^[ \t]*:(?:[ \t]+(.*)|)$/.exec(quoted.tail) : null;
+    return after ? { key: quoted.value, rest: after[1] ?? "" } : undefined;
+  }
+  // flow collections, sequences, complex keys, anchors, tags, block scalars, directives and comments are not plain entries
+  if ("[{?&*!|>%@`,#".includes(text[0]) || /^-(?:[ \t]|$)/.test(text)) return undefined;
+  const colon = /:(?=[ \t]|$)/.exec(text);
+  return colon && colon.index > 0 ? { key: text.slice(0, colon.index).trimEnd(), rest: text.slice(colon.index + 1).replace(/^[ \t]+/, "") } : undefined;
+}
 /**
- * The `name:` scalar of a SKILL.md header, read the way YAML does for plain, single-quoted and double-quoted scalars (a
- * ` #` comment outside quotes is dropped). `{status: "named", name}`, `{status: "none"}` for a file without frontmatter or
- * without a top-level `name`, and `{status: "indeterminate"}` whenever the name cannot be determined: an unclosed
- * frontmatter, a duplicate key, an empty value, a block or flow scalar, a multi-line scalar, malformed quoting.
+ * The `name:` scalar of a SKILL.md header, read the way YAML does. The header must be a block mapping: its top-level
+ * indentation is that of its first content line, keys at that indentation are the top-level keys, and deeper lines
+ * (nested keys, continuation lines) are not keys of the mapping. The value may be a plain, single-quoted or
+ * double-quoted scalar (a ` #` comment outside quotes is dropped).
+ * `{status: "named", name}`; `{status: "none"}` only for a header that is provably a block mapping without a top-level `name`
+ * (or an empty one) or a file without frontmatter; `{status: "indeterminate"}` for everything else: an unclosed
+ * frontmatter, a flow mapping, a sequence, a dedent below the top level, a tab as indentation, a duplicate key, an empty
+ * value, a block, folded or flow scalar, a multi-line scalar and malformed quoting.
  */
 export function skillNameFromHeader(text) {
   const indeterminate = { status: "indeterminate" };
@@ -419,34 +455,31 @@ export function skillNameFromHeader(text) {
   const lines = body.split(/\r?\n/).slice(1);
   const end = lines.findIndex((line) => /^---[ \t]*$/.test(line));
   if (end < 0) return indeterminate;
-  const front = lines.slice(0, end);
-  const key = /^(?:name|"name"|'name')[ \t]*:/;
-  const at = front.flatMap((line, index) => (key.test(line) ? [index] : []));
-  if (at.length === 0) return { status: "none" };
-  if (at.length > 1) return indeterminate;
-  const next = front[at[0] + 1];
-  if (next !== undefined && /^[ \t]+\S/.test(next) && !/^[ \t]+#/.test(next)) return indeterminate;
-  const rest = front[at[0]].replace(key, "").replace(/^[ \t]+/, "");
+  const content = lines.slice(0, end).map((line, index) => ({ line, index })).filter(({ line }) => !/^[ \t]*(?:#.*)?$/.test(line));
+  if (content.length === 0) return { status: "none" };
+  if (content.some(({ line }) => /^ *\t/.test(line))) return indeterminate;
+  const indentOf = (line) => /^ */.exec(line)[0].length;
+  const top = indentOf(content[0].line);
+  const entries = [];
+  for (const [position, { line }] of content.entries()) {
+    const indent = indentOf(line);
+    if (indent < top) return indeterminate;
+    if (indent > top) continue;
+    const entry = mappingEntry(line.slice(top));
+    if (!entry) return indeterminate;
+    entries.push({ ...entry, position });
+  }
+  const named = entries.filter((entry) => entry.key === "name");
+  if (named.length === 0) return { status: "none" };
+  if (named.length > 1) return indeterminate;
+  const { rest, position } = named[0];
+  const following = content[position + 1];
+  if (following !== undefined && indentOf(following.line) > top) return indeterminate;
   if (rest === "" || rest.startsWith("#") || "|>&*!%@`[{".includes(rest[0])) return indeterminate;
   if (rest[0] === '"' || rest[0] === "'") {
-    const quote = rest[0];
-    let name = ""; let i = 1; let closed = false;
-    for (; i < rest.length && !closed; i += 1) {
-      const ch = rest[i];
-      if (ch === quote) {
-        if (quote === "'" && rest[i + 1] === "'") { name += "'"; i += 1; } else closed = true;
-      } else if (ch === "\\" && quote === '"') {
-        const escape = rest[i + 1];
-        if (escape !== undefined && Object.hasOwn(YAML_ESCAPES, escape)) { name += YAML_ESCAPES[escape]; i += 1; } else if (escape === "x" || escape === "u" || escape === "U") {
-          const digits = { x: 2, u: 4, U: 8 }[escape];
-          const hex = rest.slice(i + 2, i + 2 + digits);
-          if (!new RegExp(`^[0-9a-fA-F]{${digits}}$`).test(hex) || Number.parseInt(hex, 16) > 0x10ffff) return indeterminate;
-          name += String.fromCodePoint(Number.parseInt(hex, 16)); i += 1 + digits;
-        } else return indeterminate;
-      } else name += ch;
-    }
+    const quoted = quotedScalar(rest);
     // after the closing quote only blanks or a comment that starts with whitespace may follow
-    return closed && /^(?:[ \t]*|[ \t]+#.*)$/.test(rest.slice(i)) ? { status: "named", name } : indeterminate;
+    return quoted && /^(?:[ \t]*|[ \t]+#.*)$/.test(quoted.tail) ? { status: "named", name: quoted.value } : indeterminate;
   }
   const comment = /[ \t]#/.exec(rest);
   const name = (comment ? rest.slice(0, comment.index) : rest).trimEnd();
