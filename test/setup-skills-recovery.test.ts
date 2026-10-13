@@ -129,18 +129,27 @@ describe.skipIf(process.platform !== "linux" || !currentSetupPlatform())("recove
     await finalState(c, "controller v2");
   }, 60_000);
 
-  it("during trash deletion: deletes the partial trash after a structural recheck", async () => {
+  /** The relative paths and bytes below a directory, for comparing a retained tree before and after. */
+  const treeBytes = async (path: string): Promise<string> => JSON.stringify(await Promise.all((await readdir(path, { recursive: true })).sort().map(async (entry) => [entry, await readFile(join(path, entry), "utf8").catch(() => null)])));
+
+  it.each(["apply", "remove", "rollback"] as const)("during trash deletion: %s retains the partial trash and changes nothing", async (operation) => {
     const c = await crashAt("trash-entry-removed");
     const left = await readdir(c.trash);
     expect(left).toHaveLength(1); // the old copy had two entries: SKILL.md and references
-    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
-    await finalState(c, "controller v2");
+    const trash = await treeBytes(c.trash); const entries = await c.entries(); const before = await c.store.get(ownedTarget);
+    expect(before).toMatchObject({ phase: "pending", replaces: c.v1.fingerprint });
+    expect((await c.run(operation))[0]).toMatchObject({ code: "skill_recovery_retained", status: "divergent" });
+    expect(await readdir(c.trash)).toEqual(left); expect(await treeBytes(c.trash)).toBe(trash);
+    expect(await c.text(c.slot)).toBe("controller v2"); expect(await c.entries()).toEqual(entries);
+    expect(await c.store.get(ownedTarget)).toEqual(before);
   }, 60_000);
 
-  it("during trash deletion: remove deletes the partial trash, the copy and the record", async () => {
+  it("during trash deletion: apply settles after the operator deleted the retained trash", async () => {
     const c = await crashAt("trash-entry-removed");
-    expect((await c.run("remove"))[0]).toMatchObject({ code: "skill_removed", status: "ok" });
-    await removedState(c);
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovery_retained", status: "divergent" });
+    await rm(c.trash, { recursive: true });
+    expect((await c.run("apply"))[0]).toMatchObject({ code: "skill_recovered", status: "ok" });
+    await finalState(c, "controller v2");
   }, 60_000);
 
   it("before the final ownership update: promotes the record", async () => {
