@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.2 — 2026-10-13
+
 - Fixed: recovery of an interrupted skill update no longer deletes operator
   content in the transaction's `.trash` directory. It deletes that directory
   only when its contents are the complete, unchanged replaced copy (its
