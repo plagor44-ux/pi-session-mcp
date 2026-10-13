@@ -788,17 +788,16 @@ describe("binding digest", () => {
     expect(h.changedResources(run.info.resources, recompute(run))).toEqual(["homeAgentsSkills"]);
   });
 
-  it("binds a linked skill in each of the other Codex sources", async () => {
-    for (const [name, , dir] of sources) {
-      const run = await buildRun();
-      const outside = join(run.root, "outside-skill");
-      put(join(outside, "SKILL.md"), "x\n");
-      mkdirSync(dir(run), { recursive: true });
-      symlinkSync(outside, join(dir(run), "linked"));
-      rerecord(run);
-      appendFileSync(join(outside, "SKILL.md"), "changed\n");
-      expect(h.changedResources(run.info.resources, recompute(run)), name).toEqual([name]);
-    }
+  // One fixture build per source, so no case approaches the default timeout on a slow runner (#70).
+  it.each(sources)("binds a linked skill in %s (%s)", async (name, _label, dir) => {
+    const run = await buildRun();
+    const outside = join(run.root, "outside-skill");
+    put(join(outside, "SKILL.md"), "x\n");
+    mkdirSync(dir(run), { recursive: true });
+    symlinkSync(outside, join(dir(run), "linked"));
+    rerecord(run);
+    appendFileSync(join(outside, "SKILL.md"), "changed\n");
+    expect(h.changedResources(run.info.resources, recompute(run)), name).toEqual([name]);
   });
 
   it("notices a dangling link that starts to resolve", async () => {
@@ -872,15 +871,15 @@ describe("incomplete bindings", () => {
     expect(h.unboundResources(undefined, { a: "tooLarge" })).toEqual(["a"]);
   });
 
-  it("keeps an incomplete value visible in every key, also in the composed ones", async () => {
+  // One fixture build per source (#70). The two extension keys are composed of the npm installation and its package;
+  // every case checks them as well, because the run has an extension in each.
+  const extensionKeys = ["extensionNpmInstallation", `extension:${EXTENSION}`];
+  it.each(sources.slice(0, 4))("keeps an incomplete value visible in %s (%s), also in the composed keys", async (name, _label, dir) => {
     const run = await buildRun({ extensions: true });
-    threeFiles(join(run.home, ".agents", "skills"));
-    threeFiles(join(run.root, ".agents", "skills"));
-    threeFiles(join(run.codexHome, "skills"));
-    threeFiles(run.etc);
+    threeFiles(dir(run));
     const now = h.computeResources(run.run, run.candidate, { ...run.context, boundLimit: 1 });
-    for (const key of ["extensionNpmInstallation", `extension:${EXTENSION}`, "codexHomeSkills", "homeAgentsSkills", "etcCodexSkills", "codexAncestorSkills"]) expect(now[key], key).toBe("tooLarge");
-    expect(h.unboundResources(run.info.resources, now)).toEqual([`extension:${EXTENSION}`, "codexAncestorSkills", "codexHomeSkills", "etcCodexSkills", "extensionNpmInstallation", "homeAgentsSkills"].sort());
+    for (const key of [...extensionKeys, name]) expect(now[key], key).toBe("tooLarge");
+    expect(h.unboundResources(run.info.resources, now)).toEqual([...extensionKeys, name].sort());
   });
 
   it.skipIf(!notRoot)("keeps an unreadable controller skill visible in the Codex link key", async () => {
