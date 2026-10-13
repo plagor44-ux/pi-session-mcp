@@ -90,6 +90,25 @@ bounded direct MCP `initialize`, `tools/list`, and
 `pi_capabilities_get({})` check. It never starts a session or invokes
 a provider.
 
+### Verify diagnostics
+
+Verify checks one target in a fixed order and stops that target at the first
+failure. After an unknown client (`client_unsupported`), ownership
+(`ownership_unavailable`) and release binding (`release_binding_mismatch`),
+Doctor runs; if it fails, verify reports its code and neither inspects the
+registration nor runs the handshake. Then the client's registration is
+inspected:
+
+| Result | Status | Code | What it means |
+| --- | --- | --- | --- |
+| Client unsupported or not discoverable | `unsupported` | `unsupported` | Setup could not run or recognize the client CLI. Usually the CLI is not on `PATH`, for example in a non-interactive SSH shell. Put the client's directory on `PATH` and rerun; the registration itself may be fine. `--dry-run` reports the same state |
+| Inspection failed | `failed` | `inspect_failed` | Inspecting the registration threw an error. Rerun; if it persists, run the client's own `mcp` listing |
+| Registration absent, divergent, or equivalent with another fingerprint | `failed` | `registration_not_equivalent` | The registration is missing or differs from the one setup would create. Run `--dry-run` for the exact state |
+| Registration equivalent | `ok` or `failed` | `mcp_verified` or `mcp_<status>` | Only now does the bounded MCP handshake run |
+
+None of the failure rows changes a registration or starts the handshake, and
+each exits with `1`.
+
 ### Controller skill
 
 Besides the registration, `--apply` installs the controller skill

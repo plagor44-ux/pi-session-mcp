@@ -10,10 +10,41 @@ skill-recovery data-preservation defect and confirmed #56's verify diagnosis.
 Fix those first, then complete real acceptance. Recording tasks does not mean
 they are implemented or that their gates passed.
 
+## Current state
+
+Updated 2026-10-13 on main `3e360dd672cbffcce2913a5cf9f6333a0262f077`.
+
+- R21 (this roadmap) was delivered as documentation by
+  [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
+  [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57). That does not
+  complete the rest of the backlog.
+- R01 is tracked as [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59).
+  It is not fixed yet.
+- R02 is [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56). The
+  docs merge had closed it although the code was unchanged; it is open again
+  and not fixed yet.
+- Sprint 1 is in progress. Its status, task owners, acceptance criteria and
+  evidence are in the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
+  Nothing in it is verified until that file records the evidence.
+
+### Sprint 1 task status
+
+| Task | Issue | Status |
+| --- | --- | --- |
+| R01 recovery retains unprovable trash | [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) | in progress |
+| R02 verify diagnostics | [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) | in progress |
+| R03 native QA gate | None; delivered in the Sprint 1 pull request | planned; needs the integrated candidate |
+| R19 v0.8.1 evidence carry-over | None; delivered in the Sprint 1 pull request | in progress |
+| R21 consolidated roadmap | [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57), [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58) | delivered (documentation only) |
+
+Status words: planned, in progress, implemented (code exists), verified (named
+criteria met with evidence), blocked. No sprint is complete.
+
 ## Sprints and exit gates
 
 The dates are proposed windows, not commitments. Dependent work waits for its
 gate; independent Mac setup verification and documentation may run alongside.
+Later windows shift with the Sprint 1 gate.
 
 | Sprint | Proposed window | Work | Exit gate |
 | --- | --- | --- | --- |
@@ -23,9 +54,10 @@ gate; independent Mac setup verification and documentation may run alongside.
 | S4: decision | Oct 21–23; 1 evaluation | Usage metrics, conditional R12/R15/R17/R18 | Maintenance or at most one justified investment, with focused issue and ADR where required |
 
 R-identifiers are planning identifiers, not GitHub issue numbers. #56 was
-the only open implementation tracker at the audit snapshot. Create a focused,
-duplicate-checked issue before each new implementation task. This roadmap
-delivers R21's documentation; it does not close the other tasks.
+the only open implementation tracker at the audit snapshot; #59 was created
+for R01 afterwards. Create a focused, duplicate-checked issue before each new
+implementation task. This roadmap delivers R21's documentation; it does not
+close the other tasks.
 
 ## Parallel work
 
