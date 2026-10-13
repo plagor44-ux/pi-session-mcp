@@ -418,9 +418,12 @@ Pi Session MCP tools; the script never does.
   file's bytes, or the same digest of the target directory, recursively); a
   link that stays inside the root needs only its text. Each real directory is
   digested once, so link cycles end, and at most 200,000 entries are read. A
-  source that cannot be bound has a fixed value instead of a digest
-  (`missing`, `notDirectory`, `unreadable`, `tooLarge`, `dangling`). The other
-  resources keep the plain tree digest. `prepare` resolves Pi's
+  value of `unreadable` or `tooLarge` means that a resource cannot be bound
+  completely. For every key, composed ones included, `prepare` then refuses and
+  names the key, and `run` refuses before the launch with `resourcesUnbound`.
+  `missing`, `none`, `notDirectory`, `unset` and a dangling top-level link are
+  determinate values and stay allowed. The other resources keep the plain tree
+  digest. `prepare` resolves Pi's
   agent directory (`PI_CODING_AGENT_DIR`, else `~/.pi/agent`) and `CODEX_HOME`
   (else `~/.codex`) once and records both only in the run's private data; they
   never appear in a result or the evidence.
@@ -436,7 +439,11 @@ Pi Session MCP tools; the script never does.
   holds a controller skill whose resolved content differs from the
   candidate's. A controller skill is a directory named
   `pi-session-orchestration` or one whose `SKILL.md` frontmatter declares that
-  `name:`. The bounded search includes hidden directories such as `.system` and
+  `name:`. The name is read as YAML reads a plain or quoted scalar, ignoring a
+  ` #` comment outside quotes; a `SKILL.md` whose name cannot be determined, or
+  that is not a regular file, makes its source count as differing. Only the
+  first 16 KiB of a `SKILL.md` are read, after its type was checked. The
+  bounded search includes hidden directories such as `.system` and
   follows links. An equal copy, also behind a link, or none is allowed; a
   source that cannot be searched completely refuses the run. Skills that Codex
   might load by other means, such as other file names or plugin caches, are
@@ -547,6 +554,8 @@ Each client runs two invocations, one per scenario:
   - the controller exit code is 0 (`controllerExit`), neither `timedOut`,
     `spawnFailed` nor `harnessAborted` is set, and the analysis finished
     (`analysisFailed`);
+  - every bound resource was completely readable when recorded and after the
+    run (`resourcesUnbound`);
   - no bound resource changed after the run (`resourcesChanged`), and for a
     reanalysis no resource or fixture differs from the state recorded at the
     end of the run (`stateChangedSinceRun`);
