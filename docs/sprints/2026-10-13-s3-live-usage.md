@@ -188,6 +188,19 @@ Three concurrent sessions, a read-only reviewer of a frozen result and a
 neighbor abort are therefore accepted for Codex; for Claude Code everything
 except the reviewer still running at the abort is shown.
 
+### Native gate
+
+On `0e90589` (this branch before this record), native Linux: `npm ci`,
+typecheck, `build:cli`, `NODE_OPTIONS=--unhandled-rejections=strict npm test`
+(54 files; 1409 passed, 6 skipped, 0 failed; no unhandled error), build,
+`npm audit` and `npm audit --omit=dev` (0 vulnerabilities), `git diff --check`
+and a clean status all exited with `0`; `npm pack --dry-run` listed 134 files
+without sources, tests, lockfile, plans or the harness. The test count adds the
+109 new harness cases to the 1306 of Sprint 2. The built `dist` tree equals the
+one of the base commit, so the package runtime is unchanged and the live
+evidence above binds to this branch. No client session in a test root and no
+client process appeared during the run.
+
 ## Independent review
 
 The harness changes for #70 and #71 were reviewed before the R08 runs by two
