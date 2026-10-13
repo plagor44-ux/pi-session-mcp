@@ -412,7 +412,8 @@ Pi Session MCP tools; the script never does.
   bundled `.system` skills (`codexHomeSkills`), all of `~/.agents/skills`
   (`homeAgentsSkills`), `/etc/codex/skills` (`etcCodexSkills`) and the
   `.agents/skills` of every ancestor of the Codex controller's directory
-  (`codexAncestorSkills`, up to `/`). These extension and Codex digests walk a
+  (`codexAncestorSkills`, up to `/`). These extension, Codex source and
+  candidate skill digests (the controller skill and both worker skills) walk a
   tree without following links, record every link's text, and for a link
   whose real path lies outside the bound root also bind what it leads to (the
   file's bytes, or the same digest of the target directory, recursively); a
@@ -439,9 +440,13 @@ Pi Session MCP tools; the script never does.
   holds a controller skill whose resolved content differs from the
   candidate's. A controller skill is a directory named
   `pi-session-orchestration` or one whose `SKILL.md` frontmatter declares that
-  `name:`. The name is read as YAML reads a plain or quoted scalar, ignoring a
-  ` #` comment outside quotes; a `SKILL.md` whose name cannot be determined, or
-  that is not a regular file, makes its source count as differing. Only the
+  `name:`. The frontmatter is read as a YAML block mapping whose top-level keys
+  are those at the indentation of its first content line; `name` may be a plain
+  or quoted scalar, and a ` #` comment outside quotes is ignored. Any other
+  form (a flow mapping or sequence, a bare scalar, a dedent or tab
+  indentation, a block or multi-line scalar, malformed quoting, a duplicate
+  `name`, unclosed frontmatter), and a `SKILL.md` that is not a regular file,
+  make the skill indeterminate, so its source counts as differing. Only the
   first 16 KiB of a `SKILL.md` are read, after its type was checked. The
   bounded search includes hidden directories such as `.system` and
   follows links. An equal copy, also behind a link, or none is allowed; a
