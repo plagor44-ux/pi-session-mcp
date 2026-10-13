@@ -412,9 +412,15 @@ Pi Session MCP tools; the script never does.
   bundled `.system` skills (`codexHomeSkills`), all of `~/.agents/skills`
   (`homeAgentsSkills`), `/etc/codex/skills` (`etcCodexSkills`) and the
   `.agents/skills` of every ancestor of the Codex controller's directory
-  (`codexAncestorSkills`). A missing source is recorded as `missing`. A link in
-  place of a bound directory binds the content it leads to; links inside a
-  bound tree are hashed as links and not followed. `prepare` resolves Pi's
+  (`codexAncestorSkills`, up to `/`). These extension and Codex digests walk a
+  tree without following links, record every link's text, and for a link
+  whose real path lies outside the bound root also bind what it leads to (the
+  file's bytes, or the same digest of the target directory, recursively); a
+  link that stays inside the root needs only its text. Each real directory is
+  digested once, so link cycles end, and at most 200,000 entries are read. A
+  source that cannot be bound has a fixed value instead of a digest
+  (`missing`, `notDirectory`, `unreadable`, `tooLarge`, `dangling`). The other
+  resources keep the plain tree digest. `prepare` resolves Pi's
   agent directory (`PI_CODING_AGENT_DIR`, else `~/.pi/agent`) and `CODEX_HOME`
   (else `~/.codex`) once and records both only in the run's private data; they
   never appear in a result or the evidence.
@@ -425,10 +431,16 @@ Pi Session MCP tools; the script never does.
   without that flag the personal copy shadowed the project copy. Re-check this
   when the client version changes. Codex's precedence between its home skills
   and the run's repository skill is not established, so a Codex run is refused
-  while a `pi-session-orchestration` directory in any bound Codex skill source
-  (`$CODEX_HOME/skills`, `~/.agents/skills`, `/etc/codex/skills` or an
-  ancestor's `.agents/skills`) differs from the candidate's skill; an equal copy
-  or none is allowed. Before the Sprint 2 harness only
+  while any bound Codex skill source (`$CODEX_HOME/skills`,
+  `~/.agents/skills`, `/etc/codex/skills` or an ancestor's `.agents/skills`)
+  holds a controller skill whose resolved content differs from the
+  candidate's. A controller skill is a directory named
+  `pi-session-orchestration` or one whose `SKILL.md` frontmatter declares that
+  `name:`. The bounded search includes hidden directories such as `.system` and
+  follows links. An equal copy, also behind a link, or none is allowed; a
+  source that cannot be searched completely refuses the run. Skills that Codex
+  might load by other means, such as other file names or plugin caches, are
+  not covered. Before the Sprint 2 harness only
   `~/.agents/skills/pi-session-orchestration` was checked.
 - Launch record and failed analysis: `run` records the launch once before the
   controller starts, so an attempt that ends without a result is never repeated
@@ -460,8 +472,14 @@ Pi Session MCP tools; the script never does.
   `codex exec --ignore-user-config --sandbox read-only` with the server
   defined through `-c mcp_servers.pi-candidate.*` and the three per-tool
   approvals from [client setup](client-setup.md#run-codex-without-prompts).
-  Neither run changes a persistent registration, `HOME` or the contents of
-  `CODEX_HOME`, and both use the existing authentication. From the Sprint 2
+  The harness changes neither a persistent registration, `HOME` nor the
+  contents of `CODEX_HOME`, and both runs use the existing authentication.
+  Codex itself can install its bundled `.system` skills into
+  `$CODEX_HOME/skills` on its first start after an upgrade, or create that
+  directory in a fresh `CODEX_HOME`. Because those skills are bound, such a
+  change invalidates the prepared run for both clients; it fails safe and never
+  passes. After a Codex upgrade, start Codex once with the same `CODEX_HOME`
+  before `prepare`. From the Sprint 2
   harness (#66, #67) on, the Codex controller runs with exactly the
   `CODEX_HOME` that `prepare` recorded, whatever the launching environment
   holds, and the server of both clients receives the recorded Pi agent
