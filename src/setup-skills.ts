@@ -48,6 +48,16 @@ interface Location { readonly path: string; readonly owned: SetupTarget }
  */
 type Recovery = "settled" | "recovered" | "retained" | "untouched";
 interface Intermediates { readonly staging: string; readonly backup: string; readonly trash: string }
+/**
+ * What a pending version 2 transaction's intermediates are, read without writing. `deleteTrash`: a
+ * trash directory exists and equals the replaced copy, so recovery may delete it. `retained`:
+ * something would stay, however the rest settles. `settle`: backup and staging are as recovery acts on them.
+ */
+type Classification =
+  | { readonly state: "untouched" }
+  | { readonly state: "retained"; readonly slot: Slot; readonly deleteTrash: boolean }
+  | { readonly state: "settle"; readonly slot: Slot; readonly deleteTrash: boolean; readonly backup: Slot; readonly staging: Staging };
+type Staging = "absent" | "complete" | "partial" | "foreign";
 
 const TRANSACTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_TREE_DEPTH = 8;
@@ -184,8 +194,10 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
         if (outcome === "retained") return finding("skill_recovery_retained", "divergent");
         recovered = outcome === "recovered";
       }
-      // A dry-run never recovers; it announces the settlement apply would perform for a version 2 transaction.
+      // A dry-run never recovers; it announces the settlement apply would perform for a version 2 transaction, or its retention.
       const recoveryPlanned = operation === "dry-run" && owned?.phase === "pending" && SKILL_TREE_FINGERPRINT_PATTERN.test(owned.fingerprint) && !hasLegacy(owned);
+      // The classification apply's recovery acts on, read-only: an intermediate apply would retain is not announced as planned.
+      if (recoveryPlanned && (await classifyIntermediates(path, name, owned!, desired, linkTarget)).state === "retained") return finding("skill_recovery_retained", "divergent");
       const current = await inspectSlot(path, linkTarget);
       if (current.state === "linked") {
         if (operation === "apply" && owned) { healthy(ownership); await ownership.delete(ownedTarget); healthy(ownership); }
@@ -312,24 +324,18 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     const names = intermediates(path, name, record.transactionId);
     const target = record.fingerprint;
     const previous = record.replaces !== undefined && SKILL_TREE_FINGERPRINT_PATTERN.test(record.replaces) ? record.replaces : undefined;
-    const slot = await inspectSlot(path, linkTarget);
-    // Only an empty slot, a link or one of setup's two copies can have intermediates of this transaction settled.
-    if (slot.state === "divergent" || (slot.state === "tree" && slot.fingerprint !== target && slot.fingerprint !== previous)) return "untouched";
-    // A trash directory with the transaction's name holds the verified replaced copy, but only
-    // while it is complete: it is deleted only when it still equals the record's replaced
-    // fingerprint. A partial trash (an interrupted deletion) or any changed content cannot be
-    // proven to be setup's own, so it is retained and reported for the operator to settle.
+    let found = await classifyIntermediates(path, name, record, library, linkTarget);
+    if (found.state === "untouched") return "untouched";
     let changed = false;
-    if (await present(names.trash)) {
-      const trash = await inspectSlot(names.trash);
-      if (trash.state !== "tree" || previous === undefined || trash.fingerprint !== previous) return "retained";
+    if (found.deleteTrash) {
       await this.discardTrash(names, parent, ownership);
       changed = true;
+      // Backup and staging are read again once the trash is gone; the slot stays the one first read.
+      found = await classifyIntermediates(path, name, record, library, linkTarget, found.slot);
     }
-    let backup = await inspectSlot(names.backup);
-    if (backup.state === "divergent" || (backup.state === "tree" && backup.fingerprint !== previous)) return "retained";
-    let staging = await classifyStaging(names.staging, target, library);
-    if (staging === "foreign") return "retained";
+    if (found.state !== "settle") return found.state;
+    const { slot } = found;
+    let { backup, staging } = found;
     if (operation === "apply" && slot.state === "absent") {
       if (staging === "complete" || backup.state === "tree") {
         const source = staging === "complete" ? names.staging : names.backup;
@@ -351,6 +357,40 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     }
     return changed ? "recovered" : "settled";
   }
+}
+
+/**
+ * Reads a pending version 2 transaction's slot, trash, backup and staging directory, by their
+ * exact names, and never writes. The slot is only inspected when `known` is not given. Shared by
+ * recovery and the dry-run, so both apply the same rules.
+ *
+ * Only an empty slot, a link or one of setup's two copies can have intermediates settled. A trash
+ * is deletable only while it is the complete replaced copy; a partial or changed trash, a backup
+ * that is not the replaced copy and a foreign staging directory are retained.
+ */
+async function classifyIntermediates(
+  path: string, name: string, record: OwnershipRecord, library: SkillTree | undefined, linkTarget: string | undefined, known?: Slot,
+): Promise<Classification> {
+  const names = intermediates(path, name, record.transactionId);
+  const target = record.fingerprint;
+  const previous = record.replaces !== undefined && SKILL_TREE_FINGERPRINT_PATTERN.test(record.replaces) ? record.replaces : undefined;
+  const slot = known ?? await inspectSlot(path, linkTarget);
+  if (slot.state === "divergent" || (slot.state === "tree" && slot.fingerprint !== target && slot.fingerprint !== previous)) return { state: "untouched" };
+  // A trash directory with the transaction's name holds the verified replaced copy, but only
+  // while it is complete: it is deleted only when it still equals the record's replaced
+  // fingerprint. A partial trash (an interrupted deletion) or any changed content cannot be
+  // proven to be setup's own, so it is retained and reported for the operator to settle.
+  let deleteTrash = false;
+  if (await present(names.trash)) {
+    const trash = await inspectSlot(names.trash);
+    if (trash.state !== "tree" || previous === undefined || trash.fingerprint !== previous) return { state: "retained", slot, deleteTrash };
+    deleteTrash = true;
+  }
+  const backup = await inspectSlot(names.backup);
+  if (backup.state === "divergent" || (backup.state === "tree" && backup.fingerprint !== previous)) return { state: "retained", slot, deleteTrash };
+  const staging = await classifyStaging(names.staging, target, library);
+  if (staging === "foreign") return { state: "retained", slot, deleteTrash };
+  return { state: "settle", slot, deleteTrash, backup, staging };
 }
 
 function healthy(ownership: OwnershipAccess): void { ownership.assertHealthy?.(); }
@@ -442,7 +482,7 @@ async function collectPlain(root: string): Promise<{ readonly files: string[]; r
  * of one, checked only against the current library tree when it is the record's target),
  * `absent`, or `foreign`, which is never deleted.
  */
-async function classifyStaging(staging: string, target: string, library: SkillTree | undefined): Promise<"absent" | "complete" | "partial" | "foreign"> {
+async function classifyStaging(staging: string, target: string, library: SkillTree | undefined): Promise<Staging> {
   const staged = await inspectSlot(staging);
   if (staged.state === "absent") return "absent";
   if (staged.state === "tree" && staged.fingerprint === target) return "complete";
