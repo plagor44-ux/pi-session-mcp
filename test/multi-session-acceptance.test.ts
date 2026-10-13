@@ -683,6 +683,19 @@ describe("handshake profile split", () => {
     }
   });
 
+  it("mentions the handshake only in the parallel prompt, where SLUG and the handshake check name it", () => {
+    for (const client of ["claude", "codex"]) {
+      const args = h.command(client, info, "/private", "/controller", { scenario: "abort" }).args as string[];
+      expect((client === "claude" ? args[1] : args.at(-1)) as string).not.toMatch(/handshake/i);
+      const parallel = (client === "claude" ? h.command(client, info, "/private", "/controller", { scenario: "parallel" }).args[1] : (h.command(client, info, "/private", "/controller", { scenario: "parallel" }).args as string[]).at(-1)) as string;
+      expect(lineWith(parallel, "- SLUG:")).toContain("`accept-code-handshake`");
+      expect(parallel).toContain("The operator checks the handshake content; you only check that the file exists.");
+      expect(parallel).toContain("complete the acceptance handshake");
+      // the boundary sentence stays in both scenarios
+      for (const text of [parallel, (client === "claude" ? args[1] : args.at(-1)) as string]) expect(text).toContain("Read files and run commands only inside ./fixtures");
+    }
+  });
+
   const capabilities = (code: string[] | undefined, handshake: string[] | undefined) => ({ tool: "pi_capabilities_get", input: {}, result: { ok: true, server: { version: "1" }, configuration: { fingerprint: "f" },
     executionProfiles: [{ alias: "accept-read", skills: ["review"] }, ...(code ? [{ alias: "accept-code", skills: code }] : []), ...(handshake ? [{ alias: "accept-code-handshake", skills: handshake }] : [])] } });
   const analysisInfo = { candidate: "/nowhere", token: "tok", version: "1", configFingerprint: "f" };

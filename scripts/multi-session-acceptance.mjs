@@ -611,12 +611,14 @@ function prompt(client, scenario) {
     scenario === "parallel"
       ? `Use the execution profile \`${HANDSHAKE_PROFILE}\` for the SLUG session and \`${CODE_PROFILE}\` for the STATS session; no other session uses \`${HANDSHAKE_PROFILE}\`. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
       : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
-    `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits. The operator checks the handshake content; you only check that the file exists.`,
+    `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits.`,
   ];
   if (scenario === "parallel") return [...common,
     "Run these two tasks in parallel, each in its own Pi session; start both first turns before waiting for either:",
     `- SLUG: execution profile \`${HANDSHAKE_PROFILE}\`, workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
     `- STATS: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-stats\` (local copy: ./fixtures/stats). Make \`node --test\` pass by implementing \`median\` in \`src/stats.js\`; change only that file.`,
+    // Only the parallel scenario has a handshake; the abort controller must not hear of it.
+    "The operator checks the handshake content; you only check that the file exists.",
     "After the first SLUG turn succeeded, send one follow-up prompt in the same SLUG session: add one more test case to `test/slug.test.js` for a string with leading and trailing whitespace (it must pass), and complete the acceptance handshake described in the worker's available skills.",
     "Verify every result yourself before closing (read the changed files, run `node --test` in the fixture directory, check `git -C <fixture> status --short`). Close every session you started.",
     "Finish with a short report: per task the final turn state, whether your own verification passed, and whether all sessions were closed.",
