@@ -27,6 +27,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run build:cli
       - run: npm test
+        env:
+          NODE_OPTIONS: --unhandled-rejections=strict
       - run: npm run build
 
   # The "Protect main" ruleset requires a check named "verify"; it passes only
