@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+- Fixed: recovery of an interrupted skill update no longer deletes operator
+  content in the transaction's `.trash` directory. It deletes that directory
+  only when its contents are the complete, unchanged replaced copy (its
+  version 2 fingerprint equals the replaced fingerprint in the pending record).
+  A partial, modified, added-to, foreign or otherwise unprovable trash, and any
+  trash when the record names no usable replaced fingerprint, is retained and
+  reported as `skill_recovery_retained`; the pending record, the skill
+  directory and the other intermediates stay unchanged. This deliberately
+  replaces the automatic deletion of partial trash trees. See [Pi
+  skills](docs/skills.md#interrupted-updates). Issue #59.
+- Fixed: `--verify` now reports `unsupported` when the client is unsupported or
+  not discoverable (for example its CLI is not on `PATH`) and `inspect_failed`
+  when the inspection fails, instead of `registration_not_equivalent`, which
+  stays for an absent, divergent or differently fingerprinted registration. A
+  failed Doctor ends the target's verify before inspection and the handshake.
+  None of these cases mutates a registration or starts the handshake. See
+  [client setup](docs/client-setup.md#verify-diagnostics). Issue #56.
+- Documentation: the Sprint 1 status file
+  ([`docs/sprints/2026-10-13-s1-correctness.md`](docs/sprints/2026-10-13-s1-correctness.md)),
+  the roadmap status, and the v0.8.1 post-release evidence carried from the
+  release notes into [acceptance](docs/acceptance.md).
+
 ## 0.8.1 — 2026-10-12
 
 - `updatedAt` of a running turn now follows public SDK activity. It is the time

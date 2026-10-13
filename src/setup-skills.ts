@@ -284,7 +284,11 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     await this.step("trash-deleted");
   }
 
-  /** Deletes the transaction's trash entry by entry, so a crash leaves only a smaller partial tree. */
+  /**
+   * Deletes the transaction's trash entry by entry, so a crash leaves only a smaller partial tree.
+   * Callers must have proven the trash to be the complete replaced copy; a later recovery retains
+   * a partial tree instead of deleting it.
+   */
   private async discardTrash(names: Intermediates, parent: string, ownership: OwnershipAccess): Promise<void> {
     await removeEntries(names.trash, parent, ownership, () => this.step("trash-entry-removed"));
   }
@@ -293,7 +297,8 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
    * Settles an interrupted update of the pending record's transaction, inside the ownership
    * transaction. Only directories with this transaction's exact names are examined, and only
    * verified ones are deleted: the backup must equal the replaced copy, the staging directory
-   * the target or an interrupted write of it. Anything else stays and is reported.
+   * the target or an interrupted write of it, the trash the complete replaced copy. Anything
+   * else stays and is reported, including a partial or changed trash.
    *
    * apply, slot absent: a complete staging directory is renamed into the slot (forward);
    * otherwise a verified backup is moved back. remove and rollback do not restore, they delete
@@ -310,12 +315,14 @@ export class FileSetupSkillInstaller implements SetupSkillInstaller {
     const slot = await inspectSlot(path, linkTarget);
     // Only an empty slot, a link or one of setup's two copies can have intermediates of this transaction settled.
     if (slot.state === "divergent" || (slot.state === "tree" && slot.fingerprint !== target && slot.fingerprint !== previous)) return "untouched";
-    // A trash directory with the transaction's name was verified before it was renamed, so on
-    // recovery it may be partial. It is deleted after a structural recheck: a real directory,
-    // not a link, only regular files and directories, no hidden entries, within the tree limits.
+    // A trash directory with the transaction's name holds the verified replaced copy, but only
+    // while it is complete: it is deleted only when it still equals the record's replaced
+    // fingerprint. A partial trash (an interrupted deletion) or any changed content cannot be
+    // proven to be setup's own, so it is retained and reported for the operator to settle.
     let changed = false;
     if (await present(names.trash)) {
-      if (await collectPlain(names.trash) === undefined) return "retained";
+      const trash = await inspectSlot(names.trash);
+      if (trash.state !== "tree" || previous === undefined || trash.fingerprint !== previous) return "retained";
       await this.discardTrash(names, parent, ownership);
       changed = true;
     }

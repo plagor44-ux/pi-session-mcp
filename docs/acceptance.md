@@ -1204,3 +1204,133 @@ release candidate `baa6406` on Linux (`x64`), with Node.js `26.11.1`, Codex CLI
   `0c7bad3`. Its built modules have the same dist tree SHA-256
   (`7b16757f9a1a0318247914f56debe79119a3845e1a1debcf1ad371db3a958fce`) as the
   final candidate `1e904be` of the multi-session acceptance recorded above.
+
+### v0.8.1 post-release evidence carried over from the release notes
+
+The post-release results of `v0.8.1` were recorded in the [v0.8.1 release
+notes](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.8.1),
+published on 2026-10-12 (22:06 UTC), and were carried over into this document
+on 2026-10-13 as roadmap item R19. This is a historical record taken from
+those notes: the checks were not rerun for it, and every item below keeps the
+scope, result and limitation that the notes state. The pre-release results of
+the same release candidate are recorded above.
+
+Source and CI, as stated in the notes:
+- Release source and annotated tag target: `e462054a37505ef00e1e0c549ebab27e4db7ef55`,
+  the merge of #55 (head `440f2e4ccb4f7cebd88825abd8515218f4bbbdee`). The
+  annotated tag object is `02f0b30588115058fbb30148cb0934f18cf05aa3`.
+- #55 passed CI on Linux, macOS 15 and macOS 26. The merged-main CI run
+  `38309519719` and the tag CI run `38309738675` are named in the notes. CI is
+  neither Level 2 nor Level 3 acceptance.
+
+Provider-free (Level 1), on a fresh clone of the tag, with Node.js `26.11.1`
+and npm `12.2.0`. Every command exited with `0`:
+- Typecheck, server build and CLI build.
+- 50 test files: 1035 passed and 6 skipped.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- Offline Doctor: package version `0.8.1`. With the example configuration, the
+  only finding was its placeholder workspace.
+
+Package publication, a release fact and not an acceptance level: the npm
+package `pi-session-mcp@0.8.1` was published from a fresh clone of the tag
+through staged publishing, approved by the maintainer. It has 129 files and
+215.6 kB, with shasum `b39fe48aff6ade4bf52c427960593951e150191b`. The tarball
+downloaded from the registry has the same SHA-1 and SHA-512 integrity. The
+package has no provenance attestation, because it was published from the
+maintainer's machine.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+160 of 160 checks passed in each of three variants:
+- the release candidate's working tree (`baa6406`);
+- a fresh clone of the tag;
+- the npm package installed into a temporary prefix.
+
+The clients were Codex CLI `0.162.1` (`user`) and Claude Code `2.1.296`
+(`user`, `project`, `local`), in disposable homes. The real client
+registrations were unchanged, no process remained, and the build stayed
+byte-identical. The notes do not state the platform of these variants; the
+pre-release run of the candidate above states Linux (`x64`).
+
+Real model, targeted multi-session skill acceptance (not a Level 3 cycle), on
+the final code candidate `1e904be`, whose built modules equal this release's
+(dist tree SHA-256 `7b16757f…`, abbreviated in the notes; the full value is
+recorded above). The detailed record is in the multi-session section above.
+- Controllers: Claude Code `2.1.296` and Codex CLI `0.162.1`. Workers: Cursor
+  (`pi-cursor-sdk@0.5.3`, `composer-2.5`) on Pi SDK `1.1.0`.
+- Both required Claude Code scenarios passed every check: two overlapping
+  sessions with a same-session follow-up, and a targeted abort while the
+  neighbor kept running.
+- `updatedAt` had moved past `startedAt` in every Cursor turn polled while
+  running: 31 of 31 across four runs.
+
+Limitations and failures stated in the notes:
+- No full ten-task Level 3 cycle. The multi-session check is targeted.
+- Live acceptance ran on Linux only, with Cursor (`pi-cursor-sdk@0.5.3`,
+  `composer-2.5`) workers. macOS is covered by CI.
+- Not live-proven: a Codex controller reading the skill from a copy installed
+  in `~/.agents/skills`; a third concurrent or `read-only` worker; a real crash
+  in the middle of a setup skill update (provider-free tests cover it).
+- In the final run, the supplementary Codex `abort` invocation failed its scope
+  check: the Cursor worker applied the `handshake` test skill on its own. The
+  required Claude Code invocations and Codex `parallel` passed, and Codex
+  `abort` had passed on earlier runs of the same build.
+
+## Sprint 1 correctness checks (2026-10-13)
+
+These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
+(recovery keeps unprovable trash) and
+[#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (verify
+diagnostics). They were run on 2026-10-13 against the Sprint 1 branch
+`fix/59-56-s1-correctness`, before merge and without a release. The
+[Sprint 1 file](sprints/2026-10-13-s1-correctness.md) holds the commands,
+source binding, before-fix evidence and review findings in full.
+
+Source: base main `3e360dd`; runtime candidate
+`fa32c22b573ff0bb0b920813bd9520bb79b025f4`, the last commit that changes `src/`
+or `test/`. Native Linux (x64), Node.js `26.11.1`, npm `12.2.0`, Codex CLI
+`0.162.1`, Claude Code `2.1.296`. No provider, model or credential was used.
+
+Provider-free (Level 1), on `fa32c22`:
+
+| Check | Exit | Result |
+| --- | --- | --- |
+| `npm ci`, `npm run typecheck`, `npm run build:cli`, `npm run build` | 0 each | |
+| `NODE_OPTIONS=--unhandled-rejections=strict npm test` | 0 | 52 files passed; 1121 tests passed, 6 skipped, 0 failed; no unhandled error |
+| `npm audit`, `npm audit --omit=dev` | 0 each | 0 vulnerabilities |
+| `git diff --check`, `git status --short` | 0 each | clean |
+| #59 counterexamples for `apply`, `remove` and `rollback` (`test/setup-skills-trash-preservation.test.ts`) and the adapted SIGKILL recovery tests | 0 | All pass. On the unfixed base 24 of the 30 counterexamples failed on the defect itself (`skill_recovered` or `skill_removed` where `skill_recovery_retained` was required). |
+| #56 counterexamples (`test/setup-verify-diagnostics.test.ts`) | 0 | All 53 pass. On the unfixed base 19 failed on the defect itself (`registration_not_equivalent` for unsupported and throwing inspections, and inspection or handshake after a failed Doctor). |
+
+On the documentation head that followed, `npm pack --dry-run` listed 132 files
+without `src/`, `test/`, lockfile or implementation plans, and a relative link
+and anchor check of the changed documentation found no problem.
+
+Real clients without a model (Level 2), on the build of the same runtime
+sources (`dist/main.js` SHA-256 `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`):
+
+- `scripts/setup-acceptance.mjs`: 160 of 160 checks passed, exit `0`, for
+  `codex:user` and `claude-code:user`, `project` and `local` in disposable
+  homes. Real registrations unchanged, no remaining process, no path leak,
+  build unchanged.
+- New #56 negative case, outside the harness: with the client CLI not on
+  `PATH`, `--verify` reported `unsupported (unsupported)` in human and JSON
+  form and `--dry-run` reported `unsupported (unsupported)`, each with exit
+  `1`, for Codex `user` and Claude Code `user`. The registration was unchanged
+  during these steps, and no output contained a path. The same steps on the
+  built base reproduced #56 (`registration_not_equivalent`).
+
+Not established by these checks: the result on macOS (only CI covers it
+there), the final pull-request head's CI matrix, a real operating-system crash
+during a skill update (the interruption tests use a checkpoint and SIGKILL,
+the counterexamples a scripted checkpoint), and any model behavior. A dry-run
+of a pending recovery can still announce a recovery that apply retains; that
+is tracked as [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60).
+
+Open gates that Sprint 1 does not close:
+- Level 3: no full ten-task cycle on Pi SDK `1.x`, and none for the profile
+  intended for use.
+- Current macOS Level 2 on real hardware with both clients. CI covers macOS;
+  it does not replace that.
+- Live discovery of the Codex home skill that setup installs.
+- Multi-session operation beyond two sessions, including a third concurrent
+  worker and a `read-only` worker.

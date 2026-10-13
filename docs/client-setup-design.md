@@ -128,9 +128,20 @@ trash, delete the trash entry by entry, owned record. `--apply`, `--remove` and
 transaction, and only when the slot is empty, a link, or one of setup's two
 copies:
 
-- A trash directory is deleted after a structural recheck: a real directory,
-  regular files and directories only, no hidden entries, within the tree
-  limits. It may be partial, because it was verified before the rename.
+- A trash directory is deleted only when its current contents are the
+  complete, unchanged replaced copy: its version 2 tree fingerprint equals the
+  replaced fingerprint in the pending record. A partial trash tree (for
+  example after an interruption during the entry-by-entry deletion, including
+  an empty one), a modified, added-to, foreign or otherwise unprovable tree,
+  and any trash when the record names no usable replaced fingerprint are
+  retained. A directory name, the transaction id or a structural check alone
+  never proves ownership of the contents. This deliberately replaces the
+  earlier automatic deletion of partial trash trees; continuing a partial
+  deletion would need additional durable evidence, and no journal is added
+  for it. The fingerprint covers the paths and contents of regular files, not
+  empty directories or file modes, so an empty directory or a mode change
+  inside an otherwise complete trash does not prevent its deletion; no file
+  content is lost that way.
 - The backup must equal the replaced copy; the staging directory must equal
   the target or be an interrupted write of it. A partially written staging
   directory counts only when every file is a prefix-consistent part of the
@@ -138,10 +149,20 @@ copies:
 - `--apply` with an empty slot finishes forward with a complete staging
   directory, else moves the verified backup back. `--remove` and `--rollback`
   delete the verified intermediates and leave the slot to the removal.
-- Anything modified or foreign stays and is reported as
-  `skill_recovery_retained` (divergent). A failed update leaves its staging
-  directory until the next run settles it, and an unhealthy ownership fence
-  retains intermediates the same way.
+- Anything modified or foreign, the trash directory included, stays and is
+  reported as `skill_recovery_retained` (divergent). The pending record and
+  the slot then stay unchanged, and nothing is reported as settled. A
+  retained trash stops recovery before any other intermediate is touched; a
+  retained backup or staging directory can follow the deletion of a proven
+  own trash. A failed update leaves its staging directory until the
+  next run settles it, and an unhealthy ownership fence retains intermediates
+  the same way.
+- Operator settlement of a retained trash directory: inspect the
+  `.pi-session-mcp-<skill>-<transactionId>.trash` directory next to the slot,
+  move any own content elsewhere, delete that directory, and rerun the same
+  setup command. A dry-run still announces `skill_recovery_planned` without
+  inspecting intermediates, so an apply can still retain
+  ([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60)).
 - Random-name directories of 0.8.0 updates are never searched for or deleted;
   an operator may remove them by hand.
 - `--dry-run` and `--verify` do not report leftover intermediates.
@@ -264,6 +285,26 @@ skill name only if it is valid, else `invalid`.
 
 Production verification requires the offline Doctor, exact public client-CLI registration inspection, and a directly launched bounded MCP handshake. The verifier calls `pi_capabilities_get` with `{}` only; session start/prompt/turn and provider/model operations are forbidden. Its child process is terminated and awaited before success is reported.
 
+Verify evaluates one target in this order, and the first failure ends that
+target's verification:
+
+1. An unknown client: `client_unsupported`.
+2. Ownership: `ownership_unavailable`.
+3. Release binding: `release_binding_mismatch`.
+4. Doctor, under its own code. A failed Doctor ends the target's verify before
+   the registration is inspected and before any handshake.
+5. Inspection. A client the inspection reports as unsupported or not
+   discoverable, for example because its CLI is not on `PATH`, gives status
+   `unsupported` and code `unsupported`. An inspection that throws gives
+   `inspect_failed`. An absent registration, a divergent one, and an
+   equivalent one with another fingerprint give `registration_not_equivalent`.
+6. Only a truly equivalent registration runs the bounded handshake, which
+   reports `mcp_verified` or `mcp_<status>`.
+
+None of the failure cases mutates a registration or starts the handshake, and
+all exit with `1`. There is no separate client-unavailable code; the
+dry-run already separates these states the same way.
+
 ## Compatibility and reporting
 
 Codex and Claude Code are separate adapters with explicit supported scopes and documented capability fixtures. Unknown output fails closed with stable codes. Absolute paths are passed only to client commands where required and are never included in results, logs, or ownership metadata. Client command diagnostics must be reduced to stable codes before crossing this boundary.
@@ -275,13 +316,16 @@ Stable finding codes are grouped by responsibility:
 - input/prerequisites: `target_invalid`, `config_required`, `usage_invalid`,
   `platform_unsupported`, `operation_interrupted`,
   `doctor_failed`, `release_unavailable`, `client_unsupported`, `inspect_failed`;
-- planning/reconciliation: `absent`, `equivalent`, `divergent`,
+- planning/reconciliation: `absent`, `equivalent`, `divergent`, `unsupported`,
   `already_equivalent`, `divergence_requires_replacement`,
   `registration_fingerprint_mismatch`, `release_binding_mismatch`;
 - ownership/apply: `applied`, `pending_recovered`, `ownership_unavailable`,
   `apply_failed_recovery_pending`;
-- verification: `registration_not_equivalent`, `mcp_verified`,
-  `mcp_unsupported`, `mcp_timeout`, `mcp_failed`;
+- verification: `registration_not_equivalent` (absent, divergent or
+  differently fingerprinted registration), `mcp_verified`, `mcp_unsupported`,
+  `mcp_timeout`, `mcp_failed`; verify also reports `unsupported` (client not
+  discoverable) and `inspect_failed` (inspection threw), which belong to the
+  other groups;
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
 - controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,

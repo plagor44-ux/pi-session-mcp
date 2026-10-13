@@ -10,10 +10,48 @@ skill-recovery data-preservation defect and confirmed #56's verify diagnosis.
 Fix those first, then complete real acceptance. Recording tasks does not mean
 they are implemented or that their gates passed.
 
+## Current state
+
+Updated 2026-10-13. Base main `3e360dd672cbffcce2913a5cf9f6333a0262f077`;
+Sprint 1 work is on branch `fix/59-56-s1-correctness`, not yet merged.
+
+- R21 (this roadmap) was delivered as documentation by
+  [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
+  [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57). That does not
+  complete the rest of the backlog.
+- R01 is [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) and
+  R02 is [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56). Both
+  are fixed on the Sprint 1 branch and verified on native Linux; #56 also with
+  real clients. Both issues stay open until the pull request is merged. (#56
+  had been closed once by the documentation merge although the code was
+  unchanged.)
+- Sprint 1 is in its exit gate: the final-head CI matrix and the maintainer's
+  merge decision are outstanding. Status, owners, criteria and evidence are in
+  the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
+- The independent review left one follow-up outside Sprint 1:
+  [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), a dry-run
+  that announces a recovery that apply retains.
+
+### Sprint 1 task status
+
+| Task | Issue | Status |
+| --- | --- | --- |
+| R01 recovery retains unprovable trash | [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) | verified on native Linux; final-head CI pending; not merged |
+| R02 verify diagnostics | [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) | verified on native Linux and with real clients; final-head CI pending; not merged |
+| R03 native QA gate | None; delivered in the Sprint 1 pull request | verified on native Linux for the runtime candidate |
+| R19 v0.8.1 evidence carry-over | None; delivered in the Sprint 1 pull request | verified against the release notes |
+| R21 consolidated roadmap | [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57), [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58) | delivered (documentation only) |
+
+Status words: planned, in progress, implemented (code exists), verified (named
+criteria met with evidence), blocked. No sprint is complete: Sprint 1 closes
+only with passing final-head CI and the merge, and Sprint 2 starts after that
+gate.
+
 ## Sprints and exit gates
 
 The dates are proposed windows, not commitments. Dependent work waits for its
 gate; independent Mac setup verification and documentation may run alongside.
+Later windows shift with the Sprint 1 gate.
 
 | Sprint | Proposed window | Work | Exit gate |
 | --- | --- | --- | --- |
@@ -23,9 +61,10 @@ gate; independent Mac setup verification and documentation may run alongside.
 | S4: decision | Oct 21–23; 1 evaluation | Usage metrics, conditional R12/R15/R17/R18 | Maintenance or at most one justified investment, with focused issue and ADR where required |
 
 R-identifiers are planning identifiers, not GitHub issue numbers. #56 was
-the only open implementation tracker at the audit snapshot. Create a focused,
-duplicate-checked issue before each new implementation task. This roadmap
-delivers R21's documentation; it does not close the other tasks.
+the only open implementation tracker at the audit snapshot; #59 was created
+for R01 afterwards. Create a focused, duplicate-checked issue before each new
+implementation task. This roadmap delivers R21's documentation; it does not
+close the other tasks.
 
 ## Parallel work
 
