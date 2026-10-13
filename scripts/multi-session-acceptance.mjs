@@ -107,6 +107,14 @@ export const FIXTURES = {
 };
 export const ALLOWED_CHANGES = { slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"], review: [] };
 
+/**
+ * The files a task may change in a scenario. `trio` has neither a follow-up turn nor a handshake, so its slug task may
+ * change `src/slug.js` only; every other case keeps `ALLOWED_CHANGES`.
+ */
+export function allowedChanges(task, scenario) {
+  return scenario === "trio" && task === "slug" ? ["src/slug.js"] : ALLOWED_CHANGES[task];
+}
+
 /** SHA-256 over every built runtime module, so evidence binds to all of dist/, not just its entry. */
 export function distTreeSha256(candidate) {
   const hash = createHash("sha256");
@@ -1281,7 +1289,7 @@ export function oracle(controller, scenario, info, intervals = {}, baselineOf = 
   for (const task of SCENARIOS[scenario].tasks) {
     const dir = join(controller, "fixtures", task);
     // Against the fixed baseline: working tree, HEAD and index. `git status` alone misses committed changes.
-    const comparison = compareToBaseline(dir, baselineOf(task), ALLOWED_CHANGES[task]);
+    const comparison = compareToBaseline(dir, baselineOf(task), allowedChanges(task, scenario));
     const changed = [...comparison.changed];
     const check = { onlyAllowedChanges: comparison.ok, baselineError: comparison.error, changedFiles: changed.length, changeSources: comparison.sources };
     // Attribution: every changed file was last written during a worker turn of this task's session.

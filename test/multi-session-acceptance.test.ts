@@ -1502,6 +1502,29 @@ describe("trio scenario: criteria", () => {
     expect(out.review).not.toHaveProperty("testsPass");
   });
 
+  // #71 review: the slug task of the trio has no follow-up and no handshake, so its scope is src/slug.js alone.
+  it("narrows the slug scope of the trio to src/slug.js and leaves every other scope as it was", () => {
+    expect(h.allowedChanges("slug", "trio")).toEqual(["src/slug.js"]);
+    expect(h.allowedChanges("slug", "parallel")).toEqual(["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"]);
+    for (const [task, scenario] of [["stats", "parallel"], ["wait", "abort"], ["range", "abort"], ["wait", "trio"], ["review", "trio"]] as const) expect(h.allowedChanges(task, scenario), `${task} ${scenario}`).toEqual(h.ALLOWED_CHANGES[task]);
+  });
+
+  it.each([
+    ["src/slug.js", true, true],
+    ["test/slug.test.js", false, true],
+    ["HANDSHAKE.txt", false, true],
+    ["README.md", false, false],
+  ])("judges a slug change to %s: trio allows it %s, parallel allows it %s", async (file, inTrio, inParallel) => {
+    const run = await buildRun();
+    const slug = join(run.controller("claude"), "fixtures", "slug");
+    writeFileSync(join(slug, file), file === "src/slug.js" ? SLUG_OK : "changed by the worker\n");
+    // attribution is not under test here: the change counts as written during a worker turn
+    const now = Date.now();
+    const intervals = { slug: [[new Date(now - 60_000).toISOString(), new Date(now + 60_000).toISOString()]] };
+    expect(h.oracle(run.controller("claude"), "trio", run.info, intervals, run.baselineOf("claude")).slug.onlyAllowedChanges, "trio").toBe(inTrio);
+    expect(h.oracle(run.controller("claude"), "parallel", run.info, intervals, run.baselineOf("claude")).slug.onlyAllowedChanges, "parallel").toBe(inParallel);
+  });
+
   const mutations: Array<[string, (dir: string) => void]> = [
     ["a changed file in the working tree", (dir) => appendFileSync(join(dir, "src", "chunk.js"), "// reviewed\n")],
     ["a changed README", (dir) => writeFileSync(join(dir, "README.md"), "thawed\n")],
