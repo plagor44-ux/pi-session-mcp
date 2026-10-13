@@ -402,11 +402,61 @@ export function codexSkillSources(run, { home = homedir(), codexHome, etcCodexSk
     codexAncestorSkills: codexAncestorSkillDirs(join(run, "controller-codex")),
   };
 }
-/** Names of the Codex skill sources that hold a controller skill differing from the candidate's; an equal copy or none is fine. */
+/** The `name:` a skill declares in the frontmatter of its SKILL.md, if any. */
+function declaredSkillName(skillFile) {
+  let text; try { text = readFileSync(skillFile, "utf8").slice(0, 16_384); } catch { return undefined; }
+  const frontmatter = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---/.exec(text);
+  const line = frontmatter ? /^name:[ \t]*(.+?)[ \t]*$/m.exec(frontmatter[1]) : null;
+  return line?.[1].replace(/^(["'])(.*)\1$/, "$2");
+}
+/**
+ * The real paths of every controller skill below a skill source: a directory named `pi-session-orchestration`, or one
+ * whose SKILL.md declares that `name:`. Hidden directories such as `.system` are searched, and links are followed (each
+ * real directory once, so cycles end). A walk that cannot finish ends in a sentinel (`tooLarge`, `unreadable`) in `sentinel`.
+ */
+export function findControllerSkills(source, { limit = BOUND_ENTRY_LIMIT } = {}) {
+  const out = { found: [], sentinel: undefined };
+  try { lstatSync(source); } catch { return out; }
+  const visited = new Set();
+  let count = 0;
+  const consider = (path, name) => {
+    if (name === CONTROLLER_SKILL || declaredSkillName(join(path, "SKILL.md")) === CONTROLLER_SKILL) out.found.push(realpathSync(path));
+  };
+  const walk = (dir) => {
+    visited.add(dir);
+    for (const entry of readdirSync(dir, { withFileTypes: true }).sort(byName)) {
+      if (++count > limit) throw new BoundSentinel("tooLarge");
+      const full = join(dir, entry.name);
+      let directory = entry.isDirectory();
+      if (entry.isSymbolicLink()) { try { directory = statSync(full).isDirectory(); } catch { directory = false; } }
+      if (!directory) continue;
+      consider(full, entry.name);
+      const real = realpathSync(full);
+      if (!visited.has(real)) walk(real);
+    }
+  };
+  try {
+    const real = realpathSync(source);
+    if (statSync(real).isDirectory()) { consider(real, ""); walk(real); }
+  } catch (error) { out.sentinel = error instanceof BoundSentinel ? error.code : "unreadable"; }
+  return out;
+}
+/** The content of a directory behind any link at its top, as one binding digest. */
+function contentDigest(path) {
+  try { return boundTreeSha256(realpathSync(path)); } catch { return "missing"; }
+}
+/**
+ * Names of the Codex skill sources that hold a controller skill whose content differs from the candidate's. Every skill
+ * definition inside a source counts, not only a direct child, and an equal copy (also through a link) or none is fine. A
+ * source that cannot be searched completely counts as differing.
+ */
 export function differingCodexControllerSkills(run, candidate, context = {}) {
-  const shipped = treeSha256(join(candidate, "skills", CONTROLLER_SKILL));
+  const shipped = contentDigest(join(candidate, "skills", CONTROLLER_SKILL));
   return Object.entries(codexSkillSources(run, context))
-    .filter(([, dirs]) => dirs.some((dir) => { const found = treeSha256(join(dir, CONTROLLER_SKILL)); return found !== "missing" && found !== shipped; }))
+    .filter(([, dirs]) => dirs.some((dir) => {
+      const { found, sentinel } = findControllerSkills(dir);
+      return sentinel !== undefined || found.some((skill) => contentDigest(skill) !== shipped);
+    }))
     .map(([name]) => name);
 }
 /** The link in the Codex controller's directory: what it points at and, when that is the candidate's skill, its tree digest. */

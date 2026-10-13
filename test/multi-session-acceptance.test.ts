@@ -423,6 +423,16 @@ const rerecord = (r: Run) => {
 const orchestration = "pi-session-orchestration";
 const codexValues = (r: Run) => ({ run: r.run, client: "codex", scenario: "parallel" });
 
+// Controller skills that are not a direct child of the source, or that are only declared by their name.
+const variants: Array<[string, string, (r: Run) => void]> = [
+  ["a differing copy under the hidden .system directory of $CODEX_HOME", "codexHomeSkills", (r) => put(join(r.codexHome, "skills", ".system", orchestration, "SKILL.md"), "an older copy\n")],
+  ["a differing copy nested below another skill", "homeAgentsSkills", (r) => put(join(r.home, ".agents", "skills", "bundle", "nested", orchestration, "SKILL.md"), "an older copy\n")],
+  ["a differently named directory declaring the name", "etcCodexSkills", (r) => put(join(r.etc, "renamed", "SKILL.md"), `---\nname: ${orchestration}\ndescription: x\n---\nolder\n`)],
+  ["a differently named directory declaring the quoted name", "codexAncestorSkills", (r) => put(join(r.root, ".agents", "skills", "renamed", "SKILL.md"), `---\nname: "${orchestration}"\n---\nolder\n`)],
+  ["a symlinked copy that differs", "homeAgentsSkills", (r) => { put(join(r.root, "other-copy", "SKILL.md"), "other\n"); mkdirSync(join(r.home, ".agents", "skills"), { recursive: true }); symlinkSync(join(r.root, "other-copy"), join(r.home, ".agents", "skills", orchestration)); }],
+  ["a differently named symlink to a copy that declares the name and differs", "codexHomeSkills", (r) => { put(join(r.root, "declared-copy", "SKILL.md"), `---\nname: ${orchestration}\n---\nolder\n`); mkdirSync(join(r.codexHome, "skills"), { recursive: true }); symlinkSync(join(r.root, "declared-copy"), join(r.codexHome, "skills", "alias")); }],
+];
+
 // ---- D3: bound resources and preserved findings --------------------------------------------------
 describe("bound resources", () => {
   it("records a digest for every resource the acceptance relies on", async () => {
@@ -478,6 +488,32 @@ describe("bound resources", () => {
     writeFileSync(join(run.etc, orchestration, "extra.md"), "x");
     put(join(run.codexHome, "skills", orchestration, "SKILL.md"), "other\n");
     expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual(["codexHomeSkills", "etcCodexSkills"]);
+  });
+
+  it.each(variants)("finds %s", async (_label, name, place) => {
+    const run = await buildRun();
+    place(run);
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([name]);
+  });
+
+  it("allows an equal symlinked copy, an equal copy under another name and unrelated skills", async () => {
+    const run = await buildRun();
+    cpSync(join(run.candidate, "skills", orchestration), join(run.root, "equal-copy"), { recursive: true });
+    mkdirSync(join(run.home, ".agents", "skills"), { recursive: true });
+    symlinkSync(join(run.root, "equal-copy"), join(run.home, ".agents", "skills", orchestration));
+    mkdirSync(join(run.codexHome, "skills", ".system"), { recursive: true });
+    symlinkSync(join(run.candidate, "skills", orchestration), join(run.codexHome, "skills", ".system", orchestration));
+    put(join(run.etc, "unrelated", "SKILL.md"), "---\nname: something-else\n---\n");
+    expect(h.differingCodexControllerSkills(run.run, run.candidate, run.context)).toEqual([]);
+  });
+
+  it("searches a source with link cycles to the end, and fails closed when a source cannot be searched completely", async () => {
+    const run = await buildRun();
+    put(join(run.etc, "a", "SKILL.md"), "x\n");
+    symlinkSync(run.etc, join(run.etc, "a", "loop"));
+    expect(h.findControllerSkills(run.etc)).toEqual({ found: [], sentinel: undefined });
+    expect(h.findControllerSkills(run.etc, { limit: 1 }).sentinel).toBe("tooLarge");
+    expect(h.findControllerSkills(join(run.root, "no-such-source"))).toEqual({ found: [], sentinel: undefined });
   });
 
   it("allows an equal copy of the controller skill, and none, in every source", async () => {
@@ -889,6 +925,15 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     rerecord(run);
     await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow(`Codex skill source (${name})`);
     await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow("Codex could read it instead");
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    expect(existsSync(join(run.priv, "launches"))).toBe(false);
+  });
+
+  it.each(variants)("refuses a Codex run before launch for %s", async (_label, name, place) => {
+    const run = await buildRun();
+    place(run);
+    rerecord(run);
+    await expect(h.runClient(codexValues(run), launch(run))).rejects.toThrow(`Codex skill source (${name})`);
     expect(readdirSync(join(run.priv, "results"))).toEqual([]);
     expect(existsSync(join(run.priv, "launches"))).toBe(false);
   });
