@@ -644,9 +644,9 @@ describe("bound resources", () => {
 
   it("records per client the controller skill kind and its digest without paths", async () => {
     const run = await buildRun();
-    const tree = h.treeSha256(join(run.candidate, "skills", orchestration));
+    const tree = h.boundTreeSha256(join(run.candidate, "skills", orchestration));
     expect(run.info.controllerSkills).toEqual({
-      claude: { kind: "installed", treeSha256: h.treeSha256(join(run.run, "controller-claude", ".claude", "skills", orchestration)) },
+      claude: { kind: "installed", treeSha256: h.boundTreeSha256(join(run.run, "controller-claude", ".claude", "skills", orchestration)) },
       codex: { kind: "linked", treeSha256: tree },
     });
     expect(JSON.stringify(run.info.controllerSkills)).not.toContain(run.root);
@@ -971,7 +971,7 @@ describe("prepare binds the agent directory", () => {
     for (const secret of [run.agentDir, prepared.info.codexHome, run.root, prepared.info.token]) expect(text).not.toContain(secret);
     expect(JSON.parse(text).resources.extensionNpmInstallation).toBe(prepared.info.resources.extensionNpmInstallation);
     // per client: the kind of controller skill and its digest
-    const shipped = h.treeSha256(join(run.candidate, "skills", orchestration));
+    const shipped = h.boundTreeSha256(join(run.candidate, "skills", orchestration));
     expect(JSON.parse(text).controllerSkills).toEqual({ claude: { kind: "installed", treeSha256: shipped }, codex: { kind: "linked", treeSha256: shipped } });
   }, 60_000);
 
@@ -1214,6 +1214,28 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(again.acceptance.passed).toBe(false);
     expect(again.acceptance.failures).toContain("resourcesUnbound");
   }, 60_000);
+
+  // The candidate's skill roots may be links: the content behind them is bound as well.
+  const linkedRoots: Array<[string, string, string, string]> = [
+    ["controller skill", "pi-session-orchestration", "codexControllerSkill", "codex"],
+    ["implementation worker skill", "pi-session-implementation", "workerSkillImplementation", "claude"],
+    ["review worker skill", "pi-session-review", "workerSkillReview", "claude"],
+  ];
+  it.each(linkedRoots)("refuses to launch when content behind a symlinked candidate %s root changed", async (_label, skillName, key, client) => {
+    const run = await buildRun();
+    const store = join(run.root, "skill-store", skillName);
+    mkdirSync(join(run.root, "skill-store"), { recursive: true });
+    const root = join(run.candidate, "skills", skillName);
+    renameSync(root, store);
+    symlinkSync(store, root);
+    rerecord(run);
+    // the Codex link in the controller directory points at the candidate's skill path, which is now a link itself
+    expect(run.info.resources[key]).toMatch(/^[0-9a-f]{64}$/);
+    appendFileSync(join(store, "SKILL.md"), "changed behind the link\n");
+    await expect(h.runClient({ run: run.run, client, scenario: "parallel" }, launch(run))).rejects.toThrow(`resourcesChanged: ["${key}"]`);
+    expect(readdirSync(join(run.priv, "results"))).toEqual([]);
+    expect(existsSync(join(run.priv, "launches"))).toBe(false);
+  });
 
   it("refuses to launch when a bound resource changed after prepare", async () => {
     const run = await buildRun();

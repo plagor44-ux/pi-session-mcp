@@ -571,17 +571,17 @@ export function differingCodexControllerSkills(run, candidate, context = {}) {
     .map(([name]) => name);
 }
 /** The link in the Codex controller's directory: what it points at and, when that is the candidate's skill, its tree digest. */
-function codexControllerLink(run, candidate) {
+function codexControllerLink(run, candidate, limit) {
   const link = join(run, "controller-codex", ".agents", "skills", CONTROLLER_SKILL);
   const skill = join(candidate, "skills", CONTROLLER_SKILL);
   // The link must point at the candidate's own skill; its content is what the Codex controller reads.
-  try { return resolve(dirname(link), readlinkSync(link)) === skill ? { status: "linked", tree: treeSha256(skill) } : { status: "wrongTarget" }; } catch { return { status: "missing" }; }
+  try { return resolve(dirname(link), readlinkSync(link)) === skill ? { status: "linked", tree: boundTreeSha256(skill, { limit }) } : { status: "wrongTarget" }; } catch { return { status: "missing" }; }
 }
 /** Per client the kind of controller skill and its tree digest, without paths: Claude Code reads an installed copy, Codex a run-scoped link. */
 export function controllerSkillRecord(run, candidate) {
   const link = codexControllerLink(run, candidate);
   return {
-    claude: { kind: "installed", treeSha256: treeSha256(join(run, "controller-claude", ".claude", "skills", CONTROLLER_SKILL)) },
+    claude: { kind: "installed", treeSha256: boundTreeSha256(join(run, "controller-claude", ".claude", "skills", CONTROLLER_SKILL)) },
     codex: { kind: "linked", treeSha256: link.status === "linked" ? link.tree : link.status },
   };
 }
@@ -608,7 +608,7 @@ export function extensionResources(agentDir, extensions, limit = BOUND_ENTRY_LIM
 export function computeResources(run, candidate, context = {}) {
   const { home = homedir(), agentDir, codexHome, extensions = [], etcCodexSkills = ETC_CODEX_SKILLS, ancestorBoundary, boundLimit } = context;
   const priv = join(run, "private");
-  const link = codexControllerLink(run, candidate);
+  const link = codexControllerLink(run, candidate, boundLimit);
   // A value that is not a hash (`unreadable`, `tooLarge`) must stay visible in the key, never be hashed into one.
   const codexSkill = link.status !== "linked" ? link.status : isIncomplete(link.tree) ? link.tree : sha256(`linked\0${link.tree}`);
   const sources = codexSkillSources(run, { home, codexHome, etcCodexSkills, ancestorBoundary });
@@ -620,8 +620,9 @@ export function computeResources(run, candidate, context = {}) {
     candidateBuild: build,
     controllerSkill: treeSha256(join(run, "controller-claude", ".claude", "skills", CONTROLLER_SKILL)),
     codexControllerSkill: codexSkill,
-    workerSkillImplementation: treeSha256(join(candidate, "skills", "pi-session-implementation")),
-    workerSkillReview: treeSha256(join(candidate, "skills", "pi-session-review")),
+    // The candidate's skill roots are bound through links: a skill root that is a link also binds the content behind it.
+    workerSkillImplementation: bound(join(candidate, "skills", "pi-session-implementation")),
+    workerSkillReview: bound(join(candidate, "skills", "pi-session-review")),
     handshakeSkill: treeSha256(join(priv, "skills", "acceptance-handshake")),
     overrideDirectory: treeSha256(join(priv, "skills")),
     runConfiguration: fileSha256(join(priv, "config.json")),
