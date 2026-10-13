@@ -1550,13 +1550,15 @@ describe("trio scenario: criteria", () => {
     expect(verdict.failures, label).toContain("review:readOnly");
   });
 
-  it("fails the read-only invariance when .git or the baseline cannot be read", async () => {
+  // One fixture build per case.
+  it.each([
+    ["the .git directory is missing", (run: Run) => { rmSync(join(reviewDir(run), ".git"), { recursive: true }); }, "gitMissing", true],
+    ["the baseline cannot be read", () => {}, "baselineUnreadable", false],
+  ])("fails the read-only invariance when %s", async (_label, damage, error, useBaseline) => {
     const run = await buildRun();
-    rmSync(join(reviewDir(run), ".git"), { recursive: true });
-    const out = reviewOracle(run);
-    expect(out.review).toMatchObject({ readOnlyInvariant: false, onlyAllowedChanges: false, baselineError: "gitMissing" });
-    const other = await buildRun();
-    expect(h.oracle(other.controller("claude"), "trio", other.info, {}, () => undefined).review).toMatchObject({ readOnlyInvariant: false, baselineError: "baselineUnreadable" });
+    damage(run);
+    const baselineOf = useBaseline ? run.baselineOf("claude") : () => undefined;
+    expect(h.oracle(run.controller("claude"), "trio", run.info, {}, baselineOf).review).toMatchObject({ readOnlyInvariant: false, onlyAllowedChanges: false, baselineError: error });
   });
 
   it("reports an untouched fixture, and one the reviewer only read, as unchanged", async () => {
