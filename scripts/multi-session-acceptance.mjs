@@ -39,6 +39,11 @@ import { parseArgs } from "node:util";
 const SERVER = "pi-candidate";
 const TOOLS = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"];
 const CLIENTS = { claude: "cc", codex: "cx" };
+// Two coding profiles: every task gets `accept-code`; only the slug session also gets the handshake skill.
+export const CODE_PROFILE = "accept-code";
+export const HANDSHAKE_PROFILE = "accept-code-handshake";
+export const CODE_SKILLS = ["implementation"];
+export const HANDSHAKE_SKILLS = ["implementation", "handshake"];
 const SCENARIOS = {
   parallel: { tasks: ["slug", "stats"] },
   abort: { tasks: ["wait", "range"] },
@@ -521,7 +526,9 @@ export function prepare(values, { env = process.env, home = homedir(), temporary
     },
     executionProfiles: {
       "accept-read": { default: true, permissionProfile: "read-only", ...profile, skills: ["review"] },
-      "accept-code": { default: false, permissionProfile: "coding", ...profile, skills: ["implementation", "handshake"] },
+      // Only the slug session needs the handshake; offering it elsewhere let a worker apply it to an unrequested file.
+      [CODE_PROFILE]: { default: false, permissionProfile: "coding", ...profile, skills: CODE_SKILLS },
+      [HANDSHAKE_PROFILE]: { default: false, permissionProfile: "coding", ...profile, skills: HANDSHAKE_SKILLS },
     },
   };
   const configBytes = Buffer.from(`${JSON.stringify(config, null, 2)}\n`);
@@ -601,13 +608,15 @@ function prompt(client, scenario) {
   const common = [
     `You are the controller of an acceptance run of the Pi Session MCP server named \`${SERVER}\`. Use your \`pi-session-orchestration\` skill and call the \`${SERVER}\` MCP tools yourself; do not write scripts that call them.`,
     "Start with pi_capabilities_get and state the server version and the configuration fingerprint you saw.",
-    "Use the execution profile `accept-code` for every task. Wait 5 to 10 seconds with the shell command `sleep` between polling rounds. Total time budget: 15 minutes.",
+    scenario === "parallel"
+      ? `Use the execution profile \`${HANDSHAKE_PROFILE}\` for the SLUG session and \`${CODE_PROFILE}\` for the STATS session; no other session uses \`${HANDSHAKE_PROFILE}\`. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`
+      : `Use the execution profile \`${CODE_PROFILE}\` for every task. Wait 5 to 10 seconds with the shell command \`sleep\` between polling rounds. Total time budget: 15 minutes.`,
     `Read files and run commands only inside ./fixtures and your own skill directory ${client === "claude" ? "./.claude/skills" : "./.agents/skills"}; every other directory of this run is off limits. The operator checks the handshake content; you only check that the file exists.`,
   ];
   if (scenario === "parallel") return [...common,
     "Run these two tasks in parallel, each in its own Pi session; start both first turns before waiting for either:",
-    `- SLUG: workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
-    `- STATS: workspace alias \`${p}-stats\` (local copy: ./fixtures/stats). Make \`node --test\` pass by implementing \`median\` in \`src/stats.js\`; change only that file.`,
+    `- SLUG: execution profile \`${HANDSHAKE_PROFILE}\`, workspace alias \`${p}-slug\` (local copy: ./fixtures/slug). Make \`node --test\` pass by implementing \`slugify\` in \`src/slug.js\`; change only that file.`,
+    `- STATS: execution profile \`${CODE_PROFILE}\`, workspace alias \`${p}-stats\` (local copy: ./fixtures/stats). Make \`node --test\` pass by implementing \`median\` in \`src/stats.js\`; change only that file.`,
     "After the first SLUG turn succeeded, send one follow-up prompt in the same SLUG session: add one more test case to `test/slug.test.js` for a string with leading and trailing whitespace (it must pass), and complete the acceptance handshake described in the worker's available skills.",
     "Verify every result yourself before closing (read the changed files, run `node --test` in the fixture directory, check `git -C <fixture> status --short`). Close every session you started.",
     "Finish with a short report: per task the final turn state, whether your own verification passed, and whether all sessions were closed.",
@@ -886,7 +895,7 @@ export function analyze(client, scenario, calls, info, rawText) {
   const p = CLIENTS[client];
   const counts = Object.fromEntries(TOOLS.map((tool) => [tool, calls.filter((call) => call.tool === tool).length]));
   const capabilities = calls.find((call) => call.tool === "pi_capabilities_get" && call.result?.ok)?.result;
-  const code = capabilities?.executionProfiles?.find((profile) => profile.alias === "accept-code");
+  const profileSkills = (alias) => capabilities?.executionProfiles?.find((profile) => profile.alias === alias)?.skills;
   const sessions = new Map();
   for (const call of calls) if (call.tool === "pi_session_start" && call.result?.ok) sessions.set(call.result.session.id, { workspace: call.result.session.workspace, profile: call.result.session.executionProfile, turns: new Map(), closed: false, aborts: [], abortedSeenAt: undefined, closedAt: undefined, polls: 0, liveness: new Map() });
   calls.forEach((call, index) => {
@@ -927,7 +936,8 @@ export function analyze(client, scenario, calls, info, rawText) {
   const result = {
     capabilitiesFirst: calls[0]?.tool === "pi_capabilities_get",
     candidateConfirmed: capabilities?.server?.version === info.version && capabilities?.configuration?.fingerprint === info.configFingerprint,
-    acceptCodeSkills: code?.skills,
+    acceptCodeSkills: profileSkills(CODE_PROFILE),
+    acceptCodeHandshakeSkills: profileSkills(HANDSHAKE_PROFILE),
     toolCalls: counts,
     sessionsStarted: sessions.size,
     sessions: [...sessions.values()].map((session) => ({ workspace: session.workspace, profile: session.profile, turns: turnsOf(session).map((turn) => turn.state), polls: session.polls, aborts: session.aborts, closed: session.closed,
@@ -1016,7 +1026,10 @@ export function evaluateAcceptance(result, scenario) {
   need(Object.keys(result.processes?.residualByRole ?? {}).length === 0, "residualProcesses");
   need(t.capabilitiesFirst === true, "capabilitiesNotFirst");
   need(t.candidateConfirmed === true, "candidateNotConfirmed");
-  need(JSON.stringify(t.acceptCodeSkills) === JSON.stringify(["implementation", "handshake"]), "workerSkills");
+  // Both coding profiles offer exactly their skills, and only the slug session ran on the profile with the handshake.
+  const expectedProfile = (workspace) => (workspace === `${prefix}-slug` ? HANDSHAKE_PROFILE : CODE_PROFILE);
+  need(JSON.stringify(t.acceptCodeSkills) === JSON.stringify(CODE_SKILLS) && JSON.stringify(t.acceptCodeHandshakeSkills) === JSON.stringify(HANDSHAKE_SKILLS)
+    && (t.sessions ?? []).every((session) => session.profile === expectedProfile(session.workspace)), "workerSkills");
   need(t.structuralLeaks === 0, "structuralLeaks");
   need(t.tokenInControllerPrompts === false && t.tokenInControllerTask === false && t.controllerTranscriptHasToken === false, "tokenExposed");
   need(t.privateMarkersInWorkerPrompts === false && t.controllerTouchedPrivate === false, "privateAccess");
@@ -1221,7 +1234,7 @@ export function evidence(values) {
   const text = JSON.stringify({
     runId: info.runId, date: info.preparedAt.slice(0, 10), platform: `${process.platform}-${process.arch}`, node: process.versions.node,
     sourceCommit: info.sourceCommit, sourceClean: info.sourceClean, version: info.version, entrySha256: info.entrySha256, distSha256: info.distSha256, harnessSha256: info.harnessSha256,
-    configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, controllerSkills: info.controllerSkills, profiles: ["accept-read", "accept-code"], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
+    configFingerprint: info.configFingerprint, claudeSkillSetup: info.claudeSkillSetup, controllerSkills: info.controllerSkills, profiles: ["accept-read", CODE_PROFILE, HANDSHAKE_PROFILE], derivedFrom: { provider: info.profile.provider, model: info.profile.model, thinkingLevel: info.profile.thinkingLevel },
     extensions: info.extensions ?? [], resources: info.resources,
     results: list(join(priv, "results")).map(({ value }) => value),
     reanalyses: list(join(priv, "reanalyses")).map(({ name, value }) => ({ file: name.replace(/\.json$/, ""), ...value })),

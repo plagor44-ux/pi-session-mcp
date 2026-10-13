@@ -645,8 +645,98 @@ describe("prepare binds the agent directory", () => {
     expect(codexArgs.find((arg) => arg.startsWith("mcp_servers.pi-candidate.env="))).toContain(`PI_CODING_AGENT_DIR=${JSON.stringify(expected)}`);
     expect(prepared.info.resources.extensionNpmInstallation).toBe("none");
     expect(Object.keys(prepared.info.resources).filter((name) => name.startsWith("extension:"))).toEqual([]);
+    // two coding profiles: the handshake skill is offered only on the second
+    const profiles = JSON.parse(readFileSync(join(prepared.priv, "config.json"), "utf8")).executionProfiles;
+    expect(Object.keys(profiles).sort()).toEqual(["accept-code", "accept-code-handshake", "accept-read"]);
+    expect(profiles["accept-code"]).toMatchObject({ permissionProfile: "coding", default: false, skills: ["implementation"] });
+    expect(profiles["accept-code-handshake"]).toMatchObject({ permissionProfile: "coding", default: false, skills: ["implementation", "handshake"] });
+    expect(profiles["accept-read"]).toMatchObject({ default: true, skills: ["review"] });
+    const { skills: _a, permissionProfile: _b, default: _c, ...codeProfile } = profiles["accept-code"];
+    const { skills: _d, permissionProfile: _e, default: _f, ...handshakeProfile } = profiles["accept-code-handshake"];
+    expect(handshakeProfile).toEqual(codeProfile);
     expect(prepared.setupEnv.PI_CODING_AGENT_DIR).toBeNull();
   }, 60_000);
+});
+
+// ---- #68: the handshake skill only for the slug task ----------------------------------------------------
+describe("handshake profile split", () => {
+  const info = { node: process.execPath, entry: "/entry.js", agentDir: "/agent" };
+  const lineWith = (text: string, needle: string) => text.split("\n").find((line) => line.includes(needle)) ?? "";
+
+  it("names the profile of each task in the controller prompt", () => {
+    const text = h.command("claude", info, "/private", "/controller", { scenario: "parallel" }).args[1] as string;
+    expect(lineWith(text, "- SLUG:")).toContain("`accept-code-handshake`");
+    expect(lineWith(text, "- STATS:")).toContain("`accept-code`");
+    expect(lineWith(text, "- STATS:")).not.toContain("accept-code-handshake");
+    expect(lineWith(text, "Use the execution profile")).toContain("no other session uses `accept-code-handshake`");
+    // the Codex controller gets the same task text
+    const codex = h.command("codex", info, "/private", "/controller", { scenario: "parallel" }).args as string[];
+    expect(codex.at(-1)).toContain("- SLUG: execution profile `accept-code-handshake`");
+  });
+
+  it("offers only accept-code to the tasks of the abort scenario", () => {
+    for (const client of ["claude", "codex"]) {
+      const args = h.command(client, info, "/private", "/controller", { scenario: "abort" }).args as string[];
+      const text = (client === "claude" ? args[1] : args.at(-1)) as string;
+      expect(text).toContain("Use the execution profile `accept-code` for every task.");
+      expect(text).not.toContain("accept-code-handshake");
+    }
+  });
+
+  const capabilities = (code: string[] | undefined, handshake: string[] | undefined) => ({ tool: "pi_capabilities_get", input: {}, result: { ok: true, server: { version: "1" }, configuration: { fingerprint: "f" },
+    executionProfiles: [{ alias: "accept-read", skills: ["review"] }, ...(code ? [{ alias: "accept-code", skills: code }] : []), ...(handshake ? [{ alias: "accept-code-handshake", skills: handshake }] : [])] } });
+  const analysisInfo = { candidate: "/nowhere", token: "tok", version: "1", configFingerprint: "f" };
+
+  it("reads the skills of both coding profiles from the capabilities the controller saw", () => {
+    const seen = h.analyze("claude", "parallel", [capabilities(["implementation"], ["implementation", "handshake"])], analysisInfo, "");
+    expect(seen.acceptCodeSkills).toEqual(["implementation"]);
+    expect(seen.acceptCodeHandshakeSkills).toEqual(["implementation", "handshake"]);
+    const missing = h.analyze("claude", "parallel", [capabilities(["implementation"], undefined)], analysisInfo, "");
+    expect(missing.acceptCodeHandshakeSkills).toBeUndefined();
+  });
+
+  // A result that satisfies every criterion; each case below breaks exactly one thing.
+  const check = (extra: Record<string, boolean> = {}) => ({ onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true, testsPass: true, businessChecks: true, ...extra });
+  const session = (workspace: string, profile: string) => ({ workspace, profile, closed: true, turns: ["completed"] });
+  const passing = (overrides: Record<string, unknown> = {}) => ({
+    client: "claude", exitCode: 0, timedOut: false, spawnFailed: false, harnessAborted: false,
+    resources: { changedAfterRun: [] }, processes: { serversObserved: 1, residualByRole: {} },
+    transcript: {
+      capabilitiesFirst: true, candidateConfirmed: true, acceptCodeSkills: ["implementation"], acceptCodeHandshakeSkills: ["implementation", "handshake"],
+      structuralLeaks: 0, tokenInControllerPrompts: false, tokenInControllerTask: false, controllerTranscriptHasToken: false, privateMarkersInWorkerPrompts: false, controllerTouchedPrivate: false,
+      sessionsStarted: 2, sessions: [session("cc-slug", "accept-code-handshake"), session("cc-stats", "accept-code")], firstTurnsOverlap: true, followUpCompleted: true,
+      ...overrides,
+    },
+    oracle: { slug: check({ addedTest: true, handshake: true, handshakeWrittenDuringFollowUp: true }), stats: check() },
+  });
+
+  it("passes the skill criterion when both profiles offer exactly their skills and only slug used the handshake profile", () => {
+    expect(h.evaluateAcceptance(passing(), "parallel")).toEqual({ passed: true, failures: [] });
+  });
+
+  it.each([
+    ["a non-slug task on the handshake profile", { sessions: [session("cc-slug", "accept-code-handshake"), session("cc-stats", "accept-code-handshake")] }],
+    ["the slug task on the profile without the handshake", { sessions: [session("cc-slug", "accept-code"), session("cc-stats", "accept-code")] }],
+    ["a session on a profile that is neither coding profile", { sessions: [session("cc-slug", "accept-code-handshake"), session("cc-stats", "accept-read")] }],
+    ["an accept-code profile that still offers the handshake", { acceptCodeSkills: ["implementation", "handshake"] }],
+    ["an accept-code profile without the implementation skill", { acceptCodeSkills: [] }],
+    ["a handshake profile without the handshake", { acceptCodeHandshakeSkills: ["implementation"] }],
+    ["a handshake profile in another skill order", { acceptCodeHandshakeSkills: ["handshake", "implementation"] }],
+    ["a handshake profile the controller never saw", { acceptCodeHandshakeSkills: undefined }],
+  ])("fails the skill criterion for %s, and nothing else", (_label, overrides) => {
+    expect(h.evaluateAcceptance(passing(overrides), "parallel")).toEqual({ passed: false, failures: ["workerSkills"] });
+  });
+
+  it("fails the skill criterion in the abort scenario when any task used the handshake profile", () => {
+    const abort = (profiles: [string, string]) => ({ ...passing({ sessions: [session("cc-wait", profiles[0]), session("cc-range", profiles[1])], abortedTurn: true, abortOk: true, abortedBeforeClose: true, abortBeforeAbortedSeen: true, neighborCompleted: true, abortWhileNeighborRunning: true }),
+      oracle: { wait: { onlyAllowedChanges: true, changesWrittenDuringWorkerTurns: true, lateFileAbsent: true }, range: check() } });
+    expect(h.evaluateAcceptance(abort(["accept-code", "accept-code"]), "abort")).toEqual({ passed: true, failures: [] });
+    expect(h.evaluateAcceptance(abort(["accept-code", "accept-code-handshake"]), "abort").failures).toEqual(["workerSkills"]);
+  });
+
+  it("keeps the scope allowance for the handshake file strict: only the slug task may write it", () => {
+    expect(h.ALLOWED_CHANGES).toEqual({ slug: ["src/slug.js", "test/slug.test.js", "HANDSHAKE.txt"], stats: ["src/stats.js"], wait: [], range: ["src/range.js"] });
+  });
 });
 
 describe.skipIf(notLinux)("runs against a synthetic layout with a controlled client", () => {
@@ -827,6 +917,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
     expect(record.reanalyses.map((entry: { file: string }) => entry.file)).toEqual(["claude-parallel-001", "claude-parallel-002", "claude-parallel-003"]);
     expect(record.resources.controllerSkill).toMatch(/^[0-9a-f]{64}$/);
     expect(record.extensions).toEqual([]);
+    expect(record.profiles).toEqual(["accept-read", "accept-code", "accept-code-handshake"]);
     const text = readFileSync(out, "utf8");
     for (const secret of [run.info.token, run.run, run.candidate]) expect(text).not.toContain(secret);
   }, 60_000);
