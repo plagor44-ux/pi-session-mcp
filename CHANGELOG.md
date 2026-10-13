@@ -19,6 +19,38 @@
   failed Doctor ends the target's verify before inspection and the handshake.
   None of these cases mutates a registration or starts the handshake. See
   [client setup](docs/client-setup.md#verify-diagnostics). Issue #56.
+- Fixed: `--dry-run` of a pending version 2 skill transaction now reports
+  `skill_recovery_retained` (divergent, exit 1) whenever `--apply` would retain
+  an intermediate, using the same read-only classification as the recovery, and
+  otherwise `skill_recovery_planned`. Before, it announced
+  `skill_recovery_planned` without inspecting the intermediates. A dry-run
+  never writes. See [Pi skills](docs/skills.md#interrupted-updates). Issue #60.
+- Changed: the `pi-session-orchestration` skill classifies every documented
+  `pi_session_start` error code as operator needed, transient or unknown, by
+  the stable code only. A code that is not listed is unknown, and the
+  `startup_failed` diagnostics mean that no MCP server is available. The MCP
+  tool contract and the error codes are unchanged. Issue #62.
+- Acceptance harness (maintainer script `scripts/multi-session-acceptance.mjs`,
+  not part of the npm package and not the package runtime): a run binds the
+  contents of the loaded Pi extensions, Pi's npm installation and the
+  candidate's skills, including content behind links, and passes the agent
+  directory to its server (#66); it binds every Codex skill source, launches
+  Codex with the recorded `CODEX_HOME` and refuses a run when any source holds
+  a differing controller skill, found by directory or declared name (#67); an
+  unreadable or too large bound resource refuses the run and fails the verdict
+  with the new code `resourcesUnbound` (#66, #67); and the handshake test skill
+  is offered only to the task that needs it, through a separate profile (#68).
+  See [acceptance](docs/acceptance.md#multi-session-skill-acceptance).
+- CI: the test step runs with `NODE_OPTIONS=--unhandled-rejections=strict` on
+  the existing matrix, the same command that README, [CONTRIBUTING](CONTRIBUTING.md),
+  [Releasing](docs/releasing.md) and acceptance now name. Issue #63.
+- Documentation: delivery-status notes on the historical macOS and Pi
+  extension plans (#64); acceptance wording that separates targeted
+  multi-session evidence from a Level 3 cycle, and one definition of the
+  package version, the MCP tool contract and the setup report `schemaVersion`
+  in the [tool contracts](docs/tool-contracts.md#versions) (#65); the Sprint 2
+  status file ([`docs/sprints/2026-10-13-s2-evidence.md`](docs/sprints/2026-10-13-s2-evidence.md))
+  with the Sprint 1 closure and the roadmap status.
 - Documentation: the Sprint 1 status file
   ([`docs/sprints/2026-10-13-s1-correctness.md`](docs/sprints/2026-10-13-s1-correctness.md)),
   the roadmap status, and the v0.8.1 post-release evidence carried from the

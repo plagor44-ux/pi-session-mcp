@@ -185,11 +185,11 @@ Maintain:
 npm ci
 npm run typecheck
 npm run build:cli
-npm test
+NODE_OPTIONS=--unhandled-rejections=strict npm test
 npm run build
 ```
 
-These are the checks that CI runs. Tests use a fake Pi adapter or a scripted model and need no provider credentials. Every direct dependency is pinned exactly, and the lockfile is committed. The project rules for contributors and coding agents are in [AGENTS.md](AGENTS.md).
+These are the checks that CI runs, with the same strict handling of unhandled promise rejections. Tests use a fake Pi adapter or a scripted model and need no provider credentials. Every direct dependency is pinned exactly, and the lockfile is committed. The project rules for contributors and coding agents are in [AGENTS.md](AGENTS.md).
 
 The Pi SDK moves quickly, so a nightly canary checks the unchanged sources against the newest published SDK without touching the pin. [Releasing](docs/releasing.md) describes how to update the pin, record a client contract, patch audit advisories and prepare a release.
 

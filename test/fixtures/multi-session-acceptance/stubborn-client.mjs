@@ -6,6 +6,7 @@
 //   leaks-pipe    exits 0 at once; one descendant keeps the pipe open
 //   mutate        edits FAKE_CLIENT_TOUCH, then exits 0
 //   delete        deletes FAKE_CLIENT_TOUCH, then exits 0
+//   record-env    writes the CODEX_HOME it was started with (or null) to the state file, then exits 0
 import { spawn } from "node:child_process";
 import { appendFileSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 
@@ -23,6 +24,9 @@ const publish = (state) => {
 
 if (mode === "mutate") {
   appendFileSync(process.env.FAKE_CLIENT_TOUCH, "\nchanged during the run\n");
+  process.stdout.write("done\n");
+} else if (mode === "record-env") {
+  writeFileSync(statePath, JSON.stringify({ CODEX_HOME: process.env.CODEX_HOME ?? null }));
   process.stdout.write("done\n");
 } else if (mode === "delete") {
   rmSync(process.env.FAKE_CLIENT_TOUCH);

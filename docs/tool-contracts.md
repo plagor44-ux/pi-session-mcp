@@ -15,6 +15,24 @@ Every response includes text JSON for broad client compatibility and the same ob
 
 There are exactly eight tools. No `pi_turn_wait` tool or live provider/model inventory exists.
 
+## Versions
+
+Three different versions exist. They identify different things and change for
+different reasons; none of them stands in for another.
+
+| Version | What it identifies | Where it appears | When it changes |
+| --- | --- | --- | --- |
+| Package version | One build and release of Pi Session MCP: the npm package, the GitHub release and the server. | `package.json`; `server.version` of `pi_capabilities_get`; `packageVersion` of the Doctor result | With every release. A release that keeps the MCP tool contract is a patch release. |
+| MCP tool contract | The eight tools of this document: their inputs, response fields, states and error codes. | Only this document. It carries no version number of its own and no tool, field or code names one. | A change to a tool, field, state or error code needs a new minor release and its own decision, so within a `0.x` minor line the contract is stable. A client identifies its compatibility by the package version, as `pi_capabilities_get` reports it, and by this document at that release. |
+| Setup report `schemaVersion` | The shape of the result of `pi-session-mcp-setup`, currently `1`; the human output derives from the same result. | The `schemaVersion` field of the `--json` report | Independent of the package version and no part of the MCP tool contract; a release does not change it by itself. It has been `1` since the first public release, and no document defines a further rule for changing it. |
+
+The setup report is not an MCP response. The Doctor result has its own
+`schemaVersion` (currently `1`), and the skill customization bases file has a
+`schemaVersion` (currently `2`) that is separate again; neither is the setup
+report's. Release rules are in [Releasing](releasing.md#versioning); acceptance
+records name the package version and the build they ran on, see
+[Acceptance](acceptance.md#evidence-rules).
+
 ## Capability discovery
 
 `pi_capabilities_get` accepts only `{}`. Unknown fields fail MCP schema validation. Success has this strict shape:

@@ -7,56 +7,69 @@ preserves source bindings, reproductions, checks and all R01–R23 items.
 
 PR #55 and v0.8.1 have green final native CI, but the review reproduced a
 skill-recovery data-preservation defect and confirmed #56's verify diagnosis.
-Fix those first, then complete real acceptance. Recording tasks does not mean
-they are implemented or that their gates passed.
+Both were fixed in Sprint 1; real acceptance follows. Recording tasks does not
+mean they are implemented or that their gates passed.
 
 ## Current state
 
-Updated 2026-10-13. Base main `3e360dd672cbffcce2913a5cf9f6333a0262f077`;
-Sprint 1 work is on branch `fix/59-56-s1-correctness`, not yet merged.
+Updated 2026-10-13. Base main `b145f8c32cca76d23628ac8830069cee5ccbaece`
+(the merge of Sprint 1).
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
   [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57). That does not
   complete the rest of the backlog.
-- R01 is [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) and
-  R02 is [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56). Both
-  are fixed on the Sprint 1 branch and verified on native Linux; #56 also with
-  real clients. Both issues stay open until the pull request is merged. (#56
-  had been closed once by the documentation merge although the code was
-  unchanged.)
-- Sprint 1 is in its exit gate: the final-head CI matrix and the maintainer's
-  merge decision are outstanding. Status, owners, criteria and evidence are in
-  the [Sprint 1 file](sprints/2026-10-13-s1-correctness.md).
-- The independent review left one follow-up outside Sprint 1:
-  [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), a dry-run
-  that announces a recovery that apply retains.
+- Sprint 1 is closed. Pull request
+  [#61](https://github.com/plagor44-ux/pi-session-mcp/pull/61) was merged on
+  2026-10-13 as `b145f8c`. Its final-head CI runs (`38389636823` and
+  `38389630496`) and the CI run on main (`38402514112`) succeeded on
+  `ubuntu-latest`, `macos-15`, `macos-26` and `verify`. It closed
+  [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) (R01) and
+  [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) (R02) as
+  completed. Details are in the closure section of the
+  [Sprint 1 file](sprints/2026-10-13-s1-correctness.md#closure).
+- Sprint 2 is in its exit gate on branch `fix/s2-evidence`, not yet merged.
+  Its tasks are verified on native Linux (native gate, Pi SDK canary, Level 2)
+  and by two independent reviews; the final-head CI and the maintainer's merge
+  decision are outstanding. Status, owners, criteria and evidence are in the
+  [Sprint 2 file](sprints/2026-10-13-s2-evidence.md). Its issues stay open
+  until the merge.
+- [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60), the dry-run
+  that announced a recovery that apply retains, is fixed on that branch.
 
-### Sprint 1 task status
+### Sprint 2 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
-| R01 recovery retains unprovable trash | [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59) | verified on native Linux; final-head CI pending; not merged |
-| R02 verify diagnostics | [#56](https://github.com/plagor44-ux/pi-session-mcp/issues/56) | verified on native Linux and with real clients; final-head CI pending; not merged |
-| R03 native QA gate | None; delivered in the Sprint 1 pull request | verified on native Linux for the runtime candidate |
-| R19 v0.8.1 evidence carry-over | None; delivered in the Sprint 1 pull request | verified against the release notes |
-| R21 consolidated roadmap | [#57](https://github.com/plagor44-ux/pi-session-mcp/issues/57), [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58) | delivered (documentation only) |
+| R04 orchestration skill start-code classification | [#62](https://github.com/plagor44-ux/pi-session-mcp/issues/62) | verified; not merged |
+| R13 bind loaded extension contents (harness) | [#66](https://github.com/plagor44-ux/pi-session-mcp/issues/66) | verified; not merged |
+| R14 bind Codex skill sources (harness) | [#67](https://github.com/plagor44-ux/pi-session-mcp/issues/67) | verified; not merged |
+| Handshake offered only where needed (harness) | [#68](https://github.com/plagor44-ux/pi-session-mcp/issues/68) | verified; not merged |
+| Dry-run predicts a retained intermediate | [#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60) | verified on native Linux and Level 2; not merged |
+| R16 strict unhandled rejections in CI | [#63](https://github.com/plagor44-ux/pi-session-mcp/issues/63) | implemented; takes effect in the pull request's CI |
+| R20 delivery status of the historical plans | [#64](https://github.com/plagor44-ux/pi-session-mcp/issues/64) | verified; not merged |
+| R23 acceptance and versioning wording | [#65](https://github.com/plagor44-ux/pi-session-mcp/issues/65) | verified; not merged |
+| R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; the Sprint 2 file holds a proposed text |
+| R15 explicit unverified code for an unreadable start time | None | not included; entry condition in the Sprint 2 file |
+| Current-source Pi SDK canary on the frozen candidate | None | verified: Pi SDK 1.2.0 compatible with the candidate; pin 1.1.0 unchanged |
+
+R19 and R21 were delivered in Sprint 1 and by #58.
 
 Status words: planned, in progress, implemented (code exists), verified (named
-criteria met with evidence), blocked. No sprint is complete: Sprint 1 closes
-only with passing final-head CI and the merge, and Sprint 2 starts after that
-gate.
+criteria met with evidence), blocked. Sprint 2 closes only with its evidence,
+a passing final-head CI, the independent review and the merge; Sprint 3 starts
+after that gate.
 
 ## Sprints and exit gates
 
 The dates are proposed windows, not commitments. Dependent work waits for its
 gate; independent Mac setup verification and documentation may run alongside.
-Later windows shift with the Sprint 1 gate.
+Later windows shift with the gate of the sprint before them.
 
 | Sprint | Proposed window | Work | Exit gate |
 | --- | --- | --- | --- |
 | S1: correctness | Oct 13–14; 1–2 sessions plus native QA | R01 recovery fix, R02/#56 diagnosis, R03 native checks, R19 evidence record | Operator data preserved; correct existing codes; native Level 1, final review/CI and relevant Level 2 pass |
-| S2: evidence | Oct 15–16; 1–2 sessions | R04, R13/R14 resource binding, R16 strict CI, R19–R23 documentation; R15 only if justified | Changed resources invalidate acceptance; original failures retained; remainder has issues or entry conditions |
+| S2: evidence | Oct 15–16; 1–2 sessions | R04, R13/R14 resource binding, handshake offering, #60, R16 strict CI, R20, R22 and R23 documentation, current-source canary; R15 not included (entry condition in the Sprint 2 file) | Changed resources invalidate acceptance; original failures retained; remainder has issues or entry conditions |
 | S3: live usage | Oct 17–20; 2–3 bounded sessions | R05–R11: same-build ten-task cycle, Codex abort scope/discovery, third/read-only worker, intended profile, current Mac acceptance | Existing Level-3 gate plus all scope/security/cleanup criteria; no claim beyond tested combinations |
 | S4: decision | Oct 21–23; 1 evaluation | Usage metrics, conditional R12/R15/R17/R18 | Maintenance or at most one justified investment, with focused issue and ADR where required |
 
@@ -103,10 +116,11 @@ in-memory state and one trusted local peer.
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |
 | Multi-user/UI/credentials | Separate justified product scope and ADR |
+| Explicit unverified code for an unreadable client start time (R15) | A run that passes while the start time was unreadable, or a demonstrated need; today the run fails with `noServerObserved`, so it cannot pass falsely |
 | Former pi-control #31/#32 | Closed as not_planned; no automatic migration/reopening |
 | Former release gates/#11–#14 | Historical; bind current acceptance to the current build |
 
-0.8.2 is a possible S1 patch candidate only if the MCP contract remains
-unchanged and its gates pass. Apply the current [release procedure](releasing.md):
+0.8.2 is a possible patch candidate only if the MCP contract remains
+unchanged and its gates pass. Sprint 1 changed no version. Apply the current [release procedure](releasing.md):
 version and pre-release acceptance travel in the change PR. Merge, tagging and
 publication remain maintainer decisions. No release is authorized by this plan.

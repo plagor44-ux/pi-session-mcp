@@ -16,7 +16,13 @@ does not authorize any of them.
 - A change to the public contract needs a minor release and its own decision.
 
 The public contract is the set of eight tools with their fields, states and
-error codes, as defined in the [tool contracts](tool-contracts.md).
+error codes, as defined in the [tool contracts](tool-contracts.md). How the
+package version, the MCP tool contract and the setup report's `schemaVersion`
+differ is defined under [Versions](tool-contracts.md#versions).
+
+Wherever this document asks for the Level 1 checks, the test step is
+`NODE_OPTIONS=--unhandled-rejections=strict npm test`. CI uses the same
+setting, so an unhandled promise rejection fails the run locally and in CI.
 
 A release is distributed twice: as the GitHub release with its source archive,
 and as the npm package `pi-session-mcp`. The npm package contains the built

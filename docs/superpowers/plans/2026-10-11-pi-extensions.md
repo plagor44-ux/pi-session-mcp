@@ -1,5 +1,19 @@
 # Pi Extensions Implementation Plan
 
+> **Delivery status (2026-10-13).** Historical plan. Its work is delivered, so
+> do not execute it again. The checkboxes below are historical and were not
+> maintained; do not read an unchecked box as open work.
+>
+> | Plan tasks | Delivered by | State |
+> | --- | --- | --- |
+> | 1-9: extension specs in configuration and capabilities, resolution without installing, Doctor checks, stdout guard, plain-text prompts, extension session path, SDK contract fixture, process-level evidence, governance and documentation ([ADR 0006](../../adr/0006-pi-extension-allowlist.md)) | [#35](https://github.com/plagor44-ux/pi-session-mcp/pull/35) (the feature), [#37](https://github.com/plagor44-ux/pi-session-mcp/pull/37) (release 0.7.0) and [#44](https://github.com/plagor44-ux/pi-session-mcp/pull/44) (post-0.7.0 follow-ups), all merged 2026-10-11; issue [#34](https://github.com/plagor44-ux/pi-session-mcp/issues/34) closed as completed | Delivered; the audit's reconciliation maps tasks 1-9 to #35, #37 and #44 together and does not assign single tasks to single pull requests |
+> | 10: working-tree live acceptance with `pi-cursor-sdk` | Documented in [acceptance](../../acceptance.md#status) and carried on in [#55](https://github.com/plagor44-ux/pi-session-mcp/pull/55) (release 0.8.1), including Claude Code parallel and abort runs | Documented for the recorded combinations only |
+>
+> Actual remainder: the controller and platform limits listed in the
+> [audit](../../reviews/2026-10-13-post-0.8.1-audit.md#plan-and-adr-reconciliation)
+> and the [roadmap](../../roadmap.md), no duplicate implementation, and this
+> status note itself.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Operators can allowlist exactly pinned Pi extensions per execution profile. Those extensions then load with full capabilities in embedded sessions, and stdout stays reserved for MCP frames.

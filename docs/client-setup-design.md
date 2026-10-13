@@ -160,9 +160,11 @@ copies:
 - Operator settlement of a retained trash directory: inspect the
   `.pi-session-mcp-<skill>-<transactionId>.trash` directory next to the slot,
   move any own content elsewhere, delete that directory, and rerun the same
-  setup command. A dry-run still announces `skill_recovery_planned` without
-  inspecting intermediates, so an apply can still retain
-  ([#60](https://github.com/plagor44-ux/pi-session-mcp/issues/60)).
+  setup command.
+- For a pending version 2 transaction, `--dry-run` reports
+  `skill_recovery_retained` (divergent, exit 1) whenever `--apply` would
+  retain an intermediate, using the same read-only classification as the
+  recovery, and otherwise `skill_recovery_planned`. A dry-run never writes.
 - Random-name directories of 0.8.0 updates are never searched for or deleted;
   an operator may remove them by hand.
 - `--dry-run` and `--verify` do not report leftover intermediates.
@@ -309,7 +311,7 @@ dry-run already separates these states the same way.
 
 Codex and Claude Code are separate adapters with explicit supported scopes and documented capability fixtures. Unknown output fails closed with stable codes. Absolute paths are passed only to client commands where required and are never included in results, logs, or ownership metadata. Client command diagnostics must be reduced to stable codes before crossing this boundary.
 
-Human and JSON output derive from one `schemaVersion: 1` result. Exit code `0` is success, `1` is an operational or reconciliation failure, `64` is command-line misuse, and interrupted setup returns `130` for `SIGINT` or `143` for `SIGTERM` only after the guardian cleanup path has completed or retained the fence. Automatic replacement of a divergent registration is deliberately unsupported.
+Human and JSON output derive from one `schemaVersion: 1` result; this version is the setup report's own, not the package version or the MCP tool contract (see [Versions](tool-contracts.md#versions)). Exit code `0` is success, `1` is an operational or reconciliation failure, `64` is command-line misuse, and interrupted setup returns `130` for `SIGINT` or `143` for `SIGTERM` only after the guardian cleanup path has completed or retained the fence. Automatic replacement of a divergent registration is deliberately unsupported.
 
 Stable finding codes are grouped by responsibility:
 
@@ -329,8 +331,9 @@ Stable finding codes are grouped by responsibility:
 - rollback/removal: `rolled_back`, `removed`, `ownership_diverged`,
   `cleanup_failed`;
 - controller skill, dry-run: `skill_absent`, `skill_equivalent`, `skill_linked`,
-  `skill_update_planned`, `skill_recovery_planned`, `skill_divergent`,
-  `skill_legacy_unverified`, `skill_source_invalid`;
+  `skill_update_planned`, `skill_recovery_planned`,
+  `skill_recovery_retained`, `skill_divergent`, `skill_legacy_unverified`,
+  `skill_source_invalid`;
 - controller skill, apply: `skill_installed`, `skill_already_equivalent`, `skill_recovered`, `skill_linked`,
   `skill_updated`, `skill_divergent`, `skill_legacy_unverified`,
   `skill_recovery_retained`, `skill_source_invalid`,
