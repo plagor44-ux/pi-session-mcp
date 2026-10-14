@@ -1404,6 +1404,31 @@ Limitations and failures stated in the notes:
   required Claude Code invocations and Codex `parallel` passed, and Codex
   `abort` had passed on earlier runs of the same build.
 
+### v0.8.2 pre-release acceptance
+
+Before its release, `v0.8.2` passed Level 1 and the working-tree Level 2 on its
+release candidate `bdbdf00` on Linux (`x64`), with Node.js `26.11.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.296`, on 2026-10-13:
+- Level 1 on the release branch: every command exited with `0`.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    54 files, 1409 passed and 6 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 135 files, including the three skills, and
+    no acceptance harness, sources, tests, lockfile or implementation plan.
+  - Doctor reported `packageVersion` `0.8.2`. With the example configuration
+    its only finding was the placeholder workspace.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. All nine steps passed on all four targets.
+  The real client registrations were unchanged, no process remained, and the
+  built files were unchanged.
+- Apart from the version and documentation, the candidate's sources equal
+  `166ffef`, current main; its runtime sources (`src/`, `skills/`) equal
+  those of `0aae639`, on which Sprint 3 ran. Its built modules have the same
+  `dist/main.js` SHA-256 (`47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`)
+  and `dist` tree as the build on which the
+  [Sprint 3 live acceptance](#sprint-3-live-acceptance-2026-10-13) ran, including
+  the accepted ten-task Level 3 cycle.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
