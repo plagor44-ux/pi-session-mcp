@@ -132,6 +132,15 @@ prefix (`npm install -g --prefix <dir> pi-session-mcp@<version>`) and runs the
 lifecycle through the installed `pi-session-mcp-setup`, which also proves the
 executables and the entry-point detection through npm's symlinks.
 
+A packed-tarball run installs the tarball of the release candidate, before it is
+published, into a temporary prefix (`npm pack`, then
+`npm install -g --prefix <dir> ./pi-session-mcp-<version>.tgz`) and runs the
+lifecycle through the installed `pi-session-mcp-setup`. It proves that the
+package resolves its dependencies like a consumer install does, without our
+lockfile, before publication. The working-tree run and the CI build cannot prove
+that, because they install from the lockfile. It is the pre-release counterpart
+of the published-package run.
+
 A published-release run uses a fresh clone of the published tag instead of an
 existing branch or local tag. It additionally records the tag object and the
 peeled commit, confirms `git describe --tags --exact-match`, passes Level 1 on
@@ -178,6 +187,28 @@ node scripts/setup-acceptance.mjs \
   --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
   --label npm-<version> --out level2-result.json
 ```
+
+Packed tarball: pack the built candidate and install the tarball into a
+temporary prefix outside `/tmp`, then pass the installed executable and package
+directory as for the published package.
+
+```bash
+npm pack
+npm install -g --prefix "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
+node scripts/setup-acceptance.mjs \
+  --setup "$PREFIX/bin/pi-session-mcp-setup" \
+  --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
+  --label packed-<x.y.z> --out level2-result.json
+```
+
+The CI job and a nightly workflow (`.github/workflows/install-smoke.yml`) run
+`scripts/install-smoke.mjs` against a lockfile-free install: CI against the
+packed tarball of the commit, the nightly job against the published
+`pi-session-mcp@latest`. The smoke starts the installed server, checks the
+handshake, its name and version and the eight tools, and requires it to exit on
+stdin EOF. It starts no session and uses no provider. Both are early warnings
+for a broken fresh install, not acceptance and not a replacement for the
+packed-tarball run.
 
 Tag clone: build a fresh clone of the tag (`npm ci`, `npm run build`,
 `npm run build:cli`) and use it like the working tree, with `--setup` and

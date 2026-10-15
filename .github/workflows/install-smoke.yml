@@ -1,0 +1,79 @@
+name: Install smoke
+
+# Early warning for a broken fresh install (#78): installs the published
+# `pi-session-mcp@latest` from the registry into a temporary prefix, without any
+# lockfile, so the transitive ranges resolve as they do for a consumer today. Then
+# scripts/install-smoke.mjs starts the installed server and checks its handshake and
+# tool list. It never starts a session and needs no provider. The check itself lives
+# in the script so it can be reproduced locally.
+
+on:
+  schedule:
+    - cron: "47 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: install-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+      - id: smoke
+        name: Install the published package and run the smoke
+        run: |
+          prefix="$RUNNER_TEMP/smoke-prefix"
+          if ! npm install -g --prefix "$prefix" pi-session-mcp@latest; then
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+            echo "code=install_failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          status=0
+          line="$(node scripts/install-smoke.mjs --package-root "$prefix/lib/node_modules/pi-session-mcp")" || status=$?
+          echo "$line"
+          echo "version=$(LINE="$line" node -p 'JSON.parse(process.env.LINE).version ?? "unknown"')" >> "$GITHUB_OUTPUT"
+          echo "code=$(LINE="$line" node -p 'JSON.parse(process.env.LINE).code')" >> "$GITHUB_OUTPUT"
+          exit "$status"
+      - name: Report a broken install
+        if: failure() && steps.smoke.outputs.code != ''
+        uses: actions/github-script@v7
+        env:
+          VERSION: ${{ steps.smoke.outputs.version }}
+          CODE: ${{ steps.smoke.outputs.code }}
+        with:
+          script: |
+            const { VERSION: version, CODE: code } = process.env;
+            const label = "install-smoke";
+            const marker = `<!-- install-smoke:${version} -->`;
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              marker,
+              `A fresh install of \`pi-session-mcp@${version}\` from the registry fails the install smoke.`,
+              "",
+              `- installed version: ${version}`,
+              `- smoke code: \`${code}\``,
+              `- run: ${run}`,
+              "",
+              "Reproduce locally: `npm install -g --prefix \"$PREFIX\" pi-session-mcp@" + version + " && node scripts/install-smoke.mjs --package-root \"$PREFIX/lib/node_modules/pi-session-mcp\"`",
+            ].join("\n");
+            // One open tracker issue carries every report; the oldest labeled one wins.
+            const open = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: "open", labels: label, per_page: 100 });
+            const tracker = open.filter((issue) => !issue.pull_request).sort((a, b) => a.number - b.number)[0];
+            if (!tracker) {
+              await github.rest.issues.create({ ...context.repo, title: `Install smoke: a fresh install of pi-session-mcp@${version} fails`, body, labels: [label] });
+              return;
+            }
+            // Report each broken version once; nightly repeats of the same version stay quiet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: tracker.number, per_page: 100 });
+            if ([tracker.body, ...comments.map((comment) => comment.body)].some((text) => (text ?? "").includes(marker))) return;
+            await github.rest.issues.createComment({ ...context.repo, issue_number: tracker.number, body });

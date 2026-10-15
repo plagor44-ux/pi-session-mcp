@@ -13,7 +13,7 @@ export const PROFILE_TOOLS: Readonly<Record<PermissionProfile, readonly string[]
 const EXTENSION_TOOL_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 
 /**
- * These mirror `isMcpToolName` of Pi SDK 1.1.0 (core/mcp-servers.js), which is not a root
+ * These mirror `isMcpToolName` of Pi SDK 1.2.0 (core/mcp-servers.js), which is not a root
  * export. When the allowlist names no `mcp__` entry, the SDK's `_isAllowedTool` keeps such
  * tools outside the allowlist for codemode and tool_search, so an extension tool with one
  * of these names could be active without being granted. This server's own MCP bridge

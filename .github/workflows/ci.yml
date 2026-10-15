@@ -30,6 +30,14 @@ jobs:
         env:
           NODE_OPTIONS: --unhandled-rejections=strict
       - run: npm run build
+      # Installs the packed package without our lockfile, the way a consumer gets it,
+      # so transitive ranges resolve fresh (#78). An early warning, not acceptance.
+      - name: Pack the built package
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+      - name: Install the tarball into a fresh prefix
+        run: npm install -g --prefix "$RUNNER_TEMP/smoke-prefix" "$RUNNER_TEMP"/pi-session-mcp-*.tgz
+      - name: Install smoke
+        run: node scripts/install-smoke.mjs --package-root "$RUNNER_TEMP/smoke-prefix/lib/node_modules/pi-session-mcp"
 
   # The "Protect main" ruleset requires a check named "verify"; it passes only
   # when every platform in the matrix passed.

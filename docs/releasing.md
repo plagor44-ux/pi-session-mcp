@@ -28,13 +28,27 @@ A release is distributed twice: as the GitHub release with its source archive,
 and as the npm package `pi-session-mcp`. The npm package contains the built
 files, the executables, the operator documentation and the example
 configuration. It contains no implementation plans (`docs/superpowers/`), and
-no lockfile, because npm does not ship lockfiles inside packages.
+no lockfile, because npm does not ship lockfiles inside packages. A consumer
+install therefore resolves every transitive range afresh, which is why the Pi
+SDK's own packages are pinned directly (see [Update the Pi SDK](#update-the-pi-sdk)).
 
 ## Update the Pi SDK
 
-The Pi SDK is pinned exactly. A nightly canary
-(`.github/workflows/pi-sdk-canary.yml`) checks the unchanged sources against the
-newest published `@earendil-works/pi-coding-agent`: typecheck plus every test
+The Pi SDK is pinned exactly, together with its five sibling packages
+`@earendil-works/pi-ai`, `pi-mcp`, `pi-tui`, `pi-codemode` and `pi-agent-core`.
+The SDK declares them with caret ranges, and npm does not ship our lockfile
+inside the package, so a consumer install resolves those ranges fresh. A newer
+sibling can then break the pinned SDK, as in
+[#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78), where
+`pi-codemode` 1.2.0 removed an export that `pi-coding-agent` 1.1.0 imports. We
+do not import the siblings; they are direct, exactly pinned dependencies only so
+that a fresh install resolves the SDK's ranges to the tested versions. The SDK
+and the five siblings therefore always move together, each sibling to the
+version the canary resolves from the SDK release's declared range.
+
+A nightly canary (`.github/workflows/pi-sdk-canary.yml`) checks the unchanged
+sources against the newest published `@earendil-works/pi-coding-agent` together
+with the sibling versions that candidate declares: typecheck plus every test
 that touches the SDK, provider-free. It reports each incompatible version once
 in an open issue labeled `pi-sdk-canary`. A green canary is a signal that an
 update is possible. It is not an update and not an acceptance.
@@ -48,7 +62,8 @@ update is possible. It is not an update and not an acceptance.
    ```
 
    Exit status `0` means compatible, `1` incompatible, and `2` invalid input or
-   a changed manifest.
+   a changed manifest. The script prints the candidate and the sibling versions it
+   resolved from the candidate's declared ranges.
 
 2. Read the upstream changelog between the pinned and the target version. It
    ships in the package as
@@ -59,23 +74,30 @@ update is possible. It is not an update and not an acceptance.
    `src/session-tools.ts`. That function is not a root export, so no test
    notices when the SDK reserves another name.
 
-3. Move the pin:
+3. Move the pins, the SDK and its five siblings in one command:
 
    ```bash
-   npm install --save-exact @earendil-works/pi-coding-agent@<version>
+   npm install --save-exact \
+     @earendil-works/pi-coding-agent@<version> @earendil-works/pi-ai@<ai> \
+     @earendil-works/pi-mcp@<mcp> @earendil-works/pi-tui@<tui> \
+     @earendil-works/pi-codemode@<codemode> @earendil-works/pi-agent-core@<core>
    ```
 
-   `package.json` must change in exactly one line and keep an exact version
-   without a range prefix. Review the lockfile diff: only the SDK's own packages
-   and their dependencies should move, and earlier lockfile-only patches must
-   survive.
+   Use the versions the canary reported. `package.json` must change in exactly
+   six lines, one per package, and keep an exact version without a range
+   prefix. Check with `npm ls` that exactly one copy of each sibling exists.
+   Review the lockfile diff: only the SDK family and their dependencies should
+   move, and earlier lockfile-only patches must survive.
 
 4. Update the documents that name the pinned version,
    [architecture](architecture.md) and [tool contracts](tool-contracts.md), and
    add a changelog entry. Record upstream changes that affect operators, for
    example a renamed provider key.
 
-5. Run the [Level 1 checks](acceptance.md#level-1-repository-checks).
+5. Run the [Level 1 checks](acceptance.md#level-1-repository-checks). Before
+   the release, the packed-tarball check under
+   [Prepare a release](#prepare-a-release) shows whether a consumer install of
+   the new pins works.
 
 Three guards protect the SDK boundary. `test/sdk-contract.test.ts` pins the prompt
 dispositions, the rejection path and the exact tools declared to the model for
@@ -172,7 +194,25 @@ Steps:
 5. Run the working-tree
    [Level 2 acceptance](acceptance.md#tooling) on the release candidate with
    `scripts/setup-acceptance.mjs`, unless the release notes state its absence.
-6. Record the pre-release acceptance in the status section of
+6. Run the packed-tarball Level 2 acceptance on the same candidate. Pack the
+   built package, install the tarball into a fresh prefix and point the harness
+   at the installed package:
+
+   ```bash
+   npm pack
+   PREFIX="$HOME/.cache/pi-session-mcp/pack-prefix"
+   npm install -g --prefix "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
+   node scripts/setup-acceptance.mjs \
+     --setup "$PREFIX/bin/pi-session-mcp-setup" \
+     --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
+     --label packed-<x.y.z> --out level2-result.json
+   ```
+
+   This is the only pre-release check that resolves dependencies like a
+   consumer: the working tree and the CI build use our lockfile, which a
+   published package does not carry (#78). Never install without `--prefix`.
+   Remove the tarball afterwards; it is not committed.
+7. Record the pre-release acceptance in the status section of
    [Acceptance](acceptance.md) and push it to the change pull request. Name the
    release in the pull request's title and description.
 
