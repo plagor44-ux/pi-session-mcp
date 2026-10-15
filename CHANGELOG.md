@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.8.3 — 2026-10-15
+
 - Fixed: a fresh `npm install -g pi-session-mcp@0.8.2` produced a server that
   exited at startup. `@earendil-works/pi-coding-agent` 1.1.0 imports
   `MCP_TYPESCRIPT_PREAMBLE` from `@earendil-works/pi-codemode` but declares it
