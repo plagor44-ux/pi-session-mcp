@@ -2,6 +2,45 @@
 
 ## Unreleased
 
+## 0.8.3 — 2026-10-15
+
+- Fixed: a fresh `npm install -g pi-session-mcp@0.8.2` produced a server that
+  exited at startup. `@earendil-works/pi-coding-agent` 1.1.0 imports
+  `MCP_TYPESCRIPT_PREAMBLE` from `@earendil-works/pi-codemode` but declares it
+  as `^1.1.0`, and `pi-codemode` 1.2.0 removed that export. Consumers do not
+  receive our lockfile, so npm resolved the new version, while CI and the
+  acceptance runs used `npm ci` and never saw it. The SDK's internal
+  `@earendil-works` packages, including those declared by other family members
+  (`pi-telemetry` comes from `pi-ai`), are now direct, exactly pinned
+  dependencies. Issue #78.
+- Changed: Pi SDK 1.2.0 (was 1.1.0) with `@earendil-works/pi-ai`, `pi-mcp`,
+  `pi-tui`, `pi-codemode`, `pi-agent-core` and `pi-telemetry` pinned to 1.2.0.
+  The SDK no longer depends on `@earendil-works/chord`, so `esbuild` leaves the install.
+  Upstream changes that matter to operators: print mode (`pi -p`) now exits 1
+  with a warning when the final response was cut off at the output token limit;
+  Mistral streams are no longer aborted mid-generation after the request
+  timeout; "The upstream provider returned an error" is retried as a transient
+  provider error; and an OpenRouter key now lists only the models it may use.
+  For extensions, `before_agent_start` now also fires for runs started by
+  `pi.sendMessage(..., { triggerTurn: true })`, and its event became a union on
+  `messageType`; the allowlisted `pi-cursor-sdk` 0.5.3 registers that event and
+  the provider-free checks do not test it against SDK 1.2.0.
+  The tools declared to the model, the stop-reason mapping and the reserved MCP
+  tool names are unchanged. The Pi SDK canary now tests a candidate SDK together
+  with the family versions that candidate declares, resolved transitively.
+- Added: an install smoke (`scripts/install-smoke.mjs`) that starts an installed
+  server, checks its handshake, name, version and the eight tools, and requires
+  it to exit by itself with status 0 on stdin EOF. CI runs it on every change against the packed package
+  installed without a lockfile; a nightly workflow
+  (`.github/workflows/install-smoke.yml`) runs it against the published
+  `latest` and reports a failure in an issue labeled `install-smoke`.
+- Added: documentation of the packed-tarball Level 2 check, the only
+  acceptance-level pre-release check that resolves dependencies like a consumer
+  install. The CI install smoke also resolves fresh, but it is an early warning,
+  not acceptance. See
+  [releasing](docs/releasing.md#prepare-a-release) and
+  [acceptance](docs/acceptance.md#tooling).
+
 ## 0.8.2 — 2026-10-13
 
 - Fixed: recovery of an interrupted skill update no longer deletes operator

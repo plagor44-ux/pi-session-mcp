@@ -132,6 +132,17 @@ prefix (`npm install -g --prefix <dir> pi-session-mcp@<version>`) and runs the
 lifecycle through the installed `pi-session-mcp-setup`, which also proves the
 executables and the entry-point detection through npm's symlinks.
 
+A packed-tarball run installs the tarball of the release candidate, before it is
+published, into a fresh temporary prefix (`npm pack`, then
+`npm install -g --prefix <dir> ./pi-session-mcp-<version>.tgz`, with `<dir>`
+created by `mktemp -d` and removed afterwards) and runs the lifecycle through
+the installed `pi-session-mcp-setup`. It is the only acceptance-level
+pre-release check that resolves dependencies like a consumer install does,
+without our lockfile, before publication. The working-tree run and the CI build
+cannot prove that, because they install from the lockfile; the CI install smoke
+also resolves fresh, but it is an early warning, not acceptance. The packed
+tarball run is the pre-release counterpart of the published-package run.
+
 A published-release run uses a fresh clone of the published tag instead of an
 existing branch or local tag. It additionally records the tag object and the
 peeled commit, confirms `git describe --tags --exact-match`, passes Level 1 on
@@ -178,6 +189,35 @@ node scripts/setup-acceptance.mjs \
   --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
   --label npm-<version> --out level2-result.json
 ```
+
+Packed tarball: pack the built candidate and install the tarball into a fresh
+temporary prefix outside `/tmp`, then pass the installed executable and package
+directory as for the published package. Create the prefix with `mktemp -d`,
+never reuse a fixed one, and remove it and the tarball afterwards.
+
+```bash
+npm pack
+PREFIX="$(mktemp -d "$HOME/.cache/pi-session-mcp-pack.XXXXXX")"
+npm install -g --prefix "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
+node scripts/setup-acceptance.mjs \
+  --setup "$PREFIX/bin/pi-session-mcp-setup" \
+  --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
+  --label packed-<x.y.z> --out level2-result.json
+rm -rf "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
+```
+
+The CI job and a nightly workflow (`.github/workflows/install-smoke.yml`) run
+`scripts/install-smoke.mjs` against a lockfile-free install: CI against the
+packed tarball of the commit, the nightly job against the published
+`pi-session-mcp@latest`. The smoke starts the installed server, checks the
+handshake, its name and version and the eight tools, and requires it to exit by
+itself with status 0 after stdin EOF. It starts no session and uses no provider.
+It reports one JSON line whose code is `smoke_passed` or one of
+`package_invalid`, `server_exited`, `initialize_invalid`, `tools_invalid`,
+`stdout_invalid`, `shutdown_timeout`, `shutdown_failed` or `timeout`. On any
+failure it kills the server's whole process group. Both are early warnings for
+a broken fresh install, not acceptance and not a replacement for the
+packed-tarball run.
 
 Tag clone: build a fresh clone of the tag (`npm ci`, `npm run build`,
 `npm run build:cli`) and use it like the working tree, with `--setup` and
@@ -1428,6 +1468,122 @@ release candidate `bdbdf00` on Linux (`x64`), with Node.js `26.11.1`, Codex CLI
   and `dist` tree as the build on which the
   [Sprint 3 live acceptance](#sprint-3-live-acceptance-2026-10-13) ran, including
   the accepted ten-task Level 3 cycle.
+
+### v0.8.2 post-release evidence
+
+The published-release acceptance of `v0.8.2` ran on 2026-10-15 from 15:36 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1` and
+Claude Code `2.1.299`. It **failed** for the installed npm package; the tag
+passed. The failure is recorded as it happened and is tracked as
+[#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78).
+
+Tag binding: a fresh clone of the annotated tag `v0.8.2` (tag object
+`d068067539a5cf86917e0be08014c9535dce0cc2`) peels to
+`bdfb95de9a46defa64d2eb382d58d454f97fc8fb`, the merge of #76, and
+`git describe --tags --exact-match` reports `v0.8.2`.
+
+Provider-free (Level 1), on that clone. Every command exited with `0`:
+- 54 test files: 1409 passed and 6 skipped, with strict unhandled rejections
+  and no unhandled error.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- `git diff --check` and `git status --short` printed nothing.
+- Offline Doctor with the example configuration: `packageVersion` `0.8.2`;
+  its only finding was the placeholder workspace (`workspace_missing`).
+
+`package.json`, `package-lock.json`, `dist/main.js` and the whole `dist` tree
+(84 files) were byte-identical before and after the client cycles.
+`dist/main.js` has the SHA-256 of the release build
+(`47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`).
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed; all nine steps passed on all four
+  targets. The real client registrations were unchanged, no process
+  remained, and the build stayed byte-identical.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix: the installed version is `0.8.2`, the registry shasum is
+  `1ab640909d8c513f3dbaad3c3691f7ce1f267945` and `dist/main.js` has the same
+  SHA-256 as above. **151 of 160 checks passed.** `--verify` (steps 5 and 8)
+  reported `mcp_unsupported` instead of `mcp_verified` on all four targets;
+  every other step passed, no process remained and the package stayed
+  byte-identical. `realRegistrationsUnchanged` was `false` (see below).
+
+Cause of the verify failure (#78): the prefix resolved
+`@earendil-works/pi-codemode` `1.2.0`, while the lockfile pins `1.1.0`. The
+pinned Pi SDK `1.1.0` declares it as `^1.1.0`, and `1.2.0` no longer exports
+`MCP_TYPESCRIPT_PREAMBLE`, which the SDK imports. Started directly, the
+installed `dist/main.js` exits with `1` and a `SyntaxError` before its first
+MCP frame; the tag clone's server answers `initialize`. Verify reports a
+server that exits before `initialize` as `mcp_unsupported`. The published
+bytes are correct; a fresh install of them is not. Installations made before
+`pi-codemode` `1.2.0` was published (2026-10-12, 23:00 UTC) keep `1.1.0` and
+start.
+
+`realRegistrationsUnchanged` `false`: the cause was not determined. Another
+process wrote the real Codex configuration file during the npm run (15:39:09
+UTC). Afterwards no real registration referenced the run's directories, the
+real setup ownership records were unchanged since 2026-10-13, and the real
+Claude Code registration still targeted the installed `0.8.1`. A live client
+that changes its registrations during a run is a known source of a false
+failure (see [Tooling](#tooling)); the check is not counted as passed.
+
+A run against the published release on 2026-10-14 was reported with exit `0`,
+but neither its variant nor its check counts were saved; it is not evidence.
+
+Result: `v0.8.2` is accepted as a release source (tag clone), not as an
+installed npm package. Fresh npm installs of `0.8.2`, and probably of every
+version that pins the Pi SDK `1.1.0`, crash at startup.
+
+### v0.8.3 pre-release acceptance
+
+Before its release, `v0.8.3` passed Level 1, the working-tree Level 2 and the
+new packed-tarball Level 2 on its release candidate `35091eb` on Linux
+(`x64`), with Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1` and Claude
+Code `2.1.299`, on 2026-10-15:
+- Level 1 on the release branch: every command exited with `0`.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    55 files, 1425 passed and 6 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 136 files, including the three
+    skills, and no acceptance harness, sources, tests, lockfile or
+    implementation plan.
+  - Doctor reported `packageVersion` `0.8.3`. With the example configuration
+    its only finding was the placeholder workspace.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. All nine steps passed on all four targets.
+  The real client registrations were unchanged, no process remained, and the
+  built files were unchanged.
+- Packed-tarball Level 2 (#78): the candidate's tarball, installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.2.0` with a single copy each. The install
+  smoke reported `smoke_passed`, and Level 2 against the installed package
+  passed 160 of 160 checks, with the same unchanged registrations, process
+  and build results.
+
+Targeted live multi-session acceptance on the new Pi SDK `1.2.0`, with
+`scripts/multi-session-acceptance.mjs` (harness SHA-256 prefix `bb1620ad`) on a
+clean detached checkout of `16b2374`, the candidate before the review fixes:
+`dist/main.js` SHA-256 `47875d38…`, build digest `c5e91f70…`. Between `16b2374`
+and `35091eb` no runtime source changed; the lockfile gained only the root
+entry that pins `@earendil-works/pi-telemetry` at the `1.2.0` it already
+resolved. Strictly sequential runs on 2026-10-15 from 18:19 UTC, with
+synthetic fixtures and the worker profiles copied from the operator profiles
+without their external MCP grant:
+
+| Profile source | Extension | Controller | Scenario | Result | Duration |
+| --- | --- | --- | --- | --- | --- |
+| DeepSeek `deepseek-flash`, `high` | none | Codex `0.162.1` | `abort` | passed, no failure | 101 s |
+| DeepSeek `deepseek-flash`, `high` | none | Claude Code `2.1.299` | `parallel` | passed, no failure | 66 s |
+| Cursor `grok-4.7@256k:fast`, `high` | `pi-cursor-sdk` `0.5.3` | Claude Code `2.1.299` | `abort` | passed, no failure | 156 s |
+| Cursor `grok-4.7@256k:fast`, `high` | `pi-cursor-sdk` `0.5.3` | Codex `0.162.1` | `parallel` | passed, no failure | 146 s |
+
+Every run kept its scope, closed its sessions and left no residual process.
+The Cursor runs load the allowlisted `pi-cursor-sdk` `0.5.3`, which registers
+`before_agent_start`, whose semantics changed in SDK `1.2.0`; both passed.
+
+Not established for `0.8.3`: the ten-task Level 3 cycle on SDK `1.2.0`, the
+`trio` scenario, the operator profiles' external MCP grant, macOS on real
+hardware (R10, R11), and other providers and models. The published-release
+acceptance follows after publication.
 
 ## Sprint 1 correctness checks (2026-10-13)
 

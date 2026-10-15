@@ -12,8 +12,8 @@ mean they are implemented or that their gates passed.
 
 ## Current state
 
-Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
-(the merge of Sprint 2).
+Updated 2026-10-15. Base main `bdfb95de9a46defa64d2eb382d58d454f97fc8fb`
+(the merge of the 0.8.2 release).
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
@@ -39,17 +39,30 @@ Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
   ([#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74)). R10 and R11
   are blocked on the work Mac, with a runbook. See the
   [Sprint 3 file](sprints/2026-10-13-s3-live-usage.md).
-- Release 0.8.2 is prepared in its own pull request: it carries #59, #56, #60
-  and the #62 skill change to npm under an unchanged MCP contract. Merge, tag
-  and publication are maintainer decisions.
+- Release 0.8.2 was merged in [#76](https://github.com/plagor44-ux/pi-session-mcp/pull/76)
+  and published on 2026-10-14. It carries #59, #56, #60 and the #62 skill
+  change under an unchanged MCP contract. Its published-release acceptance on
+  2026-10-15 found that a fresh npm install crashes at startup
+  ([#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78)); the fix
+  ships as 0.8.3.
 - Sprint 4 decision inputs for the conditional items R12, R15, R17 and R18 are recorded in the [Sprint 4 decision inputs](sprints/2026-10-13-s4-decision-inputs.md) ([#72](https://github.com/plagor44-ux/pi-session-mcp/issues/72)): R12, R15 and R17 not met, R18 not determinable as of 2026-10-13; this is input, not the Sprint 4 decision.
+- Sprint 4 is closed with its [decision](sprints/2026-10-15-s4-decision.md)
+  ([#77](https://github.com/plagor44-ux/pi-session-mcp/issues/77)), taken on
+  2026-10-15 before the macOS gate by maintainer decision. ADR 0003's isolation
+  trigger fired, because coding profiles had written on non-disposable
+  repositories. The one next investment is the isolation decision
+  ([#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79), ADR 0008
+  Proposed), with interim operating rules until it is accepted. R12, R15 and
+  R17 stay deferred (not met), R18 stays deferred (not determinable), and
+  [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) is closed as
+  not planned. R10, R11 and R22 stay open.
 
 ### Sprint 3 task status
 
 | Task | Issue | Status |
 | --- | --- | --- |
 | Harness tests time out on macOS | [#70](https://github.com/plagor44-ux/pi-session-mcp/issues/70) | verified: CI green on macOS 15 and 26, also on main |
-| R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | partially verified: Codex passed, Claude Code failed on timing only; follow-up [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) |
+| R08 three sessions with a read-only reviewer | [#71](https://github.com/plagor44-ux/pi-session-mcp/issues/71) | partially verified: Codex passed, Claude Code failed on timing only; follow-up [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) closed as not planned in Sprint 4 |
 | R05 / R09 ten-task Level 3 cycle | None (acceptance) | verified: accepted, 10 of 10 tasks |
 | R06 new Codex abort run | None (acceptance) | verified |
 | R07 Codex discovery of the setup-installed skill | None (acceptance) | verified |
@@ -58,8 +71,8 @@ Updated 2026-10-13. Base main `0aae6390c539e1d70138f1efaf297e6193a2b497`
 
 Status words: planned, in progress, implemented (code exists), verified (named
 criteria met with evidence), blocked, failed (ran and missed its criteria; kept
-on record). Sprint 3 is closed; Sprint 4 decides the next investment
-from the evidence of Sprints 1 to 3 and the decision inputs.
+on record). Sprints 1 to 4 are closed; the next investment is the isolation
+decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79).
 
 ## Sprints and exit gates
 
@@ -111,7 +124,7 @@ in-memory state and one trusted local peer.
 
 | Topic | Entry condition |
 | --- | --- |
-| OS isolation | Decide before coding on non-disposable repositories or with untrusted content; profiles/skills are not an OS sandbox |
+| OS isolation | Trigger fired on 2026-10-15 (coding profiles wrote on non-disposable repositories); decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and ADR 0008, interim rules in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules); profiles/skills are not an OS sandbox |
 | pi_turn_wait | Measured high polling cost per turn with pauses or tool/approval cost; 5–7 polls per invocation is insufficient evidence |
 | Persistence/resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
@@ -121,7 +134,7 @@ in-memory state and one trusted local peer.
 | Former pi-control #31/#32 | Closed as not_planned; no automatic migration/reopening |
 | Former release gates/#11–#14 | Historical; bind current acceptance to the current build |
 
-0.8.2 is a possible patch candidate only if the MCP contract remains
-unchanged and its gates pass. Sprint 1 changed no version. Apply the current [release procedure](releasing.md):
-version and pre-release acceptance travel in the change PR. Merge, tagging and
+0.8.3 is a patch release only if the MCP contract remains unchanged and its
+gates pass. Apply the current [release procedure](releasing.md): version and
+pre-release acceptance travel in the change PR. Merge, tagging and
 publication remain maintainer decisions. No release is authorized by this plan.
