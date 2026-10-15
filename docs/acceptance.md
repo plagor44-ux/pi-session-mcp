@@ -1533,6 +1533,58 @@ Result: `v0.8.2` is accepted as a release source (tag clone), not as an
 installed npm package. Fresh npm installs of `0.8.2`, and probably of every
 version that pins the Pi SDK `1.1.0`, crash at startup.
 
+### v0.8.3 pre-release acceptance
+
+Before its release, `v0.8.3` passed Level 1, the working-tree Level 2 and the
+new packed-tarball Level 2 on its release candidate `35091eb` on Linux
+(`x64`), with Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1` and Claude
+Code `2.1.299`, on 2026-10-15:
+- Level 1 on the release branch: every command exited with `0`.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    55 files, 1425 passed and 6 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 136 files, including the three
+    skills, and no acceptance harness, sources, tests, lockfile or
+    implementation plan.
+  - Doctor reported `packageVersion` `0.8.3`. With the example configuration
+    its only finding was the placeholder workspace.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. All nine steps passed on all four targets.
+  The real client registrations were unchanged, no process remained, and the
+  built files were unchanged.
+- Packed-tarball Level 2 (#78): the candidate's tarball, installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.2.0` with a single copy each. The install
+  smoke reported `smoke_passed`, and Level 2 against the installed package
+  passed 160 of 160 checks, with the same unchanged registrations, process
+  and build results.
+
+Targeted live multi-session acceptance on the new Pi SDK `1.2.0`, with
+`scripts/multi-session-acceptance.mjs` (harness SHA-256 prefix `bb1620ad`) on a
+clean detached checkout of `16b2374`, the candidate before the review fixes:
+`dist/main.js` SHA-256 `47875d38…`, build digest `c5e91f70…`. Between `16b2374`
+and `35091eb` no runtime source changed; the lockfile gained only the root
+entry that pins `@earendil-works/pi-telemetry` at the `1.2.0` it already
+resolved. Strictly sequential runs on 2026-10-15 from 18:19 UTC, with
+synthetic fixtures and the worker profiles copied from the operator profiles
+without their external MCP grant:
+
+| Profile source | Extension | Controller | Scenario | Result | Duration |
+| --- | --- | --- | --- | --- | --- |
+| DeepSeek `deepseek-flash`, `high` | none | Codex `0.162.1` | `abort` | passed, no failure | 101 s |
+| DeepSeek `deepseek-flash`, `high` | none | Claude Code `2.1.299` | `parallel` | passed, no failure | 66 s |
+| Cursor `grok-4.7@256k:fast`, `high` | `pi-cursor-sdk` `0.5.3` | Claude Code `2.1.299` | `abort` | passed, no failure | 156 s |
+| Cursor `grok-4.7@256k:fast`, `high` | `pi-cursor-sdk` `0.5.3` | Codex `0.162.1` | `parallel` | passed, no failure | 146 s |
+
+Every run kept its scope, closed its sessions and left no residual process.
+The Cursor runs load the allowlisted `pi-cursor-sdk` `0.5.3`, which registers
+`before_agent_start`, whose semantics changed in SDK `1.2.0`; both passed.
+
+Not established for `0.8.3`: the ten-task Level 3 cycle on SDK `1.2.0`, the
+`trio` scenario, the operator profiles' external MCP grant, macOS on real
+hardware (R10, R11), and other providers and models. The published-release
+acceptance follows after publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
