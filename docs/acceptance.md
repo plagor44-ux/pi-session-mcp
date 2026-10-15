@@ -1460,6 +1460,70 @@ release candidate `bdbdf00` on Linux (`x64`), with Node.js `26.11.1`, Codex CLI
   [Sprint 3 live acceptance](#sprint-3-live-acceptance-2026-10-13) ran, including
   the accepted ten-task Level 3 cycle.
 
+### v0.8.2 post-release evidence
+
+The published-release acceptance of `v0.8.2` ran on 2026-10-15 from 15:36 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1` and
+Claude Code `2.1.299`. It **failed** for the installed npm package; the tag
+passed. The failure is recorded as it happened and is tracked as
+[#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78).
+
+Tag binding: a fresh clone of the annotated tag `v0.8.2` (tag object
+`d068067539a5cf86917e0be08014c9535dce0cc2`) peels to
+`bdfb95de9a46defa64d2eb382d58d454f97fc8fb`, the merge of #76, and
+`git describe --tags --exact-match` reports `v0.8.2`.
+
+Provider-free (Level 1), on that clone. Every command exited with `0`:
+- 54 test files: 1409 passed and 6 skipped, with strict unhandled rejections
+  and no unhandled error.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- `git diff --check` and `git status --short` printed nothing.
+- Offline Doctor with the example configuration: `packageVersion` `0.8.2`;
+  its only finding was the placeholder workspace (`workspace_missing`).
+
+`package.json`, `package-lock.json`, `dist/main.js` and the whole `dist` tree
+(84 files) were byte-identical before and after the client cycles.
+`dist/main.js` has the SHA-256 of the release build
+(`47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`).
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed; all nine steps passed on all four
+  targets. The real client registrations were unchanged, no process
+  remained, and the build stayed byte-identical.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix: the installed version is `0.8.2`, the registry shasum is
+  `1ab640909d8c513f3dbaad3c3691f7ce1f267945` and `dist/main.js` has the same
+  SHA-256 as above. **151 of 160 checks passed.** `--verify` (steps 5 and 8)
+  reported `mcp_unsupported` instead of `mcp_verified` on all four targets;
+  every other step passed, no process remained and the package stayed
+  byte-identical. `realRegistrationsUnchanged` was `false` (see below).
+
+Cause of the verify failure (#78): the prefix resolved
+`@earendil-works/pi-codemode` `1.2.0`, while the lockfile pins `1.1.0`. The
+pinned Pi SDK `1.1.0` declares it as `^1.1.0`, and `1.2.0` no longer exports
+`MCP_TYPESCRIPT_PREAMBLE`, which the SDK imports. Started directly, the
+installed `dist/main.js` exits with `1` and a `SyntaxError` before its first
+MCP frame; the tag clone's server answers `initialize`. Verify reports a
+server that exits before `initialize` as `mcp_unsupported`. The published
+bytes are correct; a fresh install of them is not. Installations made before
+`pi-codemode` `1.2.0` was published (2026-10-12, 23:00 UTC) keep `1.1.0` and
+start.
+
+`realRegistrationsUnchanged` `false`: the cause was not determined. Another
+process wrote the real Codex configuration file during the npm run (15:39:09
+UTC). Afterwards no real registration referenced the run's directories, the
+real setup ownership records were unchanged since 2026-10-13, and the real
+Claude Code registration still targeted the installed `0.8.1`. A live client
+that changes its registrations during a run is a known source of a false
+failure (see [Tooling](#tooling)); the check is not counted as passed.
+
+A run against the published release on 2026-10-14 was reported with exit `0`,
+but neither its variant nor its check counts were saved; it is not evidence.
+
+Result: `v0.8.2` is accepted as a release source (tag clone), not as an
+installed npm package. Fresh npm installs of `0.8.2`, and probably of every
+version that pins the Pi SDK `1.1.0`, crash at startup.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

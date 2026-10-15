@@ -53,7 +53,7 @@ Changes that keep the public MCP contract (tools, fields, states, error codes) s
 
 ## Revisit triggers
 
-- **E (isolation research):** coding profiles are used on non-disposable repositories or with untrusted content, at the latest before a local writer runs on real repositories.
+- **E (isolation research):** coding profiles are used on non-disposable repositories or with untrusted content, at the latest before a local writer runs on real repositories. This trigger fired on 2026-10-15: coding profiles had written on non-disposable repositories. Sprint 4 authorizes the isolation decision as the one next investment, an options comparison in ADR 0008, not an implementation; see [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and the [Sprint 4 decision](../sprints/2026-10-15-s4-decision.md).
 - **C (bounded wait):** clients routinely need more than about five polls per turn, or client tool-call limits or approval prompts make polling costly.
 - **D (persistence research):** a client or server restart loses useful work in practice.
 - **F (remote architecture):** a concrete remote or mobile use case that SSH or existing remote-development workflows cannot satisfy.
