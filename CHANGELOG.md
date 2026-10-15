@@ -9,11 +9,13 @@
   `MCP_TYPESCRIPT_PREAMBLE` from `@earendil-works/pi-codemode` but declares it
   as `^1.1.0`, and `pi-codemode` 1.2.0 removed that export. Consumers do not
   receive our lockfile, so npm resolved the new version, while CI and the
-  acceptance runs used `npm ci` and never saw it. The Pi SDK's five sibling
-  packages are now direct, exactly pinned dependencies. Issue #78.
+  acceptance runs used `npm ci` and never saw it. The SDK's internal
+  `@earendil-works` packages, including those declared by other family members
+  (`pi-telemetry` comes from `pi-ai`), are now direct, exactly pinned
+  dependencies. Issue #78.
 - Changed: Pi SDK 1.2.0 (was 1.1.0) with `@earendil-works/pi-ai`, `pi-mcp`,
-  `pi-tui`, `pi-codemode` and `pi-agent-core` pinned to 1.2.0. The SDK no
-  longer depends on `@earendil-works/chord`, so `esbuild` leaves the install.
+  `pi-tui`, `pi-codemode`, `pi-agent-core` and `pi-telemetry` pinned to 1.2.0.
+  The SDK no longer depends on `@earendil-works/chord`, so `esbuild` leaves the install.
   Upstream changes that matter to operators: print mode (`pi -p`) now exits 1
   with a warning when the final response was cut off at the output token limit;
   Mistral streams are no longer aborted mid-generation after the request
@@ -25,15 +27,17 @@
   the provider-free checks do not test it against SDK 1.2.0.
   The tools declared to the model, the stop-reason mapping and the reserved MCP
   tool names are unchanged. The Pi SDK canary now tests a candidate SDK together
-  with the sibling versions that candidate declares.
+  with the family versions that candidate declares, resolved transitively.
 - Added: an install smoke (`scripts/install-smoke.mjs`) that starts an installed
   server, checks its handshake, name, version and the eight tools, and requires
-  it to exit on stdin EOF. CI runs it on every change against the packed package
+  it to exit by itself with status 0 on stdin EOF. CI runs it on every change against the packed package
   installed without a lockfile; a nightly workflow
   (`.github/workflows/install-smoke.yml`) runs it against the published
   `latest` and reports a failure in an issue labeled `install-smoke`.
-- Added: documentation of the packed-tarball Level 2 check, the only pre-release
-  check that resolves dependencies like a consumer install. See
+- Added: documentation of the packed-tarball Level 2 check, the only
+  acceptance-level pre-release check that resolves dependencies like a consumer
+  install. The CI install smoke also resolves fresh, but it is an early warning,
+  not acceptance. See
   [releasing](docs/releasing.md#prepare-a-release) and
   [acceptance](docs/acceptance.md#tooling).
 

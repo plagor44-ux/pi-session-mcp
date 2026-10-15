@@ -133,13 +133,15 @@ lifecycle through the installed `pi-session-mcp-setup`, which also proves the
 executables and the entry-point detection through npm's symlinks.
 
 A packed-tarball run installs the tarball of the release candidate, before it is
-published, into a temporary prefix (`npm pack`, then
-`npm install -g --prefix <dir> ./pi-session-mcp-<version>.tgz`) and runs the
-lifecycle through the installed `pi-session-mcp-setup`. It proves that the
-package resolves its dependencies like a consumer install does, without our
-lockfile, before publication. The working-tree run and the CI build cannot prove
-that, because they install from the lockfile. It is the pre-release counterpart
-of the published-package run.
+published, into a fresh temporary prefix (`npm pack`, then
+`npm install -g --prefix <dir> ./pi-session-mcp-<version>.tgz`, with `<dir>`
+created by `mktemp -d` and removed afterwards) and runs the lifecycle through
+the installed `pi-session-mcp-setup`. It is the only acceptance-level
+pre-release check that resolves dependencies like a consumer install does,
+without our lockfile, before publication. The working-tree run and the CI build
+cannot prove that, because they install from the lockfile; the CI install smoke
+also resolves fresh, but it is an early warning, not acceptance. The packed
+tarball run is the pre-release counterpart of the published-package run.
 
 A published-release run uses a fresh clone of the published tag instead of an
 existing branch or local tag. It additionally records the tag object and the
@@ -188,26 +190,33 @@ node scripts/setup-acceptance.mjs \
   --label npm-<version> --out level2-result.json
 ```
 
-Packed tarball: pack the built candidate and install the tarball into a
+Packed tarball: pack the built candidate and install the tarball into a fresh
 temporary prefix outside `/tmp`, then pass the installed executable and package
-directory as for the published package.
+directory as for the published package. Create the prefix with `mktemp -d`,
+never reuse a fixed one, and remove it and the tarball afterwards.
 
 ```bash
 npm pack
+PREFIX="$(mktemp -d "$HOME/.cache/pi-session-mcp-pack.XXXXXX")"
 npm install -g --prefix "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
 node scripts/setup-acceptance.mjs \
   --setup "$PREFIX/bin/pi-session-mcp-setup" \
   --build-dir "$PREFIX/lib/node_modules/pi-session-mcp" \
   --label packed-<x.y.z> --out level2-result.json
+rm -rf "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
 ```
 
 The CI job and a nightly workflow (`.github/workflows/install-smoke.yml`) run
 `scripts/install-smoke.mjs` against a lockfile-free install: CI against the
 packed tarball of the commit, the nightly job against the published
 `pi-session-mcp@latest`. The smoke starts the installed server, checks the
-handshake, its name and version and the eight tools, and requires it to exit on
-stdin EOF. It starts no session and uses no provider. Both are early warnings
-for a broken fresh install, not acceptance and not a replacement for the
+handshake, its name and version and the eight tools, and requires it to exit by
+itself with status 0 after stdin EOF. It starts no session and uses no provider.
+It reports one JSON line whose code is `smoke_passed` or one of
+`package_invalid`, `server_exited`, `initialize_invalid`, `tools_invalid`,
+`stdout_invalid`, `shutdown_timeout`, `shutdown_failed` or `timeout`. On any
+failure it kills the server's whole process group. Both are early warnings for
+a broken fresh install, not acceptance and not a replacement for the
 packed-tarball run.
 
 Tag clone: build a fresh clone of the tag (`npm ci`, `npm run build`,

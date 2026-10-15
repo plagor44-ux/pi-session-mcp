@@ -59,6 +59,7 @@
     "@earendil-works/pi-codemode": "1.2.0",
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-mcp": "1.2.0",
+    "@earendil-works/pi-telemetry": "1.2.0",
     "@earendil-works/pi-tui": "1.2.0",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",

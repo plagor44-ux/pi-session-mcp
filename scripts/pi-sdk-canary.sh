@@ -4,13 +4,18 @@
 #
 # Usage: bash scripts/pi-sdk-canary.sh [version-or-dist-tag]
 #
-# The SDK and its five sibling packages (pi-ai, pi-mcp, pi-tui, pi-codemode,
-# pi-agent-core) move together: the candidate is tested with the highest published
-# version of each sibling that satisfies the range the candidate declares, which is
-# what a consumer install without our lockfile resolves (#78). All six are installed
-# in one `npm install --no-save` call, so only node_modules changes; package.json
-# and package-lock.json must stay byte-identical. Run `npm ci` afterwards to return
-# to the pinned dependency tree. Provider-free: no model, credentials or network
+# The SDK and the @earendil-works packages it pulls in (today pi-ai, pi-mcp, pi-tui,
+# pi-codemode, pi-agent-core and, declared by pi-ai, pi-telemetry) move together. The
+# family is resolved transitively: the candidate's declared @earendil-works/*
+# dependencies, then the declared @earendil-works/* dependencies of each resolved
+# member, and so on until the set is stable. Each member gets the highest published
+# version that satisfies every range declared for it; when no version satisfies all
+# of them, the script exits with 2. Prereleases are skipped unless the candidate is
+# itself a prerelease. This is what a consumer install without our lockfile
+# resolves (#78). The candidate and the family are installed in one
+# `npm install --no-save` call, so only node_modules changes; package.json and
+# package-lock.json must stay byte-identical. Run `npm ci` afterwards to return to
+# the pinned dependency tree. Provider-free: no model, credentials or network
 # access beyond the npm registry.
 #
 # Exit status: 0 compatible, 1 incompatible (typecheck or SDK-facing tests
@@ -18,7 +23,6 @@
 set -uo pipefail
 
 package="@earendil-works/pi-coding-agent"
-siblings=(pi-ai pi-mcp pi-tui pi-codemode pi-agent-core)
 target="${1:-latest}"
 if [[ ! "$target" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$ ]]; then
   echo "pi-sdk-canary: invalid version or dist-tag" >&2
@@ -33,39 +37,120 @@ output() {
 manifest_before="$(sha256sum package.json package-lock.json)"
 pinned="$(node -p "require('./package.json').dependencies['$package']")"
 
-# Prints the install specs, one per line: the candidate first, then each sibling at the
-# highest published version that satisfies the range the candidate declares.
+# Prints the install specs, one per line: the candidate first, then every resolved
+# family member (sorted by name) at the highest published version that satisfies all
+# ranges declared for it by the candidate and by the other members.
 resolve_specs() {
-  PACKAGE="$package" TARGET="$target" SIBLINGS="${siblings[*]}" node --input-type=module -e '
-    import { execFileSync } from "node:child_process";
-    const view = (spec, field) => {
-      const raw = execFileSync("npm", ["view", spec, field, "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-      const value = JSON.parse(raw);
-      return Array.isArray(value) ? value : [value];
-    };
-    const numeric = (version) => version.split(/[-+]/)[0].split(".").map(Number);
-    const compare = (a, b) => {
-      const x = numeric(a), y = numeric(b);
-      for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return x[i] - y[i];
-      return 0;
-    };
-    const { PACKAGE, TARGET, SIBLINGS } = process.env;
-    const version = view(`${PACKAGE}@${TARGET}`, "version").sort(compare).at(-1);
-    const dependencies = view(`${PACKAGE}@${version}`, "dependencies").at(-1) ?? {};
-    console.log(`${PACKAGE}@${version}`);
-    for (const name of SIBLINGS.split(" ")) {
-      const full = `@earendil-works/${name}`;
-      const range = dependencies[full];
-      if (!range) { console.error(`pi-sdk-canary: ${PACKAGE}@${version} declares no ${name}; keeping the installed one`); continue; }
-      const highest = view(`${full}@${range}`, "version").sort(compare).at(-1);
-      if (!highest) throw new Error(`no published ${name} satisfies ${range}`);
-      console.log(`${full}@${highest}`);
+  PACKAGE="$package" TARGET="$target" node --input-type=module - <<'JS'
+import { execFileSync } from "node:child_process";
+
+const SCOPE = "@earendil-works/";
+const { PACKAGE, TARGET } = process.env;
+process.on("uncaughtException", (error) => {
+  console.error(`pi-sdk-canary: ${error.message}`);
+  process.exit(1);
+});
+
+// Runs `npm view <spec> <field> --json`; a registry "no match" (E404) is an empty result.
+const cache = new Map();
+function view(spec, field) {
+  const key = `${spec}\0${field}`;
+  if (cache.has(key)) return cache.get(key);
+  let raw;
+  try {
+    raw = execFileSync("npm", ["view", spec, field, "--json"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch (error) {
+    let code;
+    try { code = JSON.parse(String(error.stdout ?? "")).error?.code; } catch { code = undefined; }
+    if (code !== "E404") throw new Error(`npm view ${spec} ${field} failed`);
+    cache.set(key, []);
+    return [];
+  }
+  const value = raw.trim() === "" ? [] : JSON.parse(raw);
+  const result = Array.isArray(value) ? value : [value];
+  cache.set(key, result);
+  return result;
+}
+
+function compare(a, b) {
+  const [coreA, preA] = a.split("+")[0].split(/-(.*)/s);
+  const [coreB, preB] = b.split("+")[0].split(/-(.*)/s);
+  const x = coreA.split(".").map(Number), y = coreB.split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) if (x[i] !== y[i]) return x[i] - y[i];
+  if (preA === undefined || preB === undefined) return preA === preB ? 0 : preA === undefined ? 1 : -1;
+  const p = preA.split("."), q = preB.split(".");
+  for (let i = 0; i < Math.max(p.length, q.length); i += 1) {
+    if (p[i] === undefined) return -1;
+    if (q[i] === undefined) return 1;
+    const numeric = /^\d+$/.test(p[i]) && /^\d+$/.test(q[i]);
+    if (p[i] === q[i]) continue;
+    if (numeric) return Number(p[i]) - Number(q[i]);
+    return p[i] < q[i] ? -1 : 1;
+  }
+  return 0;
+}
+
+function declared(name, version) {
+  const out = {};
+  for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+    for (const entry of view(`${name}@${version}`, field)) {
+      for (const [dependency, range] of Object.entries(entry ?? {})) {
+        if (dependency.startsWith(SCOPE)) (out[dependency] ??= new Set()).add(range);
+      }
     }
-  '
+  }
+  return out;
+}
+
+const candidate = view(`${PACKAGE}@${TARGET}`, "version").sort(compare).at(-1);
+if (!candidate) throw new Error(`no published ${PACKAGE} matches ${TARGET}`);
+const allowPrerelease = TARGET.includes("-") || candidate.includes("-");
+
+// Highest version satisfying every range, or undefined when the intersection is empty.
+function highest(name, ranges) {
+  let common;
+  for (const range of ranges) {
+    const matching = new Set(view(`${name}@${range}`, "version").filter((version) => allowPrerelease || !version.includes("-")));
+    common = common === undefined ? matching : new Set([...common].filter((version) => matching.has(version)));
+  }
+  return [...common ?? []].sort(compare).at(-1);
+}
+
+// Fixpoint: the family and its ranges are recomputed from the current members until stable.
+let family = new Map();
+for (let round = 0; ; round += 1) {
+  if (round >= 10) throw new Error("the family does not converge");
+  const members = [[PACKAGE, candidate], ...family];
+  const constraints = new Map();
+  for (const [name, version] of members) {
+    for (const [dependency, ranges] of Object.entries(declared(name, version))) {
+      if (!constraints.has(dependency)) constraints.set(dependency, new Set());
+      for (const range of ranges) constraints.get(dependency).add(range);
+    }
+  }
+  const next = new Map();
+  for (const [name, ranges] of constraints) {
+    if (name === PACKAGE) {
+      const fits = [...ranges].every((range) => view(`${name}@${range}`, "version").includes(candidate));
+      if (!fits) throw new Error(`${PACKAGE}@${candidate} does not satisfy ${[...ranges].join(" and ")}`);
+      continue;
+    }
+    const version = highest(name, ranges);
+    if (!version) throw new Error(`no published ${name} satisfies all of: ${[...ranges].join(", ")}`);
+    next.set(name, version);
+  }
+  const same = next.size === family.size && [...next].every(([name, version]) => family.get(name) === version);
+  family = next;
+  if (same) break;
+}
+
+console.log(`${PACKAGE}@${candidate}`);
+for (const [name, version] of [...family].sort(([a], [b]) => (a < b ? -1 : 1))) console.log(`${name}@${version}`);
+JS
 }
 
 if ! resolved="$(resolve_specs)" || [[ -z "$resolved" ]]; then
-  echo "pi-sdk-canary: could not resolve the candidate and its sibling versions" >&2
+  echo "pi-sdk-canary: could not resolve the candidate and its family versions" >&2
   exit 2
 fi
 mapfile -t specs <<< "$resolved"
@@ -80,7 +165,7 @@ for spec in "${specs[@]:1}"; do
 done
 output pinned "$pinned"
 output candidate "$candidate"
-output siblings "$sibling_versions"
+output siblings "$sibling_versions"  # every resolved family member besides the candidate
 
 if [[ "$(sha256sum package.json package-lock.json)" != "$manifest_before" ]]; then
   echo "pi-sdk-canary: package.json or package-lock.json changed; the pin must stay untouched" >&2

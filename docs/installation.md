@@ -82,11 +82,11 @@ run.
 npm resolves the package's transitive dependencies at install time within the
 ranges that the Pi SDK and the MCP SDK declare, because npm does not ship a
 lockfile inside a package. Direct dependencies are pinned exactly, and so are
-the Pi SDK's own packages (`@earendil-works/pi-ai`, `pi-mcp`, `pi-tui`,
-`pi-codemode` and `pi-agent-core`), so that the SDK's caret ranges resolve to the
-tested versions. CI smoke-tests an install of the packed package without a
-lockfile on every change, and a nightly job does the same for the published
-`latest` version. If you need the exact dependency tree that the maintainers
+the SDK's internal `@earendil-works` packages (`pi-ai`, `pi-mcp`, `pi-tui`,
+`pi-codemode`, `pi-agent-core` and `pi-telemetry`, the last one declared by
+`pi-ai`), so that the SDK's caret ranges resolve to the tested versions.
+CI smoke-tests an install of the packed package without a lockfile on every
+change, and a nightly job does the same for the published `latest` version. If you need the exact dependency tree that the maintainers
 tested, install from a release tag instead.
 
 ### From a release tag
