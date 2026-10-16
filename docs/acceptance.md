@@ -1795,3 +1795,42 @@ Not established: macOS (R10, R11; runbook in the Sprint 3 file), other
 providers and models, the operator profiles' external MCP grant, larger tasks,
 more than three concurrent sessions, and the `trio` timing with Claude Code as
 controller.
+
+## macOS acceptance on real hardware (2026-10-16)
+
+Recorded on 2026-10-16 for the published release `0.8.3` (tag `v0.8.3`, peeled
+commit `53ed581`), on a real Mac: macOS 26.7.1 (`25G241`) on `arm64`, Node.js
+`22.23.3` and Claude Code `2.1.294`. This closes R10 and R11 for Claude Code.
+
+The source was the tree of the tag, exported from a local clone with
+`git archive` into a directory of its own, so the run did not use a clone from
+the network. `git describe` was not run on it. `dist/main.js` built from that
+tree has the SHA-256 `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`,
+the same digest as the `dist/main.js` of the globally installed npm package
+`0.8.3` that the client registration starts.
+
+- Level 1 on that tree: `npm ci`, `npm run typecheck`, `npm run build` and
+  `npm run build:cli` exited with `0`. `npm test` reported 54 test files
+  passed and 1 skipped, 1315 tests passed and 116 skipped. `npm audit`
+  reported 0 vulnerabilities.
+- R10, Level 2 with `scripts/setup-acceptance.mjs` for Claude Code only: 117 of
+  117 checks passed. All three targets (`user`, `project` and `local`)
+  completed the nine-step sequence. The result reported
+  `realRegistrationsUnchanged`, `processCheck`, the leak check and
+  `buildUnchanged` as true, and the script exited with `0`.
+- R11, read-only smoke through the installed registration: one
+  `pi_session_start` with a `read-only` profile, one short prompt that asked
+  for the package name and version, `pi_turn_get` until `completed`, and
+  `pi_session_close`. The session ran on a local model served by LM Studio. The
+  turn completed in about 6 s, and its answer named the package and version
+  `0.8.3` correctly.
+
+Not established by these checks:
+- Codex, which is not installed on the machine, so macOS has still not passed
+  setup acceptance for Codex.
+- The lock-contention and interruption steps of the [macOS](#macos) section,
+  which the script does not cover and which were not run by hand. The earlier
+  run of 2026-10-11 covers them for an older build.
+- Level 3, a coding profile, more than one session, Intel Macs, and the
+  published-package install path (the package was installed earlier and was
+  not reinstalled for this run).
