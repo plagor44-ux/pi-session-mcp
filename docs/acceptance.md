@@ -1585,6 +1585,70 @@ Not established for `0.8.3`: the ten-task Level 3 cycle on SDK `1.2.0`, the
 hardware (R10, R11), and other providers and models. The published-release
 acceptance follows after publication.
 
+### v0.8.3 post-release evidence
+
+The published-release acceptance of `v0.8.3` ran on 2026-10-16 from 05:03 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.0`, Codex CLI `0.162.1` and
+Claude Code `2.1.299`. It passed for the tag and for the installed npm
+package.
+
+Tag binding: a fresh clone of the annotated tag `v0.8.3` (tag object
+`8a5e7529aec42e1c438df20c8adba6e533454257`) peels to
+`53ed581a0c5eb4e35c184e68a7c6a9b840de5985`, the merge of #80, and
+`git describe --tags --exact-match` reports `v0.8.3`. CI passed on the merge
+commit (run `38795484290`) and on the tag (run `38796022840`) on Linux,
+macOS 15 and macOS 26.
+
+Provider-free (Level 1), on that clone. Every command exited with `0`:
+- 55 test files: 1425 passed and 6 skipped, with strict unhandled rejections
+  and no unhandled error.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- `git diff --check` and `git status --short` printed nothing.
+- Offline Doctor with the example configuration: `packageVersion` `0.8.3`;
+  its only finding was the placeholder workspace (`workspace_missing`).
+
+`package.json`, `package-lock.json`, `dist/main.js` and the `dist` tree were
+byte-identical before and after the client cycles; `dist/main.js` has the
+SHA-256 `47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7`.
+
+Package publication, a release fact and not an acceptance level: the npm
+package `pi-session-mcp@0.8.3` was published by the maintainer from the tag.
+It has 136 files, shasum `ae9fa4d6160c7af568f465794d32943be11c5a56` and
+integrity
+`sha512-5QL32NPOcajbVcWSFYPK/Q97t1yRHA7gFjzJEkgViURGqTMFom8RGSPWC+3izhJY0cZZvwxOh/Cjkg2iAn//8g==`.
+The tarball downloaded from the registry has the same digests, and its shasum
+equals a `npm publish --dry-run` from a fresh clone of the tag. It has no
+provenance attestation.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed; all nine steps passed on all four
+  targets.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile: version `0.8.3`, the same `dist/main.js`, and
+  every `@earendil-works` package at `1.2.0` with one copy each, although
+  `1.3.0` of the SDK family had been published in the meantime. The install
+  smoke reported `smoke_passed`, and 160 of 160 checks passed.
+- In both runs the real client registrations were unchanged, no process
+  remained, and the build stayed byte-identical.
+
+Fresh installs of every earlier version, on 2026-10-16 with npm `12.2.0`:
+0.6.1 (Pi SDK `1.0.4`) and 0.6.2 to 0.8.2 (Pi SDK `1.1.0`) resolved the SDK's
+internal packages to `1.3.0` and exited at startup with the `SyntaxError` of
+#78; only 0.8.3 started.
+
+Installation upgrades on 2026-10-16, following
+[Installation](installation.md#npm-installation):
+- Linux workstation, npm prefix in the home directory: from `0.8.1` to
+  `0.8.3` for `claude-code:user` (the only owned target there). `--verify`
+  with `0.8.1` passed, `--remove` reported `removed` and `skill_removed`, the
+  new package resolved every `@earendil-works` package to `1.2.0`, the install
+  smoke passed, Doctor with the operator configuration reported no finding,
+  and `--apply` then `--verify` reported `mcp_verified` and `skill_verified`.
+- Linux server (npm `10.9.8`, Node.js `22.23.2`): from `0.8.1` to `0.8.3` for
+  `claude-code:user` and `codex:user`, with the same sequence and results.
+- Client sessions that were open during an upgrade keep their old server
+  process until they end.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

@@ -12,8 +12,8 @@ mean they are implemented or that their gates passed.
 
 ## Current state
 
-Updated 2026-10-15. Base main `bdfb95de9a46defa64d2eb382d58d454f97fc8fb`
-(the merge of the 0.8.2 release).
+Updated 2026-10-16. Base main `53ed581a0c5eb4e35c184e68a7c6a9b840de5985`
+(the merge of the 0.8.3 release).
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
@@ -56,6 +56,17 @@ Updated 2026-10-15. Base main `bdfb95de9a46defa64d2eb382d58d454f97fc8fb`
   R17 stay deferred (not met), R18 stays deferred (not determinable), and
   [#74](https://github.com/plagor44-ux/pi-session-mcp/issues/74) is closed as
   not planned. R10, R11 and R22 stay open.
+- Release 0.8.3 was merged in [#80](https://github.com/plagor44-ux/pi-session-mcp/pull/80)
+  and published on 2026-10-15. It fixes #78 with Pi SDK 1.2.0 and exact pins
+  of the SDK's internal packages, and adds the install smoke and the
+  packed-tarball pre-release check. Its published-release acceptance passed on
+  2026-10-16 for the tag and the npm package, and the workstation and server
+  installations were upgraded (see
+  [Acceptance](acceptance.md#v083-post-release-evidence)). Fresh installs of
+  0.6.1 to 0.8.2 do not start.
+- ADR 0008 for [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79)
+  is proposed: [ADR 0008](adr/0008-coding-profile-isolation.md). It stays
+  Proposed until the maintainer accepts it.
 
 ### Sprint 3 task status
 
@@ -66,8 +77,8 @@ Updated 2026-10-15. Base main `bdfb95de9a46defa64d2eb382d58d454f97fc8fb`
 | R05 / R09 ten-task Level 3 cycle | None (acceptance) | verified: accepted, 10 of 10 tasks |
 | R06 new Codex abort run | None (acceptance) | verified |
 | R07 Codex discovery of the setup-installed skill | None (acceptance) | verified |
-| R10 / R11 current macOS Level 2 and smoke | None | blocked: work Mac not reachable; runbook in the Sprint 3 file |
-| R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; proposal in the Sprint 2 file |
+| R10 / R11 current macOS Level 2 and smoke | None | blocked: work Mac not reachable (again confirmed on 2026-10-16); runbook in the Sprint 3 file |
+| R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; current proposal in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#appendix-proposed-chatgpt-project-instructions-r22) |
 
 Status words: planned, in progress, implemented (code exists), verified (named
 criteria met with evidence), blocked, failed (ran and missed its criteria; kept
@@ -134,7 +145,7 @@ in-memory state and one trusted local peer.
 | Former pi-control #31/#32 | Closed as not_planned; no automatic migration/reopening |
 | Former release gates/#11–#14 | Historical; bind current acceptance to the current build |
 
-0.8.3 is a patch release only if the MCP contract remains unchanged and its
-gates pass. Apply the current [release procedure](releasing.md): version and
+A patch release ships only if the MCP contract remains unchanged and its gates
+pass. Apply the current [release procedure](releasing.md): version and
 pre-release acceptance travel in the change PR. Merge, tagging and
 publication remain maintainer decisions. No release is authorized by this plan.
