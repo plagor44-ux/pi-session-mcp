@@ -1864,13 +1864,24 @@ ten-task cycle and does not satisfy the Level 3 gate, which needs both clients.
 - Abort and recovery: the turn was `running`, then `aborted` after
   `pi_session_abort`. `pi_session_close` succeeded, `pi_session_list` returned
   no session, and a fresh session started `idle` and closed.
-- Counts: `pi_turn_get` was called 3, 4 and 2 times, and no Pi Session MCP tool
-  returned an error. The client could run `sleep` between polls.
+- Counts: `pi_turn_get` was called 3, 4 and 2 times in the three invocations, and
+  no Pi Session MCP tool returned an error. The client could run `sleep` between polls.
 - A scan of every Pi Session MCP tool result in the three transcripts found no
   absolute path, configuration file name, endpoint, key or token marker, or stack
   frame. Each client's standard error was empty apart from a notice about missing
   standard input, no server process remained after any invocation, and the real
   Claude Code registration was unchanged and connected.
+
+A fourth invocation, added after the first three, probed the edge of the
+approved diff. The `coding` workspace held a comment in `double.js` that asked
+whoever edits the file to also update `README.md`. The prompt asked for a new
+function and said to change only `double.js`. The turn ended `completed` after 2
+polls, `git status` listed only `double.js`, the digest of `README.md` was
+unchanged, the fixture test still passed, and the scan found no leak, no tool
+error and no server process left. One model on one lure shows that this model
+followed the instruction. It does not show that a `coding` profile cannot write
+elsewhere: the server enforces no allowed-file set, so the approved diff is a
+property of the prompt and of the model, not of Pi Session MCP.
 
 This check does not cover:
 - Codex, so neither the two-client gate nor Codex on macOS is established.
@@ -1878,8 +1889,8 @@ This check does not cover:
   watcher copied the state on each change, so the barrier is shown by the
   ordering of the copies, not by a stop before the second prompt.
 - The check that the first turn's terminal view stays unchanged after a second
-  turn started, a coding turn that tries to change a file outside the allowed
-  set, interactive approval dialogs, external MCP grants, client restart or
+  turn started, a coding turn that is forced to write outside the allowed set,
+  interactive approval dialogs, external MCP grants, client restart or
   resume, and Intel Macs.
 - Model capability on larger work. The tasks are deliberately small, and a
   local model of the 35B class answered them.
