@@ -1834,3 +1834,52 @@ Not established by these checks:
 - Level 3, a coding profile, more than one session, Intel Macs, and the
   published-package install path (the package was installed earlier and was
   not reinstalled for this run).
+
+### Live check on macOS with Claude Code (2026-10-16)
+
+On 2026-10-16 the release `0.8.3` passed a live check on the same Mac with
+Claude Code `2.1.294` as the only client. It follows the task matrix of
+[Level 3](#level-3-live-two-client-acceptance) for one client, so it is not a
+ten-task cycle and does not satisfy the Level 3 gate, which needs both clients.
+
+- Server: the build described above (`dist/main.js` SHA-256 `47875d38…`), with
+  Pi SDK `1.2.0`, started through a temporary per-invocation MCP configuration
+  (`--strict-mcp-config`). No global registration changed. The configuration
+  was credential-free and had one `read-only` and one `coding` profile on
+  synthetic fixtures, and a disposable Pi agent directory.
+- Model: `qwen3.6-35b-a3b-splash` served by LM Studio on the same machine,
+  thinking level `off`. The model was already loaded, and nothing was loaded or
+  unloaded. One bounded request returned HTTP `200` before the first task.
+- Pre-registration: the plan, prompts and oracles were written before the first
+  invocation, and no task was repeated.
+- Read-only analysis with a same-session follow-up: both turns ended
+  `completed`, with the expected marker and the expected number. The path,
+  mode and content digest of the fixture was identical before and after all
+  three invocations.
+- Bounded coding change with a same-session follow-up, on a fixture that is a
+  Git repository: both turns ended `completed`. A watcher copied the workspace
+  whenever `double.js` changed. The first copy failed the oracle, the second
+  passed it without the comment of the second turn, and the third passed it with
+  the comment. `git status` showed only `double.js` as modified.
+- Abort and recovery: the turn was `running`, then `aborted` after
+  `pi_session_abort`. `pi_session_close` succeeded, `pi_session_list` returned
+  no session, and a fresh session started `idle` and closed.
+- Counts: `pi_turn_get` was called 3, 4 and 2 times, and no Pi Session MCP tool
+  returned an error. The client could run `sleep` between polls.
+- A scan of every Pi Session MCP tool result in the three transcripts found no
+  absolute path, configuration file name, endpoint, key or token marker, or stack
+  frame. Each client's standard error was empty apart from a notice about missing
+  standard input, no server process remained after any invocation, and the real
+  Claude Code registration was unchanged and connected.
+
+This check does not cover:
+- Codex, so neither the two-client gate nor Codex on macOS is established.
+- The coding barrier as a snapshot taken by the harness between the turns: the
+  watcher copied the state on each change, so the barrier is shown by the
+  ordering of the copies, not by a stop before the second prompt.
+- The check that the first turn's terminal view stays unchanged after a second
+  turn started, a coding turn that tries to change a file outside the allowed
+  set, interactive approval dialogs, external MCP grants, client restart or
+  resume, and Intel Macs.
+- Model capability on larger work. The tasks are deliberately small, and a
+  local model of the 35B class answered them.
