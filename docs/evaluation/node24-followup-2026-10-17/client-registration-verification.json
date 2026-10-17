@@ -1,0 +1,389 @@
+{
+  "kind": "node24-actual-client-registration-verification",
+  "verified_at": "2026-10-17T09:30:06.747Z",
+  "runtime": "v24.22.0",
+  "direct_command_matches_expected": true,
+  "doctor": {
+    "exit_code": 0,
+    "result": {
+      "schemaVersion": 1,
+      "ok": true,
+      "packageVersion": "0.8.3",
+      "checks": [
+        {
+          "id": "node_version_unsupported",
+          "severity": "ok",
+          "subject": "Node.js"
+        },
+        {
+          "id": "build_missing",
+          "severity": "ok",
+          "subject": "build output"
+        },
+        {
+          "id": "build_stale",
+          "severity": "ok",
+          "subject": "build output"
+        },
+        {
+          "id": "version_mismatch",
+          "severity": "ok",
+          "subject": "package version"
+        },
+        {
+          "id": "config_invalid",
+          "severity": "ok",
+          "subject": "configuration"
+        },
+        {
+          "id": "workspace_not_directory",
+          "severity": "ok",
+          "subject": "omp-control"
+        },
+        {
+          "id": "workspace_not_directory",
+          "severity": "ok",
+          "subject": "pi-session-mcp"
+        },
+        {
+          "id": "workspace_not_directory",
+          "severity": "ok",
+          "subject": "smartpaper-ng"
+        },
+        {
+          "id": "workspace_not_directory",
+          "severity": "ok",
+          "subject": "thoth"
+        },
+        {
+          "id": "workspace_not_directory",
+          "severity": "ok",
+          "subject": "workflow-artifact-copilot"
+        },
+        {
+          "id": "workspace_unreadable",
+          "severity": "ok",
+          "subject": "omp-control"
+        },
+        {
+          "id": "workspace_unreadable",
+          "severity": "ok",
+          "subject": "pi-session-mcp"
+        },
+        {
+          "id": "workspace_unreadable",
+          "severity": "ok",
+          "subject": "smartpaper-ng"
+        },
+        {
+          "id": "workspace_unreadable",
+          "severity": "ok",
+          "subject": "thoth"
+        },
+        {
+          "id": "workspace_unreadable",
+          "severity": "ok",
+          "subject": "workflow-artifact-copilot"
+        },
+        {
+          "id": "workspace_not_writable",
+          "severity": "ok",
+          "subject": "omp-control"
+        },
+        {
+          "id": "workspace_not_writable",
+          "severity": "ok",
+          "subject": "pi-session-mcp"
+        },
+        {
+          "id": "workspace_not_writable",
+          "severity": "ok",
+          "subject": "smartpaper-ng"
+        },
+        {
+          "id": "workspace_not_writable",
+          "severity": "ok",
+          "subject": "thoth"
+        },
+        {
+          "id": "workspace_not_writable",
+          "severity": "ok",
+          "subject": "workflow-artifact-copilot"
+        },
+        {
+          "id": "extension_missing",
+          "severity": "ok",
+          "subject": "code-cursor:pi-cursor-sdk"
+        },
+        {
+          "id": "extension_missing",
+          "severity": "ok",
+          "subject": "review-cursor:pi-cursor-sdk"
+        },
+        {
+          "id": "extension_version_mismatch",
+          "severity": "ok",
+          "subject": "code-cursor:pi-cursor-sdk"
+        },
+        {
+          "id": "extension_version_mismatch",
+          "severity": "ok",
+          "subject": "review-cursor:pi-cursor-sdk"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "code-cursor:pi-session-implementation"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "code-deepseek:pi-session-implementation"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "code-glm:pi-session-implementation"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "code-mistral:pi-session-implementation"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "code:pi-session-implementation"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "explore-fast:pi-session-review"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "review-cursor:pi-session-review"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "review-glm:pi-session-review"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "review-grok:pi-session-review"
+        },
+        {
+          "id": "skill_missing",
+          "severity": "ok",
+          "subject": "review:pi-session-review"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "code-cursor:pi-session-implementation"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "code-deepseek:pi-session-implementation"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "code-glm:pi-session-implementation"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "code-mistral:pi-session-implementation"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "code:pi-session-implementation"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "explore-fast:pi-session-review"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "review-cursor:pi-session-review"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "review-glm:pi-session-review"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "review-grok:pi-session-review"
+        },
+        {
+          "id": "skill_unreadable",
+          "severity": "ok",
+          "subject": "review:pi-session-review"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "code-cursor:pi-session-implementation"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "code-deepseek:pi-session-implementation"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "code-glm:pi-session-implementation"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "code-mistral:pi-session-implementation"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "code:pi-session-implementation"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "explore-fast:pi-session-review"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "review-cursor:pi-session-review"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "review-glm:pi-session-review"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "review-grok:pi-session-review"
+        },
+        {
+          "id": "skill_duplicate",
+          "severity": "ok",
+          "subject": "review:pi-session-review"
+        }
+      ],
+      "exitCode": 0
+    }
+  },
+  "setup_verify": [
+    {
+      "target": "codex:user:pi-session-mcp",
+      "exit_code": 0,
+      "result": {
+        "schemaVersion": 1,
+        "operation": "verify",
+        "status": "ok",
+        "findings": [
+          {
+            "target": {
+              "client": "codex",
+              "scope": "user",
+              "alias": "pi-session-mcp"
+            },
+            "status": "ok",
+            "code": "mcp_verified"
+          },
+          {
+            "target": {
+              "client": "codex",
+              "scope": "user",
+              "alias": "pi-session-orchestration"
+            },
+            "status": "ok",
+            "code": "skill_verified"
+          }
+        ],
+        "exitCode": 0
+      }
+    },
+    {
+      "target": "claude-code:user:pi-session-mcp",
+      "exit_code": 0,
+      "result": {
+        "schemaVersion": 1,
+        "operation": "verify",
+        "status": "ok",
+        "findings": [
+          {
+            "target": {
+              "client": "claude-code",
+              "scope": "user",
+              "alias": "pi-session-mcp"
+            },
+            "status": "ok",
+            "code": "mcp_verified"
+          },
+          {
+            "target": {
+              "client": "claude-code",
+              "scope": "user",
+              "alias": "pi-session-orchestration"
+            },
+            "status": "ok",
+            "code": "skill_verified"
+          }
+        ],
+        "exitCode": 0
+      }
+    }
+  ],
+  "registration_inspections": [
+    {
+      "client": "codex",
+      "scope": "user",
+      "name": "pi-session-mcp",
+      "state": "equivalent",
+      "command": "node",
+      "hasExpectedConfig": true,
+      "supported": true
+    },
+    {
+      "client": "claude-code",
+      "scope": "user",
+      "name": "pi-session-mcp",
+      "state": "equivalent",
+      "command": "node",
+      "hasExpectedConfig": true,
+      "supported": true
+    }
+  ],
+  "direct_registration_handshake": {
+    "status": "verified",
+    "initialize": true,
+    "toolsList": true,
+    "capabilitiesGet": true,
+    "tools": [
+      "pi_capabilities_get",
+      "pi_session_start",
+      "pi_session_list",
+      "pi_session_get",
+      "pi_session_prompt",
+      "pi_session_abort",
+      "pi_session_close",
+      "pi_turn_get"
+    ]
+  },
+  "session_starts": 0,
+  "provider_calls": 0,
+  "limits": "The direct Node executable is bound to 24.22.0. It does not prepend PATH; child commands selected by PATH retain the client environment. Existing client stdio connections were not restarted.",
+  "status": "PASS"
+}

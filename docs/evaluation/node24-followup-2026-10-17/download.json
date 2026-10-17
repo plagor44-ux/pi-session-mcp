@@ -1,0 +1,16 @@
+{
+  "kind": "official-node-download",
+  "retrieved_at": "2026-10-17T09:14:35.786Z",
+  "version": "24.22.0",
+  "platform": "linux",
+  "arch": "x64",
+  "artifact": "node-v24.22.0-linux-x64.tar.xz",
+  "url": "https://nodejs.org/dist/v24.22.0/node-v24.22.0-linux-x64.tar.xz",
+  "checksum_url": "https://nodejs.org/dist/v24.22.0/SHASUMS256.txt",
+  "sha256": "cc2f601cee82d9a5a233302fe307abc600727035fd7d2c3a3571755989e95008",
+  "checksum_verified": true,
+  "signature_verified": false,
+  "verification": "SHA-256 against official HTTPS SHASUMS256.txt; no detached-signature verification claimed.",
+  "bytes": 32015600,
+  "scope": "node24-extension-followup-04470d85-3a99-47e3-b356-ce96e77de0dd"
+}

@@ -1,0 +1,58 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:38:41.612Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-c57c4778-261d-4397-8a36-df9cc23ca629",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "c2b61e4b-fd33-4969-ab29-118957ca5fbb",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "FAIL",
+      "process_group_empty_after_close": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@earendil-works/pi-coding-agent' imported from <cursor-package>/dist/context-window-cache.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/activation-and-resources-c2b61e4b-fd33-4969-ab29-118957ca5fbb.json",
+      "receipt_sha256": "09c3ff82ef681d38679d57cb49792f66dcfb70ed22eb7ece3672028b776690b2"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "19d479f2-7162-463e-90de-2d89a13e59a3",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "FAIL",
+      "process_group_empty_after_close": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@earendil-works/pi-coding-agent' imported from <cursor-package>/dist/context-window-cache.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/bridge-disabled-19d479f2-7162-463e-90de-2d89a13e59a3.json",
+      "receipt_sha256": "6b28897efc82a17343ca2feb206722df7ecc75e7149f8ed6712b5b0dab8ea7d7"
+    }
+  ],
+  "cleanup": "FAIL",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "independent-read-only-extension-function-review",
+  "reviewed_components": {
+    "bridges": "PASS",
+    "cache": "PASS",
+    "cursor": "PASS",
+    "navigation": "PASS"
+  },
+  "resolved_findings": [
+    "Cache SDK import uses the public package root.",
+    "Codex bypass is tested with cache keys enabled, equally to the OpenAI case.",
+    "Statistics receive the actual synthetic prompt marker before absence from stored JSON is checked.",
+    "Headless confirmation requests are counted.",
+    "Cache unrelated debug deletion removed; only marked owned test homes are removed after close and an empty group.",
+    "Cache and Cursor stderr/output supervision and timeout escalation are bounded.",
+    "Cursor records actual owned-case removal and retains a scope if cleanup is unresolved.",
+    "Navigation supervisor sends TERM then KILL independently of exit and waits for close.",
+    "Inner Git and context server stay in the supervised process group.",
+    "getconf read-only callback and promisify semantics are preserved.",
+    "Context server preload guards are applied inside the child and its final counters are read after exit.",
+    "Context MCP probe remains BLOCKED by instrumentation; retrieval is separately INCONCLUSIVE and hook persistence alone passes."
+  ],
+  "reviewer_mutations": 0,
+  "reviewer_external_provider_calls": 0,
+  "status": "PASS",
+  "conclusion": "Named component claims and observed cleanup are supported; no package-wide effectiveness, production integration or OS containment is qualified."
+}

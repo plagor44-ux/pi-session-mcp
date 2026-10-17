@@ -1,0 +1,103 @@
+{
+  "kind": "final-extension-function-dossier-verification",
+  "status": "PASS",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "script_syntax": [
+    {
+      "script": "bridges/guard.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "bridges/run.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "bridges/worker.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "cache/probe.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "cache/runner.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "cursor/probe.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "cursor/runner.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "navigation/child-guard.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "navigation/function-probe.mjs",
+      "exit_code": 0
+    },
+    {
+      "script": "navigation/function-runner.mjs",
+      "exit_code": 0
+    }
+  ],
+  "archives_verified": [
+    {
+      "path": "docs/evaluation/client-reconnect-2026-10-17/integrity.json",
+      "files_verified": 5
+    },
+    {
+      "path": "docs/evaluation/extension-audit-2026-10-17/integrity.json",
+      "files_verified": 22
+    },
+    {
+      "path": "docs/evaluation/live-rescreen-2026-10-17/integrity.json",
+      "files_verified": 32
+    },
+    {
+      "path": "docs/evaluation/live-screening-2026-10-17/integrity.json",
+      "files_verified": 35
+    },
+    {
+      "path": "docs/evaluation/node24-followup-2026-10-17/integrity.json",
+      "files_verified": 46
+    },
+    {
+      "path": "docs/evaluation/permission-gates-2026-10-17/integrity.json",
+      "files_verified": 9
+    },
+    {
+      "path": "docs/evaluation/plan-continuation-2026-10-17/integrity.json",
+      "files_verified": 12
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/bridges/integrity.json",
+      "files_verified": 19
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/cache/integrity.json",
+      "files_verified": 39
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/cursor/integrity.json",
+      "files_verified": 49
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/navigation/integrity.json",
+      "files_verified": 37
+    }
+  ],
+  "local_markdown_links_verified": 49,
+  "private_path_or_secret_marker_scan": "PASS",
+  "original_checkout_clean": true,
+  "diff_whitespace_check": "PASS",
+  "new_external_model_starts": 0,
+  "full_suite_repeated": false,
+  "reason": "Only docs-contained optional probes and evidence changed; core source binding is unchanged."
+}

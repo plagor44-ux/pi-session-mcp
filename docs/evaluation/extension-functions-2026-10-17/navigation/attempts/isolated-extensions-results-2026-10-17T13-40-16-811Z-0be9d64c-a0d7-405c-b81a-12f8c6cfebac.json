@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T13:40:16.811Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "sanitized_stderr_excerpt": "file://<repository>/docs/evaluation/extension-functions-2026-10-17/navigation/function-probe.mjs:338\n        const session = capturedRuntime.session;\n              ^\n\nSyntaxError: Identifier 'session' has already been declared\n    at compileSourceTextModule (node:internal/modules/esm/utils:319:16)\n    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:89:18)\n    at #translate (node:internal/modules/esm/loader:438:20)\n    at afterLoad (node:internal/modules/esm/loader:506:29)\n    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:511:12)\n    at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:564:36)\n    at afterResolve (node:internal/modules/esm/loader:611:52)\n    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)\n    at node:internal/modules/esm/loader:636:32\n    at TracingChannel.tracePromise (node:diagnostics_channel:370:14)\n\nNode.js v24.22.0\n",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 0,
+      "evidence_id": "b09dc440-4c3f-4c81-85a3-d41b65d374be",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Only the specific synthetic function/event checks in function_check are covered. No prompts, model/provider calls, UI behavior, real-world retrieval quality, or broader package efficacy claim."
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0.0",
+  "approved": false,
+  "screening": {
+    "max_runs": 8,
+    "proposed_usd": 5,
+    "route_groups": [
+      {"candidate": "Luna", "tasks": ["T1", "T2"], "max_runs": 2},
+      {"candidate": "Sol", "tasks": ["T1", "T2"], "max_runs": 2},
+      {"candidate": "DeepSeek optional replacement slots", "tasks": ["T1", "T2"], "max_runs": 2},
+      {"candidate": "Grok review screening", "tasks": ["T5", "T5"], "max_runs": 2}
+    ],
+    "parallelism": 1,
+    "max_retries": 0,
+    "run_timeout_ms": 180000,
+    "total_timeout_ms": 1440000
+  },
+  "pilot": {
+    "max_runs": 18,
+    "proposed_usd": 15,
+    "requires": "accepted screening records and selected exact routes",
+    "tasks": [
+      {"task_id": "T1", "profile_id": "P1", "view": "scout", "repetitions": 2},
+      {"task_id": "T2", "profile_id": "P2", "view": "implementer", "repetitions": 2},
+      {"task_id": "T3", "profile_id": "P4", "view": "ui-writer", "repetitions": 2},
+      {"task_id": "T4", "profile_id": "P2", "view": "implementer", "repetitions": 2},
+      {"task_id": "T5", "profile_id": "P3", "view": "reviewer", "repetitions": 2},
+      {"task_id": "T6", "profile_id": "P4", "view": "tester", "repetitions": 2},
+      {"task_id": "T7", "profile_id": "P1", "view": "scout", "repetitions": 2},
+      {"task_id": "T8", "profile_id": "P1", "view": "docs-writer", "repetitions": 2},
+      {"task_id": "T9", "profile_id": ["P1", "P2"], "view": ["scout", "implementer"], "repetitions": 2, "status": "BLOCKED", "reason": "no controlled compaction evidence; one read and one mutation slot do not qualify either route with two repetitions"}
+    ],
+    "fixed_result_reviews": "Replace pilot slots with P3 T2/T4 reviews of hash-bound snapshots; additional slots need revised approval, never exceed 18."
+  },
+  "ablation": {
+    "max_runs": 4,
+    "proposed_usd": 5,
+    "tasks": 2,
+    "repetitions": 2,
+    "status": "NOT_RUN",
+    "reason": "No measured live baseline bottleneck; no extension selected or installed. Pair against existing same-task baseline records. Package/peer/SDK/license/telemetry/data-path/headless audit required before a variant can be enabled."
+  },
+  "total_max_runs": 30,
+  "notes": [
+    "Dollar figures are unapproved estimates, not an enforced provider cap.",
+    "GLM replaces a comparison slot or requires a revised approval.",
+    "Astra is a justified escalation only; Cursor and Antigravity are separate harness comparisons and excluded.",
+    "No automatic pilot promotion or ablation starts."
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "kind": "cursor-node24-headless-component-test",
+  "status": "INCONCLUSIVE",
+  "node": "24.22.0",
+  "phase": "verify-coding-binding",
+  "diagnostic_code": "ERR_ASSERTION",
+  "completed_rows": [
+    {
+      "permission_profile": "read-only",
+      "status": "PASS",
+      "candidate": "pi-cursor-sdk@0.5.3",
+      "fixture": "pi-extension-fixture@1.0.0",
+      "candidate_registered_tool_count": 1,
+      "candidate_tools": [
+        "cursor_activate_skill"
+      ],
+      "active_tools": [
+        "find",
+        "grep",
+        "ls",
+        "read"
+      ],
+      "applied_model_selection": {
+        "provider": "fixture-ext",
+        "model": "fixture-ext-model",
+        "thinkingLevel": "off"
+      },
+      "skills_loaded": 0,
+      "prompts_loaded": 0,
+      "themes_loaded": 0,
+      "fixture_provider_turns": 0,
+      "candidate_tool_calls": 0,
+      "session_shutdown": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 2,
+  "external_provider_calls": 0,
+  "cursor_model_turns": 0,
+  "cursor_tools_invoked": 0,
+  "diagnostics": [],
+  "execution_scope": "fresh-temporary-home-removed-after-observed-exit",
+  "execution_scope_removed": true,
+  "observed_node24_child_exit": true,
+  "process_exit_code": 1,
+  "process_signal": null,
+  "receipt_overflow": false,
+  "additional_paid_candidate_runs": 0
+}

@@ -1,0 +1,108 @@
+{
+  "kind": "cursor-node24-headless-component-test",
+  "status": "PASS",
+  "node": "24.22.0",
+  "candidate": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "peers": {
+      "@earendil-works/pi-ai": "*",
+      "@earendil-works/pi-coding-agent": "*",
+      "@earendil-works/pi-tui": "*",
+      "typebox": "*"
+    }
+  },
+  "lock_entry": {
+    "version": "0.5.3",
+    "resolved": "https://registry.npmjs.org/pi-cursor-sdk/-/pi-cursor-sdk-0.5.3.tgz",
+    "integrity": "sha512-5Rj6m600FuBmc+VfEeqZkktsYUbwJQscdwTNBz7UPKWNtl8taibiIILqnJB2YEr8FLAqOUlLgmCaVsA4sYsfRg=="
+  },
+  "resolved_peer_versions": {
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0",
+    "typebox": "1.3.27",
+    "@cursor/sdk": "1.0.37"
+  },
+  "entry_hashes": {
+    "package.json": "sha256:66d2272b2b3a598c1b03510c3d2083e98fd974a8464ae3b034ed328a1c0774ed",
+    "./dist/index.js": "sha256:9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "rows": [
+    {
+      "permission_profile": "read-only",
+      "status": "PASS",
+      "candidate": "pi-cursor-sdk@0.5.3",
+      "fixture": "pi-extension-fixture@1.0.0",
+      "candidate_registered_tool_count": 1,
+      "candidate_tools": [
+        "cursor_activate_skill"
+      ],
+      "active_tools": [
+        "find",
+        "grep",
+        "ls",
+        "read"
+      ],
+      "applied_model_selection": {
+        "provider": "fixture-ext",
+        "model": "fixture-ext-model",
+        "thinkingLevel": "off"
+      },
+      "skills_loaded": 0,
+      "prompts_loaded": 0,
+      "themes_loaded": 0,
+      "fixture_provider_turns": 0,
+      "candidate_tool_calls": 0,
+      "session_shutdown": "PASS"
+    },
+    {
+      "permission_profile": "coding",
+      "status": "PASS",
+      "candidate": "pi-cursor-sdk@0.5.3",
+      "fixture": "pi-extension-fixture@1.0.0",
+      "candidate_registered_tool_count": 1,
+      "candidate_tools": [
+        "cursor_activate_skill"
+      ],
+      "active_tools": [
+        "bash",
+        "edit",
+        "find",
+        "fixture_tool",
+        "grep",
+        "ls",
+        "read",
+        "write"
+      ],
+      "applied_model_selection": {
+        "provider": "fixture-ext",
+        "model": "fixture-ext-model",
+        "thinkingLevel": "off"
+      },
+      "skills_loaded": 0,
+      "prompts_loaded": 0,
+      "themes_loaded": 0,
+      "fixture_provider_turns": 0,
+      "candidate_tool_calls": 0,
+      "session_shutdown": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "denied_child_process_attempts": 2,
+  "external_provider_calls": 0,
+  "cursor_model_turns": 0,
+  "fixture_provider_turns": 0,
+  "cursor_tools_invoked": 0,
+  "stdout_guard_suppressed_fixture_writes": 4,
+  "raw_stderr_suppressed": true,
+  "raw_errors_recorded": false,
+  "limitation": "Actual resolver, SDK extension load/bind, provider and tool registration, active tool selection and shutdown only. No Cursor tool, Cursor model/provider request, cloud/MCP operation or fixture model turn was invoked. Two child-process API attempts were denied by instrumentation. JavaScript denials are not an OS sandbox.",
+  "execution_scope": "fresh-temporary-home-removed-after-observed-exit",
+  "execution_scope_removed": true,
+  "observed_node24_child_exit": true,
+  "process_exit_code": 0,
+  "process_signal": null,
+  "receipt_overflow": false,
+  "additional_paid_candidate_runs": 0
+}

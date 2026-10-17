@@ -1,0 +1,290 @@
+{
+  "kind": "registry-and-tarball-static-inputs",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "packages": [
+    {
+      "identity": "pi-lens",
+      "version": "4.4.3",
+      "published_at": "2026-10-11T03:59:51.078Z",
+      "retrieved_at": "2026-10-17T09:01:03.880Z",
+      "source_url": "https://registry.npmjs.org/pi-lens",
+      "package_url": "https://www.npmjs.com/package/pi-lens",
+      "repository": {
+        "url": "git+https://github.com/apmantza/pi-lens.git",
+        "type": "git"
+      },
+      "license": "MIT",
+      "engines": {
+        "node": ">=22.19.0"
+      },
+      "pi": {
+        "skills": [
+          "./skills"
+        ],
+        "extensions": [
+          "./dist/index.js"
+        ]
+      },
+      "dependencies": {
+        "js-yaml": "^5.2.2",
+        "pidusage": "^4.0.1",
+        "minimatch": "^10.2.6",
+        "@ast-grep/cli": "0.45.3",
+        "@ast-grep/napi": "^0.45.0",
+        "vscode-jsonrpc": "^9.0.0"
+      },
+      "peerDependencies": {
+        "typebox": "^1.0.0",
+        "@earendil-works/pi-tui": "*",
+        "@earendil-works/pi-coding-agent": "*"
+      },
+      "peerDependenciesMeta": {
+        "typebox": {
+          "optional": true
+        },
+        "@earendil-works/pi-tui": {
+          "optional": true
+        },
+        "@earendil-works/pi-coding-agent": {
+          "optional": true
+        }
+      },
+      "scripts": {
+        "fmt": "oxfmt",
+        "knip": "node scripts/run-knip.mjs",
+        "lint": "tsc --project tsconfig.json && npm run lint:js && npm run lint:js:tests",
+        "test": "node scripts/with-test-lock.mjs -- vitest run",
+        "build": "tsc --project tsconfig.build.json",
+        "check": "node scripts/check-extensions.mjs",
+        "taplo": "taplo check $(git ls-files '*.toml' ':!tests/fixtures/**') && taplo fmt --check $(git ls-files '*.toml' ':!tests/fixtures/**' ':!config/ruff/core.toml') # taplo 0.7.0 panics on this file's comments; lint it above",
+        "watch": "tsc --watch",
+        "banner": "npx -y sharp-cli --input banner.svg --output banner.png resize 2200 620",
+        "hygiene": "node scripts/prune-agent-worktrees.mjs",
+        "lint:js": "oxlint --deny-warnings --import-plugin --promise-plugin -D block-scoped-var -D import/default -D import/namespace -D import/no-absolute-path -D import/no-empty-named-blocks -D import/no-named-as-default -D import/no-self-import -D no-extend-native -D no-extra-bind -D no-implied-eval -D no-new -D no-unexpected-multiline -D no-useless-constructor -D oxc/approx-constant -D oxc/misrefactored-assign-op -D oxc/no-accumulating-spread -D oxc/no-async-endpoint-handlers -D oxc/no-this-in-exported-function -D promise/no-callback-in-promise -D promise/no-multiple-resolved -D promise/no-new-statics -D promise/valid-params -D typescript/no-confusing-non-null-assertion -D typescript/no-extraneous-class -D typescript/no-unnecessary-type-constraint -D typescript/no-unsafe-enum-comparison -D unicorn/no-accessor-recursion -D unicorn/no-array-fill-with-reference-type -D unicorn/no-confusing-array-with -D unicorn/no-instanceof-builtins -D unicorn/prefer-array-flat-map -D unicorn/require-module-specifiers --ignore-pattern \"tests/**/*.ts\" --ignore-pattern \"tests/**/*.tsx\" --ignore-pattern \"**/*.d.mts\" --ignore-pattern \"tests/fixtures/autofix-smoke/**\" --ignore-pattern \"tests/fixtures/format-smoke/**\" --ignore-pattern \"tests/fixtures/tool-smoke/**\" --ignore-pattern \"tests/fixtures/call-graph/javascript/**\" --ignore-pattern \"tests/fixtures/function-facts/javascript-parameter.js\" .",
+        "prepack": "node scripts/strip-dev-deps-for-pack.mjs --strip",
+        "prepare": "npm run build:dist && node scripts/download-grammars.js --core --dest grammars && node scripts/setup-git-hooks.mjs && node scripts/stamp-package-lock.mjs && node scripts/warm-loader-cache.mjs",
+        "postpack": "node scripts/strip-dev-deps-for-pack.mjs --restore",
+        "fmt:check": "oxfmt --check",
+        "preflight": "node scripts/pr-preflight.mjs",
+        "test:unit": "node scripts/with-test-lock.mjs -- vitest run",
+        "build:dist": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && node scripts/build-dist-tsc.mjs tsconfig.dist.json && npm run bundle:dist",
+        "complexity": "node scripts/complexity-report.mjs",
+        "lane:check": "node scripts/lane-check.mjs",
+        "test:regen": "node scripts/regen-test-baseline.mjs",
+        "test:watch": "vitest",
+        "bundle:dist": "node scripts/bundle-dist.mjs",
+        "harness:poc": "node scripts/run-harness.mjs cases/ts/pipeline-dispatch-poc",
+        "logs:smells": "node scripts/analyze-pi-lens-logs.mjs",
+        "lint:js:tests": "node scripts/lint-js-advisory.mjs --deny-warnings --format unix --type-aware -A correctness -A suspicious -A perf --ignore-pattern \"tests/fixtures/**\" tests",
+        "mutation:diff": "node scripts/stryker-diff.mjs --base origin/master --max-files 6",
+        "test:targeted": "node scripts/with-test-lock.mjs --shared -- vitest run",
+        "check:grammars": "node scripts/check-grammar-provenance.mjs",
+        "check:lockfile": "node scripts/check-lockfile-sync.mjs",
+        "harness:go-poc": "node scripts/run-harness.mjs cases/go/pipeline-dispatch-poc",
+        "changelog:check": "node scripts/rollup-changelog.mjs --check",
+        "depcruise:check": "depcruise --validate --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json --output-type err index.ts \"clients/**/*.ts\"",
+        "audit:playground": "node scripts/playground-verify-rule.mjs",
+        "lint:js:advisory": "node scripts/lint-js-advisory.mjs --deny-warnings --format unix -D correctness -D suspicious -D perf --import-plugin --promise-plugin --type-aware -A no-underscore-dangle -A no-await-in-loop -A unicorn/no-array-sort -A unicorn/consistent-function-scoping -A promise/no-promise-in-callback -A no-useless-call -A import/no-unassigned-import -A no-unmodified-loop-condition --ignore-pattern \"**/*.d.mts\" --ignore-pattern \"tests/fixtures/autofix-smoke/**\" --ignore-pattern \"tests/fixtures/format-smoke/**\" --ignore-pattern \"tests/fixtures/tool-smoke/**\" --ignore-pattern \"tests/fixtures/call-graph/javascript/**\" --ignore-pattern \"tests/fixtures/function-facts/javascript-parameter.js\" .",
+        "selftest:install": "node scripts/install-selftest.mjs",
+        "test:integration": "node scripts/with-test-lock.mjs -- vitest run tests/index-integration.test.ts tests/clients/lsp/integration.test.ts",
+        "astgrep:self-scan": "node scripts/run-astgrep-pi-lens.mjs",
+        "audit:tree-sitter": "node scripts/audit-tree-sitter-rules.mjs",
+        "changelog:extract": "node scripts/changelog-extract.mjs",
+        "changelog:release": "node scripts/changelog-release.mjs",
+        "download-grammars": "node scripts/download-grammars.js",
+        "test:real-harness": "node scripts/with-test-lock.mjs --shared -- vitest run",
+        "audit:rule-catalog": "node scripts/validate-rule-catalog.mjs",
+        "check:grammar-load": "node scripts/check-grammar-load.mjs",
+        "docs:rule-catalogs": "node scripts/gen-rule-catalogs.mjs",
+        "harness:python-poc": "node scripts/run-harness.mjs cases/python/pipeline-dispatch-poc",
+        "check:allow-scripts": "node scripts/check-allow-scripts.mjs",
+        "contributors:update": "node scripts/update-contributors.mjs",
+        "bench:cascade-budget": "node scripts/bench-cascade-budget.mjs",
+        "harness:ts-format-poc": "node scripts/run-harness.mjs cases/ts/format-default-poc",
+        "release:backfill-notes": "node scripts/backfill-github-releases.mjs",
+        "release:backfill-thanks": "node scripts/backfill-release-thanks.mjs",
+        "audit:astgrep-rule-pairs": "node scripts/audit-astgrep-rule-pairs.mjs",
+        "harness:python-autofix-poc": "node scripts/run-harness.mjs cases/python/autofix-default-poc",
+        "bench:word-index-replacement": "node scripts/bench-word-index-replacement.mjs",
+        "astgrep:self-scan:update-baseline": "node scripts/run-astgrep-pi-lens.mjs --update-baseline"
+      },
+      "tarball": {
+        "url": "https://registry.npmjs.org/pi-lens/-/pi-lens-4.4.3.tgz",
+        "integrity": "sha512-huULHQMTx00rS9E+wdIli1o7dZx1EP5GVu4L2XC+21ifky/xxLz+GJQg1kZqOigfMs0H65TbmZgqA06zMjERVA==",
+        "sha256": "sha256:94c089862a90eb89e11faefb3d7798c710eaced0279b8c27843ac6abc5cdcbcb",
+        "bytes": 5004599,
+        "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+        "artifact": "pi-lens-4.4.3.tgz"
+      },
+      "registry_metadata_hash": "sha256:d8907f1bdb3747d097613ce177a9773b4bfd5927a40ec82d94281b2181845c2a"
+    },
+    {
+      "identity": "context-mode",
+      "version": "1.0.169",
+      "published_at": "2026-06-29T18:18:27.670Z",
+      "retrieved_at": "2026-10-17T09:01:03.982Z",
+      "source_url": "https://registry.npmjs.org/context-mode",
+      "package_url": "https://www.npmjs.com/package/context-mode",
+      "repository": {
+        "type": "git",
+        "url": "git+https://github.com/mksglu/context-mode.git"
+      },
+      "license": "Elastic-2.0",
+      "engines": {
+        "node": ">=22.5.0"
+      },
+      "pi": {
+        "extensions": [
+          "./build/adapters/pi/extension.js"
+        ],
+        "skills": [
+          "./skills"
+        ]
+      },
+      "dependencies": {
+        "@clack/prompts": "^1.0.1",
+        "@mixmark-io/domino": "^2.2.0",
+        "@modelcontextprotocol/sdk": "^1.26.0",
+        "better-sqlite3": "^12.6.2",
+        "picocolors": "^1.1.1",
+        "turndown": "^7.2.0",
+        "turndown-plugin-gfm": "^1.0.2",
+        "zod": "^3.25.0"
+      },
+      "peerDependencies": {},
+      "peerDependenciesMeta": {},
+      "scripts": {
+        "build": "tsc && node -e \"if(process.platform!=='win32'){require('fs').chmodSync('build/cli.js',0o755)}\" && npm run bundle && npm run assert-bundle && npm run assert-asymmetric-drift",
+        "assert-bundle": "node scripts/assert-bundle.mjs server.bundle.mjs cli.bundle.mjs hooks/session-extract.bundle.mjs hooks/session-snapshot.bundle.mjs hooks/session-db.bundle.mjs hooks/security.bundle.mjs",
+        "assert-asymmetric-drift": "node scripts/assert-asymmetric-drift.mjs",
+        "bundle": "esbuild src/server.ts --bundle --platform=node --target=node18 --format=esm --outfile=server.bundle.mjs --external:better-sqlite3 --external:turndown --external:turndown-plugin-gfm --external:@mixmark-io/domino --minify && esbuild src/cli.ts --bundle --platform=node --target=node18 --format=esm --outfile=cli.bundle.mjs --external:better-sqlite3 --minify && esbuild src/session/extract.ts --bundle --platform=node --target=node18 --format=esm --outfile=hooks/session-extract.bundle.mjs --minify && esbuild src/session/snapshot.ts --bundle --platform=node --target=node18 --format=esm --outfile=hooks/session-snapshot.bundle.mjs --minify && esbuild src/session/db.ts --bundle --platform=node --target=node18 --format=esm --outfile=hooks/session-db.bundle.mjs --external:better-sqlite3 --minify && esbuild src/security.ts --bundle --platform=node --target=node18 --format=esm --outfile=hooks/security.bundle.mjs --minify",
+        "version-sync": "node scripts/version-sync.mjs",
+        "version": "node scripts/version-sync.mjs && git add package.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .cursor-plugin/plugin.json .codex-plugin/plugin.json .openclaw-plugin/openclaw.plugin.json .openclaw-plugin/package.json openclaw.plugin.json .pi/extensions/context-mode/package.json configs/antigravity-cli/plugin.json configs/copilot-cli/.github/plugin/plugin.json",
+        "prepublishOnly": "npm run build",
+        "dev": "npx tsx src/server.ts",
+        "setup": "npx tsx src/cli.ts setup",
+        "doctor": "npx tsx src/cli.ts doctor",
+        "typecheck": "tsc --noEmit",
+        "pretest": "npm run build",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "benchmark": "npx tsx tests/benchmark.ts",
+        "test:use-cases": "npx tsx tests/use-cases.ts",
+        "test:compare": "npx tsx tests/context-comparison.ts",
+        "test:ecosystem": "npx tsx tests/ecosystem-benchmark.ts",
+        "install:openclaw": "node -e \"if(process.platform==='win32'){console.error('OpenClaw install requires bash (Git Bash or WSL)');process.exit(1)}else{require('child_process').execSync('bash scripts/install-openclaw-plugin.sh',{stdio:'inherit'})}\"",
+        "postinstall": "node scripts/postinstall.mjs"
+      },
+      "tarball": {
+        "url": "https://registry.npmjs.org/context-mode/-/context-mode-1.0.169.tgz",
+        "integrity": "sha512-94JIaFuLjF9SO2BsGTrbGtyT44K95+9OC8BdbaL/UT76xOkanJLfUR5CzmNw+GELXZQqH4nBrKg9wjBnSFkVnQ==",
+        "sha256": "sha256:09c41e4cf77b21566c76b8ea2fdbd7f3d823055fee2f02c2166fd5bb575daf2c",
+        "bytes": 1166887,
+        "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+        "artifact": "context-mode-1.0.169.tgz"
+      },
+      "registry_metadata_hash": "sha256:9d7e0166bd60fa74f5545ca8ca379fafb0262e2823686e8e34d8c890f4f3c843"
+    },
+    {
+      "identity": "pi-cursor-sdk",
+      "version": "0.5.3",
+      "published_at": "2026-10-07T23:05:24.641Z",
+      "retrieved_at": "2026-10-17T09:01:04.105Z",
+      "source_url": "https://registry.npmjs.org/pi-cursor-sdk",
+      "package_url": "https://www.npmjs.com/package/pi-cursor-sdk",
+      "repository": {
+        "url": "git+https://github.com/fitchmultz/pi-cursor-sdk.git",
+        "type": "git"
+      },
+      "license": "MIT",
+      "engines": {
+        "node": ">=24"
+      },
+      "pi": {
+        "extensions": [
+          "./dist/index.js"
+        ]
+      },
+      "dependencies": {
+        "hono": "4.13.13",
+        "@cursor/sdk": "1.0.37",
+        "@hono/node-server": "2.1.3",
+        "@modelcontextprotocol/hono": "2.0.2",
+        "@modelcontextprotocol/server": "2.3.1"
+      },
+      "peerDependencies": {
+        "typebox": "*",
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-tui": "*",
+        "@earendil-works/pi-coding-agent": "*"
+      },
+      "peerDependenciesMeta": {
+        "typebox": {
+          "optional": true
+        },
+        "@earendil-works/pi-ai": {
+          "optional": true
+        },
+        "@earendil-works/pi-tui": {
+          "optional": true
+        },
+        "@earendil-works/pi-coding-agent": {
+          "optional": true
+        }
+      },
+      "scripts": {
+        "test": "vitest run",
+        "build": "node ./scripts/build.mjs",
+        "verify": "npm run check:platform-smoke && npm run typecheck && npm test",
+        "prepare": "node ./scripts/prepare.mjs",
+        "typecheck": "npm run typecheck:src && npm run typecheck:tests && npm run typecheck:replay-compile",
+        "smoke:live": "npm run build && scripts/tmux-live-smoke.sh",
+        "test:watch": "vitest",
+        "smoke:cloud": "node scripts/cloud-runtime-smoke.mjs",
+        "smoke:jsonl": "node scripts/validate-smoke-jsonl.mjs",
+        "check:compat": "npm run build && npm run verify && node --test test/ci-compatibility.test.mjs test/native-provider.test.mjs test/native-cursor-flow.test.mjs test/native-cursor-ownership.test.mjs test/native-cursor-prompt.test.mjs",
+        "smoke:visual": "npm run build && node scripts/visual-tui-smoke.mjs",
+        "typecheck:src": "node ./node_modules/typescript/bin/tsc --noEmit",
+        "smoke:isolated": "npm run build && scripts/isolated-cursor-smoke.sh",
+        "smoke:platform": "node scripts/platform-smoke.mjs",
+        "smoke:steering": "node scripts/steering-rpc-smoke.mjs",
+        "typecheck:tests": "node ./node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit",
+        "debug:sdk-events": "node scripts/debug-sdk-events.mjs",
+        "smoke:local-resume": "node scripts/local-resume-smoke.mjs",
+        "smoke:platform:all": "npm run smoke:platform:doctor && node scripts/platform-smoke.mjs run --target macos,ubuntu,windows-native",
+        "debug:mcp-coldstart": "node scripts/probe-mcp-coldstart.mjs",
+        "smoke:cloud:context": "node scripts/cloud-runtime-smoke.mjs --context-matrix",
+        "check:platform-smoke": "node --check platform-smoke.config.mjs && node --check scripts/cloud-runtime-smoke.mjs && node --check scripts/lib/cloud-smoke-cleanup-evidence.mjs && node --check scripts/lib/cloud-smoke-artifacts.mjs && node --check scripts/lib/cloud-smoke-pi-runner.mjs && node --check scripts/lib/cloud-smoke-github.mjs && node --check scripts/lib/cloud-smoke-shutdown.mjs && node --check scripts/local-resume-cleanup-smoke.mjs && node --check scripts/local-resume-smoke.mjs && node --check scripts/lib/local-resume-smoke-harness.mjs && node --check scripts/platform-smoke.mjs && node --check scripts/platform-smoke/artifact-bundle-chunk.mjs && node --check scripts/platform-smoke/artifact-bundle-contract.mjs && node --check scripts/platform-smoke/artifact-fs-safety.mjs && node --check scripts/platform-smoke/artifact-anchored-extract.mjs && node --check scripts/platform-smoke/artifact-secrets.mjs && node --check scripts/platform-smoke/assertions.mjs && node --check scripts/platform-smoke/artifacts.mjs && node --check scripts/platform-smoke/card-detect.mjs && node --check scripts/platform-smoke/crabbox-runner.mjs && node --check scripts/platform-smoke/doctor.mjs && node --check scripts/platform-smoke/jsonl-text.mjs && node --check scripts/platform-smoke/live-suite-runner.mjs && node --check scripts/platform-smoke/local-resume-runner.mjs && node --check scripts/platform-smoke/pty-capture.mjs && node --check scripts/platform-smoke/render-ansi.mjs && node --check scripts/platform-smoke/scenarios.mjs && node --check scripts/platform-smoke/target-runtime.mjs && node --check scripts/platform-smoke/targets.mjs && node --check scripts/platform-smoke/visual-evidence.mjs && node --check scripts/platform-smoke/wrapped-line-match.mjs",
+        "smoke:platform:macos": "node scripts/platform-smoke.mjs run --target macos",
+        "debug:provider-events": "node scripts/debug-provider-events.mjs",
+        "smoke:platform:doctor": "node scripts/platform-smoke.mjs doctor",
+        "smoke:platform:ubuntu": "node scripts/platform-smoke.mjs run --target ubuntu",
+        "check:cursor-snapshots": "node scripts/refresh-cursor-model-snapshots.mjs --check",
+        "smoke:local-resume:tree": "node scripts/local-resume-smoke.mjs --tree",
+        "refresh:cursor-snapshots": "node scripts/refresh-cursor-model-snapshots.mjs",
+        "smoke:local-resume:abort": "node scripts/local-resume-smoke.mjs --abort",
+        "typecheck:replay-compile": "node ./node_modules/typescript/bin/tsc --noEmit -p test/tsconfig.json",
+        "smoke:local-resume:safety": "node scripts/local-resume-smoke.mjs --safety",
+        "smoke:local-resume:cleanup": "node scripts/local-resume-smoke.mjs --cleanup",
+        "smoke:local-resume:fallback": "node scripts/local-resume-smoke.mjs --fallback",
+        "smoke:local-resume:compaction": "node scripts/local-resume-smoke.mjs --compaction",
+        "smoke:platform:windows-native": "node scripts/platform-smoke.mjs run --target windows-native",
+        "smoke:local-resume:copy-switch": "node scripts/local-resume-smoke.mjs --copy-switch",
+        "smoke:local-resume:tool-surface": "node scripts/local-resume-smoke.mjs --tool-surface",
+        "smoke:local-resume:default-dry-run": "node scripts/local-resume-smoke.mjs --default-dry-run"
+      },
+      "tarball": {
+        "url": "https://registry.npmjs.org/pi-cursor-sdk/-/pi-cursor-sdk-0.5.3.tgz",
+        "integrity": "sha512-5Rj6m600FuBmc+VfEeqZkktsYUbwJQscdwTNBz7UPKWNtl8taibiIILqnJB2YEr8FLAqOUlLgmCaVsA4sYsfRg==",
+        "sha256": "sha256:3fccfe865393d64ce8ae85731689759bdaf7c1b95d803812de4709ad5a7bb9c3",
+        "bytes": 4550864,
+        "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+        "artifact": "pi-cursor-sdk-0.5.3.tgz"
+      },
+      "registry_metadata_hash": "sha256:7419ff93724ea01e66026dcdff65d928ab3a1f794ddb2e774eeaa5ad53ad4044"
+    }
+  ]
+}

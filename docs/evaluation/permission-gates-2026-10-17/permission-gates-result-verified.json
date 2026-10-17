@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "pi-permission-system-policy-hook-probe",
+  "status": "PASS",
+  "package": "@gotgenes/pi-permission-system@40.3.0",
+  "node": "24.22.0",
+  "loading": "real SDK adapter and actual candidate package entry",
+  "hook": "public AgentSession.extensionRunner.emitToolCall() invoked the registered actual tool_call handler",
+  "policy_checks": {
+    "general_allow": "allow",
+    "general_deny": "deny",
+    "path_allowed": "allow",
+    "path_denied": "deny",
+    "mcp_allowed": "allow",
+    "mcp_unmatched": "deny",
+    "headless_ask": "ask"
+  },
+  "synthetic_dispatch": {
+    "allowed_tool_reached_counter": true,
+    "denied_write_blocked": true,
+    "headless_ask_blocked": true,
+    "unregistered_tool_blocked": true,
+    "in_memory_counter": 1
+  },
+  "harness_model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "ui_mode": "print",
+  "has_dialog_capable_ui": false,
+  "denied_network_attempts": 0,
+  "denied_child_process_attempts": 0,
+  "stdout_suppressed_writes": 0,
+  "diagnostics": [],
+  "evidence_id": "38d814fd-395d-458c-8e92-ca134c3fc721",
+  "limits": [
+    "An in-memory synthetic counter advances only after an unblocked hook result. No actual executor was attached or invoked; no operating-system command, file write, MCP connection, or external tool was executed.",
+    "These checks cover deterministic policy resolution and registered-hook mediation under a provider-free SDK harness. They do not prove operating-system sandboxing, collector or inner-method enforcement, live UI behavior, MCP transport enforcement, or interactive-client integration."
+  ],
+  "cleanup": {
+    "dispose_promise_resolved": true,
+    "fixture_session_shutdown_observed": true,
+    "temporary_scope_removed": true
+  },
+  "process_supervision": {
+    "worker_exit_observed": true,
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "spawn_failed": false,
+    "timeout_ms": 45000,
+    "timeout_triggered": false,
+    "output_limit_exceeded": false,
+    "process_group_empty_observed": true,
+    "supervisor_home_removed": true
+  }
+}

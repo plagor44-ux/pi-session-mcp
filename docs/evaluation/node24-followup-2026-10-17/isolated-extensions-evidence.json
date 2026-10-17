@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "isolated-pi-extension-headless-evidence-index",
+  "date": "2026-10-17",
+  "runtime": {
+    "node": "24.22.0",
+    "pi_coding_agent": "1.2.0",
+    "pi_tui": "1.2.0",
+    "typebox": "1.3.27",
+    "install_evidence": "isolated-install.json",
+    "lifecycle_scripts_enabled": false
+  },
+  "results": [
+    { "package": "pi-lens@4.4.3", "read_only": "PASS", "coding": "PASS", "evidence": ["isolated-extensions-results-2026-10-17T09-23-42-291Z-f4af1e12-844e-4b2d-a090-9068e7626dd5.json", "isolated-extensions-results-2026-10-17T09-22-05-375Z-16f5d77c-32a2-4d0a-905a-e080b392316f.json"] },
+    { "package": "context-mode@1.0.169", "read_only": "PASS", "coding": "PASS", "reason": "Only the exact read-only Git rev-parse metadata query against the owned synthetic workspace was allowed via /usr/bin/git, with 1.5-second timeout and global/system config disabled. It returned nonzero because the fixture is not a Git repository; extension startup handled this. All other child-process and network attempts remained denied.", "evidence": ["isolated-extensions-results-2026-10-17T09-25-15-842Z-798946f5-b9a5-4810-8a0c-35be6f40abb3.json", "isolated-extensions-results-2026-10-17T09-25-19-099Z-89bd000d-bb51-4e3a-b713-51ff1ff4e38b.json"] },
+    { "package": "pi-cache-optimizer@2.9.3", "read_only": "PASS", "coding": "PASS", "evidence": "isolated-extensions-results-2026-10-17T09-22-22-485Z-1b08e134-667c-4416-8372-cb233939c48b.json" },
+    { "package": "@gotgenes/pi-permission-system@40.3.0", "read_only": "PASS", "coding": "PASS", "evidence": "isolated-extensions-results-2026-10-17T09-22-25-490Z-223fd05e-52f9-4996-88d7-3ec43a6ecdd9.json" }
+  ],
+  "global_limits": {
+    "provider_calls": 0,
+    "prompt_submissions": 0,
+    "candidate_tool_invocations": 0,
+    "network_attempts_observed": 0,
+    "cache_warming": "disabled",
+    "scope": "Headless extension loading, registration/discovery, adapter tool allowlist composition, and shutdown only."
+  },
+  "sha256": {
+    "isolated-extensions-results-2026-10-17T09-21-44-636Z-488698ad-f8bf-4d7e-b85a-615275c32e5d.json": "fba85adbd6ded8558251c963d589fd7f8b452f6376a65fc1ee70686298bcef9b",
+    "isolated-extensions-results-2026-10-17T09-23-42-291Z-f4af1e12-844e-4b2d-a090-9068e7626dd5.json": "e14a0e901e17fe97d80e2dc399b6e778da1995e61f9a5cbd0e440f97df83a255",
+    "isolated-extensions-results-2026-10-17T09-22-05-375Z-16f5d77c-32a2-4d0a-905a-e080b392316f.json": "f968512477e27c1a16866eb879de27a269b47cf3d4ba4b39126e05fa42f2f995",
+    "isolated-extensions-results-2026-10-17T09-22-17-638Z-45ec386d-3429-4a7c-a10e-8673c03861f0.json": "f51d68c164e8f12ab4200398b2c2c4b4fc737b3d3d3b4650ea86dfca2a065e2d",
+    "isolated-extensions-results-2026-10-17T09-22-22-485Z-1b08e134-667c-4416-8372-cb233939c48b.json": "cef6e34007097c9741d377e081a078934a894190fd039363b1d08039ab35cb49",
+    "isolated-extensions-results-2026-10-17T09-22-25-490Z-223fd05e-52f9-4996-88d7-3ec43a6ecdd9.json": "f139734d7bf96730e20a77f6438d96f2f015681f2b87c8c9ff9e7943550bf1b2",
+    "isolated-extensions-results-2026-10-17T09-25-15-842Z-798946f5-b9a5-4810-8a0c-35be6f40abb3.json": "b5d99d87765528cd1af3558fa7121b5b2bf530fbc2c1cbf4c6c07af2e7febb03",
+    "isolated-extensions-results-2026-10-17T09-25-19-099Z-89bd000d-bb51-4e3a-b713-51ff1ff4e38b.json": "a310c804338b4d48c2236f42f70c2e476209e918bc6db9650280a1174e650a8a",
+    "isolated-extensions-results-2026-10-17T09-24-36-866Z-30770d13-c7ae-4309-921b-5c1b43050adb.json": "00ea68401be8a93d1ddc217032dd172ebc4c963e4c1c3bedc34c6fc8e0f88d3c"
+  },
+  "report": "isolated-extensions-report.md"
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "source-bound-final-repository-tests",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160",
+  "source_unchanged": true,
+  "started_at": "2026-10-17T07:09:59.820Z",
+  "ended_at": "2026-10-17T07:11:33.226Z",
+  "command": "NODE_OPTIONS=--unhandled-rejections=strict npm test -- --maxWorkers=2 --reporter=json",
+  "exit_code": 0,
+  "success": true,
+  "total_tests": 1465,
+  "passed_tests": 1459,
+  "failed_tests": 0,
+  "skipped_tests": 6,
+  "files": 60,
+  "failed_files": []
+}

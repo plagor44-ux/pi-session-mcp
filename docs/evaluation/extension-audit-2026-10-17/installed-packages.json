@@ -1,0 +1,100 @@
+{
+  "kind": "exact-selected-install-path-metadata",
+  "observed_at": "2026-10-17T09:01:04.148Z",
+  "runtime_node": "22.23.2",
+  "packages": [
+    {
+      "requested": "pi-lens",
+      "present": false,
+      "code": "ENOENT"
+    },
+    {
+      "requested": "context-mode",
+      "present": false,
+      "code": "ENOENT"
+    },
+    {
+      "requested": "pi-cache-optimizer",
+      "present": false,
+      "code": "ENOENT"
+    },
+    {
+      "requested": "@gotgenes/pi-permission-system",
+      "present": false,
+      "code": "ENOENT"
+    },
+    {
+      "requested": "pi-web-access",
+      "present": true,
+      "identity": "pi-web-access",
+      "version": "0.41.0",
+      "manifest_hash": "sha256:c5ccc33fe7241a28d1a32f6a633dae06b6a23e4fb3b841b0527e148d66d21ee7",
+      "engines": {
+        "node": ">=22.19.0"
+      },
+      "license": "MIT",
+      "pi": {
+        "extensions": [
+          "./dist"
+        ],
+        "video": "https://github.com/nicobailon/pi-web-access/raw/refs/heads/main/pi-web-fetch-demo.mp4"
+      },
+      "entries": [
+        {
+          "entry": "./dist",
+          "exists": true,
+          "type": "directory"
+        }
+      ]
+    },
+    {
+      "requested": "openwiki",
+      "present": true,
+      "identity": "openwiki",
+      "version": "0.7.2",
+      "manifest_hash": "sha256:715cf49690cad358394d3f603d1a167bbc8ec3d8bfb8c3df9801e15abed4ab33",
+      "engines": {
+        "node": ">=22.22.0"
+      },
+      "license": "MIT",
+      "pi": {
+        "extensions": [
+          "./dist/integrations/pi/openwiki.js"
+        ],
+        "skills": [
+          "./integrations/openwiki"
+        ]
+      },
+      "entries": [
+        {
+          "entry": "./dist/integrations/pi/openwiki.js",
+          "exists": true,
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "requested": "pi-cursor-sdk",
+      "present": true,
+      "identity": "pi-cursor-sdk",
+      "version": "0.5.3",
+      "manifest_hash": "sha256:66d2272b2b3a598c1b03510c3d2083e98fd974a8464ae3b034ed328a1c0774ed",
+      "engines": {
+        "node": ">=24"
+      },
+      "license": "MIT",
+      "pi": {
+        "extensions": [
+          "./dist/index.js"
+        ]
+      },
+      "entries": [
+        {
+          "entry": "./dist/index.js",
+          "exists": true,
+          "type": "file"
+        }
+      ]
+    }
+  ]
+}

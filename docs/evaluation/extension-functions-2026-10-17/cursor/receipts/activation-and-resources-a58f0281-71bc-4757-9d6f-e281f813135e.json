@@ -1,0 +1,65 @@
+{
+  "schema": "pi-cursor-activation-attempt.v1",
+  "attempt_id": "a58f0281-71bc-4757-9d6f-e281f813135e",
+  "case": "activation-and-resources",
+  "node": "24.22.0",
+  "package": "pi-cursor-sdk@0.5.3",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "checks": [
+    {
+      "id": "public_cursor_pi_manifest_entrypoint_loaded",
+      "result": "PASS"
+    },
+    {
+      "id": "cursor_activate_skill_registered_by_public_entrypoint",
+      "result": "PASS"
+    },
+    {
+      "id": "no_provider_turn_started",
+      "result": "PASS"
+    },
+    {
+      "id": "provider_discovery_offline",
+      "result": "PASS"
+    },
+    {
+      "id": "activation_tool_enabled_for_local_cursor_with_visible_skill",
+      "result": "PASS"
+    },
+    {
+      "id": "system_prompt_points_to_activation_tool",
+      "result": "PASS"
+    },
+    {
+      "id": "positive_activation_returns_only_fixture_skill_content",
+      "result": "PASS"
+    },
+    {
+      "id": "resource_listing_includes_regular_fixture_resource",
+      "result": "PASS"
+    },
+    {
+      "id": "resource_listing_skips_symlink_resource",
+      "result": "PASS"
+    },
+    {
+      "id": "unknown_skill_rejected",
+      "result": "PASS"
+    },
+    {
+      "id": "disable_model_invocation_skill_rejected",
+      "result": "PASS"
+    },
+    {
+      "id": "no_cursor_agent_model_or_cloud_calls",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "denied_child_process_attempts": 0,
+  "cleanup": "PASS",
+  "process_group_empty_after_close": true,
+  "component": "cursor_activate_skill registration, activation and resource enumeration only",
+  "stdout_sha256": "a25df7c43a2976d0396ff2fbacc89d9c89763df8d07e9c94256018f3a61a9534"
+}

@@ -1,0 +1,223 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T09:20:22.821Z",
+  "package_count": 4,
+  "profile_count_per_package": 2,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "pi-lens@4.4.3",
+      "permission_profile": "read-only",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "b643bc61-48ba-489d-9e9a-45cc1fe912c9",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "pi-lens@4.4.3",
+      "permission_profile": "coding",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "baae201f-b682-4b79-b240-74207a4c1ee9",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "read-only",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "3a96bdd8-17a8-47ba-aa26-14444c249032",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "f30291d5-2fcf-4ace-a7ae-af0214bf04ca",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "pi-cache-optimizer@2.9.3",
+      "permission_profile": "read-only",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "c73a1050-435b-439a-bfee-ea578e409d04",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "pi-cache-optimizer@2.9.3",
+      "permission_profile": "coding",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "2465c131-67c9-427a-a5ed-9f51c3f5bb3e",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "permission_profile": "read-only",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "edfca984-d210-480b-a672-2c2627184af1",
+      "isolated_scope_removed": true
+    },
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "permission_profile": "coding",
+      "failure_code": "extension_not_installed",
+      "failure_stage": "extension_resolve",
+      "diagnostic_codes": [
+        "extension_not_installed"
+      ],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "41d24be7-247c-4e2a-b07e-a88b5c2016e7",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Headless extension loading, hook binding/lifecycle, registered tool discovery, active-tool selection and process cleanup only; no package efficacy, UI behavior, provider behavior, or tool-call mediation claim."
+}

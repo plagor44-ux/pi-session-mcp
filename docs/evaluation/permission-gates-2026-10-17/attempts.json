@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "scope": "provider-free @gotgenes/pi-permission-system@40.3.0 policy and tool_call gate checks",
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "discarded_harness",
+      "finding": "The SDK public root did not export loadExtensions; an initial fake API approach could not provide registered tools or prove package-hook mediation.",
+      "resolution": "Replaced it with SdkPiSessionAdapter and the public AgentSession.extensionRunner.emitToolCall() seam."
+    },
+    {
+      "attempt": 2,
+      "status": "failed_configuration_context",
+      "finding": "Policy checks all resolved to the default ask state because the isolated agent-directory variables were not set before loading the candidate entry.",
+      "resolution": "Set HOME, PI_CODING_AGENT_DIR, and XDG directories to the fresh temporary scope before extension initialization."
+    },
+    {
+      "attempt": 3,
+      "status": "failed_fixture_policy",
+      "finding": "The fixture tool inherited the configured deny fallback because no explicit fixture_tool allow rule existed.",
+      "resolution": "Added the exact synthetic fixture_tool allow rule, retained the global deny fallback, then reran the full probe."
+    },
+    {
+      "attempt": 4,
+      "status": "superseded_receipt",
+      "evidence": "superseded-initial-receipt.json",
+      "finding": "Policy and hook outcomes were correct, but the probe reached the SDK session through the private SdkPiSessionAdapter handle.session property.",
+      "resolution": "Retained the sanitized diagnostic and replaced access with the public extensionSdk.createRuntime seam and AgentSessionRuntime.session getter."
+    },
+    {
+      "attempt": 5,
+      "status": "pass",
+      "evidence": "permission-gates-result.json",
+      "ignored_receipt": "eval/results/permission-gates-514fd082-4f96-46bf-b520-514130f1d790.json",
+      "evidence_id": "a522f14a-9b44-49dd-b738-d39c56571910",
+      "summary": "Seven policy checks matched. Actual registered hook passed the allowed fixture tool and blocked denied write, headless ask, and unregistered tool; the in-memory counter advanced once. SDK dispose resolved, fixture shutdown was observed, worker exit and empty process group were confirmed, and both temporary scopes were removed."
+    },
+    {
+      "attempt": 6,
+      "status": "pass",
+      "evidence": "permission-gates-result-final.json",
+      "ignored_receipt": "eval/results/permission-gates-f6fa21fd-c64b-4905-900a-e01d2fc2db5f.json",
+      "summary": "Rerun after adding supervisor SIGKILL escalation, bounded output capture and fresh archive-path preflight. Seven policy queries and four hook outcomes passed, with observed process and temporary-scope cleanup."
+    },
+    {
+      "attempt": 7,
+      "status": "pass_final",
+      "evidence": "permission-gates-result-verified.json",
+      "ignored_receipt": "eval/results/permission-gates-b9552de2-bb69-42cd-be37-4e8a0ce3f9dd.json",
+      "summary": "Final rerun records timeout_triggered explicitly and forbids PASS when the deadline fires. All policy/hook outcomes and cleanup checks passed; timeout was not triggered."
+    }
+  ]
+}

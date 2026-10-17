@@ -1,0 +1,185 @@
+{
+  "kind": "verified-tarball-static-audit",
+  "audited_at": "2026-10-17T09:04:19.555Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "tarball_metadata": "navigation-cursor-registry.json",
+  "candidate_imports": 0,
+  "installs": 0,
+  "provider_calls": 0,
+  "packages": [
+    {
+      "identity": "pi-lens@4.4.3",
+      "license": "MIT",
+      "engines": {
+        "node": ">=22.19.0"
+      },
+      "peer_dependencies": {
+        "@earendil-works/pi-coding-agent": "*",
+        "@earendil-works/pi-tui": "*",
+        "typebox": "^1.0.0"
+      },
+      "package_entry": {
+        "extensions": [
+          "./dist/index.js"
+        ],
+        "skills": [
+          "./skills"
+        ]
+      },
+      "reviewed_files": [
+        {
+          "file": "package.json",
+          "hash": "sha256:33799b50c97f9afe24972e327a20fd4b95963f0768d3a96a6122f3980c1bee9d"
+        },
+        {
+          "file": "LICENSE",
+          "hash": "sha256:acea1344d185329e12fe999df92fc11676af644f98a068b7f67de9f0f6e046a2"
+        },
+        {
+          "file": "dist/index.js",
+          "hash": "sha256:192098c6d5297f633206a01adfa60bafe2e73aa4f2ec1cae0faa097a9bfa5e67"
+        }
+      ],
+      "findings": [
+        {
+          "id": "runtime-and-peers",
+          "assessment": "declared-compatible-only",
+          "detail": "Node >=22.19.0 is satisfied; Pi/TUI peer wildcard includes SDK1.2.0, but no runtime qualification exists because the package is not installed."
+        },
+        {
+          "id": "package-entry",
+          "assessment": "static-file-present",
+          "detail": "Published artifact declares dist/index.js and skills directory; the main entry is a regular file in the downloaded tarball."
+        },
+        {
+          "id": "lifecycle",
+          "assessment": "requires-explicit-install-review",
+          "detail": "prepare builds dist, downloads core grammars, sets Git hooks and warms loader caches; native AST-grep dependencies can have their own lifecycle/platform setup. No scripts were executed."
+        },
+        {
+          "id": "execution-and-network",
+          "assessment": "expanded-capability",
+          "detail": "Source contains LSP/tool child-process management, formatter/autofix operations, managed tool installation and GitHub/unpkg grammar/tool downloads. These paths must be disabled or locally stubbed for provider-free checks."
+        },
+        {
+          "id": "project-trust",
+          "assessment": "static-guard-found",
+          "detail": "Entry session_start adopts host project trust and declares that untrusted projects disable tool auto-install and LSP spawn. Actual SDK1.2.0 trust-port propagation was not executed."
+        },
+        {
+          "id": "headless",
+          "assessment": "NOT_RUN",
+          "detail": "Tool/lifecycle registrations are present; TUI affordances and late/lazy tool activation need an actual SDK test and must not be assumed to work through this MCP host."
+        },
+        {
+          "id": "data",
+          "assessment": "local-and-tool-mediated",
+          "detail": "Source tracks diagnostics and session/model-related telemetry and can read/write code and extension-owned caches. Known remote download paths are present; no complete absence of optional outbound telemetry is established."
+        },
+        {
+          "id": "decision",
+          "assessment": "BLOCKED",
+          "detail": "Real production resolver reports extension_not_installed. Do not silently substitute a scoped fork or install it into global/user Pi state."
+        }
+      ],
+      "source_urls": [
+        "https://registry.npmjs.org/pi-lens/4.4.3",
+        "https://github.com/apmantza/pi-lens"
+      ],
+      "runtime_status": "NOT_RUN"
+    },
+    {
+      "identity": "context-mode@1.0.169",
+      "license": "Elastic-2.0",
+      "engines": {
+        "node": ">=22.5.0"
+      },
+      "peer_dependencies": {},
+      "package_entry": {
+        "extensions": [
+          "./build/adapters/pi/extension.js"
+        ],
+        "skills": [
+          "./skills"
+        ]
+      },
+      "reviewed_files": [
+        {
+          "file": "package.json",
+          "hash": "sha256:f0a96c5affd66f5334f2f4cd5a1270e65018a0b83317b4e752cd6f60cdba8680"
+        },
+        {
+          "file": "LICENSE",
+          "hash": "sha256:92f11a867c41c9e575ccb978ff205ae2011c244a14aa3c576e914e537105caa0"
+        },
+        {
+          "file": "build/adapters/pi/extension.js",
+          "hash": "sha256:1e6e88988e927bb0c744254b71cd497eaf919e910bea1f0a23f43a3b25ee32c7"
+        },
+        {
+          "file": "build/adapters/pi/mcp-bridge.js",
+          "hash": "sha256:4a6e89f0bca2674f75076ac009190957ca67cbd4f823926a219adf2c876afd06"
+        },
+        {
+          "file": "scripts/postinstall.mjs",
+          "hash": "sha256:d8eef5cea7979beb8db68fe5de10ec3ed086e2c3fbbfb745a23e43574d9dfba4"
+        }
+      ],
+      "findings": [
+        {
+          "id": "runtime-and-peers",
+          "assessment": "not-qualified",
+          "detail": "Declared Node >=22.5.0 is satisfied; package declares no Pi peer range, so SDK1.2.0 compatibility remains unqualified."
+        },
+        {
+          "id": "license",
+          "assessment": "Elastic-2.0",
+          "detail": "Source-available Elastic-2.0 license, distinct from MIT. No legal compatibility decision is inferred."
+        },
+        {
+          "id": "entry-and-state",
+          "assessment": "static-file-present",
+          "detail": "Declared build/adapters/pi/extension.js exists. Extension opens a session SQLite database and records prompt/tool-derived events and compaction snapshots in adapter-owned home state."
+        },
+        {
+          "id": "bridge",
+          "assessment": "headless-test-required",
+          "detail": "before_agent_start lazily starts a local MCP server and registers discovered ctx tools. Bootstrap is best effort and failure can degrade to no tools; production admission freezes a composed allowlist earlier, so late registration and activation need explicit compatibility testing."
+        },
+        {
+          "id": "capabilities",
+          "assessment": "expanded-capability",
+          "detail": "ctx execution/fetch/index/search tools are more powerful than read-only navigation; package also advertises upgrade and purge. Shell HTTP regex routing is not an OS sandbox or general network authorization layer."
+        },
+        {
+          "id": "headless",
+          "assessment": "static-support-only",
+          "detail": "Source distinguishes hasUI false and uses an idle reaper for noninteractive bridge children. No actual SDK/headless run occurred."
+        },
+        {
+          "id": "lifecycle",
+          "assessment": "global-side-effects-require-review",
+          "detail": "postinstall contains a global-install-only repair path for other client plugin registries/settings and cache metadata. No lifecycle script or client registration was executed."
+        },
+        {
+          "id": "telemetry",
+          "assessment": "not-established",
+          "detail": "Session usage/event telemetry and persistent local content are present; known fetch and upgrade network paths exist. No package-wide outbound-telemetry absence is claimed."
+        },
+        {
+          "id": "decision",
+          "assessment": "BLOCKED",
+          "detail": "Real production resolver reports extension_not_installed; no output-volume bottleneck was demonstrated by the current screening, so no quality ablation is selected."
+        }
+      ],
+      "source_urls": [
+        "https://registry.npmjs.org/context-mode/1.0.169",
+        "https://github.com/mksglu/context-mode"
+      ],
+      "runtime_status": "NOT_RUN"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+--- a/contract.mjs
++++ b/contract.mjs
+@@ -1,4 +1,4 @@
+-export function parseLimit(value) {
+-  const parsed = Number(value);
+-  return Number.isFinite(parsed) ? parsed : 20;
+-}
++export function parseLimit(value) {
++  const parsed = Number(value);
++  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 20;
++}

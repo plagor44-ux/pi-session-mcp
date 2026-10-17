@@ -1,0 +1,38 @@
+{
+  "kind": "extension-dossier-verification",
+  "verified_at": "2026-10-17T09:07:30.397Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "status": "PASS",
+  "checks": {
+    "seven_exact_candidates": "PASS",
+    "seven_real_resolver_checks": "PASS",
+    "four_missing_installs_classified": "PASS",
+    "web_directory_entry_gate_reproduced": "PASS",
+    "cursor_node_engine_gate_documented": "PASS",
+    "openwiki_two_permission_profiles": "PASS",
+    "openwiki_fresh_scope_reproduction": "PASS",
+    "probe_hash_binding": "PASS",
+    "successful_owned_scope_cleanup": "PASS",
+    "selected_published_vs_installed_files": "PASS",
+    "prior_live_evidence_unchanged": "PASS",
+    "local_links": "PASS",
+    "json_parsing": "PASS",
+    "private_marker_scan": "PASS",
+    "independent_review": "PASS",
+    "whitespace_check": "PASS",
+    "probe_syntax_checks": "PASS"
+  },
+  "counts": {
+    "selected_artifact_file_comparisons": 11,
+    "prior_live_evidence_files": 35,
+    "checked_local_links": 18,
+    "json_files_before_this_record": 16
+  },
+  "additional_paid_candidate_starts": 0,
+  "full_test_suite_rerun": false,
+  "full_test_suite_reason": "Evaluated product/harness source unchanged; targeted resolver and actual headless adapter checks cover this follow-on.",
+  "quality_ablation": "NOT_RUN"
+}

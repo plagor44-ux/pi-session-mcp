@@ -1,0 +1,85 @@
+{
+  "kind": "selected-installed-files-versus-verified-published-artifacts",
+  "checked_at": "2026-10-17T09:05:04.253592+00:00",
+  "results": [
+    {
+      "identity": "pi-cursor-sdk@0.5.3",
+      "file": "package.json",
+      "status": "PASS",
+      "published_hash": "sha256:66d2272b2b3a598c1b03510c3d2083e98fd974a8464ae3b034ed328a1c0774ed",
+      "installed_hash": "sha256:66d2272b2b3a598c1b03510c3d2083e98fd974a8464ae3b034ed328a1c0774ed"
+    },
+    {
+      "identity": "pi-cursor-sdk@0.5.3",
+      "file": "dist/index.js",
+      "status": "PASS",
+      "published_hash": "sha256:9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4",
+      "installed_hash": "sha256:9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+    },
+    {
+      "identity": "pi-cursor-sdk@0.5.3",
+      "file": "dist/cursor-provider-binding.js",
+      "status": "PASS",
+      "published_hash": "sha256:3006bf5ab44f355dfb5117a27f071cc112f93299815ac3689e3a72a3af905c1f",
+      "installed_hash": "sha256:3006bf5ab44f355dfb5117a27f071cc112f93299815ac3689e3a72a3af905c1f"
+    },
+    {
+      "identity": "pi-cursor-sdk@0.5.3",
+      "file": "dist/model-discovery.js",
+      "status": "PASS",
+      "published_hash": "sha256:c6f70d96d552fd168bb721f95e936ba1fc8351bfd67366cb963ea571b584e953",
+      "installed_hash": "sha256:c6f70d96d552fd168bb721f95e936ba1fc8351bfd67366cb963ea571b584e953"
+    },
+    {
+      "identity": "pi-cursor-sdk@0.5.3",
+      "file": "dist/cursor-session-store.js",
+      "status": "PASS",
+      "published_hash": "sha256:e7004f34a94a410737206fa09dcbd4e2131c7303bbc58482200f87db7c6148ef",
+      "installed_hash": "sha256:e7004f34a94a410737206fa09dcbd4e2131c7303bbc58482200f87db7c6148ef"
+    },
+    {
+      "identity": "pi-web-access@0.41.0",
+      "file": "package.json",
+      "status": "PASS",
+      "published_hash": "sha256:c5ccc33fe7241a28d1a32f6a633dae06b6a23e4fb3b841b0527e148d66d21ee7",
+      "installed_hash": "sha256:c5ccc33fe7241a28d1a32f6a633dae06b6a23e4fb3b841b0527e148d66d21ee7"
+    },
+    {
+      "identity": "pi-web-access@0.41.0",
+      "file": "dist/index.js",
+      "status": "PASS",
+      "published_hash": "sha256:28844389c2abc6b2d39b9f0e537182611fcb8f35d898e26b699a0ab8632922c2",
+      "installed_hash": "sha256:28844389c2abc6b2d39b9f0e537182611fcb8f35d898e26b699a0ab8632922c2"
+    },
+    {
+      "identity": "openwiki@0.7.2",
+      "file": "package.json",
+      "status": "PASS",
+      "published_hash": "sha256:715cf49690cad358394d3f603d1a167bbc8ec3d8bfb8c3df9801e15abed4ab33",
+      "installed_hash": "sha256:715cf49690cad358394d3f603d1a167bbc8ec3d8bfb8c3df9801e15abed4ab33"
+    },
+    {
+      "identity": "openwiki@0.7.2",
+      "file": "dist/integrations/pi/openwiki.js",
+      "status": "PASS",
+      "published_hash": "sha256:bd1bdd26a8a920c9f9dec9d56273e62f77abeddcc46df30b65ab07d7a5f6e531",
+      "installed_hash": "sha256:bd1bdd26a8a920c9f9dec9d56273e62f77abeddcc46df30b65ab07d7a5f6e531"
+    },
+    {
+      "identity": "openwiki@0.7.2",
+      "file": "dist/integrations/core/protocol.js",
+      "status": "PASS",
+      "published_hash": "sha256:b7eefb577ae5b57a9f96e0b1c0b2c3996f4fc496a23f451066a5831c70989bff",
+      "installed_hash": "sha256:b7eefb577ae5b57a9f96e0b1c0b2c3996f4fc496a23f451066a5831c70989bff"
+    },
+    {
+      "identity": "openwiki@0.7.2",
+      "file": "dist/version.js",
+      "status": "PASS",
+      "published_hash": "sha256:93d1648338a80903d25a0a86b08478b015e3d766147c411f4d7c0719ea761e5e",
+      "installed_hash": "sha256:93d1648338a80903d25a0a86b08478b015e3d766147c411f4d7c0719ea761e5e"
+    }
+  ],
+  "limitation": "Only the named files were compared. This is not a complete transitive installed dependency audit.",
+  "execution": "none"
+}

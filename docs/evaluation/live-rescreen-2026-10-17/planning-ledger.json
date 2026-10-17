@@ -1,0 +1,26 @@
+{
+  "kind": "live-start-planning-envelope-after-rescreen",
+  "original_maximum_plan_starts": 30,
+  "initial_screening_starts": 8,
+  "approved_rescreen_max_starts": 6,
+  "actual_rescreen_starts": 5,
+  "total_executed_starts": 13,
+  "unused_rescreen_slot": 1,
+  "unused_slot_reason": "Same route/profile/view stopped after its first failed T5 result; no retry or substitute permitted.",
+  "remaining_within_original_planning_envelope": 17,
+  "later_stage_authorization": false,
+  "pilot_eligible_routes": [
+    {
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "evidence": [
+        "rescreen-3",
+        "rescreen-4"
+      ]
+    }
+  ],
+  "p3_review_screening": "NOT_PASSED",
+  "t9": "BLOCKED",
+  "ablation": "NOT_RUN_NO_MEASURED_BOTTLENECK"
+}

@@ -1,0 +1,324 @@
+{
+  "schema": "pi-cache-optimizer-function-evidence.v1",
+  "package": "pi-cache-optimizer@2.9.3",
+  "source": "isolated package prefix; real published index.ts entrypoint; public SDK package root",
+  "scope_id": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5",
+  "created_at": "2026-10-17T13:42:18.175Z",
+  "scope": "provider-free functional checks; no model/provider requests",
+  "status": "PASS",
+  "harness": [
+    {
+      "path": "runner.mjs",
+      "sha256": "40ad451b36f814b08c012a3b3eea9c86154c8f7ea8a502ce62e7273152d263ce"
+    },
+    {
+      "path": "probe.mjs",
+      "sha256": "845c8dd582429dce3ac4bb4356442d848ee4f43718e916200f8afedf6c625fe5"
+    }
+  ],
+  "attempts": [
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "6fcdbc20-b14b-4b80-a4da-bf24078da8d2",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "payload-openai",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-payload-returns-copy-with-cache-key",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-cache-key-opaque-and-bounded",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-request-fields-preserved",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-input-not-mutated",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "bc1365e02a4f2baf73bdc5f54062f4bc8d87e405f5b586db18b5ec71e47dd0d5",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/payload-openai-6fcdbc20-b14b-4b80-a4da-bf24078da8d2.json",
+      "receipt_sha256": "d5c4a77c03f3dd55349d7d241da2384119cea2a74bbbb3488d68ec4f225d305a"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "3b572182-a737-471f-b9cb-b01d5da1752a",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "payload-codex-bypass",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "codex-responses-bypass-keeps-request-unchanged",
+          "result": "PASS"
+        },
+        {
+          "id": "codex-responses-input-not-mutated",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "e3793f5de62bb60de6d84c90dd31e37b2c40fb56914f10d83f74a49dbe62feb1",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/payload-codex-bypass-3b572182-a737-471f-b9cb-b01d5da1752a.json",
+      "receipt_sha256": "ee876ef9e6d2fafe32725d545f4fa9d618145e1e5aab501ba1390c0053a2beed"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "e0bb4742-214a-4b3f-88d2-44de54394e2f",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "warming-disabled-zero",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-returns-no-warming-action",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-host-cache-warming-setting-off",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-no-provider-or-network-call",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "b6e85455fd6087fdf85ccaf4e6e508cf84bb5c738a0f19cf53aaa3354f4c63bc",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/warming-disabled-zero-e0bb4742-214a-4b3f-88d2-44de54394e2f.json",
+      "receipt_sha256": "a13ce8548090c588b8ce3be7bd6ebcc21e744dc42cc25e1d26a8777ca72b9e0d"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "49b45e2b-e2d2-456f-b73f-e6bc938b6378",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "warming-disabled-unknown",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-returns-no-warming-action",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-host-cache-warming-setting-off",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-no-provider-or-network-call",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "22f67d38c40f10faf5134874ca679a02a67158d07fc31c10fdefea1701a760b2",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/warming-disabled-unknown-49b45e2b-e2d2-456f-b73f-e6bc938b6378.json",
+      "receipt_sha256": "efefe2763b6ad5bbc197f380459ca48522640532186c8f2319e72656ac31070f"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "8482b2b0-f600-488b-9f36-905e0125177a",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "commands-headless",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-fix-does-not-write-agent-files",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-fix-explains-confirmation-required",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-rollback-does-not-write-agent-files",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-rollback-explains-confirmation-required",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-command-never-requested-confirmation",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "1d0203c9026ac9d34372595c9778e156280313d03c88c9663fe3b2c794481aaa",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/commands-headless-8482b2b0-f600-488b-9f36-905e0125177a.json",
+      "receipt_sha256": "6e9ebbfce2e4069741f9ff08ca0cf831d5cf1794dfdca7c5e0cbfbdf6c1a228b"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "a23c264f-151d-4ff0-aab4-bdbb2f6560d8",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "stats-synthetic",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "owned_home_removed": true,
+      "timed_out": false,
+      "output_overflow": false,
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "synthetic-usage-produced-local-stats-file",
+          "result": "PASS"
+        },
+        {
+          "id": "synthetic-prompt-response-content-not-persisted",
+          "result": "PASS"
+        },
+        {
+          "id": "stats-remain-inside-fresh-agent-dir",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [
+        "pi-cache-optimizer-stats.d",
+        "pi-cache-optimizer-stats.d/maintenance",
+        "pi-cache-optimizer-stats.d/shards",
+        "pi-cache-optimizer-stats.d/shards/fa0521f0-bc8c-4b18-bb96-c8e81e01a55d.json",
+        "pi-cache-optimizer-stats.d/maintenance/last-cleanup",
+        "pi-cache-optimizer-stats.d/maintenance/last-compaction"
+      ],
+      "stdout_sha256": "79d60dd6debb1b0be68e1f99fe8311a04e403eb5fe70e145e5a59d6d9409294d",
+      "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_bytes": 0,
+      "receipt": "eval/results/extension-functions-cache-2a4e8dfa-3004-46d2-834c-246ab18249b5/attempts/stats-synthetic-a23c264f-151d-4ff0-aab4-bdbb2f6560d8.json",
+      "receipt_sha256": "7d732f845c858f7ea78fc5a931560d53b887ae81f729402513909cc5af17f510"
+    }
+  ]
+}

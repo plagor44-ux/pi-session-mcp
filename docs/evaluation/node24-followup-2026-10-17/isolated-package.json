@@ -1,0 +1,12 @@
+{
+  "name": "pi-profile-extension-evaluation-private",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pi-lens": "4.4.3",
+    "context-mode": "1.0.169",
+    "pi-cache-optimizer": "2.9.3",
+    "@gotgenes/pi-permission-system": "40.3.0"
+  }
+}

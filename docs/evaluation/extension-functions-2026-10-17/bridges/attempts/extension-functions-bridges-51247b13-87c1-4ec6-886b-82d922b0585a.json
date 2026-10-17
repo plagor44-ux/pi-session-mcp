@@ -1,0 +1,89 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "pi-web-access@0.41.0",
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-extension-resolver-gate",
+      "status": "PASS",
+      "expected_blocker": "directory_manifest_entry",
+      "pi_profile_status": "BLOCKED"
+    },
+    {
+      "id": "standalone-mcp-tool-discovery",
+      "status": "PASS",
+      "tools": [
+        "web_search",
+        "fetch_content",
+        "get_search_content",
+        "source_check"
+      ]
+    },
+    {
+      "id": "standalone-raw-fetch-owned-http",
+      "status": "PASS",
+      "canary_preserved": true
+    },
+    {
+      "id": "standalone-stored-content-search",
+      "status": "PASS",
+      "original_content_retrieved": true
+    },
+    {
+      "id": "standalone-invalid-fetch-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "standalone-model-answer-mode-rejected",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "integration": "Standalone MCP functional path; production Pi extension loading remains BLOCKED.",
+  "status": "PASS",
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 1,
+    "network_denied": 0,
+    "git_allowed": 0,
+    "children_allowed": 1,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "started_at": "2026-10-17T13:35:17.316Z",
+  "ended_at": "2026-10-17T13:35:18.380Z",
+  "harness": [
+    {
+      "path": "run.mjs",
+      "sha256": "21fb7b96d8df277f75926f6848154a10717d59db722be33539704ea4f2f0470e"
+    },
+    {
+      "path": "worker.mjs",
+      "sha256": "7105d18a149076f1c5fb49e539f74cda3e95293201d4be6648948cd21df14e49"
+    },
+    {
+      "path": "guard.mjs",
+      "sha256": "cb1fd997320e858f5beab49c5796858ce194b026c21d73a04384543cd859fec9"
+    }
+  ],
+  "supervisor": {
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 0,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-51247b13-87c1-4ec6-886b-82d922b0585a"
+}

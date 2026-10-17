@@ -1,0 +1,102 @@
+{
+  "kind": "pi-selected-extension-functional-summary",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "packages": [
+    {
+      "package": "openwiki@0.7.2",
+      "pi_sdk_functions": "PASS",
+      "outer_model_turn": "NOT_RUN",
+      "retrieval_quality": "NOT_RUN",
+      "named_cases": 14,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "scope_removed": true,
+      "evidence": {
+        "path": "bridges/openwiki-final.json",
+        "hash": "sha256:b37edf16efaa907eb8ff6236072f0ce9297c45978e3c46d36d3afd90cf139ea9"
+      }
+    },
+    {
+      "package": "pi-web-access@0.41.0",
+      "pi_integration": "BLOCKED",
+      "pi_blocker": "directory_manifest_entry",
+      "standalone_mcp_functions": "PASS",
+      "web_search": "NOT_RUN",
+      "source_check": "NOT_RUN",
+      "named_cases": 6,
+      "cleanup": "PASS",
+      "process_group_empty": true,
+      "scope_removed": true,
+      "evidence": {
+        "path": "bridges/web-final.json",
+        "hash": "sha256:637ebb25309d075bf197bb07c5ee932398a74b30c0da37b4236c42de48b85620"
+      }
+    },
+    {
+      "package": "pi-cache-optimizer@2.9.3",
+      "fixture_host_functions": "PASS",
+      "external_model_turns": "NOT_RUN",
+      "attempts": 6,
+      "cleanup": "PASS",
+      "evidence": {
+        "path": "cache/cache-function-evidence-2026-10-17T13-42-18-175Z-215330e7-06a6-4666-af9c-2ecb214d8d71.json",
+        "hash": "sha256:8029fe14ab04d2de80a75977e50c01ca05b8be2e1090ee407ef67debfb3d4122"
+      }
+    },
+    {
+      "package": "pi-cursor-sdk@0.5.3",
+      "fixture_host_functions": "PASS",
+      "external_model_turns": "NOT_RUN",
+      "attempts": 2,
+      "cleanup": "PASS",
+      "evidence": {
+        "path": "cursor/evidence-2026-10-17T13-42-04-909Z-01d70cb3-6897-46ca-b8aa-1c69d5b5c7fc.json",
+        "hash": "sha256:0bca36c569fa5e4ceea6abc451f1d969839e4168c0bf17436e2123fefe6ed900"
+      }
+    },
+    {
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "public_policy_queries": "PASS",
+      "sdk_hook_decisions": "PASS",
+      "executor_enforcement": "NOT_RUN",
+      "evidence": {
+        "path": "../permission-gates-2026-10-17/permission-gates-result-verified.json",
+        "hash": "sha256:903d8ff9775d59c8149f797ac3505a117f876661341547f8cd63fa76c14d8185"
+      }
+    },
+    {
+      "package": "pi-lens@4.4.3",
+      "cold_cache_tool_responses": "PASS",
+      "candidate_tool_invocations": 7,
+      "fixture_retrieval": "INCONCLUSIVE",
+      "cleanup": "PASS",
+      "evidence": {
+        "path": "navigation/attempts/isolated-extensions-results-2026-10-17T13-46-56-605Z-f46134c2-8523-4892-ab76-e88195d79ed2.json",
+        "hash": "sha256:1a77ea3f869b7f03ea9cbb227baad3d99e0546647d180d695343a84caecd01a9"
+      }
+    },
+    {
+      "package": "context-mode@1.0.169",
+      "sdk_hook_persistence": "PASS",
+      "candidate_tool_invocations": 0,
+      "tool_result_hook_invocations": 1,
+      "before_agent_start_hook_invocations": 1,
+      "mcp_bridge": "INCONCLUSIVE",
+      "retrieval_or_compression": "NOT_RUN",
+      "child_network_attempts_denied": 1,
+      "child_process_attempts_denied": 20,
+      "cleanup": "PASS",
+      "evidence": {
+        "path": "navigation/attempts/isolated-extensions-results-2026-10-17T13-45-48-020Z-06f478f2-43c4-48a7-ac02-7e53d4df8aaf.json",
+        "hash": "sha256:939b3fca2048af16227c6bb69d26d48db08b9902e9eddb18e4cc2070ab01d07e"
+      },
+      "raw_probe_status": "BLOCKED",
+      "probe_blocker": "Child guard intercepted one network and twenty process attempts."
+    }
+  ],
+  "scope": "Seven selected candidates; provider-free named function checks, not a quality ablation",
+  "external_model_starts": 0
+}

@@ -1,0 +1,46 @@
+{
+  "kind": "evaluation-continuation-dossier-integrity",
+  "created_at": "2026-10-17T12:04:43.297432+00:00",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:4a3f91dfa2f244a10114e68ed8ecc60f3c9099cc26f79eaa0ce270e353a9197c"
+    },
+    {
+      "path": "attempts.json",
+      "hash": "sha256:14f39c91db0f8104e19f79596fa3445d9d82234deda58585d1a481856bababdc"
+    },
+    {
+      "path": "permission-gate-probe.mjs",
+      "hash": "sha256:743e949692cf739579db698c30a2f2e26eeccf784aa94b0fb932e9d57c7ee1c5"
+    },
+    {
+      "path": "permission-gate-worker.mjs",
+      "hash": "sha256:78e4574d9dc753f43d2bdccd9751b5276b90b94e788f74d5e63fb664ca09194e"
+    },
+    {
+      "path": "permission-gates-result-final.json",
+      "hash": "sha256:f8c0034630063d74f7cf4e191965b0084151f8bb09ce0ae5ef84da542de56f3d"
+    },
+    {
+      "path": "permission-gates-result-verified.json",
+      "hash": "sha256:903d8ff9775d59c8149f797ac3505a117f876661341547f8cd63fa76c14d8185"
+    },
+    {
+      "path": "permission-gates-result.json",
+      "hash": "sha256:c91913d046a0d76c1cc8ea8928ada3ce5b55940d6fec5b4034f114f6a4dc3628"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:eaa0fc63b6b7c2b6a911f22a6aa30b2b7b0d9fdb9d72f06d69976c652fa247f4"
+    },
+    {
+      "path": "superseded-initial-receipt.json",
+      "hash": "sha256:e10b610f7bea50f224282511b1a4f28f45f871fa86df00022c2ac55417f86168"
+    }
+  ]
+}

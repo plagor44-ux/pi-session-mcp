@@ -1,0 +1,31 @@
+{
+  "kind": "operator-authorized-node-interpreter-migration",
+  "status": "APPLIED",
+  "scope": "node24-extension-followup-04470d85-3a99-47e3-b356-ce96e77de0dd",
+  "old_interpreter": "/usr/bin/node",
+  "new_interpreter": "$HOME/.local/opt/node-v24.22.0/bin/node",
+  "targets": [
+    {
+      "client": "codex",
+      "scope": "user",
+      "only_interpreter_token_changed": true,
+      "private_backup_mode": "0o600",
+      "registration": "$HOME/.codex/config.toml"
+    },
+    {
+      "client": "claude-code",
+      "scope": "user",
+      "only_interpreter_token_changed": true,
+      "private_backup_mode": "0o600",
+      "registration": "$HOME/.claude.json"
+    }
+  ],
+  "owned_release_proved": true,
+  "release_binding": "e423500e43a6b9e228633bac709f6e0e43ea98c11a1196a1c2a3278a929cdcdf",
+  "ownership_records_updated": 2,
+  "skills_modified": false,
+  "config_env_args_and_other_bytes_preserved": true,
+  "recovery_journal_private": true,
+  "reconnect_existing_clients": "REQUIRED",
+  "provider_calls": 0
+}

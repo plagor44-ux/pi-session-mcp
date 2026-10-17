@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "screening",
+  "run_id": "screen-7",
+  "task_id": "T5",
+  "task_hash": "sha256:11a9b8dc872873fa8e9a63c660649b1c47a09390347ce83bc8ad2f7b645845bb",
+  "repetition": 1,
+  "scope_id": "pi-profile-eval-ol7409",
+  "fixture_revision": "sha256:135a849ce7f8ceaec5a053466046b5e5d4f0d51227abca1038827e5ebb72a0cb",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160",
+  "package_version": "0.8.3",
+  "sdk_version": "1.2.0",
+  "client_version": "profile-evaluation/1.0.0",
+  "profile_id": "P3",
+  "view": "reviewer",
+  "profile_digest": "sha256:c4a82239f19bcfe8e9ddf194a14a4731209f95b1a53833a80a1ca4c9b195ed0b",
+  "permission_profile": "read-only",
+  "skills": [],
+  "extensions": [],
+  "requested_route": {
+    "provider": "xai",
+    "model": "grok-4.7",
+    "effort": "high",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "resolved_route": {
+    "provider": "xai",
+    "model": "grok-4.7",
+    "effort": "high",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "model_revision": null,
+  "started_at": "2026-10-17T08:14:43.986Z",
+  "ended_at": "2026-10-17T08:15:21.999Z",
+  "terminal_status": "completed",
+  "harness_status": "PASS",
+  "task_status": "PASS",
+  "boundary_status": "PASS",
+  "recommendation": "restricted",
+  "checks": [
+    {
+      "id": "transport-route-binding",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "session-cleanup",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "diff-gate",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "seed-tenant-scope",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "seed-wildcard-claim",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "clean-counterexample",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "no-extra-findings",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "observed-process-cleanup",
+      "status": "PASS",
+      "exit_code": null
+    }
+  ],
+  "blockers": [],
+  "artifacts": [],
+  "expected_diff_scope": [],
+  "observed_diff_scope": [],
+  "duration_ms": 38013,
+  "tool_errors": null,
+  "manual_rework": null,
+  "controller_calls": 139,
+  "cost_usd": null,
+  "usage": null,
+  "cost_source": "not-exposed-by-mcp",
+  "metrics": {
+    "all_findings": 2,
+    "confirmed_findings": 2,
+    "precision_numerator": 2,
+    "precision_denominator": 2,
+    "false_positives": 0,
+    "seed_findings_detected": 2,
+    "seed_findings_total": 2,
+    "false_positives_on_clean_cases": 0
+  }
+}

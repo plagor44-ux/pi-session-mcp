@@ -1,0 +1,51 @@
+{
+  "kind": "real-production-extension-resolver-check",
+  "executed_at": "2026-10-17T09:03:44.751Z",
+  "imports_of_candidate_code": 0,
+  "installs": 0,
+  "provider_calls": 0,
+  "results": [
+    {
+      "identity": "npm:pi-lens@4.4.3",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:context-mode@1.0.169",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:pi-cache-optimizer@2.9.3",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:@gotgenes/pi-permission-system@40.3.0",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:pi-web-access@0.41.0",
+      "resolver_status": "BLOCKED",
+      "code": "extension_load_failed",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:openwiki@0.7.2",
+      "resolver_status": "PASS",
+      "required_node": ">=22.22.0",
+      "current_node": "22.23.2"
+    },
+    {
+      "identity": "npm:pi-cursor-sdk@0.5.3",
+      "resolver_status": "PASS",
+      "required_node": ">=24",
+      "current_node": "22.23.2"
+    }
+  ]
+}

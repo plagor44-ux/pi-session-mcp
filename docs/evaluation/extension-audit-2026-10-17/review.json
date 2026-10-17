@@ -1,0 +1,28 @@
+{
+  "kind": "independent-read-only-review",
+  "reviewed_at": "2026-10-17T09:07:30.354Z",
+  "subjects": [
+    {
+      "file": "README.md",
+      "hash": "sha256:18f6b4a76f4cddb426d6554b4a2fce76f14114a125b46b099a1ebf7e2d5a59ea"
+    },
+    {
+      "file": "summary.json",
+      "hash": "sha256:5833fcc28ca711e43ae9a086d3d8870a5b08ab5878b5731f34b4af15c258c014"
+    },
+    {
+      "file": "run-openwiki-headless-probe.mjs",
+      "hash": "sha256:f11602228306ce6556b87ac9a437d8d4e31638461c96b87f7e84df0e04ab1d4c"
+    },
+    {
+      "file": "openwiki-headless-probe.mjs",
+      "hash": "sha256:14f7c859f347a85fef34b587f21dea508339e3f318153a9720a9e2b2f1cd96b7"
+    }
+  ],
+  "status": "PASS",
+  "findings": [],
+  "conclusion": "Resolver, runtime and quality statuses are separated correctly. OpenWiki PASS is restricted to registration, tool selection, scripted turn and shutdown. Its writer tools and internal MCP child are not qualified. Supervisor bounds execution, observes child exit and checks ownership before cleanup. Instrumentation limits are explicit.",
+  "changes": 0,
+  "test_executions": 0,
+  "external_provider_calls": 0
+}

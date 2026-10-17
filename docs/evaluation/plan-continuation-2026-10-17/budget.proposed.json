@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "approved": false,
+  "manifest_digest": "sha256:1e4209fb1d4f776f095b355398d754814c4e71ccfaadec61dd7a6379dc1bb673",
+  "max_starts": 6,
+  "max_retries": 0,
+  "parallelism": 1,
+  "run_timeout_ms": 180000,
+  "total_timeout_ms": 1080000,
+  "advisory_usd": 5,
+  "provider_cap_usd": null,
+  "acknowledges_unmetered_cost": true
+}

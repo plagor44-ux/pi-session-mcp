@@ -1,0 +1,152 @@
+{
+  "kind": "six-start-live-rescreen-audit",
+  "status": "PASS",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "approved_manifest_digest": "sha256:b3e80291c681ce8509ade8a387e278a65eae6eeb00cc709fbee76c5932206c97",
+  "claims": 5,
+  "started": 5,
+  "accepted": 3,
+  "rejected": 2,
+  "blocked": 1,
+  "harness_passed": 5,
+  "sequential_intervals_verified": true,
+  "unique_scopes_verified": true,
+  "artifacts": [
+    {
+      "run_id": "rescreen-1",
+      "path": "rescreen-1.diagnostic.json",
+      "hash": "sha256:c95e8462f49c8e96b9551dad55d33c2791805a3014c49d81672f1e0f3ab20de3"
+    },
+    {
+      "run_id": "rescreen-2",
+      "path": "rescreen-2.snapshot",
+      "hash": "sha256:3cfc2fcee9b65f78fb19830bf59ba89af06e1a46410435e7e293c9d67b18ae43"
+    },
+    {
+      "run_id": "rescreen-2",
+      "path": "rescreen-2.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "run_id": "rescreen-4",
+      "path": "rescreen-4.snapshot",
+      "hash": "sha256:3cfc2fcee9b65f78fb19830bf59ba89af06e1a46410435e7e293c9d67b18ae43"
+    },
+    {
+      "run_id": "rescreen-4",
+      "path": "rescreen-4.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "run_id": "rescreen-5",
+      "path": "rescreen-5.diagnostic.json",
+      "hash": "sha256:e974eaa3470cdbec0e7e21198a5d83f7d0a309f8a3c97c44cda47139384880da"
+    }
+  ],
+  "diagnostics": [
+    {
+      "run_id": "rescreen-1",
+      "scope_id": "pi-profile-eval-hOKIEl",
+      "temporary_fixture_retained": true
+    },
+    {
+      "run_id": "rescreen-2",
+      "scope_id": "pi-profile-eval-FGWr1Q",
+      "temporary_fixture_retained": false
+    },
+    {
+      "run_id": "rescreen-3",
+      "scope_id": "pi-profile-eval-4bpOaQ",
+      "temporary_fixture_retained": false
+    },
+    {
+      "run_id": "rescreen-4",
+      "scope_id": "pi-profile-eval-YDjN2s",
+      "temporary_fixture_retained": false
+    },
+    {
+      "run_id": "rescreen-5",
+      "scope_id": "pi-profile-eval-uiWdlk",
+      "temporary_fixture_retained": true
+    },
+    {
+      "run_id": "rescreen-6",
+      "scope_id": "not-created",
+      "temporary_fixture_retained": false
+    }
+  ],
+  "route_screening": [
+    {
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "screening_gate": "FAIL",
+      "eligible_for_separately_approved_pilot": false,
+      "evidence_run_ids": [
+        "rescreen-2"
+      ],
+      "limitations": [
+        "Screening eligibility is not two-repeat role qualification or production approval.",
+        "Coding profiles have no OS file-scope boundary."
+      ]
+    },
+    {
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "screening_gate": "PASS",
+      "eligible_for_separately_approved_pilot": true,
+      "evidence_run_ids": [
+        "rescreen-3",
+        "rescreen-4"
+      ],
+      "limitations": [
+        "Screening eligibility is not two-repeat role qualification or production approval.",
+        "Coding profiles have no OS file-scope boundary."
+      ]
+    },
+    {
+      "route": {
+        "provider": "xai",
+        "model": "grok-4.7",
+        "effort": "high",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "screening_gate": "FAIL",
+      "eligible_for_separately_approved_pilot": false,
+      "evidence_run_ids": [],
+      "limitations": [
+        "Screening eligibility is not two-repeat role qualification or production approval.",
+        "Coding profiles have no OS file-scope boundary."
+      ]
+    }
+  ],
+  "measured_interval_ms": 74424,
+  "cost_usd": null,
+  "usage": null,
+  "cost_reason": "not-exposed-by-mcp",
+  "scope_violations": [],
+  "model_starts_beyond_approved_matrix": 0,
+  "live_starts_used_across_authorized_waves": 13,
+  "planning_envelope_remaining_if_30_total": 17,
+  "limitations": [
+    "No raw model receipt archived; exact rejected response content cannot be reconstructed.",
+    "Cleanup covers observed sessions and process identities, not OS containment.",
+    "SDK-internal provider retries and provider cost/quota are not metered."
+  ]
+}

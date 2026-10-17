@@ -1,0 +1,29 @@
+{
+  "kind": "published-pinned-artifact-download-and-integrity",
+  "retrieved_at": "2026-10-17T09:04:52.656Z",
+  "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+  "artifacts": [
+    {
+      "name": "pi-web-access",
+      "version": "0.41.0",
+      "metadata_url": "https://registry.npmjs.org/pi-web-access/0.41.0",
+      "tarball_url": "https://registry.npmjs.org/pi-web-access/-/pi-web-access-0.41.0.tgz",
+      "integrity": "sha512-8+UoNENGHKlYBxrtwh7Hwoh2twVfs+tcdR1Ciq7sRUtTur0mOXP8N/o7/y72JbdYij3NuSyCNjShbWBPPJ8JPA==",
+      "sha256": "sha256:68c4eb20216fe77fe69b0fcdb24e03c0cc6e0c7cc7bad8e88b47373da1c91aec",
+      "bytes": 7102345,
+      "artifact": "pi-web-access-0.41.0.tgz"
+    },
+    {
+      "name": "openwiki",
+      "version": "0.7.2",
+      "metadata_url": "https://registry.npmjs.org/openwiki/0.7.2",
+      "tarball_url": "https://registry.npmjs.org/openwiki/-/openwiki-0.7.2.tgz",
+      "integrity": "sha512-+DJd/g2knw92fhem+QXzuVFU3A8tYjTPTQ5LPNXMFzDyVhruvxcKxrweDXUN9lKWJhhFetvYsKTz4Ac/hGUVOA==",
+      "sha256": "sha256:17f0061fbb60c9b1410b30de1c47fbcc1b639bb9519a9798e4415ca8ffbe7155",
+      "bytes": 586095,
+      "artifact": "openwiki-0.7.2.tgz"
+    }
+  ],
+  "installs": 0,
+  "code_execution": 0
+}

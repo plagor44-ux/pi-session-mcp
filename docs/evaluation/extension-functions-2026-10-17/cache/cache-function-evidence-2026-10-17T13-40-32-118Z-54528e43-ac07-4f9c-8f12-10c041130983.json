@@ -1,0 +1,283 @@
+{
+  "schema": "pi-cache-optimizer-function-evidence.v1",
+  "package": "pi-cache-optimizer@2.9.3",
+  "source": "isolated package prefix; real published index.ts entrypoint, real Pi SDK root export",
+  "scope_id": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a",
+  "created_at": "2026-10-17T13:40:32.118Z",
+  "scope": "provider-free functional checks; no prompt/model/provider requests",
+  "attempts": [
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "c3c39463-a2d6-4ff8-b985-8f6d1fb1aa02",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "payload-openai",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-payload-returns-copy-with-cache-key",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-cache-key-opaque-and-bounded",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-request-fields-preserved",
+          "result": "PASS"
+        },
+        {
+          "id": "openai-compatible-input-not-mutated",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "bc1365e02a4f2baf73bdc5f54062f4bc8d87e405f5b586db18b5ec71e47dd0d5",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/payload-openai-c3c39463-a2d6-4ff8-b985-8f6d1fb1aa02.json",
+      "receipt_sha256": "5d6d3e6efc8684619755131f253a2292ea777e230f49bdb3606ea78056871dd4"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "6c225370-2f47-4a0a-80d5-87d12f6c6fdc",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "payload-codex-bypass",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "codex-responses-bypass-keeps-request-unchanged",
+          "result": "PASS"
+        },
+        {
+          "id": "codex-responses-input-not-mutated",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "e3793f5de62bb60de6d84c90dd31e37b2c40fb56914f10d83f74a49dbe62feb1",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/payload-codex-bypass-6c225370-2f47-4a0a-80d5-87d12f6c6fdc.json",
+      "receipt_sha256": "75801e0bdd1b9e53ae0a8499ad70c655591b698e0e690c2b1b7d8661df1b4cd9"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "f77e1e2d-742a-490f-9955-1dfb19f59c9c",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "warming-disabled-zero",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-returns-no-warming-action",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-host-cache-warming-setting-off",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-zero-no-provider-or-network-call",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "b6e85455fd6087fdf85ccaf4e6e508cf84bb5c738a0f19cf53aaa3354f4c63bc",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/warming-disabled-zero-f77e1e2d-742a-490f-9955-1dfb19f59c9c.json",
+      "receipt_sha256": "4c6bad9bf3f9de732ebc46d1a6a06e7b4c80b2868d5669a4b119ede51a7c9b74"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "347a8548-d2e0-4846-a08e-b0399f8fd3b4",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "warming-disabled-unknown",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-returns-no-warming-action",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-host-cache-warming-setting-off",
+          "result": "PASS"
+        },
+        {
+          "id": "warming-disabled-unknown-no-provider-or-network-call",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "22f67d38c40f10faf5134874ca679a02a67158d07fc31c10fdefea1701a760b2",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/warming-disabled-unknown-347a8548-d2e0-4846-a08e-b0399f8fd3b4.json",
+      "receipt_sha256": "61e6aa27ec645498d578fd00dba3a366bf562b18276ccacc9c9b41c5382e6298"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "50f39f1c-8b48-442b-8d15-1f9c8f63bd81",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "commands-headless",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-fix-does-not-write-agent-files",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-fix-explains-confirmation-required",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-rollback-does-not-write-agent-files",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-rollback-explains-confirmation-required",
+          "result": "PASS"
+        },
+        {
+          "id": "headless-command-never-requested-confirmation",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [],
+      "stdout_sha256": "1d0203c9026ac9d34372595c9778e156280313d03c88c9663fe3b2c794481aaa",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/commands-headless-50f39f1c-8b48-442b-8d15-1f9c8f63bd81.json",
+      "receipt_sha256": "da011b515e3c2b3ad766dd8dce5e8c21f4e6a44c9d5308affb7e65571eaa6533"
+    },
+    {
+      "schema": "pi-cache-optimizer-function-attempt.v1",
+      "attempt_id": "e3985119-e101-459e-91cd-21a0905287ba",
+      "package": "pi-cache-optimizer@2.9.3",
+      "case": "stats-synthetic",
+      "node": "24.22.0",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "cleanup": "PASS",
+      "checks": [
+        {
+          "id": "sdk-root-export-imported",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-hooks",
+          "result": "PASS"
+        },
+        {
+          "id": "real-extension-registers-command",
+          "result": "PASS"
+        },
+        {
+          "id": "synthetic-usage-produced-local-stats-file",
+          "result": "PASS"
+        },
+        {
+          "id": "synthetic-prompt-response-content-not-persisted",
+          "result": "PASS"
+        },
+        {
+          "id": "stats-remain-inside-fresh-agent-dir",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "child_process_attempts": 0,
+      "changed_files": [
+        "pi-cache-optimizer-stats.d",
+        "pi-cache-optimizer-stats.d/maintenance",
+        "pi-cache-optimizer-stats.d/shards",
+        "pi-cache-optimizer-stats.d/shards/3f4c4cec-4cb9-4dae-ab80-f07e8875b574.json",
+        "pi-cache-optimizer-stats.d/maintenance/last-cleanup",
+        "pi-cache-optimizer-stats.d/maintenance/last-compaction"
+      ],
+      "stdout_sha256": "c388bdc54d0928d19db4ea0bb44e2ecfb4f4b5d6e6e7d8c928367f6e71e0f291",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "receipt": "eval/results/extension-functions-cache-172cc299-adf1-4eb0-9dfa-2499ce39523a/attempts/stats-synthetic-e3985119-e101-459e-91cd-21a0905287ba.json",
+      "receipt_sha256": "a785da09eeea912cb6b1d7d0b2fb995bf385319fc6c0109ed8017bf45fd8e931"
+    }
+  ]
+}
