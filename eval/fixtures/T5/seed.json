@@ -1,0 +1,1 @@
+{"defects":[{"id":"tenant-scope","path":"handler.ts","precondition":"invoice ID from another tenant is supplied","impact":"cross-tenant invoice disclosure"},{"id":"wildcard-claim","path":"token.ts","precondition":"untrusted token contains wildcard permission","impact":"bypasses exact permission check"}],"clean_paths":["clean.ts"]}

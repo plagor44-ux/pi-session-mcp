@@ -1,0 +1,69 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "pi-web-access@0.41.0",
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-extension-resolver-gate",
+      "status": "PASS",
+      "expected_blocker": "directory_manifest_entry",
+      "pi_profile_status": "BLOCKED"
+    },
+    {
+      "id": "standalone-mcp-tool-discovery",
+      "status": "PASS",
+      "tools": [
+        "web_search",
+        "fetch_content",
+        "get_search_content",
+        "source_check"
+      ]
+    },
+    {
+      "id": "standalone-raw-fetch-owned-http",
+      "status": "PASS",
+      "canary_preserved": true
+    },
+    {
+      "id": "standalone-stored-content-search",
+      "status": "PASS",
+      "original_content_retrieved": true
+    },
+    {
+      "id": "standalone-invalid-fetch-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "standalone-model-answer-mode-rejected",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "integration": "Standalone MCP functional path; production Pi extension loading remains BLOCKED.",
+  "status": "PASS",
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 1,
+    "network_denied": 0,
+    "git_allowed": 0,
+    "children_allowed": 1,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "supervisor": {
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 0,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-6d2fbaa9-a720-4582-9be1-a95f4764786d"
+}

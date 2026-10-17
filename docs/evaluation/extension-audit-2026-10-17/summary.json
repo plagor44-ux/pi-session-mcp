@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "extension-evaluation-follow-on",
+  "completed_at": "2026-10-17T09:06:38.139Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "scope": "Six named AP6 candidates plus configured Cursor, without unknown historical package-list expansion.",
+  "overall_status": "PARTIAL_RUNTIME_QUALIFICATION",
+  "static_candidates": 7,
+  "resolver_candidates": 7,
+  "installed_candidates": 3,
+  "not_installed_candidates": 4,
+  "runtime_component_qualified_candidates": 1,
+  "runtime_blocked_candidates": 6,
+  "candidates": [
+    {
+      "identity": "npm:pi-lens@4.4.3",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "extension_not_installed",
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:context-mode@1.0.169",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "extension_not_installed",
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:pi-cache-optimizer@2.9.3",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "extension_not_installed",
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:@gotgenes/pi-permission-system@40.3.0",
+      "resolver_status": "BLOCKED",
+      "code": "extension_not_installed",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "extension_not_installed",
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:pi-web-access@0.41.0",
+      "resolver_status": "BLOCKED",
+      "code": "extension_load_failed",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "extension_load_failed",
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:openwiki@0.7.2",
+      "resolver_status": "PASS",
+      "required_node": ">=22.22.0",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "PASS_COMPONENT_ONLY",
+      "runtime_blocker": null,
+      "quality_status": "NOT_RUN"
+    },
+    {
+      "identity": "npm:pi-cursor-sdk@0.5.3",
+      "resolver_status": "PASS",
+      "required_node": ">=24",
+      "current_node": "22.23.2",
+      "static_audit": "COMPLETE",
+      "runtime_status": "BLOCKED",
+      "runtime_blocker": "node_engine_unsupported",
+      "quality_status": "NOT_RUN"
+    }
+  ],
+  "component_test": {
+    "candidate": "npm:openwiki@0.7.2",
+    "sdk_version": "1.2.0",
+    "first_execution": {
+      "read_only": "PASS",
+      "coding": "PASS"
+    },
+    "fresh_scope_reproduction": {
+      "read_only": "PASS",
+      "coding": "PASS"
+    },
+    "support_fixture": "npm:pi-extension-fixture@1.0.0",
+    "candidate_tools_invoked": 0,
+    "external_provider_calls": 0,
+    "network_attempts": 0,
+    "child_process_attempts": 0
+  },
+  "additional_paid_candidate_runs": 0,
+  "installs": 0,
+  "production_changes": 0,
+  "live_quality_ablation": "NOT_RUN",
+  "prior_screening_cost_usd": null,
+  "prior_screening_cost_reason": "not-exposed-by-mcp; preserved unchanged",
+  "rules_applied": [
+    "Only installed exact allowlist pins can be loaded.",
+    "No automatic global installs or production pin/runtime changes.",
+    "No live quality run without concrete paired matrix and budget."
+  ],
+  "limitations": [
+    "Static review is not runtime qualification or transitive dependency assurance.",
+    "OpenWiki registration/selection/shutdown does not qualify writer/retrieval tools or its internal MCP child.",
+    "Instrumented JavaScript network/process guards are not an OS sandbox.",
+    "No LSP, large-output or cache bottleneck was measured, so no quality ablation was selected."
+  ]
+}

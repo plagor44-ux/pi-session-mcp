@@ -1,0 +1,48 @@
+{
+  "schema": "pi-cache-optimizer-function-attempt.v1",
+  "attempt_id": "e3985119-e101-459e-91cd-21a0905287ba",
+  "package": "pi-cache-optimizer@2.9.3",
+  "case": "stats-synthetic",
+  "node": "24.22.0",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "cleanup": "PASS",
+  "checks": [
+    {
+      "id": "sdk-root-export-imported",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-hooks",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-command",
+      "result": "PASS"
+    },
+    {
+      "id": "synthetic-usage-produced-local-stats-file",
+      "result": "PASS"
+    },
+    {
+      "id": "synthetic-prompt-response-content-not-persisted",
+      "result": "PASS"
+    },
+    {
+      "id": "stats-remain-inside-fresh-agent-dir",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 0,
+  "changed_files": [
+    "pi-cache-optimizer-stats.d",
+    "pi-cache-optimizer-stats.d/maintenance",
+    "pi-cache-optimizer-stats.d/shards",
+    "pi-cache-optimizer-stats.d/shards/3f4c4cec-4cb9-4dae-ab80-f07e8875b574.json",
+    "pi-cache-optimizer-stats.d/maintenance/last-cleanup",
+    "pi-cache-optimizer-stats.d/maintenance/last-compaction"
+  ],
+  "stdout_sha256": "c388bdc54d0928d19db4ea0bb44e2ecfb4f4b5d6e6e7d8c928367f6e71e0f291",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

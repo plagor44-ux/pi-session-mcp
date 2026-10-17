@@ -1,0 +1,53 @@
+{
+  "schema": "pi-cache-optimizer-function-attempt.v1",
+  "attempt_id": "a23c264f-151d-4ff0-aab4-bdbb2f6560d8",
+  "package": "pi-cache-optimizer@2.9.3",
+  "case": "stats-synthetic",
+  "node": "24.22.0",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "cleanup": "PASS",
+  "process_group_empty": true,
+  "owned_home_removed": true,
+  "timed_out": false,
+  "output_overflow": false,
+  "checks": [
+    {
+      "id": "sdk-root-export-imported",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-hooks",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-command",
+      "result": "PASS"
+    },
+    {
+      "id": "synthetic-usage-produced-local-stats-file",
+      "result": "PASS"
+    },
+    {
+      "id": "synthetic-prompt-response-content-not-persisted",
+      "result": "PASS"
+    },
+    {
+      "id": "stats-remain-inside-fresh-agent-dir",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 0,
+  "changed_files": [
+    "pi-cache-optimizer-stats.d",
+    "pi-cache-optimizer-stats.d/maintenance",
+    "pi-cache-optimizer-stats.d/shards",
+    "pi-cache-optimizer-stats.d/shards/fa0521f0-bc8c-4b18-bb96-c8e81e01a55d.json",
+    "pi-cache-optimizer-stats.d/maintenance/last-cleanup",
+    "pi-cache-optimizer-stats.d/maintenance/last-compaction"
+  ],
+  "stdout_sha256": "79d60dd6debb1b0be68e1f99fe8311a04e403eb5fe70e145e5a59d6d9409294d",
+  "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_bytes": 0
+}

@@ -1,0 +1,136 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:39:53.514Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-db409f47-8ee5-4354-b7f9-a258eb7e17d0",
+  "status": "PASS",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "a58f0281-71bc-4757-9d6f-e281f813135e",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "checks": [
+        {
+          "id": "public_cursor_pi_manifest_entrypoint_loaded",
+          "result": "PASS"
+        },
+        {
+          "id": "cursor_activate_skill_registered_by_public_entrypoint",
+          "result": "PASS"
+        },
+        {
+          "id": "no_provider_turn_started",
+          "result": "PASS"
+        },
+        {
+          "id": "provider_discovery_offline",
+          "result": "PASS"
+        },
+        {
+          "id": "activation_tool_enabled_for_local_cursor_with_visible_skill",
+          "result": "PASS"
+        },
+        {
+          "id": "system_prompt_points_to_activation_tool",
+          "result": "PASS"
+        },
+        {
+          "id": "positive_activation_returns_only_fixture_skill_content",
+          "result": "PASS"
+        },
+        {
+          "id": "resource_listing_includes_regular_fixture_resource",
+          "result": "PASS"
+        },
+        {
+          "id": "resource_listing_skips_symlink_resource",
+          "result": "PASS"
+        },
+        {
+          "id": "unknown_skill_rejected",
+          "result": "PASS"
+        },
+        {
+          "id": "disable_model_invocation_skill_rejected",
+          "result": "PASS"
+        },
+        {
+          "id": "no_cursor_agent_model_or_cloud_calls",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "denied_child_process_attempts": 0,
+      "cleanup": "PASS",
+      "process_group_empty_after_close": true,
+      "component": "cursor_activate_skill registration, activation and resource enumeration only",
+      "stdout_sha256": "a25df7c43a2976d0396ff2fbacc89d9c89763df8d07e9c94256018f3a61a9534",
+      "receipt": "attempts/activation-and-resources-a58f0281-71bc-4757-9d6f-e281f813135e.json",
+      "receipt_sha256": "bf8bf5670294382b3c6f6ff6618c2342c07b752abbab70164c2f1afb5fe2ba59"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "3a6aa7d7-b956-4fe5-9555-a2c63408c067",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "checks": [
+        {
+          "id": "public_cursor_pi_manifest_entrypoint_loaded",
+          "result": "PASS"
+        },
+        {
+          "id": "cursor_activate_skill_registered_by_public_entrypoint",
+          "result": "PASS"
+        },
+        {
+          "id": "no_provider_turn_started",
+          "result": "PASS"
+        },
+        {
+          "id": "provider_discovery_offline",
+          "result": "PASS"
+        },
+        {
+          "id": "disabled_bridge_keeps_activation_tool_inactive",
+          "result": "PASS"
+        },
+        {
+          "id": "disabled_bridge_does_not_set_active_tools",
+          "result": "PASS"
+        },
+        {
+          "id": "no_cursor_agent_model_or_cloud_calls",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "denied_child_process_attempts": 0,
+      "cleanup": "PASS",
+      "process_group_empty_after_close": true,
+      "component": "cursor_activate_skill registration, activation and resource enumeration only",
+      "stdout_sha256": "a608997ab6bed02f15f1c0cf3ae698535eaa4a523424c972d568e4b02e4e194f",
+      "receipt": "attempts/bridge-disabled-3a6aa7d7-b956-4fe5-9555-a2c63408c067.json",
+      "receipt_sha256": "b01b4ab1b0eaf5f7a59dc08bceb8362c9b8e166342ff8b3e9edb673f353f5941"
+    }
+  ],
+  "cleanup": "PASS",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

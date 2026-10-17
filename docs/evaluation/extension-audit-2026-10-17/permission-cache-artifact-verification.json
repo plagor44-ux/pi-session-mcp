@@ -1,0 +1,24 @@
+{
+  "kind": "independent-artifact-integrity-verification",
+  "verified_at": "2026-10-17T09:05:22.235Z",
+  "results": [
+    {
+      "identity": "@gotgenes/pi-permission-system@40.3.0",
+      "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+      "artifact": "gotgenes-pi-permission-system-40.3.0.tgz",
+      "sha256": "sha256:19a718d2a62f03be7eaffd62bc693371b466cda31d66992ef437fcbdee5f8c47",
+      "integrity": "sha512-B3iAs1YOnyUdeh66P40+YEJ0G3WBFsEpJAtXv/pY0CyhpIoErCoLBNKN2Sx9+Cg3VXmGMC1h/3T7r+b0d97oVg==",
+      "sri_status": "PASS",
+      "matches_independent_audit_hash": true
+    },
+    {
+      "identity": "pi-cache-optimizer@2.9.3",
+      "artifact_scope": "extension-audit-20261017-51c18bf7-245f-427b-91e2-4dc7820d7227",
+      "artifact": "pi-cache-optimizer-2.9.3.tgz",
+      "sha256": "sha256:fb04b2e382eb06e1ebb2eb54a7e1272b06cdf6b81f65aedb2235f74ca6911e81",
+      "integrity": "sha512-FdkhoM05E6JLTTgiIu+QSTuahcV1GeB1beVBaqGQRz4VZXMGoHgjlnUBLJt43WTXfe3TULG7r/xUKx3JIxVjUw==",
+      "sri_status": "PASS",
+      "matches_independent_audit_hash": true
+    }
+  ]
+}

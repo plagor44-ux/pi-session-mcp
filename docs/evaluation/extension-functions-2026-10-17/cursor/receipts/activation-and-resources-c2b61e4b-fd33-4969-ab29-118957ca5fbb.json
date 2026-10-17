@@ -1,0 +1,15 @@
+{
+  "schema": "pi-cursor-activation-attempt.v1",
+  "attempt_id": "c2b61e4b-fd33-4969-ab29-118957ca5fbb",
+  "case": "activation-and-resources",
+  "node": "24.22.0",
+  "package": "pi-cursor-sdk@0.5.3",
+  "outcome": "HARNESS_ERROR",
+  "exit_code": 1,
+  "checks": [],
+  "network_attempts": null,
+  "denied_child_process_attempts": null,
+  "cleanup": "FAIL",
+  "process_group_empty_after_close": true,
+  "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

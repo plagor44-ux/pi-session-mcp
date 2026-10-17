@@ -5,3 +5,7 @@ dist/
 coverage/
 .env
 *.log
+
+/.profile-eval/
+/eval/results/
+/.vitest/

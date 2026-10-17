@@ -1,0 +1,12 @@
+{
+  "kind": "owned-successful-probe-scope-cleanup",
+  "cleaned_at": "2026-10-17T09:06:38.138Z",
+  "initial_scope": "runtime-home child of owned extension-audit artifact scope",
+  "ownership_marker_verified": true,
+  "initial_child_exit_observed": true,
+  "initial_home_removed": true,
+  "reproduction_scope": "removed by ownedTemporary cleanup after PASS",
+  "candidate_tool_calls": 0,
+  "external_provider_calls": 0,
+  "artifacts_retained": "Verified package tarballs, static copies and probe scripts only; no real credentials or production data."
+}

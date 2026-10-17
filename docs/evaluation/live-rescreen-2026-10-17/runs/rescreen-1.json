@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "screening",
+  "run_id": "rescreen-1",
+  "task_id": "T1",
+  "task_hash": "sha256:2b8a7d3cfbe985f25a9fe7e2c2e329e90f7c38a16f35ae3e180f1d9cd419531f",
+  "repetition": 1,
+  "scope_id": "pi-profile-eval-hOKIEl",
+  "fixture_revision": "sha256:579d5064e6529e3a08cbd7f3ecf9636f38ee138d17ee9b89d25fad81b8b69651",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5",
+  "package_version": "0.8.3",
+  "sdk_version": "1.2.0",
+  "client_version": "profile-evaluation/1.0.0",
+  "profile_id": "P1",
+  "view": "scout",
+  "profile_digest": "sha256:58aee84b2179955bb53c8fdc0ab0ec6f38817d30e99fde39694535d0fa0b495f",
+  "permission_profile": "read-only",
+  "skills": [],
+  "extensions": [],
+  "requested_route": {
+    "provider": "openai-codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "resolved_route": {
+    "provider": "openai-codex",
+    "model": "gpt-6-luna",
+    "effort": "low",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "model_revision": null,
+  "started_at": "2026-10-17T13:22:54.870Z",
+  "ended_at": "2026-10-17T13:23:02.402Z",
+  "terminal_status": "completed",
+  "harness_status": "PASS",
+  "task_status": "FAIL",
+  "boundary_status": "PASS",
+  "recommendation": "rejected-for-scope",
+  "checks": [
+    {
+      "id": "transport-route-binding",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "session-cleanup",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "diff-gate",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "api-data-flow",
+      "status": "FAIL",
+      "exit_code": 1,
+      "reason": "Receipt must cite the actual ordered route/service/data path and only defined symbols."
+    },
+    {
+      "id": "stale-doc-contradiction",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "observed-process-cleanup",
+      "status": "PASS",
+      "exit_code": null
+    }
+  ],
+  "blockers": [
+    "task_not_accepted"
+  ],
+  "artifacts": [
+    {
+      "path": "rescreen-1.diagnostic.json",
+      "hash": "sha256:c95e8462f49c8e96b9551dad55d33c2791805a3014c49d81672f1e0f3ab20de3"
+    }
+  ],
+  "expected_diff_scope": [],
+  "observed_diff_scope": [],
+  "duration_ms": 7532,
+  "tool_errors": null,
+  "manual_rework": null,
+  "controller_calls": 27,
+  "cost_usd": null,
+  "usage": null,
+  "cost_source": "not-exposed-by-mcp",
+  "metrics": {}
+}

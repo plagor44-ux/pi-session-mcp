@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T13:37:00.445Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "FAIL",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "failure_code": "Error",
+      "failure_stage": null,
+      "diagnostic_codes": [],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 0,
+      "allowed_metadata_commands": [
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "rev-parse",
+            "--show-toplevel"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        },
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "rev-parse",
+            "--show-toplevel"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        }
+      ],
+      "child_process_diagnostics": [],
+      "function_check": {
+        "status": "DB_QUERY",
+        "function": "tool_result capture"
+      },
+      "limitation": "Probe failed before a qualified function result; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "56376bf3-7c7f-4a56-98a8-32e9816f239a",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Only the specific synthetic function/event checks in function_check are covered. No prompts, model/provider calls, UI behavior, real-world retrieval quality, or broader package efficacy claim."
+}

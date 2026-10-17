@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T13:45:34.538Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "FAIL",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "failure_code": "ERR_ASSERTION",
+      "failure_detail": "Expected values to be strictly equal:\n\n1 !== 0\n",
+      "failure_stage": null,
+      "diagnostic_codes": [],
+      "provider_calls": 0,
+      "network_attempts_denied": 1,
+      "child_process_attempts_denied": 20,
+      "allowed_metadata_commands": [
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "rev-parse",
+            "--show-toplevel"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        },
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "worktree",
+            "list",
+            "--porcelain"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        },
+        {
+          "method": "spawn",
+          "executable_basename": "node-v24",
+          "argv_pattern": [
+            "--import",
+            "<owned-child-guard>",
+            "<owned-context-mode>/server.bundle.mjs"
+          ],
+          "cwd": "owned_fixture",
+          "result": "exited",
+          "exit_code": 0,
+          "child_guard": {
+            "network_attempts_denied": 1,
+            "child_process_attempts_denied": 20
+          }
+        }
+      ],
+      "child_process_diagnostics": [],
+      "function_check": {
+        "status": "PASS",
+        "function": "tool_result capture",
+        "hook_invocations": 1,
+        "candidate_tools_invoked": 0,
+        "behavior": "synthetic AGENTS.md read result reached the real SDK event handler and was persisted with fixture project attribution",
+        "canary_persisted": true,
+        "fixture_project_scope_attribution_verified": true,
+        "retrieval_or_compression_tested": false,
+        "sdk_event_modifications": false,
+        "mcp_bridge_status": "BLOCKED",
+        "reason_code": "ctx_search_not_registered_after_before_agent_start",
+        "before_agent_start_emitted": true,
+        "context_tools_registered": [],
+        "registered_tool_names": [
+          "read",
+          "bash",
+          "edit",
+          "write",
+          "grep",
+          "find",
+          "ls",
+          "fixture_tool"
+        ]
+      },
+      "limitation": "Probe failed before a qualified function result; private error text and paths are omitted.",
+      "sanitized_stderr_excerpt": "",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 2,
+      "evidence_id": "6baf64a7-cce0-4f1c-81be-fbffb4991ddb",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Only the specific synthetic function/event checks in function_check are covered. No prompts, model/provider calls, UI behavior, real-world retrieval quality, or broader package efficacy claim."
+}

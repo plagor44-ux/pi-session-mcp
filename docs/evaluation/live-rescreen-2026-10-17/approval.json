@@ -1,0 +1,18 @@
+{
+  "kind": "operator-authorized-six-start-rescreen",
+  "authorized_at": "2026-10-17T13:22:47.517Z",
+  "authorization": "Operator replied Ja mach to the concrete request for six new screening runs: Luna T1/T2, Sol T1/T2, Grok T5 twice, USD 5 advisory, no hard cost cap, sequential and zero controller retries.",
+  "scope": "screening only; baseline A; no pilot, ablation, extensions, worker skills or external MCP grants",
+  "manifest_digest": "sha256:b3e80291c681ce8509ade8a387e278a65eae6eeb00cc709fbee76c5932206c97",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "max_starts": 6,
+  "advisory_usd": 5,
+  "run_timeout_ms": 180000,
+  "total_timeout_ms": 1080000,
+  "raw_output_scope": "live-rescreen-0e7491cd-68b7-400d-b738-489f9b9b6d67",
+  "credential_reuse": "Previously authorized existing OAuth/subscription routes; no new credential provisioning or auth-store edits.",
+  "openai_api_key_environment_present": false
+}

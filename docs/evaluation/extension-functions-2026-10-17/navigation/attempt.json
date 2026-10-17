@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "pi-extension-function-probe-attempt",
+  "created_at": "2026-10-17",
+  "superseded": true,
+  "initial_status": "BLOCKED",
+  "initial_reason_code": "public_sdk_context_unavailable",
+  "initial_reason": "The first attempt incorrectly assumed that direct ToolDefinition.execute could not use the public SDK runner. Root review identified AgentSession.extensionRunner.createToolContext and public emit methods. The initial BLOCKED status was superseded; final results use the public SDK APIs.",
+  "final_result": "final-result.json",
+  "provider_calls": 0,
+  "network_attempts": 0,
+  "production_child_process_attempts": 0
+}

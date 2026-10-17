@@ -1,0 +1,54 @@
+{
+  "schema": "pi-cache-optimizer-function-attempt.v1",
+  "attempt_id": "8482b2b0-f600-488b-9f36-905e0125177a",
+  "package": "pi-cache-optimizer@2.9.3",
+  "case": "commands-headless",
+  "node": "24.22.0",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "cleanup": "PASS",
+  "process_group_empty": true,
+  "owned_home_removed": true,
+  "timed_out": false,
+  "output_overflow": false,
+  "checks": [
+    {
+      "id": "sdk-root-export-imported",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-hooks",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-command",
+      "result": "PASS"
+    },
+    {
+      "id": "headless-fix-does-not-write-agent-files",
+      "result": "PASS"
+    },
+    {
+      "id": "headless-fix-explains-confirmation-required",
+      "result": "PASS"
+    },
+    {
+      "id": "headless-rollback-does-not-write-agent-files",
+      "result": "PASS"
+    },
+    {
+      "id": "headless-rollback-explains-confirmation-required",
+      "result": "PASS"
+    },
+    {
+      "id": "headless-command-never-requested-confirmation",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 0,
+  "changed_files": [],
+  "stdout_sha256": "1d0203c9026ac9d34372595c9778e156280313d03c88c9663fe3b2c794481aaa",
+  "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_bytes": 0
+}

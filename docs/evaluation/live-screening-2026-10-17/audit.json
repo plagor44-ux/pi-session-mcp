@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0.0",
+  "audited_at": "2026-10-17T08:17:11.379Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "manifest_digest": "sha256:b8eb63eb4013e0943124376cfe72071efab3e584154e1dff8c7cbee420e09f0e",
+  "checks": {
+    "source_binding": "PASS",
+    "manifest_budget_approval_binding": "PASS",
+    "result_schema_and_route_binding": "PASS",
+    "artifact_hashes": "PASS",
+    "sequential_intervals": "PASS",
+    "unique_scopes": "PASS",
+    "per_run_and_total_wall_time": "PASS",
+    "session_cleanup": "PASS",
+    "observed_process_cleanup": "PASS",
+    "diff_scope": "PASS",
+    "comparison_recomputation": "PASS",
+    "successful_fixture_cleanup_and_failed_fixture_retention": "PASS"
+  },
+  "planned_slots": 8,
+  "claimed_attempts": 8,
+  "resolved_sessions": 8,
+  "completed_turns": 8,
+  "harness_passed": 8,
+  "task_accepted": 4,
+  "task_failed": 4,
+  "controller_retries": 0,
+  "observed_max_parallelism": 1,
+  "duration_ms": 172993,
+  "advisory_usd": 5,
+  "cost_usd": null,
+  "usage": null,
+  "hard_cost_cap_enforced": false,
+  "cost_source": "not-exposed-by-mcp",
+  "cli_exit_code": 1,
+  "cli_exit_reason": "Four task results did not pass their acceptance gates; all eight harness records passed.",
+  "extra_snapshot_checks": [
+    {
+      "run_id": "screen-2",
+      "status": "PASS",
+      "case_count": 7,
+      "cases": [
+        "undefined -> 20",
+        "7 -> 7",
+        "invalid -> 20",
+        "-2 -> 20",
+        "-0.1 -> 20",
+        "0 -> 0",
+        "7.5 -> 7.5"
+      ]
+    },
+    {
+      "run_id": "screen-4",
+      "status": "PASS",
+      "case_count": 7,
+      "cases": [
+        "undefined -> 20",
+        "7 -> 7",
+        "invalid -> 20",
+        "-2 -> 20",
+        "-0.1 -> 20",
+        "0 -> 0",
+        "7.5 -> 7.5"
+      ]
+    },
+    {
+      "run_id": "screen-6",
+      "status": "PASS",
+      "case_count": 7,
+      "cases": [
+        "undefined -> 20",
+        "7 -> 7",
+        "invalid -> 20",
+        "-2 -> 20",
+        "-0.1 -> 20",
+        "0 -> 0",
+        "7.5 -> 7.5"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "run_id": "screen-1",
+      "path": "screen-1.diagnostic.json",
+      "hash": "sha256:012d9176a23abea36dff542b98a249f17c723855336c295cffe36c50e241340b"
+    },
+    {
+      "run_id": "screen-2",
+      "path": "screen-2.snapshot",
+      "hash": "sha256:3cfc2fcee9b65f78fb19830bf59ba89af06e1a46410435e7e293c9d67b18ae43"
+    },
+    {
+      "run_id": "screen-2",
+      "path": "screen-2.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "run_id": "screen-3",
+      "path": "screen-3.diagnostic.json",
+      "hash": "sha256:0a1114dd23ec92cf797c0a2bf4cc69d8b75a32358bb261c6716e122c95ae32b8"
+    },
+    {
+      "run_id": "screen-4",
+      "path": "screen-4.snapshot",
+      "hash": "sha256:3cfc2fcee9b65f78fb19830bf59ba89af06e1a46410435e7e293c9d67b18ae43"
+    },
+    {
+      "run_id": "screen-4",
+      "path": "screen-4.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "run_id": "screen-5",
+      "path": "screen-5.diagnostic.json",
+      "hash": "sha256:c6d2fece66cae8b83c07fbc4138bb5a36ec76b9525160bb69ef4d0791bd7876a"
+    },
+    {
+      "run_id": "screen-6",
+      "path": "screen-6.snapshot",
+      "hash": "sha256:3cfc2fcee9b65f78fb19830bf59ba89af06e1a46410435e7e293c9d67b18ae43"
+    },
+    {
+      "run_id": "screen-6",
+      "path": "screen-6.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "run_id": "screen-8",
+      "path": "screen-8.diagnostic.json",
+      "hash": "sha256:e9516d57d54ac76e1b7bb7ca29472b721fa88b7b1e73956c3eea1eb9f7ad67a1"
+    }
+  ],
+  "limitations": [
+    "No raw model receipt is archived; exact rejected receipt content cannot be reconstructed from result records.",
+    "T1 uses exact claim, path and symbol checks; T5 clean-case acceptance requires the exact status string no finding. Failure is limited to this task and receipt contract.",
+    "Coding profiles do not enforce an OS file-scope boundary.",
+    "Cleanup evidence concerns observed sessions and process identities; this is not OS containment.",
+    "SDK-internal request retries and provider billing are not metered by this contract."
+  ]
+}

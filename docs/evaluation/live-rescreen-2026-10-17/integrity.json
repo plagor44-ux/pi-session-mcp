@@ -1,0 +1,138 @@
+{
+  "kind": "authorized-live-rescreen-dossier-integrity",
+  "created_at": "2026-10-17T13:26:53.835432+00:00",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:f0569f105a26946738c1d543fc7d24433f30567a5c6de362f1cdb49afc9d400c"
+    },
+    {
+      "path": "approval.json",
+      "hash": "sha256:bfbce3a401ca5b279647eb36f085a10610c88c5f862b5a9837f8124667639533"
+    },
+    {
+      "path": "approved-budget.json",
+      "hash": "sha256:ecf345cedec7960687e45c2abfc5962c18d13973440c97d48fbcb30506b5c5ad"
+    },
+    {
+      "path": "approved-manifest.json",
+      "hash": "sha256:14c6feb0428754e7566c3586c1dc04d7435e3522606495460970332ada057630"
+    },
+    {
+      "path": "audit-rescreen.mjs",
+      "hash": "sha256:8ee5d2258ca10a3760dc9b1beb01053ff86e4f68bcfc7f16912e2fe8b865bb90"
+    },
+    {
+      "path": "audit.json",
+      "hash": "sha256:300ab7bad460b01fa04679e4a3b933405f0c2488f6146f106b9c3e842cfde746"
+    },
+    {
+      "path": "backend-independent-checks.json",
+      "hash": "sha256:1056d0416d530e9418722ceb901cd71204754f8cd70a9809fd4b6e4bbd6238e8"
+    },
+    {
+      "path": "checks.json",
+      "hash": "sha256:27481e6cee552f220118c32ebf34106a1db1dcca605ade528e342dfebe517b3d"
+    },
+    {
+      "path": "execution.json",
+      "hash": "sha256:c95204967d4b1035c3d3af45c42b7d978b940658e6c053fb60c94882ef288929"
+    },
+    {
+      "path": "planning-ledger.json",
+      "hash": "sha256:0b4911d791b40ed1557be5537963c117a92635f64efac6bf91c293994b9481a4"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:136ca86bad4e0c8219f0be6c8267e1bc439904db505ceb98db707ff76c08c3c0"
+    },
+    {
+      "path": "runs/comparison.json",
+      "hash": "sha256:bb995327072061aa2897d627c4f47c2330554152db541a36619b5ed59e05f9f6"
+    },
+    {
+      "path": "runs/rescreen-1.claim",
+      "hash": "sha256:3f9c37c533109aa537aa044ab465fa77ffb7f5784402a73894f9e3b765d7eec0"
+    },
+    {
+      "path": "runs/rescreen-1.diagnostic.json",
+      "hash": "sha256:c95e8462f49c8e96b9551dad55d33c2791805a3014c49d81672f1e0f3ab20de3"
+    },
+    {
+      "path": "runs/rescreen-1.json",
+      "hash": "sha256:4e7b5436aa46bbfbb22816935a7202d38591e1acaa56a2ac7b0ca5a75590fdee"
+    },
+    {
+      "path": "runs/rescreen-2.claim",
+      "hash": "sha256:010a2fb0cff4a7d10ded127b9952cff5312a4ec9a06ef10f77325b06135ef616"
+    },
+    {
+      "path": "runs/rescreen-2.json",
+      "hash": "sha256:92ab8fd1ea5198b48bb7ed77a18de431318f69eced2d9da8a3325831b572c7e6"
+    },
+    {
+      "path": "runs/rescreen-2.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "path": "runs/rescreen-2.snapshot/contract.mjs",
+      "hash": "sha256:7df782c1888f40c7a6965803dfb8dcd71ea3db90d72920135e87a428f7b623c8"
+    },
+    {
+      "path": "runs/rescreen-2.snapshot/package.json",
+      "hash": "sha256:1239d4d885dcad42201a27ed9324f8f0f760b78700d8db9ced39a511cffe7eae"
+    },
+    {
+      "path": "runs/rescreen-3.claim",
+      "hash": "sha256:0973b1f2ce59a000da977eeccae799511ab47f5d4055676d8348a25b4fdc9422"
+    },
+    {
+      "path": "runs/rescreen-3.json",
+      "hash": "sha256:02807575deb742ab3ad7fb0e6c3842d3ce0836b973102efda1fb9df2cc743220"
+    },
+    {
+      "path": "runs/rescreen-4.claim",
+      "hash": "sha256:0df1a7f1f7de15c5001f076f439b639ba58d9b04b753d15f3728d9cf215111b3"
+    },
+    {
+      "path": "runs/rescreen-4.json",
+      "hash": "sha256:5c09c162a213fb5076f5d387d9fb22bf26d1954d5f17eba3b1594341348dfddb"
+    },
+    {
+      "path": "runs/rescreen-4.patch",
+      "hash": "sha256:6e5fe041c47508e7c390bf6e580faf93243e658cb93b6398e7c0c655b4cdb60e"
+    },
+    {
+      "path": "runs/rescreen-4.snapshot/contract.mjs",
+      "hash": "sha256:7df782c1888f40c7a6965803dfb8dcd71ea3db90d72920135e87a428f7b623c8"
+    },
+    {
+      "path": "runs/rescreen-4.snapshot/package.json",
+      "hash": "sha256:1239d4d885dcad42201a27ed9324f8f0f760b78700d8db9ced39a511cffe7eae"
+    },
+    {
+      "path": "runs/rescreen-5.claim",
+      "hash": "sha256:2ea56b159dd7fe80263434fc4fd3e19c98330d2b2db46ddaf25d71868e2f57f8"
+    },
+    {
+      "path": "runs/rescreen-5.diagnostic.json",
+      "hash": "sha256:e974eaa3470cdbec0e7e21198a5d83f7d0a309f8a3c97c44cda47139384880da"
+    },
+    {
+      "path": "runs/rescreen-5.json",
+      "hash": "sha256:c1187e69ecbe862f8f9af3c8c59957bf6bd6a0b4810318d0d2fef8d9112e795e"
+    },
+    {
+      "path": "runs/rescreen-6.json",
+      "hash": "sha256:168e8f6868c9f0a127aec4c23794452231218df022efac2460d4c557356ddcf6"
+    },
+    {
+      "path": "runtime-observation.json",
+      "hash": "sha256:7c7fb4961f711882dc1b1d73ee8b5608e30dba184d45ae944f95a623f082425b"
+    }
+  ]
+}

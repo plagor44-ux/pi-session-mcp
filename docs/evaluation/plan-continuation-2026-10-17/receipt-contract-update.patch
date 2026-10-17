@@ -1,0 +1,40 @@
+--- a/eval/profiles/oracles.ts
++++ b/eval/profiles/oracles.ts
+@@ -9,11 +9,11 @@
+   allowed_paths: string[]; prompt: string; oracle_kind: string;
+ }
+ export const taskDefinitions: TaskDefinition[] = [
+-  {id:'T1',title:'Codebase explanation',family:'code-understanding',profiles:['P1'],views:['scout','docs-writer'],allowed_paths:[],prompt:'Return exactly two claims: {id:"api-data-flow",paths:[...],symbols:[...],text} and {id:"stale-doc",paths:[...],document_status:number,source_status:number,text}. Cite API, service and data files in order; list only symbols defined in those files. Cite README.md and src/api/records.ts for the discrepancy. Do not modify files.',oracle_kind:'source-and-receipt'},
++  {id:'T1',title:'Codebase explanation',family:'code-understanding',profiles:['P1'],views:['scout','docs-writer'],allowed_paths:[],prompt:'Return one JSON object with a claims array containing exactly two claims: {id:"api-data-flow",paths:[...],symbols:[...],text} and {id:"stale-doc",paths:[...],document_status:number,source_status:number,text}. For api-data-flow, paths must contain exactly three source paths in execution order: API handler file, service file, data-store file. symbols must contain exactly three entries: the API handler function name, the service function name, and the data-store lookup in Object.method notation. Omit container objects, imported aliases, Map methods and other local helpers. Derive the names and paths from source. For stale-doc, cite README.md and src/api/records.ts and use numeric HTTP status values. Do not modify files.',oracle_kind:'source-and-receipt'},
+   {id:'T2',title:'Backend contract fix',family:'backend-fix',profiles:['P2','P3'],views:['implementer','reviewer'],allowed_paths:['contract.mjs'],prompt:'Implementer: fix parseLimit so negative values use the default and preserve valid values. Reviewer: inspect the supplied immutable fixed diff and return {reviewed_files:[...],target_hash,findings:[{path,line,summary,preconditions,impact}]}; include the exact changed path and supplied target hash, with an empty findings array when no defect remains. No edits in reviewer view.',oracle_kind:'external-test-and-review'},
+   {id:'T3',title:'Responsive accessible UI',family:'ui',profiles:['P4'],views:['ui-writer'],allowed_paths:['src/App.jsx','src/style.css'],prompt:'Fix narrow viewport overflow and visible keyboard focus. Verify 375px and 1280px viewports, keyboard focus, and the visible error alert before and after activating Refresh. Save screenshots for both viewports.',oracle_kind:'browser-execution'},
+   {id:'T4',title:'Multi-module debugging',family:'debugging',profiles:['P2','P3'],views:['implementer','reviewer'],allowed_paths:['src/tax.mjs'],prompt:'Implementer: fix checkout tax calculation at its cause in src/tax.mjs; include the empty-cart counterexample. Reviewer: inspect the supplied immutable fixed diff and return {reviewed_files:[...],target_hash,findings:[{path,line,summary,preconditions,impact}]}; include the exact changed path and supplied target hash, with an empty findings array when no defect remains. No edits in reviewer view.',oracle_kind:'external-test-and-review'},
+-  {id:'T5',title:'Independent security review',family:'review',profiles:['P3'],views:['reviewer'],allowed_paths:[],prompt:'Return findings [{path,line,summary,preconditions,impact}] and clean_cases [{path,status}]. Provide one entry per defect and assess clean.ts. Review sources read-only.',oracle_kind:'structured-findings'},
++  {id:'T5',title:'Independent security review',family:'review',profiles:['P3'],views:['reviewer'],allowed_paths:[],prompt:'Return one JSON object with findings [{path,line,summary,preconditions,impact}] and clean_cases [{path,status}]. Provide one finding per defect, with a source line, preconditions and impact. Assess clean.ts exactly once in clean_cases. For a file with no finding, use exactly status:"no finding"; do not also report a finding on a file assessed as clean. Review sources read-only.',oracle_kind:'structured-findings'},
+   {id:'T6',title:'Regression test gap',family:'testing',profiles:['P4'],views:['tester'],allowed_paths:[],prompt:'Return coverage_gaps [{case,test}] for zero, negative, non-integer and maximum input values. Give each executable call, report product_code_changed:false, and do not change product code.',oracle_kind:'test-execution-and-coverage'},
+   {id:'T7',title:'Infrastructure source review',family:'infrastructure-review',profiles:['P1'],views:['scout'],allowed_paths:[],prompt:'Return findings [{path,line,claim,impact}]. Identify the relative config mount and shell failure-propagation risks using source citations. Do not assert current host, production or live state; perform no operations.',oracle_kind:'source-and-receipt'},
+   {id:'T8',title:'Evidence-based documentation draft',family:'documentation',profiles:['P1'],views:['docs-writer'],allowed_paths:[],prompt:'Return claims [{source,revision,date,text}] and summary. Cite ADR revision 2 dated 2026-10-10 and runbook revision 1 dated 2026-10-12 in chronological order, preserve Proposed status, explain their conflict and uncertainty, and state the newer runbook does not change ADR status. Do not publish.',oracle_kind:'source-and-receipt'},
+--- a/test/profile-oracles.test.ts
++++ b/test/profile-oracles.test.ts
+@@ -27,6 +27,10 @@
+       expect((await evaluateTask('T1',root,receipt)).status).toBe('PASS');
+       expect((await evaluateTask('T1',root,{claims:[receipt.claims[0],{...receipt.claims[1],document_status:404,source_status:200}]})).status).toBe('FAIL');
+       expect((await evaluateTask('T1',root,{claims:[...receipt.claims,{id:'imaginary-helper',paths:[],symbols:['inventedFunction'],text:'inventedFunction exists'}]})).status).toBe('FAIL');
++      const containerOnly={...receipt.claims[0],symbols:['handle','getRecord','recordStore']};
++      expect((await evaluateTask('T1',root,{claims:[containerOnly,receipt.claims[1]]})).checks.find(c=>c.id==='api-data-flow')?.status).toBe('FAIL');
++      const reversedFlow={...receipt.claims[0],paths:[...receipt.claims[0]!.paths].reverse()};
++      expect((await evaluateTask('T1',root,{claims:[reversedFlow,receipt.claims[1]]})).checks.find(c=>c.id==='api-data-flow')?.status).toBe('FAIL');
+     } finally { await rm(root,{recursive:true,force:true}); }
+   });
+   it('independent T2 test fails before and passes after reference behavior is applied', async () => {
+@@ -73,6 +77,10 @@
+       expect(falsePositive.status).toBe('FAIL');
+       expect(falsePositive.metrics?.false_positives_on_clean_cases).toBe(1);
+       expect(falsePositive.metrics?.false_positives).toBe(1);
++      const unspecifiedStatus=await evaluateTask('T5',root,{...receipt,clean_cases:[{path:'clean.ts',status:'clean'}]});
++      expect(unspecifiedStatus.checks.find(c=>c.id==='clean-counterexample')?.status).toBe('FAIL');
++      const duplicateClean=await evaluateTask('T5',root,{...receipt,clean_cases:[...receipt.clean_cases,...receipt.clean_cases]});
++      expect(duplicateClean.checks.find(c=>c.id==='clean-counterexample')?.status).toBe('FAIL');
+     } finally { await rm(root,{recursive:true,force:true}); }
+   });
+   it('runs independent boundary probes for tester view and rejects gaps-by-keyword alone', async () => {

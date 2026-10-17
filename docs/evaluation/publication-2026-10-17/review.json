@@ -1,0 +1,21 @@
+{
+  "kind": "independent-read-only-publication-review",
+  "status": "PASS",
+  "source_digest": "sha256:922f78c2f4a2f85673606fb45a3776fa5246da47c1f7a7862fd87fe08727bbfe",
+  "initial_blocking_findings": 1,
+  "resolved_findings": [
+    "T2/T4 no longer accept exit zero without assertion completion; both premature-exit regressions and genuine fixes are covered.",
+    "Completion uses FD3 instead of a temporary file, eliminating the new worker-timeout completion-directory leak.",
+    "No production src, public MCP or direct dependency changes.",
+    "Current source checks and historical source-bound live decisions remain distinct."
+  ],
+  "node22_type_error_diagnosis": "Corrected before final validation; controller also verified Node 22.23.2 typecheck and eight oracle cases.",
+  "publication_audit": {
+    "private_interpreter_path": "Explicit derived export with old/new hashes; original locally preserved.",
+    "credentials_or_live_prompts_found": false,
+    "vendor_or_scratch_files_intended_for_git": false,
+    "route_metadata": "Names and auth-presence/type metadata intentionally retained; no secret values."
+  },
+  "reviewer_mutations": 0,
+  "reviewer_provider_calls": 0
+}

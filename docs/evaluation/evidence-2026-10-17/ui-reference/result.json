@@ -1,0 +1,141 @@
+{
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160",
+  "fixture_hash": "sha256:d77cd778b5d4315636e7c18ea3ee92a260e1a4649ddf0e7a2b558b1e692553cd",
+  "reference_css_hash": "sha256:70379e3104a52652a173bf746549686dc7a0aa079f6859cb4d9f26cfdd347f9c",
+  "kind": "provider_free_reference_calibration_not_model_run",
+  "task_id": "T3",
+  "observed_at": "2026-10-17T07:12:36.376Z",
+  "fixture_revision": "synthetic-T3",
+  "before": {
+    "status": "FAIL",
+    "checks": [
+      {
+        "id": "viewport-375-long-content-preserved",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-no-overflow",
+        "status": "FAIL",
+        "exit_code": 1,
+        "reason": "Document overflows viewport."
+      },
+      {
+        "id": "viewport-375-initial-error-visible",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-keyboard-focus",
+        "status": "FAIL",
+        "exit_code": 1,
+        "reason": "Keyboard focus is not on the button or has no visible outline."
+      },
+      {
+        "id": "viewport-375-error-after-refresh",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-long-content-preserved",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-no-overflow",
+        "status": "FAIL",
+        "exit_code": 1,
+        "reason": "Document overflows viewport."
+      },
+      {
+        "id": "viewport-1280-initial-error-visible",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-keyboard-focus",
+        "status": "FAIL",
+        "exit_code": 1,
+        "reason": "Keyboard focus is not on the button or has no visible outline."
+      },
+      {
+        "id": "viewport-1280-error-after-refresh",
+        "status": "PASS",
+        "exit_code": 0
+      }
+    ]
+  },
+  "after": {
+    "status": "PASS",
+    "checks": [
+      {
+        "id": "viewport-375-long-content-preserved",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-no-overflow",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-initial-error-visible",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-keyboard-focus",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-375-error-after-refresh",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-long-content-preserved",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-no-overflow",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-initial-error-visible",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-keyboard-focus",
+        "status": "PASS",
+        "exit_code": 0
+      },
+      {
+        "id": "viewport-1280-error-after-refresh",
+        "status": "PASS",
+        "exit_code": 0
+      }
+    ]
+  },
+  "tooling": {
+    "vite": "6.4.4",
+    "react": "18.3.1",
+    "react_dom": "18.3.1",
+    "playwright": "1.60.0-alpha-1775584683000",
+    "browser_channel": "playwright-chromium"
+  },
+  "screenshots": [
+    {
+      "path": "T3-375.png",
+      "sha256": "2ac0ee40d66654f2ba9048b3653b6a0836f2248171f570eefb0dde8771de3cf0"
+    },
+    {
+      "path": "T3-1280.png",
+      "sha256": "d6f6d59b9bd5aaeb5e5affd99e226aa8bd6940972906217821afe2ce3d257ad2"
+    }
+  ]
+}

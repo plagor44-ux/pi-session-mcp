@@ -1,0 +1,25 @@
+{
+  "kind": "headless-probe-source-and-input-binding",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "sdk_version": "1.2.0",
+  "candidate": "npm:openwiki@0.7.2",
+  "support_fixture": "npm:pi-extension-fixture@1.0.0",
+  "probe_hash": "sha256:14f7c859f347a85fef34b587f21dea508339e3f318153a9720a9e2b2f1cd96b7",
+  "result_hash": "sha256:43098de8b7795ec9d120a4441f5f9be8eeb7d105a9efc029846671a92c8a3132",
+  "scope": "Actual production adapter and installed SDK; local in-memory fixture provider. Import/register, read-only vs coding tool selection, synthetic turn and shutdown. No candidate tool executed.",
+  "runtime_environment": {
+    "home": "owned temporary scope",
+    "agent_state": "owned temporary scope",
+    "auth": "fresh missing fixture-auth path; no real credentials",
+    "telemetry_opt_out": [
+      "OPENWIKI_TELEMETRY_DISABLED=1",
+      "DO_NOT_TRACK=1"
+    ],
+    "guards": "Instrumented fetch, HTTP(S), net/TLS and child-process entrypoints; not OS containment."
+  },
+  "paid_candidate_starts": 0,
+  "quality_ablation": false
+}

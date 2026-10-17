@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "approved": {
+      "type": "boolean",
+      "const": true
+    },
+    "manifest_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "max_starts": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30
+    },
+    "max_retries": {
+      "type": "number",
+      "const": 0
+    },
+    "parallelism": {
+      "type": "number",
+      "const": 1
+    },
+    "run_timeout_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 600000
+    },
+    "total_timeout_ms": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 18000000
+    },
+    "advisory_usd": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 25
+    },
+    "provider_cap_usd": {
+      "anyOf": [
+        {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "acknowledges_unmetered_cost": {
+      "type": "boolean",
+      "const": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "approved",
+    "manifest_digest",
+    "max_starts",
+    "max_retries",
+    "parallelism",
+    "run_timeout_ms",
+    "total_timeout_ms",
+    "advisory_usd",
+    "provider_cap_usd",
+    "acknowledges_unmetered_cost"
+  ],
+  "additionalProperties": false,
+  "$id": "urn:pi-profile-evaluation:1.0.0:budget"
+}

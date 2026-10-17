@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "evidence_kind": "existing provider-free repository tests; references are exact Vitest test titles",
+  "cases": {
+    "N1": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/profile-boundaries.test.ts", "test": "rejects scripted write, edit, and bash requests after reading hostile AGENTS text", "layer": "real Pi SDK with scripted runtime; tool-selection boundary" }
+      ],
+      "limit": "Proves the forbidden tools were absent from each model-visible allowlist and the synthetic canary stayed unchanged. It does not prove a filesystem or OS sandbox."
+    },
+    "N2": {
+      "status": "FAIL",
+      "evidence": [
+        { "file": "test/profile-boundaries.test.ts", "test": "observes a granted collector tool forwarding an unfiltered inner method", "layer": "synthetic service call observation; grant exists for outer tool only" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "refuses a model-issued call to an ungranted tool without contacting the server", "layer": "real Pi SDK and real MCP stdio child" },
+        { "file": "test/mcp-session-tools.test.ts", "test": "does not trust readOnlyHint and rejects write grants before any process creation", "layer": "MCP grant policy gate" },
+        { "file": "test/mcp-session-tools.test.ts", "test": "exposes only granted names and preserves the remote JSON Schema", "layer": "bridge selection and granted dispatch" }
+      ],
+      "limit": "An outer granted tool can carry an arbitrary inner method in its schema payload. The synthetic service records the denied method, so this boundary fails. Product grants named MCP tools directly and has no separate inner-method authorization gate."
+    },
+    "N3": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/mcp-contract.test.ts", "test": "strictly rejects legacy, raw selection, credential, and unknown start fields", "layer": "MCP input schema gate" },
+        { "file": "test/mcp-contract.test.ts", "test": "resolves default and explicit execution aliases server-side", "layer": "server-bound profile selection" },
+        { "file": "test/mcp-contract.test.ts", "test": "serves the loaded snapshot after the configuration file changes", "layer": "loaded configuration snapshot" }
+      ],
+      "limit": "Validates client inputs and server profile resolution; it does not establish OS-level enforcement of profile file scope."
+    },
+    "N4": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "fails closed on a missing grant and terminates the child it already started", "layer": "startup gate and cleanup" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "classifies real empty, looping and capability-less discovery and reaps each child", "layer": "real stdio initialization/discovery gates" },
+        { "file": "test/mcp-session-tools.test.ts", "test": "distinguishes a complete empty catalog from a missing grant", "layer": "grant initialization gate" },
+        { "file": "test/sdk-pi-adapter.test.ts", "test": "fails closed when binding registers a tool that replaces a built-in", "layer": "extension binding gate" },
+        { "file": "test/sdk-pi-adapter.test.ts", "test": "fails closed when binding adds any tool to the selection", "layer": "extension allowlist gate" },
+        { "file": "test/sdk-skill-contract.test.ts", "test": "rejects all invalid selections without a session or sensitive diagnostics, extensions=false (6,11)", "layer": "skill-selection initialization gate" }
+      ],
+      "limit": "Covers implemented profile tool composition, selected-skill validation, extension binding, and configured MCP discovery gates. This is contract coverage, not OS containment."
+    },
+    "N5": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/profile-evaluation.test.ts", "test": "never retries a mutation on a lost or invalid acknowledgement and closes resources", "layer": "evaluation no-retry behavior for lost/malformed receipt" },
+        { "file": "test/profile-evaluation.test.ts", "test": "does not accept malformed, truncated or failed terminal receipts %#", "layer": "receipt parser rejection cases" },
+        { "file": "test/profile-evaluation-stdio.test.ts", "test": "runs a local scripted OpenAI-compatible response through the compiled MCP server", "layer": "evaluation transport against real MCP stdio and local SSE endpoint" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "reports an MCP isError result as a failed tool execution", "layer": "tool result failure" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "fails the call and reaps the child when the server dies mid-request", "layer": "lost response / child failure" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "bounds a call by its own deadline and still admits later calls", "layer": "timeout; no blind call retry" },
+        { "file": "test/sdk-failure-recovery.test.ts", "test": "projects a real terminal model error at the MCP surface as the generic sanitized turn_failed contract", "layer": "provider error" },
+        { "file": "test/sdk-failure-recovery.test.ts", "test": "treats a retryable provider error as an interim step and completes the turn", "layer": "SDK retry is an explicit observed interim recovery" },
+        { "file": "test/sdk-pi-adapter.test.ts", "test": "disposes a session when SDK thinking is clamped or model selection differs", "layer": "model route mismatch rejection and cleanup" }
+      ],
+      "limit": "Covers timeout, provider errors, malformed/truncated receipts, lost responses, no mutation retry, and route mismatch. Provider retryable errors are an explicit SDK behavior rather than a fallback route."
+    },
+    "N6": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/process-stdin-eof.test.ts", "test": "aborts a running turn before it closes the session", "layer": "real server process on EOF" },
+        { "file": "test/profile-evaluation-stdio.test.ts", "test": "runs a local scripted OpenAI-compatible response through the compiled MCP server", "layer": "EvaluationTransport observes Linux compiled-server process cleanup" },
+        { "file": "test/process-stdin-eof.test.ts", "test": "keeps the EOF shutdown and its exit status when SIGTERM arrives during it", "layer": "real server process EOF/SIGTERM race" },
+        { "file": "test/shutdown.test.ts", "test": "terminates a child process with an open event-loop handle after bounded cleanup", "layer": "real child process SIGTERM" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "closes one session without disturbing a second real session", "layer": "session close and child cleanup" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "escalates to SIGKILL for a child that ignores EOF and SIGTERM", "layer": "stubborn child cleanup" }
+      ],
+      "limit": "These cases establish cleanup behavior for their covered lifecycle paths; not every event ordering is tested."
+    },
+    "N7": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/profile-evaluation.test.ts", "test": "keeps two concurrent run copies, results and writes independent", "layer": "two concurrent synthetic evaluation run scopes" },
+        { "file": "test/mcp-stdio-e2e.test.ts", "test": "closes one session without disturbing a second real session", "layer": "two live sessions remain independently closable" },
+        { "file": "test/mcp-session-tools.test.ts", "test": "does not share connections across sessions", "layer": "per-session MCP connections" }
+      ],
+      "limit": "Covers two controlled concurrent synthetic runs and session resources; this does not establish arbitrary multi-user isolation in the production trusted-peer server."
+    },
+    "N8": {
+      "status": "PASS",
+      "evidence": [
+        { "file": "test/profile-boundaries.test.ts", "test": "rejects scripted write, edit, and bash requests after reading hostile AGENTS text", "layer": "real Pi SDK with hostile synthetic AGENTS text and scripted forbidden calls" }
+      ],
+      "limit": "The synthetic hostile text reaches the scripted model context; the three requested tools remain unavailable and the canary is unchanged. This is tool-selection evidence only, not prompt-injection resistance for arbitrary capabilities or OS containment."
+    }
+  },
+  "not_established": [
+    "OS sandboxing or general filesystem read/write isolation",
+    "workspace aliases and worktrees as security boundaries",
+    "coding-profile file scope enforced by the operating system",
+    "rollback of mutations already made before a diff gate",
+    "multi-user isolation inside the trusted-peer server",
+    "extension, external MCP child, or Cursor execution paths beyond specifically cited tests"
+  ]
+}

@@ -1,0 +1,204 @@
+{
+  "kind": "node24-followup-dossier-integrity",
+  "created_at": "2026-10-17T09:31:20.689155+00:00",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:fc79e91eec36d98bc22d9337b63003cebccf7b98d9f0ff2f48fa33b882180e35"
+    },
+    {
+      "path": "client-migration-review.json",
+      "hash": "sha256:f4778e96b98b6eb1d7a53697efe42dd287a69b7ad7e6fbd37996cbf70934e1d8"
+    },
+    {
+      "path": "client-registration-migration.json",
+      "hash": "sha256:721277ebec650684fa8a9cb762ceb7bc1464cd190911600b82e97e54eb417378"
+    },
+    {
+      "path": "client-registration-verification.json",
+      "hash": "sha256:f60dfb478f1db7e03ad1fcb9618812a8c0bc2184cfcfa2baf88af82112ce7776"
+    },
+    {
+      "path": "closure-checks.json",
+      "hash": "sha256:d7e1f644d7c1de35eb58d0f1fd0df970dd05cc7f4cd33c25e59f9774603c746e"
+    },
+    {
+      "path": "cursor-headless-probe.mjs",
+      "hash": "sha256:c63ffe93c36877fdb40f136c1ef58e5432a9387210c75343eab473629c0b41e5"
+    },
+    {
+      "path": "cursor-headless-report.md",
+      "hash": "sha256:60f2c7cf6442bdbe0a77bfdcf6740697084df7f046a72196f667d074b82f5c82"
+    },
+    {
+      "path": "cursor-headless-result-attempt-2.json",
+      "hash": "sha256:ac17a07fd77bf35ddd4725206de1d65cb5cbe55b9bf5e50d77b8fd9f3e474441"
+    },
+    {
+      "path": "cursor-headless-result-attempt-3.json",
+      "hash": "sha256:ad13eb8a1b2819857d766857ca03669dc6c9159b82251f7e1270c70f8d3080cc"
+    },
+    {
+      "path": "cursor-headless-result-attempt-4.json",
+      "hash": "sha256:923ec7e0aa836cc5b27a824d70c821c3d8c493bb6e1f1ea6a05c81f7120b1c12"
+    },
+    {
+      "path": "cursor-headless-result.json",
+      "hash": "sha256:7ccef63a073502bc8d2b9cf210a853c96e4a03458174b36d1c837d63253225a3"
+    },
+    {
+      "path": "cursor-headless-run.mjs",
+      "hash": "sha256:bb94f8702be86f406f98a08be0d8e5bae7293a677953e560341202e36e14203a",
+      "original_hash": "sha256:5b35c97784a54fcd9a43114fc565fccd88c87e9b76dc9c188258619f23fd861f"
+    },
+    {
+      "path": "download.json",
+      "hash": "sha256:563bb1656071511efefc4f05d4b9ba6769693c1a4090dfd0e270e6a55aa4521d"
+    },
+    {
+      "path": "extension-summary.json",
+      "hash": "sha256:a7d92ef7cd69657f624f7fc637f876001732abe1477e4119d1dcefa92843b1b5"
+    },
+    {
+      "path": "final-review.json",
+      "hash": "sha256:d40aa13d9b2b01c54db1c57e3d8aeae37cbc01b1d9ae02e3054f28a115788aed"
+    },
+    {
+      "path": "install.json",
+      "hash": "sha256:b1bc57a22e11416834bd54e01105c1f99dbe383037d5d437b727f4862d0b19d8"
+    },
+    {
+      "path": "isolated-extensions-evidence.json",
+      "hash": "sha256:5e52da2158c9cde82711e26f68151aef1dc2816cac69fd432610431a6293c995"
+    },
+    {
+      "path": "isolated-extensions-probe.mjs",
+      "hash": "sha256:39c0000ab7713a85affb8002ff796949f4692b81f1e11f129b74872074056980"
+    },
+    {
+      "path": "isolated-extensions-report.md",
+      "hash": "sha256:6dfbd181a15af783f87f302025d5fea2d7a5d2778c4137e6e462ca60f428bda0"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-19-48-378Z-b378dc9f-9ab8-4349-8892-78af8184f78f.json",
+      "hash": "sha256:0552b261919acf9c4db1868d0a5d6b6a8ec5afae84e04144b7df1d18fe99fc7e"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-20-22-821Z-85cfcba4-c05e-4c5a-9658-d8d70f5c8d1a.json",
+      "hash": "sha256:06dfbb34308b5c3dcb563c0f1adb2e7ad82278a1961c027051b86415cbf44598"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-20-54-825Z-fd5d8373-6e29-4197-84bd-2e65251b4db8.json",
+      "hash": "sha256:91e0ada3d60a8db0263cd6b8aa80266cf18bcdc99ad9b7ca21ed91840a0e9f15"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-21-44-636Z-488698ad-f8bf-4d7e-b85a-615275c32e5d.json",
+      "hash": "sha256:fba85adbd6ded8558251c963d589fd7f8b452f6376a65fc1ee70686298bcef9b"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-22-05-375Z-16f5d77c-32a2-4d0a-905a-e080b392316f.json",
+      "hash": "sha256:f968512477e27c1a16866eb879de27a269b47cf3d4ba4b39126e05fa42f2f995"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-22-07-471Z-fcbe7c98-fed3-4120-a860-b2e3f9572836.json",
+      "hash": "sha256:463843aafaec8c85b9a6c847183239abed34ffb136ccc8eee848a019214758ca"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-22-17-638Z-45ec386d-3429-4a7c-a10e-8673c03861f0.json",
+      "hash": "sha256:f51d68c164e8f12ab4200398b2c2c4b4fc737b3d3d3b4650ea86dfca2a065e2d"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-22-22-485Z-1b08e134-667c-4416-8372-cb233939c48b.json",
+      "hash": "sha256:cef6e34007097c9741d377e081a078934a894190fd039363b1d08039ab35cb49"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-22-25-490Z-223fd05e-52f9-4996-88d7-3ec43a6ecdd9.json",
+      "hash": "sha256:f139734d7bf96730e20a77f6438d96f2f015681f2b87c8c9ff9e7943550bf1b2"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-23-42-291Z-f4af1e12-844e-4b2d-a090-9068e7626dd5.json",
+      "hash": "sha256:e14a0e901e17fe97d80e2dc399b6e778da1995e61f9a5cbd0e440f97df83a255"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-24-36-866Z-30770d13-c7ae-4309-921b-5c1b43050adb.json",
+      "hash": "sha256:00ea68401be8a93d1ddc217032dd172ebc4c963e4c1c3bedc34c6fc8e0f88d3c"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-25-05-378Z-2a5dffc1-3f3a-433a-823f-6e77964dcaee.json",
+      "hash": "sha256:ca67c90cd0dbf35a24654b0249887257dddb7f54b8598f076c6f58bd8151aaf3"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-25-15-842Z-798946f5-b9a5-4810-8a0c-35be6f40abb3.json",
+      "hash": "sha256:b5d99d87765528cd1af3558fa7121b5b2bf530fbc2c1cbf4c6c07af2e7febb03"
+    },
+    {
+      "path": "isolated-extensions-results-2026-10-17T09-25-19-099Z-89bd000d-bb51-4e3a-b713-51ff1ff4e38b.json",
+      "hash": "sha256:a310c804338b4d48c2236f42f70c2e476209e918bc6db9650280a1174e650a8a"
+    },
+    {
+      "path": "isolated-extensions-runner.mjs",
+      "hash": "sha256:694946fc1ed43c170bc73a243c45aaf16696568c21308a220087bc0a7489706a"
+    },
+    {
+      "path": "isolated-install.json",
+      "hash": "sha256:d551a96e57460a64490dc6d2dc5b93c6297033f566d7964fc874b69f8439b7c5"
+    },
+    {
+      "path": "isolated-package-lock.json",
+      "hash": "sha256:6408ff9b643649a2d5b89b5023382a8abd8cbeb38cc4f9710590a388bbe9c7ff"
+    },
+    {
+      "path": "isolated-package.json",
+      "hash": "sha256:9df45086bd58dae9084860590f4d6da4010bbb4d4c5e0aef5d201adf39f72a36"
+    },
+    {
+      "path": "launcher-review.json",
+      "hash": "sha256:d39cc06fe66029307c03bd8fe3b0057df6c1239130979458173b9d283a7f89d0"
+    },
+    {
+      "path": "launcher-switch.json",
+      "hash": "sha256:08f28fa4b9637190ec683bf8fce79da61a8c663d0c5253e5bf85fb9f64d48d07"
+    },
+    {
+      "path": "mcp-launcher-test.json",
+      "hash": "sha256:f502fa51af2d9a96c02995bf0c8dbb76b878532db4b2bcc779c9ace4e822494f"
+    },
+    {
+      "path": "migrate-client-node.mjs",
+      "hash": "sha256:b5d58038d774221de0fd335ae519095c7e6ce3d5884c539ca29062d05d4799d2"
+    },
+    {
+      "path": "node-runtime-report.md",
+      "hash": "sha256:acd017af37bb919a99151f8a3c0840141c1a7c30d81adfae853c6ae7195328c8"
+    },
+    {
+      "path": "node24-checks.json",
+      "hash": "sha256:697eedc90db73428ce662d66f6b2d8e6a7b521e4d154b225ad3273885909b572"
+    },
+    {
+      "path": "pi-launcher-test.json",
+      "hash": "sha256:99b62e5a9d80741ff7bacc2308bce3a2f970eb42d327dd0b1de5008a7292d2bd"
+    },
+    {
+      "path": "restore-launchers.mjs",
+      "hash": "sha256:bbbe6c38a3023348e0f554242264a6aa8a01757eeec1ec449229923b652f7302"
+    },
+    {
+      "path": "verify-client-node.mjs",
+      "hash": "sha256:96b696ba5cabff8de3587f9ab9d83559a77a6742a3d75df22ebbea25959080a4"
+    },
+    {
+      "path": "publication-export.json",
+      "hash": "sha256:0eb86163ce740a7f2e0c496aebea6dbe6a769ca37b07bdc0ed661aab470651e6"
+    }
+  ],
+  "publication_export": {
+    "record": "publication-export.json",
+    "original_integrity_index_sha256": "sha256:112a79eff3f7f8cdcb649d119076bc65f56c4126c55442e817fbc17505bb6fc5",
+    "exported_at": "2026-10-17T15:49:24.587910+00:00"
+  }
+}
