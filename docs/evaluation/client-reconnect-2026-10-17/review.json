@@ -1,0 +1,10 @@
+{
+  "kind": "independent-read-only-followup-review",
+  "status": "FINDING_RESOLVED",
+  "finding": "The generic registration verifier limitation originally stated that existing clients were not restarted, without limiting that statement to the verification procedure.",
+  "resolution": "The limitation now explicitly describes the verification procedure only and points to the separately recorded actual reconnects in reconnect.json.",
+  "resolution_verified_by": "controlling agent JSON check",
+  "other_findings": [],
+  "reviewer_mutations": 0,
+  "reviewer_provider_calls": 0
+}

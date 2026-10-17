@@ -1,0 +1,40 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "pi-permission-system-policy-hook-probe",
+  "status": "SUPERSEDED",
+  "package": "@gotgenes/pi-permission-system@40.3.0",
+  "node": "24.22.0",
+  "loading": "real SDK adapter and actual candidate package entry",
+  "hook": "public AgentSession.extensionRunner.emitToolCall() invoked the registered actual tool_call handler",
+  "policy_checks": {
+    "general_allow": "allow",
+    "general_deny": "deny",
+    "path_allowed": "allow",
+    "path_denied": "deny",
+    "mcp_allowed": "allow",
+    "mcp_unmatched": "deny",
+    "headless_ask": "ask"
+  },
+  "synthetic_dispatch": {
+    "allowed_tool_reached_counter": true,
+    "denied_write_blocked": true,
+    "headless_ask_blocked": true,
+    "unregistered_tool_blocked": true,
+    "in_memory_counter": 1
+  },
+  "harness_model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "ui_mode": "print",
+  "has_dialog_capable_ui": false,
+  "denied_network_attempts": 0,
+  "denied_child_process_attempts": 0,
+  "stdout_suppressed_writes": 0,
+  "diagnostics": [],
+  "evidence_id": "71f99101-ebb7-467e-915f-c5d4779cbb95",
+  "limits": [
+    "An in-memory synthetic counter advances only after an unblocked hook result. No actual executor was attached or invoked; no operating-system command, file write, MCP connection, or external tool was executed.",
+    "These checks cover deterministic policy resolution and registered-hook mediation under a provider-free SDK harness. They do not prove operating-system sandboxing, collector or inner-method enforcement, live UI behavior, MCP transport enforcement, or interactive-client integration."
+  ],
+  "superseded_reason": "The initial run accessed handle.session even though that property is private on the evaluation adapter handle. Results are retained as historical diagnostic evidence and replaced by the public extensionSdk capture run.",
+  "superseded_by": "permission-gates-result.json"
+}

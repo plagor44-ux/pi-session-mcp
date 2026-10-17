@@ -1,0 +1,11 @@
+{
+  "kind": "derived-publication-export",
+  "source_artifact": "cursor-headless-run.mjs",
+  "original_artifact_sha256": "5b35c97784a54fcd9a43114fc565fccd88c87e9b76dc9c188258619f23fd861f",
+  "public_artifact_sha256": "bb94f8702be86f406f98a08be0d8e5bae7293a677953e560341202e36e14203a",
+  "original_integrity_index_sha256": "112a79eff3f7f8cdcb649d119076bc65f56c4126c55442e817fbc17505bb6fc5",
+  "transformation": "Replace a private absolute interpreter path with process.execPath. Preserve the original v24.22.0 version requirement and all existing run receipts.",
+  "original_preservation": "Original script and index retained in the owned ignored publication scope.",
+  "limits": "This public script is a portability/privacy edit, not the exact byte sequence executed in the historical attempt. No historical run was repeated or reclassified.",
+  "exported_at": "2026-10-17T15:49:24.587910+00:00"
+}

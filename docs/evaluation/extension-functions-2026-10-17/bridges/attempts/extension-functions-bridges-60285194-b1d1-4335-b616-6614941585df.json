@@ -1,0 +1,46 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "openwiki@0.7.2",
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-sdk-openwiki-bind",
+      "status": "PASS"
+    },
+    {
+      "id": "relative-root-rejected",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "status": "FAIL",
+  "failure": {
+    "case": "begin-owned-repository",
+    "code": "McpError"
+  },
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 0,
+    "network_denied": 2,
+    "git_allowed": 0,
+    "children_allowed": 2,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "supervisor": {
+    "worker_exit_code": 1,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 2834,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-60285194-b1d1-4335-b616-6614941585df"
+}

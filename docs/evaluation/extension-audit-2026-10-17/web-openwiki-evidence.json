@@ -1,0 +1,116 @@
+{
+  "schema_version": "1.0.0",
+  "audited_at": "2026-10-17",
+  "method": "read-only installed package metadata, selected compiled files, package lock integrity, npm registry metadata, official upstream README/package metadata",
+  "actions_not_taken": [
+    "install packages",
+    "import or execute extension code",
+    "call model providers",
+    "invoke external web searches through the extension",
+    "read or configure credentials",
+    "modify production profiles or settings"
+  ],
+  "runtime": {
+    "node": "22.23.2",
+    "pi_launcher_version": "1.1.0",
+    "pi_1_2_0_compatibility": "not runtime-tested"
+  },
+  "packages": [
+    {
+      "spec": "npm:pi-web-access@0.41.0",
+      "identity": "Nico Bailon Pi Web Access",
+      "repository": "https://github.com/nicobailon/pi-web-access",
+      "registry": "https://www.npmjs.com/package/pi-web-access",
+      "registry_metadata_query": "npm view pi-web-access@0.41.0 name version license repository.url engines node peerDependencies pi --json",
+      "version": "0.41.0",
+      "license": "MIT",
+      "node_engine": ">=22.19.0",
+      "pi_extension_entries": ["./dist"],
+      "entry_target_is_regular_file": false,
+      "resolver_result": "extension_load_failed: exact installed entry resolves to a directory while repository resolver requires a regular file",
+      "peer_dependencies": {
+        "@earendil-works/pi-ai": "*",
+        "@earendil-works/pi-coding-agent": "*",
+        "@earendil-works/pi-tui": "*",
+        "typebox": "*"
+      },
+      "current_upstream_main_note": "At audit time current upstream main package metadata reports 0.42.0 and ./index.ts; it is not the installed 0.41.0 package and was not substituted.",
+      "features_and_data_paths": [
+        "search and fetch tools may send queries, URLs or page content to external configured/default providers",
+        "provider/model selection may reuse host Pi authentication depending on routing",
+        "summary workflows can make a separate model call; workflow none omits summarizer call but not external search-provider use",
+        "optional browser-cookie Gemini access is documented",
+        "curator and local config/result state may be written"
+      ],
+      "telemetry_assessment": "No package-wide telemetry was established from inspected source/docs; optional provider paths were not exhaustively audited.",
+      "lockfile": {
+        "resolved": "https://registry.npmjs.org/pi-web-access/-/pi-web-access-0.41.0.tgz",
+        "integrity": "sha512-8+UoNENGHKlYBxrtwh7Hwoh2twVfs+tcdR1Ciq7sRUtTur0mOXP8N/o7/y72JbdYij3NuSyCNjShbWBPPJ8JPA=="
+      },
+      "installed_files_sha256": {
+        "package.json": "c5ccc33fe7241a28d1a32f6a633dae06b6a23e4fb3b841b0527e148d66d21ee7",
+        "dist/index.js": "28844389c2abc6b2d39b9f0e537182611fcb8f35d898e26b699a0ab8632922c2",
+        "dist/mcp-cli.js": "2eae8d7b75b02f9df03b9334c5c0b4df5b53ef08536c69f8baea8757b829bd71"
+      },
+      "behavioral_test": "not run"
+    },
+    {
+      "spec": "npm:openwiki@0.7.2",
+      "identity": "LangChain OpenWiki CLI and Pi integration",
+      "repository": "https://github.com/langchain-ai/openwiki",
+      "registry": "https://www.npmjs.com/package/openwiki",
+      "registry_metadata_query": "npm view openwiki@0.7.2 name version license repository.url engines node peerDependencies pi --json",
+      "not_same_as": {
+        "name": "pi-openwiki",
+        "repository": "https://github.com/barvhaim/pi-openwiki"
+      },
+      "version": "0.7.2",
+      "license": "MIT",
+      "node_engine": ">=22.22.0",
+      "pi_extension_entries": ["./dist/integrations/pi/openwiki.js"],
+      "entry_target_is_regular_file": true,
+      "peer_dependencies": {
+        "jsdom": "^29.1.1 || ^30.0.0",
+        "mermaid": "^11.16.0"
+      },
+      "integration_contract": {
+        "tools": [
+          "openwiki_begin",
+          "openwiki_submit_plan",
+          "openwiki_next_page",
+          "openwiki_inspect_page_claims",
+          "openwiki_submit_page",
+          "openwiki_finish"
+        ],
+        "execution_mode": "sequential annotation",
+        "transport": "local child process running package CLI with mcp --host pi over stdio",
+        "shutdown": "Pi session_shutdown closes child bridge",
+        "writes": "repository wiki lifecycle may write pages, indexes, provenance and setup metadata; personal/connectors mode writes under OpenWiki home"
+      },
+      "telemetry_assessment": "Official README documents default-on aggregate openwiki_run telemetry for standalone init/update; documented opt-outs are OPENWIKI_TELEMETRY_DISABLED=1 and DO_NOT_TRACK=1. Integration itself delegates to mcp --host pi and does not call the telemetry sender directly in inspected file. Exact installed-build host-driven egress remains unverified.",
+      "lockfile": {
+        "resolved": "https://registry.npmjs.org/openwiki/-/openwiki-0.7.2.tgz",
+        "integrity": "sha512-+DJd/g2knw92fhem+QXzuVFU3A8tYjTPTQ5LPNXMFzDyVhruvxcKxrweDXUN9lKWJhhFetvYsKTz4Ac/hGUVOA=="
+      },
+      "installed_files_sha256": {
+        "package.json": "715cf49690cad358394d3f603d1a167bbc8ec3d8bfb8c3df9801e15abed4ab33",
+        "dist/integrations/pi/openwiki.js": "bd1bdd26a8a920c9f9dec9d56273e62f77abeddcc46df30b65ab07d7a5f6e531"
+      },
+      "behavioral_test": "not run; suitable only for provider-free API smoke test followed by isolated synthetic writer test"
+    }
+  ],
+  "official_sources": [
+    "https://www.npmjs.com/package/pi-web-access",
+    "https://www.npmjs.com/package/openwiki",
+    "https://github.com/nicobailon/pi-web-access/blob/main/package.json",
+    "https://github.com/langchain-ai/openwiki/blob/main/package.json",
+    "https://github.com/langchain-ai/openwiki/blob/main/README.md",
+    "https://github.com/barvhaim/pi-openwiki"
+  ],
+  "limitations": [
+    "Installed file hashes record the current local files; the npm lock SRI records expected archive integrity, but this audit did not download and re-hash registry tarballs.",
+    "No provider or network behavior was exercised.",
+    "Wildcard Pi SDK peers and matching method names are not runtime compatibility proof.",
+    "No claim of sandboxing or complete transitive dependency audit is made."
+  ]
+}

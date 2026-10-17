@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T09:25:05.377Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "read-only",
+      "failure_code": "OFFLINE_CHILD_PROCESS_DENIED",
+      "failure_stage": null,
+      "diagnostic_codes": [],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 1,
+      "allowed_metadata_commands": [],
+      "child_process_diagnostics": [
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<path>",
+            "rev-parse",
+            "--show-toplevel"
+          ],
+          "candidate_relative_stack_frame": "build/session/db.js:253"
+        }
+      ],
+      "limitation": "No candidate tool or model prompt was invoked; private error text and paths are omitted.",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "0f9d1173-1392-4e24-a80b-c1c13343caaf",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Headless extension loading, hook binding/lifecycle, registered tool discovery, active-tool selection and process cleanup only; no package efficacy, UI behavior, provider behavior, or tool-call mediation claim."
+}

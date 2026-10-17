@@ -1,0 +1,125 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "openwiki@0.7.2",
+  "package_files": [
+    {
+      "path": "package.json",
+      "sha256": "715cf49690cad358394d3f603d1a167bbc8ec3d8bfb8c3df9801e15abed4ab33"
+    },
+    {
+      "path": "dist/integrations/pi/openwiki.js",
+      "sha256": "bd1bdd26a8a920c9f9dec9d56273e62f77abeddcc46df30b65ab07d7a5f6e531"
+    },
+    {
+      "path": "dist/cli/cli.js",
+      "sha256": "82d2e6b65008b4129c1d8ef42e76942e7561eeeee2130c3652bac8f3151e6cd6"
+    }
+  ],
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-sdk-openwiki-bind",
+      "status": "PASS"
+    },
+    {
+      "id": "relative-root-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "begin-owned-repository",
+      "status": "PASS"
+    },
+    {
+      "id": "accept-and-repeat-canonical-plan",
+      "status": "PASS"
+    },
+    {
+      "id": "different-plan-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "next-page-queued",
+      "status": "PASS"
+    },
+    {
+      "id": "inspect-pending-claims",
+      "status": "PASS"
+    },
+    {
+      "id": "premature-finish-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "missing-page-submission-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "submit-grounded-written-page",
+      "status": "PASS"
+    },
+    {
+      "id": "queue-completion",
+      "status": "PASS"
+    },
+    {
+      "id": "finish-written-wiki",
+      "status": "PASS"
+    },
+    {
+      "id": "finished-run-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "original-source-preserved",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "integration": "Actual registered Pi tool definitions -> real OpenWiki stdio MCP child -> synthetic repository writer lifecycle.",
+  "status": "PASS",
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 0,
+    "network_denied": 1,
+    "git_allowed": 14,
+    "children_allowed": 1,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "started_at": "2026-10-17T13:35:24.139Z",
+  "ended_at": "2026-10-17T13:35:26.553Z",
+  "harness": [
+    {
+      "path": "run.mjs",
+      "sha256": "21fb7b96d8df277f75926f6848154a10717d59db722be33539704ea4f2f0470e"
+    },
+    {
+      "path": "worker.mjs",
+      "sha256": "3f7299cb8972ee268cf6fd2b187b0cdde21ff53b4d1132b69d5d19e21c3b450f"
+    },
+    {
+      "path": "guard.mjs",
+      "sha256": "cb1fd997320e858f5beab49c5796858ce194b026c21d73a04384543cd859fec9"
+    }
+  ],
+  "supervisor": {
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 0,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-6fbb576c-d87d-478d-9c05-4b5ef3563598"
+}

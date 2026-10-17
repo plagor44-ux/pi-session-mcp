@@ -1,0 +1,12 @@
+{
+  "kind": "cursor-node24-headless-component-test",
+  "status": "INCONCLUSIVE",
+  "diagnostic_code": "missing_sanitized_receipt",
+  "execution_scope": "fresh-temporary-home-removed-after-observed-exit",
+  "execution_scope_removed": true,
+  "observed_node24_child_exit": true,
+  "process_exit_code": 1,
+  "process_signal": null,
+  "receipt_overflow": false,
+  "additional_paid_candidate_runs": 0
+}

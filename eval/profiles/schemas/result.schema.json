@@ -1,0 +1,496 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "screening",
+        "pilot",
+        "ablation"
+      ]
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "task_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "repetition": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "scope_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+    },
+    "fixture_revision": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "server_commit": {
+      "type": "string"
+    },
+    "source_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "package_version": {
+      "type": "string"
+    },
+    "sdk_version": {
+      "type": "string"
+    },
+    "client_version": {
+      "type": "string"
+    },
+    "profile_id": {
+      "type": "string"
+    },
+    "view": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+    },
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "permission_profile": {
+      "type": "string",
+      "enum": [
+        "coding",
+        "read-only"
+      ]
+    },
+    "skills": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "identity",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "extensions": {
+      "maxItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string",
+            "pattern": "^npm:(?:@[a-z0-9-]+\\/)?[a-z0-9-]+@\\d+\\.\\d+\\.\\d+$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "identity",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "requested_route": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.:@/-]{1,160}$"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "auth_type": {
+          "type": "string",
+          "enum": [
+            "api-key",
+            "oauth",
+            "subscription",
+            "local",
+            "unknown"
+          ]
+        },
+        "billing_type": {
+          "type": "string",
+          "enum": [
+            "api",
+            "subscription",
+            "local",
+            "unknown"
+          ]
+        },
+        "data_path": {
+          "type": "string",
+          "const": "synthetic-fixture-to-selected-provider"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "effort",
+        "auth_type",
+        "billing_type",
+        "data_path"
+      ],
+      "additionalProperties": false
+    },
+    "resolved_route": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+            },
+            "model": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9_.:@/-]{1,160}$"
+            },
+            "effort": {
+              "type": "string",
+              "enum": [
+                "off",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max"
+              ]
+            },
+            "auth_type": {
+              "type": "string",
+              "enum": [
+                "api-key",
+                "oauth",
+                "subscription",
+                "local",
+                "unknown"
+              ]
+            },
+            "billing_type": {
+              "type": "string",
+              "enum": [
+                "api",
+                "subscription",
+                "local",
+                "unknown"
+              ]
+            },
+            "data_path": {
+              "type": "string",
+              "const": "synthetic-fixture-to-selected-provider"
+            }
+          },
+          "required": [
+            "provider",
+            "model",
+            "effort",
+            "auth_type",
+            "billing_type",
+            "data_path"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "model_revision": {
+      "type": "null"
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ended_at": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "terminal_status": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "harness_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT_RUN",
+        "INCONCLUSIVE"
+      ]
+    },
+    "task_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT_RUN",
+        "INCONCLUSIVE"
+      ]
+    },
+    "boundary_status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "BLOCKED",
+        "NOT_RUN",
+        "INCONCLUSIVE"
+      ]
+    },
+    "recommendation": {
+      "type": "string",
+      "enum": [
+        "suitable-for-synthetic-scope",
+        "restricted",
+        "blocked-not-established",
+        "rejected-for-scope"
+      ]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED",
+              "NOT_RUN",
+              "INCONCLUSIVE"
+            ]
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "exit_code"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "expected_diff_scope": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "observed_diff_scope": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "duration_ms": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tool_errors": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "manual_rework": {
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "controller_calls": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "cost_usd": {
+      "type": "null"
+    },
+    "usage": {
+      "type": "null"
+    },
+    "cost_source": {
+      "type": "string",
+      "const": "not-exposed-by-mcp"
+    },
+    "metrics": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "stage",
+    "run_id",
+    "task_id",
+    "task_hash",
+    "repetition",
+    "scope_id",
+    "fixture_revision",
+    "server_commit",
+    "source_digest",
+    "package_version",
+    "sdk_version",
+    "client_version",
+    "profile_id",
+    "view",
+    "profile_digest",
+    "permission_profile",
+    "skills",
+    "extensions",
+    "requested_route",
+    "resolved_route",
+    "model_revision",
+    "started_at",
+    "ended_at",
+    "terminal_status",
+    "harness_status",
+    "task_status",
+    "boundary_status",
+    "recommendation",
+    "checks",
+    "blockers",
+    "artifacts",
+    "expected_diff_scope",
+    "observed_diff_scope",
+    "duration_ms",
+    "tool_errors",
+    "manual_rework",
+    "controller_calls",
+    "cost_usd",
+    "usage",
+    "cost_source",
+    "metrics"
+  ],
+  "additionalProperties": false,
+  "$id": "urn:pi-profile-evaluation:1.0.0:result"
+}

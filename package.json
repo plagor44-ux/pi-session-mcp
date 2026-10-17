@@ -51,7 +51,9 @@
     "setup": "node dist/setup-main.js",
     "start": "node dist/main.js",
     "inspect": "mcp-inspector node dist/main.js",
-    "prepack": "npm run build && npm run build:cli"
+    "prepack": "npm run build && npm run build:cli",
+    "eval:profiles": "node scripts/profile-evaluation.mjs",
+    "eval:schemas": "tsc -p tsconfig.eval.json && node scripts/profile-evaluation-schemas.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.2.0",

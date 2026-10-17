@@ -1,0 +1,11 @@
+{
+  "kind": "observed-live-rescreen-server-runtime",
+  "observed_at": "2026-10-17T13:23:44.775080+00:00",
+  "observations": [
+    {
+      "node24_22_0": true,
+      "entry": "owned-temporary-build/src/main.js"
+    }
+  ],
+  "limits": "Point-in-time observation, not a per-run runtime trace."
+}

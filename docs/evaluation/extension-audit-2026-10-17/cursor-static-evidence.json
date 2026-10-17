@@ -1,0 +1,93 @@
+{
+  "kind": "installed-cursor-static-audit",
+  "identity": "npm:pi-cursor-sdk@0.5.3",
+  "observed_at": "2026-10-17T09:03:44.754Z",
+  "manifest_hash": "sha256:66d2272b2b3a598c1b03510c3d2083e98fd974a8464ae3b034ed328a1c0774ed",
+  "engines": {
+    "node": ">=24"
+  },
+  "current_node": "22.23.2",
+  "node_engine_supported": false,
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@cursor/sdk": "1.0.37",
+    "@hono/node-server": "2.1.3",
+    "@modelcontextprotocol/hono": "2.0.2",
+    "@modelcontextprotocol/server": "2.3.1",
+    "hono": "4.13.13"
+  },
+  "source_files": [
+    {
+      "file": "dist/index.js",
+      "hash": "sha256:9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+    },
+    {
+      "file": "dist/cursor-provider-binding.js",
+      "hash": "sha256:3006bf5ab44f355dfb5117a27f071cc112f93299815ac3689e3a72a3af905c1f"
+    },
+    {
+      "file": "dist/model-discovery.js",
+      "hash": "sha256:c6f70d96d552fd168bb721f95e936ba1fc8351bfd67366cb963ea571b584e953"
+    },
+    {
+      "file": "dist/cursor-session-store.js",
+      "hash": "sha256:e7004f34a94a410737206fa09dcbd4e2131c7303bbc58482200f87db7c6148ef"
+    },
+    {
+      "file": "dist/cursor-config.js",
+      "hash": "sha256:bfa4d71188ba072abf4cb225a794ffe5f2af324d24ea5a3f27878baf1b1448a2"
+    },
+    {
+      "file": "dist/cursor-usage-ledger.js",
+      "hash": "sha256:d250d021068b1981e77af2b2e6f86e5a31d6c520ebd04acb1c63e5489faa0e5e"
+    },
+    {
+      "file": "dist/cursor-cloud-reporting.js",
+      "hash": "sha256:b8b62919df68b7757acea10e73cee73b09d2a831875f3cb353059b411f9196c6"
+    }
+  ],
+  "loading": "NOT_RUN",
+  "provider_calls": 0,
+  "findings": [
+    {
+      "id": "node-engine",
+      "status": "BLOCKED",
+      "fact": "Package requires Node >=24; evaluated process runs Node 22.23.2."
+    },
+    {
+      "id": "own-agent-loop",
+      "status": "restricted",
+      "fact": "Cursor runs its own SDK agent loop; Pi tool allowlists do not disable Cursor host/MCP tools."
+    },
+    {
+      "id": "network",
+      "status": "not-exercised",
+      "fact": "Source registers cursor.com provider; live model/catalog/cloud calls use Cursor services. Startup discovery declares allowNetwork:false."
+    },
+    {
+      "id": "storage",
+      "status": "not-exercised",
+      "fact": "Session-store source derives a durable Cursor SDK-agent store below a user-home cursor projects directory; Pi in-memory sessions do not remove extension-owned persistence."
+    },
+    {
+      "id": "telemetry",
+      "status": "not-established",
+      "fact": "Local usage-ledger and optional public billing/cloud reporting are present. No package-wide absence of telemetry is claimed."
+    },
+    {
+      "id": "headless",
+      "status": "NOT_RUN",
+      "fact": "Source supports no-UI branches, but unsupported current Node engine blocks runtime qualification in this environment."
+    }
+  ],
+  "sources": [
+    "https://registry.npmjs.org/pi-cursor-sdk/0.5.3",
+    "https://github.com/fitchmultz/pi-cursor-sdk"
+  ]
+}

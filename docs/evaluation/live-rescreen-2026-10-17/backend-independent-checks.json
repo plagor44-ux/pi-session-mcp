@@ -1,0 +1,38 @@
+{
+  "kind": "controller-reviewed-patches-and-independent-backend-checks",
+  "status": "PASS",
+  "assertions": 14,
+  "model_calls": 0,
+  "rows": [
+    {
+      "run_id": "rescreen-2",
+      "status": "PASS",
+      "assertions": 7,
+      "cases": [
+        "undefined-default",
+        "positive-integer",
+        "invalid-default",
+        "negative-integer-default",
+        "negative-fraction-default",
+        "zero-preserved",
+        "positive-fraction-preserved"
+      ],
+      "snapshot_entry_hash": "sha256:7df782c1888f40c7a6965803dfb8dcd71ea3db90d72920135e87a428f7b623c8"
+    },
+    {
+      "run_id": "rescreen-4",
+      "status": "PASS",
+      "assertions": 7,
+      "cases": [
+        "undefined-default",
+        "positive-integer",
+        "invalid-default",
+        "negative-integer-default",
+        "negative-fraction-default",
+        "zero-preserved",
+        "positive-fraction-preserved"
+      ],
+      "snapshot_entry_hash": "sha256:7df782c1888f40c7a6965803dfb8dcd71ea3db90d72920135e87a428f7b623c8"
+    }
+  ]
+}

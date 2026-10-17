@@ -1,0 +1,483 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "retrospective-test-coverage-register",
+  "recorded_at": "2026-10-17T08:47:46.880Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "additional_live_starts": 0,
+  "evidence": [
+    {
+      "path": "evidence-2026-10-17/full-tests.json",
+      "hash": "sha256:8ecf2a79c119cb3bd1d6a0cb74026957c9d634417ca2a8aaa5c0e87d1319d4f5"
+    },
+    {
+      "path": "evidence-2026-10-17/offline.json",
+      "hash": "sha256:59ac0db84ff643f2da12a7f82ea384840035992f0c469d097ebec6cc77c31c9e"
+    },
+    {
+      "path": "evidence-2026-10-17/checks.json",
+      "hash": "sha256:08140fd1f4847a6e67c901afe3bab17522fde91918536fdb185652c54f9e9bf7"
+    },
+    {
+      "path": "live-screening-2026-10-17/approved-manifest.json",
+      "hash": "sha256:a7eb8d03ea8792d6e18826ee62c9e58aebf746b94890c3c8c5004eaf7a7f913e"
+    },
+    {
+      "path": "live-screening-2026-10-17/approved-budget.json",
+      "hash": "sha256:87f862d04192da5242cbf0bd50c1e6561e1319f159ae3220be1aef7e02725e67"
+    },
+    {
+      "path": "live-screening-2026-10-17/inventory.json",
+      "hash": "sha256:f3ee345dbf246665c5499522105399f3069ea897149921122f65f15a9a2eb97b"
+    },
+    {
+      "path": "live-screening-2026-10-17/audit.json",
+      "hash": "sha256:d249f275210d076b73df8d6236db6c7fde08e382a8fb42c632521bafaed9c576"
+    },
+    {
+      "path": "live-screening-2026-10-17/integrity.json",
+      "hash": "sha256:3a72d5ed551eb213e50a5ebdde348853d6a929b535379b72e721852df24aa4ed"
+    }
+  ],
+  "live": {
+    "stage": "screening",
+    "variant": "A",
+    "starts": 8,
+    "task_passed": 4,
+    "harness_passed": 8,
+    "selected_extensions": [],
+    "selected_worker_skills": [],
+    "external_worker_mcp_servers": [],
+    "pi_session_transport": "real compiled server over MCP stdio",
+    "controller_methods_exercised": [
+      "pi_capabilities_get",
+      "pi_session_start",
+      "pi_session_prompt",
+      "pi_turn_get",
+      "pi_session_close",
+      "pi_session_list"
+    ],
+    "controller_methods_not_needed_in_successful_live_wave": [
+      "pi_session_abort"
+    ],
+    "builtin_tool_allowlists": {
+      "read-only": [
+        "read",
+        "grep",
+        "find",
+        "ls"
+      ],
+      "coding": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "grep",
+        "find",
+        "ls"
+      ]
+    },
+    "per_builtin_tool_execution_counts": null,
+    "cost_usd": null,
+    "usage": null,
+    "routes": [
+      {
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "tasks": [
+          "T1",
+          "T2"
+        ]
+      },
+      {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "tasks": [
+          "T1",
+          "T2"
+        ]
+      },
+      {
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "effort": "high",
+        "tasks": [
+          "T1",
+          "T2"
+        ]
+      },
+      {
+        "provider": "xai",
+        "model": "grok-4.7",
+        "effort": "high",
+        "tasks": [
+          "T5",
+          "T5"
+        ]
+      }
+    ]
+  },
+  "local_contract_fixtures": [
+    {
+      "identity": "npm:pi-extension-fixture@1.0.0",
+      "kind": "local private extension fixture",
+      "execution": "actual installed Pi SDK with in-memory fixture provider",
+      "tests": [
+        "test/sdk-extension-contract.test.ts"
+      ],
+      "claims": [
+        "provider registration and prompt completion",
+        "RPC input hook",
+        "read-only model tool allowlist resists setActiveTools widening",
+        "coding extension tool advertisement",
+        "slash command text forwarded literally",
+        "session_shutdown event"
+      ],
+      "production_extension_qualification": false
+    },
+    {
+      "identity": "npm:pi-skill-fixture@1.0.0",
+      "kind": "local private extension and skills fixture",
+      "execution": "actual Pi resource-loader/SDK contract; lifecycle fault seams also tested",
+      "tests": [
+        "test/sdk-skill-contract.test.ts"
+      ],
+      "claims": [
+        "explicit skill selection and order",
+        "empty selection remains empty despite package discovery",
+        "unselected same-name and late-discovered skills do not widen selection",
+        "invalid selections fail closed with sanitized diagnostics",
+        "per-session skill/tool selection and lifecycle cleanup"
+      ],
+      "production_extension_qualification": false
+    },
+    {
+      "identity": "npm:fixture-ext@1.2.3",
+      "kind": "synthetic resolver package metadata",
+      "execution": "temporary package resolver tests",
+      "tests": [
+        "test/pi-extensions.test.ts"
+      ],
+      "claims": [
+        "exact installed version",
+        "missing and malformed package classification",
+        "reject entries outside package and escaping symlinks"
+      ],
+      "production_extension_qualification": false
+    },
+    {
+      "identity": "test/fixtures/mcp-stdio-server.mjs",
+      "kind": "local real stdio MCP child",
+      "execution": "actual MCP server/client SDK and Pi bridge with scripted responses",
+      "tests": [
+        "test/mcp-stdio-e2e.test.ts",
+        "test/mcp-session-tools.test.ts"
+      ],
+      "claims": [
+        "granted dispatch and ungranted-call denial",
+        "input/output JSON Schema validation",
+        "discovery pagination and empty/missing/looping capability cases",
+        "isError and sanitized JSON-RPC failures",
+        "lost response, cancellation and timeout",
+        "per-session connections and cleanup including EOF/SIGTERM/SIGKILL"
+      ],
+      "production_mcp_service_qualification": false
+    },
+    {
+      "identity": "synthetic collector",
+      "kind": "in-memory MCP connection seam",
+      "execution": "observed collector call with method delete_all",
+      "tests": [
+        "test/profile-boundaries.test.ts"
+      ],
+      "boundary_status": "FAIL",
+      "claims": [
+        "outer tool grant does not authorize/filter individual inner methods"
+      ],
+      "production_mcp_service_qualification": false
+    }
+  ],
+  "inventoried_only": [
+    {
+      "identity": "npm:pi-cursor-sdk@0.5.3",
+      "status": "NOT_RUN",
+      "scope": "configured extension identity only; not loaded or evaluated; package digest null"
+    },
+    {
+      "identity": "pi-session-review",
+      "status": "NOT_RUN as worker skill",
+      "scope": "configured skill alias only; recorded digest null"
+    },
+    {
+      "identity": "pi-session-implementation",
+      "status": "NOT_RUN as worker skill",
+      "scope": "configured skill alias only; recorded digest null"
+    },
+    {
+      "identity": "mistral/zai-glm-5-3 and mistral/mistral-large-4",
+      "status": "NOT_RUN",
+      "scope": "configured route/catalog/credential metadata only"
+    },
+    {
+      "identity": "cursor model routes",
+      "status": "NOT_RUN",
+      "scope": "native catalog registration absent without loading configured extension; not evidence of provider unavailability"
+    }
+  ],
+  "not_tested": [
+    "production codegraph_explore/Graphify service through a Pi worker",
+    "other production external MCP services or their credentials/permissions",
+    "pi-lens",
+    "context-mode",
+    "cache optimizer",
+    "permission-system extension experiment",
+    "extension/skill/MCP ablation B or C",
+    "worker use of production review/implementation skills",
+    "live T3/T4/T6/T7/T8",
+    "T9 controlled compaction",
+    "OS sandboxing and general filesystem isolation"
+  ],
+  "controller_only": {
+    "orchestration_skill": "pi-session-orchestration was read and applied by the controlling agent; not selected as a worker skill",
+    "browser_calibration": "Real local Vite/Chromium via Playwright for T3 reference fix; not a worker extension, browser MCP or live candidate UI result"
+  },
+  "negative_requirements": {
+    "N1": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/profile-boundaries.test.ts",
+          "test": "rejects scripted write, edit, and bash requests after reading hostile AGENTS text",
+          "layer": "real Pi SDK with scripted runtime; tool-selection boundary"
+        }
+      ],
+      "limit": "Proves the forbidden tools were absent from each model-visible allowlist and the synthetic canary stayed unchanged. It does not prove a filesystem or OS sandbox."
+    },
+    "N2": {
+      "status": "FAIL",
+      "evidence": [
+        {
+          "file": "test/profile-boundaries.test.ts",
+          "test": "observes a granted collector tool forwarding an unfiltered inner method",
+          "layer": "synthetic service call observation; grant exists for outer tool only"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "refuses a model-issued call to an ungranted tool without contacting the server",
+          "layer": "real Pi SDK and real MCP stdio child"
+        },
+        {
+          "file": "test/mcp-session-tools.test.ts",
+          "test": "does not trust readOnlyHint and rejects write grants before any process creation",
+          "layer": "MCP grant policy gate"
+        },
+        {
+          "file": "test/mcp-session-tools.test.ts",
+          "test": "exposes only granted names and preserves the remote JSON Schema",
+          "layer": "bridge selection and granted dispatch"
+        }
+      ],
+      "limit": "An outer granted tool can carry an arbitrary inner method in its schema payload. The synthetic service records the denied method, so this boundary fails. Product grants named MCP tools directly and has no separate inner-method authorization gate."
+    },
+    "N3": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/mcp-contract.test.ts",
+          "test": "strictly rejects legacy, raw selection, credential, and unknown start fields",
+          "layer": "MCP input schema gate"
+        },
+        {
+          "file": "test/mcp-contract.test.ts",
+          "test": "resolves default and explicit execution aliases server-side",
+          "layer": "server-bound profile selection"
+        },
+        {
+          "file": "test/mcp-contract.test.ts",
+          "test": "serves the loaded snapshot after the configuration file changes",
+          "layer": "loaded configuration snapshot"
+        }
+      ],
+      "limit": "Validates client inputs and server profile resolution; it does not establish OS-level enforcement of profile file scope."
+    },
+    "N4": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "fails closed on a missing grant and terminates the child it already started",
+          "layer": "startup gate and cleanup"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "classifies real empty, looping and capability-less discovery and reaps each child",
+          "layer": "real stdio initialization/discovery gates"
+        },
+        {
+          "file": "test/mcp-session-tools.test.ts",
+          "test": "distinguishes a complete empty catalog from a missing grant",
+          "layer": "grant initialization gate"
+        },
+        {
+          "file": "test/sdk-pi-adapter.test.ts",
+          "test": "fails closed when binding registers a tool that replaces a built-in",
+          "layer": "extension binding gate"
+        },
+        {
+          "file": "test/sdk-pi-adapter.test.ts",
+          "test": "fails closed when binding adds any tool to the selection",
+          "layer": "extension allowlist gate"
+        },
+        {
+          "file": "test/sdk-skill-contract.test.ts",
+          "test": "rejects all invalid selections without a session or sensitive diagnostics, extensions=false (6,11)",
+          "layer": "skill-selection initialization gate"
+        }
+      ],
+      "limit": "Covers implemented profile tool composition, selected-skill validation, extension binding, and configured MCP discovery gates. This is contract coverage, not OS containment."
+    },
+    "N5": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/profile-evaluation.test.ts",
+          "test": "never retries a mutation on a lost or invalid acknowledgement and closes resources",
+          "layer": "evaluation no-retry behavior for lost/malformed receipt"
+        },
+        {
+          "file": "test/profile-evaluation.test.ts",
+          "test": "does not accept malformed, truncated or failed terminal receipts %#",
+          "layer": "receipt parser rejection cases"
+        },
+        {
+          "file": "test/profile-evaluation-stdio.test.ts",
+          "test": "runs a local scripted OpenAI-compatible response through the compiled MCP server",
+          "layer": "evaluation transport against real MCP stdio and local SSE endpoint"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "reports an MCP isError result as a failed tool execution",
+          "layer": "tool result failure"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "fails the call and reaps the child when the server dies mid-request",
+          "layer": "lost response / child failure"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "bounds a call by its own deadline and still admits later calls",
+          "layer": "timeout; no blind call retry"
+        },
+        {
+          "file": "test/sdk-failure-recovery.test.ts",
+          "test": "projects a real terminal model error at the MCP surface as the generic sanitized turn_failed contract",
+          "layer": "provider error"
+        },
+        {
+          "file": "test/sdk-failure-recovery.test.ts",
+          "test": "treats a retryable provider error as an interim step and completes the turn",
+          "layer": "SDK retry is an explicit observed interim recovery"
+        },
+        {
+          "file": "test/sdk-pi-adapter.test.ts",
+          "test": "disposes a session when SDK thinking is clamped or model selection differs",
+          "layer": "model route mismatch rejection and cleanup"
+        }
+      ],
+      "limit": "Covers timeout, provider errors, malformed/truncated receipts, lost responses, no mutation retry, and route mismatch. Provider retryable errors are an explicit SDK behavior rather than a fallback route."
+    },
+    "N6": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/process-stdin-eof.test.ts",
+          "test": "aborts a running turn before it closes the session",
+          "layer": "real server process on EOF"
+        },
+        {
+          "file": "test/profile-evaluation-stdio.test.ts",
+          "test": "runs a local scripted OpenAI-compatible response through the compiled MCP server",
+          "layer": "EvaluationTransport observes Linux compiled-server process cleanup"
+        },
+        {
+          "file": "test/process-stdin-eof.test.ts",
+          "test": "keeps the EOF shutdown and its exit status when SIGTERM arrives during it",
+          "layer": "real server process EOF/SIGTERM race"
+        },
+        {
+          "file": "test/shutdown.test.ts",
+          "test": "terminates a child process with an open event-loop handle after bounded cleanup",
+          "layer": "real child process SIGTERM"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "closes one session without disturbing a second real session",
+          "layer": "session close and child cleanup"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "escalates to SIGKILL for a child that ignores EOF and SIGTERM",
+          "layer": "stubborn child cleanup"
+        }
+      ],
+      "limit": "These cases establish cleanup behavior for their covered lifecycle paths; not every event ordering is tested."
+    },
+    "N7": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/profile-evaluation.test.ts",
+          "test": "keeps two concurrent run copies, results and writes independent",
+          "layer": "two concurrent synthetic evaluation run scopes"
+        },
+        {
+          "file": "test/mcp-stdio-e2e.test.ts",
+          "test": "closes one session without disturbing a second real session",
+          "layer": "two live sessions remain independently closable"
+        },
+        {
+          "file": "test/mcp-session-tools.test.ts",
+          "test": "does not share connections across sessions",
+          "layer": "per-session MCP connections"
+        }
+      ],
+      "limit": "Covers two controlled concurrent synthetic runs and session resources; this does not establish arbitrary multi-user isolation in the production trusted-peer server."
+    },
+    "N8": {
+      "status": "PASS",
+      "evidence": [
+        {
+          "file": "test/profile-boundaries.test.ts",
+          "test": "rejects scripted write, edit, and bash requests after reading hostile AGENTS text",
+          "layer": "real Pi SDK with hostile synthetic AGENTS text and scripted forbidden calls"
+        }
+      ],
+      "limit": "The synthetic hostile text reaches the scripted model context; the three requested tools remain unavailable and the canary is unchanged. This is tool-selection evidence only, not prompt-injection resistance for arbitrary capabilities or OS containment."
+    }
+  },
+  "test_counts": {
+    "full_suite": {
+      "passed": 1459,
+      "skipped": 6,
+      "failed": 0,
+      "files": 60
+    },
+    "offline_subset": {
+      "passed": 308,
+      "skipped": 0,
+      "failed": 0
+    },
+    "overlap": "The offline subset overlaps the full suite; counts must not be added."
+  },
+  "evidence_limits": [
+    "Live results archive outcomes, hashes, checks and scoped artifacts, not raw model receipts or full provider messages.",
+    "Per-built-in tool execution and SDK internal retry counts are not exposed in the archived records.",
+    "N2 requirement failure is intentionally detected by a passing regression test; suite PASS does not turn that boundary into PASS.",
+    "No new candidate, extension, service, credential or paid connectivity call was started while compiling this register."
+  ]
+}

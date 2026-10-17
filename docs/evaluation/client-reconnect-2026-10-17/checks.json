@@ -1,0 +1,38 @@
+{
+  "kind": "existing-client-reconnect-closure-checks",
+  "status": "PASS",
+  "prior_evidence_integrity": [
+    {
+      "dossier": "live-screening-2026-10-17",
+      "files": 35,
+      "status": "PASS"
+    },
+    {
+      "dossier": "extension-audit-2026-10-17",
+      "files": 22,
+      "status": "PASS"
+    },
+    {
+      "dossier": "node24-followup-2026-10-17",
+      "files": 46,
+      "status": "PASS"
+    }
+  ],
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "source_unchanged": true,
+  "actual_registration_verification": "PASS",
+  "final_same_user_installed_server_processes": {
+    "node24_22_0": 2,
+    "node22": 0
+  },
+  "terminal_ui_restored_empty_prompts": 2,
+  "json_parse": "PASS",
+  "private_home_literal_scan": "PASS",
+  "diff_whitespace": "PASS",
+  "original_checkout_clean": true,
+  "new_model_prompts_requested": 0,
+  "new_live_evaluation_runs": 0
+}

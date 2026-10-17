@@ -1,0 +1,83 @@
+{
+  "kind": "offline-headless-adapter-component-test",
+  "status": "PASS",
+  "node": "22.23.2",
+  "rows": [
+    {
+      "permission_profile": "read-only",
+      "status": "PASS",
+      "sdk_model": "fixture-ext/fixture-ext-model",
+      "candidate": "openwiki@0.7.2",
+      "support_fixture": "pi-extension-fixture@1.0.0",
+      "registered_tools": [
+        "openwiki_begin",
+        "openwiki_finish",
+        "openwiki_inspect_page_claims",
+        "openwiki_next_page",
+        "openwiki_submit_page",
+        "openwiki_submit_plan"
+      ],
+      "active_tools": [
+        "find",
+        "grep",
+        "ls",
+        "read"
+      ],
+      "skills_selected": 0,
+      "prompts_loaded": 0,
+      "local_scripted_turn": "completed",
+      "candidate_tools_invoked": 0,
+      "shutdown": "PASS"
+    },
+    {
+      "permission_profile": "coding",
+      "status": "PASS",
+      "sdk_model": "fixture-ext/fixture-ext-model",
+      "candidate": "openwiki@0.7.2",
+      "support_fixture": "pi-extension-fixture@1.0.0",
+      "registered_tools": [
+        "openwiki_begin",
+        "openwiki_finish",
+        "openwiki_inspect_page_claims",
+        "openwiki_next_page",
+        "openwiki_submit_page",
+        "openwiki_submit_plan"
+      ],
+      "active_tools": [
+        "bash",
+        "edit",
+        "find",
+        "fixture_tool",
+        "grep",
+        "ls",
+        "openwiki_begin",
+        "openwiki_finish",
+        "openwiki_inspect_page_claims",
+        "openwiki_next_page",
+        "openwiki_submit_page",
+        "openwiki_submit_plan",
+        "read",
+        "write"
+      ],
+      "skills_selected": 0,
+      "prompts_loaded": 0,
+      "local_scripted_turn": "completed",
+      "candidate_tools_invoked": 0,
+      "shutdown": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 0,
+  "external_provider_calls": 0,
+  "paid_candidate_runs": 0,
+  "diagnostics": [],
+  "foreign_stdout_suppressed": 6,
+  "limitation": "Registration, tool selection and shutdown only. No OpenWiki lifecycle tool, MCP child, writer mutation, retrieval or quality ablation was executed.",
+  "process_exit": {
+    "code": 0,
+    "signal": null
+  },
+  "duration_ms": 1077,
+  "stderr_bytes_discarded": 0,
+  "child_exit_observed": true
+}

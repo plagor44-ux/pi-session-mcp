@@ -1,0 +1,56 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:37:02.277Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "79d220d0-fc0b-4cad-85cc-40b9e904fb97",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@bufbuild/protobuf' imported from <repo>/eval/results/extension-functions-cursor-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe/home/.pi/agent/npm/node_modules/@cursor/sdk/dist/esm/index.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/activation-and-resources-79d220d0-fc0b-4cad-85cc-40b9e904fb97.json",
+      "receipt_sha256": "738c3231867addb257af2847409f5161dfe1fed20b73e5305094e98cae1949cc"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "c24ad0c8-5e7e-4d71-9b22-3e2708ce1626",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@bufbuild/protobuf' imported from <repo>/eval/results/extension-functions-cursor-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe/home/.pi/agent/npm/node_modules/@cursor/sdk/dist/esm/index.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/bridge-disabled-c24ad0c8-5e7e-4d71-9b22-3e2708ce1626.json",
+      "receipt_sha256": "3f3b4ade6b8faf9f1060b9a1c2c55ef2742a08814f40caba55544c27a459af90"
+    }
+  ],
+  "cleanup": "PASS",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

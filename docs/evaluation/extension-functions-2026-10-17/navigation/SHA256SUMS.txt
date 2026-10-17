@@ -1,0 +1,8 @@
+aaba685618015e1c80a5d074d1b3ea7165eb38320fab5c3b265d8b690cd1b0ac  docs/evaluation/extension-functions-2026-10-17/navigation/function-probe.mjs
+236737c29746e0553158edf5a9e0ebc1b2c3878876e11c81ccdbf7ed5e721a3e  docs/evaluation/extension-functions-2026-10-17/navigation/function-runner.mjs
+e34f119ee99c5a693dc8d9c49864288d85e56e2c1681aefb3746ea5ad52aa88e  docs/evaluation/extension-functions-2026-10-17/navigation/child-guard.mjs
+c351777d5a088a805c35b3b098ba1ddd17c56c0320dd77d4c144daa09c93507c  docs/evaluation/extension-functions-2026-10-17/navigation/README.md
+fd449738353dda2f510b03eac3d1316970d21b8ff709dca2c368c46fbbb72000  docs/evaluation/extension-functions-2026-10-17/navigation/attempt.json
+ec5d68808a69b0e7123a829af5d4451a53dfe06e725d8388a7162aaaf67f3c3a  docs/evaluation/extension-functions-2026-10-17/navigation/final-result.json
+1a77ea3f869b7f03ea9cbb227baad3d99e0546647d180d695343a84caecd01a9  docs/evaluation/extension-functions-2026-10-17/navigation/attempts/isolated-extensions-results-2026-10-17T13-46-56-605Z-f46134c2-8523-4892-ab76-e88195d79ed2.json
+939b3fca2048af16227c6bb69d26d48db08b9902e9eddb18e4cc2070ab01d07e  docs/evaluation/extension-functions-2026-10-17/navigation/attempts/isolated-extensions-results-2026-10-17T13-45-48-020Z-06f478f2-43c4-48a7-ac02-7e53d4df8aaf.json

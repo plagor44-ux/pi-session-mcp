@@ -1,0 +1,46 @@
+{
+  "schema": "pi-cache-optimizer-function-attempt.v1",
+  "attempt_id": "9388d2df-fa15-479c-a4ef-2a774c366c0f",
+  "package": "pi-cache-optimizer@2.9.3",
+  "case": "warming-disabled-zero",
+  "node": "24.22.0",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "cleanup": "PASS",
+  "process_group_empty": true,
+  "owned_home_removed": true,
+  "timed_out": false,
+  "output_overflow": false,
+  "checks": [
+    {
+      "id": "sdk-root-export-imported",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-hooks",
+      "result": "PASS"
+    },
+    {
+      "id": "real-extension-registers-command",
+      "result": "PASS"
+    },
+    {
+      "id": "warming-disabled-zero-returns-no-warming-action",
+      "result": "PASS"
+    },
+    {
+      "id": "warming-disabled-zero-host-cache-warming-setting-off",
+      "result": "PASS"
+    },
+    {
+      "id": "warming-disabled-zero-no-provider-or-network-call",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "child_process_attempts": 0,
+  "changed_files": [],
+  "stdout_sha256": "b6e85455fd6087fdf85ccaf4e6e508cf84bb5c738a0f19cf53aaa3354f4c63bc",
+  "stderr_prefix_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_bytes": 0
+}

@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^T[1-9]$"
+    },
+    "task_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "profile_id": {
+      "type": "string",
+      "enum": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ]
+    },
+    "view": {
+      "type": "string",
+      "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+    },
+    "repetition": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "screening",
+        "pilot",
+        "ablation"
+      ]
+    },
+    "route": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+        },
+        "model": {
+          "type": "string",
+          "pattern": "^[a-zA-Z0-9_.:@/-]{1,160}$"
+        },
+        "effort": {
+          "type": "string",
+          "enum": [
+            "off",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ]
+        },
+        "auth_type": {
+          "type": "string",
+          "enum": [
+            "api-key",
+            "oauth",
+            "subscription",
+            "local",
+            "unknown"
+          ]
+        },
+        "billing_type": {
+          "type": "string",
+          "enum": [
+            "api",
+            "subscription",
+            "local",
+            "unknown"
+          ]
+        },
+        "data_path": {
+          "type": "string",
+          "const": "synthetic-fixture-to-selected-provider"
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "effort",
+        "auth_type",
+        "billing_type",
+        "data_path"
+      ],
+      "additionalProperties": false
+    },
+    "permission_profile": {
+      "type": "string",
+      "enum": [
+        "read-only",
+        "coding"
+      ]
+    },
+    "variant": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    "review_target": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "path",
+            "hash"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "skills": {
+      "maxItems": 2,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,80}$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "identity",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "extensions": {
+      "maxItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string",
+            "pattern": "^npm:(?:@[a-z0-9-]+\\/)?[a-z0-9-]+@\\d+\\.\\d+\\.\\d+$"
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "identity",
+          "digest"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "run_id",
+    "task_id",
+    "task_hash",
+    "profile_id",
+    "view",
+    "repetition",
+    "stage",
+    "route",
+    "permission_profile",
+    "variant",
+    "review_target",
+    "skills",
+    "extensions"
+  ],
+  "additionalProperties": false,
+  "$id": "urn:pi-profile-evaluation:1.0.0:run"
+}

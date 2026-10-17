@@ -1,0 +1,10 @@
+{
+  "kind": "parallel-node-install",
+  "node_version": "24.22.0",
+  "target": "user-local-opt/node-v24.22.0",
+  "official_checksum_verified": true,
+  "binary_version_check": "PASS",
+  "system_node_changed": false,
+  "existing_node24_20_changed": false,
+  "activated": false
+}

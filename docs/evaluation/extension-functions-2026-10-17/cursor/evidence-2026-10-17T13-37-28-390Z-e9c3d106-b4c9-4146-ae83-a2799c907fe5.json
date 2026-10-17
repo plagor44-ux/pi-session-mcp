@@ -1,0 +1,56 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:37:28.390Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "394fc425-ed51-408f-ab09-6d26aee0d48f",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": " TypeError: sessionManager.getEntries is not a function     at restoreFromSessionManager (file://<repo>/eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-session-agent-resume.js:355:40)     at file://<repo>/eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-session-agent-resume.js:375:9     at file://<repo>/docs/evaluation/extens",
+      "receipt": "attempts/activation-and-resources-394fc425-ed51-408f-ab09-6d26aee0d48f.json",
+      "receipt_sha256": "b0d8b4b96fad69880097264a5b2a8592e875cebb18c3171a54973dad9b36cb25"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "1bd882bb-2403-4269-8335-90f9803f57b7",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": " TypeError: sessionManager.getEntries is not a function     at restoreFromSessionManager (file://<repo>/eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-session-agent-resume.js:355:40)     at file://<repo>/eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-session-agent-resume.js:375:9     at file://<repo>/docs/evaluation/extens",
+      "receipt": "attempts/bridge-disabled-1bd882bb-2403-4269-8335-90f9803f57b7.json",
+      "receipt_sha256": "ec57b21dd1387b227bec8a4739488645036c3392a2bf01abc7d08e39f9293faa"
+    }
+  ],
+  "cleanup": "PASS",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

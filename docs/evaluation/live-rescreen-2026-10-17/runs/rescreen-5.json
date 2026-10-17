@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "screening",
+  "run_id": "rescreen-5",
+  "task_id": "T5",
+  "task_hash": "sha256:a76b843866bd20b4d40348575c7645e786947cc3eb49b0765b77f854c677e55e",
+  "repetition": 1,
+  "scope_id": "pi-profile-eval-uiWdlk",
+  "fixture_revision": "sha256:135a849ce7f8ceaec5a053466046b5e5d4f0d51227abca1038827e5ebb72a0cb",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5",
+  "package_version": "0.8.3",
+  "sdk_version": "1.2.0",
+  "client_version": "profile-evaluation/1.0.0",
+  "profile_id": "P3",
+  "view": "reviewer",
+  "profile_digest": "sha256:c4a82239f19bcfe8e9ddf194a14a4731209f95b1a53833a80a1ca4c9b195ed0b",
+  "permission_profile": "read-only",
+  "skills": [],
+  "extensions": [],
+  "requested_route": {
+    "provider": "xai",
+    "model": "grok-4.7",
+    "effort": "high",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "resolved_route": {
+    "provider": "xai",
+    "model": "grok-4.7",
+    "effort": "high",
+    "auth_type": "oauth",
+    "billing_type": "subscription",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "model_revision": null,
+  "started_at": "2026-10-17T13:23:38.938Z",
+  "ended_at": "2026-10-17T13:24:09.294Z",
+  "terminal_status": "completed",
+  "harness_status": "PASS",
+  "task_status": "FAIL",
+  "boundary_status": "PASS",
+  "recommendation": "rejected-for-scope",
+  "checks": [
+    {
+      "id": "transport-route-binding",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "session-cleanup",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "diff-gate",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "seed-tenant-scope",
+      "status": "FAIL",
+      "exit_code": 1,
+      "reason": "Missing structured handler finding with line, preconditions and impact."
+    },
+    {
+      "id": "seed-wildcard-claim",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "clean-counterexample",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "no-extra-findings",
+      "status": "FAIL",
+      "exit_code": 1,
+      "reason": "Unexpected additional finding path counted as a potential false positive."
+    },
+    {
+      "id": "observed-process-cleanup",
+      "status": "PASS",
+      "exit_code": null
+    }
+  ],
+  "blockers": [
+    "task_not_accepted"
+  ],
+  "artifacts": [
+    {
+      "path": "rescreen-5.diagnostic.json",
+      "hash": "sha256:e974eaa3470cdbec0e7e21198a5d83f7d0a309f8a3c97c44cda47139384880da"
+    }
+  ],
+  "expected_diff_scope": [],
+  "observed_diff_scope": [],
+  "duration_ms": 30356,
+  "tool_errors": null,
+  "manual_rework": null,
+  "controller_calls": 116,
+  "cost_usd": null,
+  "usage": null,
+  "cost_source": "not-exposed-by-mcp",
+  "metrics": {
+    "all_findings": 2,
+    "confirmed_findings": 1,
+    "precision_numerator": 1,
+    "precision_denominator": 2,
+    "false_positives": 1,
+    "seed_findings_detected": 1,
+    "seed_findings_total": 2,
+    "false_positives_on_clean_cases": 0
+  }
+}

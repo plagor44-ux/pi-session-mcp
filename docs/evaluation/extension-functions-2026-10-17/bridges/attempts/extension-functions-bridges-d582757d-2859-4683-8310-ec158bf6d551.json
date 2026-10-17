@@ -1,0 +1,99 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "pi-web-access@0.41.0",
+  "package_files": [
+    {
+      "path": "package.json",
+      "sha256": "c5ccc33fe7241a28d1a32f6a633dae06b6a23e4fb3b841b0527e148d66d21ee7"
+    },
+    {
+      "path": "dist/mcp-cli.js",
+      "sha256": "2eae8d7b75b02f9df03b9334c5c0b4df5b53ef08536c69f8baea8757b829bd71"
+    }
+  ],
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-extension-resolver-gate",
+      "status": "PASS",
+      "expected_blocker": "directory_manifest_entry",
+      "pi_profile_status": "BLOCKED"
+    },
+    {
+      "id": "standalone-mcp-tool-discovery",
+      "status": "PASS",
+      "tools": [
+        "web_search",
+        "fetch_content",
+        "get_search_content",
+        "source_check"
+      ]
+    },
+    {
+      "id": "standalone-raw-fetch-owned-http",
+      "status": "PASS",
+      "canary_preserved": true
+    },
+    {
+      "id": "standalone-stored-content-search",
+      "status": "PASS",
+      "original_content_retrieved": true
+    },
+    {
+      "id": "standalone-invalid-fetch-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "standalone-model-answer-mode-rejected",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "integration": "Standalone MCP functional path; production Pi extension loading remains BLOCKED.",
+  "status": "PASS",
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 1,
+    "network_denied": 0,
+    "git_allowed": 0,
+    "children_allowed": 1,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "started_at": "2026-10-17T13:35:28.891Z",
+  "ended_at": "2026-10-17T13:35:29.926Z",
+  "harness": [
+    {
+      "path": "run.mjs",
+      "sha256": "21fb7b96d8df277f75926f6848154a10717d59db722be33539704ea4f2f0470e"
+    },
+    {
+      "path": "worker.mjs",
+      "sha256": "3f7299cb8972ee268cf6fd2b187b0cdde21ff53b4d1132b69d5d19e21c3b450f"
+    },
+    {
+      "path": "guard.mjs",
+      "sha256": "cb1fd997320e858f5beab49c5796858ce194b026c21d73a04384543cd859fec9"
+    }
+  ],
+  "supervisor": {
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 0,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-d582757d-2859-4683-8310-ec158bf6d551"
+}

@@ -1,0 +1,30 @@
+{
+  "kind": "existing-client-reconnect-dossier-integrity",
+  "created_at": "2026-10-17T10:05:52.487669+00:00",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:eb51575bdc4f43ebddc14dd7da9947071ede3962c4d524a1f2d85a0d11d9b100"
+    },
+    {
+      "path": "checks.json",
+      "hash": "sha256:f208a98a7e298e412c72d5f85d00ebd0782a44547ca2fc15fefdfca4dced0d9e"
+    },
+    {
+      "path": "reconnect.json",
+      "hash": "sha256:db3a90db9b31ece6260f2345aedcef727f03ef3402d1f989a30f3073ac93c1b0"
+    },
+    {
+      "path": "registration-verification.json",
+      "hash": "sha256:4902ecdae57d975e9d21c11aadd88e7f8f368d0ed56f0766d492e87fad463e33"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:e07eee236daf0a98d7d12a3be29ed462bf07aed03489dda9522ba781c091216f"
+    }
+  ]
+}

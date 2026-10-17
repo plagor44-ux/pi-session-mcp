@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T13:46:00.807Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 7,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "pi-lens@4.4.3",
+      "permission_profile": "coding",
+      "failure_code": "OFFLINE_CHILD_PROCESS_DENIED",
+      "failure_detail": "offline_child_process_denied",
+      "failure_stage": null,
+      "diagnostic_codes": [],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 2,
+      "allowed_metadata_commands": [
+        {
+          "method": "spawn",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "ls-files"
+          ],
+          "cwd": "owned_fixture",
+          "timeout_ms": 1500,
+          "result": "completed",
+          "exit_code": 0
+        },
+        {
+          "method": "spawn",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "ls-files",
+            "--others",
+            "--ignored",
+            "--exclude-standard"
+          ],
+          "cwd": "owned_fixture",
+          "timeout_ms": 1500,
+          "result": "completed",
+          "exit_code": 0
+        }
+      ],
+      "child_process_diagnostics": [
+        {
+          "method": "exec",
+          "executable_basename": "getconf CLK_TCK",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "dist/index.js:9596"
+        },
+        {
+          "method": "exec",
+          "executable_basename": "getconf CLK_TCK",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "dist/index.js:9596"
+        }
+      ],
+      "function_check": {
+        "status": "PASS",
+        "retrieval_status": "INCONCLUSIVE",
+        "function": "symbol_search",
+        "behavior": "cold-cache response accurately reports building state and retry hint",
+        "invocations": 7,
+        "fixture_search_result": "not_yet_available",
+        "result_is_error": true,
+        "project_report": {
+          "status": "COLD_CACHE_UNAVAILABLE",
+          "result_is_error": true,
+          "available": false,
+          "output_excerpt": "No review graph cached for this workspace yet — a build was kicked off in the background; retry this call shortly.\n\n```json\n{\n  \"available\": false,\n  \"hint\": \"No review graph cached for this workspace yet — a build was kicked off in the background; r"
+        }
+      },
+      "limitation": "Probe failed before a qualified function result; private error text and paths are omitted.",
+      "sanitized_stderr_excerpt": "",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "6a69388f-99c2-448b-9e32-f06dd87e16a5",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Only the specific synthetic function/event checks in function_check are covered. No prompts, model/provider calls, UI behavior, real-world retrieval quality, or broader package efficacy claim."
+}

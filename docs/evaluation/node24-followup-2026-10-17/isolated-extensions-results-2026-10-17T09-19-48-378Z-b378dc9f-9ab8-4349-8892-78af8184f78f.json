@@ -1,0 +1,151 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T09:19:48.377Z",
+  "package_count": 4,
+  "profile_count_per_package": 2,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "pi-lens@4.4.3",
+      "permission_profile": "read-only",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "e9fb46fc-a90b-4fac-b1bf-8d1421581c04",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "pi-lens@4.4.3",
+      "permission_profile": "coding",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "8d9a1492-8f42-4e98-bc34-074cdd2f03db",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "read-only",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "61c49be7-2dea-4f28-9f60-2b5e02715a07",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "04967cc7-5fad-4dbb-8f6b-34c257cdd8f1",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "pi-cache-optimizer@2.9.3",
+      "permission_profile": "read-only",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "0077101a-8d16-4553-8909-860fa0a1bf0a",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "pi-cache-optimizer@2.9.3",
+      "permission_profile": "coding",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "98316e62-455f-4390-8e83-1fc464899888",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "permission_profile": "read-only",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "89c52dc7-37c2-4228-839b-d0e67ba569c9",
+      "isolated_scope_removed": true
+    },
+    {
+      "status": "FAIL",
+      "failure_code": "sanitized_receipt_missing",
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "permission_profile": "coding",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "1b64fbf9-28df-4d88-94b3-b3cd56f86f67",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Headless extension loading, hook binding/lifecycle, registered tool discovery, active-tool selection and process cleanup only; no package efficacy, UI behavior, provider behavior, or tool-call mediation claim."
+}

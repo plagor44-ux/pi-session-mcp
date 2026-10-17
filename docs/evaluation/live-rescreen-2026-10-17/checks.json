@@ -1,0 +1,54 @@
+{
+  "kind": "live-rescreen-closure-checks",
+  "status": "PASS",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "archive_artifact_hashes": "PASS",
+  "prior_evidence_integrity": [
+    {
+      "dossier": "live-screening-2026-10-17",
+      "files_verified": 35,
+      "status": "PASS"
+    },
+    {
+      "dossier": "extension-audit-2026-10-17",
+      "files_verified": 22,
+      "status": "PASS"
+    },
+    {
+      "dossier": "node24-followup-2026-10-17",
+      "files_verified": 46,
+      "status": "PASS"
+    },
+    {
+      "dossier": "client-reconnect-2026-10-17",
+      "files_verified": 5,
+      "status": "PASS"
+    },
+    {
+      "dossier": "plan-continuation-2026-10-17",
+      "files_verified": 12,
+      "status": "PASS"
+    },
+    {
+      "dossier": "permission-gates-2026-10-17",
+      "files_verified": 9,
+      "status": "PASS"
+    }
+  ],
+  "independent_review": "PASS",
+  "independent_backend_assertions": 14,
+  "runner_exit_code": 1,
+  "expected_task_rejection_exit": true,
+  "started": 5,
+  "accepted": 3,
+  "blocked_not_started": 1,
+  "additional_live_calls_during_verification": 0,
+  "controller_source_changed": false,
+  "production_profiles_edited": false,
+  "credentials_provisioned": false,
+  "cost_usd": null,
+  "usage": null
+}

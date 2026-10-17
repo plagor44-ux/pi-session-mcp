@@ -1,0 +1,19 @@
+{
+  "kind": "live-rescreen-cli-execution",
+  "node": "24.22.0",
+  "exit_code": 1,
+  "exit_reason": "Two started task receipts failed independent acceptance; the same-combination fail gate blocked the sixth planned slot.",
+  "planned": 6,
+  "claims": 5,
+  "started": 5,
+  "harness_pass": 5,
+  "task_accepted": 3,
+  "task_rejected": 2,
+  "not_started_blocked": 1,
+  "controller_retries": 0,
+  "pilot_starts": 0,
+  "ablation_starts": 0,
+  "cost_usd": null,
+  "usage": null,
+  "cost_reason": "not-exposed-by-mcp"
+}

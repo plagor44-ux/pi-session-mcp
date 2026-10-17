@@ -1,0 +1,63 @@
+{
+  "kind": "public-tree-hygiene-and-integrity-verification",
+  "status": "PASS",
+  "recorded_at": "2026-10-17T15:51:12.292517+00:00",
+  "dossier_indexes": [
+    {
+      "path": "docs/evaluation/client-reconnect-2026-10-17/integrity.json",
+      "files": 5
+    },
+    {
+      "path": "docs/evaluation/extension-audit-2026-10-17/integrity.json",
+      "files": 23
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/bridges/integrity.json",
+      "files": 19
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/cache/integrity.json",
+      "files": 39
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/cursor/integrity.json",
+      "files": 49
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/integrity.json",
+      "files": 152
+    },
+    {
+      "path": "docs/evaluation/extension-functions-2026-10-17/navigation/integrity.json",
+      "files": 37
+    },
+    {
+      "path": "docs/evaluation/live-rescreen-2026-10-17/integrity.json",
+      "files": 32
+    },
+    {
+      "path": "docs/evaluation/live-screening-2026-10-17/integrity.json",
+      "files": 35
+    },
+    {
+      "path": "docs/evaluation/node24-followup-2026-10-17/integrity.json",
+      "files": 47
+    },
+    {
+      "path": "docs/evaluation/permission-gates-2026-10-17/integrity.json",
+      "files": 9
+    },
+    {
+      "path": "docs/evaluation/plan-continuation-2026-10-17/integrity.json",
+      "files": 12
+    }
+  ],
+  "local_markdown_links_verified": 163,
+  "private_host_path_scan": "PASS",
+  "scratch_and_vendor_excluded": "PASS",
+  "derived_exports": [
+    "node24-followup-2026-10-17/publication-export.json",
+    "extension-audit-2026-10-17/publication-export.json"
+  ],
+  "historical_run_receipts_modified": false
+}

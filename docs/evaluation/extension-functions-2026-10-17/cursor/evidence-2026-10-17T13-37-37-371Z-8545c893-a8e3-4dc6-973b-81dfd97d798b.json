@@ -1,0 +1,56 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:37:37.371Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "256cb86e-40ae-4fec-a2d2-9b7f66cc4be8",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "TypeError: ctx.ui.setStatus is not a function     at updateCursorStatus (file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-state.js:172:12)     at sync (file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-state.js:517:13)     at file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-97",
+      "receipt": "attempts/activation-and-resources-256cb86e-40ae-4fec-a2d2-9b7f66cc4be8.json",
+      "receipt_sha256": "a4d5cce09b41bb186f8fadfe13fe57db1661f4951c668bc2033cee242c916269"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "6eccb170-ff45-40e2-afc5-dfc0f77c229f",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "UNKNOWN",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "TypeError: ctx.ui.setStatus is not a function     at updateCursorStatus (file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-state.js:172:12)     at sync (file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-state.js:517:13)     at file://<repo>/eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-97",
+      "receipt": "attempts/bridge-disabled-6eccb170-ff45-40e2-afc5-dfc0f77c229f.json",
+      "receipt_sha256": "cf0c66a436b95780a1a7cda02465c8c8a00044c15fa2fe0358d8a283395d8ffc"
+    }
+  ],
+  "cleanup": "PASS",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

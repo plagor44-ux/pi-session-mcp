@@ -1,0 +1,19 @@
+{
+  "kind": "source-bound-final-repository-tests",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:acc4ca231edd888a99b993c0b1f67749b7419e6dc7f3d6efa988dc083410d9bc",
+  "source_unchanged": true,
+  "started_at": "2026-10-17T07:06:31.156Z",
+  "ended_at": "2026-10-17T07:07:50.245Z",
+  "command": "NODE_OPTIONS=--unhandled-rejections=strict npm test -- --reporter=json",
+  "exit_code": 1,
+  "success": false,
+  "total_tests": 1465,
+  "passed_tests": 1458,
+  "failed_tests": 1,
+  "skipped_tests": 6,
+  "files": 60,
+  "failed_files": [
+    "test/setup-skills-recovery.test.ts"
+  ]
+}

@@ -1,0 +1,136 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:39:39.506Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-d4c80a7b-76b4-4d11-bf0f-552d11b131b2",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "1f07360d-046f-4f0c-b40f-6b57a027220c",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "checks": [
+        {
+          "id": "public_cursor_pi_manifest_entrypoint_loaded",
+          "result": "PASS"
+        },
+        {
+          "id": "cursor_activate_skill_registered_by_public_entrypoint",
+          "result": "PASS"
+        },
+        {
+          "id": "no_provider_turn_started",
+          "result": "PASS"
+        },
+        {
+          "id": "provider_discovery_offline",
+          "result": "PASS"
+        },
+        {
+          "id": "activation_tool_enabled_for_local_cursor_with_visible_skill",
+          "result": "PASS"
+        },
+        {
+          "id": "system_prompt_points_to_activation_tool",
+          "result": "PASS"
+        },
+        {
+          "id": "positive_activation_returns_only_fixture_skill_content",
+          "result": "PASS"
+        },
+        {
+          "id": "resource_listing_includes_regular_fixture_resource",
+          "result": "PASS"
+        },
+        {
+          "id": "resource_listing_skips_symlink_resource",
+          "result": "PASS"
+        },
+        {
+          "id": "unknown_skill_rejected",
+          "result": "PASS"
+        },
+        {
+          "id": "disable_model_invocation_skill_rejected",
+          "result": "PASS"
+        },
+        {
+          "id": "no_cursor_agent_model_or_cloud_calls",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "denied_child_process_attempts": 0,
+      "cleanup": "PASS",
+      "process_group_empty_after_close": true,
+      "component": "cursor_activate_skill registration, activation and resource enumeration only",
+      "stdout_sha256": "a25df7c43a2976d0396ff2fbacc89d9c89763df8d07e9c94256018f3a61a9534",
+      "receipt": "attempts/activation-and-resources-1f07360d-046f-4f0c-b40f-6b57a027220c.json",
+      "receipt_sha256": "cdfc7373c807cc2f32247f63e41ab08fc86feb3956f3e5eb02aff47650064438"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "0ee0df5a-299f-451c-96e3-5abcf8bfa999",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "PASS",
+      "exit_code": 0,
+      "checks": [
+        {
+          "id": "public_cursor_pi_manifest_entrypoint_loaded",
+          "result": "PASS"
+        },
+        {
+          "id": "cursor_activate_skill_registered_by_public_entrypoint",
+          "result": "PASS"
+        },
+        {
+          "id": "no_provider_turn_started",
+          "result": "PASS"
+        },
+        {
+          "id": "provider_discovery_offline",
+          "result": "PASS"
+        },
+        {
+          "id": "disabled_bridge_keeps_activation_tool_inactive",
+          "result": "PASS"
+        },
+        {
+          "id": "disabled_bridge_does_not_set_active_tools",
+          "result": "PASS"
+        },
+        {
+          "id": "no_cursor_agent_model_or_cloud_calls",
+          "result": "PASS"
+        }
+      ],
+      "network_attempts": 0,
+      "denied_child_process_attempts": 0,
+      "cleanup": "PASS",
+      "process_group_empty_after_close": true,
+      "component": "cursor_activate_skill registration, activation and resource enumeration only",
+      "stdout_sha256": "a608997ab6bed02f15f1c0cf3ae698535eaa4a523424c972d568e4b02e4e194f",
+      "receipt": "attempts/bridge-disabled-0ee0df5a-299f-451c-96e3-5abcf8bfa999.json",
+      "receipt_sha256": "56335b9d31c954e36c09071bffb39e5f09688fa72e1dab19c441f165204a183a"
+    }
+  ],
+  "cleanup": "FAIL",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}
