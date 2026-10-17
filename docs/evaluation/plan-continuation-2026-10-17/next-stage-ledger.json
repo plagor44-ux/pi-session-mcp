@@ -1,0 +1,19 @@
+{
+  "kind": "original-plan-live-start-planning-envelope",
+  "original_maximum_plan_starts": 30,
+  "approved_screening_starts_used": 8,
+  "proposed_rescreen_starts": 6,
+  "proposed_rescreen_approved": false,
+  "starts_used_if_rescreen_fully_approved_and_executed": 14,
+  "remaining_for_all_later_pilot_and_ablation_if_rescreen_executed": 16,
+  "later_stages_approved": false,
+  "auto_promotion": false,
+  "ablation_status": "NOT_RUN",
+  "ablation_reason": "No measured feature bottleneck supports a candidate extension ablation.",
+  "rules": [
+    "The old 18 pilot plus four ablation schedule cannot be retained after six additional screening starts within the original 30-start envelope.",
+    "Fixed-result review slots displace other pilot slots.",
+    "Any increase beyond the envelope or later live budget needs a concrete revised approval.",
+    "This ledger is a planning allocation; per-wave approved manifests and budgets still enforce their own limits."
+  ]
+}

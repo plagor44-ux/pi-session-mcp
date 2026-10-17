@@ -1,0 +1,10 @@
+{
+  "kind": "derived-publication-format-export",
+  "source_artifact": "web-openwiki-report.md",
+  "original_artifact_sha256": "45f256880a3cf466d92f9dbe23b801f322dee46392458bccdad5429739f1154d",
+  "public_artifact_sha256": "1ab296eea8357684491ced997e51a7ca7de7c2c9ad29ee45c75c875ae80f9d35",
+  "original_integrity_index_sha256": "e7fee562680eca6224420939fd6faeb1b6dd8112076f516dc5de3c428a32d71c",
+  "transformation": "Remove one redundant blank line at end of the archived Markdown report so the staged patch passes whitespace validation. No prose, result, code or run receipt changed.",
+  "original_preservation": "Original report and index retained in the owned ignored publication scope.",
+  "exported_at": "2026-10-17T15:49:24.588367+00:00"
+}

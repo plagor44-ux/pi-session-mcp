@@ -1,0 +1,57 @@
+{
+  "kind": "actual-existing-client-mcp-reconnect",
+  "completed_at": "2026-10-17T10:04:59.094720+00:00",
+  "operator_authorization": "Continue with reconnecting the remaining existing MCP client connections after the Node migration.",
+  "scope": "client-reconnect-64bbe53b-17fa-46b8-9337-56f3eba5224c",
+  "status": "PASS",
+  "initial_process_scan": {
+    "old_node22_servers": 2,
+    "clients": "two Claude Code sessions",
+    "previously_observed_codex_old_server": "already absent before this follow-up"
+  },
+  "clients": [
+    {
+      "client": "claude-connection-A",
+      "idle_empty_prompt_before_control": true,
+      "command": "/mcp reconnect pi-session-mcp",
+      "reconnect_success_message": true,
+      "post_cleanup_mcp_panel_connected": true,
+      "status_panel_closed_after_check": true
+    },
+    {
+      "client": "claude-connection-B",
+      "idle_empty_prompt_before_control": true,
+      "command": "/mcp reconnect pi-session-mcp",
+      "reconnect_success_message": true,
+      "post_cleanup_mcp_panel_connected": true,
+      "status_panel_closed_after_check": true
+    }
+  ],
+  "transition": {
+    "new_node24_servers_started_by_existing_clients": 2,
+    "old_node22_processes_retained_after_client_reconnect": 2,
+    "old_processes_terminated_via_sigterm": 2,
+    "old_process_identity_revalidated_before_signal": true,
+    "new_replacement_same_parent_verified_before_signal": true,
+    "old_processes_termination_observed": true,
+    "new_processes_alive": true,
+    "force_kill_used": false
+  },
+  "final_process_scan": {
+    "same_user_installed_server_processes": 2,
+    "node24_22_0": 2,
+    "node22": 0
+  },
+  "other_configuration_changes": 0,
+  "model_prompts_submitted": 0,
+  "new_evaluation_sessions_started": 0,
+  "paid_quality_runs_added": 0,
+  "terminal_transcripts_archived": false,
+  "private_process_identity_journal": "stored only in the owned user-local state scope",
+  "limitations": [
+    "Runtime counts describe same-user processes with the exact installed Pi-session MCP entry at the observation time.",
+    "The previous Codex connection ended before this follow-up; no existing Codex connection was restarted or claimed as reconnected.",
+    "Built-in reconnect and status commands were used; no model prompt, Pi session start or candidate extension tool was requested.",
+    "Client connections still inherit their original PATH; only the server executable is pinned to Node 24."
+  ]
+}

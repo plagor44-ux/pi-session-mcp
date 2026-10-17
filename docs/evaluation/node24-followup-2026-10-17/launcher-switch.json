@@ -1,0 +1,28 @@
+{
+  "kind": "owned-node-launcher-switch",
+  "scope": "node24-extension-followup-04470d85-3a99-47e3-b356-ce96e77de0dd",
+  "created_at": "2026-10-17T09:18:15.784Z",
+  "node_version": "24.22.0",
+  "runtime_target": ".local/opt/node-v24.22.0",
+  "selector": ".local/share/pi-node/current",
+  "selector_original": null,
+  "pi": {
+    "entry": ".pi/agent/bin/pi",
+    "original_type": "file",
+    "original_hash": "sha256:da0c6a49fe94aadc9765cc7afc6ba6b17e553eed0247d0385c160bc188f5cfbb",
+    "original_mode": 493,
+    "backup_file": "pi-launcher.original",
+    "new_hash": "sha256:e1e9e3d2ae03af319cae5dfca8aff98e496ef68fe4ec67b37f5f96bbb91ac445"
+  },
+  "mcp": {
+    "entry": ".npm-global/bin/pi-session-mcp",
+    "original_type": "symlink",
+    "original_target": "../lib/node_modules/pi-session-mcp/dist/main.js",
+    "new_hash": "sha256:ef635778496a95ea1d51916ce860b91fbc87b1753c229a64f67e230f8c8db646",
+    "module_hash": "sha256:47875d38886528ace6b242df2c6ad79d624c51e330e63c2f401576eadc449ed7"
+  },
+  "system_node_changed": false,
+  "production_profiles_changed": false,
+  "status": "APPLIED",
+  "backup_scope": ".local/state/pi-node24-switch/node24-extension-followup-04470d85-3a99-47e3-b356-ce96e77de0dd"
+}

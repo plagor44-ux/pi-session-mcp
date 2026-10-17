@@ -173,6 +173,7 @@ Contract and design:
 Maintain:
 
 - [Acceptance](docs/acceptance.md)
+- [Synthetic profile evaluation](docs/evaluation/README.md): current results, provider-free harness and gated live plan
 - [Maintenance roadmap](docs/roadmap.md)
 - [Post-0.8.1 audit and backlog snapshot](docs/reviews/2026-10-13-post-0.8.1-audit.md)
 - [Releasing](docs/releasing.md)

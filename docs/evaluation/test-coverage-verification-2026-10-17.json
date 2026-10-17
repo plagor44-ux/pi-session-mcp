@@ -1,0 +1,31 @@
+{
+  "kind": "coverage-documentation-verification",
+  "verified_at": "2026-10-17T08:49:06.954Z",
+  "source_unchanged": true,
+  "prior_live_evidence_unchanged": true,
+  "register_evidence_hashes": "PASS",
+  "live_empty_extension_and_skill_selections": "PASS",
+  "relative_document_links": "PASS",
+  "checked_links": 26,
+  "test_references": "PASS",
+  "private_marker_scan": "PASS",
+  "additional_live_starts": 0,
+  "register": {
+    "path": "docs/evaluation/test-coverage-2026-10-17.json",
+    "hash": "sha256:c8627abb3a5f08e61243fefc250b7032035b0588877ce1571600b87b47770108"
+  },
+  "documents": [
+    {
+      "path": "docs/evaluation/2026-10-17-test-coverage.md",
+      "hash": "sha256:914d1b6cd3084a79a554980e8b48f44ee5482623b0b72a4bfab9c9cdfa8a784d"
+    },
+    {
+      "path": "docs/evaluation/2026-10-17-live-screening.md",
+      "hash": "sha256:0ab4d24d6824f4580012fea745955e2b6aa731ed27fe84557756699aba9a5ebe"
+    },
+    {
+      "path": "docs/evaluation/profile-evaluation.md",
+      "hash": "sha256:5874f9e245c497bc11ecb6034d9521b5ab42992ea3777467991c4b36d800d3a1"
+    }
+  ]
+}

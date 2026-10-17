@@ -1,0 +1,108 @@
+{
+  "kind": "extension-dossier-integrity",
+  "created_at": "2026-10-17T09:07:30.401Z",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:18f6b4a76f4cddb426d6554b4a2fce76f14114a125b46b099a1ebf7e2d5a59ea"
+    },
+    {
+      "path": "checks.json",
+      "hash": "sha256:7c743745107a48574dbc12db1e391d632ef35af1e94f45f0216e6bd5f08f54c2"
+    },
+    {
+      "path": "cursor-static-evidence.json",
+      "hash": "sha256:05a154baae355bd88464524eb24f54fcd786d1fbaf96d24eb8c197c162662eb8"
+    },
+    {
+      "path": "installed-artifact-comparison.json",
+      "hash": "sha256:a8b6f80c3250d324dd6b5f37d24040ce604b5021eecd5e649de142cba091d49a"
+    },
+    {
+      "path": "installed-packages.json",
+      "hash": "sha256:585a204dae45fce820b810621ee588796c6d6e096c7dbfb64521841e5828007d"
+    },
+    {
+      "path": "navigation-cursor-registry.json",
+      "hash": "sha256:777029a04795462ce94255de9c73be4d2c4278eaa1c3a380726cc5269b29cd05"
+    },
+    {
+      "path": "navigation-static-evidence.json",
+      "hash": "sha256:1abead2989f69245308065c34fca4b6f5ebb7d0c10ae1aacb2a96bba23ef76de"
+    },
+    {
+      "path": "openwiki-headless-bindings.json",
+      "hash": "sha256:afc0e32154842608caf5e069ffbf366ef4f0a48deb6fb8a2fad3eae0dbeb152d"
+    },
+    {
+      "path": "openwiki-headless-cleanup.json",
+      "hash": "sha256:7671a2d12e2ed291e9f751a27b812d57225eebfefe854c2e7d563bc47bf551f1"
+    },
+    {
+      "path": "openwiki-headless-probe.mjs",
+      "hash": "sha256:14f7c859f347a85fef34b587f21dea508339e3f318153a9720a9e2b2f1cd96b7"
+    },
+    {
+      "path": "openwiki-headless-reproduction.json",
+      "hash": "sha256:0df42c4a3af8a8d0176359e2a5e49fe2e538295fda50384c2602ab58e953fe8f"
+    },
+    {
+      "path": "openwiki-headless-result.json",
+      "hash": "sha256:43098de8b7795ec9d120a4441f5f9be8eeb7d105a9efc029846671a92c8a3132"
+    },
+    {
+      "path": "permission-cache-artifact-verification.json",
+      "hash": "sha256:52f48cb704516f64625494aac285bf03e2b427a5ee0ae4013eacc811ed2593ad"
+    },
+    {
+      "path": "permission-cache-evidence.json",
+      "hash": "sha256:d4c980b6de9dcb07a7e89c05bae211a4e137004302db4f993ac2c6031c99de1e"
+    },
+    {
+      "path": "permission-cache-report.md",
+      "hash": "sha256:36d8356db266b84f7986c9aaf26bb750b0e1dc40186ed75b0e2fda657e2a1253"
+    },
+    {
+      "path": "resolver-gates.json",
+      "hash": "sha256:c25c165aaf1d704ace6cc03a860e23e22d56cb5a3b7b772a8d29f1724413d6ea"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:8b9180939cd639950de987f185a3caa81f22a358bfbfdfa11cb22b9a22ec7d5c"
+    },
+    {
+      "path": "run-openwiki-headless-probe.mjs",
+      "hash": "sha256:f11602228306ce6556b87ac9a437d8d4e31638461c96b87f7e84df0e04ab1d4c"
+    },
+    {
+      "path": "summary.json",
+      "hash": "sha256:5833fcc28ca711e43ae9a086d3d8870a5b08ab5878b5731f34b4af15c258c014"
+    },
+    {
+      "path": "web-openwiki-artifacts.json",
+      "hash": "sha256:ecfaeb8d83ecd15b123fd4312a19fe13dbe786b8e3a57ad5d4c8113df3172b77"
+    },
+    {
+      "path": "web-openwiki-evidence.json",
+      "hash": "sha256:b3f594c9356ecc069d5aae153f818720af047bd2ae685a34236a0b23ad66f3af"
+    },
+    {
+      "path": "web-openwiki-report.md",
+      "hash": "sha256:1ab296eea8357684491ced997e51a7ca7de7c2c9ad29ee45c75c875ae80f9d35",
+      "original_hash": "sha256:45f256880a3cf466d92f9dbe23b801f322dee46392458bccdad5429739f1154d"
+    },
+    {
+      "path": "publication-export.json",
+      "hash": "sha256:4d73fab398c500c429f6bfe403a404d3bb8fe925a55432b87afc86c75e39b355"
+    }
+  ],
+  "publication_export": {
+    "record": "publication-export.json",
+    "original_integrity_index_sha256": "sha256:e7fee562680eca6224420939fd6faeb1b6dd8112076f516dc5de3c428a32d71c",
+    "exported_at": "2026-10-17T15:49:24.588367+00:00"
+  }
+}

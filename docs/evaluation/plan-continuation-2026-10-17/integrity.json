@@ -1,0 +1,58 @@
+{
+  "kind": "evaluation-continuation-dossier-integrity",
+  "created_at": "2026-10-17T12:04:43.300988+00:00",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:a4524626851448908b8d21ecbd7248c9956ce830406e81c45fda46c8eb6fffc5"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:b0f9956f3914d82e7686f3b2d408061469a7e92a7b334a02cc9b48b5d50a9868"
+    },
+    {
+      "path": "budget.proposed.json",
+      "hash": "sha256:808bea93dd06971cd2d6d653472a379301349afe39583653ddb43875b7d39d73"
+    },
+    {
+      "path": "checks.json",
+      "hash": "sha256:e41773722a5e72adfcd76c8f1122ed1dd9d9f64564db1847eaf48f165fafbaae"
+    },
+    {
+      "path": "inventory.json",
+      "hash": "sha256:f3ee345dbf246665c5499522105399f3069ea897149921122f65f15a9a2eb97b"
+    },
+    {
+      "path": "manifest.proposed.json",
+      "hash": "sha256:3ebf764ada3639df425462ff792e9b77698fda99ef197cbb278aa2907afd1ac1"
+    },
+    {
+      "path": "next-stage-ledger.json",
+      "hash": "sha256:0cfcfcd8ac84bb1e7833e033f820a2531dc5053798964318df82c7ca7ee27357"
+    },
+    {
+      "path": "prepare-rescreen.mjs",
+      "hash": "sha256:9c9f8d7d0fc2814fa9b8843cc054e2491d96d593e4610813d4675e0239655f5e"
+    },
+    {
+      "path": "prior-integrity.json",
+      "hash": "sha256:2785458cb5136440b4a90a32d02bfb66f06b8515f2ae28b4945fe12f6d619f86"
+    },
+    {
+      "path": "proposal-validation.json",
+      "hash": "sha256:2ea6b70e6f02ad81815af1b0b14de6f595114b5606ca9c80a1dc6357b301daf2"
+    },
+    {
+      "path": "receipt-contract-update.patch",
+      "hash": "sha256:1aa5a86e504318f356cf98ca6b5d13a992b1b55d87ba1d961f52b73b717649ba"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:4492ed1c6ff1662ec1676dd81ede633aff9f88f999a63c581129b2d3552f71f7"
+    },
+    {
+      "path": "source-delta.json",
+      "hash": "sha256:1be72b5a6be68c720c00713c174a083fb98fad2b1dd5b7c64d421b350fa006e8"
+    }
+  ]
+}

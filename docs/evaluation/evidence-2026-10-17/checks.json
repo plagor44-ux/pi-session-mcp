@@ -1,0 +1,103 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "final-provider-free-checks",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160",
+  "environment": {
+    "platform": "linux",
+    "architecture": "x64",
+    "node": "22.23.2",
+    "npm": "12.2.0",
+    "package": "0.8.3",
+    "pi_sdk": "1.2.0"
+  },
+  "checks": [
+    {
+      "command": "npm ci",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run build:cli",
+      "exit_code": 0
+    },
+    {
+      "command": "npm run build",
+      "exit_code": 0
+    },
+    {
+      "command": "NODE_OPTIONS=--unhandled-rejections=strict npm test -- --maxWorkers=2 --reporter=json",
+      "exit_code": 0,
+      "passed": 1459,
+      "skipped": 6,
+      "failed": 0,
+      "source_unchanged": true
+    },
+    {
+      "command": "npm run eval:profiles -- --offline --output eval/results/final-offline-20261017",
+      "exit_code": 0,
+      "passed": 308,
+      "failed": 0
+    },
+    {
+      "command": "npm run eval:profiles -- --plan",
+      "exit_code": 0,
+      "sessions_started": 0
+    },
+    {
+      "command": "npm run eval:profiles -- --live",
+      "exit_code": 1,
+      "expected_rejection": true,
+      "candidate_sessions_started": 0
+    },
+    {
+      "command": "npm run eval:schemas -- --check",
+      "exit_code": 0
+    },
+    {
+      "command": "npm audit",
+      "exit_code": 0,
+      "vulnerabilities": 0,
+      "scope": "unchanged root dependency lock"
+    },
+    {
+      "command": "npm audit --omit=dev",
+      "exit_code": 0,
+      "vulnerabilities": 0,
+      "scope": "unchanged root dependency lock"
+    },
+    {
+      "command": "npm audit --prefix eval/fixtures/T3/tooling",
+      "exit_code": 0,
+      "vulnerabilities": 0
+    },
+    {
+      "command": "npx vitest run test/setup-skills-recovery.test.ts",
+      "exit_code": 0,
+      "passed": 31,
+      "reason": "isolated rerun after default-parallel lock failure"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0
+    }
+  ],
+  "live_candidate_runs_started": 0,
+  "live_candidate_provider_calls": 0,
+  "cost_usd": null,
+  "usage": null,
+  "cost_reason": "not-exposed-by-mcp; no live candidate run",
+  "default_parallel_failure": "full-attempt-default.json",
+  "development_collection_failure": "development-collection-failure.json",
+  "ui_reference": "ui-reference/result.json",
+  "evidence_integrity": {
+    "source_bindings": "PASS",
+    "blocked_live_records": "PASS",
+    "screenshot_hashes": "PASS",
+    "document_links": "PASS",
+    "secret_or_absolute_path_marker_matches": 0
+  }
+}

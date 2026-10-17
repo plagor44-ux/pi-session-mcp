@@ -1,0 +1,117 @@
+{
+  "kind": "evaluation-publication-provider-free-verification",
+  "status": "PASS",
+  "recorded_at": "2026-10-17T15:51:12.258293+00:00",
+  "node": "24.22.0",
+  "base_commit_at_verification": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:922f78c2f4a2f85673606fb45a3776fa5246da47c1f7a7862fd87fe08727bbfe",
+  "plan_source_matches_final_source": true,
+  "plan_approved": false,
+  "new_external_evaluation_model_starts": 0,
+  "checks": [
+    {
+      "check": "typecheck",
+      "command": "npm run typecheck",
+      "started_at": "2026-10-17T15:48:24.466085+00:00",
+      "ended_at": "2026-10-17T15:48:25.281800+00:00",
+      "seconds": 0.816,
+      "exit_code": 0,
+      "log_sha256": "60a28c7e1de55c50e6aea0f8cb5c76dc212cdcbee09c43bcc6d8ad3141d3c0a6"
+    },
+    {
+      "check": "build-cli",
+      "command": "npm run build:cli",
+      "started_at": "2026-10-17T15:48:25.282037+00:00",
+      "ended_at": "2026-10-17T15:48:25.674514+00:00",
+      "seconds": 0.392,
+      "exit_code": 0,
+      "log_sha256": "5671644b334db36e7f462506ec2f89f12e4a51fe795afa2b9dbfc71350561ab8"
+    },
+    {
+      "check": "build",
+      "command": "npm run build",
+      "started_at": "2026-10-17T15:48:25.674744+00:00",
+      "ended_at": "2026-10-17T15:48:26.138291+00:00",
+      "seconds": 0.464,
+      "exit_code": 0,
+      "log_sha256": "d14756b62e2e0ac20fe41deebc125b56f99c658d834c8afe76ecc42e748fe2df"
+    },
+    {
+      "check": "schemas",
+      "command": "npm run eval:schemas -- --check",
+      "started_at": "2026-10-17T15:48:26.138531+00:00",
+      "ended_at": "2026-10-17T15:48:26.748727+00:00",
+      "seconds": 0.61,
+      "exit_code": 0,
+      "log_sha256": "17035341612f85467126cbbef228e9c173b899afc401ff3e266c51419c960ab5"
+    },
+    {
+      "check": "plan",
+      "command": "npm run eval:profiles -- --plan",
+      "started_at": "2026-10-17T15:48:26.748954+00:00",
+      "ended_at": "2026-10-17T15:48:28.034451+00:00",
+      "seconds": 1.286,
+      "exit_code": 0,
+      "log_sha256": "33fbbc0873485b89ee221e580520ee648cc084d7494d3036ab4b3e6afd99d999"
+    },
+    {
+      "check": "offline",
+      "command": "npm run eval:profiles -- --offline",
+      "started_at": "2026-10-17T15:48:28.034710+00:00",
+      "ended_at": "2026-10-17T15:48:53.723848+00:00",
+      "seconds": 25.689,
+      "exit_code": 0,
+      "log_sha256": "d20a2ce8e065267a5af923ba66058085655abfea615ca2c2857565f5d6607f33"
+    },
+    {
+      "check": "full-tests",
+      "command": "npm test -- --maxWorkers=2",
+      "started_at": "2026-10-17T15:48:53.724080+00:00",
+      "ended_at": "2026-10-17T15:50:31.535700+00:00",
+      "seconds": 97.812,
+      "exit_code": 0,
+      "log_sha256": "93cd5509c029a6d6dcaf28f033866b2021c65cf1ea1bb556b41edd0835c60b43"
+    }
+  ],
+  "full_suite": {
+    "passed": 1459,
+    "skipped": 6,
+    "total": 1465,
+    "failed": 0,
+    "files": 60
+  },
+  "offline_suite": {
+    "numTotalTests": 308,
+    "numPassedTests": 308,
+    "numFailedTests": 0,
+    "numPendingTests": 0,
+    "success": true
+  },
+  "node22_compatibility": {
+    "node": "22.23.2",
+    "typescript_no_emit_exit_code": 0,
+    "oracle_tests_passed": 8,
+    "oracle_tests_failed": 0,
+    "raw_oracle_report_sha256": "986260eafe1b808ede7cb92aa873fb0efbf1bbea79bdb35eacc04e5b0a45b757",
+    "intermediate_failure": "A transient implementation revision had TS2339 in an unreachable Buffer branch. The branch was removed before the final checks; this was a source type error, not a Node runtime incompatibility.",
+    "typescript_stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "npm_audit": {
+    "exit_code": 0,
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "raw_output_sha256": "687369085f8fab131c8f37ef88efa248622d9b50dd5ccee8562495f1512c1caa"
+  },
+  "production_src_changed": false,
+  "dependency_pins_changed": false,
+  "release_version_changed": false,
+  "raw_logs_public": false,
+  "historical_live_replayed": false,
+  "test_node_options": "--unhandled-rejections=strict"
+}

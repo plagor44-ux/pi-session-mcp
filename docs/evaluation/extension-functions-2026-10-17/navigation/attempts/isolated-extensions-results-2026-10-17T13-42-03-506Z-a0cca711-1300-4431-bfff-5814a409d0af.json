@@ -1,0 +1,120 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "node24-isolated-extension-headless-followup",
+  "node_version": "24.22.0",
+  "created_at": "2026-10-17T13:42:03.506Z",
+  "package_count": 1,
+  "profile_count_per_package": 1,
+  "prompt_or_provider_calls": 0,
+  "candidate_tool_invocations": 0,
+  "cache_warming": "disabled in isolated settings and environment",
+  "installation": "preinstalled exact pins; runner does not install or modify candidate packages",
+  "results": [
+    {
+      "kind": "node24-isolated-extension-headless-probe",
+      "status": "BLOCKED",
+      "package": "context-mode@1.0.169",
+      "permission_profile": "coding",
+      "failure_code": "OFFLINE_CHILD_PROCESS_DENIED",
+      "failure_detail": "offline_child_process_denied",
+      "failure_stage": null,
+      "diagnostic_codes": [],
+      "provider_calls": 0,
+      "network_attempts_denied": 0,
+      "child_process_attempts_denied": 8,
+      "allowed_metadata_commands": [
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "rev-parse",
+            "--show-toplevel"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        },
+        {
+          "method": "execFileSync",
+          "executable_basename": "git",
+          "argv_pattern": [
+            "-C",
+            "<owned-fixture>",
+            "worktree",
+            "list",
+            "--porcelain"
+          ],
+          "timeout_ms": 1500,
+          "cwd": "owned_fixture",
+          "result": "completed"
+        },
+        {
+          "method": "spawn",
+          "executable_basename": "node-v24",
+          "argv_pattern": [
+            "<owned-context-mode>/server.bundle.mjs"
+          ],
+          "cwd": "owned_fixture",
+          "result": "started"
+        }
+      ],
+      "child_process_diagnostics": [
+        {
+          "method": "execSync",
+          "executable_basename": "command -v go",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "build/runtime.js:38"
+        },
+        {
+          "method": "execSync",
+          "executable_basename": "command -v rustc",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "build/runtime.js:38"
+        },
+        {
+          "method": "execSync",
+          "executable_basename": "command -v php",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "build/runtime.js:38"
+        },
+        {
+          "method": "execSync",
+          "executable_basename": "command -v perl",
+          "argv_pattern": [],
+          "candidate_relative_stack_frame": "build/runtime.js:38"
+        }
+      ],
+      "function_check": {
+        "status": "PASS",
+        "function": "tool_result capture",
+        "hook_invocations": 1,
+        "candidate_tools_invoked": 0,
+        "behavior": "synthetic AGENTS.md read result reached the real SDK event handler and was persisted with fixture project attribution",
+        "canary_persisted": true,
+        "fixture_project_scope_attribution_verified": true,
+        "retrieval_or_compression_tested": false,
+        "sdk_event_modifications": false,
+        "mcp_bridge_status": "BLOCKED",
+        "reason_code": "ctx_search_not_registered_after_before_agent_start",
+        "before_agent_start_emitted": true,
+        "context_tools_registered": []
+      },
+      "limitation": "Probe failed before a qualified function result; private error text and paths are omitted.",
+      "sanitized_stderr_excerpt": "",
+      "process": {
+        "exit_code": 1,
+        "signal": null,
+        "timeout": false,
+        "spawn_error": false,
+        "output_limit_exceeded": false
+      },
+      "process_group_cleanup": "PASS",
+      "max_observed_group_members": 1,
+      "evidence_id": "0c70f94a-2d00-4d55-a5c8-05a5633c7f57",
+      "isolated_scope_removed": true
+    }
+  ],
+  "claims_limit": "Only the specific synthetic function/event checks in function_check are covered. No prompts, model/provider calls, UI behavior, real-world retrieval quality, or broader package efficacy claim."
+}

@@ -30,6 +30,10 @@ jobs:
         env:
           NODE_OPTIONS: --unhandled-rejections=strict
       - run: npm run build
+      - name: Validate provider-free evaluation plan and schemas
+        run: |
+          npm run eval:profiles -- --plan > /dev/null
+          npm run eval:schemas -- --check
       # Installs the packed package without our lockfile, the way a consumer gets it,
       # so transitive ranges resolve fresh (#78). An early warning, not acceptance.
       - name: Pack the built package

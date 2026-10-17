@@ -1,0 +1,138 @@
+{
+  "final": {
+    "web": "extension-functions-bridges-d582757d-2859-4683-8310-ec158bf6d551",
+    "openwiki": "extension-functions-bridges-6fbb576c-d87d-478d-9c05-4b5ef3563598"
+  },
+  "attempts": [
+    {
+      "scope_id": "extension-functions-bridges-03dc1dad-9959-40df-b51c-7820991bf7e3",
+      "package": "openwiki@0.7.2",
+      "status": "PASS",
+      "failure": null,
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-03dc1dad-9959-40df-b51c-7820991bf7e3.json",
+      "sha256": "a01a785c500b9eba2ea4d216075326aa655a375a5e5878aaf59e55aec755d38f"
+    },
+    {
+      "scope_id": "extension-functions-bridges-0c43651e-8c7d-4c7c-aa9b-5b5761141e3b",
+      "package": "pi-web-access@0.41.0",
+      "status": "FAIL",
+      "failure": {
+        "case": "standalone-raw-fetch-owned-http",
+        "code": "ERR_ASSERTION"
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-0c43651e-8c7d-4c7c-aa9b-5b5761141e3b.json",
+      "sha256": "30b04a781d3931279e1ac6f2c44626952de91c788cc7d53756daf6413adf4e24"
+    },
+    {
+      "scope_id": "extension-functions-bridges-51247b13-87c1-4ec6-886b-82d922b0585a",
+      "package": "pi-web-access@0.41.0",
+      "status": "PASS",
+      "failure": null,
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-51247b13-87c1-4ec6-886b-82d922b0585a.json",
+      "sha256": "4a33a0c38f51e7b84e759e679a95790fa34e68b84b29ae6b36e21828e260157b"
+    },
+    {
+      "scope_id": "extension-functions-bridges-5337f6bf-503f-4c45-aac0-43b142385a87",
+      "package": "openwiki@0.7.2",
+      "status": "FAIL",
+      "failure": {
+        "case": "begin-owned-repository",
+        "code": "McpError",
+        "message": "MCP error -32000: Connection closed"
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-5337f6bf-503f-4c45-aac0-43b142385a87.json",
+      "sha256": "5aa507800f7f26faef182f7d9562a0047a34292f007f57597116e8dfc543e14c"
+    },
+    {
+      "scope_id": "extension-functions-bridges-60285194-b1d1-4335-b616-6614941585df",
+      "package": "openwiki@0.7.2",
+      "status": "FAIL",
+      "failure": {
+        "case": "begin-owned-repository",
+        "code": "McpError"
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-60285194-b1d1-4335-b616-6614941585df.json",
+      "sha256": "591277883a0c9915bec8d6e3b0830425c30865f20e0b682d8c72c1ab8c90f57b"
+    },
+    {
+      "scope_id": "extension-functions-bridges-6d2fbaa9-a720-4582-9be1-a95f4764786d",
+      "package": "pi-web-access@0.41.0",
+      "status": "PASS",
+      "failure": null,
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-6d2fbaa9-a720-4582-9be1-a95f4764786d.json",
+      "sha256": "3ceccde973bf339eaaa1830ca3e9ef1e6b0662cae5a56f47493c7a8a08646dbc"
+    },
+    {
+      "scope_id": "extension-functions-bridges-6fbb576c-d87d-478d-9c05-4b5ef3563598",
+      "package": "openwiki@0.7.2",
+      "status": "PASS",
+      "failure": null,
+      "final": true,
+      "receipt": "attempts/extension-functions-bridges-6fbb576c-d87d-478d-9c05-4b5ef3563598.json",
+      "sha256": "b37edf16efaa907eb8ff6236072f0ce9297c45978e3c46d36d3afd90cf139ea9"
+    },
+    {
+      "scope_id": "extension-functions-bridges-730926d1-ef20-4b2d-ab74-7e542f1065e9",
+      "package": "openwiki@0.7.2",
+      "status": "FAIL",
+      "failure": {
+        "case": "begin-owned-repository",
+        "code": "Error",
+        "message": "OpenWiki MCP operation failed."
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-730926d1-ef20-4b2d-ab74-7e542f1065e9.json",
+      "sha256": "46aeab08c88ca395914ccc6e95f1cec3f34d3851ff927a88a0d29e4275751e55"
+    },
+    {
+      "scope_id": "extension-functions-bridges-a1baa47a-5bbe-4a16-ade8-a350599eb911",
+      "package": "openwiki@0.7.2",
+      "status": "FAIL",
+      "failure": {
+        "case": "begin-owned-repository",
+        "code": "McpError",
+        "message": "MCP error -32000: Connection closed"
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-a1baa47a-5bbe-4a16-ade8-a350599eb911.json",
+      "sha256": "a770f49d1a60599e282bebd59ebebb80e948ccaf07df16f7e8940120a66b2a70"
+    },
+    {
+      "scope_id": "extension-functions-bridges-bc1d69c7-784f-4ddb-9335-0d905330d568",
+      "package": "openwiki@0.7.2",
+      "status": "PASS",
+      "failure": null,
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-bc1d69c7-784f-4ddb-9335-0d905330d568.json",
+      "sha256": "116165656608a1123f8c482b1ca107759b45c07a4c0c95068bdddb2b95463679"
+    },
+    {
+      "scope_id": "extension-functions-bridges-d582757d-2859-4683-8310-ec158bf6d551",
+      "package": "pi-web-access@0.41.0",
+      "status": "PASS",
+      "failure": null,
+      "final": true,
+      "receipt": "attempts/extension-functions-bridges-d582757d-2859-4683-8310-ec158bf6d551.json",
+      "sha256": "637ebb25309d075bf197bb07c5ee932398a74b30c0da37b4236c42de48b85620"
+    },
+    {
+      "scope_id": "extension-functions-bridges-e6533a23-4933-4d6e-a250-b1b27f010d18",
+      "package": "openwiki@0.7.2",
+      "status": "FAIL",
+      "failure": {
+        "case": "next-page-queued",
+        "code": "ERR_ASSERTION",
+        "message": "Expected values to be strictly equal:\n+ actual - expected\n\n+ '/openwiki/quickstart.md'\n- 'openwiki/quickstart.md'\n"
+      },
+      "final": false,
+      "receipt": "attempts/extension-functions-bridges-e6533a23-4933-4d6e-a250-b1b27f010d18.json",
+      "sha256": "a68a9d6a232ea03320ab25493d17421cff4bf8b49e31ab7f264caccd4829c75f"
+    }
+  ]
+}

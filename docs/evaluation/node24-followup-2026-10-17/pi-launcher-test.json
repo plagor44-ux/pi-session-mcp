@@ -1,0 +1,13 @@
+{
+  "kind": "actual-pi-launcher-runtime-probe",
+  "invocation": "pi --version",
+  "exit_code": 0,
+  "pi_version": "1.1.0",
+  "runtime": {
+    "node": "24.22.0",
+    "expected_interpreter": true,
+    "child_path_prefers_runtime": true
+  },
+  "stderr_bytes_discarded": 0,
+  "provider_calls": 0
+}

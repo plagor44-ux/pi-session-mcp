@@ -1,0 +1,45 @@
+{
+  "schema": "pi-cursor-activation-attempt.v1",
+  "attempt_id": "0ee0df5a-299f-451c-96e3-5abcf8bfa999",
+  "case": "bridge-disabled",
+  "node": "24.22.0",
+  "package": "pi-cursor-sdk@0.5.3",
+  "outcome": "PASS",
+  "exit_code": 0,
+  "checks": [
+    {
+      "id": "public_cursor_pi_manifest_entrypoint_loaded",
+      "result": "PASS"
+    },
+    {
+      "id": "cursor_activate_skill_registered_by_public_entrypoint",
+      "result": "PASS"
+    },
+    {
+      "id": "no_provider_turn_started",
+      "result": "PASS"
+    },
+    {
+      "id": "provider_discovery_offline",
+      "result": "PASS"
+    },
+    {
+      "id": "disabled_bridge_keeps_activation_tool_inactive",
+      "result": "PASS"
+    },
+    {
+      "id": "disabled_bridge_does_not_set_active_tools",
+      "result": "PASS"
+    },
+    {
+      "id": "no_cursor_agent_model_or_cloud_calls",
+      "result": "PASS"
+    }
+  ],
+  "network_attempts": 0,
+  "denied_child_process_attempts": 0,
+  "cleanup": "PASS",
+  "process_group_empty_after_close": true,
+  "component": "cursor_activate_skill registration, activation and resource enumeration only",
+  "stdout_sha256": "a608997ab6bed02f15f1c0cf3ae698535eaa4a523424c972d568e4b02e4e194f"
+}

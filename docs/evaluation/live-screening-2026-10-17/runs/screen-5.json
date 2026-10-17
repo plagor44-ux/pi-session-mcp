@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "stage": "screening",
+  "run_id": "screen-5",
+  "task_id": "T1",
+  "task_hash": "sha256:7179f3bc24bd7297e7ef54bf238c45d4f00314de59ce181e23a8d7cf85205081",
+  "repetition": 1,
+  "scope_id": "pi-profile-eval-UdT51j",
+  "fixture_revision": "sha256:579d5064e6529e3a08cbd7f3ecf9636f38ee138d17ee9b89d25fad81b8b69651",
+  "server_commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+  "source_digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160",
+  "package_version": "0.8.3",
+  "sdk_version": "1.2.0",
+  "client_version": "profile-evaluation/1.0.0",
+  "profile_id": "P1",
+  "view": "scout",
+  "profile_digest": "sha256:703f56b19905e99d1150bbe6644db50a6a9d656ecd38444e0ce606fe752830c3",
+  "permission_profile": "read-only",
+  "skills": [],
+  "extensions": [],
+  "requested_route": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "effort": "high",
+    "auth_type": "api-key",
+    "billing_type": "api",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "resolved_route": {
+    "provider": "deepseek",
+    "model": "deepseek-flash",
+    "effort": "high",
+    "auth_type": "api-key",
+    "billing_type": "api",
+    "data_path": "synthetic-fixture-to-selected-provider"
+  },
+  "model_revision": null,
+  "started_at": "2026-10-17T08:14:26.262Z",
+  "ended_at": "2026-10-17T08:14:34.236Z",
+  "terminal_status": "completed",
+  "harness_status": "PASS",
+  "task_status": "FAIL",
+  "boundary_status": "PASS",
+  "recommendation": "rejected-for-scope",
+  "checks": [
+    {
+      "id": "transport-route-binding",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "session-cleanup",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "diff-gate",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "api-data-flow",
+      "status": "FAIL",
+      "exit_code": 1,
+      "reason": "Receipt must cite the actual ordered route/service/data path and only defined symbols."
+    },
+    {
+      "id": "stale-doc-contradiction",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "id": "observed-process-cleanup",
+      "status": "PASS",
+      "exit_code": null
+    }
+  ],
+  "blockers": [
+    "task_not_accepted"
+  ],
+  "artifacts": [
+    {
+      "path": "screen-5.diagnostic.json",
+      "hash": "sha256:c6d2fece66cae8b83c07fbc4138bb5a36ec76b9525160bb69ef4d0791bd7876a"
+    }
+  ],
+  "expected_diff_scope": [],
+  "observed_diff_scope": [],
+  "duration_ms": 7974,
+  "tool_errors": null,
+  "manual_rework": null,
+  "controller_calls": 28,
+  "cost_usd": null,
+  "usage": null,
+  "cost_source": "not-exposed-by-mcp",
+  "metrics": {}
+}

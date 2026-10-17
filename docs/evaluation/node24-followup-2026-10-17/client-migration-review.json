@@ -1,0 +1,20 @@
+{
+  "kind": "independent-read-only-pre-apply-review",
+  "status": "PASS",
+  "reviewed_at": "2026-10-17T09:29:47.742292+00:00",
+  "artifact": "docs/evaluation/node24-followup-2026-10-17/migrate-client-node.mjs",
+  "artifact_hash": "sha256:b5d58038d774221de0fd335ae519095c7e6ce3d5884c539ca29062d05d4799d2",
+  "blocking_findings": [],
+  "previous_findings_resolved": [
+    "Durable backups and journal before configuration mutations",
+    "Post-staging configuration byte and mode check before rename",
+    "Sanitized stable error codes"
+  ],
+  "limitations": [
+    "Read-only source review; helper not executed by reviewer",
+    "Staging leftovers fail closed and may require manual inspection",
+    "Concurrent client writers do not share the ownership lock"
+  ],
+  "reviewer_mutations": 0,
+  "reviewer_provider_calls": 0
+}

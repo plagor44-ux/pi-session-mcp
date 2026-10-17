@@ -1,0 +1,24 @@
+{
+  "kind": "actual-installed-mcp-launcher-node24-handshake",
+  "status": "PASS",
+  "runtime": {
+    "node": "24.22.0",
+    "expected_interpreter": true,
+    "child_path_prefers_runtime": true
+  },
+  "tools": [
+    "pi_capabilities_get",
+    "pi_session_start",
+    "pi_session_list",
+    "pi_session_get",
+    "pi_session_prompt",
+    "pi_session_abort",
+    "pi_session_close",
+    "pi_turn_get"
+  ],
+  "capabilities": "PASS",
+  "session_starts": 0,
+  "provider_calls": 0,
+  "stderr_bytes_discarded": 0,
+  "observed_process_cleanup": "PASS"
+}

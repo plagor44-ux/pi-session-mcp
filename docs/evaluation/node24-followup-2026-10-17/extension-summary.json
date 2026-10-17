@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0.0",
+  "kind": "extension-evaluation-final-component-matrix",
+  "completed_at": "2026-10-17",
+  "runtime_context": {
+    "isolated_extension_followup": "Node 24.22.0, Pi coding-agent 1.2.0, Pi TUI 1.2.0, TypeBox 1.3.27",
+    "cursor_attempt_4": "Node 24.22.0",
+    "openwiki_prior_component_test": "Node 22.23.2",
+    "new_provider_or_model_calls": 0
+  },
+  "isolated_component_matrix": [
+    {
+      "package": "pi-lens@4.4.3",
+      "read_only": "PASS",
+      "coding": "PASS",
+      "evidence": [
+        { "file": "isolated-extensions-results-2026-10-17T09-23-42-291Z-f4af1e12-844e-4b2d-a090-9068e7626dd5.json", "sha256": "e14a0e901e17fe97d80e2dc399b6e778da1995e61f9a5cbd0e440f97df83a255" },
+        { "file": "isolated-extensions-results-2026-10-17T09-22-05-375Z-16f5d77c-32a2-4d0a-905a-e080b392316f.json", "sha256": "f968512477e27c1a16866eb879de27a269b47cf3d4ba4b39126e05fa42f2f995" }
+      ],
+      "limits": "Read-only tools were the four adapter built-ins; coding active tools remained within the composed allowlist. Candidate tools were registered but never invoked."
+    },
+    {
+      "package": "context-mode@1.0.169",
+      "read_only": "PASS",
+      "coding": "PASS",
+      "evidence": [
+        { "file": "isolated-extensions-results-2026-10-17T09-25-15-842Z-798946f5-b9a5-4810-8a0c-35be6f40abb3.json", "sha256": "b5d99d87765528cd1af3558fa7121b5b2bf530fbc2c1cbf4c6c07af2e7febb03" },
+        { "file": "isolated-extensions-results-2026-10-17T09-25-19-099Z-89bd000d-bb51-4e3a-b713-51ff1ff4e38b.json", "sha256": "a310c804338b4d48c2236f42f70c2e476209e918bc6db9650280a1174e650a8a" }
+      ],
+      "limits": "One exact `git rev-parse --show-toplevel` metadata query against the fresh synthetic workspace was allowed using fixed /usr/bin/git, 1.5-second timeout, global/system config disabled, and optional locks off. It returned nonzero because the fixture is not a Git repository; the extension handled this. All other child-process and network attempts remained denied. No candidate tools registered."
+    },
+    {
+      "package": "pi-cache-optimizer@2.9.3",
+      "read_only": "PASS",
+      "coding": "PASS",
+      "evidence": [
+        { "file": "isolated-extensions-results-2026-10-17T09-22-22-485Z-1b08e134-667c-4416-8372-cb233939c48b.json", "sha256": "cef6e34007097c9741d377e081a078934a894190fd039363b1d08039ab35cb49" }
+      ],
+      "limits": "Cache warming was disabled; this did not test warming effectiveness or cache quality. Candidate tools were not invoked."
+    },
+    {
+      "package": "@gotgenes/pi-permission-system@40.3.0",
+      "read_only": "PASS",
+      "coding": "PASS",
+      "evidence": [
+        { "file": "isolated-extensions-results-2026-10-17T09-22-25-490Z-223fd05e-52f9-4996-88d7-3ec43a6ecdd9.json", "sha256": "f139734d7bf96730e20a77f6438d96f2f015681f2b87c8c9ff9e7943550bf1b2" }
+      ],
+      "limits": "Load, binding, profile allowlist and disposal only; no permission policy was exercised. No candidate tools registered."
+    }
+  ],
+  "other_component_checks": [
+    {
+      "package": "pi-cursor-sdk@0.5.3",
+      "status": "PASS_RESTRICTED_COMPONENT_ONLY",
+      "profiles": { "read_only": "PASS", "coding": "PASS" },
+      "evidence": { "file": "cursor-headless-result-attempt-4.json", "sha256": "923ec7e0aa836cc5b27a824d70c821c3d8c493bb6e1f1ea6a05c81f7120b1c12" },
+      "limits": "Node 24.22.0; production resolver and SDK load/bind, tool registration, active-tool selection and shutdown. Two child-process API calls were denied. No Cursor model/tool, cloud/MCP action or fixture model turn. Fresh temporary execution scope was removed."
+    },
+    {
+      "package": "openwiki@0.7.2",
+      "status": "PASS_RESTRICTED_COMPONENT_ONLY",
+      "profiles": { "read_only": "PASS", "coding": "PASS" },
+      "runtime": "Node 22.23.2",
+      "evidence": [
+        { "file": "../extension-audit-2026-10-17/openwiki-headless-result.json", "sha256": "43098de8b7795ec9d120a4441f5f9be8eeb7d105a9efc029846671a92c8a3132" },
+        { "file": "../extension-audit-2026-10-17/openwiki-headless-reproduction.json", "sha256": "0df42c4a3af8a8d0176359e2a5e49fe2e538295fda50384c2602ab58e953fe8f" }
+      ],
+      "limits": "Provider-free registration/selection/shutdown with a local scripted fixture turn. No OpenWiki lifecycle tool, internal MCP child, writer mutation, retrieval, or quality check was run."
+    },
+    {
+      "package": "pi-web-access@0.41.0",
+      "status": "BLOCKED_RESOLVER",
+      "evidence": { "file": "../extension-audit-2026-10-17/resolver-gates.json", "sha256": "c25c165aaf1d704ace6cc03a860e23e22d56cb5a3b7b772a8d29f1724413d6ea" },
+      "reason": "The installed package declares a directory as its Pi extension entry; the actual resolver reported `extension_load_failed`. Its standalone MCP executable is a separate path and was not tested."
+    }
+  ],
+  "integrity": {
+    "isolated_final_receipts_expected": 8,
+    "isolated_final_receipts_hash_verified": 8,
+    "evidence_index": "isolated-extensions-evidence.json",
+    "evidence_index_json_valid": true
+  },
+  "repo_cwd_artifact_check": {
+    "scope": "Read-only bounded filename scan to depth 3 for Pi-Lens-named paths, .pi, .pi-* and lens-cache patterns in the repository after the superseded pi-lens diagnostic used repository cwd.",
+    "result": "No Pi-Lens-named artifact was found. `.pi-session-mcp-cli` was the only matching hidden Pi-related directory; its recorded mtime was 2026-10-17 09:00:49 +0200, before the 09:21:44 UTC diagnostic. No files were removed or modified during this check.",
+    "limitation": "This bounded scan does not establish a full before/after filesystem diff. The superseded probe invoked no candidate tool and had no provider/network calls."
+  },
+  "cross_cutting_limits": {
+    "new_model_calls": 0,
+    "new_provider_calls": 0,
+    "candidate_tool_calls": 0,
+    "network_attempts_observed_in_final_isolated_receipts": 0,
+    "production_configuration_changes_by_this_audit": 0,
+    "quality_or_efficacy_claims": "NOT_ESTABLISHED",
+    "javascript_process_network_guards": "Instrumentation only; not an OS sandbox."
+  }
+}

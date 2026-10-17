@@ -1,0 +1,21 @@
+{
+  "kind": "publication-verification-integrity",
+  "files": [
+    {
+      "path": "README.md",
+      "hash": "sha256:9373133a4217d651aba6756476e43705e952b27ba26e520aecb3a2ad831bfd48"
+    },
+    {
+      "path": "checks.json",
+      "hash": "sha256:499daea467ab7b5d372999e5a0caf4d0ef3a694a2185dc7d40d982c7f638073f"
+    },
+    {
+      "path": "publication-scan.json",
+      "hash": "sha256:9d49832118cdb39f2d02423bc3d0b79f979852298ba2b3a62e1c36423070e1d6"
+    },
+    {
+      "path": "review.json",
+      "hash": "sha256:7a2756a4fdbcb1ec115374b080a072e9af7116f99fa7d4df18cfdf36bf49f464"
+    }
+  ]
+}

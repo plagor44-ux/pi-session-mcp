@@ -1,0 +1,79 @@
+{
+  "kind": "actual-extension-functional-probe",
+  "package": "openwiki@0.7.2",
+  "node": "24.22.0",
+  "cases": [
+    {
+      "id": "pi-sdk-openwiki-bind",
+      "status": "PASS"
+    },
+    {
+      "id": "relative-root-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "begin-owned-repository",
+      "status": "PASS"
+    },
+    {
+      "id": "accept-and-repeat-canonical-plan",
+      "status": "PASS"
+    },
+    {
+      "id": "different-plan-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "next-page-queued",
+      "status": "PASS"
+    },
+    {
+      "id": "missing-page-submission-rejected",
+      "status": "PASS"
+    },
+    {
+      "id": "submit-grounded-written-page",
+      "status": "PASS"
+    },
+    {
+      "id": "queue-completion",
+      "status": "PASS"
+    },
+    {
+      "id": "finish-written-wiki",
+      "status": "PASS"
+    },
+    {
+      "id": "original-source-preserved",
+      "status": "PASS"
+    }
+  ],
+  "model_prompts_submitted": 0,
+  "provider_calls": 0,
+  "integration": "Actual registered Pi tool definitions -> real OpenWiki stdio MCP child -> synthetic repository writer lifecycle.",
+  "status": "PASS",
+  "cleanup": "PASS",
+  "guards": {
+    "network_allowed": 0,
+    "network_denied": 1,
+    "git_allowed": 14,
+    "children_allowed": 1,
+    "children_denied": 0
+  },
+  "diagnostics": [],
+  "limits": [
+    "No model prompt or paid provider request.",
+    "JavaScript network/child guards are instrumentation, not OS containment.",
+    "Only named synthetic function cases are qualified; model quality and production use remain unproven."
+  ],
+  "supervisor": {
+    "worker_exit_code": 0,
+    "worker_signal": null,
+    "timed_out": false,
+    "output_overflow": false,
+    "stderr_bytes_discarded": 0,
+    "process_group_empty": true,
+    "owned_scope_removed": true
+  },
+  "scope_id": "extension-functions-bridges-03dc1dad-9959-40df-b51c-7820991bf7e3"
+}

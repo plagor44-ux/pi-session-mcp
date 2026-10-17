@@ -1,0 +1,58 @@
+{
+  "schema": "pi-cursor-activation-evidence.v1",
+  "created_at": "2026-10-17T13:38:55.412Z",
+  "package": {
+    "name": "pi-cursor-sdk",
+    "version": "0.5.3",
+    "entry": "./dist/index.js",
+    "entry_sha256": "9fd42e8582599655b72878672f911f8b5fa4cf7ac251e4c2fe77fc303c3377c4"
+  },
+  "node": "24.22.0",
+  "scope": "eval/results/extension-functions-cursor-8169d843-a9e7-48f4-88b1-3a90e1592df1",
+  "status": "INCONCLUSIVE",
+  "attempts": [
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "104e378f-8f82-4ae9-bffc-7f1d52e00e74",
+      "case": "activation-and-resources",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "FAIL",
+      "process_group_empty_after_close": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@cursor/sdk' imported from <repo>/eval/results/extension-functions-cursor-8169d843-a9e7-48f4-88b1-3a90e1592df1/case-104e378f-8f82-4ae9-bffc-7f1d52e00e74/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-sdk-runtime.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/activation-and-resources-104e378f-8f82-4ae9-bffc-7f1d52e00e74.json",
+      "receipt_sha256": "07e72f4f01283a1a01c9bb80e65779bc44f248d0909daa7d6f1373d7efca1b45"
+    },
+    {
+      "schema": "pi-cursor-activation-attempt.v1",
+      "attempt_id": "6333425f-0b46-4ced-a272-3d48895ee853",
+      "case": "bridge-disabled",
+      "node": "24.22.0",
+      "package": "pi-cursor-sdk@0.5.3",
+      "outcome": "HARNESS_ERROR",
+      "exit_code": 1,
+      "checks": [],
+      "network_attempts": null,
+      "denied_child_process_attempts": null,
+      "cleanup": "FAIL",
+      "process_group_empty_after_close": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "diagnostic": "Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@cursor/sdk' imported from <repo>/eval/results/extension-functions-cursor-8169d843-a9e7-48f4-88b1-3a90e1592df1/case-6333425f-0b46-4ced-a272-3d48895ee853/home/.pi/agent/npm/node_modules/pi-cursor-sdk/dist/cursor-sdk-runtime.js |   code: 'ERR_MODULE_NOT_FOUND'",
+      "receipt": "attempts/bridge-disabled-6333425f-0b46-4ced-a272-3d48895ee853.json",
+      "receipt_sha256": "a8f03b1d0675b8ca4570e22b65bced8bcc21a410a0c29e1052ac9bab18c0fa8f"
+    }
+  ],
+  "cleanup": "FAIL",
+  "constraints": [
+    "real public package entrypoint",
+    "synthetic ExtensionAPI and ctx",
+    "no prompts or model/provider turns",
+    "no Cursor cloud/tool calls"
+  ]
+}

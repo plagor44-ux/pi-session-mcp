@@ -1,0 +1,44 @@
+{
+  "kind": "node24-provider-free-verification",
+  "verified_at": "2026-10-17T09:22:18.294Z",
+  "node": "24.22.0",
+  "source_binding": {
+    "commit": "406dae7e6b99aa5715960490e869bd3fc668cca2",
+    "digest": "sha256:686887d57899c2e55593bb7dd98b78be08ea0fc6c471a6dd4eab3298f890d160"
+  },
+  "source_unchanged": true,
+  "full_suite": {
+    "exit_code": 0,
+    "passed": 1459,
+    "failed": 0,
+    "skipped": 6,
+    "total": 1465,
+    "files": 60,
+    "command": "npm test -- --maxWorkers=2 --reporter=json",
+    "raw_result_hash": "sha256:a032b98a5d34ef1db38f5fd2c5a0f11dd018bccfac9fecec5f4f239ba06c9c35"
+  },
+  "standalone_offline": {
+    "exit_code": 0,
+    "harness_status": "PASS",
+    "summary": {
+      "numTotalTests": 308,
+      "numPassedTests": 308,
+      "numFailedTests": 0,
+      "numPendingTests": 0,
+      "success": true
+    },
+    "model_starts": 0,
+    "provider_calls": 0
+  },
+  "typecheck": {
+    "exit_code": 0
+  },
+  "build": {
+    "exit_code": 0
+  },
+  "build_cli": {
+    "exit_code": 0
+  },
+  "root_package_lock_changed": false,
+  "note": "Offline subset overlaps full suite. Raw tests remain in owned ignored scope; sanitized summary is archived."
+}

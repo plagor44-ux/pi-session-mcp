@@ -1,0 +1,186 @@
+{
+  "kind": "immutable-receipt-copy-index",
+  "copies": [
+    {
+      "manifest": "evidence-2026-10-17T13-36-10-753Z-2bb4fff5-48cc-4f6b-ae1b-5cc1a07f610b.json",
+      "original_receipt": "eval/results/extension-functions-cursor-2bb4fff5-48cc-4f6b-ae1b-5cc1a07f610b/attempts/activation-and-resources-182a8009-c52a-4760-9768-9cba15fceb9c.json",
+      "archived_receipt": "receipts/activation-and-resources-182a8009-c52a-4760-9768-9cba15fceb9c.json",
+      "hash": "sha256:36c0699047a32f85750079ffa2b5ec5495ad3935a0737729dd66ccc8dcfab3fc"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-10-753Z-2bb4fff5-48cc-4f6b-ae1b-5cc1a07f610b.json",
+      "original_receipt": "eval/results/extension-functions-cursor-2bb4fff5-48cc-4f6b-ae1b-5cc1a07f610b/attempts/bridge-disabled-c5a3140e-a28e-4264-9ee6-51b1310b3123.json",
+      "archived_receipt": "receipts/bridge-disabled-c5a3140e-a28e-4264-9ee6-51b1310b3123.json",
+      "hash": "sha256:4183d50b3bb9bd7abad0238dadecf5a2ab3d29920ba791c08fbc93bf23decb46"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-26-537Z-5adc4fb1-0008-4ef9-a106-aa372dabf061.json",
+      "original_receipt": "eval/results/extension-functions-cursor-5adc4fb1-0008-4ef9-a106-aa372dabf061/attempts/activation-and-resources-2667d991-3133-44c3-b883-c401b3c14cb1.json",
+      "archived_receipt": "receipts/activation-and-resources-2667d991-3133-44c3-b883-c401b3c14cb1.json",
+      "hash": "sha256:7d716b440a870ae14cc8d9d91628bbcd23d6e2ef7d92b59c1db808995d407c18"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-26-537Z-5adc4fb1-0008-4ef9-a106-aa372dabf061.json",
+      "original_receipt": "eval/results/extension-functions-cursor-5adc4fb1-0008-4ef9-a106-aa372dabf061/attempts/bridge-disabled-8d9de272-165c-4bb8-a147-d1b306388472.json",
+      "archived_receipt": "receipts/bridge-disabled-8d9de272-165c-4bb8-a147-d1b306388472.json",
+      "hash": "sha256:2764b7521560f5472113df34d6eb39cc0f980d4d30e88aa4742e4690ba57a21f"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-32-362Z-30949c31-73a3-4dae-af81-68deded51543.json",
+      "original_receipt": "eval/results/extension-functions-cursor-30949c31-73a3-4dae-af81-68deded51543/attempts/activation-and-resources-5c7d0d62-8290-494f-8729-5d60bc626ad7.json",
+      "archived_receipt": "receipts/activation-and-resources-5c7d0d62-8290-494f-8729-5d60bc626ad7.json",
+      "hash": "sha256:ee239847e82501800c2bab25846e316a0a1de291e4ed26f7e2fd3c6d894fffe1"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-32-362Z-30949c31-73a3-4dae-af81-68deded51543.json",
+      "original_receipt": "eval/results/extension-functions-cursor-30949c31-73a3-4dae-af81-68deded51543/attempts/bridge-disabled-169e5146-09a2-4231-8017-ebd8d4b75f0a.json",
+      "archived_receipt": "receipts/bridge-disabled-169e5146-09a2-4231-8017-ebd8d4b75f0a.json",
+      "hash": "sha256:972919df8ab333858bb41073bd715e85ba49b371f76a4f8925e45f627ae9f82c"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-38-494Z-8eec81b8-5576-48cb-b2fa-c279269db058.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8eec81b8-5576-48cb-b2fa-c279269db058/attempts/activation-and-resources-66acde31-19c7-4d3e-9814-ddeb2cffd373.json",
+      "archived_receipt": "receipts/activation-and-resources-66acde31-19c7-4d3e-9814-ddeb2cffd373.json",
+      "hash": "sha256:713e4286f9ceb21653eb9a7d18a179c0a093a388d1ad58be185539f5ba5aaea0"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-38-494Z-8eec81b8-5576-48cb-b2fa-c279269db058.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8eec81b8-5576-48cb-b2fa-c279269db058/attempts/bridge-disabled-7f330c57-9c3f-4879-a1d0-67c4c5c36050.json",
+      "archived_receipt": "receipts/bridge-disabled-7f330c57-9c3f-4879-a1d0-67c4c5c36050.json",
+      "hash": "sha256:1506cc920767a19026a0bb8605e689591b36e36cf87278c905b465e8eb9acac6"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-45-546Z-991647e5-7ea4-43c4-a90d-868e4ac38d83.json",
+      "original_receipt": "eval/results/extension-functions-cursor-991647e5-7ea4-43c4-a90d-868e4ac38d83/attempts/activation-and-resources-531d3f1d-c326-4914-b768-3d32103513b9.json",
+      "archived_receipt": "receipts/activation-and-resources-531d3f1d-c326-4914-b768-3d32103513b9.json",
+      "hash": "sha256:864cb8905a149f5c46e6788a3b586f77b6210dfeedf300fb2a9bb130209fea28"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-36-45-546Z-991647e5-7ea4-43c4-a90d-868e4ac38d83.json",
+      "original_receipt": "eval/results/extension-functions-cursor-991647e5-7ea4-43c4-a90d-868e4ac38d83/attempts/bridge-disabled-c1ffa69f-25fa-4f45-a691-af3bc422c089.json",
+      "archived_receipt": "receipts/bridge-disabled-c1ffa69f-25fa-4f45-a691-af3bc422c089.json",
+      "hash": "sha256:b2e50ce561f841e67f64bcfdaa05398e02ef23f10431acbc5d57078e1aab44ee"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-02-277Z-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe.json",
+      "original_receipt": "eval/results/extension-functions-cursor-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe/attempts/activation-and-resources-79d220d0-fc0b-4cad-85cc-40b9e904fb97.json",
+      "archived_receipt": "receipts/activation-and-resources-79d220d0-fc0b-4cad-85cc-40b9e904fb97.json",
+      "hash": "sha256:738c3231867addb257af2847409f5161dfe1fed20b73e5305094e98cae1949cc"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-02-277Z-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe.json",
+      "original_receipt": "eval/results/extension-functions-cursor-2296fb35-e5cb-4bf1-9e83-7370bcb46bfe/attempts/bridge-disabled-c24ad0c8-5e7e-4d71-9b22-3e2708ce1626.json",
+      "archived_receipt": "receipts/bridge-disabled-c24ad0c8-5e7e-4d71-9b22-3e2708ce1626.json",
+      "hash": "sha256:3f3b4ade6b8faf9f1060b9a1c2c55ef2742a08814f40caba55544c27a459af90"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-28-390Z-e9c3d106-b4c9-4146-ae83-a2799c907fe5.json",
+      "original_receipt": "eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/attempts/activation-and-resources-394fc425-ed51-408f-ab09-6d26aee0d48f.json",
+      "archived_receipt": "receipts/activation-and-resources-394fc425-ed51-408f-ab09-6d26aee0d48f.json",
+      "hash": "sha256:b0d8b4b96fad69880097264a5b2a8592e875cebb18c3171a54973dad9b36cb25"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-28-390Z-e9c3d106-b4c9-4146-ae83-a2799c907fe5.json",
+      "original_receipt": "eval/results/extension-functions-cursor-e9c3d106-b4c9-4146-ae83-a2799c907fe5/attempts/bridge-disabled-1bd882bb-2403-4269-8335-90f9803f57b7.json",
+      "archived_receipt": "receipts/bridge-disabled-1bd882bb-2403-4269-8335-90f9803f57b7.json",
+      "hash": "sha256:ec57b21dd1387b227bec8a4739488645036c3392a2bf01abc7d08e39f9293faa"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-37-371Z-8545c893-a8e3-4dc6-973b-81dfd97d798b.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/attempts/activation-and-resources-256cb86e-40ae-4fec-a2d2-9b7f66cc4be8.json",
+      "archived_receipt": "receipts/activation-and-resources-256cb86e-40ae-4fec-a2d2-9b7f66cc4be8.json",
+      "hash": "sha256:a4d5cce09b41bb186f8fadfe13fe57db1661f4951c668bc2033cee242c916269"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-37-37-371Z-8545c893-a8e3-4dc6-973b-81dfd97d798b.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8545c893-a8e3-4dc6-973b-81dfd97d798b/attempts/bridge-disabled-6eccb170-ff45-40e2-afc5-dfc0f77c229f.json",
+      "archived_receipt": "receipts/bridge-disabled-6eccb170-ff45-40e2-afc5-dfc0f77c229f.json",
+      "hash": "sha256:cf0c66a436b95780a1a7cda02465c8c8a00044c15fa2fe0358d8a283395d8ffc"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-41-612Z-c57c4778-261d-4397-8a36-df9cc23ca629.json",
+      "original_receipt": "eval/results/extension-functions-cursor-c57c4778-261d-4397-8a36-df9cc23ca629/attempts/activation-and-resources-c2b61e4b-fd33-4969-ab29-118957ca5fbb.json",
+      "archived_receipt": "receipts/activation-and-resources-c2b61e4b-fd33-4969-ab29-118957ca5fbb.json",
+      "hash": "sha256:09c3ff82ef681d38679d57cb49792f66dcfb70ed22eb7ece3672028b776690b2"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-41-612Z-c57c4778-261d-4397-8a36-df9cc23ca629.json",
+      "original_receipt": "eval/results/extension-functions-cursor-c57c4778-261d-4397-8a36-df9cc23ca629/attempts/bridge-disabled-19d479f2-7162-463e-90de-2d89a13e59a3.json",
+      "archived_receipt": "receipts/bridge-disabled-19d479f2-7162-463e-90de-2d89a13e59a3.json",
+      "hash": "sha256:6b28897efc82a17343ca2feb206722df7ecc75e7149f8ed6712b5b0dab8ea7d7"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-51-661Z-0eb898de-7471-4f17-a308-5ef5d86421ff.json",
+      "original_receipt": "eval/results/extension-functions-cursor-0eb898de-7471-4f17-a308-5ef5d86421ff/attempts/activation-and-resources-65fce696-864c-4247-960e-59f6d671cbf9.json",
+      "archived_receipt": "receipts/activation-and-resources-65fce696-864c-4247-960e-59f6d671cbf9.json",
+      "hash": "sha256:f3ca88b0d63bb0bdbec3c5cd02ca86baa8956c70f4d608fd6a7627521cf0b40e"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-51-661Z-0eb898de-7471-4f17-a308-5ef5d86421ff.json",
+      "original_receipt": "eval/results/extension-functions-cursor-0eb898de-7471-4f17-a308-5ef5d86421ff/attempts/bridge-disabled-d68f774c-d1f0-4620-b334-301a20edffc3.json",
+      "archived_receipt": "receipts/bridge-disabled-d68f774c-d1f0-4620-b334-301a20edffc3.json",
+      "hash": "sha256:34cb098b618e8b34c32b569da2f695aa929e12084e82acf7abee0289ca77fd52"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-55-412Z-8169d843-a9e7-48f4-88b1-3a90e1592df1.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8169d843-a9e7-48f4-88b1-3a90e1592df1/attempts/activation-and-resources-104e378f-8f82-4ae9-bffc-7f1d52e00e74.json",
+      "archived_receipt": "receipts/activation-and-resources-104e378f-8f82-4ae9-bffc-7f1d52e00e74.json",
+      "hash": "sha256:07e72f4f01283a1a01c9bb80e65779bc44f248d0909daa7d6f1373d7efca1b45"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-38-55-412Z-8169d843-a9e7-48f4-88b1-3a90e1592df1.json",
+      "original_receipt": "eval/results/extension-functions-cursor-8169d843-a9e7-48f4-88b1-3a90e1592df1/attempts/bridge-disabled-6333425f-0b46-4ced-a272-3d48895ee853.json",
+      "archived_receipt": "receipts/bridge-disabled-6333425f-0b46-4ced-a272-3d48895ee853.json",
+      "hash": "sha256:a8f03b1d0675b8ca4570e22b65bced8bcc21a410a0c29e1052ac9bab18c0fa8f"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-15-274Z-a5610333-e428-4cc6-9f5a-9206748ee512.json",
+      "original_receipt": "eval/results/extension-functions-cursor-a5610333-e428-4cc6-9f5a-9206748ee512/attempts/activation-and-resources-f61b5020-2c05-40ad-9cb8-590b22790186.json",
+      "archived_receipt": "receipts/activation-and-resources-f61b5020-2c05-40ad-9cb8-590b22790186.json",
+      "hash": "sha256:a2b240caa3ec1d4b151df7dfb41455c0b8c3088a2918f2b458df9b57e810b82b"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-15-274Z-a5610333-e428-4cc6-9f5a-9206748ee512.json",
+      "original_receipt": "eval/results/extension-functions-cursor-a5610333-e428-4cc6-9f5a-9206748ee512/attempts/bridge-disabled-2ab9d418-68b2-4679-bf42-f31b6945ea5a.json",
+      "archived_receipt": "receipts/bridge-disabled-2ab9d418-68b2-4679-bf42-f31b6945ea5a.json",
+      "hash": "sha256:af01b94590e6f0b324b83adf28e4ccc66aa39f7df7d446d6c220013b2fb9bba8"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-39-506Z-d4c80a7b-76b4-4d11-bf0f-552d11b131b2.json",
+      "original_receipt": "eval/results/extension-functions-cursor-d4c80a7b-76b4-4d11-bf0f-552d11b131b2/attempts/activation-and-resources-1f07360d-046f-4f0c-b40f-6b57a027220c.json",
+      "archived_receipt": "receipts/activation-and-resources-1f07360d-046f-4f0c-b40f-6b57a027220c.json",
+      "hash": "sha256:cdfc7373c807cc2f32247f63e41ab08fc86feb3956f3e5eb02aff47650064438"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-39-506Z-d4c80a7b-76b4-4d11-bf0f-552d11b131b2.json",
+      "original_receipt": "eval/results/extension-functions-cursor-d4c80a7b-76b4-4d11-bf0f-552d11b131b2/attempts/bridge-disabled-0ee0df5a-299f-451c-96e3-5abcf8bfa999.json",
+      "archived_receipt": "receipts/bridge-disabled-0ee0df5a-299f-451c-96e3-5abcf8bfa999.json",
+      "hash": "sha256:56335b9d31c954e36c09071bffb39e5f09688fa72e1dab19c441f165204a183a"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-53-515Z-db409f47-8ee5-4354-b7f9-a258eb7e17d0.json",
+      "original_receipt": "eval/results/extension-functions-cursor-db409f47-8ee5-4354-b7f9-a258eb7e17d0/attempts/activation-and-resources-a58f0281-71bc-4757-9d6f-e281f813135e.json",
+      "archived_receipt": "receipts/activation-and-resources-a58f0281-71bc-4757-9d6f-e281f813135e.json",
+      "hash": "sha256:bf8bf5670294382b3c6f6ff6618c2342c07b752abbab70164c2f1afb5fe2ba59"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-39-53-515Z-db409f47-8ee5-4354-b7f9-a258eb7e17d0.json",
+      "original_receipt": "eval/results/extension-functions-cursor-db409f47-8ee5-4354-b7f9-a258eb7e17d0/attempts/bridge-disabled-3a6aa7d7-b956-4fe5-9555-a2c63408c067.json",
+      "archived_receipt": "receipts/bridge-disabled-3a6aa7d7-b956-4fe5-9555-a2c63408c067.json",
+      "hash": "sha256:b01b4ab1b0eaf5f7a59dc08bceb8362c9b8e166342ff8b3e9edb673f353f5941"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-42-04-909Z-01d70cb3-6897-46ca-b8aa-1c69d5b5c7fc.json",
+      "original_receipt": "eval/results/extension-functions-cursor-01d70cb3-6897-46ca-b8aa-1c69d5b5c7fc/attempts/activation-and-resources-64af1d94-ea73-481f-b827-dbf6755d8591.json",
+      "archived_receipt": "receipts/activation-and-resources-64af1d94-ea73-481f-b827-dbf6755d8591.json",
+      "hash": "sha256:3cf0253e286eeae0a6d7866e0de6628400f1daf5b97dec14f62d9fd1fc83a468"
+    },
+    {
+      "manifest": "evidence-2026-10-17T13-42-04-909Z-01d70cb3-6897-46ca-b8aa-1c69d5b5c7fc.json",
+      "original_receipt": "eval/results/extension-functions-cursor-01d70cb3-6897-46ca-b8aa-1c69d5b5c7fc/attempts/bridge-disabled-cdbb3dde-2441-46ae-9111-f2a299d45807.json",
+      "archived_receipt": "receipts/bridge-disabled-cdbb3dde-2441-46ae-9111-f2a299d45807.json",
+      "hash": "sha256:1833a68a61018e25e2bd4ce0da637173f6347f535c0d0c0c42d3453003a906ee"
+    }
+  ],
+  "unresolved_historical_references": []
+}
