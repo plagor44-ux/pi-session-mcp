@@ -28,6 +28,13 @@ const RUN_PROMPTS = [
   "For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start one coding session in workspace alias `fixture` using profile `code`; prompt once with the supplied task; poll with bounded pauses until terminal; retrieve its completed receipt; close it and verify the session list is empty. Do not start another session. The harness independently recorded the failing T2 baseline before this controller started.",
   "For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start exactly two read-only sessions in workspace alias `fixture`, both using profile `review`, before prompting either. Prompt each once with its supplied task, poll both with bounded pauses to terminal, retrieve both receipts, then issue exactly one additional prompt to the first session with the supplied follow-up. Poll that turn to terminal, retrieve its receipt, verify the first turn remains unchanged, close both sessions and verify the list is empty. Do not start or prompt any other session.",
 ];
+/** Per-case server configuration. The server requires a read-only default, so L2 keeps `review` as default and selects `code` explicitly. */
+export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string) {
+  const review = { permissionProfile: "read-only", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "high", default: true } as const;
+  return { workspaces: { fixture: workspace }, executionProfiles: caseId === "L2"
+    ? { review, code: { permissionProfile: "coding", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "medium", default: false } as const }
+    : { review } };
+}
 async function buildBinding(build: string): Promise<`sha256:${string}`> {
   const root = resolve(build), entries: Array<[string, string]> = [];
   for (const required of ["package.json", "src/main.js", "eval/profiles/token-live-proxy.js"]) {
@@ -403,11 +410,7 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       for (let invocation = 0; invocation < turns.length && caseStatus === "PASS"; invocation++) {
         const cfg = join(temp, `config-${invocation}.json`), metrics = join(temp, `proxy-${invocation}.json`), control = join(temp, `server-${invocation}.json`), proxyEntry = fileURLToPath(new URL("./token-live-proxy.js", import.meta.url));
         const proxyEnv = { TOKEN_LIVE_REAL_ENTRY: join(resolve(build), "src/main.js"), TOKEN_LIVE_CONFIG: cfg, TOKEN_LIVE_METRICS_FILE: metrics, TOKEN_LIVE_CONTROL_FILE: control, TOKEN_LIVE_MAX_STARTS: String(spec.starts), TOKEN_LIVE_MAX_PROMPTS: String(spec.prompts), TOKEN_LIVE_WORKER_TURN_MS: "180000" };
-        const config = { workspaces: { fixture: workspace }, executionProfiles: spec.id === "L2" ? {
-          code: { permissionProfile: "coding", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "medium", default: true },
-        } : {
-          review: { permissionProfile: "read-only", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "high", default: true },
-        } };
+        const config = caseServerConfig(spec.id, workspace);
         await writeFile(cfg, JSON.stringify(config), { mode: 0o600, flag: "wx" });
         const envToml = `{${Object.entries(proxyEnv).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
         const controllerCwd = join(temp, "controller"); await mkdir(controllerCwd, { mode: 0o700 });
