@@ -213,7 +213,27 @@ until they are accepted inside this boundary (ADR 0008).
 ## 6. Review the writer's result from the host
 
 Do not run Git as the host user inside `$CLONE`: its local configuration
-(`core.fsmonitor`, `diff.external`, hooks, aliases) can run code. A direct
+(`core.fsmonitor`, `diff.external`, hooks, aliases) can run code. Read-only
+mounts of `.git/hooks` and `.git/config` do not close this: the rest of `.git`
+stays writable for the worker, which can create redirect files such as
+`.git/commondir` or `.git/config.worktree` that point a later host `git` at a
+configuration the worker controls (the acceptance records
+`commondir_writable_inside: true`).
+
+Before every review, check from the host without Git and refuse the clone if any
+redirect file exists:
+
+```sh
+for f in commondir gitdir config.worktree; do
+  if [ -e "$CLONE/.git/$f" ]; then echo "refuse: .git/$f present" >&2; exit 1; fi
+done
+```
+
+If a host `git` command in the clone is ever unavoidable, run it as
+`GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...`
+after the check above. Stricter variant: mount the whole `$CLONE/.git` read-only;
+the worker then cannot commit, and the review takes a patch
+(`git diff HEAD`) from the throwaway container instead of a bundle. A direct
 `git fetch "$CLONE"` also starts `git upload-pack` against the clone's
 configuration; the ADR says to fetch the branch, and this runbook does it from a
 bundle, so that no host Git process reads the clone. (Which clone settings
@@ -223,7 +243,7 @@ bundle, so that no host Git process reads the clone. (Which clone settings
 # 1. Create the bundle inside a throwaway container with the clone read-only, no network, no other mounts.
 podman run --rm --network=none --userns=keep-id --cap-drop=all --security-opt=no-new-privileges \
   -v "$CLONE:$CLONE:ro" -v "$STATE/bundles:/bundles:rw" \
-  "$IMAGE" git -c safe.directory='*' -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
+  "$IMAGE" git -c safe.directory='*' -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
 
 # 2. On the host, in the source repository: verify and fetch into a namespaced ref.
 git -C /path/to/source-repo bundle verify "$STATE/bundles/alpha.bundle"

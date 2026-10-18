@@ -23,7 +23,7 @@ Operator decisions taken for this writer:
 | Item | Evidence | Result |
 | --- | --- | --- |
 | Control (uncontained, same host) | [control.json](control.json) | `control_detected_escapes`: every write escape seen, canaries removed |
-| Contained, final wrapper | [contained.json](contained.json) | **pass**: launch bound (user, mount, PID and network namespaces differ), every write through Node.js and `bash` blocked with no host change, no host credential visible, own configuration not the host's, `ssh` authentication failed, no persistence, children clean, network not limited, all canaries removed (including those in the agent copy) |
+| Contained, final wrapper | [contained.json](contained.json) | **pass**: launch bound (user, mount, PID and network namespaces differ), every write through Node.js and `bash` blocked with no host change, no host credential visible, own configuration not the host's, `ssh` authentication failed, no persistence, children clean, network not limited, all canaries removed (including those in the agent copy); `.git/commondir` could be created inside the clone (expected, the clone is writable) and was removed, none left |
 | Contained, read-only agent copy (earlier variant) | [contained-agent-ro.json](contained-agent-ro.json) | pass |
 | Live | [live.json](live.json) | **pass**: one `code` session (Sol) through the wrapper attempted `write` to the host home, `edit` on the read-only package and on `.git/config`, and `bash` writes to the host home, `.git/hooks` and through a symlink: all blocked; a `bash` write into the boundary's own agent copy succeeded, as decided; an ordinary file inside the workspace was created. Host targets digested from outside were unchanged except the boundary's own agent copy listing |
 
@@ -32,12 +32,18 @@ runs: the boundary's own tmpfs `HOME` counted as an escape (now exempt only when
 the probe sees a tmpfs mount), and the boundary's own server configuration
 counted as a visible host configuration (now compared by digest with the host
 file). A third gap: with a writable agent copy, canaries in that copy were not
-removed; `--agent-dir-copy <host path>` now covers it.
+removed; `--agent-dir-copy <host path>` now covers it. A security review then
+pointed out that the worker can create Git redirect files (`.git/commondir`,
+`.git/config.worktree`) in its clone, which would steer a later host `git` in that
+clone to a worker-controlled configuration. The harness now records whether
+`commondir` can be created and fails if a redirect file is left behind; the
+runbook adds a pre-review refusal check and safe Git flags. The documented flow
+never runs host Git in the clone.
 
 One deviation by the integrator: `git status` was run once as the host user in
 the writer's clone after the live run, which the runbook forbids. The clone's
 `.git/config` and hooks were unchanged by then (digests above), so no code from
-the clone could run; the rule stands.
+the clone could run (no redirect file was present either, checked afterwards); the rule stands.
 
 Not covered: escapes from the container runtime itself, exfiltration over the
 provider connection, trusted extension code (none selected), macOS, other
