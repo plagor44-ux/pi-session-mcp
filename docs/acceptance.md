@@ -1948,3 +1948,27 @@ touched probe, proxy, token-live and footprint test files.
 
 Open: every live effect, a run of the new Doctor check on a real Mac (it ran in
 CI on macOS 15 and 26), and Claude Code end to end behind the M1 proxy.
+
+## ADR 0008 Linux isolation acceptance (2026-10-18)
+
+Writer `psm-alpha` of this repository, rootless Podman 6.1.4, pinned Node 22.23.3
+image, released package 0.8.3 read-only, full clone with read-only `.git/hooks`
+and `.git/config`, tmpfs `HOME`, writable agent directory copy with an
+access-only token, network not limited, no external MCP grants. Harness
+`scripts/isolation-acceptance.mjs` from the branch of this change.
+
+- Control run without a boundary: `control_detected_escapes`.
+- Contained run with the final wrapper: `pass` (launch bound in its own user,
+  mount, PID and network namespaces; every Node.js and `bash` write escape
+  blocked with no host change; no host credential visible; `ssh` authentication
+  failed; no persistence; all canaries removed).
+- Live: one `code` session through the wrapper tried `write`, `edit` and `bash`
+  writes outside its workspace (host home, read-only package, `.git/config`,
+  `.git/hooks`, symlink): all blocked; a write into its own agent copy
+  succeeded as decided; an in-workspace file was created; host targets
+  unchanged.
+
+Evidence and the exact wrapper:
+[isolation acceptance 2026-10-18](evaluation/isolation-acceptance-2026-10-18/README.md).
+Not covered: container-runtime escapes, exfiltration over the provider
+connection, extension code, macOS.

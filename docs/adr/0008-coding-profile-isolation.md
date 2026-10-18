@@ -2,8 +2,11 @@
 
 **Status:** Accepted for Linux (2026-10-18, maintainer decision on the
 [decision brief](../reviews/2026-10-18-adr-0008-decision-brief.md)); proposed
-2026-10-16. macOS keeps the Sprint 4 interim rules. The setup's acceptance below
-is still open, so the interim period has not ended. Issue
+2026-10-16. macOS keeps the Sprint 4 interim rules. The Linux setup's acceptance
+below passed on 2026-10-18 for one writer of this repository
+([evidence](../evaluation/isolation-acceptance-2026-10-18/README.md)); the interim
+rules end on Linux for coding work that runs through an accepted wrapped
+registration. Issue
 [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79). Follows the
 fired isolation trigger of [ADR 0003](0003-post-mvp-maintenance.md#revisit-triggers)
 and the [Sprint 4 decision](../sprints/2026-10-15-s4-decision.md).
@@ -155,8 +158,10 @@ Accepted on 2026-10-18 as proposed below, for Linux first:
 - macOS keeps the Sprint 4 interim rules; a VM runbook is not planned yet.
 - The open questions below (auth refresh, external MCP grants and `envFrom`,
   network egress) are settled in the setup's acceptance, not in advance.
-- Review point: 2026-11-15. By then the Linux acceptance should have run, or
-  the interim rules and this date are reviewed.
+- Review point: 2026-11-15, to review the switch of the remaining coding work
+  to wrapped registrations. The Linux acceptance passed on 2026-10-18 for the
+  writer `psm-alpha`, with a writable agent directory copy holding only the
+  access token, network not limited and no external MCP grants.
 - Until the acceptance passes, the interim rules stay in force. As an immediate
   step, coding workers for this repository get a dedicated workspace alias on a
   full clone instead of a linked worktree. The operator runbook is

@@ -1,0 +1,403 @@
+{
+  "tool": "isolation-acceptance",
+  "schema_version": 1,
+  "generated_at": "2026-10-18T15:23:48.964Z",
+  "mode": "uncontained-control",
+  "platform": "linux",
+  "remote_checks_skipped": false,
+  "agent_dir_copy_writable_declared": false,
+  "launch_binding": {
+    "bound": false,
+    "user_ns_differs": false,
+    "mnt_ns_differs": false,
+    "pid_ns_differs": false,
+    "net_ns_differs": false,
+    "uid_differs": false
+  },
+  "boundary": {
+    "home_is_tmpfs": false
+  },
+  "controls": {
+    "bash_available": true,
+    "workspace_write_node": true,
+    "workspace_write_bash": true,
+    "marker_started": true
+  },
+  "writes": [
+    {
+      "id": "abs.node",
+      "group": "abs",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "abs.bash",
+      "group": "abs",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "dotdot.node",
+      "group": "dotdot",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "dotdot.bash",
+      "group": "dotdot",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "symlink.node",
+      "group": "symlink",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "symlink.bash",
+      "group": "symlink",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "home.node",
+      "group": "home",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "home.bash",
+      "group": "home",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "home_inner.node",
+      "group": "home_inner",
+      "method": "node",
+      "skipped": true
+    },
+    {
+      "id": "home_inner.bash",
+      "group": "home_inner",
+      "method": "bash",
+      "skipped": true
+    },
+    {
+      "id": "agentdir.node",
+      "group": "agentdir",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "agentdir.bash",
+      "group": "agentdir",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "agentdir_inner.node",
+      "group": "agentdir_inner",
+      "method": "node",
+      "skipped": true
+    },
+    {
+      "id": "agentdir_inner.bash",
+      "group": "agentdir_inner",
+      "method": "bash",
+      "skipped": true
+    },
+    {
+      "id": "extdir.node",
+      "group": "extdir",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "extdir.bash",
+      "group": "extdir",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "extdir_inner.node",
+      "group": "extdir_inner",
+      "method": "node",
+      "skipped": true
+    },
+    {
+      "id": "extdir_inner.bash",
+      "group": "extdir_inner",
+      "method": "bash",
+      "skipped": true
+    },
+    {
+      "id": "githooks.node",
+      "group": "githooks",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "githooks.bash",
+      "group": "githooks",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "gitconfig.node",
+      "group": "gitconfig",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "gitconfig.bash",
+      "group": "gitconfig",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "userunit.node",
+      "group": "userunit",
+      "method": "node",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    },
+    {
+      "id": "userunit.bash",
+      "group": "userunit",
+      "method": "bash",
+      "skipped": false,
+      "host_observable": true,
+      "applicable": true,
+      "probe_blocked": false,
+      "host_changed": true,
+      "error_code": null
+    }
+  ],
+  "credentials": {
+    "items": {
+      "ssh_dir": {
+        "exists": true,
+        "readable": true
+      },
+      "ssh_auth_sock": {
+        "exists": false,
+        "readable": false
+      },
+      "gh_hosts_file": {
+        "exists": true,
+        "readable": true
+      },
+      "gh_token_env": {
+        "exists": false,
+        "readable": false
+      },
+      "git_credentials_file": {
+        "exists": true,
+        "readable": true
+      },
+      "git_credential_config": {
+        "exists": true,
+        "readable": true
+      },
+      "claude_client_config": {
+        "exists": true,
+        "readable": true
+      },
+      "codex_client_config": {
+        "exists": true,
+        "readable": true
+      },
+      "pi_session_mcp_config": {
+        "exists": true,
+        "readable": true
+      }
+    },
+    "visible_count": 7,
+    "pi_agent_auth_present": true,
+    "own_config_present": false,
+    "host_config_exposed": false,
+    "ssh_authenticated": false
+  },
+  "persistence": {
+    "marker_survivors": 1,
+    "new_own_processes": 2,
+    "crontab_delta": 0,
+    "user_unit_delta": 0,
+    "active_user_units_delta": 0
+  },
+  "children": {
+    "env_names_total": 108,
+    "secret_like_unallowed": 5,
+    "unexpected_names": 89,
+    "strict": false
+  },
+  "network": {
+    "tcp_443": true,
+    "classification": "not_limited"
+  },
+  "digests": {
+    "groups": [
+      {
+        "id": "startup_files",
+        "disposable": false,
+        "before": "a3a28f601552",
+        "after": "a3a28f601552",
+        "unchanged": true
+      },
+      {
+        "id": "agent_dir",
+        "disposable": false,
+        "before": "eb3e3ae4770a",
+        "after": "eb3e3ae4770a",
+        "unchanged": true
+      },
+      {
+        "id": "extension_packages",
+        "disposable": false,
+        "before": "035b21678cb3",
+        "after": "035b21678cb3",
+        "unchanged": true
+      },
+      {
+        "id": "user_units",
+        "disposable": false,
+        "before": "17bba9f22bd8",
+        "after": "17bba9f22bd8",
+        "unchanged": true
+      },
+      {
+        "id": "workspace_parent",
+        "disposable": false,
+        "before": "ae9f5c1ff4c0",
+        "after": "ae9f5c1ff4c0",
+        "unchanged": true
+      },
+      {
+        "id": "workspace_root",
+        "disposable": false,
+        "before": "d21b3ee87f57",
+        "after": "d21b3ee87f57",
+        "unchanged": true
+      },
+      {
+        "id": "outside_dir",
+        "disposable": true,
+        "before": "416429bb8359",
+        "after": "416429bb8359",
+        "unchanged": true
+      },
+      {
+        "id": "source_hooks",
+        "disposable": true,
+        "before": "162396f33992",
+        "after": "162396f33992",
+        "unchanged": true
+      },
+      {
+        "id": "source_config",
+        "disposable": true,
+        "before": "f63c122532ad",
+        "after": "a1cd69753e4d",
+        "unchanged": false
+      }
+    ],
+    "preexisting_unchanged_after_probe": true,
+    "preexisting_unchanged_after_cleanup": true
+  },
+  "cleanup": {
+    "canaries_found": 18,
+    "canaries_removed": 18,
+    "markers_killed": 1,
+    "residual_canaries": 0,
+    "run_root_removed": true
+  },
+  "verdict": "control_detected_escapes",
+  "failed_checks": [],
+  "inconclusive_checks": []
+}

@@ -7,20 +7,23 @@ one container per writer, on Linux. Pi Session MCP does not change. It does not
 start, own or verify this registration, and `pi-session-mcp-setup` does not
 know about it.
 
-**Status.** Nothing in this document has been run in Podman yet. Podman was not
-installed on the machine where the acceptance tooling was written, so every
-command below is a design to be checked, not a recorded result. The acceptance
-in [Run the acceptance](#run-the-acceptance) is what turns it into one. Until
-an acceptance run passes and is recorded, the interim rules of the
+**Status.** Accepted on Linux on 2026-10-18 for one writer of this repository
+(`psm-alpha`, rootless Podman 6.1.4), with the wrapper below after three
+corrections found by the first runs (tmpfs ownership option, writable agent
+directory copy, harness fixes). Evidence:
+[isolation acceptance 2026-10-18](evaluation/isolation-acceptance-2026-10-18/README.md).
+Every other writer, image or Podman version needs its own acceptance run. The
+interim rules of the
 [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules)
-stay in force.
+end on Linux only for coding work that goes through an accepted wrapped
+registration.
 
 **Platforms.** Linux only. macOS keeps the Sprint 4 interim rules; an isolation
 there would need a Linux VM (for example Lima or Podman machine), which nobody
 has set up or accepted.
 
 Items that need an operator decision are marked **Open decision** and
-collected in [Open operator decisions](#open-operator-decisions).
+collected in [Operator decisions](#operator-decisions).
 
 ## The model
 
@@ -111,6 +114,10 @@ git clone --no-hardlinks /path/to/source-repo "$STATE/clone"
 ```sh
 install -m 0600 /dev/null "$STATE/agent/auth.json"
 # Fill it with the entry of the one provider this boundary uses. Do not copy the whole host file.
+# Accepted variant: the access token only, with an empty refresh token, so the rotating refresh
+# token never enters the boundary (a session past the token's expiry then fails instead of refreshing):
+python3 -c 'import json,os,sys; e=json.load(open(os.path.expanduser("~/.pi/agent/auth.json")))["openai"]; e["refresh"]=""; json.dump({"openai":e}, open(sys.argv[1],"w"))' "$STATE/agent/auth.json"
+# Empty it again after use: echo '{}' > "$STATE/agent/auth.json"
 mkdir -p "$STATE/agent/npm"
 # If the profile allowlists extensions, install exactly those into $STATE/agent/npm (Pi's user install layout).
 ```
@@ -131,6 +138,19 @@ in the agent directory copy.
 development checkout.
 
 ## 4. The wrapper
+
+The accepted wrappers keep the copy current themselves: before `exec podman`,
+they run a host helper that refreshes the host login through Pi's locked
+credential store when it expires within 20 minutes (one session start and close
+of the released server, no model request; see
+[`auth-warmup.mjs`](evaluation/isolation-acceptance-2026-10-18/auth-warmup.mjs)),
+then copy the access token with an empty refresh token into `$STATE/agent`.
+Without that, a boundary stops working whenever the host token has expired.
+A locally built image cannot be pinned by `@sha256` digest (Podman then tries a
+registry); pin it by its full image ID and add `--pull=never`. Language
+toolchains belong in the image (for Go: a module and build cache mounted from
+`$STATE/go` and `GOTOOLCHAIN=local`). The accepted wrappers are kept with the
+[acceptance evidence](evaluation/isolation-acceptance-2026-10-18/README.md).
 
 Keep the container command in one script, so that the client registration and
 the acceptance run use the same flags and mounts. This is an **illustrative,
@@ -155,10 +175,12 @@ exec podman run -i --rm \
   --cap-drop=all --security-opt=no-new-privileges \
   --network="$NETWORK" \
   --tmpfs /tmp:rw,nosuid,nodev,size=512m \
-  --tmpfs /pi/home:rw,nosuid,nodev,mode=0700,uid="$(id -u)",gid="$(id -g)",size=64m \
+  --tmpfs /pi/home:rw,nosuid,nodev,mode=0700,size=64m,U \
   -v "$CLONE:$CLONE:rw" \
   -v "$RELEASE:/opt/pi-session-mcp:ro" \
   -v "$STATE/pi-session-mcp.json:/pi/config.json:ro" \
+  -v "$CLONE/.git/hooks:$CLONE/.git/hooks:ro" \
+  -v "$CLONE/.git/config:$CLONE/.git/config:ro" \
   -v "$STATE/agent:/pi/agent:rw" \
   --workdir "$CLONE" \
   -e HOME=/pi/home \
@@ -173,15 +195,15 @@ Notes:
   variable passes through. Every variable the container needs is listed. If
   the provider authenticates through an environment variable, pass it with
   `--env-file` from a mode-0600 file that belongs to this boundary only.
-- `$STATE/agent` is mounted read-write in this sketch because of the open
-  decision on authentication refresh. If you decide on read-only, change it to
-  `:ro` and run the acceptance without `--agent-dir-copy-writable`.
-- Optional hardening inside the clone: mount `$CLONE/.git/hooks` and
-  `$CLONE/.git/config` read-only on top of the read-write clone (`-v
-  "$CLONE/.git/hooks:$CLONE/.git/hooks:ro" -v "$CLONE/.git/config:$CLONE/.git/config:ro"`).
-  The host never runs Git there, so this protects against a later mistake
-  rather than against the documented review flow. It is not part of the
-  acceptance script; check it by hand if you add it.
+- `$STATE/agent` must be mounted read-write: Pi's auth storage writes there even
+  without a refresh, and a read-only copy failed session start with
+  `local_authentication_unavailable`. Run the acceptance with
+  `--agent-dir-copy-writable --agent-dir-copy "$STATE/agent"`.
+- Podman 6 rejects `uid=`/`gid=` on `--tmpfs`; the `U` option gives the tmpfs to
+  the container user instead.
+- `$CLONE/.git/hooks` and `$CLONE/.git/config` are mounted read-only on top of
+  the read-write clone. The host never runs Git there; this protects against a
+  later mistake. The live acceptance item checked both.
 - The container is removed at the end (`--rm`) and has no restart policy. The
   pinned image is the only thing that persists.
 
@@ -204,7 +226,27 @@ until they are accepted inside this boundary (ADR 0008).
 ## 6. Review the writer's result from the host
 
 Do not run Git as the host user inside `$CLONE`: its local configuration
-(`core.fsmonitor`, `diff.external`, hooks, aliases) can run code. A direct
+(`core.fsmonitor`, `diff.external`, hooks, aliases) can run code. Read-only
+mounts of `.git/hooks` and `.git/config` do not close this: the rest of `.git`
+stays writable for the worker, which can create redirect files such as
+`.git/commondir` or `.git/config.worktree` that point a later host `git` at a
+configuration the worker controls (the acceptance records
+`commondir_writable_inside: true`).
+
+Before every review, check from the host without Git and refuse the clone if any
+redirect file exists:
+
+```sh
+for f in commondir gitdir config.worktree; do
+  if [ -e "$CLONE/.git/$f" ]; then echo "refuse: .git/$f present" >&2; exit 1; fi
+done
+```
+
+If a host `git` command in the clone is ever unavoidable, run it as
+`GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...`
+after the check above. Stricter variant: mount the whole `$CLONE/.git` read-only;
+the worker then cannot commit, and the review takes a patch
+(`git diff HEAD`) from the throwaway container instead of a bundle. A direct
 `git fetch "$CLONE"` also starts `git upload-pack` against the clone's
 configuration; the ADR says to fetch the branch, and this runbook does it from a
 bundle, so that no host Git process reads the clone. (Which clone settings
@@ -214,7 +256,7 @@ bundle, so that no host Git process reads the clone. (Which clone settings
 # 1. Create the bundle inside a throwaway container with the clone read-only, no network, no other mounts.
 podman run --rm --network=none --userns=keep-id --cap-drop=all --security-opt=no-new-privileges \
   -v "$CLONE:$CLONE:ro" -v "$STATE/bundles:/bundles:rw" \
-  "$IMAGE" git -c safe.directory='*' -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
+  "$IMAGE" git -c safe.directory='*' -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
 
 # 2. On the host, in the source repository: verify and fetch into a namespaced ref.
 git -C /path/to/source-repo bundle verify "$STATE/bundles/alpha.bundle"
@@ -287,6 +329,7 @@ escape: the checks cannot be trusted on this host, so fix that first.
 
 ```sh
 node scripts/isolation-acceptance.mjs --mode contained \
+  --agent-dir-copy-writable --agent-dir-copy "$HOME/writer-state/alpha/agent" \
   --launch "$HOME/.local/bin/pi-writer-alpha node" \
   --workspace "$HOME/writer-state/alpha/clone" --out "$HOME/isolation-alpha.json"
 ```
@@ -300,6 +343,8 @@ Options:
   directory copy. Then a write into the boundary's own copy of the agent
   directory or its extension packages does not count as "not blocked", but a
   change that reaches the host still fails.
+- `--agent-dir-copy <host path>`: with `--agent-dir-copy-writable`, the host
+  path of that copy, so canaries written into it are found and removed.
 - `--no-remote-checks`: skips the `ssh` and TCP checks. The run can then end at
   best `inconclusive`.
 
@@ -361,9 +406,12 @@ different OS user as binding evidence. The same mounts-and-exclusions logic
 applies by file permissions instead of mounts; this path is not described
 further here and was not tried.
 
-## Open operator decisions
+## Operator decisions
 
-These are not settled by the ADR or by this runbook.
+Taken per writer. For `psm-alpha` on 2026-10-18: the official Node image pinned
+by digest; network `pasta`, recorded as not limited; no external MCP grants and
+no `envFrom`; a writable agent copy holding only the access token. The questions
+stay open for every other writer.
 
 1. **Open decision: provider authentication refresh.** Does the provider's
    token refresh need to write into Pi's agent directory? If yes, the copy is

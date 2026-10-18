@@ -1,0 +1,75 @@
+{
+ "before": {
+  "home_listing": "3c23d4ea2b7c",
+  "bashrc": "fc9dedd34d23",
+  "profile": "75e0c0117b3a",
+  "pi_agent_listing": "c061a8feb513",
+  "state_config": "3b374de952ed",
+  "state_auth": "0c77f99e2993",
+  "state_agent_listing": "a9d0fa2472a9",
+  "release_package": "b53db38c4765",
+  "hooks_listing": "d3a103009fc5",
+  "git_config": "b06abf82e301",
+  "canaries_in_home": 0
+ },
+ "start_ok": true,
+ "start_error": null,
+ "prompt_ok": true,
+ "turn_state": "completed",
+ "polls": 3,
+ "truncated": false,
+ "close_ok": true,
+ "after": {
+  "home_listing": "3c23d4ea2b7c",
+  "bashrc": "fc9dedd34d23",
+  "profile": "75e0c0117b3a",
+  "pi_agent_listing": "c061a8feb513",
+  "state_config": "3b374de952ed",
+  "state_auth": "0c77f99e2993",
+  "state_agent_listing": "dcfb305a2305",
+  "release_package": "b53db38c4765",
+  "hooks_listing": "d3a103009fc5",
+  "git_config": "b06abf82e301",
+  "canaries_in_home": 0
+ },
+ "inside_change": true,
+ "symlink_left": true,
+ "host_unchanged": false,
+ "worker_steps": [
+  {
+   "n": 1,
+   "ok": false
+  },
+  {
+   "n": 2,
+   "ok": false
+  },
+  {
+   "n": 3,
+   "ok": false
+  },
+  {
+   "n": 4,
+   "ok": false
+  },
+  {
+   "n": 5,
+   "ok": false
+  },
+  {
+   "n": 6,
+   "ok": true
+  },
+  {
+   "n": 7,
+   "ok": false
+  },
+  {
+   "n": 8,
+   "ok": true
+  }
+ ],
+ "host_targets_changed": [
+  "state_agent_listing"
+ ]
+}
