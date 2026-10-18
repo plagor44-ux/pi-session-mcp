@@ -1,0 +1,2853 @@
+{
+  "schema_version": "token-client-projection-1",
+  "binding": {
+    "commit": "08b40f20237a2daff7e7525312038d38f6c77e6c",
+    "digest": "sha256:2020086125f510aa8482c4f91439b242da44c94aa342d61480a97c686af521c8"
+  },
+  "build_digest": "sha256:5bd8c22a495aeaa0c420fd5f77e2f48a6e585a449f5c8e08beb37bf940b8fc4e",
+  "node": "26.11.1",
+  "fixture_digest": "sha256:89d7046116226de6fc138d56660c08c0a1225c1801d8a0fbb7b3b8895fe88314",
+  "route": "synthetic-loopback-responses",
+  "authentication": "disabled-empty-disposable-client-home",
+  "client_version": "0.162.1",
+  "started_at": "2026-10-18T12:46:38.406Z",
+  "ended_at": "2026-10-18T12:46:49.379Z",
+  "source_unchanged": true,
+  "build_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "repetition": 0,
+      "pilot": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 573.22891,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "repetition": 1,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 587.060791,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "repetition": 2,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 569.374513,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "repetition": 3,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 566.8377469999996,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "repetition": 4,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 641.1725459999998,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "repetition": 5,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 608.0697989999999,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44764,
+          "input_bytes": 21684,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45095,
+          "input_bytes": 22015,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 1021,
+        "content_bytes": 518,
+        "structured_bytes": 435,
+        "assistant_bytes": 0,
+        "state": "none",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "domain-error",
+      "repetition": 1,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 1759,
+      "duration_ms": 599.364822,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44425,
+          "input_bytes": 21345,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 129,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44756,
+          "input_bytes": 21676,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 129,
+        "marker_hits": 0,
+        "error_marker_hits": 1,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_session_start",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 280,
+        "content_bytes": 118,
+        "structured_bytes": 79,
+        "assistant_bytes": 0,
+        "state": "domain-error",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "domain-error",
+      "repetition": 2,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 1759,
+      "duration_ms": 594.4654199999995,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44425,
+          "input_bytes": 21345,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 129,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44756,
+          "input_bytes": 21676,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 129,
+        "marker_hits": 0,
+        "error_marker_hits": 1,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_session_start",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 280,
+        "content_bytes": 118,
+        "structured_bytes": 79,
+        "assistant_bytes": 0,
+        "state": "domain-error",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "domain-error",
+      "repetition": 3,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 1759,
+      "duration_ms": 679.757173,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44425,
+          "input_bytes": 21345,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 129,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44756,
+          "input_bytes": 21676,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 129,
+        "marker_hits": 0,
+        "error_marker_hits": 1,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_session_start",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 280,
+        "content_bytes": 118,
+        "structured_bytes": 79,
+        "assistant_bytes": 0,
+        "state": "domain-error",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "domain-error",
+      "repetition": 4,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 1759,
+      "duration_ms": 883.9490750000004,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44425,
+          "input_bytes": 21345,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 129,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44756,
+          "input_bytes": 21676,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 129,
+        "marker_hits": 0,
+        "error_marker_hits": 1,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_session_start",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 280,
+        "content_bytes": 118,
+        "structured_bytes": 79,
+        "assistant_bytes": 0,
+        "state": "domain-error",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "domain-error",
+      "repetition": 5,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 1759,
+      "duration_ms": 594.9825330000003,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44425,
+          "input_bytes": 21345,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 129,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44756,
+          "input_bytes": 21676,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 129,
+              "marker_hits": 0,
+              "error_marker_hits": 1,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 129,
+        "marker_hits": 0,
+        "error_marker_hits": 1,
+        "plaintext_tool_echo_hits": 0,
+        "plaintext_thinking_echo_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_session_start",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 280,
+        "content_bytes": 118,
+        "structured_bytes": 79,
+        "assistant_bytes": 0,
+        "state": "domain-error",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "truncated",
+      "repetition": 1,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 137521,
+      "duration_ms": 793.4569609999999,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44700,
+          "input_bytes": 21620,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 394,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45695,
+          "input_bytes": 22615,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 623,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58123,
+          "input_bytes": 35043,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 12062,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58838,
+          "input_bytes": 35758,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 396,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 59169,
+          "input_bytes": 36089,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 5,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 12062,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 1,
+        "plaintext_thinking_echo_hits": 1,
+        "structured_key_present": false,
+        "tool": "pi_turn_get",
+        "call_ordinal": 3,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 131789,
+        "content_bytes": 65891,
+        "structured_bytes": 65830,
+        "assistant_bytes": 65536,
+        "state": "completed",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": true,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": true,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "truncated",
+      "repetition": 2,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 137521,
+      "duration_ms": 818.9091729999991,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44700,
+          "input_bytes": 21620,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 394,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45695,
+          "input_bytes": 22615,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 623,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58123,
+          "input_bytes": 35043,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 12062,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58838,
+          "input_bytes": 35758,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 396,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 59169,
+          "input_bytes": 36089,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 5,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 12062,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 1,
+        "plaintext_thinking_echo_hits": 1,
+        "structured_key_present": false,
+        "tool": "pi_turn_get",
+        "call_ordinal": 3,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 131789,
+        "content_bytes": 65891,
+        "structured_bytes": 65830,
+        "assistant_bytes": 65536,
+        "state": "completed",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": true,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": true,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "truncated",
+      "repetition": 3,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 137521,
+      "duration_ms": 770.5451919999996,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44700,
+          "input_bytes": 21620,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 394,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45695,
+          "input_bytes": 22615,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 623,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58123,
+          "input_bytes": 35043,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 12062,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58838,
+          "input_bytes": 35758,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 396,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 59169,
+          "input_bytes": 36089,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 5,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 12062,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 1,
+        "plaintext_thinking_echo_hits": 1,
+        "structured_key_present": false,
+        "tool": "pi_turn_get",
+        "call_ordinal": 3,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 131789,
+        "content_bytes": 65891,
+        "structured_bytes": 65830,
+        "assistant_bytes": 65536,
+        "state": "completed",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": true,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": true,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "truncated",
+      "repetition": 4,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 137521,
+      "duration_ms": 817.7206170000009,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44700,
+          "input_bytes": 21620,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 394,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45695,
+          "input_bytes": 22615,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 623,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58123,
+          "input_bytes": 35043,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 12062,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58838,
+          "input_bytes": 35758,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 396,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 59169,
+          "input_bytes": 36089,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 5,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 12062,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 1,
+        "plaintext_thinking_echo_hits": 1,
+        "structured_key_present": false,
+        "tool": "pi_turn_get",
+        "call_ordinal": 3,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 131789,
+        "content_bytes": 65891,
+        "structured_bytes": 65830,
+        "assistant_bytes": 65536,
+        "state": "completed",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": true,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": true,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "truncated",
+      "repetition": 5,
+      "pilot": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "registered_server_cleanup": true,
+      "stdout_bytes": 137521,
+      "duration_ms": 816.7140569999992,
+      "proxy_integrity": true,
+      "requests": [
+        {
+          "bytes": 43967,
+          "input_bytes": 20887,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44700,
+          "input_bytes": 21620,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 394,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 45695,
+          "input_bytes": 22615,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 623,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58123,
+          "input_bytes": 35043,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 12062,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 58838,
+          "input_bytes": 35758,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 396,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 59169,
+          "input_bytes": 36089,
+          "tools_bytes": 21667,
+          "pi_tools_bytes": 2521,
+          "pi_schema_keys": {
+            "pattern": 0,
+            "format": 0
+          },
+          "outputs": [
+            {
+              "serialized_bytes": 394,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_start",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 623,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_prompt",
+              "call_ordinal": 2,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 12062,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 1,
+              "plaintext_thinking_echo_hits": 1,
+              "structured_key_present": false,
+              "tool": "pi_turn_get",
+              "call_ordinal": 3,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 396,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_close",
+              "call_ordinal": 4,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "plaintext_tool_echo_hits": 0,
+              "plaintext_thinking_echo_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 5,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 12062,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "plaintext_tool_echo_hits": 1,
+        "plaintext_thinking_echo_hits": 1,
+        "structured_key_present": false,
+        "tool": "pi_turn_get",
+        "call_ordinal": 3,
+        "new_in_request": true
+      },
+      "server_target": {
+        "wire_bytes": 131789,
+        "content_bytes": 65891,
+        "structured_bytes": 65830,
+        "assistant_bytes": 65536,
+        "state": "completed",
+        "equal_json_representations": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": true,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": true,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": true
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "metric_semantics": {
+    "bytes": "direct-observation-of-serialized-utf8",
+    "marker_hits": "occurrences-in-selected-function-output",
+    "newly_added_output_bytes": "first-observed-call-id-output-serialization",
+    "request_bytes": "whole-http-json-body-not-token-usage",
+    "model_usage": "unknown-no-model-executed",
+    "money": "unknown-no-meter-or-tariff"
+  },
+  "harness_status": "PASS"
+}

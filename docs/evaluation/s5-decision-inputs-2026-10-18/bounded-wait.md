@@ -59,3 +59,20 @@ spread before any contract change is considered. The A/B as prepared compares
 3. #91 decision against the criteria above. If a wait is still wanted: its own
    decision record, contract tests, documented cap and cancellation behavior and
    a minor release. If rejected: restate trigger C with the cost dimension.
+
+## A/B outcome and proposed decision (2026-10-18)
+
+The [A/B](../m1-ab-proposal-2026-10-18/results/README.md) ran four pairs on the
+Codex route. Both arms kept quality; running polls stayed at 1–3 per turn in both
+arms; the variant with the #86 skill guidance used fewer or equal calls and
+mostly lower cumulative (largely cached) controller input, with no consistent
+uncached difference.
+
+Proposed decision, for the maintainer to confirm: **do not add a bounded wait
+now** (no `waitMs`, no `pi_turn_wait`). Polling per turn stays below ADR 0003's
+count trigger, and the measured lever is fewer avoidable calls, which skill
+guidance already addresses without a contract change. Restate trigger C with the
+cost dimension: revisit when running polls routinely exceed about five per turn,
+or when the uncached controller input attributable to polling becomes material in
+a measurement like this one, or when a client's tool-call limits or approval
+prompts make polling costly.

@@ -1,0 +1,71 @@
+{
+  "schema_version": "token-live-decision-1",
+  "approved": true,
+  "manifest_digest": "sha256:ca580ba5d9bf92ec005f9f72839fb99860a620353511ef5553a369bff858b733",
+  "budget_digest": "sha256:8925fedeb31ed14a23f6c509ca4f43e7704fc3c3df672ea12d85187ffa3c67fd",
+  "source_digest": "sha256:419ae16afea885be0d3fb821eaa3648131764e18b6282e9a21153de52b6058f5",
+  "build_digest": "sha256:f974afe51498e9c7cb55451c8f7d0a42a4098ae6fcb70eb90cf09e8978b24967",
+  "matrix_digest": "sha256:9cdd89195dcb72d557c0b298bea796bdb8f2cfebb7ef8df249721596e572b27d",
+  "controller_skill_digest": "v2:1d39e8ac17a706901dd139a9478cfa623b031801c6d2170e13bbe0f627cbdb2a",
+  "controller": {
+    "client": "codex",
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "auth": "existing-client-login-not-probed",
+    "version": "0.162.1"
+  },
+  "schedule": [
+    {
+      "id": "L1",
+      "task": "T1",
+      "starts": 1,
+      "turns": 1,
+      "route": "review",
+      "slots": [
+        "m1-l1"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L2",
+      "task": "T2",
+      "starts": 1,
+      "turns": 1,
+      "route": "code",
+      "slots": [
+        "m1-l2"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L3",
+      "task": "T1",
+      "starts": 2,
+      "turns": 3,
+      "route": "review",
+      "slots": [
+        "m1-l3-shared"
+      ],
+      "prompts": 3
+    }
+  ],
+  "worker_skills": [],
+  "worker_provider": "openai",
+  "budget_limits": {
+    "max_starts": 4,
+    "max_retries": 0,
+    "parallelism": 1,
+    "run_timeout_ms": 600000,
+    "total_timeout_ms": 1800000,
+    "provider_cap_usd": null
+  },
+  "advisory_usd": 10,
+  "limits": {
+    "starts": 4,
+    "work_turns": 5,
+    "retries": 0,
+    "invocations": 3
+  },
+  "operator_acknowledges_advisory_not_cap": true
+}

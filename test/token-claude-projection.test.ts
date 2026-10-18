@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
 import { gzipSync } from "node:zlib";
-import { classifyRequest, createFakeMessagesServer, messagesSseEvents, projectToolResults, projectToolsEntry } from "../eval/profiles/token-claude-projection.js";
+import { classifyRequest, classifySockets, createFakeMessagesServer, messagesSseEvents, projectToolResults, projectToolsEntry } from "../eval/profiles/token-claude-projection.js";
 
 const tool = "mcp__pi-projection__pi_capabilities_get";
 
@@ -103,5 +103,19 @@ describe("loopback Messages fake", () => {
     expect(response.status).toBe(400);
     expect(fake.state.invalid).toBe(true);
     expect(fake.state.requests).toHaveLength(0);
+  });
+});
+
+describe("socket classification for the non-bare isolation check", () => {
+  const header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n";
+  const row = (remote: string, inode: string) => `   0: 0100007F:C350 ${remote} 01 00000000:00000000 00:00000000 00000000  1000        0 ${inode} 1 0000000000000000 100 0 0 10 0\n`;
+  it("separates loopback, non-loopback and unconnected sockets of the given inodes and keeps no address", () => {
+    const table = header + row("0100007F:1F90", "11") + row("0101A8C0:01BB", "12") + row("00000000:0000", "13") + row("0100007F:1F90", "99");
+    expect(classifySockets(table, new Set(["11", "12", "13"]))).toEqual({ loopback: 1, non_loopback: 1 });
+    expect(classifySockets(table, new Set())).toEqual({ loopback: 0, non_loopback: 0 });
+  });
+  it("understands IPv6 loopback, v4-mapped loopback and a global address", () => {
+    const table = header + row("00000000000000000000000001000000:1F90", "21") + row("0000000000000000FFFF00000100007F:1F90", "22") + row("B80D0120000000000000000000000001:01BB", "23");
+    expect(classifySockets(table, new Set(["21", "22", "23"]))).toEqual({ loopback: 2, non_loopback: 1 });
   });
 });
