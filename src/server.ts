@@ -15,6 +15,9 @@ const viewSchema = z.object({
   lastError: z.string().optional(),
 });
 const aliasSchema = z.string().regex(ALIAS_PATTERN);
+// Input IDs: tools/list keeps `format: "uuid"` but omits zod's long repeated `pattern`; the
+// server still validates with the unchanged `z.string().uuid()`, so accepted values and issues are identical.
+const idInputSchema = z.string().meta({ format: "uuid" }).pipe(z.string().uuid());
 const successSchema = z.object({ ok: z.literal(true), session: viewSchema });
 const turnBase = { turnId: z.string().uuid(), sessionId: z.string().uuid(), startedAt: z.string(), updatedAt: z.string() };
 const turnSchema = z.discriminatedUnion("state", [
@@ -87,23 +90,23 @@ export function createServer(
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, () => safe(() => ({ ok: true, sessions: registry.list() })));
   server.registerTool("pi_session_get", {
-    description: "Get one local Pi session by ID.", inputSchema: z.object({ sessionId: z.string().uuid() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    description: "Get one local Pi session by ID.", inputSchema: z.object({ sessionId: idInputSchema }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ sessionId }) => safe(() => ({ ok: true, session: registry.get(sessionId) })));
   server.registerTool("pi_session_prompt", {
-    description: "Accept a prompt after Pi preflight and run the turn in the background. Returns a running turn at once; poll pi_turn_get with pauses.", inputSchema: z.object({ sessionId: z.string().uuid(), prompt: z.string().min(1).max(100_000) }).strict(), outputSchema: z.union([promptSuccessSchema, errorSchema]),
+    description: "Accept a prompt after Pi preflight and run the turn in the background. Returns a running turn at once; poll pi_turn_get with pauses.", inputSchema: z.object({ sessionId: idInputSchema, prompt: z.string().min(1).max(100_000) }).strict(), outputSchema: z.union([promptSuccessSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
   }, ({ sessionId, prompt }) => safe(async () => ({ ok: true, ...(await registry.prompt(sessionId, prompt)) })));
   server.registerTool("pi_session_abort", {
-    description: "Abort a running Pi turn; idle sessions are unchanged.", inputSchema: z.object({ sessionId: z.string().uuid() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    description: "Abort a running Pi turn; idle sessions are unchanged.", inputSchema: z.object({ sessionId: idInputSchema }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   }, ({ sessionId }) => safe(async () => ({ ok: true, session: await registry.abort(sessionId) })));
   server.registerTool("pi_session_close", {
-    description: "Abort if needed, dispose, and remove a Pi session. Idempotent; close every started session.", inputSchema: z.object({ sessionId: z.string().uuid() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    description: "Abort if needed, dispose, and remove a Pi session. Idempotent; close every started session.", inputSchema: z.object({ sessionId: idInputSchema }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   }, ({ sessionId }) => safe(async () => ({ ok: true, session: await registry.close(sessionId) })));
   server.registerTool("pi_turn_get", {
-    description: "Get the normalized observable result of a Pi turn. completed, failed and aborted are terminal and never change: read a terminal turn once. completed is not task success.", inputSchema: z.object({ sessionId: z.string().uuid(), turnId: z.string().uuid() }).strict(), outputSchema: z.union([turnSuccessSchema, errorSchema]),
+    description: "Get the normalized observable result of a Pi turn. completed, failed and aborted are terminal and never change: read a terminal turn once. completed is not task success.", inputSchema: z.object({ sessionId: idInputSchema, turnId: idInputSchema }).strict(), outputSchema: z.union([turnSuccessSchema, errorSchema]),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ sessionId, turnId }) => safe(() => ({ ok: true, turn: registry.getTurn(sessionId, turnId) })));
   return server;
