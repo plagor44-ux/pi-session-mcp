@@ -36,7 +36,7 @@ its approval gate. No second benchmark platform.
 
 | Factor | Arm A (baseline) | Arm B (variant) | Rule |
 | --- | --- | --- | --- |
-| Source and build | main `612fbcb` | Sprint 5 final head | Bound per arm by digest |
+| Source and build | a dedicated arm-A commit: the final harness with `skills/` and `src/server.ts` restored to `612fbcb` | Sprint 5 final head | Bound per arm by digest; both arms use the same harness |
 | Controller skill (#86) | old tree | new tree (`SKILL.md` + `references/start-errors.md`) | Tree digest, not `SKILL.md` alone |
 | Tool descriptions and input schemas (#88, #90) | old | new | Part of the source binding |
 | Worker skills (#87) | old trees, explicitly selected | new trees, explicitly selected | Only with prerequisite P2; otherwise #87 is reported as **not tested** |
@@ -55,20 +55,37 @@ factor and its own approval.
   (`SKILL.md` plus `references/start-errors.md`) via `readSkillTree`/`fingerprint`
   from `src/skill-library.ts`. In embedded delivery, the controller prompt contains
   the reference file content clearly delimited (`--- Reference: references/start-errors.md ---`),
-  making start-error guidance available to the controller.
+  making start-error guidance available to the controller. Arm A's old tree has no
+  reference file, so its prompt is the old `SKILL.md` alone.
 - **P2, worker skill selection (implemented, not live-verified).** The manifest
   and decision template support optional explicit worker skills (`pi-session-implementation`
   for coding, `pi-session-review` for read-only) with tree digests. The executor
   verifies digests before starting and configures worker profiles; default remains
-  "no worker skills" so existing pilot templates remain valid.
+  "no worker skills" so existing pilot templates remain valid. The evaluation server
+  runs from a compiled build without a shipped `skills/` directory, so selected
+  skills are configured as the digest-verified source `SKILL.md` paths, not
+  `builtin:` entries.
 - **P3, client version (implemented, not live-verified).** The controller client
   version is bound from the approval/decision (`codex-cli 0.162.1` installed)
   instead of the hard constant `0.162.0`. The executor refuses to run
   (`controller_version_mismatch`) if the installed client version differs from the
   bound version. Historical records remain untouched.
 
-P1–P3 are now implemented provider-free in the test and evaluation harness and
-verified by unit tests; live execution remains unapproved (`approved: false`).
+P1–P3 are now implemented provider-free in the evaluation harness and verified by
+unit tests; live execution remains unapproved (`approved: false`).
+
+Arm A cannot run on `612fbcb` itself, because that commit lacks P1–P3. Before an
+approval, create one arm-A commit from the final head that restores only `skills/`
+and `src/server.ts` to `612fbcb`, and bind its source and build digests. Tree
+digests measured on 2026-10-18:
+
+| Skill tree | Arm A (`612fbcb` trees) | Arm B (Sprint 5 head) |
+| --- | --- | --- |
+| `pi-session-orchestration` | `v2:25494639…e250ab` | `v2:1d39e8ac…7cbdb2a` |
+| `pi-session-review` | `v2:610c0b48…7952bf0` | `v2:30f0e1f8…6c1a4` |
+| `pi-session-implementation` | `v2:f8ce75ef…94eb12` | `v2:d9487905…abbeab5` |
+
+Full values are in [`ab-proposal.json`](ab-proposal.json).
 
 ## Measurements, kept separate
 
