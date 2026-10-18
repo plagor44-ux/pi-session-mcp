@@ -27,6 +27,9 @@ Plain http loopback was accepted; a fresh config dir did not force onboarding or
 Files hold only byte sizes, counts, marker hit counts, booleans, safe labels and
 hashes; no request body, prompt, header or tool data.
 
+The probe runs on Linux only: its leftover-process check scans `/proc`, so it
+refuses other platforms up front rather than report cleanup it cannot show.
+
 ## Attempts (both preserved)
 
 - [attempt-1](attempt-1/claude-projection.json): **INCONCLUSIVE, 1 run (pilot only).**
