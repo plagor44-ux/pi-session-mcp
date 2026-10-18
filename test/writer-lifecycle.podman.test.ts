@@ -36,8 +36,8 @@ it.skipIf(skipReason !== undefined)("provisions an isolated clone, detects untra
   await git("update-ref", "refs/remotes/origin/main", "HEAD");
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
-  const profiles = new Map([["code", { alias: "code", default: false, permissionProfile: "coding" as const, provider: "example", model: "model", thinkingLevel: "off" as const }]]);
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none" }, profiles })).toMatchObject({ status: "ok" });
+  const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   await writeFile(join(paths.clone, "untracked.txt"), "untracked\n");
