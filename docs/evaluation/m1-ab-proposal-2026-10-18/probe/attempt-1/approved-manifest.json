@@ -1,0 +1,271 @@
+{
+  "schema_version": "1.0.0",
+  "approved": true,
+  "server_commit": "e90550666c85754443ec34850795cd3f673c3cf2",
+  "screening_evidence": [],
+  "source_digest": "sha256:e8d6fa03346f25b94a32b5ed49f542f7b4c0750c99bdba69757e72197fc5720e",
+  "tasks": [
+    {
+      "schema_version": "1.0.0",
+      "id": "T1",
+      "title": "Codebase explanation",
+      "family": "code-understanding",
+      "profiles": [
+        "P1"
+      ],
+      "views": [
+        "scout",
+        "docs-writer"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:d74a18bad9847c37741322c366c20ea05e6f2cc1bc046b164ae90ff2600c6000",
+      "fixture_hash": "sha256:44a9cbaac20b659a3c05afc027584a72d2c1fe9e299b57747a0c75548e83d97a",
+      "oracle_kind": "source-and-receipt",
+      "task_hash": "sha256:487b0b497bd3c4e36ef4dfb71bebd345e2604fae3bc3d0f4ce3ab25804ebfd2e"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T2",
+      "title": "Backend contract fix",
+      "family": "backend-fix",
+      "profiles": [
+        "P2",
+        "P3"
+      ],
+      "views": [
+        "implementer",
+        "reviewer"
+      ],
+      "allowed_paths": [
+        "contract.mjs"
+      ],
+      "prompt_hash": "sha256:3fb9a806d2c7de11f73c302088c5a3a1c48564f7588a7e392b6c98521840eccc",
+      "fixture_hash": "sha256:0e3869092e24bf5d38405a238815236a55685149aaa8b07b7d717d811baaf737",
+      "oracle_kind": "external-test-and-review",
+      "task_hash": "sha256:a71f1a1ea9c8a33c81178c4f1913ea809713de615c0720da12e2d9baedcb5c35"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T3",
+      "title": "Responsive accessible UI",
+      "family": "ui",
+      "profiles": [
+        "P4"
+      ],
+      "views": [
+        "ui-writer"
+      ],
+      "allowed_paths": [
+        "src/App.jsx",
+        "src/style.css"
+      ],
+      "prompt_hash": "sha256:cc72e58b0a7efcaf70170d339ac1197cd7e53fa862053107c6b9f4482323238c",
+      "fixture_hash": "sha256:ea526c693c451cd31e2db024c0d577825d9c7bc3695542841d6330c94107231a",
+      "oracle_kind": "browser-execution",
+      "task_hash": "sha256:9825b1973be10bf8eaa32d9a9f0985f32702b06253f174d7dd8a109b32e330aa"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T4",
+      "title": "Multi-module debugging",
+      "family": "debugging",
+      "profiles": [
+        "P2",
+        "P3"
+      ],
+      "views": [
+        "implementer",
+        "reviewer"
+      ],
+      "allowed_paths": [
+        "src/tax.mjs"
+      ],
+      "prompt_hash": "sha256:374611acced668d2e13e0bcd15eaf38749cb11888ea0791b4c1cd0878a1ab989",
+      "fixture_hash": "sha256:25239b91af9e60f96561a5429ba488ea3eb392418f3180e5889aaffcec1a3282",
+      "oracle_kind": "external-test-and-review",
+      "task_hash": "sha256:df305499ae6c35aea48de50745d0e0234339438af3b499a2a3ded0d0fb6ff599"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T5",
+      "title": "Independent security review",
+      "family": "review",
+      "profiles": [
+        "P3"
+      ],
+      "views": [
+        "reviewer"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:97f8528b749b92838e0b3b4f4046a8fb81ffd9d14a60ecaeb33cf84c00a6858b",
+      "fixture_hash": "sha256:42412ef5ea065b0313541367c952bc1bae668b7f238c72e41871f8a6a2667cf1",
+      "oracle_kind": "structured-findings",
+      "task_hash": "sha256:373efd53311814fb2b341dc349a3c46fd368859133e16e350ca19fd8cf691cb5"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T6",
+      "title": "Regression test gap",
+      "family": "testing",
+      "profiles": [
+        "P4"
+      ],
+      "views": [
+        "tester"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:1d91df807efc91147ee7750d5730447d212de4ac9764f9a625a035e34fe82d68",
+      "fixture_hash": "sha256:74acb0015b78459ca9c66bf82c3476b3cb2c7f6877ec41c0f22393d3123cc3d1",
+      "oracle_kind": "test-execution-and-coverage",
+      "task_hash": "sha256:5e56a3cba8df7f5f6a91e6a5f8d40b13f4fffc151b73a8590a315cb85ed9b11c"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T7",
+      "title": "Infrastructure source review",
+      "family": "infrastructure-review",
+      "profiles": [
+        "P1"
+      ],
+      "views": [
+        "scout"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:cdacd6795b07e211e3a002a51aa49b2b1272e55cd5aec2aecc2b7e40851ef668",
+      "fixture_hash": "sha256:397ddf1a2d29126e17401791fa04c38dc0bb8f412721e17425d632cb7a8273de",
+      "oracle_kind": "source-and-receipt",
+      "task_hash": "sha256:3a8a0514bc8fb40a3ab9c5931af02e5241ecbdbdc4003bd9e4c4b5dfc04754a2"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T8",
+      "title": "Evidence-based documentation draft",
+      "family": "documentation",
+      "profiles": [
+        "P1"
+      ],
+      "views": [
+        "docs-writer"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:2c35ae92d2aa1b62fdfe3c9bea0adb079d67ee9811db7c9a90971f0a84a87d0c",
+      "fixture_hash": "sha256:472f84b2ab1a61a2b2f2a2f325aa52d58bc9dedececcdea6f7e2bdd3b19836e3",
+      "oracle_kind": "source-and-receipt",
+      "task_hash": "sha256:af1ad49d78ea2dca7a3b2699e281c4c372d05f0cc0176cbe54c4157a204b7860"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "T9",
+      "title": "Observed compaction continuation",
+      "family": "context-continuation",
+      "profiles": [
+        "P1",
+        "P2"
+      ],
+      "views": [
+        "scout",
+        "implementer"
+      ],
+      "allowed_paths": [],
+      "prompt_hash": "sha256:d8b100be1027e5eb54bd15581c3748fed50371dd5151165061cb53d9c0c4c709",
+      "fixture_hash": "sha256:2c08762cd199ba950ad15e6bd4299c1d08ee56c768ea0166ef399038aebb6412",
+      "oracle_kind": "observed-compaction-event",
+      "task_hash": "sha256:d2482b0ef8a3ba9964d3c3e13c0c5e9c0ee506ca49f986da6ab94cc967ea4bf1"
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "m1-l1",
+      "task_id": "T1",
+      "task_hash": "sha256:487b0b497bd3c4e36ef4dfb71bebd345e2604fae3bc3d0f4ce3ab25804ebfd2e",
+      "profile_id": "P1",
+      "view": "scout",
+      "repetition": 1,
+      "stage": "screening",
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "permission_profile": "read-only",
+      "variant": "A",
+      "review_target": null,
+      "skills": [],
+      "extensions": []
+    },
+    {
+      "run_id": "m1-l2",
+      "task_id": "T2",
+      "task_hash": "sha256:a71f1a1ea9c8a33c81178c4f1913ea809713de615c0720da12e2d9baedcb5c35",
+      "profile_id": "P2",
+      "view": "implementer",
+      "repetition": 1,
+      "stage": "screening",
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "permission_profile": "coding",
+      "variant": "A",
+      "review_target": null,
+      "skills": [],
+      "extensions": []
+    },
+    {
+      "run_id": "m1-l3-a",
+      "task_id": "T1",
+      "task_hash": "sha256:487b0b497bd3c4e36ef4dfb71bebd345e2604fae3bc3d0f4ce3ab25804ebfd2e",
+      "profile_id": "P1",
+      "view": "scout",
+      "repetition": 1,
+      "stage": "screening",
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "permission_profile": "read-only",
+      "variant": "A",
+      "review_target": null,
+      "skills": [],
+      "extensions": []
+    },
+    {
+      "run_id": "m1-l3-b",
+      "task_id": "T1",
+      "task_hash": "sha256:487b0b497bd3c4e36ef4dfb71bebd345e2604fae3bc3d0f4ce3ab25804ebfd2e",
+      "profile_id": "P1",
+      "view": "scout",
+      "repetition": 2,
+      "stage": "screening",
+      "route": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "permission_profile": "read-only",
+      "variant": "A",
+      "review_target": null,
+      "skills": [],
+      "extensions": []
+    }
+  ],
+  "prerequisites": {
+    "baseline_passed": false,
+    "screening_passed": false,
+    "bottleneck": null
+  }
+}

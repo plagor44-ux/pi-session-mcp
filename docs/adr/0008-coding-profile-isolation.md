@@ -1,7 +1,9 @@
 # ADR 0008: Isolation for coding profiles on non-disposable repositories
 
-**Status:** Proposed (2026-10-16; facts rechecked 2026-10-18, see the
-[decision brief](../reviews/2026-10-18-adr-0008-decision-brief.md)). Issue
+**Status:** Accepted for Linux (2026-10-18, maintainer decision on the
+[decision brief](../reviews/2026-10-18-adr-0008-decision-brief.md)); proposed
+2026-10-16. macOS keeps the Sprint 4 interim rules. The setup's acceptance below
+is still open, so the interim period has not ended. Issue
 [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79). Follows the
 fired isolation trigger of [ADR 0003](0003-post-mvp-maintenance.md#revisit-triggers)
 and the [Sprint 4 decision](../sprints/2026-10-15-s4-decision.md).
@@ -143,7 +145,24 @@ Sources were read on 2026-10-16.
 | T5 exfiltration | only if the boundary removes the network; the provider stays reachable | `bash` network only | TCP rules only | with an OS wrapper |
 | T6 extension code | reach limited to the boundary | not confined | confined to the union | confined per session |
 
-## Proposed decision
+## Decision
+
+Accepted on 2026-10-18 as proposed below, for Linux first:
+
+- Direction: option 1 in its wrapped-registration form, rootless Podman with one
+  boundary per writer and a full clone per writer; a separate OS user remains the
+  documented alternative.
+- macOS keeps the Sprint 4 interim rules; a VM runbook is not planned yet.
+- The open questions below (auth refresh, external MCP grants and `envFrom`,
+  network egress) are settled in the setup's acceptance, not in advance.
+- Review point: 2026-11-15. By then the Linux acceptance should have run, or
+  the interim rules and this date are reviewed.
+- Until the acceptance passes, the interim rules stay in force. As an immediate
+  step, coding workers for this repository get a dedicated workspace alias on a
+  full clone instead of a linked worktree. The operator runbook is
+  [Isolation setup](../isolation-setup.md).
+
+## Proposed decision (as proposed on 2026-10-16)
 
 Choose **option 1 in its wrapped-registration form** and add no runtime
 change.

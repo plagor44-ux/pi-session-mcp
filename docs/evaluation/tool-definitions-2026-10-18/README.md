@@ -91,24 +91,38 @@ difference; that is an inference, not a measurement. Compare only like with like
 the deltas above (+255, -1,074) are exact for this formula, and the whole-frame
 numbers in (a) are exact.
 
-## (c) Codex projection: open measurement gate
+## (c) Codex projection, measured (Codex 0.162.1)
 
-The provider-free loopback probe exists:
-`npm run --silent eval:profiles -- --footprint-client-offline --output <new dir>`.
-It runs the actual Codex CLI against a no-auth loopback Responses endpoint and records
-`tools_bytes` of each request. Before and after the changes it stops immediately with
-exit code 1 and `{"event":"profile_evaluation_stopped","code":"invalid_input_or_failed_gate"}`
-because `measureClientProjection` in `eval/profiles/token-client-projection.ts` requires
-exactly `codex-cli 0.162.0` and this workstation has `codex-cli 0.162.1`
-(`unsupported_fixture_client`). No request was sent and nothing was recorded.
+The first attempt above stopped because the probe pinned exactly `codex-cli
+0.162.0` while this workstation has `codex-cli 0.162.1`. The integrator then
+changed the probe to accept an explicit list of exact versions (0.162.0, 0.162.1;
+each result records the one that ran), and added two allowlisted metrics per
+request: `pi_tools_bytes` (bytes of the projected entries carrying the pi tools,
+here one `namespace` entry) and `pi_schema_keys` (counts of `pattern` and `format`
+keys inside them). Both runs use the same probe code; "before" runs it on the base
+server sources `612fbcb`, "after" on the Sprint 5 head. Each run: one pilot plus five
+repetitions each of success, domain error and registry truncation, 16 clients,
+`PASS`, no request forwarded to a provider.
 
-Per the task rules the pin was not edited (outside the allowed paths) and no
-substitute probe was improvised. The actual Codex `tools` array size, and its eight pi
-definitions, for these changes are therefore **unmeasured**. Closing the gate needs
-either `codex-cli 0.162.0` or an approved change of the version pin (then re-run
-before and after). Expected direction only: the projection shrinks by the pattern
-removal (up to 1,074 bytes before any Codex re-encoding) and grows by the 255 description
-bytes; the Codex-side encoding was not measured.
+| Codex 0.162.1 request | [Before](codex-projection/before/client-projection.json) | [After](codex-projection/after/client-projection.json) |
+| --- | ---: | ---: |
+| Whole `tools` array (includes Codex's own tools) | 21,412 | 21,667 (+255) |
+| Projected pi tool entries | 2,266 | 2,521 (+255) |
+| `pattern` keys / `format` keys in them | 0 / 0 | 0 / 0 |
+
+Findings for this client version and route only:
+
+- The +255 bytes are exactly the description hints of #88.
+- #90 has **no effect on the Codex projection**: Codex 0.162.1 already drops
+  `pattern` and `format` from the projected input schemas. The premise of #90 that
+  about 1,008 of the Codex-visible bytes were the UUID regex is not confirmed for
+  0.162.1; 0.162.0 could not be rechecked here. #90 still shrinks the `tools/list`
+  wire frame (−1,074 bytes) and the Claude Code request `tools[]` on the bare probe
+  route (see the [Claude probe](../s5-decision-inputs-2026-10-18/claude-projection/README.md)).
+- The 2,266 bytes are close to the 2,246 bytes quoted in #88/#90; the definition
+  behind the quoted figure stays unknown.
+
+Bytes are not tokens; no model, billing or cache behavior is measured.
 
 ## #90 compatibility finding
 

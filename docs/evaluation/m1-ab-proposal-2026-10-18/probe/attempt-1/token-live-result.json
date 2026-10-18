@@ -1,0 +1,546 @@
+{
+  "schema_version": "token-live-result-1",
+  "harness_status": "FAIL",
+  "source_digest": "sha256:e8d6fa03346f25b94a32b5ed49f542f7b4c0750c99bdba69757e72197fc5720e",
+  "build_digest": "sha256:8f20039116457fbfde283bfafef31d276ed26b133c6dfed58790743fa078ec4b",
+  "failure_code": null,
+  "binding": {
+    "source_commit": "e90550666c85754443ec34850795cd3f673c3cf2",
+    "source_recheck_passed": true,
+    "build_recheck_passed": true,
+    "skill_recheck_passed": true,
+    "worker_skills_recheck_passed": true,
+    "manifest_digest": "sha256:e768fb9c05d04b34f5ba6d627d82b69ca843459f3d3b0f2671d2d97b6514415f",
+    "budget_digest": "sha256:cfad1cd58c6c13c7f764d610756f48b60f841792d634884cb3d4146bb3b74c23",
+    "decision_digest": "sha256:889e6fe3dc020dd0890193f89c1952168b1681d309ba3d5658b1a42d3a885891",
+    "skill_digest": "v2:25494639689d5dad58d5adbeefbb493c91b21175facbe44fe5b880e0c2e250ab",
+    "worker_skills": [
+      {
+        "name": "pi-session-implementation",
+        "tree_digest": "v2:f8ce75eff83a5c952f6ca51c04e1e8025cb7c2c558c30d692f291a3f6594eb12"
+      },
+      {
+        "name": "pi-session-review",
+        "tree_digest": "v2:610c0b4829eeb1ce6c9b2000ad73f8e88ca230707eef7f7b1708a80767952bf0"
+      }
+    ],
+    "matrix_digest": "sha256:9cdd89195dcb72d557c0b298bea796bdb8f2cfebb7ef8df249721596e572b27d",
+    "node_version": "26.11.1",
+    "controller": {
+      "client": "codex",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "auth": "existing-client-login-not-probed",
+      "version": "0.162.1"
+    },
+    "routes": {
+      "review": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      },
+      "code": {
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "data_path": "synthetic-fixture-to-selected-provider"
+      }
+    },
+    "tasks": [
+      {
+        "id": "T1",
+        "task_hash": "sha256:487b0b497bd3c4e36ef4dfb71bebd345e2604fae3bc3d0f4ce3ab25804ebfd2e",
+        "fixture_hash": "sha256:44a9cbaac20b659a3c05afc027584a72d2c1fe9e299b57747a0c75548e83d97a",
+        "prompt_digest": "sha256:d74a18bad9847c37741322c366c20ea05e6f2cc1bc046b164ae90ff2600c6000"
+      },
+      {
+        "id": "T2",
+        "task_hash": "sha256:a71f1a1ea9c8a33c81178c4f1913ea809713de615c0720da12e2d9baedcb5c35",
+        "fixture_hash": "sha256:0e3869092e24bf5d38405a238815236a55685149aaa8b07b7d717d811baaf737",
+        "prompt_digest": "sha256:3fb9a806d2c7de11f73c302088c5a3a1c48564f7588a7e392b6c98521840eccc"
+      },
+      {
+        "id": "T3",
+        "task_hash": "sha256:9825b1973be10bf8eaa32d9a9f0985f32702b06253f174d7dd8a109b32e330aa",
+        "fixture_hash": "sha256:ea526c693c451cd31e2db024c0d577825d9c7bc3695542841d6330c94107231a",
+        "prompt_digest": "sha256:cc72e58b0a7efcaf70170d339ac1197cd7e53fa862053107c6b9f4482323238c"
+      },
+      {
+        "id": "T4",
+        "task_hash": "sha256:df305499ae6c35aea48de50745d0e0234339438af3b499a2a3ded0d0fb6ff599",
+        "fixture_hash": "sha256:25239b91af9e60f96561a5429ba488ea3eb392418f3180e5889aaffcec1a3282",
+        "prompt_digest": "sha256:374611acced668d2e13e0bcd15eaf38749cb11888ea0791b4c1cd0878a1ab989"
+      },
+      {
+        "id": "T5",
+        "task_hash": "sha256:373efd53311814fb2b341dc349a3c46fd368859133e16e350ca19fd8cf691cb5",
+        "fixture_hash": "sha256:42412ef5ea065b0313541367c952bc1bae668b7f238c72e41871f8a6a2667cf1",
+        "prompt_digest": "sha256:97f8528b749b92838e0b3b4f4046a8fb81ffd9d14a60ecaeb33cf84c00a6858b"
+      },
+      {
+        "id": "T6",
+        "task_hash": "sha256:5e56a3cba8df7f5f6a91e6a5f8d40b13f4fffc151b73a8590a315cb85ed9b11c",
+        "fixture_hash": "sha256:74acb0015b78459ca9c66bf82c3476b3cb2c7f6877ec41c0f22393d3123cc3d1",
+        "prompt_digest": "sha256:1d91df807efc91147ee7750d5730447d212de4ac9764f9a625a035e34fe82d68"
+      },
+      {
+        "id": "T7",
+        "task_hash": "sha256:3a8a0514bc8fb40a3ab9c5931af02e5241ecbdbdc4003bd9e4c4b5dfc04754a2",
+        "fixture_hash": "sha256:397ddf1a2d29126e17401791fa04c38dc0bb8f412721e17425d632cb7a8273de",
+        "prompt_digest": "sha256:cdacd6795b07e211e3a002a51aa49b2b1272e55cd5aec2aecc2b7e40851ef668"
+      },
+      {
+        "id": "T8",
+        "task_hash": "sha256:af1ad49d78ea2dca7a3b2699e281c4c372d05f0cc0176cbe54c4157a204b7860",
+        "fixture_hash": "sha256:472f84b2ab1a61a2b2f2a2f325aa52d58bc9dedececcdea6f7e2bdd3b19836e3",
+        "prompt_digest": "sha256:2c35ae92d2aa1b62fdfe3c9bea0adb079d67ee9811db7c9a90971f0a84a87d0c"
+      },
+      {
+        "id": "T9",
+        "task_hash": "sha256:d2482b0ef8a3ba9964d3c3e13c0c5e9c0ee506ca49f986da6ab94cc967ea4bf1",
+        "fixture_hash": "sha256:2c08762cd199ba950ad15e6bd4299c1d08ee56c768ea0166ef399038aebb6412",
+        "prompt_digest": "sha256:d8b100be1027e5eb54bd15581c3748fed50371dd5151165061cb53d9c0c4c709"
+      }
+    ]
+  },
+  "starts": 1,
+  "work_turns": 0,
+  "retries": 0,
+  "cases": [
+    {
+      "id": "L1",
+      "status": "FAIL",
+      "starts": 1,
+      "prompts": 0,
+      "controller_exit_code": 0,
+      "controller_stdout_bytes": 8564,
+      "proxy_integrity": true,
+      "server_cleanup_observed": true,
+      "controller_cleanup_observed": true,
+      "proxy_bytes": {
+        "controller_received": 2203,
+        "server_received": 21557,
+        "server_written": 2203,
+        "quota_rejections": 0
+      },
+      "events": [
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "tool-item-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": 530,
+          "structured_bytes": 445,
+          "domain_error": false,
+          "tool_failed": false,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "tool-item-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": 169,
+          "structured_bytes": 130,
+          "domain_error": true,
+          "tool_failed": true,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "other-event",
+          "input_tokens": null,
+          "output_tokens": null,
+          "cached_input_tokens": null,
+          "reasoning_output_tokens": null,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        },
+        {
+          "kind": "usage-event",
+          "input_tokens": 77351,
+          "output_tokens": 390,
+          "cached_input_tokens": 68608,
+          "reasoning_output_tokens": 26,
+          "content_bytes": null,
+          "structured_bytes": null,
+          "domain_error": null,
+          "tool_failed": null,
+          "registry_truncated": null,
+          "model_injection_copies": null,
+          "injection_reason": "inference-request-boundary-not-observed"
+        }
+      ],
+      "independent_checks": [
+        {
+          "id": "approved-quota-exact",
+          "passed": false
+        },
+        {
+          "id": "completed-receipts-present",
+          "passed": false
+        },
+        {
+          "id": "unique-turn-receipts",
+          "passed": false
+        },
+        {
+          "id": "independent-oracle",
+          "passed": false
+        },
+        {
+          "id": "resolved-route-and-permission",
+          "passed": false
+        },
+        {
+          "id": "workspace-change-scope",
+          "passed": true
+        },
+        {
+          "id": "all-sessions-closed",
+          "passed": false
+        },
+        {
+          "id": "empty-session-list-observed",
+          "passed": false
+        }
+      ],
+      "frames": [
+        {
+          "ordinal": 0,
+          "elapsed_ms": 0.7578609999999912,
+          "direction": "request",
+          "tool": "initialize",
+          "wire_bytes": 258,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 1,
+          "elapsed_ms": 418.312818,
+          "direction": "response",
+          "tool": "initialize",
+          "wire_bytes": 170,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 2,
+          "elapsed_ms": 418.54337599999997,
+          "direction": "request",
+          "tool": "notifications/initialized",
+          "wire_bytes": 55,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 3,
+          "elapsed_ms": 418.72247600000003,
+          "direction": "request",
+          "tool": "tools/list",
+          "wire_bytes": 86,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 4,
+          "elapsed_ms": 423.56450900000004,
+          "direction": "response",
+          "tool": "tools/list",
+          "wire_bytes": 19962,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 19917,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": [
+            {
+              "tool": "pi_capabilities_get",
+              "definition_bytes": 1950,
+              "input_bytes": 119,
+              "output_bytes": 1523
+            },
+            {
+              "tool": "pi_session_start",
+              "definition_bytes": 1688,
+              "input_bytes": 282,
+              "output_bytes": 1156
+            },
+            {
+              "tool": "pi_session_list",
+              "definition_bytes": 1519,
+              "input_bytes": 119,
+              "output_bytes": 1183
+            },
+            {
+              "tool": "pi_session_get",
+              "definition_bytes": 1732,
+              "input_bytes": 368,
+              "output_bytes": 1156
+            },
+            {
+              "tool": "pi_session_prompt",
+              "definition_bytes": 5025,
+              "input_bytes": 437,
+              "output_bytes": 4338
+            },
+            {
+              "tool": "pi_session_abort",
+              "definition_bytes": 1756,
+              "input_bytes": 368,
+              "output_bytes": 1156
+            },
+            {
+              "tool": "pi_session_close",
+              "definition_bytes": 1753,
+              "input_bytes": 368,
+              "output_bytes": 1156
+            },
+            {
+              "tool": "pi_turn_get",
+              "definition_bytes": 4485,
+              "input_bytes": 599,
+              "output_bytes": 3662
+            }
+          ]
+        },
+        {
+          "ordinal": 5,
+          "elapsed_ms": 10767.232735,
+          "direction": "request",
+          "tool": "pi_capabilities_get",
+          "wire_bytes": 879,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 6,
+          "elapsed_ms": 10770.840633,
+          "direction": "response",
+          "tool": "pi_capabilities_get",
+          "wire_bytes": 1043,
+          "content_bytes": 530,
+          "structured_bytes": 445,
+          "content_text_bytes": 445,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": true,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 7,
+          "elapsed_ms": 14436.208451,
+          "direction": "request",
+          "tool": "pi_session_start",
+          "wire_bytes": 925,
+          "content_bytes": 0,
+          "structured_bytes": 0,
+          "content_text_bytes": 0,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "none",
+          "repeated_terminal": false,
+          "equal_json_representations": false,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        },
+        {
+          "ordinal": 8,
+          "elapsed_ms": 14446.055767,
+          "direction": "response",
+          "tool": "pi_session_start",
+          "wire_bytes": 382,
+          "content_bytes": 169,
+          "structured_bytes": 130,
+          "content_text_bytes": 130,
+          "prompt_bytes": 0,
+          "assistant_bytes": 0,
+          "schema_bytes": 0,
+          "state": "domain-error",
+          "repeated_terminal": false,
+          "equal_json_representations": true,
+          "session_ordinal": null,
+          "turn_ordinal": null,
+          "schema_sizes": []
+        }
+      ]
+    }
+  ]
+}

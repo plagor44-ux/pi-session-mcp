@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodedObjects, projectedOutputs, projectedTool } from "../eval/profiles/token-client-projection.js";
+import { decodedObjects, piSchemaKeys, piToolsBytes, projectedOutputs, projectedTool } from "../eval/profiles/token-client-projection.js";
 
 describe("synthetic Codex request boundary", () => {
   it("preserves the namespace required by current Responses tools", () => {
@@ -19,5 +19,13 @@ describe("synthetic Codex request boundary", () => {
     const wrapped = [{ type: "input_text", text: 'Tool result:\n```json\n{"ok":true,"sessions":[]}\n```' }];
     expect(decodedObjects(wrapped).some(v => Array.isArray(v.sessions) && v.sessions.length === 0)).toBe(true);
     expect(decodedObjects("unparseable")).toEqual([]);
+  });
+  it("sizes only the pi tool entries and counts their schema keys", () => {
+    const pi = { type: "namespace", name: "mcp__pi", tools: [{ name: "pi_turn_get", parameters: { properties: { id: { type: "string", format: "uuid", pattern: "x" } } } }] };
+    const other = { type: "function", name: "shell", parameters: { properties: { cmd: { type: "string", pattern: "y" } } } };
+    expect(piToolsBytes({ tools: [other, pi] })).toBe(Buffer.byteLength(JSON.stringify(pi)));
+    expect(piSchemaKeys({ tools: [other, pi] })).toEqual({ pattern: 1, format: 1 });
+    expect(piToolsBytes({ tools: [other] })).toBeNull();
+    expect(piSchemaKeys({})).toBeNull();
   });
 });
