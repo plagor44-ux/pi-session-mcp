@@ -226,6 +226,8 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
 
 /** Declared test-only route; no external provider/auth and no semantic token usage. */
 export async function measureClaudeProjection(root: string, build: string, output: string) {
+  // The leftover-process check scans /proc; without it cleanup cannot be shown, so other platforms are refused up front.
+  if (process.platform !== "linux") throw new Error("unsupported_probe_platform");
   const binding = await sourceBinding(root), started_at = new Date().toISOString();
   const buildBinding = async () => digest([await snapshot(join(build, "src")), await snapshot(join(build, "eval/profiles")), hash(await readFile(join(build, "package.json")).catch(() => Buffer.alloc(0)))]);
   const build_digest = await buildBinding();
