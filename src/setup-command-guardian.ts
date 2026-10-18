@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { spawn, type ChildProcess } from "node:child_process";
+import { statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import type { ProcessTable } from "./setup-platform.js";
 
 type SetupPlatformModule = typeof import("./setup-platform.js");
@@ -17,6 +19,7 @@ interface RunRequest {
   readonly args: readonly string[];
   readonly timeoutMs: number;
   readonly maxOutputBytes: number;
+  readonly cwd?: string;
 }
 interface AbortRequest { readonly type: "abort"; readonly id: number; }
 interface ShutdownRequest { readonly type: "shutdown"; }
@@ -68,12 +71,13 @@ function parseRequest(value: unknown): Request | undefined {
   const input = value as Record<string, unknown>;
   if (input.type === "shutdown" && Object.keys(input).length === 1) return { type: "shutdown" };
   if (input.type === "abort" && Object.keys(input).length === 2 && Number.isSafeInteger(input.id)) return { type: "abort", id: input.id as number };
-  if (input.type !== "run" || Object.keys(input).sort().join(",") !== "args,command,id,maxOutputBytes,timeoutMs,type") return undefined;
+  if (input.type !== "run" || !["args,command,id,maxOutputBytes,timeoutMs,type", "args,command,cwd,id,maxOutputBytes,timeoutMs,type"].includes(Object.keys(input).sort().join(","))) return undefined;
+  if ("cwd" in input && (typeof input.cwd !== "string" || !isAbsolute(input.cwd) || input.cwd.length > 4_096 || input.cwd.includes("\0"))) return undefined;
   if (!Number.isSafeInteger(input.id) || typeof input.command !== "string" || input.command.length === 0 || input.command.length > 4_096) return undefined;
   if (!Array.isArray(input.args) || input.args.length > 128 || !input.args.every((argument) => typeof argument === "string" && argument.length <= 16_384)) return undefined;
   if (!Number.isSafeInteger(input.timeoutMs) || (input.timeoutMs as number) < 1 || (input.timeoutMs as number) > 120_000) return undefined;
   if (!Number.isSafeInteger(input.maxOutputBytes) || (input.maxOutputBytes as number) < 1 || (input.maxOutputBytes as number) > 1_048_576) return undefined;
-  return { type: "run", id: input.id as number, command: input.command, args: input.args as string[], timeoutMs: input.timeoutMs as number, maxOutputBytes: input.maxOutputBytes as number };
+  return { type: "run", id: input.id as number, command: input.command, args: input.args as string[], timeoutMs: input.timeoutMs as number, maxOutputBytes: input.maxOutputBytes as number, ...(typeof input.cwd === "string" ? { cwd: input.cwd } : {}) };
 }
 
 async function groupState(group: number): Promise<GroupState> {
@@ -92,7 +96,10 @@ function bounded(value: string, maximum: number): string {
 function start(request: RunRequest): void {
   if (active || shuttingDown) { send({ type: "result", id: request.id, exitCode: 126, stdout: "", stderr: "" }); return; }
   let child: ChildProcess;
-  try { child = spawn(request.command, [...request.args], { stdio: ["ignore", "pipe", "pipe", 3], detached: true }); }
+  try {
+    if (request.cwd !== undefined && !statSync(request.cwd).isDirectory()) throw new Error("cwd_invalid");
+    child = spawn(request.command, [...request.args], { stdio: ["ignore", "pipe", "pipe", 3], detached: true, cwd: request.cwd });
+  }
   catch { send({ type: "result", id: request.id, exitCode: 127, stdout: "", stderr: "" }); return; }
   if (child.pid === undefined || !child.stdout || !child.stderr) { child.once("error", () => undefined); send({ type: "result", id: request.id, exitCode: 127, stdout: "", stderr: "" }); return; }
   const execution: ActiveExecution = { id: request.id, child, group: child.pid, cleanupStarted: false, resultSent: false };

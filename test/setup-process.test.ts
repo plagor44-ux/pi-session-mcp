@@ -31,6 +31,48 @@ async function cleanupDescendants(parentPidFile: string, pidFile: string): Promi
 }
 
 describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
+  it("honors per-command cwd and merges per-command environment", async () => {
+    const cwd = await temporaryRoot("setup-process-cwd-");
+    const runner = createProcessRunner({ env: { BASE: "base", OVERRIDE: "old" } });
+    const pwd = await runner.run("/bin/pwd", [], undefined, { cwd });
+    expect(pwd.exitCode).toBe(0);
+    expect(pwd.stdout.trim()).toBe(cwd);
+    const env = await runner.run(execPath, ["-e", "process.stdout.write(process.env.BASE + ':' + process.env.OVERRIDE)"], undefined, { env: { OVERRIDE: "new" } });
+    expect(env.stdout).toBe("base:new");
+  });
+
+  it("guardian honors an existing absolute cwd and rejects a missing directory at spawn", async () => {
+    const directory = await temporaryRoot("setup-guardian-cwd-");
+    const handle = await open(join(directory, "lock"), "w+");
+    const child = spawn(execPath, [join(process.cwd(), "src/setup-command-guardian.ts"), String(process.pid)], { stdio: ["ignore", "ignore", "ignore", handle.fd, "ipc"] });
+    try {
+      await once(child, "message");
+      const request = { type: "run", id: 1, command: "/bin/pwd", args: [], timeoutMs: 1000, maxOutputBytes: 4096, cwd: directory };
+      const result = once(child, "message");
+      child.send(request);
+      expect((await result)[0]).toMatchObject({ type: "result", id: 1, exitCode: 0, stdout: `${directory}\n` });
+      const missing = once(child, "message");
+      child.send({ ...request, id: 2, cwd: join(directory, "missing") });
+      expect((await missing)[0]).toMatchObject({ type: "result", id: 2, exitCode: 127 });
+      const closed = once(child, "close");
+      child.send({ type: "shutdown" });
+      await closed;
+    } finally { child.kill("SIGKILL"); await handle.close(); }
+  });
+
+  it.each([{ cwd: "relative" }, { cwd: "/", env: {} }, { cwd: `/${"x".repeat(4096)}` }])("guardian rejects invalid options %j", async (options) => {
+    const directory = await temporaryRoot("setup-guardian-protocol-");
+    const handle = await open(join(directory, "lock"), "w+");
+    const child = spawn(execPath, [join(process.cwd(), "src/setup-command-guardian.ts"), String(process.pid)], { stdio: ["ignore", "ignore", "ignore", handle.fd, "ipc"] });
+    try {
+      const closed = once(child, "close");
+      await once(child, "message");
+      const marker = join(directory, "spawned");
+      child.send({ type: "run", id: 1, command: execPath, args: ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)}, '')`], timeoutMs: 1000, maxOutputBytes: 1024, ...options });
+      await closed;
+      expect(existsSync(marker)).toBe(false);
+    } finally { child.kill("SIGKILL"); await handle.close(); }
+  });
   it("captures a short-lived process exit without using a real client", async () => {
     const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", "process.stdout.write('SAFE_STDOUT'); process.stderr.write('SAFE_STDERR'); process.exitCode=7"]);
     expect(result.exitCode).toBe(7);
