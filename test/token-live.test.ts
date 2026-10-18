@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { symlink } from "node:fs/promises";
+import { promisify } from "node:util";
+import { ownedTemporary } from "../eval/profiles/files.js";
 import { digest } from "../eval/profiles/files.js";
 import { cleanupRegisteredServer, prepareTokenLive, runOwnedController, runTokenLive, verifyL3ReceiptSchedule } from "../eval/profiles/token-live.js";
 import { TokenFrameForwarder } from "../eval/profiles/token-live-proxy.js";
@@ -247,4 +250,29 @@ describe("M1 preparation and approval gates", () => {
     expect(saved.cases[0]).toMatchObject({ starts: null, prompts: null });
     expect(saved.binding.decision_digest).toBe(digest(decision));
   });
+});
+
+describe.skipIf(process.platform !== "linux")("token-live proxy process shutdown", () => {
+  let build: string, remove: () => Promise<void>;
+  beforeAll(async () => {
+    const temp = await ownedTemporary(); remove = temp.remove; build = join(temp.root, "build");
+    await promisify(execFile)(process.execPath, ["node_modules/typescript/bin/tsc", "-p", "tsconfig.eval.json", "--outDir", build], { timeout: 120000 });
+    await symlink(join(process.cwd(), "node_modules"), join(build, "node_modules"), "dir");
+  }, 150000);
+  afterAll(async () => { await remove?.(); });
+
+  test("forwards a controller SIGTERM as stdin EOF so a real-style server exits 0", async () => {
+    const dir = await tempDir("token-live-shutdown-");
+    // Mirrors src/main.ts: EOF takes the graceful exit-0 path, SIGTERM exits 143.
+    const server = join(dir, "server.mjs"), metrics = join(dir, "metrics.json");
+    await writeFile(server, 'process.stdin.resume();process.stdin.once("end",()=>process.exit(0));process.once("SIGTERM",()=>process.exit(143));');
+    const proxy = spawn(process.execPath, [join(build, "eval/profiles/token-live-proxy.js")], { stdio: ["pipe", "ignore", "ignore"], env: {
+      PATH: process.env.PATH ?? "", TOKEN_LIVE_REAL_ENTRY: server, TOKEN_LIVE_CONFIG: join(dir, "config.json"), TOKEN_LIVE_METRICS_FILE: metrics,
+      TOKEN_LIVE_MAX_STARTS: "1", TOKEN_LIVE_MAX_PROMPTS: "1" } });
+    const closed = new Promise<number | null>(resolve => proxy.once("close", code => resolve(code)));
+    await new Promise(resolve => setTimeout(resolve, 500));
+    proxy.kill("SIGTERM");
+    expect(await closed).toBe(0);
+    expect(JSON.parse(await readFile(metrics, "utf8"))).toMatchObject({ server_exit_code: 0, server_cleanup_observed: true, integrity_passed: true });
+  }, 30000);
 });
