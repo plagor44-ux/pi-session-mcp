@@ -92,6 +92,13 @@ describe("verdict logic", () => {
     expect(h.evaluateVerdict(containedReport({ writes: landed, boundary: { home_is_tmpfs: true } })).failed_checks).toContain("writes.host_changed.home_inner.node");
   });
 
+  it("fails when a Git redirect file the run created is left in the writer's clone", () => {
+    const left = containedReport({ git_metadata: { commondir_writable_inside: true, redirect_files_preexisting: 0, redirect_files_removed: 0, redirect_files_residual: 1 } });
+    expect(h.evaluateVerdict(left).failed_checks).toContain("git_metadata.redirect_residual");
+    const removed = containedReport({ git_metadata: { commondir_writable_inside: true, redirect_files_preexisting: 0, redirect_files_removed: 1, redirect_files_residual: 0 } });
+    expect(h.evaluateVerdict(removed).verdict).toBe("pass");
+  });
+
   it("fails when the boundary's own configuration is the host configuration", () => {
     const exposed = containedReport({ credentials: { visible_count: 0, ssh_authenticated: false, host_config_exposed: true } });
     expect(h.evaluateVerdict(exposed).failed_checks).toContain("credentials.host_config_exposed");
