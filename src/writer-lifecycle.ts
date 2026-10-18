@@ -3,7 +3,7 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
-import type { ConfiguredExecutionProfile } from "./execution-profile.js";
+import { configSchema } from "./config.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
@@ -25,24 +25,41 @@ function failure(error: unknown): WriterOutcome {
   return { status: "failed", code: error instanceof LifecycleError || error instanceof BoundaryError || error instanceof WriterStateError ? error.code : "writer_operation_failed" };
 }
 
-export function renderContainedConfig(alias: string, clonePath: string, profiles: ReadonlyMap<string, ConfiguredExecutionProfile>) {
-  if (profiles.size === 0) throw new LifecycleError("container_profile_unsupported");
+function record(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new LifecycleError("container_profile_unsupported");
+  return value as Record<string, unknown>;
+}
+
+export function renderContainedConfig(alias: string, clonePath: string, rawConfig: unknown, selected: readonly string[]) {
+  if (selected.length === 0 || selected.includes("boundary-read-only")) throw new LifecycleError("container_profile_unsupported");
+  const raw = record(rawConfig), profiles = record(raw.executionProfiles);
   const skillCatalog: Record<string, string> = {};
-  const executionProfiles = Object.fromEntries([...profiles].map(([name, profile], index) => {
-    if (profile.extensions !== undefined || profile.mcpServers !== undefined) throw new LifecycleError("container_profile_unsupported");
-    for (const skill of profile.skills ?? []) {
-      if (builtinSkillName(skill.path) === undefined || (skillCatalog[skill.alias] !== undefined && skillCatalog[skill.alias] !== skill.path)) {
-        throw new LifecycleError("container_profile_unsupported");
-      }
-      skillCatalog[skill.alias] = skill.path;
+  const executionProfiles = Object.fromEntries(selected.map((name) => {
+    const profile = record(Object.hasOwn(profiles, name) ? profiles[name] : undefined);
+    if (profile.extensions !== undefined || profile.mcpServers !== undefined || profile.default !== false || profile.permissionProfile !== "coding") {
+      throw new LifecycleError("container_profile_unsupported");
     }
-    return [name, {
-      default: index === 0, permissionProfile: profile.permissionProfile, provider: profile.provider,
-      model: profile.model, thinkingLevel: profile.thinkingLevel,
-      ...(profile.skills === undefined ? {} : { skills: profile.skills.map(({ alias }) => alias) }),
-    }];
+    if (profile.skills !== undefined) {
+      if (!Array.isArray(profile.skills)) throw new LifecycleError("container_profile_unsupported");
+      for (const skill of profile.skills) {
+        const catalog = record(raw.skillCatalog);
+        const value = typeof skill === "string" && Object.hasOwn(catalog, skill) ? catalog[skill] : undefined;
+        if (typeof value !== "string" || builtinSkillName(value) === undefined) throw new LifecycleError("container_profile_unsupported");
+        Object.defineProperty(skillCatalog, skill, { value, enumerable: true, configurable: true, writable: true });
+      }
+    }
+    return [name, { ...profile }];
   }));
-  return { workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
+  const first = executionProfiles[selected[0]!]!;
+  executionProfiles["boundary-read-only"] = {
+    default: true, permissionProfile: "read-only", provider: first.provider,
+    model: first.model, thinkingLevel: first.thinkingLevel,
+  };
+  const rendered = { workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
+  const parsed = configSchema.safeParse(rendered);
+  if (!parsed.success) throw new LifecycleError("container_profile_unsupported");
+  // Validate with the real schema without normalizing or resolving the raw profile objects.
+  return rendered as typeof parsed.data;
 }
 
 // CommandRunner has no per-call environment option. Hooks are disabled even for injected runners.
@@ -69,7 +86,7 @@ async function jsonFile(path: string, value: unknown): Promise<void> {
 }
 
 export async function provisionWriter(ctx: WriterContext, input: {
-  index: number; settings: ContainerSettings; baseRef?: string; profiles: ReadonlyMap<string, ConfiguredExecutionProfile>;
+  index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown;
 }): Promise<WriterOutcome> {
   try {
     const { index, settings } = input;
@@ -79,13 +96,9 @@ export async function provisionWriter(ctx: WriterContext, input: {
       if (!(error instanceof WriterStateError) || error.code !== "writer_state_invalid") throw error;
       restart = true;
     }
-    const selected = new Map(settings.profiles.map((alias) => {
-      const profile = input.profiles.get(alias);
-      if (!profile) throw new LifecycleError("container_profile_unsupported");
-      return [alias, profile] as const;
-    }));
-    const config = renderContainedConfig(ctx.alias, paths.clone, selected);
-    const providers = [...selected.values()].filter((profile, i, all) => all.findIndex((other) => other.provider === profile.provider) === i)
+    const config = renderContainedConfig(ctx.alias, paths.clone, input.rawConfig, settings.profiles);
+    const selected = settings.profiles.map((alias) => config.executionProfiles[alias]!);
+    const providers = selected.filter((profile, i, all) => all.findIndex((other) => other.provider === profile.provider) === i)
       .map(({ provider, model }) => ({ provider, model }));
     const imageId = await resolveImage(ctx.runner, settings.image, true);
     const ref = input.baseRef ?? await git(ctx, ["symbolic-ref", "refs/remotes/origin/HEAD"], true) ?? "refs/heads/main";

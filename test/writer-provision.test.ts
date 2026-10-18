@@ -4,15 +4,15 @@ import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
-import type { ConfiguredExecutionProfile } from "../src/execution-profile.js";
+import { loadConfig } from "../src/config.js";
 import { inspectWork, provisionWriter, removeWriter, renderContainedConfig, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
 const commit = "b".repeat(40), tree = "c".repeat(40), imageId = "a".repeat(64);
-const profile: ConfiguredExecutionProfile = { alias: "code", default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "high" };
-const profiles = new Map([["code", profile], ["other", { ...profile, alias: "other", model: "second" }]]);
+const profile = { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "high" };
+const rawConfig = { workspaces: { repo: "/host" }, executionProfiles: { code: profile, other: { ...profile, model: "second" } } };
 const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none" } as const;
 async function fixture(remote = "git@github.com:o/r.git") {
   const home = await temporaryRoot("pi-writer-provision-");
@@ -46,7 +46,7 @@ async function fixture(remote = "git@github.com:o/r.git") {
 }
 it("provisions privately from the checkout bundle with ordered state and provider deduplication", async () => {
   const f = await fixture();
-  expect(await provisionWriter(f.ctx, { index: 1, settings, profiles })).toEqual({ code: "writer_provisioned", status: "ok" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
   expect(f.phases).toEqual(["provisioning"]);
   const state = (await readWriterState(f.ctx.home, "repo-w1"))!;
   expect(state.phase).toBe("not_ready");
@@ -60,43 +60,63 @@ it("provisions privately from the checkout bundle with ordered state and provide
   for (const path of [f.paths.state, join(f.paths.agent, "auth.json"), ...["pi-session-mcp.json", "execution-modes.json", "writer-guard.json"].map((name) => join(f.paths.config, name)), join(f.paths.bundles, "base.bundle")]) expect((await lstat(path)).mode & 0o777).toBe(0o600);
   await expect(lstat(f.paths.wrapper)).rejects.toMatchObject({ code: "ENOENT" });
   expect(f.calls.filter((call) => call.command === "podman" && call.args[0] === "run").every((call) => call.signal !== undefined)).toBe(true);
-  expect(await provisionWriter(f.ctx, { index: 1, settings, profiles })).toEqual({ code: "writer_unchanged", status: "unchanged" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_unchanged", status: "unchanged" });
 });
 it("refuses URL userinfo before writing, but allows scp syntax", async () => {
   const f = await fixture("https://user:tok@host/x.git");
-  expect(await provisionWriter(f.ctx, { index: 1, settings, profiles })).toMatchObject({ code: "remote_url_refused", status: "failed" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toMatchObject({ code: "remote_url_refused", status: "failed" });
   await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("rejects unsupported profiles and renders only selected builtin skills", () => {
-  for (const extra of [{ extensions: [] }, { mcpServers: {} }, { skills: [{ alias: "impl", path: "./x/SKILL.md" }] }]) {
-    expect(() => renderContainedConfig("repo", "/clone", new Map([["code", { ...profile, ...extra }]]))).toThrow("container_profile_unsupported");
+it("rejects unsupported raw profiles, missing profiles and non-builtin catalog skills", () => {
+  for (const extra of [{ extensions: [] }, { mcpServers: {} }, { skills: ["local"] }, { skills: ["missing"] }]) {
+    expect(() => renderContainedConfig("repo", "/clone", { executionProfiles: { code: { ...profile, ...extra } }, skillCatalog: { local: "./x/SKILL.md" } }, ["code"])).toThrow("container_profile_unsupported");
   }
-  expect(renderContainedConfig("repo", "/clone", new Map([["code", { ...profile, skills: [{ alias: "impl", path: "builtin:pi-session-implementation" }] }]]))).toMatchObject({ workspaces: { repo: "/clone" }, skillCatalog: { impl: "builtin:pi-session-implementation" }, executionProfiles: { code: { default: true, skills: ["impl"] } } });
+  for (const raw of [null, {}, { executionProfiles: {} }]) expect(() => renderContainedConfig("repo", "/clone", raw, ["missing"])).toThrow("container_profile_unsupported");
+});
+it("renders verbatim selected raw profiles and a loadable synthetic read-only default", async () => {
+  const selected = { ...profile, skills: ["impl"] };
+  const raw = { ...rawConfig, executionProfiles: { code: selected, unused: { ...profile, extensions: [] } }, skillCatalog: { impl: "builtin:pi-session-implementation", unused: "./x/SKILL.md" } };
+  const before = JSON.stringify(raw);
+  const config = renderContainedConfig("repo", "/clone", raw, ["code"]);
+  expect(config.workspaces).toEqual({ repo: "/clone" });
+  expect(config.skillCatalog).toEqual({ impl: "builtin:pi-session-implementation" });
+  expect(config.executionProfiles).toEqual({ code: selected, "boundary-read-only": { default: true, permissionProfile: "read-only", provider: "example", model: "model", thinkingLevel: "high" } });
+  expect(JSON.stringify(raw)).toBe(before);
+  const directory = await temporaryRoot("pi-contained-config-");
+  const path = join(directory, "pi-session-mcp.json");
+  await writeFile(path, JSON.stringify(config));
+  await writeFile(join(directory, "execution-modes.json"), JSON.stringify({ schemaVersion: 1, workspaces: { repo: { mode: "host", acceptHostWrites: true } } }));
+  const loaded = await loadConfig(path);
+  expect(loaded.defaultExecutionProfile).toBe("boundary-read-only");
+  expect(loaded.executionProfiles.get("code")).toMatchObject({ default: false, permissionProfile: "coding", skills: [{ alias: "impl" }] });
+  expect(loaded.executionProfiles.get("boundary-read-only")?.skills).toBeUndefined();
+  expect([...loaded.workspaces]).toEqual([["repo", "/clone"]]);
+  expect(loaded.workspaceModes.get("repo")?.mode).toBe("host");
 });
 it("recreates interrupted and invalid state without preserving stale files", async () => {
   const f = await fixture();
-  await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   await writeWriterState(f.ctx.home, "repo-w1", { ...(await readWriterState(f.ctx.home, "repo-w1"))!, phase: "provisioning" });
   await writeFile(join(f.paths.root, "stale"), "stale");
-  await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   await expect(lstat(join(f.paths.root, "stale"))).rejects.toMatchObject({ code: "ENOENT" });
   await writeFile(f.paths.state, "invalid");
-  await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   expect(f.phases).toEqual(["provisioning", "provisioning", "provisioning"]);
 });
 it("never deletes an unreadable writer", async () => {
   const f = await fixture();
-  await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   await writeFile(join(f.paths.root, "keep"), "keep");
   const mock = vi.spyOn(fsPromises, "open").mockRejectedValueOnce(Object.assign(new Error("private"), { code: "EACCES" }));
   syncBuiltinESMExports();
-  try { expect(await provisionWriter(f.ctx, { index: 1, settings, profiles })).toEqual({ code: "writer_state_unreadable", status: "failed" }); } finally { mock.mockRestore(); syncBuiltinESMExports(); }
+  try { expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_state_unreadable", status: "failed" }); } finally { mock.mockRestore(); syncBuiltinESMExports(); }
   expect(await readFile(join(f.paths.root, "keep"), "utf8")).toBe("keep");
   expect(f.phases).toEqual(["provisioning"]);
 });
 it("a missing local image writes nothing", async () => {
   const f = await fixture(); f.unavailable();
-  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, image: imageId }, profiles })).toMatchObject({ code: "image_unavailable", status: "failed" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, image: imageId }, rawConfig })).toMatchObject({ code: "image_unavailable", status: "failed" });
   await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 });
 it.each([
@@ -104,14 +124,14 @@ it.each([
   ["stash", `${commit}\nrefs/heads/main ${commit}\nrefs/stash ${commit}\n${tree}\n${tree}\n${tree}\n`],
   ["moved HEAD", `${"e".repeat(40)}\nrefs/heads/main ${"e".repeat(40)}\n${tree}\n${tree}\n${tree}\n`],
 ])("does not treat %s as baseline", async (_label, output) => {
-  const f = await fixture(); await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  const f = await fixture(); await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   f.work(output);
   expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, dirty: false });
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
   expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
 });
 it("inspects work and refuses removal unless baseline, collected or discarded", async () => {
-  const f = await fixture(); await provisionWriter(f.ctx, { index: 1, settings, profiles });
+  const f = await fixture(); await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false, branches: [{ name: "refs/heads/main", commit }] });
   f.dirty();
   expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, dirty: true });
