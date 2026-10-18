@@ -49,8 +49,10 @@ pi-session-mcp-setup --repo my-project --profiles code --apply
 With no `--mode`, setup proposes `container` only when the local rootless Podman
 probe succeeds. Otherwise it reports `mode_choice_required`: explicitly choose
 `host` with acknowledgment or `read-only`. Container mode requires a non-empty
-list of configured coding-profile aliases; replace `code` with yours. A profile
-whose provider is `cursor` is refused pending its own boundary acceptance.
+list of configured coding-profile aliases; replace `code` with yours. Without
+that list, explicit or proposed container mode reports
+`container_profiles_required` and writes nothing. A profile whose provider is
+`cursor` is refused pending its own boundary acceptance.
 A successful runtime probe does not prove writer readiness or containment.
 
 Explicit alternatives (dry-run first, then repeat with `--apply`):
@@ -122,6 +124,7 @@ Setup reports sanitized findings under `modes/workspace/<alias>`:
 | `mode_unchanged` | The stored choice already equals the requested choice |
 | `mode_choice_required` | Automatic choice found no usable rootless Podman; explicitly choose host or read-only |
 | `host_ack_required` | Explicit host request lacks `--accept-host-writes` |
+| `container_profiles_required` | Explicit or proposed container mode lacks a non-empty `--profiles` list; nothing written |
 | `container_runtime_unavailable` | Explicit container request found no usable rootless Podman |
 | `alias_unknown` | The requested alias is invalid or not configured |
 | `modes_file_invalid` | Existing or proposed modes fail validation; no replacement is made |
@@ -148,7 +151,9 @@ for a container entry. Read-only profiles remain allowed.
 Setup never restarts servers or controllers. After applying a change, restart
 all affected controllers, or use `/mcp` reconnect where the client provides it
 and ensure it starts a **new server process**. Confirm the new mode with
-`pi_capabilities_get`. Running servers retain their loaded policy, and changing
+`pi_capabilities_get`'s workspace `mode`, which confirms the running policy.
+The configuration fingerprint covers only the main configuration file, not
+`execution-modes.json`. Running servers retain their loaded policy, and changing
 the file does not stop existing sessions; close them before tightening policy.
 An unchanged request does not emit a new restart finding, but does not make an
 old running server reload either.

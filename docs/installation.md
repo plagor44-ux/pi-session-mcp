@@ -188,12 +188,15 @@ clients do not depend on your shell environment.
 ### Choose repository execution modes
 
 Before registering a client, choose a mode for every workspace alias with
-`pi-session-mcp-setup --repo <alias>` (dry-run), then repeat with `--apply`.
-See [Execution modes](execution-modes.md#choose-at-installation) for required
-profile selection, explicit host-write acknowledgment and all options. With
-usable rootless Podman, setup proposes container; otherwise it requires an
-explicit host or read-only choice. Container mode blocks host coding but does
-not provision writers: use the [manual isolation route](isolation-setup.md).
+`pi-session-mcp-setup --repo <alias> --profiles <coding-alias>` (dry-run), then
+repeat with `--apply`. Container mode requires a non-empty list of configured
+coding-profile aliases (`--profiles a,b`); without it, setup reports
+`container_profiles_required` and writes nothing. See
+[Execution modes](execution-modes.md#choose-at-installation) for explicit
+host-write acknowledgment and all options. With usable rootless Podman, setup
+proposes container; otherwise it requires an explicit host or read-only choice.
+Container mode blocks host coding but does not provision writers: use the
+[manual isolation route](isolation-setup.md).
 Missing entries retain host behavior as `unset` for compatibility and warn in
 Doctor when a coding profile exists.
 
@@ -410,9 +413,11 @@ define every field and error code.
 
 The server reads the configuration once when it starts. After editing the file,
 start a new client session so that the client launches a new server process.
-`pi_capabilities_get` returns the SHA-256 fingerprint of the loaded
-bytes and `reloadPolicy: "restart-required"`, which shows which version of the
-file a running server uses. The same applies to changes of the local Pi provider
+`pi_capabilities_get` returns the SHA-256 fingerprint of the loaded main
+configuration file's bytes and `reloadPolicy: "restart-required"`, which shows
+which version of that file a running server uses. The fingerprint does not
+cover `execution-modes.json`; each workspace's `mode` in `pi_capabilities_get`
+confirms the running execution-mode policy. The same applies to changes of the local Pi provider
 configuration or credentials.
 
 Execution-mode changes also require a new server process; setup reports
