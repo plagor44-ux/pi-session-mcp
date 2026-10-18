@@ -129,7 +129,15 @@ describe("client adapters", () => {
     expect(methods).not.toContain("pi_session_start");
   });
 
+  it.each(["unset", "host", "container", "read-only"])("accepts workspace mode %s", async (mode) => {
+    const capabilities = { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo", mode }] };
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "verified", capabilitiesGet: true });
+  });
+
   const malformedCapabilities: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ["missing workspace mode", { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo" }] }],
+    ["unknown workspace mode", { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo", mode: "unknown" }] }],
+    ["unknown workspace key", { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo", mode: "host", extra: true }] }],
     ["missing configuration", withoutConfiguration(VERIFIED_CAPABILITIES)],
     ["unknown capabilities key", { ...VERIFIED_CAPABILITIES, extra: true }],
     ["unknown configuration key", capabilitiesWith({ ...VERIFIED_CONFIGURATION, stale: false })],
