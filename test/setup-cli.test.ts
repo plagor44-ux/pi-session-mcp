@@ -22,6 +22,18 @@ describe("setup CLI", () => {
   it("rejects unsupported, repeated, and malformed arguments", () => { expect(() => parseSetupArgs(["--wat"])).toThrow("argument_unsupported"); expect(() => parseSetupArgs(["--apply", "--verify"])).toThrow("operation_repeated"); expect(() => parseSetupArgs(["--target", "codex:user"])).toThrow("target_invalid"); });
   it("does not echo secret or path sentinels from a target projection", () => { const result: SetupResult = { ...sample, findings: [{ ...sample.findings[0]!, target: { client: "codex", scope: "user", alias: "SAFE_ALIAS" }, code: "setup_failed" }] }; const rendered = `${formatSetupResult(result)}\n${formatSetupHuman(result)}`; expect(rendered).not.toContain("SECRET_SENTINEL"); expect(rendered).not.toContain("/tmp/secret"); });
   describe("--repo", () => {
+    it.each(["none", "go"])("passes the selected cache %s into container settings", (cache) => {
+      expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cache", cache]).repo?.container?.cache).toBe(cache);
+    });
+    it.each([
+      [["--repo", "a", "--cache", "other"], "cache_invalid"],
+      [["--repo", "a", "--cache", "go", "--cache", "none"], "repo_argument_repeated"],
+      [["--repo", "a", "--mode", "host", "--accept-host-writes", "--cache", "go"], "repo_combination"],
+      [["--repo", "a", "--mode", "read-only", "--cache", "none"], "repo_combination"],
+      [["--repo", "a", "--cache"], "repo_argument_invalid"],
+    ])("rejects invalid cache arguments %j", (argv, code) => {
+      expect(() => parseSetupArgs(argv)).toThrow(code);
+    });
     it("parses explicit container settings and defaults to dry-run", () => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--writers", "2", "--lifecycle", "ephemeral", "--profiles", "code,other", "--image", "node", "--network", "none"])).toMatchObject({ repo: { alias: "a", mode: "container", apply: false, acceptHostWrites: false, container: { writers: 2, lifecycle: "ephemeral", profiles: ["code", "other"], image: "node", network: "none" } } });
       expect(parseSetupArgs(["--apply", "--repo", "a", "--mode", "host", "--accept-host-writes"])).toMatchObject({ repo: { apply: true, acceptHostWrites: true } });
