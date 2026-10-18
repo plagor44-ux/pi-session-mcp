@@ -71,6 +71,9 @@ async function git(ctx: WriterContext, args: readonly string[], optional = false
   }
   return result.stdout.trim();
 }
+async function collectGit(ctx: WriterContext, args: readonly string[]): Promise<string | undefined> {
+  try { return await git(ctx, args); } catch { throw new LifecycleError("writer_collect_failed"); }
+}
 function shortBranch(ref: string): string {
   const short = ref.startsWith("refs/heads/") ? ref.slice(11)
     : ref.startsWith("refs/remotes/") ? ref.slice(13).split("/").slice(1).join("/") : ref;
@@ -227,7 +230,9 @@ export async function collectWriter(ctx: WriterContext, name: string): Promise<C
     const paths = writerPaths(ctx.home, name);
     // Check redirects before inspecting or running any Git command on the clone.
     await verifyCloneLayout(paths.clone);
-    const state = await requiredState(ctx, name);
+    const { collected: previous, ...state } = await requiredState(ctx, name);
+    // Only this attempt's complete export may authorize a subsequent reset/recreate.
+    if (previous !== undefined) await writeWriterState(ctx.home, name, state);
     const bundle = join(paths.bundles, "collect.bundle");
     await rm(bundle, { force: true });
     try {
@@ -249,7 +254,11 @@ if [ "$tree" != "$(${BOUNDARY_GIT} rev-parse 'HEAD^{tree}')" ]; then
   export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
   commit=$(printf '%s\\n' 'WIP collected by pi-session-mcp' | ${BOUNDARY_GIT} commit-tree "$tree" -p HEAD)
   branch=$(${BOUNDARY_GIT} symbolic-ref --short HEAD || printf '%s' "$4")
-  ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$branch-wip" "$commit"
+  if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$branch-wip"; then
+    printf '%s\\n' ref_name_refused
+  else
+    ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$branch-wip" "$commit"
+  fi
 fi
 if [ -z "$(${BOUNDARY_GIT} --git-dir=/tmp/scratch for-each-ref --format='%(refname)')" ]; then
   printf '%s\\n' nothing_to_collect
@@ -258,9 +267,11 @@ else
 fi`;
       const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
       if (result.exitCode !== 0) throw new LifecycleError("writer_collect_failed");
-      if (!result.stdout.split("\n").includes("nothing_to_collect")) {
-        await git(ctx, ["bundle", "verify", bundle]);
-        const heads = await git(ctx, ["bundle", "list-heads", bundle]);
+      const messages = result.stdout.split("\n");
+      for (const message of messages) if (message === "ref_name_refused") findings.push({ code: "ref_name_refused" });
+      if (!messages.includes("nothing_to_collect")) {
+        await collectGit(ctx, ["bundle", "verify", bundle]);
+        const heads = await collectGit(ctx, ["bundle", "list-heads", bundle]);
         for (const line of heads?.split("\n") ?? []) {
           if (!line.trim()) continue;
           const match = /^(?:[0-9a-f]{40}|[0-9a-f]{64}) (refs\/heads\/(.+))$/.exec(line.trim());
@@ -269,9 +280,12 @@ fi`;
             continue;
           }
           const source = match[1]!, destination = `refs/remotes/writer-${name}/${match[2]!}`;
-          await git(ctx, ["fetch", "--no-tags", "--end-of-options", bundle, `+${source}:${destination}`]);
+          await collectGit(ctx, ["fetch", "--no-tags", "--end-of-options", bundle, `+${source}:${destination}`]);
           refs.push(destination);
         }
+      }
+      if (findings.length > 0) {
+        return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
       }
       const work = await inspectWork(ctx, name);
       await writeWriterState(ctx.home, name, { ...state, collected: { digest: work.digest, at: new Date().toISOString() } });
