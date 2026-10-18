@@ -206,7 +206,7 @@ export async function immutableReleaseBinding(packageRoot: string): Promise<stri
   const runtimeRoot = join(packageRoot, "dist");
   const runtimeFiles = await listRuntimeFiles(runtimeRoot);
   // The guardian loads setup-platform.js at runtime, so it is mandatory too.
-  for (const required of ["main.js", "setup-command-guardian.js", "setup-platform.js"] as const) {
+  for (const required of ["main.js", "setup-command-guardian.js", "setup-platform.js", "writer-launch.js"] as const) {
     if (!runtimeFiles.includes(required)) throw new Error("release_entry_missing");
     const entry = await lstat(join(runtimeRoot, required));
     if (!entry.isFile() || entry.isSymbolicLink()) throw new Error("release_entry_invalid");

@@ -58,7 +58,8 @@ it("provisions privately from the checkout bundle with ordered state and provide
   expect(JSON.parse(await readFile(join(f.paths.config, "writer-guard.json"), "utf8"))).toMatchObject({ baseCommit: commit });
   for (const path of [f.paths.root, f.paths.config, f.paths.agent, f.paths.clone, f.paths.bundles]) expect((await lstat(path)).mode & 0o777).toBe(0o700);
   for (const path of [f.paths.state, join(f.paths.agent, "auth.json"), ...["pi-session-mcp.json", "execution-modes.json", "writer-guard.json"].map((name) => join(f.paths.config, name)), join(f.paths.bundles, "base.bundle")]) expect((await lstat(path)).mode & 0o777).toBe(0o600);
-  await expect(lstat(f.paths.wrapper)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await lstat(f.paths.wrapper)).mode & 0o777).toBe(0o700);
+  expect(await readFile(f.paths.wrapper, "utf8")).toContain("dist/writer-launch.js");
   expect(f.calls.filter((call) => call.command === "podman" && call.args[0] === "run").every((call) => call.signal !== undefined)).toBe(true);
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_unchanged", status: "unchanged" });
 });

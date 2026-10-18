@@ -98,13 +98,20 @@ export async function refreshHostLogin(input: {
     let failed = false;
     let expected = 1;
     let buffer = "";
-    const fail = () => { failed = true; server.kill("SIGTERM"); };
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const fail = () => {
+      if (failed) return;
+      failed = true;
+      server.kill("SIGTERM");
+      killTimer = setTimeout(() => { server.kill("SIGKILL"); }, 2_000);
+    };
     const timer = setTimeout(fail, input.timeoutMs);
     const send = (message: unknown) => { server.stdin.write(`${JSON.stringify(message)}\n`); };
     server.stdin.on("error", fail);
-    server.on("error", () => { clearTimeout(timer); reject(new Error("writer_auth_warmup_failed")); });
+    server.on("error", () => { clearTimeout(timer); clearTimeout(killTimer); reject(new Error("writer_auth_warmup_failed")); });
     server.on("close", (code) => {
       clearTimeout(timer);
+      clearTimeout(killTimer);
       if (!failed && expected === 4 && code === 0) resolve();
       else reject(new Error("writer_auth_warmup_failed"));
     });

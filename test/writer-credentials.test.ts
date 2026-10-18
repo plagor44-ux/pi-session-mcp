@@ -127,6 +127,14 @@ describe("host login warmup", () => {
     await expect(refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: "unused", timeoutMs: 100 })).rejects.toThrow("warmup");
   });
 
+  it("kills a server that traps SIGTERM after the grace period", async () => {
+    const root = await fakeServer("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);");
+    const started = Date.now();
+    await expect(refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: "unused", timeoutMs: 500 })).rejects.toThrow("warmup");
+    expect(Date.now() - started).toBeGreaterThanOrEqual(2500);
+    expect(Date.now() - started).toBeLessThan(4500);
+  });
+
   it("rejects tool errors without sending a model request", async () => {
     const root = await fakeServer(`
       const readline = require('node:readline');
