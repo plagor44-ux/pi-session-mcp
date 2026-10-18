@@ -100,7 +100,7 @@ means its named checks passed with evidence. Nothing here is released.
 | [#90](https://github.com/plagor44-ux/pi-session-mcp/issues/90) | Input schemas without the UUID pattern | Sprint 5 | compatibility proof | implemented after the proof (156 identical responses); no effect on the Codex 0.162.1 projection, which drops `pattern` itself; wire −1,074 bytes |
 | [#91](https://github.com/plagor44-ux/pi-session-mcp/issues/91) | Bounded wait decision | maintainer | #93 results | decision inputs delivered; decision deferred |
 | [#92](https://github.com/plagor44-ux/pi-session-mcp/issues/92) | Worker usage research | Sprint 5 research | — | research note delivered; no contract change |
-| [#93](https://github.com/plagor44-ux/pi-session-mcp/issues/93) | M1 A/B | operator approval | arm-A commit | proposal delivered, not approved; P1–P3 implemented provider-free |
+| [#93](https://github.com/plagor44-ux/pi-session-mcp/issues/93) | M1 A/B | operator approval | receipt decision | P1–P3 implemented; probe option C approved (10 USD advisory): attempt 1 failed on a missing `openai-codex` login, attempt 2 on the `openai` route passed L1 and repaired L2 correctly, but the selected implementation skill's report replaced the JSON-only receipt; open decision on that conflict |
 
 Gates for later sprints: the #79 decision before any isolation work; the #93
 approval before the A/B; the A/B before the final #91 decision; a public
