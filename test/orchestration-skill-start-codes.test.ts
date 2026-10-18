@@ -51,6 +51,13 @@ const classes = classBullets();
 const classOf = (code: string): StartClass[] => CLASSES.filter((name) => classes[name].includes(code));
 
 describe("orchestration skill start-error classification", () => {
+  it("teaches finish and classifies writer refusals exactly once", () => {
+    expect(skill).toContain("--finish");
+    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "container_runtime_unavailable"]) {
+      expect(classOf(code), code).toHaveLength(1);
+      expect(backticked(reference).filter((value) => value === code), code).toHaveLength(1);
+    }
+  });
   it("reads the documented codes from the contract", () => {
     expect(mcpErrorCodes).toContain("unknown_execution_profile");
     expect(mcpErrorCodes).toContain("unknown_provider");

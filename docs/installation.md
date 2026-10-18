@@ -7,7 +7,9 @@ Code, and covers configuration changes, upgrades and removal. Related documents:
   tool flow and troubleshooting.
 - [Acceptance](acceptance.md): how a release is accepted.
 - [Execution modes](execution-modes.md): choose host, container or read-only per
-  repository; container writer automation is pending.
+  repository; automated Linux container writers, readiness, collection and finish.
+- [Isolation setup](isolation-setup.md): rootless Podman prerequisites, what setup
+  automates and migration from hand-made writers.
 
 ## What gets installed
 
@@ -60,12 +62,16 @@ the same arguments.
   reports `unsupported` otherwise. The contract was last recorded with Codex CLI
   `0.162.1` and Claude Code `2.1.296`. Manual registration, described in the
   [client setup reference](client-setup.md), works independently of `setup`.
-- For real prompts only: local Pi authentication and a provider and model pair
-  that the local Pi configuration knows. Installation, Doctor and `setup` need
-  no credentials, no provider and no network access beyond `npm ci`.
+- For real prompts: local Pi authentication and a provider/model pair that Pi
+  knows. Doctor is offline. Container apply may pull the built-in pinned image
+  and runs the acceptance network probes; writer registration health checks can
+  start its launcher and copy/refresh selected credentials. Direct writer verify
+  disables credential refresh and uses no session or provider request.
 
 Pi Session MCP embeds the Pi SDK version pinned in `package.json`. It reuses the
-local user's existing Pi authentication and never stores or prints it.
+local user's existing Pi authentication and never prints it. Automated writers
+keep selected provider credentials in their private boundary agent copy; see
+[Execution modes](execution-modes.md#writer-storage-launch-and-readiness).
 
 ## 1. Install
 
@@ -195,8 +201,12 @@ coding-profile aliases (`--profiles a,b`); without it, setup reports
 [Execution modes](execution-modes.md#choose-at-installation) for explicit
 host-write acknowledgment and all options. With usable rootless Podman, setup
 proposes container; otherwise it requires an explicit host or read-only choice.
-Container mode blocks host coding but does not provision writers: use the
-[manual isolation route](isolation-setup.md).
+On Linux, container apply provisions and accepts separate full-clone writers,
+then registers their wrappers. First explicitly authorize the host isolation
+control (`--isolation-control --repo <alias> --apply`): it writes real canaries
+below $HOME and removes them. Without a passing control writers remain not ready.
+See [Isolation setup](isolation-setup.md) for prerequisites, residual credential
+and network risks, and migration of `psm-alpha` and `thoth-alpha`.
 Missing entries retain host behavior as `unset` for compatibility and warn in
 Doctor when a coding profile exists.
 

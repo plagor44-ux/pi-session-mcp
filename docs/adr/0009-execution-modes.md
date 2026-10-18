@@ -8,8 +8,8 @@
 fired when coding profiles wrote on non-disposable repositories.
 [ADR 0008](0008-coding-profile-isolation.md) accepted a Linux boundary made
 from rootless Podman, a wrapped registration and one full clone per writer.
-Its [manual runbook](../isolation-setup.md) remains the accepted operational
-route. The host server previously offered coding profiles for every workspace,
+Its [operator runbook](../isolation-setup.md) now describes the automated
+route; historical manual acceptance remains separately recorded. The host server previously offered coding profiles for every workspace,
 without recording which repositories were intended to stay inside a boundary.
 
 ## Decision
@@ -51,8 +51,9 @@ with `invalid_execution_modes`.
 Container entries record writers (1–16, default 1), lifecycle (`persistent` by
 default or `ephemeral`), selected coding profiles, image (default `node`) and
 network (`pasta` by default or `none`). Profiles must exist, be coding profiles
-and not use the Cursor provider. These settings record intent, not provisioned
-or accepted writers.
+and not use the Cursor provider. These settings alone are intent, not proof
+of provisioned or accepted writers. Container entries also accept cache `none`
+(default) or `go`; the current CLI does not expose a cache flag.
 
 ## Contract change and versioning
 
@@ -71,16 +72,59 @@ This decision does not itself bump the package version or authorize publication.
 - The operator's host-write choice is visible in Doctor as
   `workspace_host_writes_accepted` (`ok`); unresolved choices warn with
   `workspace_mode_unset` when a coding profile exists.
-- Host coding is blocked for container repositories even before automation is
-  available. Changing the mode does not stop sessions already running.
-- Plan A implements policy, setup selection and offline diagnosis only.
-  **Plan B is pending:** automated provisioning, collection, reset, generated
-  wrappers, refusal server, writer registration and periodic credential refresh
-  for long-running contained servers are not implemented.
-- Until Plan B, the operator must follow the manual runbook and obtain the
-  writer's acceptance. Selecting container mode alone creates no boundary.
+- Host coding is blocked for container repositories. Changing the mode does
+  not stop sessions already running.
+- Plan A implements policy, selection and offline diagnosis. Plan B implements
+  the Linux writer lifecycle below; selecting a mode alone still proves no
+  acceptance and does not authorize publication or a live rollout.
 - Local stdio, in-memory sessions and one trusted local peer remain the product
   boundary. macOS containment remains unaccepted; its interim rules still apply.
 
-See [Execution modes](../execution-modes.md) for commands, reports and the
-restart rule.
+## Plan B: automated writer decisions
+
+1. **Separate clones and guarded admission.** One full clone and boundary per
+   writer; never host Git inside a clone. Coding admission refuses a clone
+   not at baseline (extra branches, stash, dirty/untracked files, different HEAD)
+   or another open coding session. Baseline guards are re-read so reset works
+   without restarting the contained server.
+2. **Explicit profiles.** Contained configs contain selected supported coding
+   profiles and the synthetic default `boundary-read-only`. Coding must name
+   its profile explicitly; extensions, external MCP grants and non-builtin
+   skills are not supported in these configs.
+3. **Safe completion.** Finish collects then resets persistent writers or
+   recreates ephemeral writers. Any refused branch name makes collection
+   incomplete; finish stops. Rename inside the writer, or explicitly resolve
+   loss with reset/discard. No implicit data-loss authorization follows a partial
+   export. Controllers finish after takeover and session close, before reuse.
+4. **Untrusted export.** Bundles import into the operator's checkout at
+   `refs/remotes/writer-<name>/<branch>`; dirty work uses `<branch>-wip`.
+   The operator reviews before integration; setup never merges results.
+5. **Explicit acceptance.** Host control requires
+   `--isolation-control --repo <alias> --apply`, writes real canaries below
+   $HOME and removes them. Dry-run plans only. Writers stay not ready until
+   it passes, then require contained provider-free acceptance bound to wrapper,
+   package version, image ID, Podman version, network and cache.
+6. **Credential lifetime.** Launcher checks every 60 seconds. Only selected
+   OAuth tokens expired or within 2 minutes of expiry trigger host login
+   warmup (invalid/missing expiry also triggers it); measured warmup refreshes
+   expired/almost expired tokens only. It then re-copies credentials, with
+   OAuth refresh tokens emptied. Direct verify disables refresh with
+   `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, makes no session/provider request and
+   touches no credential in that launch. Residual risk remains: access tokens
+   or API keys are readable inside the boundary; pasta networking is not limited.
+7. **Honest inspection.** Doctor stays offline. Writer verify includes Doctor,
+   registration equality and a bounded direct MCP check. `claude mcp get`
+   health-checks the registration and briefly starts the container; setup's
+   inspect/verify do this too. That client health-check subprocess does not
+   receive the direct launch's credential-refresh override from setup.
+8. **Migration, not adoption.** Collect manual `psm-alpha`/`thoth-alpha` work,
+   remove their local registration in its project, remove wrapper/state, then
+   provision by configured alias with `--repo … --mode container --profiles …
+   --apply`. Go requires an operator-supplied image ID and `cache: go` settings;
+   no `--cache` CLI exists and CLI mode requests rebuild defaults, a documented
+   migration limitation. Generated names and ownership are not the manual ones.
+
+These decisions keep local stdio and in-memory MCP sessions. Durable writer
+lifecycle metadata is not persistence/resume of sessions. No HTTP, remote or
+multi-user behavior is added. See [Execution modes](../execution-modes.md) for
+commands, reports, readiness and restart rules.
