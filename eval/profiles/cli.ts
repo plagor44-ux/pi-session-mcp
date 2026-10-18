@@ -19,16 +19,17 @@ export function parseArgs(args:string[]) {
   const options:Record<string,string>={};
   for(let i=0;i<args.length;i++){
     const a=args[i]!;if(modes.includes(a))continue;
-    if(!["--manifest","--budget","--decision","--output","--inventory","--controller-version","--worker-skills"].includes(a)||!args[i+1]||args[i+1]!.startsWith("--")||options[a])throw new Error("invalid_argument");
+    if(!["--manifest","--budget","--decision","--output","--inventory","--controller-version","--worker-skills","--worker-provider"].includes(a)||!args[i+1]||args[i+1]!.startsWith("--")||options[a])throw new Error("invalid_argument");
     options[a]=args[++i]!;
   }
   if(options["--inventory"]&&mode[0]&&!["--plan","--footprint-plan"].includes(mode[0]))throw new Error("inventory_plan_only");
   if(!["--live","--footprint-live"].includes(mode[0]??"")&&(options["--manifest"]||options["--budget"]))throw new Error("live_only_argument");
   if(["--live","--footprint-live"].includes(mode[0]??"")&&(!options["--manifest"]||!options["--budget"]))throw new Error("live_approval_required");
   if(options["--decision"]&&mode[0]!=="--footprint-live")throw new Error("footprint_decision_only");
-  if((options["--controller-version"]||options["--worker-skills"])&&mode[0]!=="--footprint-plan")throw new Error("footprint_plan_only");
+  if((options["--controller-version"]||options["--worker-skills"]||options["--worker-provider"])&&mode[0]!=="--footprint-plan")throw new Error("footprint_plan_only");
   if(options["--controller-version"]&&!/^\d+\.\d+\.\d+$/.test(options["--controller-version"]))throw new Error("invalid_controller_version");
   if(options["--worker-skills"]&&!["none","selected"].includes(options["--worker-skills"]))throw new Error("invalid_worker_skills");
+  if(options["--worker-provider"]&&!["openai-codex","openai"].includes(options["--worker-provider"]))throw new Error("invalid_worker_provider");
   if(mode[0]==="--footprint-live"&&!options["--decision"])throw new Error("footprint_decision_required");
   return {mode:mode[0]??"--plan",options};
 }
@@ -40,7 +41,7 @@ async function main() {
     // Selected worker skills are bound to the tree digests of this source; the version names the installed controller client.
     const {readSkillTree}=await import("../../src/skill-library.js");
     const workerSkills=options["--worker-skills"]==="selected"?await Promise.all(["pi-session-implementation","pi-session-review"].map(async name=>({name,tree_digest:(await readSkillTree(join(root,"skills",name))).fingerprint}))):[];
-    const planOptions={controllerVersion:options["--controller-version"],workerSkills};
+    const planOptions={controllerVersion:options["--controller-version"],workerSkills,workerProvider:options["--worker-provider"] as "openai-codex"|"openai"|undefined};
     process.stdout.write(JSON.stringify({proposal:await footprintPlan(root,planOptions),execution_templates:await prepareTokenLive(root,build,planOptions),...options["--inventory"]?{inventory:await inventory(options["--inventory"])}:{}},null,2)+"\n");return;
   }
   if(mode==="--plan"){
