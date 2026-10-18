@@ -12,8 +12,31 @@ import { bounded } from "./transport.js";
 import { proxyMetricsSchema, runTokenProxy, type ProxyMetrics } from "./token-live-proxy.js";
 import { frameSchema, type Frame } from "./token-meter.js";
 import { fileURLToPath } from "node:url";
+import { readSkillTree, type SkillTree } from "../../src/skill-library.js";
 
-const CONTROLLER = { client: "codex", version: "0.162.0", provider: "openai", model: "gpt-6.1-sol", effort: "high", auth: "existing-client-login-not-probed" } as const;
+export const DEFAULT_CONTROLLER_VERSION = "0.162.0" as const;
+export const CONTROLLER_BASE = {
+  client: "codex",
+  provider: "openai",
+  model: "gpt-6.1-sol",
+  effort: "high",
+  auth: "existing-client-login-not-probed",
+} as const;
+
+export interface ControllerBinding {
+  readonly client: "codex";
+  readonly version: string;
+  readonly provider: "openai";
+  readonly model: "gpt-6.1-sol";
+  readonly effort: "high";
+  readonly auth: "existing-client-login-not-probed";
+}
+
+export function controllerConfig(version: string = DEFAULT_CONTROLLER_VERSION): ControllerBinding {
+  return { ...CONTROLLER_BASE, version };
+}
+
+export const CONTROLLER = controllerConfig(DEFAULT_CONTROLLER_VERSION);
 const ROUTES = {
   review: { provider: "openai-codex", model: "gpt-6.1-sol", effort: "high" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
   code: { provider: "openai-codex", model: "gpt-6.1-sol", effort: "medium" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
@@ -28,12 +51,61 @@ const RUN_PROMPTS = [
   "For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start one coding session in workspace alias `fixture` using profile `code`; prompt once with the supplied task; poll with bounded pauses until terminal; retrieve its completed receipt; close it and verify the session list is empty. Do not start another session. The harness independently recorded the failing T2 baseline before this controller started.",
   "For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start exactly two read-only sessions in workspace alias `fixture`, both using profile `review`, before prompting either. Prompt each once with its supplied task, poll both with bounded pauses to terminal, retrieve both receipts, then issue exactly one additional prompt to the first session with the supplied follow-up. Poll that turn to terminal, retrieve its receipt, verify the first turn remains unchanged, close both sessions and verify the list is empty. Do not start or prompt any other session.",
 ];
+
+export interface WorkerSkillBinding {
+  readonly name: string;
+  readonly tree_digest: string;
+}
+
+export function parseWorkerSkills(value: unknown): readonly WorkerSkillBinding[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    const r = asRecord(item);
+    const name = String(r.name ?? r.identity ?? "");
+    const tree_digest = String(r.tree_digest ?? r.digest ?? "");
+    return { name, tree_digest };
+  }).filter((s) => s.name.length > 0 && s.tree_digest.length > 0);
+}
+
 /** Per-case server configuration. The server requires a read-only default, so L2 keeps `review` as default and selects `code` explicitly. */
-export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string) {
-  const review = { permissionProfile: "read-only", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "high", default: true } as const;
-  return { workspaces: { fixture: workspace }, executionProfiles: caseId === "L2"
-    ? { review, code: { permissionProfile: "coding", provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "medium", default: false } as const }
-    : { review } };
+export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, workerSkills: readonly WorkerSkillBinding[] = []) {
+  const hasReview = workerSkills.some((s) => s.name === "pi-session-review");
+  const hasCode = workerSkills.some((s) => s.name === "pi-session-implementation");
+  const skillCatalog: Record<string, string> = {};
+  if (hasReview) skillCatalog["pi-session-review"] = "builtin:pi-session-review";
+  if (hasCode) skillCatalog["pi-session-implementation"] = "builtin:pi-session-implementation";
+  const review = {
+    permissionProfile: "read-only",
+    provider: "openai-codex",
+    model: "gpt-6.1-sol",
+    thinkingLevel: "high",
+    default: true,
+    ...(hasReview ? { skills: ["pi-session-review"] } : {}),
+  } as const;
+  const code = {
+    permissionProfile: "coding",
+    provider: "openai-codex",
+    model: "gpt-6.1-sol",
+    thinkingLevel: "medium",
+    default: false,
+    ...(hasCode ? { skills: ["pi-session-implementation"] } : {}),
+  } as const;
+  return {
+    workspaces: { fixture: workspace },
+    ...(Object.keys(skillCatalog).length > 0 ? { skillCatalog } : {}),
+    executionProfiles: caseId === "L2" ? { review, code } : { review },
+  };
+}
+
+export function formatEmbeddedSkillTree(tree: SkillTree): string {
+  const skillFile = tree.files.find((f) => f.path === "SKILL.md");
+  if (!skillFile) throw new Error("orchestration_skill_missing");
+  const skillText = skillFile.bytes.toString("utf8");
+  const referenceFiles = tree.files.filter((f) => f.path !== "SKILL.md");
+  const referenceSections = referenceFiles.map((file) =>
+    `--- Reference: ${file.path} ---\n${file.bytes.toString("utf8")}\n--- End Reference: ${file.path} ---`
+  );
+  return referenceSections.length > 0 ? `${skillText}\n\n${referenceSections.join("\n\n")}` : skillText;
 }
 async function buildBinding(build: string): Promise<`sha256:${string}`> {
   const root = resolve(build), entries: Array<[string, string]> = [];
@@ -72,8 +144,9 @@ export interface TokenLiveApproval {
   readonly build_digest: string;
   readonly matrix_digest: string;
   readonly controller_skill_digest: string;
-  readonly controller: typeof CONTROLLER;
+  readonly controller: ControllerBinding;
   readonly schedule: typeof MATRIX;
+  readonly worker_skills?: readonly WorkerSkillBinding[];
   readonly budget_limits: { max_starts: 4; max_retries: 0; parallelism: 1; run_timeout_ms: 600000; total_timeout_ms: 1800000; provider_cap_usd: null };
   readonly advisory_usd: number;
   readonly limits: { starts: 4; work_turns: 5; retries: 0; invocations: 3 };
@@ -99,13 +172,15 @@ export interface TokenLiveResult {
     readonly source_recheck_passed: boolean;
     readonly build_recheck_passed: boolean;
     readonly skill_recheck_passed: boolean;
+    readonly worker_skills_recheck_passed?: boolean;
     readonly manifest_digest: string;
     readonly budget_digest: string;
     readonly decision_digest: string;
     readonly skill_digest: string;
+    readonly worker_skills?: readonly WorkerSkillBinding[];
     readonly matrix_digest: string;
     readonly node_version: string;
-    readonly controller: typeof CONTROLLER;
+    readonly controller: ControllerBinding;
     readonly routes: { readonly review: typeof ROUTES.review; readonly code: typeof ROUTES.code };
     readonly tasks: readonly { readonly id: string; readonly task_hash: string; readonly fixture_hash: string; readonly prompt_digest: string }[];
   };
@@ -307,7 +382,12 @@ export async function runOwnedController(command: string, args: string[], option
   return { exit_code: exitCode, timed_out: timedOut || aborted, process_group_cleanup_observed: processGroupCleanupObserved, stdout_bytes: stdoutBytes, line_integrity_passed: lineIntegrity && !childError && !stdinFailed };
 }
 
-export async function prepareTokenLive(root: string, build: string): Promise<TokenLiveTemplates> {
+export interface PrepareTokenLiveOptions {
+  readonly controllerVersion?: string | undefined;
+  readonly workerSkills?: readonly WorkerSkillBinding[] | undefined;
+}
+
+export async function prepareTokenLive(root: string, build: string, options?: PrepareTokenLiveOptions): Promise<TokenLiveTemplates> {
   const base = await createPlan(root), tasks = await taskCatalog(root), source = await sourceBinding(root);
   const runs: Run[] = ([
     { ...base.runs[0]!, run_id: "m1-l1", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 1, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: ROUTES.review },
@@ -318,23 +398,45 @@ export async function prepareTokenLive(root: string, build: string): Promise<Tok
   const profileManifest = manifestSchema.parse({ ...base, approved: false, runs, tasks, server_commit: source.commit, source_digest: source.digest, prerequisites: { baseline_passed: false, screening_passed: false, bottleneck: null } });
   const buildDigest = await buildBinding(build);
   const matrixDigest = digest(MATRIX);
-  const controllerSkillDigest = await hashFile(join(root, "skills/pi-session-orchestration/SKILL.md"));
+  const orchestrationTree = await readSkillTree(join(root, "skills/pi-session-orchestration"));
+  const controllerSkillDigest = orchestrationTree.fingerprint;
+  const controller = controllerConfig(options?.controllerVersion ?? DEFAULT_CONTROLLER_VERSION);
+  const workerSkills = options?.workerSkills ? parseWorkerSkills(options.workerSkills) : [];
   return {
     profileManifest,
     budgetProposal: { schema_version: "1.0.0", approved: false, manifest_digest: null, max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, advisory_usd: null, provider_cap_usd: null, acknowledges_unmetered_cost: false },
-    decisionTemplate: { schema_version: "token-live-decision-1", approved: false, manifest_digest: null, budget_digest: null, source_digest: source.digest, build_digest: buildDigest, matrix_digest: matrixDigest, controller_skill_digest: controllerSkillDigest, controller: CONTROLLER, schedule: MATRIX, budget_limits: { max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, provider_cap_usd: null }, advisory_usd: null, limits: { starts: 4, work_turns: 5, retries: 0, invocations: 3 }, operator_acknowledges_advisory_not_cap: false },
+    decisionTemplate: {
+      schema_version: "token-live-decision-1",
+      approved: false,
+      manifest_digest: null,
+      budget_digest: null,
+      source_digest: source.digest,
+      build_digest: buildDigest,
+      matrix_digest: matrixDigest,
+      controller_skill_digest: controllerSkillDigest,
+      controller,
+      schedule: MATRIX,
+      worker_skills: workerSkills,
+      budget_limits: { max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, provider_cap_usd: null },
+      advisory_usd: null,
+      limits: { starts: 4, work_turns: 5, retries: 0, invocations: 3 },
+      operator_acknowledges_advisory_not_cap: false,
+    },
   };
 }
 
 function validDecision(value: unknown, manifest: Manifest, budget: Budget, expected: TokenLiveTemplates): value is TokenLiveApproval {
   const d = asRecord(value);
   const exactManifest = { ...manifest, approved: false };
+  const dWorkerSkills = parseWorkerSkills(d.worker_skills ?? d.worker_skill_tree_digests);
+  const expWorkerSkills = parseWorkerSkills(expected.decisionTemplate.worker_skills);
   return d.schema_version === "token-live-decision-1" && d.approved === true && d.operator_acknowledges_advisory_not_cap === true
     && d.manifest_digest === digest(manifest) && d.budget_digest === digest(budget)
     && digest(exactManifest) === digest(expected.profileManifest)
     && d.source_digest === expected.decisionTemplate.source_digest && d.build_digest === expected.decisionTemplate.build_digest && d.matrix_digest === digest(MATRIX)
     && d.controller_skill_digest === expected.decisionTemplate.controller_skill_digest
-    && digest(d.controller) === digest(CONTROLLER) && digest(d.schedule) === digest(MATRIX)
+    && digest(d.controller) === digest(expected.decisionTemplate.controller) && digest(d.schedule) === digest(MATRIX)
+    && digest(dWorkerSkills) === digest(expWorkerSkills)
     && digest(d.budget_limits) === digest({ max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, provider_cap_usd: null })
     && d.advisory_usd === budget.advisory_usd && budget.max_starts === 4 && budget.max_retries === 0 && budget.parallelism === 1
     && budget.run_timeout_ms === 600000 && budget.total_timeout_ms === 1800000 && budget.provider_cap_usd === null
@@ -343,26 +445,55 @@ function validDecision(value: unknown, manifest: Manifest, budget: Budget, expec
 
 /** Fresh-controller M1 path. Tests may inject a child factory; production defaults to the Codex CLI. */
 export async function runTokenLive(root: string, build: string, approvals: { profileManifest: unknown; budget: unknown; decision: unknown }, output: string,
-  dependencies: { spawn?: ChildFactory; now?: () => number; signal?: AbortSignal; controllerVersion?: () => boolean } = {}): Promise<TokenLiveResult> {
+  dependencies: { spawn?: ChildFactory; now?: () => number; signal?: AbortSignal; controllerVersion?: ((version: string) => boolean) | (() => boolean) } = {}): Promise<TokenLiveResult> {
   // Preserve existing profile gate and reject before creating temp dirs, clients, or child processes.
   const { manifest, budget } = await validateApproval(root, approvals.profileManifest, approvals.budget);
-  const expected = await prepareTokenLive(root, build);
+  const dec = asRecord(approvals.decision);
+  const decController = asRecord(dec.controller);
+  const controllerVersion = typeof decController.version === "string" ? decController.version : undefined;
+  const workerSkills = parseWorkerSkills(dec.worker_skills ?? dec.worker_skill_tree_digests);
+  const expected = await prepareTokenLive(root, build, { controllerVersion, workerSkills });
   if (!validDecision(approvals.decision, manifest, budget, expected)) throw new Error(noApproval);
   const source = await sourceBinding(root);
   const buildDigest = await buildBinding(build);
   if (source.digest !== expected.decisionTemplate.source_digest || buildDigest !== expected.decisionTemplate.build_digest) throw new Error(noApproval);
-  const factory = dependencies.spawn ?? defaultChildFactory, now = dependencies.now ?? Date.now;
-  const startTime = now(), cases: TokenLiveResult["cases"][number][] = [];
-  const versionOk = dependencies.controllerVersion?.() ?? (() => {
+
+  // P3: Bound client version verification
+  const boundVersion = expected.decisionTemplate.controller.version;
+  const versionOk = dependencies.controllerVersion ? dependencies.controllerVersion(boundVersion) : (() => {
     const versionCheck = spawnSync("codex", ["--version"], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] });
-    return versionCheck.status === 0 && /^codex-cli 0\.162\.0(?:\s|$)/m.test(versionCheck.stdout ?? "");
+    if (versionCheck.status !== 0) return false;
+    const escaped = boundVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`^codex-cli ${escaped}(?:\\s|$)`, "m").test(versionCheck.stdout ?? "");
   })();
   if (!versionOk) throw new Error("controller_version_mismatch");
+
+  // P2: Verify worker skills before starting
+  for (const skill of expected.decisionTemplate.worker_skills ?? []) {
+    if (skill.name !== "pi-session-implementation" && skill.name !== "pi-session-review") {
+      throw new Error("worker_skill_invalid");
+    }
+    const skillPath = join(root, "skills", skill.name);
+    let tree: SkillTree;
+    try {
+      tree = await readSkillTree(skillPath);
+    } catch {
+      throw new Error("worker_skill_missing");
+    }
+    if (tree.fingerprint !== skill.tree_digest) {
+      throw new Error("worker_skill_digest_mismatch");
+    }
+  }
+
+  // P1: Freeze controller skill tree and build embedded prompt text
+  const skillTree = await readSkillTree(join(root, "skills/pi-session-orchestration"));
+  const skillDigest = skillTree.fingerprint;
+  if (skillDigest !== expected.decisionTemplate.controller_skill_digest) throw new Error(noApproval);
+  const fullSkillText = formatEmbeddedSkillTree(skillTree);
+
+  const factory = dependencies.spawn ?? defaultChildFactory, now = dependencies.now ?? Date.now;
+  const startTime = now(), cases: TokenLiveResult["cases"][number][] = [];
   const privateRun = await ownedTemporary();
-  // Freeze the exact skill text once; bind its bytes to the M1 decision.
-  const skillText = await readFile(join(root, "skills/pi-session-orchestration/SKILL.md"), "utf8");
-  const skillDigest = hash(Buffer.from(skillText, "utf8"));
-  if (skillDigest !== expected.decisionTemplate.controller_skill_digest) { await privateRun.remove(); throw new Error(noApproval); }
   let sourceSame = false, buildSame = false, skillSame = false, executionFailure = false;
   let activeCaseId: TokenLiveResult["cases"][number]["id"] | null = null;
   let activePartial: TokenLiveResult["cases"][number] | null = null;
@@ -396,7 +527,7 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       const routeChecks: ProxyMetrics["route_checks"] = [], closedSessionOrdinals = new Set<number>();
       let emptySessionListObserved = false, sessionListAfterAllClosed = false;
       let controllerStdoutBytes = 0, proxyControllerBytes = 0, proxyServerBytes = 0, proxyServerWrittenBytes = 0, quotaRejections = 0, metricsObserved = false;
-      const controllerPrompt = `${skillText}\n\nM1 measurement override: perform exactly the listed operations, with zero retries. If any operation fails, stop and report failure; do not start replacement sessions.\n${RUN_PROMPTS[index]}\nTask: ${taskDefinitions.find(t => t.id === spec.task)!.prompt}\n${spec.id === "L3" ? `Follow-up: ${"Re-read the T1 source and documentation. Return the same two source-linked claims with numeric status values; do not modify files."}` : ""}\nReturn no success claim unless every requested step and cleanup check completed.`;
+      const controllerPrompt = `${fullSkillText}\n\nM1 measurement override: perform exactly the listed operations, with zero retries. If any operation fails, stop and report failure; do not start replacement sessions.\n${RUN_PROMPTS[index]}\nTask: ${taskDefinitions.find(t => t.id === spec.task)!.prompt}\n${spec.id === "L3" ? `Follow-up: ${"Re-read the T1 source and documentation. Return the same two source-linked claims with numeric status values; do not modify files."}` : ""}\nReturn no success claim unless every requested step and cleanup check completed.`;
       const turns = [controllerPrompt];
       const caseChecks: { id: string; passed: boolean }[] = [];
       let caseStarts: number | null = 0, casePrompts: number | null = 0, caseStatus: TokenLiveResult["harness_status"] = spec.id === "L2" && baselineStatus !== "failed" ? baselineStatus === "timeout" ? "INCONCLUSIVE" : "FAIL" : "PASS", controllerExit: number | null = null, proxyOk: boolean | null = null, serverCleaned: boolean | null = null, controllerCleanup = false;
@@ -410,7 +541,7 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       for (let invocation = 0; invocation < turns.length && caseStatus === "PASS"; invocation++) {
         const cfg = join(temp, `config-${invocation}.json`), metrics = join(temp, `proxy-${invocation}.json`), control = join(temp, `server-${invocation}.json`), proxyEntry = fileURLToPath(new URL("./token-live-proxy.js", import.meta.url));
         const proxyEnv = { TOKEN_LIVE_REAL_ENTRY: join(resolve(build), "src/main.js"), TOKEN_LIVE_CONFIG: cfg, TOKEN_LIVE_METRICS_FILE: metrics, TOKEN_LIVE_CONTROL_FILE: control, TOKEN_LIVE_MAX_STARTS: String(spec.starts), TOKEN_LIVE_MAX_PROMPTS: String(spec.prompts), TOKEN_LIVE_WORKER_TURN_MS: "180000" };
-        const config = caseServerConfig(spec.id, workspace);
+        const config = caseServerConfig(spec.id, workspace, expected.decisionTemplate.worker_skills);
         await writeFile(cfg, JSON.stringify(config), { mode: 0o600, flag: "wx" });
         const envToml = `{${Object.entries(proxyEnv).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
         const controllerCwd = join(temp, "controller"); await mkdir(controllerCwd, { mode: 0o700 });
@@ -533,21 +664,29 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
     if (activeCaseId && activePartial) cases.push({ ...activePartial, status: "FAIL", independent_checks: [...activePartial.independent_checks, { id: "attempt-incomplete", passed: false }], frames: activePartial.frames.map(frame => frameSchema.parse(frame)) });
   }
   finally { await privateRun.remove().catch(() => undefined); }
+  let workerSkillsSame = true;
   try {
     sourceSame = (await sourceBinding(root)).digest === source.digest;
     buildSame = await buildBinding(build) === buildDigest;
-    skillSame = hash(await readFile(join(root, "skills/pi-session-orchestration/SKILL.md"))) === skillDigest;
+    skillSame = (await readSkillTree(join(root, "skills/pi-session-orchestration"))).fingerprint === skillDigest;
+    for (const skill of expected.decisionTemplate.worker_skills ?? []) {
+      const tree = await readSkillTree(join(root, "skills", skill.name));
+      if (tree.fingerprint !== skill.tree_digest) workerSkillsSame = false;
+    }
   } catch { executionFailure = true; }
   const startsKnown = cases.every(c => c.starts !== null), promptsKnown = cases.every(c => c.prompts !== null);
   const measuredStarts = startsKnown ? cases.reduce((n, c) => n + (c.starts ?? 0), 0) : null;
   const measuredPrompts = promptsKnown ? cases.reduce((n, c) => n + (c.prompts ?? 0), 0) : null;
-  const allPassed = cases.length === MATRIX.length && cases.every(c => c.status === "PASS") && sourceSame && buildSame && skillSame
+  const allPassed = cases.length === MATRIX.length && cases.every(c => c.status === "PASS") && sourceSame && buildSame && skillSame && workerSkillsSame
     && measuredStarts === 4 && measuredPrompts === 5;
   const result: TokenLiveResult = { schema_version: "token-live-result-1", harness_status: allPassed ? "PASS" : executionFailure || cases.some(c => c.status === "FAIL") ? "FAIL" : cases.length === 0 ? "BLOCKED" : "INCONCLUSIVE", source_digest: source.digest, build_digest: buildDigest,
     failure_code: executionFailure ? "execution_error" : null,
     binding: { source_commit: source.commit, source_recheck_passed: sourceSame, build_recheck_passed: buildSame, skill_recheck_passed: skillSame,
-      manifest_digest: digest(manifest), budget_digest: digest(budget), decision_digest: digest(approvals.decision), skill_digest: skillDigest, matrix_digest: digest(MATRIX), node_version: process.versions.node,
-      controller: CONTROLLER, routes: ROUTES, tasks: expected.profileManifest.tasks.map(task => ({ id: task.id, task_hash: task.task_hash, fixture_hash: task.fixture_hash, prompt_digest: hash(Buffer.from(taskDefinitions.find(definition => definition.id === task.id)!.prompt, "utf8")) })) },
+      worker_skills_recheck_passed: workerSkillsSame,
+      manifest_digest: digest(manifest), budget_digest: digest(budget), decision_digest: digest(approvals.decision), skill_digest: skillDigest,
+      worker_skills: expected.decisionTemplate.worker_skills ?? [],
+      matrix_digest: digest(MATRIX), node_version: process.versions.node,
+      controller: expected.decisionTemplate.controller, routes: ROUTES, tasks: expected.profileManifest.tasks.map(task => ({ id: task.id, task_hash: task.task_hash, fixture_hash: task.fixture_hash, prompt_digest: hash(Buffer.from(taskDefinitions.find(definition => definition.id === task.id)!.prompt, "utf8")) })) },
     starts: measuredStarts, work_turns: measuredPrompts, retries: 0, cases };
   const safe = { ...result, cases: result.cases.map(c => ({ ...c, events: c.events.map(e => ({ ...e })) })) };
   await mkdir(output, { recursive: true, mode: 0o700 });
