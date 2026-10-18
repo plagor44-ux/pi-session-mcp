@@ -28,7 +28,9 @@
 - Changed: the input JSON Schemas of the six `sessionId`/`turnId` fields keep
   `format: "uuid"` but no longer repeat the long `pattern`; the server still
   validates with the same rule, and accepted values and error responses are
-  byte-identical (156 compared responses). `tools/list` shrinks by 1,074 bytes.
+  byte-identical (156 compared responses). `tools/list` shrinks by 1,074 bytes
+  against the #88 state; net against 0.8.3 it is 819 bytes smaller (19,962 to
+  19,143 bytes), because #88 adds 255 bytes.
   Output schemas are unchanged. Issue #90.
 
 ## 0.8.3 — 2026-10-15

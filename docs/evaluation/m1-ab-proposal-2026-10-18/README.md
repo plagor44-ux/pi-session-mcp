@@ -19,6 +19,10 @@ its approval gate. No second benchmark platform.
 - Arithmetic: 3 pairs × 2 arms = 6 matrix runs. Each run has 3 fresh controller
   invocations, 4 worker starts and 5 work turns. Total **18 fresh controller
   invocations, 24 worker starts, 30 work turns, 0 retries**.
+- Order limitation: with three pairs, arm A runs first in two of them (run
+  sequence A B B A A B). Drift, cache warming or throttling that favors the
+  first position would therefore act on A more often; this is recorded as a
+  known limitation of the prescribed three-pair design, not corrected.
 - One executor run per matrix run, each with its own decision bound to that arm's
   source, build and skill digests, so the existing per-run limits (4 starts,
   5 turns, 3 invocations, 0 retries) stay unchanged.
