@@ -14,7 +14,7 @@ async function fixture() {
   const home = await temporaryRoot("pi-writer-collect-");
   const paths = writerPaths(home, "repo-w1");
   const calls: { command: string; args: readonly string[] }[] = [];
-  let dirty = true, changed = false, badReset = false, empty = false, baseSource = "refs/heads/main", heads = `${commit} refs/heads/feature\n`;
+  let dirty = true, changed = false, badReset = false, empty = false, collision = false, baseSource = "refs/heads/main", heads = `${commit} refs/heads/feature\n`;
   const runner: CommandRunner = { async run(command, args) {
     calls.push({ command, args });
     let stdout = "";
@@ -36,6 +36,7 @@ async function fixture() {
       } else if (script.includes("/tmp/scratch")) {
         if (empty) stdout = "nothing_to_collect\n";
         else await writeFile(join(paths.bundles, "collect.bundle"), "bundle");
+        if (collision) stdout += "ref_name_refused\n";
       }
       else if (script.includes("stash clear")) { if (!badReset) dirty = false; }
       else stdout = `${commit}\n${(await readWriterState(home, "repo-w1"))!.base.ref} ${commit}\n${dirty ? (changed ? "e" : "d").repeat(40) : tree}\n${tree}\n${tree}\n`;
@@ -43,7 +44,7 @@ async function fixture() {
     return { exitCode: 0, stdout, stderr: "" };
   } };
   const ctx: WriterContext = { home, checkout: join(home, "source"), releaseRoot: home, nodePath: process.execPath, runner, alias: "repo" };
-  return { ctx, paths, calls, dirty: () => { dirty = true; }, changed: () => { changed = true; }, badReset: () => { badReset = true; }, empty: () => { empty = true; }, heads: (value: string) => { heads = value; } };
+  return { ctx, paths, calls, dirty: () => { dirty = true; }, changed: () => { changed = true; }, badReset: () => { badReset = true; }, empty: () => { empty = true; }, collision: () => { collision = true; }, heads: (value: string) => { heads = value; } };
 }
 async function provision(f: Awaited<ReturnType<typeof fixture>>) {
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toMatchObject({ status: "ok" });
@@ -55,7 +56,7 @@ it("refuses hostile refs separately, fetches only safe namespaced refs and delet
   const f = await fixture(); await provision(f);
   f.heads(`${commit} refs/heads/--upload-pack=x\n${commit} refs/heads/a..b\n${commit} refs/heads/feature\n`);
   const result = await collectWriter(f.ctx, "repo-w1");
-  expect(result).toMatchObject({ status: "ok", refs: ["refs/remotes/writer-repo-w1/feature"], refused: 2, findings: [{ code: "ref_name_refused" }, { code: "ref_name_refused" }] });
+  expect(result).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: ["refs/remotes/writer-repo-w1/feature"], refused: 2, findings: [{ code: "ref_name_refused" }, { code: "ref_name_refused" }] });
   const fetches = f.calls.filter((c) => c.command === "git" && c.args.includes("fetch"));
   expect(fetches).toHaveLength(1);
   expect(fetches[0]!.args).toContain("--end-of-options");
@@ -66,7 +67,51 @@ it("refuses hostile refs separately, fetches only safe namespaced refs and delet
   expect(container.args).toContain(`${f.paths.bundles}:/bundles:rw`);
   expect(container.args.some((arg) => arg.includes('commit-tree "$tree" -p HEAD'))).toBe(true);
   await expect(lstat(join(f.paths.bundles, "collect.bundle"))).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected?.digest).toMatch(/^sha256:/);
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+});
+it("incomplete collect revokes an earlier digest and blocks reset/recreate unless discarded", async () => {
+  const f = await fixture(); await provision(f);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeDefined();
+  f.heads(`${commit} refs/heads/a..b\n${commit} refs/heads/feature\n`);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refused: 1 });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_reset", status: "ok" });
+});
+it("reports incomplete rather than nothing_to_collect when every ref is refused", async () => {
+  const f = await fixture(); await provision(f); f.heads(`${commit} refs/heads/a..b\n`);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: [], refused: 1 });
+});
+it.each(["persistent", "ephemeral"] as const)("finish stops after an incomplete collect (%s)", async (lifecycle) => {
+  const f = await fixture(); await provision(f);
+  await writeWriterState(f.ctx.home, "repo-w1", { ...(await readWriterState(f.ctx.home, "repo-w1"))!, lifecycle });
+  f.heads(`${commit} refs/heads/a..b\n`);
+  const start = f.calls.length;
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+  expect(f.calls.slice(start).some((c) => c.args.some((a) => a.includes("stash clear") || a.includes("clone --no-hardlinks")))).toBe(false);
+});
+it.each(["verify", "list-heads", "fetch"])("reports host collect %s failures as writer_collect_failed", async (step) => {
+  const f = await fixture(); await provision(f);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok" });
+  const original = f.ctx.runner;
+  f.ctx.runner = { async run(command, args, signal) {
+    if (command === "git" && args.includes(step)) return { exitCode: 1, stdout: "", stderr: "private diagnostic" };
+    return original.run(command, args, signal);
+  } };
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_failed" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  await expect(lstat(join(f.paths.bundles, "collect.bundle"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("preserves a real WIP-named branch and treats the skipped WIP export as refused", async () => {
+  const f = await fixture(); await provision(f); f.collision();
+  f.heads(`${commit} refs/heads/main-wip\n`);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: ["refs/remotes/writer-repo-w1/main-wip"], refused: 1, findings: [{ code: "ref_name_refused" }] });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  const script = f.calls.find((c) => c.args.some((a) => a.includes("/tmp/scratch")))!.args.find((a) => a.includes("/tmp/scratch"))!;
+  expect(script).toContain('show-ref --verify --quiet "refs/heads/$branch-wip"');
+  expect(script).toMatch(/if .*show-ref[^\n]+; then\n\s+printf[^\n]+ref_name_refused[^\n]*\n\s+else\n\s+.*update-ref/);
 });
 it("refuses uncollected work, allows discard, preserves acceptance and clears collected", async () => {
   const f = await fixture(); await provision(f);
