@@ -45,7 +45,7 @@ records name the package version and the build they ran on, see
     "fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "reloadPolicy": "restart-required"
   },
-  "workspaces": [{ "alias": "my-project" }],
+  "workspaces": [{ "alias": "my-project", "mode": "unset" }],
   "executionProfiles": [{
     "alias": "safe-readonly",
     "default": true,
@@ -59,13 +59,15 @@ records name the package version and the build they ran on, see
 }
 ```
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases, and the eight documented profile fields. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases and workspace modes, and the eight documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, or `read-only`; a missing modes entry is reported as `unset`. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
 
 Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`. Clients may use them for presentation, but the strict input schema and server-owned projection enforce the contract.
 
 ## Session start
 
 `pi_session_start` accepts a strict object containing a configured `workspace` alias and optional configured `executionProfile` alias. If omitted, the sole configured default profile is used. Unknown aliases fail before registry admission or SDK session creation.
+
+Coding profiles are refused on `container` and `read-only` workspaces with `workspace_mode_forbids_coding` before registry admission or adapter session creation. Read-only profiles remain allowed on every mode; `unset` and `host` preserve existing coding behavior.
 
 The former `profile` input is rejected; it is not reinterpreted as an execution-profile alias. Raw `provider`, `model`, `thinkingLevel`, credential-like fields, and every other unknown field are rejected. MCP annotations are hints only; authorization and selection come from schema validation, alias lookup, and the server-owned profile.
 
@@ -80,6 +82,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | Code | Meaning |
 | --- | --- |
 | `unknown_execution_profile` | The requested alias is not configured. |
+| `workspace_mode_forbids_coding` | The workspace's execution mode does not allow coding sessions on this server. Operator needed: do not retry or switch profiles on this server. |
 | `unknown_provider` / `unknown_model` | The exact configured item is absent from the local Pi catalog. |
 | `local_authentication_missing` / `local_authentication_unavailable` | Existing local Pi authentication is absent or cannot be resolved within its deadline. |
 | `model_unavailable` | The exact model is not locally available for the configured provider. |

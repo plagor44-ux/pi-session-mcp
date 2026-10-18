@@ -34,7 +34,7 @@ describe("configuration capability projection", () => {
       ok: true,
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" },
-      workspaces: [{ alias: "alpha-workspace" }, { alias: "zeta-workspace" }],
+      workspaces: [{ alias: "alpha-workspace", mode: "unset" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
@@ -47,6 +47,14 @@ describe("configuration capability projection", () => {
       ],
     });
     expect(JSON.stringify(capabilities)).not.toMatch(/private|TOKEN_SENTINEL|API_KEY_SENTINEL|SKILL_PATH_SENTINEL|SKILL\.md/);
+  });
+
+  it("reports configured workspace modes and defaults missing entries to unset", () => {
+    const capabilities = projectCapabilities(
+      new Map([["b", "/private/b"], ["a", "/private/a"]]),
+      new Map(), configuration, new Map([["a", { mode: "container" }]]),
+    );
+    expect(capabilities.workspaces).toEqual([{ alias: "a", mode: "container" }, { alias: "b", mode: "unset" }]);
   });
 
   it("projects only captured memory with an exact key set on every call", () => {

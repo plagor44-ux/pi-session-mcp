@@ -19,9 +19,10 @@ export interface TurnView { turnId: string; sessionId: string; state: TurnState;
 export interface PromptResult { session: SessionView; turn: TurnView; }
 interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; }
 interface Entry extends SessionView { handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
-export type RegistryErrorCode = "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "server_stopping";
+export type RegistryErrorCode = "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
   unknown_workspace: "Unknown workspace",
+  workspace_mode_forbids_coding: "The workspace's execution mode does not allow coding sessions on this server",
   unknown_session: "Unknown session",
   session_running: "Session already has a running turn",
   prompt_rejected: "Pi rejected the prompt during preflight",
