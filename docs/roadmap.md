@@ -77,9 +77,12 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   installations were upgraded (see
   [Acceptance](acceptance.md#v083-post-release-evidence)). Fresh installs of
   0.6.1 to 0.8.2 do not start.
-- ADR 0008 for [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79)
-  is proposed: [ADR 0008](adr/0008-coding-profile-isolation.md). It stays
-  Proposed until the maintainer accepts it.
+- [ADR 0008](adr/0008-coding-profile-isolation.md) for
+  [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) was accepted for
+  Linux on 2026-10-18: option 1, wrapped registration in rootless Podman, one
+  boundary per writer. The Linux acceptance is pending (Podman is not installed
+  on the workstation yet); review point 2026-11-15. macOS keeps the interim
+  rules.
 
 ### Sprint 5 issue status
 
@@ -88,7 +91,7 @@ means its named checks passed with evidence. Nothing here is released.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | open decision; [brief](reviews/2026-10-18-adr-0008-decision-brief.md) ready, ADR stays Proposed |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | Podman install | decided: ADR 0008 accepted for Linux (option 1); acceptance tooling and [runbook](isolation-setup.md) prepared; Linux acceptance run pending; writer alias on a full clone in use |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
