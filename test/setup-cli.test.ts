@@ -10,6 +10,21 @@ describe("setup CLI", () => {
   it("projects the same sanitized result in JSON", () => { const json = formatSetupResult(sample); expect(JSON.parse(json)).toEqual(sample); expect(json).not.toContain("/home/"); expect(json).not.toContain("sk_"); });
   it("rejects unsupported, repeated, and malformed arguments", () => { expect(() => parseSetupArgs(["--wat"])).toThrow("argument_unsupported"); expect(() => parseSetupArgs(["--apply", "--verify"])).toThrow("operation_repeated"); expect(() => parseSetupArgs(["--target", "codex:user"])).toThrow("target_invalid"); });
   it("does not echo secret or path sentinels from a target projection", () => { const result: SetupResult = { ...sample, findings: [{ ...sample.findings[0]!, target: { client: "codex", scope: "user", alias: "SAFE_ALIAS" }, code: "setup_failed" }] }; const rendered = `${formatSetupResult(result)}\n${formatSetupHuman(result)}`; expect(rendered).not.toContain("SECRET_SENTINEL"); expect(rendered).not.toContain("/tmp/secret"); });
+  describe("--repo", () => {
+    it("parses explicit container settings and defaults to dry-run", () => {
+      expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--writers", "2", "--lifecycle", "ephemeral", "--profiles", "code,other", "--image", "node", "--network", "none"])).toMatchObject({ repo: { alias: "a", mode: "container", apply: false, acceptHostWrites: false, container: { writers: 2, lifecycle: "ephemeral", profiles: ["code", "other"], image: "node", network: "none" } } });
+      expect(parseSetupArgs(["--apply", "--repo", "a", "--mode", "host", "--accept-host-writes"])).toMatchObject({ repo: { apply: true, acceptHostWrites: true } });
+    });
+    it.each([
+      ["--repo", "a", "--target", "codex:user:pi-session-mcp"],
+      ["--repo", "a", "--customize-skill", "review"],
+      ["--repo", "a", "--writers", "0"], ["--repo", "a", "--writers", "17"],
+      ["--repo", "a", "--writers", "1.5"], ["--repo", "a", "--verify"],
+      ["--repo", "a", "--mode", "unset"], ["--repo", "a", "--profiles", ""],
+      ["--mode", "host"], ["--repo"], ["--repo", "a", "--repo", "b"],
+      ["--repo", "a", "--network", "bridge"],
+    ])("rejects invalid repo arguments %j", (...argv) => { expect(() => parseSetupArgs(argv)).toThrow(); });
+  });
   describe("--customize-skill", () => {
     it("parses a dry run, an apply and the JSON flag in any order", () => {
       expect(parseSetupArgs(["--customize-skill", "review"])).toEqual({ json: false, targets: [], customizeSkill: "review" });
