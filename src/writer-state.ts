@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { wrapperDigest } from "./writer-wrapper.js";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -126,10 +127,6 @@ export async function writeWriterState(home: string, name: string, state: Writer
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
   }
-}
-
-export function wrapperDigest(text: string): string {
-  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
 }
 
 export async function currentAcceptanceFingerprint(wrapper: string, state: WriterState, podmanVersion: string): Promise<string> {

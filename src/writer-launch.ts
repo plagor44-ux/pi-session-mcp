@@ -10,15 +10,8 @@ import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, serveArgs } from "./writer-boundary.js";
 import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
 import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
-export { currentAcceptanceFingerprint, wrapperDigest } from "./writer-state.js";
-
-export function renderWrapper(nodePath: string, releaseRoot: string, name: string): string {
-  const quote = (value: string) => {
-    if (value.includes("'")) throw new Error("writer_wrapper_invalid");
-    return `'${value}'`;
-  };
-  return `#!/bin/sh\n# stdout is reserved for MCP frames.\nexec ${quote(nodePath)} ${quote(join(releaseRoot, "dist", "writer-launch.js"))} ${quote(name)} "$@"\n`;
-}
+export { currentAcceptanceFingerprint } from "./writer-state.js";
+export { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
 export interface LaunchDependencies {
   home: string;
   nodePath: string;
