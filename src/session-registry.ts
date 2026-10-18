@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { WriterGuard } from "./writer-guard.js";
 import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
@@ -19,9 +20,11 @@ export interface TurnView { turnId: string; sessionId: string; state: TurnState;
 export interface PromptResult { session: SessionView; turn: TurnView; }
 interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; }
 interface Entry extends SessionView { handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
-export type RegistryErrorCode = "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "server_stopping";
+export type RegistryErrorCode = "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
   unknown_workspace: "Unknown workspace",
+  writer_uncollected: "Writer is not at its collected baseline",
+  writer_busy: "Writer already has an open coding session",
   workspace_mode_forbids_coding: "The workspace's execution mode does not allow coding sessions on this server",
   unknown_session: "Unknown session",
   session_running: "Session already has a running turn",
@@ -44,15 +47,18 @@ export const ABORT_DEADLINE_MS = 5_000;
 export const CLOSE_CLEANUP_DEADLINE_MS = 5_000;
 export const SHUTDOWN_DEADLINE_MS = 12_000;
 const stamp = () => new Date().toISOString();
-export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; }
+export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
   private readonly pendingStarts = new Set<Promise<SessionView>>();
-  private readonly options: Required<SessionRegistryOptions>;
+  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard">>;
+  private readonly writerGuard: WriterGuard | undefined;
+  private readonly codingAdmissions = new Map<string, Promise<void>>();
   private stopping = false;
   private readonly shutdownController = new AbortController();
   constructor(private readonly adapter: PiSessionAdapter, private readonly workspaces: ReadonlyMap<string, string>, options: SessionRegistryOptions = {}) {
+    this.writerGuard = options.writerGuard;
     this.options = { preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
   async start(workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
@@ -60,9 +66,28 @@ export class SessionRegistry {
     const cwd = this.workspaces.get(workspace);
     if (!cwd) throw new RegistryError("unknown_workspace");
     // Track registration and orphan cleanup too, not just the raw adapter promise.
-    const start = this.createAndRegister(cwd, workspace, executionProfile);
+    const start = this.writerGuard && executionProfile.permissionProfile === "coding"
+      ? this.guardedCreate(cwd, workspace, executionProfile)
+      : this.createAndRegister(cwd, workspace, executionProfile);
     this.pendingStarts.add(start);
     try { return await start; } finally { this.pendingStarts.delete(start); }
+  }
+  private async guardedCreate(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
+    const previous = this.codingAdmissions.get(workspace) ?? Promise.resolve();
+    let release!: () => void;
+    const admission = new Promise<void>((resolve) => { release = resolve; });
+    this.codingAdmissions.set(workspace, admission);
+    await previous;
+    try {
+      if (this.stopping) throw new RegistryError("server_stopping");
+      const open = [...this.sessions.values()].filter((entry) => entry.workspace === workspace && entry.profile === "coding").length;
+      await this.writerGuard!.check(workspace, open);
+      if (this.stopping) throw new RegistryError("server_stopping");
+      return await this.createAndRegister(cwd, workspace, executionProfile);
+    } finally {
+      release();
+      if (this.codingAdmissions.get(workspace) === admission) this.codingAdmissions.delete(workspace);
+    }
   }
   private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
     const handle = await Promise.resolve().then(() => this.adapter.create({ cwd, executionProfile, signal: this.shutdownController.signal }));

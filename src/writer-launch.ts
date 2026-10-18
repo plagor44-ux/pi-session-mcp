@@ -35,6 +35,15 @@ export interface LaunchDependencies {
   clearInterval(timer: ReturnType<typeof setInterval>): void;
 }
 
+function launchFailure(stage: "spawn" | "entry"): void {
+  process.stderr.write(JSON.stringify({ level: "error", event: "writer_launch_failed", stage, code: "writer_launch_failed" }) + "\n");
+}
+
+export async function launchEntry(argv: readonly string[], deps: LaunchDependencies): Promise<number> {
+  try { return await launch(argv, deps); }
+  catch { launchFailure("entry"); return 1; }
+}
+
 export async function launch(argv: readonly string[], deps: LaunchDependencies): Promise<number> {
   const refuse = async (code: "writer_not_ready" | "container_runtime_unavailable") => { await serveRefusal(code); return 0; };
   const name = argv[0];
@@ -73,7 +82,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   try { if (enabled) await refresh(); } catch { return refuse("writer_not_ready"); }
   const command = argv.length > 1 ? argv.slice(1) : ["node", "/opt/pi-session-mcp/dist/main.js"];
   let child: ChildProcess;
-  try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot)); } catch { return 1; }
+  try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot)); } catch { launchFailure("spawn"); return 1; }
   let busy = false;
   const timer = enabled ? deps.setInterval(() => {
     if (busy) return;
@@ -83,21 +92,24 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   return new Promise<number>((resolveExit) => {
     const interrupt = () => { child.kill("SIGINT"); };
     const terminate = () => { child.kill("SIGTERM"); };
+    let finished = false;
     const finish = (code: number) => {
+      if (finished) return;
+      finished = true;
       if (timer !== undefined) deps.clearInterval(timer);
       process.off("SIGINT", interrupt); process.off("SIGTERM", terminate);
       resolveExit(code);
     };
     process.on("SIGINT", interrupt); process.on("SIGTERM", terminate);
-    child.once("error", () => finish(1));
+    child.once("error", () => { if (!finished) launchFailure("spawn"); finish(1); });
     child.once("close", (code, signal) => finish(code ?? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1)));
   });
 }
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
-  void launch(process.argv.slice(2), {
+  void launchEntry(process.argv.slice(2), {
     home: homedir(), nodePath: process.execPath, releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
     runner: createProcessRunner(), spawnPodman: (args) => spawn("podman", args, { stdio: "inherit" }),
     env: process.env, now: Date.now, setInterval, clearInterval,
-  }).then((code) => { process.exitCode = code; }).catch(() => { process.exitCode = 1; });
+  }).then((code) => { process.exitCode = code; });
 }
