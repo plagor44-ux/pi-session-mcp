@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 import { createPlan, roleViews } from "./catalog.js";
 import { runOffline } from "./offline.js";
 import { inventory } from "./inventory.js";
@@ -99,4 +100,8 @@ async function main() {
   }finally{process.off("SIGINT",stop);process.off("SIGTERM",stop);}
 }
 // Run only as the entry point, so tests can import parseArgs without starting a mode.
-if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)await main().catch(()=>{process.stderr.write(JSON.stringify({event:"profile_evaluation_stopped",code:"invalid_input_or_failed_gate"})+"\n");process.exitCode=1;});
+// Compare real paths: on macOS the temporary directory is reached through a symlink (/var -> /private/var).
+function isEntryPoint(argvPath:string):boolean{
+  try{return realpathSync(argvPath)===realpathSync(fileURLToPath(import.meta.url));}catch{return false;}
+}
+if(process.argv[1]&&isEntryPoint(process.argv[1]))await main().catch(()=>{process.stderr.write(JSON.stringify({event:"profile_evaluation_stopped",code:"invalid_input_or_failed_gate"})+"\n");process.exitCode=1;});
