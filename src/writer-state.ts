@@ -1,8 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
+import { PACKAGE_VERSION } from "./package-metadata.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 
 export const WRITER_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,63}-w([1-9]|1[0-6])$/;
@@ -125,6 +126,15 @@ export async function writeWriterState(home: string, name: string, state: Writer
       if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     });
   }
+}
+
+export function wrapperDigest(text: string): string {
+  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
+}
+
+export async function currentAcceptanceFingerprint(wrapper: string, state: WriterState, podmanVersion: string): Promise<string> {
+  return acceptanceFingerprint({ wrapperDigest: wrapperDigest(await readFile(wrapper, "utf8")), packageVersion: PACKAGE_VERSION,
+    imageId: state.imageId, podmanVersion, network: state.network, cache: state.cache });
 }
 
 export function acceptanceFingerprint(input: {

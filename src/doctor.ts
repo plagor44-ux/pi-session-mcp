@@ -1,6 +1,10 @@
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
+import { createProcessRunner } from "./setup-process.js";
+import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
+import { currentAcceptanceFingerprint, readWriterState, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -17,6 +21,7 @@ export type DoctorCheckId =
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
+  | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
 
@@ -48,6 +53,8 @@ export interface DoctorFileSystem {
   readonly readPrefix?: (path: string, maxBytes: number) => Promise<string>;
 }
 export interface DoctorDependencies {
+  readonly home?: string;
+  readonly writerRuntime?: () => Promise<{ podmanVersion?: string; imageExists: (id: string) => Promise<boolean> }>;
   readonly packageRoot?: string;
   readonly nodeVersion?: string;
   readonly fileSystem?: DoctorFileSystem;
@@ -75,7 +82,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -164,6 +171,57 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
   } catch { return false; }
 }
 
+async function defaultWriterRuntime() {
+  const runner = createProcessRunner();
+  const info = await podmanInfo(runner);
+  return { ...(info.version ? { podmanVersion: info.version } : {}), imageExists: async (id: string) => {
+    try { return (await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000))).exitCode === 0; }
+    catch { return false; }
+  } };
+}
+
+async function writerDirty(clone: string, state: WriterState): Promise<boolean> {
+  try {
+    const git = join(clone, ".git");
+    if (!(await lstat(clone)).isDirectory() || !(await lstat(git)).isDirectory()) return true;
+    const bounded = async (path: string) => {
+      const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      try {
+        const info = await handle.stat();
+        if (!info.isFile() || info.size > 65_536) throw new Error("unsafe metadata");
+        const buffer = Buffer.alloc(65_536);
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        if ((await handle.stat()).size > 65_536) throw new Error("oversized metadata");
+        return buffer.subarray(0, bytesRead).toString("utf8");
+      } finally { await handle.close(); }
+    };
+    if (!isSafeRefName(state.base.ref) || !state.base.ref.startsWith("refs/heads/")) return true;
+    if ((await bounded(join(git, "HEAD"))).trim() !== `ref: ${state.base.ref}`) return true;
+    const refs = new Map<string, string>();
+    try {
+      for (const line of (await bounded(join(git, "packed-refs"))).split("\n")) {
+        if (!line || line.startsWith("#") || line.startsWith("^")) continue;
+        const match = /^([0-9a-f]{40}|[0-9a-f]{64}) (refs\/\S+)$/.exec(line);
+        if (!match) return true;
+        if (match[2]!.startsWith("refs/heads/")) refs.set(match[2]!, match[1]!);
+      }
+    } catch (error) { if (!isMissing(error)) throw error; }
+    const walk = async (path: string, ref: string, depth = 0): Promise<void> => {
+      if (depth > 64 || !(await lstat(path)).isDirectory()) throw new Error("unsafe refs");
+      for (const entry of await readdir(path, { withFileTypes: true })) {
+        const child = join(path, entry.name), name = `${ref}/${entry.name}`;
+        if (entry.isDirectory()) await walk(child, name, depth + 1);
+        else if (entry.isFile()) refs.set(name, (await bounded(child)).trim());
+        else throw new Error("unsafe ref");
+      }
+    };
+    if (!(await lstat(join(git, "refs"))).isDirectory()) return true;
+    try { await walk(join(git, "refs/heads"), "refs/heads"); }
+    catch (error) { if (!isMissing(error)) throw error; }
+    return refs.size !== 1 || refs.get(state.base.ref) !== state.base.commit;
+  } catch { return true; }
+}
+
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
   const fs = dependencies.fileSystem ?? defaultFileSystem;
   const root = dependencies.packageRoot ?? process.cwd();
@@ -249,6 +307,34 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
         checks.push(runtimeUsable
           ? ok("container_runtime_unavailable", alias)
           : failure("container_runtime_unavailable", alias, "make rootless Podman available or choose a different execution mode"));
+      }
+    }
+  }
+  if (config) {
+    let runtime: Awaited<ReturnType<typeof defaultWriterRuntime>> | undefined;
+    for (const [alias, entry] of config.workspaceModes) {
+      if (entry.mode !== "container" || !entry.container) continue;
+      for (let index = 1; index <= entry.container.writers; index++) {
+        const name = writerName(alias, index), home = dependencies.home ?? homedir(), paths = writerPaths(home, name);
+        const remediation = `run pi-session-mcp-setup --repo ${alias} --apply, or --writer ${name} --recreate --apply`;
+        let state: WriterState | undefined, ready = false;
+        try {
+          state = await readWriterState(home, name);
+          if (state?.phase === "ready" && state.acceptance) {
+            runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)();
+            ready = !!runtime.podmanVersion && state.acceptance.fingerprint === await currentAcceptanceFingerprint(paths.wrapper, state, runtime.podmanVersion)
+              && await runtime.imageExists(state.imageId);
+          }
+        } catch { /* Unreadable state or runtime is not ready. */ }
+        checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));
+        if (state) checks.push(await writerDirty(paths.clone, state)
+          ? warning("writer_dirty", name, "collect writer work before resetting or recreating the writer") : ok("writer_dirty", name));
+        let bundles = false;
+        try {
+          if (!(await lstat(paths.bundles)).isDirectory()) bundles = true;
+          else bundles = (await readdir(paths.bundles)).some((file) => file !== "base.bundle");
+        } catch (error) { bundles = !isMissing(error); }
+        checks.push(bundles ? warning("writer_uncollected_bundle", name, "collect or review outstanding writer bundles") : ok("writer_uncollected_bundle", name));
       }
     }
   }

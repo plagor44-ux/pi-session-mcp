@@ -1,17 +1,16 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CommandRunner } from "./client-adapters/types.js";
 import { isEntryPoint } from "./entry-point.js";
-import { PACKAGE_VERSION } from "./package-metadata.js";
 import { serveRefusal } from "./refusal-server.js";
 import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, serveArgs } from "./writer-boundary.js";
 import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
-import { acceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
+import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
+export { currentAcceptanceFingerprint, wrapperDigest } from "./writer-state.js";
 
 export function renderWrapper(nodePath: string, releaseRoot: string, name: string): string {
   const quote = (value: string) => {
@@ -19,9 +18,6 @@ export function renderWrapper(nodePath: string, releaseRoot: string, name: strin
     return `'${value}'`;
   };
   return `#!/bin/sh\n# stdout is reserved for MCP frames.\nexec ${quote(nodePath)} ${quote(join(releaseRoot, "dist", "writer-launch.js"))} ${quote(name)} "$@"\n`;
-}
-export function wrapperDigest(text: string): string {
-  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
 }
 export interface LaunchDependencies {
   home: string;
@@ -56,10 +52,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
     state = await readWriterState(deps.home, name);
     if (!state) return refuse("writer_not_ready");
     if (argv.length === 1) {
-      if (state.phase !== "ready" || state.acceptance?.fingerprint !== acceptanceFingerprint({
-        wrapperDigest: wrapperDigest(await readFile(paths.wrapper, "utf8")), packageVersion: PACKAGE_VERSION,
-        imageId: state.imageId, podmanVersion: info.version, network: state.network, cache: state.cache,
-      })) return refuse("writer_not_ready");
+      if (state.phase !== "ready" || state.acceptance?.fingerprint !== await currentAcceptanceFingerprint(paths.wrapper, state, info.version)) return refuse("writer_not_ready");
     }
   } catch { return refuse("writer_not_ready"); }
   const providers = state.providers;
