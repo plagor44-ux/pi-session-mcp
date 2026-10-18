@@ -61,7 +61,7 @@ describe("setup execution modes", () => {
     expect(await changeExecutionMode(config, input, probe(false))).toMatchObject({ exitCode: 1, findings: [{ code: "container_runtime_unavailable" }] });
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta" });
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none" });
   });
   it("chooses container only when usable and never falls back to host", async () => {
     const { config } = await fixture();
