@@ -155,7 +155,7 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
     if (info.isSymbolicLink() || !info.isFile() || (info.size ?? 0) > MAX_GITFILE_BYTES) return false;
     // One byte more than the cap proves the file grew after the size check.
     const content = await (fs.readPrefix ?? readPrefix)(entry, MAX_GITFILE_BYTES + 1);
-    return content.length <= MAX_GITFILE_BYTES && /^gitdir:[ \t]*\S/.test(content);
+    return Buffer.byteLength(content, "utf8") <= MAX_GITFILE_BYTES && /^gitdir:[ \t]*\S/.test(content);
   } catch { return false; }
 }
 
