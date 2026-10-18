@@ -327,7 +327,8 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           }
         } catch { /* Unreadable state or runtime is not ready. */ }
         checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));
-        if (state) checks.push(await writerDirty(paths.clone, state)
+        if (!state) continue;
+        checks.push(await writerDirty(paths.clone, state)
           ? warning("writer_dirty", name, "collect writer work before resetting or recreating the writer") : ok("writer_dirty", name));
         let bundles = false;
         try {

@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { podmanInfo } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
@@ -12,7 +12,6 @@ async function harness(ctx: WriterContext, args: string[]) {
   await mkdir(writersRoot(ctx.home), { recursive: true, mode: 0o700 });
   const directory = await mkdtemp(join(writersRoot(ctx.home), ".acceptance-"));
   try {
-    await chmod(directory, 0o700);
     const out = join(directory, "report.json");
     const result = await ctx.runner.run(ctx.nodePath, [join(ctx.releaseRoot, "scripts", "isolation-acceptance.mjs"), ...args, "--out", out], AbortSignal.timeout(300_000));
     const report = JSON.parse(await readFile(out, "utf8")) as { verdict?: unknown; network?: { classification?: unknown } };
@@ -20,22 +19,28 @@ async function harness(ctx: WriterContext, args: string[]) {
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 export async function runIsolationControl(ctx: WriterContext): Promise<WriterOutcome> {
-  let directory: string | undefined;
+  const record = async (verdict: "fail" | "control_detected_escapes") => {
+    await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict, at: new Date().toISOString() }) + "\n", { mode: 0o600 });
+  };
   try {
     await mkdir(writersRoot(ctx.home), { recursive: true, mode: 0o700 });
-    await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict: "fail", at: new Date().toISOString() }) + "\n", { mode: 0o600 });
+    await record("fail");
     const root = join(ctx.home, ".cache", "pi-session-mcp-isolation");
     await mkdir(root, { recursive: true, mode: 0o700 });
-    directory = await mkdtemp(join(root, "control-"));
-    const clone = join(directory, "clone");
-    const result = await ctx.runner.run("git", ["-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--", ctx.checkout, clone], AbortSignal.timeout(300_000));
-    if (result.exitCode !== 0) return failed("isolation_control_failed");
-    const report = await harness(ctx, ["--mode", "uncontained-control", "--launch", "node", "--workspace", clone]);
-    const pass = report.exitCode === 0 && report.verdict === "control_detected_escapes";
-    await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict: pass ? "control_detected_escapes" : "fail", at: new Date().toISOString() }) + "\n", { mode: 0o600 });
-    return pass ? { status: "ok", code: "isolation_control_passed" } : failed("isolation_control_failed");
-  } catch { return failed("isolation_control_failed"); }
-  finally { if (directory) await rm(directory, { recursive: true, force: true }); }
+    const directory = await mkdtemp(join(root, "control-"));
+    try {
+      const clone = join(directory, "clone");
+      const result = await ctx.runner.run("git", ["-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--", ctx.checkout, clone], AbortSignal.timeout(300_000));
+      if (result.exitCode !== 0) throw new Error("isolation_control_failed");
+      const report = await harness(ctx, ["--mode", "uncontained-control", "--launch", "node", "--workspace", clone]);
+      if (report.exitCode !== 0 || report.verdict !== "control_detected_escapes") throw new Error("isolation_control_failed");
+    } finally { await rm(directory, { recursive: true, force: true }); }
+    await record("control_detected_escapes");
+    return { status: "ok", code: "isolation_control_passed" };
+  } catch {
+    await record("fail").catch(() => {}); // Invalidate again even when an earlier step threw.
+    return failed("isolation_control_failed");
+  }
 }
 export async function acceptWriter(ctx: WriterContext, name: string): Promise<WriterOutcome> {
   try {
