@@ -50,22 +50,25 @@ factor and its own approval.
 
 ## Prerequisites before an approval can be bound
 
-- **P1, skill tree binding.** The executor hashes and embeds only `SKILL.md`
-  (`eval/profiles/token-live.ts`, `eval/profiles/token-footprint-plan.ts`). With
-  the new reference file, arm B must bind the whole tree digest and make the
-  reference available to the controller, or record that start-error guidance is
-  absent in embedded mode.
-- **P2, worker skill selection.** The pilot's evaluation workers select no
-  skills. Comparing #87 needs both arms to select the worker skills explicitly,
-  old immutable trees in A and new trees in B.
-- **P3, client version.** The pilot and the provider-free projection probe pin
-  Codex `0.162.0`; this machine now has `0.162.1`
-  ([tool-definition evidence](../tool-definitions-2026-10-18/README.md)). The
-  approval must name the version actually installed, the same for all six runs;
-  a version change during the wave stops it.
+- **P1, skill tree binding (implemented, not live-verified).** The controller
+  skill digest covers the whole skill tree of `skills/pi-session-orchestration`
+  (`SKILL.md` plus `references/start-errors.md`) via `readSkillTree`/`fingerprint`
+  from `src/skill-library.ts`. In embedded delivery, the controller prompt contains
+  the reference file content clearly delimited (`--- Reference: references/start-errors.md ---`),
+  making start-error guidance available to the controller.
+- **P2, worker skill selection (implemented, not live-verified).** The manifest
+  and decision template support optional explicit worker skills (`pi-session-implementation`
+  for coding, `pi-session-review` for read-only) with tree digests. The executor
+  verifies digests before starting and configures worker profiles; default remains
+  "no worker skills" so existing pilot templates remain valid.
+- **P3, client version (implemented, not live-verified).** The controller client
+  version is bound from the approval/decision (`codex-cli 0.162.1` installed)
+  instead of the hard constant `0.162.0`. The executor refuses to run
+  (`controller_version_mismatch`) if the installed client version differs from the
+  bound version. Historical records remain untouched.
 
-P1–P3 are harness changes for a later, separately reviewed step. None is
-implemented in Sprint 5.
+P1–P3 are now implemented provider-free in the test and evaluation harness and
+verified by unit tests; live execution remains unapproved (`approved: false`).
 
 ## Measurements, kept separate
 

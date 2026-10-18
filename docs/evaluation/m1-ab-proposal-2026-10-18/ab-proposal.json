@@ -9,7 +9,7 @@
   "route": "codex-m1",
   "controller": {
     "client": "codex",
-    "version": null,
+    "version": "0.162.1",
     "version_rule": "bind-installed-version-at-approval-identical-for-all-runs",
     "provider": "openai",
     "model": "gpt-6.1-sol",
@@ -22,12 +22,21 @@
   ],
   "arms": {
     "A": { "source_commit": "612fbcb976d4563ea597e87be56123055b782c1a", "source_digest": null, "build_digest": null, "controller_skill_tree_digest": null, "worker_skill_tree_digests": null },
-    "B": { "source_commit": null, "source_digest": null, "build_digest": null, "controller_skill_tree_digest": null, "worker_skill_tree_digests": null }
+    "B": {
+      "source_commit": null,
+      "source_digest": null,
+      "build_digest": null,
+      "controller_skill_tree_digest": "v2:1d39e8ac17a706901dd139a9478cfa623b031801c6d2170e13bbe0f627cbdb2a",
+      "worker_skill_tree_digests": {
+        "pi-session-review": "v2:30f0e1f8f54dd5c38bf0c0008eb701a8c68edba129a7e182c0da1416ea46c1a4",
+        "pi-session-implementation": "v2:d9487905a9dc429239de39695190f8a459d1921d9c97db2d9bc17ac18abbeab5"
+      }
+    }
   },
   "comparison": "package",
   "per_measure_effects_claimed": false,
-  "worker_skills_selected_in_both_arms": false,
-  "untested_without_worker_skill_selection": [87],
+  "worker_skills_selected_in_both_arms": true,
+  "untested_without_worker_skill_selection": [],
   "prerequisites": [
     "P1-controller-skill-tree-digest-and-reference-availability",
     "P2-explicit-worker-skill-selection-in-both-arms",

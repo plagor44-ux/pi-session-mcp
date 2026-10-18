@@ -8,8 +8,10 @@ import { promisify } from "node:util";
 import { ownedTemporary } from "../eval/profiles/files.js";
 import { configSchema } from "../src/config.js";
 import { digest } from "../eval/profiles/files.js";
-import { caseServerConfig, cleanupRegisteredServer, prepareTokenLive, runOwnedController, runTokenLive, verifyL3ReceiptSchedule } from "../eval/profiles/token-live.js";
+import { caseServerConfig, cleanupRegisteredServer, formatEmbeddedSkillTree, prepareTokenLive, runOwnedController, runTokenLive, verifyL3ReceiptSchedule } from "../eval/profiles/token-live.js";
 import { TokenFrameForwarder } from "../eval/profiles/token-live-proxy.js";
+import { readSkillTree } from "../src/skill-library.js";
+import { footprintPlan } from "../eval/profiles/token-footprint-plan.js";
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map(path => rm(path, { recursive: true, force: true }))); vi.restoreAllMocks(); });
@@ -289,3 +291,122 @@ describe("token-live per-case server configuration", () => {
     expect(caseServerConfig("L2", "/fixture").executionProfiles).toHaveProperty("code.permissionProfile", "coding");
   });
 });
+
+describe("M1 A/B prerequisites: skill trees, worker skills and client version (P1-P3)", () => {
+  test("tree digest changes when the reference changes", async () => {
+    const dir = await tempDir("skill-tree-test-");
+    await writeFile(join(dir, "SKILL.md"), "# Skill\nInitial content\n");
+    await mkdir(join(dir, "references"), { recursive: true });
+    await writeFile(join(dir, "references/start-errors.md"), "# Errors\nType A\n");
+
+    const tree1 = await readSkillTree(dir);
+    expect(tree1.files).toHaveLength(2);
+
+    await writeFile(join(dir, "references/start-errors.md"), "# Errors\nType B (modified)\n");
+    const tree2 = await readSkillTree(dir);
+
+    expect(tree1.fingerprint).not.toEqual(tree2.fingerprint);
+  });
+
+  test("embedded prompt contains the reference", async () => {
+    const root = process.cwd();
+    const tree = await readSkillTree(join(root, "skills/pi-session-orchestration"));
+    const embedded = formatEmbeddedSkillTree(tree);
+
+    const skillMd = await readFile(join(root, "skills/pi-session-orchestration/SKILL.md"), "utf8");
+    expect(embedded).toContain(skillMd);
+
+    const refContent = await readFile(join(root, "skills/pi-session-orchestration/references/start-errors.md"), "utf8");
+    expect(embedded).toContain("--- Reference: references/start-errors.md ---");
+    expect(embedded).toContain(refContent);
+    expect(embedded).toContain("--- End Reference: references/start-errors.md ---");
+  });
+
+  test("worker-skill digest mismatch is rejected before child spawn", async () => {
+    const root = process.cwd(), build = await tempDir("token-live-build-");
+    await mkdir(join(build, "src"));
+    await mkdir(join(build, "eval/profiles"), { recursive: true });
+    await writeFile(join(build, "src/main.js"), "synthetic build");
+    await writeFile(join(build, "eval/profiles/token-live-proxy.js"), "synthetic proxy build");
+    await writeFile(join(build, "package.json"), JSON.stringify({ version: "test" }));
+
+    const wrongDigest = "v2:0000000000000000000000000000000000000000000000000000000000000000";
+    const workerSkills = [{ name: "pi-session-review", tree_digest: wrongDigest }];
+    const prepared = await prepareTokenLive(root, build, { workerSkills });
+    const profileManifest = { ...prepared.profileManifest, approved: true };
+    const budget = { ...prepared.budgetProposal, approved: true, manifest_digest: digest(profileManifest), advisory_usd: 1, acknowledges_unmetered_cost: true };
+    const decision = { ...prepared.decisionTemplate, approved: true, manifest_digest: digest(profileManifest), budget_digest: digest(budget), advisory_usd: 1, operator_acknowledges_advisory_not_cap: true };
+
+    let spawns = 0;
+    const spawn = (() => { spawns++; throw new Error("must_not_spawn"); }) as never;
+    const output = join(await tempDir("token-live-output-"), "results");
+
+    await expect(runTokenLive(root, build, { profileManifest, budget, decision }, output, { spawn, controllerVersion: () => true })).rejects.toThrow("worker_skill_digest_mismatch");
+    expect(spawns).toBe(0);
+  });
+
+  test("controller client version mismatch is rejected before child spawn", async () => {
+    const root = process.cwd(), build = await tempDir("token-live-build-");
+    await mkdir(join(build, "src"));
+    await mkdir(join(build, "eval/profiles"), { recursive: true });
+    await writeFile(join(build, "src/main.js"), "synthetic build");
+    await writeFile(join(build, "eval/profiles/token-live-proxy.js"), "synthetic proxy build");
+    await writeFile(join(build, "package.json"), JSON.stringify({ version: "test" }));
+
+    const prepared = await prepareTokenLive(root, build, { controllerVersion: "0.162.1" });
+    const profileManifest = { ...prepared.profileManifest, approved: true };
+    const budget = { ...prepared.budgetProposal, approved: true, manifest_digest: digest(profileManifest), advisory_usd: 1, acknowledges_unmetered_cost: true };
+    const decision = { ...prepared.decisionTemplate, approved: true, manifest_digest: digest(profileManifest), budget_digest: digest(budget), advisory_usd: 1, operator_acknowledges_advisory_not_cap: true };
+
+    let spawns = 0;
+    const spawn = (() => { spawns++; throw new Error("must_not_spawn"); }) as never;
+    const output = join(await tempDir("token-live-output-"), "results");
+
+    await expect(runTokenLive(root, build, { profileManifest, budget, decision }, output, { spawn, controllerVersion: () => false })).rejects.toThrow("controller_version_mismatch");
+    expect(spawns).toBe(0);
+  });
+
+  test("default templates unchanged with 0.162.0 controller and no worker skills", async () => {
+    const root = process.cwd(), build = await tempDir("token-live-build-");
+    await mkdir(join(build, "src"));
+    await mkdir(join(build, "eval/profiles"), { recursive: true });
+    await writeFile(join(build, "src/main.js"), "synthetic build");
+    await writeFile(join(build, "eval/profiles/token-live-proxy.js"), "synthetic proxy build");
+    await writeFile(join(build, "package.json"), JSON.stringify({ version: "test" }));
+
+    const prepared = await prepareTokenLive(root, build);
+    expect(prepared.decisionTemplate.controller.version).toBe("0.162.0");
+    expect(prepared.decisionTemplate.worker_skills).toEqual([]);
+
+    const plan = await footprintPlan(root);
+    expect(plan.controller.version).toBe("0.162.0");
+    expect(plan.worker_skills).toEqual([]);
+
+    const l1Config = caseServerConfig("L1", "/fixture");
+    expect(l1Config).not.toHaveProperty("skillCatalog");
+    expect(l1Config.executionProfiles.review).not.toHaveProperty("skills");
+
+    const l2Config = caseServerConfig("L2", "/fixture");
+    expect(l2Config).not.toHaveProperty("skillCatalog");
+    expect(l2Config.executionProfiles.review).not.toHaveProperty("skills");
+    expect(l2Config.executionProfiles.code).not.toHaveProperty("skills");
+  });
+
+  test("caseServerConfig configures skillCatalog and profile skills when worker skills are provided", () => {
+    const workerSkills = [
+      { name: "pi-session-review", tree_digest: "v2:rev" },
+      { name: "pi-session-implementation", tree_digest: "v2:code" },
+    ];
+    const l1Config = caseServerConfig("L1", "/fixture", workerSkills);
+    expect(l1Config.skillCatalog).toEqual({
+      "pi-session-review": "builtin:pi-session-review",
+      "pi-session-implementation": "builtin:pi-session-implementation",
+    });
+    expect(l1Config.executionProfiles.review).toHaveProperty("skills", ["pi-session-review"]);
+
+    const l2Config = caseServerConfig("L2", "/fixture", workerSkills);
+    expect(l2Config.executionProfiles.review).toHaveProperty("skills", ["pi-session-review"]);
+    expect(l2Config.executionProfiles.code).toHaveProperty("skills", ["pi-session-implementation"]);
+  });
+});
+
