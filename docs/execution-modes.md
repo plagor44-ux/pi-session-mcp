@@ -138,6 +138,10 @@ choices, and `container_runtime_unavailable` as an error for each container
 alias if its local rootless Podman probe fails. Doctor stays offline and never
 starts a writer, session or provider request. Invalid modes surface through its
 `config_invalid` check. See the [Doctor contract](doctor-design.md).
+When any alias uses container mode, a `container_runtime_unavailable` error
+also blocks setup's `--target` operations with `doctor_failed` until Doctor is
+clean, because those operations run Doctor first. Run `pi-session-mcp-doctor`
+to see the cause.
 
 The server fails startup with `invalid_execution_modes` for an invalid modes
 file. `pi_capabilities_get` reports each workspace's `mode`. A
