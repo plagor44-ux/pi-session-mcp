@@ -46,6 +46,25 @@ it("records a path-free successful control and uses new clones", async () => {
   const clones = run.mock.calls.filter(([cmd]) => cmd === "git").map(([, args]) => args.at(-1));
   expect(new Set(clones).size).toBe(2);
 });
+it("overwrites a stale control pass after a throwing harness", async () => {
+  const { ctx, run } = await fixture();
+  const control = controlStatePath(ctx.home);
+  const stale = JSON.stringify({ schemaVersion: 1, verdict: "control_detected_escapes", at: "old" });
+  await writeFile(control, stale);
+  const original = run.getMockImplementation()!;
+  run.mockImplementation(async (command, args, signal) => {
+    if (command !== ctx.nodePath) return original(command, args, signal);
+    expect(JSON.parse(await readFile(control, "utf8")).verdict).toBe("fail");
+    // Simulate a stale pass reappearing after the pre-emptive invalidation.
+    await writeFile(control, stale);
+    throw new Error("harness failed");
+  });
+  expect(await runIsolationControl(ctx)).toEqual({ status: "failed", code: "isolation_control_failed" });
+  expect(JSON.parse(await readFile(control, "utf8")).verdict).toBe("fail");
+  const clone = run.mock.calls.find(([cmd]) => cmd === "git")![1].at(-1)!;
+  await expect(readdir(clone)).rejects.toThrow();
+  expect(await readdir(join(ctx.home, ".local/state/pi-session-mcp/writers"))).toEqual(["repo-w1"]);
+});
 it("cleans the fresh disposable control clone even on harness failure", async () => {
   const { ctx, run } = await fixture(1);
   expect((await runIsolationControl(ctx)).status).toBe("failed");

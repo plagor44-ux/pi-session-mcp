@@ -25,7 +25,11 @@ async function fixture() {
   };
   return { paths, check, ready };
 }
-it("reports missing state", async () => { const { check } = await fixture(); expect(await check()).toContainEqual(expect.objectContaining({ id: "writer_not_ready", severity: "error" })); });
+it.each(["absent", "invalid"])("reports only readiness for %s state", async (kind) => {
+  const { paths, check, ready } = await fixture();
+  if (kind === "invalid") { await ready(); await writeFile(paths.state, "{}"); }
+  expect(await check()).toEqual([expect.objectContaining({ id: "writer_not_ready", severity: "error", subject: "repo-w1" })]);
+});
 it("detects wrapper drift", async () => {
   const { paths, check, ready } = await fixture(); await ready();
   await writeFile(paths.wrapper, "changed wrapper");
@@ -43,8 +47,19 @@ it.each(["branch", "symlink", "bundle", "packed", "parent-symlink", "oversized",
   if (kind === "detached") await writeFile(join(paths.clone, ".git/HEAD"), "b".repeat(40));
   if (kind === "branch") await writeFile(join(paths.clone, ".git/refs/heads/x"), "c".repeat(40));
   if (kind === "packed") await writeFile(join(paths.clone, ".git/packed-refs"), `${"c".repeat(40)} refs/heads/x\n`);
-  if (kind === "symlink") { await rm(join(paths.clone, ".git/HEAD")); await symlink("/unreadable-secret", join(paths.clone, ".git/HEAD")); }
-  if (kind === "parent-symlink") { await rm(join(paths.clone, ".git/refs"), { recursive: true }); await symlink("/unreadable-secret", join(paths.clone, ".git/refs")); }
+  if (kind === "symlink") {
+    const target = join(paths.root, "readable-head");
+    await writeFile(target, "ref: refs/heads/main\n");
+    await rm(join(paths.clone, ".git/HEAD"));
+    await symlink(target, join(paths.clone, ".git/HEAD"));
+  }
+  if (kind === "parent-symlink") {
+    const target = join(paths.root, "readable-refs");
+    await mkdir(join(target, "heads"), { recursive: true });
+    await writeFile(join(target, "heads/main"), "b".repeat(40) + "\n");
+    await rm(join(paths.clone, ".git/refs"), { recursive: true });
+    await symlink(target, join(paths.clone, ".git/refs"));
+  }
   if (kind === "bundle") await writeFile(join(paths.bundles, "collect.bundle"), "bundle");
   const checks = await check();
   expect(checks).toContainEqual(expect.objectContaining({ id: kind === "bundle" ? "writer_uncollected_bundle" : "writer_dirty", severity: "warning" }));
