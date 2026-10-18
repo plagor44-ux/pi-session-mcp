@@ -9,7 +9,7 @@ import { manifestSchema, type Manifest, type Budget, type Run } from "./schemas.
 import { validateApproval } from "./runner.js";
 import { measureCodexEvent } from "./token-client-events.js";
 import { bounded } from "./transport.js";
-import { proxyMetricsSchema, runTokenProxy, type ProxyMetrics } from "./token-live-proxy.js";
+import { DEFAULT_WORKER_PROVIDER, isWorkerProvider, proxyMetricsSchema, runTokenProxy, type ProxyMetrics, type WorkerProvider } from "./token-live-proxy.js";
 import { frameSchema, type Frame } from "./token-meter.js";
 import { fileURLToPath } from "node:url";
 import { readSkillTree, type SkillTree } from "../../src/skill-library.js";
@@ -37,10 +37,14 @@ export function controllerConfig(version: string = DEFAULT_CONTROLLER_VERSION): 
 }
 
 export const CONTROLLER = controllerConfig(DEFAULT_CONTROLLER_VERSION);
-const ROUTES = {
-  review: { provider: "openai-codex", model: "gpt-6.1-sol", effort: "high" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
-  code: { provider: "openai-codex", model: "gpt-6.1-sol", effort: "medium" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
-};
+/** Worker routes for one bound Pi provider; the pilot used `openai-codex`. */
+export function routesFor(provider: WorkerProvider) {
+  return {
+    review: { provider: provider as string, model: "gpt-6.1-sol", effort: "high" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
+    code: { provider: provider as string, model: "gpt-6.1-sol", effort: "medium" as const, auth_type: "oauth" as const, billing_type: "subscription" as const, data_path: "synthetic-fixture-to-selected-provider" as const },
+  };
+}
+const ROUTES = routesFor(DEFAULT_WORKER_PROVIDER);
 const MATRIX = [
   { id: "L1", task: "T1", starts: 1, turns: 1, route: "review", slots: ["m1-l1"], prompts: 1 },
   { id: "L2", task: "T2", starts: 1, turns: 1, route: "code", slots: ["m1-l2"], prompts: 1 },
@@ -72,7 +76,7 @@ export function parseWorkerSkills(value: unknown): readonly WorkerSkillBinding[]
  * Selected worker skills point at the digest-verified source trees (`<skillsRoot>/<name>/SKILL.md`), not at
  * `builtin:`: the evaluation server runs from a compiled build without a shipped `skills/` directory.
  */
-export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, workerSkills: readonly WorkerSkillBinding[] = [], skillsRoot?: string) {
+export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, workerSkills: readonly WorkerSkillBinding[] = [], skillsRoot?: string, provider: WorkerProvider = DEFAULT_WORKER_PROVIDER) {
   const hasReview = workerSkills.some((s) => s.name === "pi-session-review");
   const hasCode = workerSkills.some((s) => s.name === "pi-session-implementation");
   if ((hasReview || hasCode) && skillsRoot === undefined) throw new Error("worker_skill_root_required");
@@ -81,7 +85,7 @@ export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, 
   if (hasCode) skillCatalog["pi-session-implementation"] = join(skillsRoot!, "pi-session-implementation", "SKILL.md");
   const review = {
     permissionProfile: "read-only",
-    provider: "openai-codex",
+    provider,
     model: "gpt-6.1-sol",
     thinkingLevel: "high",
     default: true,
@@ -89,7 +93,7 @@ export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, 
   } as const;
   const code = {
     permissionProfile: "coding",
-    provider: "openai-codex",
+    provider,
     model: "gpt-6.1-sol",
     thinkingLevel: "medium",
     default: false,
@@ -152,6 +156,7 @@ export interface TokenLiveApproval {
   readonly controller: ControllerBinding;
   readonly schedule: typeof MATRIX;
   readonly worker_skills?: readonly WorkerSkillBinding[];
+  readonly worker_provider?: WorkerProvider;
   readonly budget_limits: { max_starts: 4; max_retries: 0; parallelism: 1; run_timeout_ms: 600000; total_timeout_ms: 1800000; provider_cap_usd: null };
   readonly advisory_usd: number;
   readonly limits: { starts: 4; work_turns: 5; retries: 0; invocations: 3 };
@@ -389,16 +394,18 @@ export async function runOwnedController(command: string, args: string[], option
 
 export interface PrepareTokenLiveOptions {
   readonly controllerVersion?: string | undefined;
+  readonly workerProvider?: WorkerProvider | undefined;
   readonly workerSkills?: readonly WorkerSkillBinding[] | undefined;
 }
 
 export async function prepareTokenLive(root: string, build: string, options?: PrepareTokenLiveOptions): Promise<TokenLiveTemplates> {
+  const workerProvider = options?.workerProvider ?? DEFAULT_WORKER_PROVIDER, routes = routesFor(workerProvider);
   const base = await createPlan(root), tasks = await taskCatalog(root), source = await sourceBinding(root);
   const runs: Run[] = ([
-    { ...base.runs[0]!, run_id: "m1-l1", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 1, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: ROUTES.review },
-    { ...base.runs[1]!, run_id: "m1-l2", task_id: "T2", profile_id: "P2", view: "implementer", stage: "screening", repetition: 1, permission_profile: "coding", variant: "A", skills: [], extensions: [], route: ROUTES.code },
-    { ...base.runs[0]!, run_id: "m1-l3-a", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 1, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: ROUTES.review },
-    { ...base.runs[0]!, run_id: "m1-l3-b", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 2, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: ROUTES.review },
+    { ...base.runs[0]!, run_id: "m1-l1", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 1, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: routes.review },
+    { ...base.runs[1]!, run_id: "m1-l2", task_id: "T2", profile_id: "P2", view: "implementer", stage: "screening", repetition: 1, permission_profile: "coding", variant: "A", skills: [], extensions: [], route: routes.code },
+    { ...base.runs[0]!, run_id: "m1-l3-a", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 1, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: routes.review },
+    { ...base.runs[0]!, run_id: "m1-l3-b", task_id: "T1", profile_id: "P1", view: "scout", stage: "screening", repetition: 2, permission_profile: "read-only", variant: "A", skills: [], extensions: [], route: routes.review },
   ] as Run[]).map(run => ({ ...run, task_hash: tasks.find(task => task.id === run.task_id)!.task_hash }));
   const profileManifest = manifestSchema.parse({ ...base, approved: false, runs, tasks, server_commit: source.commit, source_digest: source.digest, prerequisites: { baseline_passed: false, screening_passed: false, bottleneck: null } });
   const buildDigest = await buildBinding(build);
@@ -422,6 +429,7 @@ export async function prepareTokenLive(root: string, build: string, options?: Pr
       controller,
       schedule: MATRIX,
       worker_skills: workerSkills,
+      worker_provider: workerProvider,
       budget_limits: { max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, provider_cap_usd: null },
       advisory_usd: null,
       limits: { starts: 4, work_turns: 5, retries: 0, invocations: 3 },
@@ -435,13 +443,14 @@ function validDecision(value: unknown, manifest: Manifest, budget: Budget, expec
   const exactManifest = { ...manifest, approved: false };
   const dWorkerSkills = parseWorkerSkills(d.worker_skills ?? d.worker_skill_tree_digests);
   const expWorkerSkills = parseWorkerSkills(expected.decisionTemplate.worker_skills);
+  const dWorkerProvider = d.worker_provider ?? DEFAULT_WORKER_PROVIDER;
   return d.schema_version === "token-live-decision-1" && d.approved === true && d.operator_acknowledges_advisory_not_cap === true
     && d.manifest_digest === digest(manifest) && d.budget_digest === digest(budget)
     && digest(exactManifest) === digest(expected.profileManifest)
     && d.source_digest === expected.decisionTemplate.source_digest && d.build_digest === expected.decisionTemplate.build_digest && d.matrix_digest === digest(MATRIX)
     && d.controller_skill_digest === expected.decisionTemplate.controller_skill_digest
     && digest(d.controller) === digest(expected.decisionTemplate.controller) && digest(d.schedule) === digest(MATRIX)
-    && digest(dWorkerSkills) === digest(expWorkerSkills)
+    && digest(dWorkerSkills) === digest(expWorkerSkills) && dWorkerProvider === expected.decisionTemplate.worker_provider
     && digest(d.budget_limits) === digest({ max_starts: 4, max_retries: 0, parallelism: 1, run_timeout_ms: 600000, total_timeout_ms: 1800000, provider_cap_usd: null })
     && d.advisory_usd === budget.advisory_usd && budget.max_starts === 4 && budget.max_retries === 0 && budget.parallelism === 1
     && budget.run_timeout_ms === 600000 && budget.total_timeout_ms === 1800000 && budget.provider_cap_usd === null
@@ -457,7 +466,9 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
   const decController = asRecord(dec.controller);
   const controllerVersion = typeof decController.version === "string" ? decController.version : undefined;
   const workerSkills = parseWorkerSkills(dec.worker_skills ?? dec.worker_skill_tree_digests);
-  const expected = await prepareTokenLive(root, build, { controllerVersion, workerSkills });
+  const workerProvider = dec.worker_provider ?? DEFAULT_WORKER_PROVIDER;
+  if (!isWorkerProvider(workerProvider)) throw new Error(noApproval);
+  const expected = await prepareTokenLive(root, build, { controllerVersion, workerSkills, workerProvider });
   if (!validDecision(approvals.decision, manifest, budget, expected)) throw new Error(noApproval);
   const source = await sourceBinding(root);
   const buildDigest = await buildBinding(build);
@@ -545,8 +556,8 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       if (spec.id === "L2") caseChecks.push({ id: "fail-before", passed: baseline?.status === "FAIL" });
       for (let invocation = 0; invocation < turns.length && caseStatus === "PASS"; invocation++) {
         const cfg = join(temp, `config-${invocation}.json`), metrics = join(temp, `proxy-${invocation}.json`), control = join(temp, `server-${invocation}.json`), proxyEntry = fileURLToPath(new URL("./token-live-proxy.js", import.meta.url));
-        const proxyEnv = { TOKEN_LIVE_REAL_ENTRY: join(resolve(build), "src/main.js"), TOKEN_LIVE_CONFIG: cfg, TOKEN_LIVE_METRICS_FILE: metrics, TOKEN_LIVE_CONTROL_FILE: control, TOKEN_LIVE_MAX_STARTS: String(spec.starts), TOKEN_LIVE_MAX_PROMPTS: String(spec.prompts), TOKEN_LIVE_WORKER_TURN_MS: "180000" };
-        const config = caseServerConfig(spec.id, workspace, expected.decisionTemplate.worker_skills, join(root, "skills"));
+        const proxyEnv = { TOKEN_LIVE_REAL_ENTRY: join(resolve(build), "src/main.js"), TOKEN_LIVE_CONFIG: cfg, TOKEN_LIVE_METRICS_FILE: metrics, TOKEN_LIVE_CONTROL_FILE: control, TOKEN_LIVE_MAX_STARTS: String(spec.starts), TOKEN_LIVE_MAX_PROMPTS: String(spec.prompts), TOKEN_LIVE_WORKER_TURN_MS: "180000", TOKEN_LIVE_WORKER_PROVIDER: workerProvider };
+        const config = caseServerConfig(spec.id, workspace, expected.decisionTemplate.worker_skills, join(root, "skills"), workerProvider);
         await writeFile(cfg, JSON.stringify(config), { mode: 0o600, flag: "wx" });
         const envToml = `{${Object.entries(proxyEnv).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
         const controllerCwd = join(temp, "controller"); await mkdir(controllerCwd, { mode: 0o700 });
@@ -691,7 +702,7 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       manifest_digest: digest(manifest), budget_digest: digest(budget), decision_digest: digest(approvals.decision), skill_digest: skillDigest,
       worker_skills: expected.decisionTemplate.worker_skills ?? [],
       matrix_digest: digest(MATRIX), node_version: process.versions.node,
-      controller: expected.decisionTemplate.controller, routes: ROUTES, tasks: expected.profileManifest.tasks.map(task => ({ id: task.id, task_hash: task.task_hash, fixture_hash: task.fixture_hash, prompt_digest: hash(Buffer.from(taskDefinitions.find(definition => definition.id === task.id)!.prompt, "utf8")) })) },
+      controller: expected.decisionTemplate.controller, routes: routesFor(workerProvider), tasks: expected.profileManifest.tasks.map(task => ({ id: task.id, task_hash: task.task_hash, fixture_hash: task.fixture_hash, prompt_digest: hash(Buffer.from(taskDefinitions.find(definition => definition.id === task.id)!.prompt, "utf8")) })) },
     starts: measuredStarts, work_turns: measuredPrompts, retries: 0, cases };
   const safe = { ...result, cases: result.cases.map(c => ({ ...c, events: c.events.map(e => ({ ...e })) })) };
   await mkdir(output, { recursive: true, mode: 0o700 });

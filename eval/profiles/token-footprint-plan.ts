@@ -6,7 +6,7 @@ import { readSkillTree } from "../../src/skill-library.js";
 import type { WorkerSkillBinding } from "./token-live.js";
 
 /** Reviewable exact schedule; deliberately not coerced into the profile-screening gate. */
-export async function footprintPlan(root: string, options?: { controllerVersion?: string | undefined; workerSkills?: readonly WorkerSkillBinding[] | undefined }) {
+export async function footprintPlan(root: string, options?: { controllerVersion?: string | undefined; workerProvider?: string | undefined; workerSkills?: readonly WorkerSkillBinding[] | undefined }) {
   const source = await sourceBinding(root), tasks = await taskCatalog(root);
   const prompts = Object.fromEntries(["T1", "T2"].map(id => [id, hash(taskDefinitions.find(t => t.id === id)!.prompt)]));
   const matrix = [
@@ -23,8 +23,8 @@ export async function footprintPlan(root: string, options?: { controllerVersion?
     follow_up_prompt_hash: hash("Re-read the T1 source and documentation. Return the same two source-linked claims with numeric status values; do not modify files."),
     controller: { client: "codex", version: controllerVersion, provider: "openai", model: "gpt-6.1-sol", effort: "high", auth: "existing-client-login-not-probed", skills: ["pi-session-orchestration"], extensions: [] },
     worker_routes: [
-      { from_configured_alias: "review", provider: "openai-codex", model: "gpt-6.1-sol", effort: "high", permission: "read-only" },
-      { from_configured_alias: "code", provider: "openai-codex", model: "gpt-6.1-sol", effort: "medium", permission: "coding" },
+      { from_configured_alias: "review", provider: options?.workerProvider ?? "openai-codex", model: "gpt-6.1-sol", effort: "high", permission: "read-only" },
+      { from_configured_alias: "code", provider: options?.workerProvider ?? "openai-codex", model: "gpt-6.1-sol", effort: "medium", permission: "coding" },
     ],
     worker_skills: workerSkills, worker_extensions: [], worker_external_mcp_grants: [],
     controller_skill_digest: orchestrationTree.fingerprint,

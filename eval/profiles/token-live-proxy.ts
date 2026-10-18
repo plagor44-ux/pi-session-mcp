@@ -7,6 +7,12 @@ import { FrameMeter, frameSchema, type Frame } from "./token-meter.js";
 
 const nonnegative = z.number().int().nonnegative();
 const allowedTools = new Set(["pi_capabilities_get", "pi_session_start", "pi_session_prompt", "pi_turn_get", "pi_session_abort", "pi_session_close", "pi_session_list", "pi_session_get"]);
+/** Pi providers an M1 worker route may use; each run binds one in its decision. Both are OAuth subscription logins. */
+export const WORKER_PROVIDERS = ["openai-codex", "openai"] as const;
+export type WorkerProvider = typeof WORKER_PROVIDERS[number];
+export const DEFAULT_WORKER_PROVIDER: WorkerProvider = "openai-codex";
+export function isWorkerProvider(value: unknown): value is WorkerProvider { return typeof value === "string" && (WORKER_PROVIDERS as readonly string[]).includes(value); }
+
 export const proxyMetricsSchema = z.object({
   schema_version: z.literal("token-live-proxy-1"), integrity_passed: z.boolean(),
   received_bytes: nonnegative, written_bytes: nonnegative, controller_bytes: nonnegative,
@@ -43,7 +49,7 @@ export class TokenFrameForwarder {
   private readonly promptTimers = new Map<unknown, { timer: NodeJS.Timeout; requestId: unknown; turnId: string | null }>();
   private readonly promptRequests = new Map<unknown, number | null>();
 
-  constructor(private readonly limits: { maxStarts: number; maxPrompts: number; workerTurnMs?: number; onWorkerTurnTimeout?: () => void } = { maxStarts: Number.MAX_SAFE_INTEGER, maxPrompts: Number.MAX_SAFE_INTEGER }) {}
+  constructor(private readonly limits: { maxStarts: number; maxPrompts: number; workerTurnMs?: number; onWorkerTurnTimeout?: () => void; workerProvider?: WorkerProvider } = { maxStarts: Number.MAX_SAFE_INTEGER, maxPrompts: Number.MAX_SAFE_INTEGER }) {}
 
   forward(direction: "request" | "response", chunk: Buffer, write: (bytes: Buffer) => void, reject?: (bytes: Buffer) => void): void {
     if (direction === "request") this.controllerBytes += chunk.length;
@@ -86,8 +92,9 @@ export class TokenFrameForwarder {
             const structured = result.structuredContent && typeof result.structuredContent === "object" ? result.structuredContent as Record<string, unknown> : {};
             const session = structured.session && typeof structured.session === "object" ? structured.session as Record<string, unknown> : {};
             const profile = this.expectedStartProfiles.get(envelope.id);
-            const route = profile === "code" ? { profile: "coding" as const, provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "medium" }
-              : { profile: "read-only" as const, provider: "openai-codex", model: "gpt-6.1-sol", thinkingLevel: "high" };
+            const provider = this.limits.workerProvider ?? DEFAULT_WORKER_PROVIDER;
+            const route = profile === "code" ? { profile: "coding" as const, provider, model: "gpt-6.1-sol", thinkingLevel: "medium" }
+              : { profile: "read-only" as const, provider, model: "gpt-6.1-sol", thinkingLevel: "high" };
             const ordinal = this.meter.frames.at(-1)?.session_ordinal;
             if (ordinal !== null && ordinal !== undefined) {
               const passed = profile !== undefined && structured.ok === true && session.executionProfile === profile && session.profile === route.profile
@@ -279,6 +286,11 @@ export async function runTokenProxy(environment: NodeJS.ProcessEnv = process.env
     process.stderr.write(JSON.stringify({ event: "token_live_proxy_stopped", code: "invalid_turn_timeout" }) + "\n");
     process.exitCode = 2; return;
   }
+  const workerProvider = environment.TOKEN_LIVE_WORKER_PROVIDER ?? DEFAULT_WORKER_PROVIDER;
+  if (!isWorkerProvider(workerProvider)) {
+    process.stderr.write(JSON.stringify({ event: "token_live_proxy_stopped", code: "invalid_worker_provider" }) + "\n");
+    process.exitCode = 2; return;
+  }
   const child = spawn(process.execPath, [entry], { stdio: "pipe", env, detached: process.platform !== "win32" });
   let exitCode: number | null = null;
   const exited = new Promise<void>(resolve => child.once("close", code => { exitCode = code; resolve(); }));
@@ -296,7 +308,7 @@ export async function runTokenProxy(environment: NodeJS.ProcessEnv = process.env
   }
   let inputEndedResolve!: () => void;
   const inputEnded = new Promise<void>(resolve => { inputEndedResolve = resolve; });
-  const meter = new TokenFrameForwarder({ maxStarts, maxPrompts, workerTurnMs, onWorkerTurnTimeout: () => { process.stdin.pause(); child.stdin.end(); inputEndedResolve(); signalServer(child, "SIGTERM"); } });
+  const meter = new TokenFrameForwarder({ maxStarts, maxPrompts, workerTurnMs, workerProvider, onWorkerTurnTimeout: () => { process.stdin.pause(); child.stdin.end(); inputEndedResolve(); signalServer(child, "SIGTERM"); } });
   const stopForFailure = () => { process.stdin.pause(); child.stdin.end(); inputEndedResolve(); signalServer(child, "SIGTERM"); };
   child.on("error", () => { meter.integrityPassed = false; });
   child.stdin.on("error", () => { meter.integrityPassed = false; stopForFailure(); });
