@@ -38,7 +38,7 @@ and owners are:
 | `container_runtime_unavailable` | A workspace has mode `container` and the local rootless Podman probe fails | validated workspace alias |
 | `writer_not_ready` | State is missing or invalid, phase is not ready, acceptance fingerprint is stale, or the local image is absent (error) | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning) | validated writer name |
-| `writer_uncollected_bundle` | Bundles directory contains entries other than base.bundle (warning) | validated writer name |
+| `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
 | `skill_missing` | The `SKILL.md` file that a profile's selected skill alias names does not exist; a `builtin:<name>` value that matches no override and no shipped skill resolves to the shipped location and is reported here | `<profile>:<skill-alias>` |
@@ -63,7 +63,16 @@ unsafe directory entries. These checks do not inspect uncommitted worktree edits
 Bundle warnings detect outstanding entries without reading their contents.
 Each successful check emits an `ok` entry; remediation text contains no paths.
 Acceptance and the disposable-clone control run are explicit setup operations,
-never Doctor actions.
+never Doctor actions. Under Plan B, `--isolation-control --repo <alias> --apply`
+writes real canaries below $HOME and removes them; omitting apply only plans.
+Doctor never runs this control, refreshes credentials, inspects client
+registrations or starts containers. In contrast, setup's writer verify checks
+Doctor, registration equality and a bounded direct MCP handshake/tools/list/
+capabilities; Claude's registration inspection health-check briefly starts a
+container. Its direct verification launch disables credential refresh.
+Doctor's metadata-only dirty warning is not the server's stronger coding guard:
+that guard also checks stash and uncommitted/untracked work on every admission.
+See [Execution modes](execution-modes.md#writer-storage-launch-and-readiness).
 
 Execution-mode checks follow `workspace_gitfile`. Unset modes warn only when a coding profile exists; explicit host modes always show the accepted write risk as an `ok` line. If any alias uses container mode, Doctor probes the local runtime once with `podman info --format {{.Host.Security.Rootless}}`, without a shell, with a 10-second timeout and a 4 KiB stdout cap. Only exit status 0 and trimmed stdout `true` pass; a missing binary, timeout, excessive output or any other error fails each container alias, even with only read-only profiles. No runtime diagnostics or paths enter reports. This local probe stays offline and never runs Git.
 

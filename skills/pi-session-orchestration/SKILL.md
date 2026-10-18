@@ -34,7 +34,8 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 - Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
 - A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
-- Every concurrently writing worker needs its own prepared worktree workspace alias on the base commit you specified. Never let two writers share an alias. Read-only workers may share one.
+- Every concurrently writing worker needs its own prepared full-clone workspace alias on the base commit you specified. Never let two writers share a clone. Read-only workers may share one.
+- Each automated writer has the synthetic default profile `boundary-read-only`. Name the coding `executionProfile` explicitly; omitting it does not start coding.
 - A session's workspace and profile are fixed at start. Never try to switch them; start a new session instead.
 - The profile's tools set the limit. A skill grants no rights. If no listed profile can do the task, stop and report that instead of picking a more powerful one than needed.
 
@@ -90,6 +91,14 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - Call `pi_session_close` for every session you started, when its task is done, aborted, failed or abandoned. Closing is idempotent.
 - Close on every error path, too. Before you end the run, check the ledger: no session may remain open.
 - A session that is idle is still open. Closing releases its resources.
+
+## 11. Finish a task on a writer
+
+After taking over the result and closing its coding session, before the next task:
+
+1. Run `pi-session-mcp-setup --writer <name> --collect --apply` from the operator environment. Review the collected refs in the operator's checkout: `refs/remotes/writer-<name>/<branch>`, with uncommitted work as `<branch>-wip`. They are untrusted until reviewed. Integrate only verified work yourself.
+2. Run `pi-session-mcp-setup --writer <name> --finish --apply`. It collects again, then resets a persistent writer or recreates an ephemeral writer. Do not reuse it until this succeeds. A refused branch name makes collection incomplete and finish stops: ask the operator to resolve it by renaming inside the boundary or explicitly discarding with `--reset --discard --apply`.
+3. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
 
 ## Limits to remember
 

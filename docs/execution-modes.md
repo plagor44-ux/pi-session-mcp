@@ -1,61 +1,56 @@
 # Execution modes
 
-Execution modes record the operator's choice **per repository workspace alias**.
-They are separate from execution profiles: a profile chooses tools and a
-provider; the workspace mode decides whether the host server permits a coding
-session. The decision is [ADR 0009](adr/0009-execution-modes.md). This is Plan A
-(policy and diagnosis), intended for release 0.9.0; automated container writers
-are not yet implemented.
+Execution modes record the operator's choice **per configured repository workspace alias**.
+A profile selects tools and provider; the mode decides whether the host server
+permits coding. [ADR 0009](adr/0009-execution-modes.md) covers policy (Plan A)
+and automated rootless-Podman writers (Plan B). This implementation is unreleased;
+it does not itself prove a live rollout or acceptance on your machine.
 
 ## Modes and risks
 
-**`host`.** Pi coding sessions write directly in the operator's checkout. The
-entry must store `acceptHostWrites: true`, set by setup with
-`--accept-host-writes`. **Risk:** coding tools, provider runtimes and trusted
-extensions run with the host process's rights, not inside an OS boundary.
+- **`host`:** coding writes in the operator's checkout; requires stored
+  `acceptHostWrites: true`. Tools, providers and trusted extensions run with
+  the host process's rights, not inside an OS boundary.
+- **`container`:** the host refuses coding. Setup provisions separate full clones
+  and wrapped stdio registrations on Linux with usable rootless Podman. A mode
+  entry alone is not containment: each writer needs successful acceptance.
+- **`read-only`:** the host refuses coding; read-only profiles remain available.
+  This is tool policy, not an OS sandbox for provider runtimes or child processes.
+- **`unset`:** a missing entry retains host coding for backward compatibility.
+  Doctor warns if a coding profile exists. This is a migration state, not a
+  selectable mode or an acknowledged host-write choice.
 
-**`container`.** The host server refuses coding sessions for this repository;
-the entry records the intended writer count, lifecycle, profiles, image and
-network. Setup requires usable local rootless Podman, but does not create or
-register writers. Use the [manual isolation runbook](isolation-setup.md) for an
-accepted wrapped registration with one full clone and boundary per writer.
-**Risk:** a recorded mode is not containment, and an actual boundary still holds
-provider credentials and may allow exfiltration through its network connection.
-
-**`read-only`.** The host server refuses coding profiles for this repository;
-read-only profiles remain available, as they do for every mode. **Risk:** this
-is a Pi tool-policy restriction, not an OS sandbox for provider runtimes,
-extensions or child processes.
-
-**`unset` (migration state).** A missing file or workspace entry behaves like
-host for compatibility; it is reported as `unset`, not as an accepted host
-choice. It cannot be selected with `--mode`. **Risk:** existing host coding
-remains possible until the operator explicitly chooses a mode.
+**Residual risks:** the boundary holds provider credentials: an OAuth access
+token (with refresh token emptied), or the API key for API-key providers.
+A malicious worker can use or exfiltrate them. Network `pasta` is **not limited**;
+setup supplies no provider-only proxy or firewall. `none` removes network access
+entirely, including access to remote providers. Runtime escapes remain a risk.
+macOS containment is not accepted; host and read-only choices remain available,
+but writer setup and lifecycle operations are Linux-only.
 
 ## Choose at installation
 
-First configure aliases and execution profiles as in
-[Installation](installation.md#2-configure), and set `PI_SESSION_MCP_CONFIG`.
-Use a configured alias, never a directory. Run mode selection separately from
-client registration (`--target`) and skill customization (`--customize-skill`):
+Configure aliases and profiles as in [Installation](installation.md#2-configure),
+set `PI_SESSION_MCP_CONFIG`, and use a release installation with production
+dependencies, not a development checkout. Never pass a workspace path.
 
 ```sh
-# Inspect the proposed choice; no file is written.
-pi-session-mcp-setup --repo my-project --profiles code
-# Apply after reviewing the report, if rootless Podman is usable.
-pi-session-mcp-setup --repo my-project --profiles code --apply
+# Plans only; no mutation, image pull, credential refresh or acceptance run.
+pi-session-mcp-setup --repo my-project --mode container --profiles code
+# Explicit host control: creates real canary files below $HOME and removes them.
+pi-session-mcp-setup --isolation-control --repo my-project --apply
+# Provisions, accepts and registers the writers.
+pi-session-mcp-setup --repo my-project --mode container --profiles code --apply
 ```
 
-With no `--mode`, setup proposes `container` only when the local rootless Podman
-probe succeeds. Otherwise it reports `mode_choice_required`: explicitly choose
-`host` with acknowledgment or `read-only`. Container mode requires a non-empty
-list of configured coding-profile aliases; replace `code` with yours. Without
-that list, explicit or proposed container mode reports
-`container_profiles_required` and writes nothing. A profile whose provider is
-`cursor` is refused pending its own boundary acceptance.
-A successful runtime probe does not prove writer readiness or containment.
+The control runs without containment on a disposable clone. Without `--apply`
+it only plans. Writers stay not ready with `isolation_control_required` until
+this host control has passed. It is not an implicit side effect of provisioning.
+The contained provider-free acceptance harness must then pass for each writer.
+A successful runtime probe alone proves neither readiness nor containment.
 
-Explicit alternatives (dry-run first, then repeat with `--apply`):
+With no `--mode`, setup chooses container only if its local rootless Podman
+probe succeeds; otherwise explicitly choose host with acknowledgment or read-only:
 
 ```sh
 pi-session-mcp-setup --repo my-project --mode host --accept-host-writes
@@ -64,117 +59,237 @@ pi-session-mcp-setup --repo my-project --mode container --profiles code,code-loc
   --writers 2 --lifecycle persistent --image node --network pasta
 ```
 
+Repeat the reviewed request with `--apply` to mutate. Mode requests cannot be
+combined with `--target` registration or `--customize-skill`.
+
 | Flag | Accepted values and defaults |
 | --- | --- |
-| `--repo <alias>` | An alias already in the configuration; no arbitrary path |
-| `--mode <mode>` | `host`, `container`, `read-only`; omitted means probe before proposing container |
-| `--accept-host-writes` | Required for each explicit host-mode request |
-| `--writers N` | Integer 1–16; default 1 |
+| `--repo <alias>` | Configured alias, never an arbitrary path |
+| `--mode <mode>` | `host`, `container`, `read-only`; omitted probes before choosing container |
+| `--accept-host-writes` | Required for every explicit host request |
+| `--writers N` | 1–16; default 1 |
 | `--lifecycle <value>` | `persistent` (default) or `ephemeral` |
-| `--profiles a,b` | Non-empty comma-separated coding-profile aliases; required for container mode; no Cursor provider |
-| `--image <value>` | Image setting, default `node`; currently recorded only, not pulled, built or pinned |
-| `--network <value>` | `pasta` (default, not limited) or `none`; currently recorded only |
-| `--dry-run` / `--apply` | Dry-run is the default; only apply writes |
-| `--json` | Sanitized JSON instead of the human report |
+| `--profiles a,b` | Required non-empty coding-profile aliases; no Cursor provider |
+| `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags |
+| `--network <value>` | `pasta` (default, not limited) or `none` |
+| `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
+| `--client codex` | Also register writers with Codex (user scope); Claude Code local registration is the default |
+| `--discard` | Explicitly allow loss of uncollected surplus writers on mode/count changes |
+| `--dry-run` / `--apply` | Dry-run is the default; apply mutates |
+| `--json` | Sanitized JSON projection of the same report |
 
-Writer, lifecycle, profile, image and network flags apply to container mode,
-not explicit host or read-only requests. Mode selection supports only dry-run
-and apply, not `--verify`, `--rollback` or `--remove`. Writer lifecycle and
-network settings describe future provisioning intent, not operations performed
-by this command today.
+Container flags do not apply to explicit host/read-only requests. Mode selection
+supports dry-run and apply, not verify/rollback/remove. Container settings are
+rebuilt from supplied values and defaults, not merged with the prior entry:
+supply the full intended settings, including profiles, on each mode request.
+Selected profiles must have `default: false`, permission `coding`, no extensions
+or external MCP grants, and only builtin skill-catalog entries. Setup rejects
+unsupported profiles rather than silently weakening them.
 
-## Storage and changing later
+## Writer storage, launch and readiness
 
-Use the same command to change an existing choice, inspecting a dry-run before
-applying. Other workspace entries are preserved. Container options are rebuilt
-from the supplied values and defaults, not merged with the previous entry, so
-supply the full intended settings (including `--profiles`) each time.
+Setup writes `execution-modes.json` beside the main configuration, preserving
+other workspace entries. The main configuration's `workspaces` stays an
+alias-to-path map. Older servers ignore modes; upgrade all relevant registrations.
+Invalid modes fail startup rather than silently falling back.
 
-Setup writes `execution-modes.json` next to the configuration. For example:
+Writers are `<alias>-w1` through `<alias>-w16`, with registrations
+`pi-coding-<alias>-w<n>`. Their private state lives under
+`$HOME/.local/state/pi-session-mcp/writers/<name>/`: `clone`, `agent`, `config`,
+`bundles`, optional `go`, `wrapper.sh` and `state.json`. This lifecycle metadata
+is distinct from in-memory MCP sessions; it does not implement session resume.
+Each clone is made via a bundle, with no hardlinks to the operator's repository.
+The base defaults to origin's symbolic HEAD, falling back to local main.
 
-```json
-{
-  "schemaVersion": 1,
-  "workspaces": {
-    "my-project": { "mode": "host", "acceptHostWrites": true },
-    "writer-project": {
-      "mode": "container", "writers": 1, "lifecycle": "persistent",
-      "profiles": ["code"], "image": "node", "network": "pasta"
-    },
-    "notes": { "mode": "read-only" }
-  }
-}
+The generated wrapper launches one disposable `podman run -i --rm` per client
+connection: keep-id user namespace, read-only root, dropped capabilities,
+no-new-privileges, tmpfs home and /tmp. The clone and isolated agent copy are
+writable; clone hooks/config, boundary config and release installation are
+read-only mounts. Host Git never runs in the clone. Throwaway lifecycle
+containers use no network and validate clone redirect metadata before export.
+
+Each contained config has only its workspace and selected coding profiles,
+plus the synthetic default **`boundary-read-only`**. Coding sessions must name
+their coding profile explicitly. The clone's internal mode is acknowledged host
+because writes there are intended *inside* the boundary; the operator's host
+alias stays container and never dispatches coding automatically.
+
+State phases are provisioning, not_ready and ready. Acceptance binds wrapper
+bytes, package version, image ID, Podman version, network and cache settings.
+Changed bindings require renewed acceptance. Existing non-provisioning writers
+with changed provisioning settings are refused, not silently replaced. Review
+and collect work before removing/reprovisioning them. Restart/reconnect affected
+controllers after successful changes; setup never restarts them.
+
+**Inspection has side effects:** `claude mcp get` health-checks the registration,
+briefly starting its container. Setup's registration inspect and verify do this
+too. Do not mistake inspection for a purely offline read. Doctor alone is offline:
+it starts no writer, session or provider request and reads no credentials.
+
+The launcher copies only selected providers from the host Pi auth store at launch
+and checks every **60 seconds**. It runs host login warmup only when selected
+OAuth credentials expire within **2 minutes** or have expired (an invalid/missing
+expiry is treated as needing refresh). Measured warmup behavior refreshes only
+expired or almost expired tokens; it is not an unconditional token rotation.
+Warmup starts/closes a read-only host session through Pi's locked store without
+a model request, then the launcher re-copies boundary credentials even if warmup
+failed. API-key entries are copied, not refreshed; Cursor credentials are excluded.
+
+## Collect, finish and reuse
+
+Close the writer's coding session before lifecycle mutation. Take over and review
+the result in the operator's checkout, never by running host Git inside the clone:
+
+```sh
+pi-session-mcp-setup --writer my-project-w1 --collect --apply
+# Review refs/remotes/writer-my-project-w1/<branch> in your own checkout.
+pi-session-mcp-setup --writer my-project-w1 --finish --apply
 ```
 
-All aliases must exist in the main configuration. Do not add these objects to
-its `workspaces` map: that map still holds paths. Unknown fields, aliases,
-profiles or modes, missing host acknowledgment, and malformed files are
-invalid. Older servers can read the unchanged main configuration but ignore
-this separate file; upgrade every relevant registration before relying on
-mode enforcement.
+Collection exports changed branches via a bundle into the operator's checkout as
+`refs/remotes/writer-<name>/<branch>`. Uncommitted/untracked work is captured as a
+synthetic `<branch>-wip` commit. These refs are **untrusted until reviewed**;
+setup does not merge or cherry-pick them. Collection does not change the clone.
+Only a complete export records a digest authorizing later destructive cleanup;
+new work invalidates that authorization. Stashes are not exported as branches:
+resolve any needed stash inside the boundary before collection.
 
-## Reports and enforcement
+`--finish` collects, then resets a persistent writer or recreates an ephemeral
+writer. A collect refusing any branch name is incomplete (`writer_collect_incomplete`,
+`ref_name_refused`), even if other refs were imported. Finish stops without reset
+or recreation. Resolve by renaming inside the writer and collecting again, or
+by an operator's explicit `--reset --discard --apply` after deciding to lose the
+unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 
-Setup reports sanitized findings under `modes/workspace/<alias>`:
+| Writer operation | Behavior |
+| --- | --- |
+| `--collect --apply` | Bundle export; retain clone |
+| `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files; falls back to recreation if post-reset verification fails |
+| `--recreate --apply` | Rebuild clone and agent copy from the source base, retaining image/settings |
+| `--finish --apply` | Collect, then reset persistent / recreate ephemeral |
+| `--remove` | Explicit mutation: unregister owned registrations before removing writer state |
+| `--verify` | Doctor, registration equality and bounded direct MCP handshake/tools/list/capabilities; no session or provider request |
+
+Other than explicit `--remove` and `--verify`, omitting apply only plans.
+Reset/recreate/remove refuse changed uncollected work unless given `--discard`.
+Only reset accepts `--base`; finish does not accept discard. Writer verify sets
+`PI_WRITER_NO_CREDENTIAL_REFRESH=1` for its direct launch, touching no credential
+in that launch. Its Claude registration inspection still invokes the client's
+health check as noted above; that subprocess is not given this override by setup.
+
+The server guard refuses coding when the clone differs from its recorded baseline
+(extra branches, stash, uncommitted/untracked changes, or different HEAD), and
+while another coding session is open. It re-reads the guard file each time, so a
+reset updates admission without a server restart. A missing/unusable runtime or
+stale/unready writer launches a refusal MCP server: all eight tools return the
+sanitized refusal, with no host fallback. See [Tool contracts](tool-contracts.md).
+
+## Reports and finding codes
+
+Reports use sanitized targets `modes/workspace/<alias>` or `writer/<alias>/<name>`
+(the control uses `writer/host/control`). General ownership/lock/client codes can
+also propagate; see [Installation](installation.md) and [Doctor](doctor-design.md).
+Each literal finding emitted by the writer orchestrator/lifecycle/acceptance is
+listed below; dynamic planned and MCP verification outcomes are listed explicitly.
 
 | Code | Meaning |
 | --- | --- |
-| `mode_planned` | Dry-run proposes a change; nothing written |
-| `mode_applied` | The new entry was written |
-| `mode_unchanged` | The stored choice already equals the requested choice |
-| `mode_choice_required` | Automatic choice found no usable rootless Podman; explicitly choose host or read-only |
-| `host_ack_required` | Explicit host request lacks `--accept-host-writes` |
-| `container_profiles_required` | Explicit or proposed container mode lacks a non-empty `--profiles` list; nothing written |
-| `container_runtime_unavailable` | Explicit container request found no usable rootless Podman |
-| `alias_unknown` | The requested alias is invalid or not configured |
-| `modes_file_invalid` | Existing or proposed modes fail validation; no replacement is made |
-| `controllers_restart_required` | Emitted after a mode change is applied; running controllers retain the old policy |
-
-Configuration and filesystem/lock failures can also produce setup's general
-failure codes; the table lists mode-specific outcomes, not every setup error.
-Doctor reports `workspace_mode_unset` as a warning only when a coding profile
-exists, `workspace_host_writes_accepted` as an `ok` line for explicit host
-choices, and `container_runtime_unavailable` as an error for each container
-alias if its local rootless Podman probe fails. Doctor stays offline and never
-starts a writer, session or provider request. Invalid modes surface through its
-`config_invalid` check. See the [Doctor contract](doctor-design.md).
-When any alias uses container mode, a `container_runtime_unavailable` error
-also blocks setup's `--target` operations with `doctor_failed` until Doctor is
-clean, because those operations run Doctor first. Run `pi-session-mcp-doctor`
-to see the cause.
-
-The server fails startup with `invalid_execution_modes` for an invalid modes
-file. `pi_capabilities_get` reports each workspace's `mode`. A
-`pi_session_start` using a coding profile on `container` or `read-only` returns
-`workspace_mode_forbids_coding` before creating a session. The host server does
-not dispatch that request to a container and never falls back to host coding
-for a container entry. Read-only profiles remain allowed.
+| `mode_planned` | Proposed mode change only |
+| `mode_applied` | Mode entry written |
+| `mode_unchanged` | Choice already matches; reconciliation still runs |
+| `mode_choice_required` | No automatic container choice; choose host or read-only explicitly |
+| `host_ack_required` | Host request lacks acknowledgment |
+| `container_profiles_required` | Non-empty coding profile list required |
+| `container_runtime_unavailable` | Rootless Podman is unavailable/unusable |
+| `alias_unknown` | Invalid or unconfigured alias |
+| `modes_file_invalid` | Existing or proposed modes invalid; no replacement |
+| `config_invalid` | Configuration cannot be loaded/validated |
+| `controllers_restart_required` | Reconnect/restart controllers to load current policy and registrations |
+| `platform_unsupported` | Writer operation requires Linux |
+| `usage_invalid` | Invalid writer name or argument combination |
+| `doctor_failed` | Relevant blocking Doctor checks failed |
+| `writer_planned` | Writer would be retained/provisioned |
+| `writer_remove_planned` | Surplus writer would be removed |
+| `writer_collect_planned` | Collection planned only |
+| `writer_reset_planned` | Reset planned only |
+| `writer_recreate_planned` | Recreation planned only |
+| `writer_finish_planned` | Finish planned only |
+| `writer_provisioned` | Clone/config/wrapper prepared, not yet accepted |
+| `writer_unchanged` | Provisioned settings already match |
+| `writer_settings_changed` | Existing writer settings differ; no silent replacement |
+| `writer_registered` | Registration added or already equivalent |
+| `writer_reconcile_failed` | Unexpected reconciliation failure |
+| `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
+| `container_profile_unsupported` | Profile or selected skills cannot be rendered safely in boundary |
+| `base_ref_invalid` | Base is not a supported safe named branch |
+| `writer_base_unavailable` | Host Git could not resolve/read/export base |
+| `remote_url_refused` | Origin URL contains URL userinfo |
+| `image_unavailable` | Image missing/invalid or pinned pull failed |
+| `writer_clone_failed` | Contained clone creation failed |
+| `clone_verification_failed` | Clone layout/hook/config redirects unsafe |
+| `writer_state_invalid` | Missing/malformed/mismatched writer state |
+| `writer_state_unreadable` | Writer state cannot safely be read |
+| `writer_inspect_failed` | Contained work inspection failed |
+| `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
+| `writer_collect_failed` | Bundle generation/verification/import failed |
+| `writer_collect_incomplete` | One or more branch names refused; no cleanup authorization |
+| `ref_name_refused` | Unsafe export name or WIP name collision |
+| `nothing_to_collect` | No changed branch or WIP to export |
+| `writer_collected` | Complete export recorded |
+| `writer_reset_failed` | Reset command or validation failed |
+| `writer_reset` | Persistent clone reset and verified |
+| `writer_recreate_failed` | Recreated clone is not at baseline |
+| `writer_recreated` | Clone/agent recreated and verified |
+| `writer_removed` | Writer state deleted after registration cleanup |
+| `ownership_unavailable` | Existing registration lacks ownership proof; removal refused |
+| `registration_not_equivalent` | Verify found absent/divergent/unsupported required registration |
+| `isolation_control_planned` | Control planned only; no canaries written |
+| `isolation_control_required` | Passing host control record required before writer acceptance |
+| `isolation_control_passed` | Uncontained control detected expected escapes and cleaned up |
+| `isolation_control_failed` | Control failed; previous passing record invalidated |
+| `writer_acceptance_failed` | Contained harness/fingerprint validation failed |
+| `writer_accepted` | Contained provider-free acceptance passed and readiness recorded |
+| `mcp_verified` | Bounded direct MCP verification passed |
+| `mcp_failed` | Direct MCP verification failed |
+| `mcp_unsupported` | Direct MCP output does not match the expected contract |
+| `mcp_timeout` | Direct MCP verification exceeded its deadline |
 
 ## Restart rule
 
-Setup never restarts servers or controllers. After applying a change, restart
-all affected controllers, or use `/mcp` reconnect where the client provides it
-and ensure it starts a **new server process**. Confirm the new mode with
-`pi_capabilities_get`'s workspace `mode`, which confirms the running policy.
-The configuration fingerprint covers only the main configuration file, not
-`execution-modes.json`. Running servers retain their loaded policy, and changing
-the file does not stop existing sessions; close them before tightening policy.
-An unchanged request does not emit a new restart finding, but does not make an
-old running server reload either.
+Running servers retain their loaded modes; mode changes do not stop sessions.
+Close them before tightening policy. Restart all affected controllers, or use
+an MCP reconnect that starts a **new server process**. Confirm workspace `mode`
+with capabilities. The configuration fingerprint covers the main file only,
+not the modes file. An unchanged request does not reload an old server.
+The writer baseline guard is the deliberate re-read exception, not general reload.
 
-## Plan B and the manual route
+## Migration from manual writers
 
-**Plan B is pending, not implemented:** automated writer provisioning,
-collection, reset/recreation, generated wrappers, refusal server, writer
-registration, and periodic credential refresh for long-running contained
-servers. Setup currently records intent only; it neither manages uncollected
-work nor verifies writer readiness. No writer lifecycle commands are available.
+For **`psm-alpha`** and **`go-app-alpha`**, collect/review all work first through
+the old boundary's bundle route. Automated setup does not adopt their manual
+state, wrappers or names.
 
-Follow [Isolation setup](isolation-setup.md) for the manual Linux route and its
-acceptance requirements. Keep the host alias in container mode and use a
-separate manually registered wrapped server for coding. Its configuration and
-mode policy are separate: inside the boundary, an explicit acknowledged host
-entry permits writes in that writer's clone. The wrapper's startup credential
-copy is not periodic refresh for a long-running server. macOS containment is
-not accepted; macOS retains the interim rules and can choose host or read-only.
-Follow-up: **Plan B, issue to be opened**.
+1. In each writer's original project remove its manual local registration:
+   `claude mcp remove pi-coding-<name> -s local` (substitute `psm-alpha` or
+   `go-app-alpha`). Remove any separately configured Codex registration too.
+2. After preserving work, remove that manual wrapper and state directory.
+   Do not delete the operator's source checkout or another writer's files.
+3. Configure the desired coding profiles, pass the explicit host isolation
+   control above, then run
+   `pi-session-mcp-setup --repo <alias> --mode container --profiles <coding-aliases> --apply`.
+   New names derive from the configured repository alias, not the old manual name.
+4. Restart/reconnect controllers and verify the new writer registrations before use.
+
+The Go-toolchain writer needs an **operator-supplied local image ID** containing
+Node, Git and the Go toolchain, plus `cache: "go"` in its container entry in
+`execution-modes.json`. There is **no `--cache` CLI flag**. Mode requests rebuild
+settings with defaults, so a later CLI mode request resets cache to `none`.
+There is currently no CLI reconcile-preserving-settings path for `cache: go`:
+an integration must supply it through the programmatic setup request's container
+settings. Merely editing the stored cache before another CLI mode apply will
+not preserve it. This is a CLI limitation for migrating `go-app-alpha`; do not
+claim the CLI alone reproduces its manual Go cache layout. The Go cache mounts
+at `/pi/go` with GOPATH, GOCACHE and `GOTOOLCHAIN=local`.
+
+See [Isolation setup](isolation-setup.md) for boundary prerequisites and what
+setup automates, and the historical manual acceptance evidence linked there.
