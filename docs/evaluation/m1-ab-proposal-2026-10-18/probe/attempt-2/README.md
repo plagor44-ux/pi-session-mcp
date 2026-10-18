@@ -14,14 +14,9 @@ succeeded for both profiles with the selected worker skills. Arm A: commit
 | A | L3 | not run | stop rule |
 | B | — | not run | stop rule |
 
-Cause: the harness accepts a receipt only when the worker's `assistantText` is
-one complete JSON object (`receiptFromTurn`). With the selected
-`pi-session-implementation` skill the coding worker ended with the skill's
-five-part final report instead, so no receipt could be read, although the repair
-itself was correct. With the selected `pi-session-review` skill (L1) the JSON
-receipt came through.
-
-Consequence: prerequisite P2 (worker skills selected in both arms) conflicts with
-the harness's JSON-only receipt. The A/B cannot measure #87 until that is
-resolved; how is a decision for the operator. No retry was made within this
+Cause as first stated here (the selected implementation skill's report replaced
+the JSON receipt) was **falsified by [attempt 3](../attempt-3/README.md)**, which
+failed the same way without worker skills. The receipt check requires a JSON-only
+`assistantText`, while the T2 implementer prompt asks for no JSON receipt.
+No retry was made within this
 approval. 2 worker starts and 2 work turns ran.
