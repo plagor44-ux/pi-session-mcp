@@ -80,9 +80,9 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
 - [ADR 0008](adr/0008-coding-profile-isolation.md) for
   [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) was accepted for
   Linux on 2026-10-18: option 1, wrapped registration in rootless Podman, one
-  boundary per writer. The Linux acceptance is pending (Podman is not installed
-  on the workstation yet); review point 2026-11-15. macOS keeps the interim
-  rules.
+  boundary per writer. The Linux acceptance passed on 2026-10-18 for one writer
+  ([evidence](evaluation/isolation-acceptance-2026-10-18/README.md)); review point
+  2026-11-15. macOS keeps the interim rules.
 
 ### Sprint 5 issue status
 
@@ -91,14 +91,14 @@ means its named checks passed with evidence. Nothing here is released.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | Podman install | decided: ADR 0008 accepted for Linux (option 1); acceptance tooling and [runbook](isolation-setup.md) prepared; Linux acceptance run pending; writer alias on a full clone in use |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writer `psm-alpha` (contained and live); remaining: register the wrapped server in clients and move the other coding routes, review point 2026-11-15 |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
 | [#88](https://github.com/plagor44-ux/pi-session-mcp/issues/88) | Tool-description hints | Sprint 5 | — | implemented; Codex 0.162.1 projection +255 bytes; Claude Code bare route −819 bytes together with #90 |
 | [#89](https://github.com/plagor44-ux/pi-session-mcp/issues/89) | Claude Code projection | Sprint 5 research | — | partial: q1 output schema not observed, q2 one representation, q3 deferral observed on a non-bare route; q4 needs approval |
 | [#90](https://github.com/plagor44-ux/pi-session-mcp/issues/90) | Input schemas without the UUID pattern | Sprint 5 | compatibility proof | implemented after the proof (156 identical responses); no effect on the Codex 0.162.1 projection, which drops `pattern` itself; wire −1,074 bytes |
-| [#91](https://github.com/plagor44-ux/pi-session-mcp/issues/91) | Bounded wait decision | maintainer | — | A/B done; proposed decision: no bounded wait now, trigger C restated with the cost dimension ([inputs](evaluation/s5-decision-inputs-2026-10-18/bounded-wait.md)); awaiting confirmation |
+| [#91](https://github.com/plagor44-ux/pi-session-mcp/issues/91) | Bounded wait decision | maintainer | — | decided 2026-10-18: no bounded wait; trigger C restated with the cost dimension in ADR 0003 |
 | [#92](https://github.com/plagor44-ux/pi-session-mcp/issues/92) | Worker usage research | Sprint 5 research | — | research note delivered; no contract change |
 | [#93](https://github.com/plagor44-ux/pi-session-mcp/issues/93) | M1 A/B | operator approval | — | A/B done: probe attempt 4 passed after three preserved failures; four pairs all PASS; quality kept, cumulative controller input lower in B in 10 of 12 case-pairs (mostly cached), no consistent uncached difference; #87 untested ([results](evaluation/m1-ab-proposal-2026-10-18/results/README.md)) |
 
