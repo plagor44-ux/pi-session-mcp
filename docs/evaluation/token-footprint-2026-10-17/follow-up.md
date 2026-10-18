@@ -62,8 +62,8 @@ source-linked findings needed to verify the task. Keep full diffs/logs out of th
 default report and retrieve them when needed. Preserve failures even when the turn
 completed. A size target is advisory: if required evidence will not fit, report the
 limit explicitly instead of dropping it. The controller verifies files/tests and
-consumes each terminal result once. This is a local draft; no skill was installed
-or changed.
+consumes each terminal result once. This was a local draft on 2026-10-17; no skill
+was installed or changed then. Sprint 5 later implemented it in the worker skills (#87).
 
 ## Public-contract follow-up, only if later evidence warrants it
 
