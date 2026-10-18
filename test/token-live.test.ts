@@ -6,8 +6,9 @@ import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child
 import { symlink } from "node:fs/promises";
 import { promisify } from "node:util";
 import { ownedTemporary } from "../eval/profiles/files.js";
+import { configSchema } from "../src/config.js";
 import { digest } from "../eval/profiles/files.js";
-import { cleanupRegisteredServer, prepareTokenLive, runOwnedController, runTokenLive, verifyL3ReceiptSchedule } from "../eval/profiles/token-live.js";
+import { caseServerConfig, cleanupRegisteredServer, prepareTokenLive, runOwnedController, runTokenLive, verifyL3ReceiptSchedule } from "../eval/profiles/token-live.js";
 import { TokenFrameForwarder } from "../eval/profiles/token-live-proxy.js";
 
 const temporary: string[] = [];
@@ -275,4 +276,16 @@ describe.skipIf(process.platform !== "linux")("token-live proxy process shutdown
     expect(await closed).toBe(0);
     expect(JSON.parse(await readFile(metrics, "utf8"))).toMatchObject({ server_exit_code: 0, server_cleanup_observed: true, integrity_passed: true });
   }, 30000);
+});
+
+describe("token-live per-case server configuration", () => {
+  test.each(["L1", "L2", "L3"] as const)("%s passes the production config schema with a read-only default", caseId => {
+    const parsed = configSchema.safeParse(caseServerConfig(caseId, "/fixture"));
+    expect(parsed.success).toBe(true);
+    const profiles = Object.values(caseServerConfig(caseId, "/fixture").executionProfiles);
+    expect(profiles.filter(profile => profile.default).map(profile => profile.permissionProfile)).toEqual(["read-only"]);
+  });
+  test("L2 offers the coding profile the controller prompt selects", () => {
+    expect(caseServerConfig("L2", "/fixture").executionProfiles).toHaveProperty("code.permissionProfile", "coding");
+  });
 });
