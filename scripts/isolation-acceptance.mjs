@@ -170,6 +170,10 @@ function hostConfigExposed(ownDigest) {
   try { return createHash("sha256").update(readFileSync(hostConfig)).digest("hex").slice(0, 12) === ownDigest; } catch { return false; }
 }
 
+/** Git files that redirect where a host `git` reads its configuration from; created inside the writer's clone they could run code in a later host Git command. */
+const GIT_REDIRECT_FILES = ["commondir", "gitdir", "config.worktree"];
+function presentGitRedirects(workspace) { return GIT_REDIRECT_FILES.filter((name) => lstatOrNull(join(workspace, ".git", name)) !== null); }
+
 export function evaluateVerdict(report, options = {}) {
   const copyWritable = options.agentDirCopyWritable === true;
   const failed = [];
@@ -208,6 +212,7 @@ export function evaluateVerdict(report, options = {}) {
   if (report.credentials.ssh_authenticated === true) failed.push("credentials.ssh_authenticated");
   if (report.credentials.ssh_authenticated === null) inconclusive.push("credentials.ssh_not_checked");
   if (report.persistence.marker_survivors > 0) failed.push("persistence.process_survived");
+  if ((report.git_metadata?.redirect_files_residual ?? 0) > 0) failed.push("git_metadata.redirect_residual");
   if (report.persistence.crontab_delta !== 0) failed.push("persistence.crontab_changed");
   if (report.persistence.user_unit_delta !== 0) failed.push("persistence.user_units_changed");
   if (report.children.secret_like_unallowed > 0) failed.push("children.secret_like_env");
@@ -469,6 +474,8 @@ export async function runAcceptance(options) {
   const extDir = join(agentDir, "npm", "node_modules");
   const userUnitDir = join(home, ".config", "systemd", "user");
   const linkPath = join(workspace, linkName);
+  const gitRedirectsBefore = new Set(presentGitRedirects(workspace));
+  let gitRedirectsCreated = 0;
 
   let cleaned = false;
   const state = { canariesFound: 0, canariesRemoved: 0, markersKilled: 0 };
@@ -483,6 +490,11 @@ export async function runAcceptance(options) {
     state.canariesFound += found.length;
     state.canariesRemoved += removeCanaries(found);
     if (lstatOrNull(linkPath)?.isSymbolicLink()) unlinkSync(linkPath);
+    // Remove only redirect files that did not exist before the run; never touch a pre-existing one.
+    for (const name of presentGitRedirects(workspace).filter((n) => !gitRedirectsBefore.has(n))) {
+      const path = join(workspace, ".git", name);
+      if (lstatOrNull(path)?.isFile() || lstatOrNull(path)?.isSymbolicLink()) { unlinkSync(path); gitRedirectsCreated += 1; }
+    }
     if (basenameIsRun(runRoot, cacheBase)) rmSync(runRoot, { recursive: true, force: true });
   };
   const onSignal = () => { cleanup(); process.exit(2); };
@@ -520,6 +532,7 @@ export async function runAcceptance(options) {
 
     const probeConfiguration = {
       prefix, marker, hostHome: home, networkHost: NETWORK_HOST, skipRemote: options.skipRemote,
+      gitCommondir: gitRedirectsBefore.has("commondir") ? null : join(workspace, ".git", "commondir"),
       attempts: attempts.map(({ id, kind, path, inner, name, compare }) => ({ id, kind, path, inner, name, compare })),
     };
     const { result: probe } = await runProbe(options.launch, probeConfiguration);
@@ -611,6 +624,12 @@ export async function runAcceptance(options) {
         own_config_present: probe.own_config?.present === true,
         host_config_exposed: hostConfigExposed(probe.own_config?.digest),
         ssh_authenticated: probe.ssh_authenticated === null || probe.ssh_authenticated === undefined ? null : probe.ssh_authenticated === true,
+      },
+      git_metadata: {
+        commondir_writable_inside: probe.git_commondir_written === true,
+        redirect_files_preexisting: gitRedirectsBefore.size,
+        redirect_files_removed: gitRedirectsCreated,
+        redirect_files_residual: presentGitRedirects(workspace).filter((n) => !gitRedirectsBefore.has(n)).length,
       },
       persistence: {
         marker_survivors: survivors,

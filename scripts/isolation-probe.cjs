@@ -77,6 +77,14 @@ for (const attempt of config.attempts) {
   attempts.push({ id: `${attempt.id}.bash`, ...viaBash });
 }
 
+// Git metadata: a writer's clone is untrusted; record whether a redirect file can be created there.
+let gitCommondirWritten = null;
+if (config.gitCommondir) {
+  // The exact name matters here; the value names no directory, and the harness removes the file afterwards.
+  try { fs.writeFileSync(config.gitCommondir, `${config.prefix}-commondir\n`, { flag: "wx" }); gitCommondirWritten = true; }
+  catch { gitCommondirWritten = false; }
+}
+
 // Persistence: leave a detached process behind; the harness looks for it after this process ends.
 let markerStarted = false;
 try {
@@ -190,6 +198,7 @@ function tcpProbe() {
     attempts,
     bash_available: bashAvailable,
     marker_started: markerStarted,
+    git_commondir_written: gitCommondirWritten,
     credentials,
     pi_agent_auth: piAgentAuth,
     own_config: ownConfig(),
