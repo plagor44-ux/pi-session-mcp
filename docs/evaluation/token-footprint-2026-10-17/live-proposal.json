@@ -1,0 +1,427 @@
+{
+  "proposal": {
+    "schema_version": "token-footprint-proposal-1",
+    "approved": false,
+    "source": {
+      "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+      "digest": "sha256:4700852ad8e150c1985604bb1e2951dc43db2b1ea511e26314151712bc3a25dc"
+    },
+    "matrix": [
+      {
+        "id": "L1",
+        "task": "T1",
+        "starts": 1,
+        "turns": 1,
+        "worker_route_alias": "review",
+        "operations": [
+          "discover",
+          "start-read-a",
+          "prompt-read-a",
+          "paused-poll-read-a",
+          "independent-read-oracle",
+          "close-read-a",
+          "empty-list"
+        ]
+      },
+      {
+        "id": "L2",
+        "task": "T2",
+        "starts": 1,
+        "turns": 1,
+        "worker_route_alias": "code",
+        "operations": [
+          "independent-failing-baseline",
+          "discover",
+          "start-code-a",
+          "prompt-code-a",
+          "paused-poll-code-a",
+          "independent-repaired-oracle-and-diff",
+          "close-code-a",
+          "empty-list"
+        ]
+      },
+      {
+        "id": "L3",
+        "task": "T1",
+        "starts": 2,
+        "turns": 3,
+        "worker_route_alias": "review",
+        "operations": [
+          "discover",
+          "start-read-a",
+          "start-read-b",
+          "prompt-read-a",
+          "prompt-read-b",
+          "paused-poll-both",
+          "independent-read-oracles",
+          "prompt-follow-up-a",
+          "paused-poll-follow-up-a",
+          "independent-read-oracle-and-first-turn-invariance",
+          "close-read-a",
+          "close-read-b",
+          "empty-list"
+        ]
+      }
+    ],
+    "matrix_digest": "sha256:178e3f623e1017ac2af2d3f5ea9ce5eaa2164c8a170d6aba0730c4388d29fd04",
+    "fixture_bindings": [
+      {
+        "schema_version": "1.0.0",
+        "id": "T1",
+        "title": "Codebase explanation",
+        "family": "code-understanding",
+        "profiles": [
+          "P1"
+        ],
+        "views": [
+          "scout",
+          "docs-writer"
+        ],
+        "allowed_paths": [],
+        "prompt_hash": "sha256:d74a18bad9847c37741322c366c20ea05e6f2cc1bc046b164ae90ff2600c6000",
+        "fixture_hash": "sha256:579d5064e6529e3a08cbd7f3ecf9636f38ee138d17ee9b89d25fad81b8b69651",
+        "oracle_kind": "source-and-receipt",
+        "task_hash": "sha256:2b8a7d3cfbe985f25a9fe7e2c2e329e90f7c38a16f35ae3e180f1d9cd419531f"
+      },
+      {
+        "schema_version": "1.0.0",
+        "id": "T2",
+        "title": "Backend contract fix",
+        "family": "backend-fix",
+        "profiles": [
+          "P2",
+          "P3"
+        ],
+        "views": [
+          "implementer",
+          "reviewer"
+        ],
+        "allowed_paths": [
+          "contract.mjs"
+        ],
+        "prompt_hash": "sha256:3fb9a806d2c7de11f73c302088c5a3a1c48564f7588a7e392b6c98521840eccc",
+        "fixture_hash": "sha256:a5d8e952b1182e89398fff4fe0071d8537363aede0119f077ff4109f957a1b71",
+        "oracle_kind": "external-test-and-review",
+        "task_hash": "sha256:2a96d93af9503e98a474cecb240ecde2ee3052eaabef010fc16140a5b7123e7f"
+      }
+    ],
+    "prompt_hashes": {
+      "T1": "sha256:d74a18bad9847c37741322c366c20ea05e6f2cc1bc046b164ae90ff2600c6000",
+      "T2": "sha256:3fb9a806d2c7de11f73c302088c5a3a1c48564f7588a7e392b6c98521840eccc"
+    },
+    "follow_up_prompt_hash": "sha256:fda4357c50a892e7a4e946eff9fc23cd8127d09be7e3e99ec7f2d0243e0f41b7",
+    "controller": {
+      "client": "codex",
+      "version": "0.162.0",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "auth": "existing-client-login-not-probed",
+      "skills": [
+        "pi-session-orchestration"
+      ],
+      "extensions": []
+    },
+    "worker_routes": [
+      {
+        "from_configured_alias": "review",
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "permission": "read-only"
+      },
+      {
+        "from_configured_alias": "code",
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "permission": "coding"
+      }
+    ],
+    "worker_skills": [],
+    "worker_extensions": [],
+    "worker_external_mcp_grants": [],
+    "controller_skill_digest": "sha256:50878a59971d685021561c3d2d7757d1cbcfed9b2f5095202f9edfefe039837c",
+    "limits": {
+      "repetitions": 1,
+      "controller_invocations": 3,
+      "max_starts": 4,
+      "max_work_turns": 5,
+      "whole_run_retries": 0,
+      "controller_timeout_ms": 600000,
+      "worker_turn_timeout_ms": 180000,
+      "wave_timeout_ms": 1800000,
+      "cleanup_timeout_ms": 30000,
+      "concurrent_controllers": 1,
+      "max_concurrent_workers": 2,
+      "poll_pause_ms": 3000
+    },
+    "money": {
+      "usd": null,
+      "provider_hard_cap": null,
+      "acknowledges_unmetered_cost": false,
+      "reason": "subscription-no-verified-per-run-tariff-or-meter"
+    },
+    "client_measurement": {
+      "usage_event": "turn.completed",
+      "fields": [
+        "input_tokens",
+        "output_tokens",
+        "cached_input_tokens",
+        "reasoning_output_tokens"
+      ],
+      "model_injection_copies": null,
+      "request_context_bytes": null,
+      "cache_compaction_state": "observe-or-record-unknown",
+      "raw_transcript_retention": false
+    },
+    "additional_repetitions_approved": 0,
+    "live_ab_approved": false,
+    "claude_comparison_approved": false,
+    "execution_status": "BLOCKED",
+    "blockers": [
+      "exact-matrix-route-budget-operator-decision-missing",
+      "fresh-controller-driver-not-implemented"
+    ],
+    "existing_profile_gate_compatible": false
+  },
+  "inventory": {
+    "kind": "offline-configuration-and-catalog",
+    "provider_requests": 0,
+    "transport_resolution": "NOT_RUN",
+    "profiles": [
+      {
+        "alias": "review",
+        "permission_profile": "read-only",
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-review",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "review-grok",
+        "permission_profile": "read-only",
+        "provider": "xai",
+        "model": "grok-4.7",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-review",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "review-glm",
+        "permission_profile": "read-only",
+        "provider": "mistral",
+        "model": "zai-glm-5-3",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-review",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "explore-fast",
+        "permission_profile": "read-only",
+        "provider": "openai-codex",
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-review",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "review-cursor",
+        "permission_profile": "read-only",
+        "provider": "cursor",
+        "model": "grok-4.7@500k",
+        "effort": "high",
+        "provider_registered": false,
+        "model_registered": false,
+        "physical_model_registered": false,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-review",
+            "digest": null
+          }
+        ],
+        "extensions": [
+          {
+            "identity": "npm:pi-cursor-sdk@0.5.3",
+            "digest": null,
+            "load_status": "NOT_RUN"
+          }
+        ]
+      },
+      {
+        "alias": "code",
+        "permission_profile": "coding",
+        "provider": "openai-codex",
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "oauth",
+        "billing_type": "subscription",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-implementation",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "code-glm",
+        "permission_profile": "coding",
+        "provider": "mistral",
+        "model": "zai-glm-5-3",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-implementation",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "code-mistral",
+        "permission_profile": "coding",
+        "provider": "mistral",
+        "model": "mistral-large-4",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-implementation",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "code-deepseek",
+        "permission_profile": "coding",
+        "provider": "deepseek",
+        "model": "deepseek-flash",
+        "effort": "high",
+        "provider_registered": true,
+        "model_registered": true,
+        "physical_model_registered": true,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-implementation",
+            "digest": null
+          }
+        ],
+        "extensions": []
+      },
+      {
+        "alias": "code-cursor",
+        "permission_profile": "coding",
+        "provider": "cursor",
+        "model": "grok-4.7@256k:fast",
+        "effort": "high",
+        "provider_registered": false,
+        "model_registered": false,
+        "physical_model_registered": false,
+        "credential_metadata_present": true,
+        "auth_type": "api-key",
+        "billing_type": "unknown",
+        "authentication_validity": "NOT_RUN",
+        "data_path": "synthetic-fixture-to-selected-provider",
+        "skills": [
+          {
+            "identity": "pi-session-implementation",
+            "digest": null
+          }
+        ],
+        "extensions": [
+          {
+            "identity": "npm:pi-cursor-sdk@0.5.3",
+            "digest": null,
+            "load_status": "NOT_RUN"
+          }
+        ]
+      }
+    ]
+  }
+}

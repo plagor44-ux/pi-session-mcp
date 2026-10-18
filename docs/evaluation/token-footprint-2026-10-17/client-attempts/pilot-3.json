@@ -1,0 +1,121 @@
+{
+  "schema_version": "token-client-projection-1",
+  "binding": {
+    "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+    "digest": "sha256:98d5c8b75cba057bab8634eddb5344a29fb27ed4881f41652b88a773ace196b9"
+  },
+  "build_digest": "sha256:d8d149884033136ec6784995a5cc5983134a3a59bc2a13c8814372918356b4da",
+  "node": "22.23.2",
+  "fixture_digest": "sha256:bee4eafbca4dc337ab4b06d089eae40529ac4ca52eb9a16a70bb6d3e7ebedd5f",
+  "route": "synthetic-loopback-responses",
+  "authentication": "disabled-empty-disposable-client-home",
+  "client_version": "0.162.0",
+  "started_at": "2026-10-17T20:43:35.706Z",
+  "ended_at": "2026-10-17T20:43:37.060Z",
+  "source_unchanged": true,
+  "build_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "repetition": 0,
+      "pilot": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "server_cleanup": true,
+      "stdout_bytes": 2412,
+      "duration_ms": 1265.6001930000002,
+      "proxy_integrity": false,
+      "requests": [
+        {
+          "bytes": 43712,
+          "input_bytes": 20887,
+          "tools_bytes": 21412,
+          "outputs": [],
+          "newly_added_output_bytes": 0,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44509,
+          "input_bytes": 21684,
+          "tools_bytes": 21412,
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 529,
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44840,
+          "input_bytes": 22015,
+          "tools_bytes": 21412,
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_capabilities_get",
+              "call_ordinal": 1,
+              "new_in_request": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "tool": "pi_session_list",
+              "call_ordinal": 2,
+              "new_in_request": true
+            }
+          ],
+          "newly_added_output_bytes": 67,
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "target_output": {
+        "serialized_bytes": 529,
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "structured_key_present": false,
+        "tool": "pi_capabilities_get",
+        "call_ordinal": 1,
+        "new_in_request": true
+      },
+      "call_schedule_matched": true,
+      "server_representation_counts": [
+        2
+      ],
+      "client_completed_truncated_json_decoded": false,
+      "session_closed_observed": true,
+      "server_completed_capped_turn": false,
+      "empty_list_observed": true,
+      "invalid": false,
+      "passed": false
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "metric_semantics": {
+    "bytes": "direct-observation-of-serialized-utf8",
+    "marker_hits": "occurrences-in-selected-function-output",
+    "newly_added_output_bytes": "first-observed-call-id-output-serialization",
+    "request_bytes": "whole-http-json-body-not-token-usage",
+    "model_usage": "unknown-no-model-executed",
+    "money": "unknown-no-meter-or-tariff"
+  },
+  "harness_status": "INCONCLUSIVE"
+}
