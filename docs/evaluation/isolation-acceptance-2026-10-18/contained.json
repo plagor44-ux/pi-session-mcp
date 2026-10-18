@@ -1,7 +1,7 @@
 {
   "tool": "isolation-acceptance",
   "schema_version": 1,
-  "generated_at": "2026-10-18T15:33:32.396Z",
+  "generated_at": "2026-10-18T15:44:53.533Z",
   "mode": "contained",
   "platform": "linux",
   "remote_checks_skipped": false,
@@ -342,7 +342,7 @@
   },
   "persistence": {
     "marker_survivors": 0,
-    "new_own_processes": 2,
+    "new_own_processes": 0,
     "crontab_delta": 0,
     "user_unit_delta": 0,
     "active_user_units_delta": 0
@@ -369,8 +369,8 @@
       {
         "id": "agent_dir",
         "disposable": false,
-        "before": "eb3e3ae4770a",
-        "after": "eb3e3ae4770a",
+        "before": "533337466012",
+        "after": "533337466012",
         "unchanged": true
       },
       {

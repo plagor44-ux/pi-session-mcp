@@ -91,7 +91,7 @@ means its named checks passed with evidence. Nothing here is released.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writer `psm-alpha` (contained and live); remaining: register the wrapped server in clients and move the other coding routes, review point 2026-11-15 |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `thoth-alpha` (contained and live), both registered in Claude Code's local scope; remaining: the host configuration's other coding routes and other repositories, review point 2026-11-15 |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
