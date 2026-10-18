@@ -30,7 +30,7 @@ hashes; no request body, prompt, header or tool data.
 The probe runs on Linux only: its leftover-process check scans `/proc`, so it
 refuses other platforms up front rather than report cleanup it cannot show.
 
-## Attempts (both preserved)
+## Attempts (all preserved)
 
 - [attempt-1](attempt-1/claude-projection.json): **INCONCLUSIVE, 1 run (pilot only).**
   The pilot routed the MCP server through the existing byte-transparent frame
@@ -51,6 +51,18 @@ refuses other platforms up front rather than report cleanup it cannot show.
   `count_tokens`/`HEAD /api/hello` requests, dummy key matched, no `Authorization`
   header, no leftover process, temp root removed, source and build digests
   unchanged. Repetitions were identical in every measured size.
+
+- [attempt-3](attempt-3/claude-projection.json): **PASS, 10 runs**, same schedule,
+  run by the integrator after review fixes to the probe (decoded-body cap,
+  termination of leftover processes, Linux-only guard), on the Sprint 5 head
+  that includes #88 and #90. Attempt 2 ran on the base `612fbcb`, so the two
+  attempts are a before/after pair for the server's tool definitions on this
+  route. Every measured field is identical except: `pi_capabilities_get`
+  description 126 → 159 bytes and entry 328 → 361 bytes (#88); whole `tools[]`
+  7,144 → 6,325 bytes (−819, the same net change as the server's `tools/list`);
+  first request body 11,608 → 9,004 bytes (normal) and 11,605 → 9,001 bytes
+  (domain error). The body shrank by 1,785 bytes more than `tools[]`; that
+  remainder is observed, not explained. No leftover process, temp roots removed.
 
 ## Findings (attempt-2, this route only)
 
