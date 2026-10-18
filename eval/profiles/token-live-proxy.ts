@@ -11,7 +11,7 @@ export const proxyMetricsSchema = z.object({
   schema_version: z.literal("token-live-proxy-1"), integrity_passed: z.boolean(),
   received_bytes: nonnegative, written_bytes: nonnegative, controller_bytes: nonnegative,
   server_exit_code: z.number().int().nullable(), server_cleanup_observed: z.boolean(),
-  start_attempts: nonnegative, prompt_attempts: nonnegative, quota_rejections: nonnegative,
+  start_attempts: nonnegative, prompt_attempts: nonnegative, quota_rejections: nonnegative, discover_requests: nonnegative,
   empty_session_list_observed: z.boolean(),
   route_checks: z.array(z.object({ session_ordinal: nonnegative, passed: z.boolean(), profile: z.enum(["read-only", "coding"]) }).strict()),
   closed_session_ordinals: z.array(nonnegative), session_list_after_all_closed: z.boolean(), stderr_bytes: nonnegative,
@@ -30,6 +30,7 @@ export class TokenFrameForwarder {
   startAttempts = 0;
   promptAttempts = 0;
   quotaRejections = 0;
+  discoverRequests = 0;
   emptySessionListObserved = false;
   readonly routeChecks: Array<{ session_ordinal: number; passed: boolean; profile: "read-only" | "coding" }> = [];
   readonly closedSessionOrdinals = new Set<number>();
@@ -164,8 +165,11 @@ export class TokenFrameForwarder {
               const validToolsCall = envelopeParsed.method === "tools/call" && hasId && typeof params?.name === "string" && allowedTools.has(params.name)
                 && params.arguments !== null && typeof params.arguments === "object" && !Array.isArray(params.arguments);
               const validStandardRequest = ["initialize", "tools/list", "ping"].includes(String(envelopeParsed.method)) && hasId;
+              // `server/discover` is the read-only 2026-07-28 discovery request of the pinned MCP SDK (a server MUST answer it);
+              // Claude Code 2.1.301 sends it first. Exactly that method, as a request with an id and absent-or-object params.
+              const validDiscover = envelopeParsed.method === "server/discover" && hasId && (envelopeParsed.params === undefined || params !== undefined);
               if (envelopeParsed.jsonrpc !== "2.0" || typeof envelopeParsed.method !== "string"
-                || !(validNotification || validToolsCall || validStandardRequest)) {
+                || !(validNotification || validToolsCall || validStandardRequest || validDiscover)) {
                 this.integrityPassed = false; this.fatalRequest = true;
               } else {
                 if (tool === "pi_session_prompt") {
@@ -177,7 +181,7 @@ export class TokenFrameForwarder {
                     timer.unref(); this.promptTimers.set(ordinal, { timer, requestId: envelope.id, turnId: null });
                   }
                 }
-                if (!this.fatalRequest) { write(raw); this.writtenBytes += raw.length; }
+                if (!this.fatalRequest) { if (validDiscover) this.discoverRequests++; write(raw); this.writtenBytes += raw.length; }
               }
             }
           }
@@ -206,7 +210,7 @@ export class TokenFrameForwarder {
       schema_version: "token-live-proxy-1", integrity_passed: this.integrityPassed,
       received_bytes: this.receivedBytes, written_bytes: this.writtenBytes, controller_bytes: this.controllerBytes,
       server_exit_code: null, server_cleanup_observed: false, start_attempts: this.startAttempts, prompt_attempts: this.promptAttempts,
-      quota_rejections: this.quotaRejections, frames: this.meter.frames.map(frame => frameSchema.parse(frame)),
+      quota_rejections: this.quotaRejections, discover_requests: this.discoverRequests, frames: this.meter.frames.map(frame => frameSchema.parse(frame)),
       empty_session_list_observed: this.emptySessionListObserved,
       route_checks: this.routeChecks.map(row => ({ ...row })), closed_session_ordinals: [...this.closedSessionOrdinals].sort((a,b)=>a-b),
       session_list_after_all_closed: this.sessionListAfterAllClosed, stderr_bytes: this.stderrBytes, fatal_request: this.fatalRequest,
