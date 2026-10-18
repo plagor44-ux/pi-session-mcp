@@ -1,7 +1,7 @@
 {
   "tool": "isolation-acceptance",
   "schema_version": 1,
-  "generated_at": "2026-10-18T15:27:45.395Z",
+  "generated_at": "2026-10-18T15:33:32.396Z",
   "mode": "contained",
   "platform": "linux",
   "remote_checks_skipped": false,
@@ -334,9 +334,15 @@
     "host_config_exposed": false,
     "ssh_authenticated": false
   },
+  "git_metadata": {
+    "commondir_writable_inside": true,
+    "redirect_files_preexisting": 0,
+    "redirect_files_removed": 1,
+    "redirect_files_residual": 0
+  },
   "persistence": {
     "marker_survivors": 0,
-    "new_own_processes": 0,
+    "new_own_processes": 2,
     "crontab_delta": 0,
     "user_unit_delta": 0,
     "active_user_units_delta": 0
