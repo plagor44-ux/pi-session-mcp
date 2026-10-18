@@ -29,6 +29,8 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 ## 3. Pick workspace and profile
 
+- Read each workspace's `mode` from `pi_capabilities_get`. For `container` workspaces, use the repository's `pi-coding-*` server for coding.
+- A coding start refused with `workspace_mode_forbids_coding` means the repository runs coding elsewhere; do not retry or switch profiles on this server.
 - Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
 - A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
