@@ -33,5 +33,5 @@ export function versionFromOutput(client: ClientName, output: string): string | 
 }
 
 export function safeRunner(run: CommandRunner["run"]): CommandRunner {
-  return { run: async (command, args, signal) => boundedResult(await run(command, args, signal)) };
+  return { run: async (command, args, signal, options) => boundedResult(await run(command, args, signal, options)) };
 }

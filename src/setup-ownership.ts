@@ -6,6 +6,7 @@ import type { CommandRunner } from "./client-adapters/types.js";
 import { acquireSetupGuardian } from "./setup-process.js";
 import { assertSupportedFilesystem, currentSetupPlatform, openLockedDarwin, type SetupPlatform } from "./setup-platform.js";
 import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, SKILL_NAME_PATTERN, SKILL_TREE_FINGERPRINT_PATTERN } from "./skill-library.js";
+import { WRITER_NAME_PATTERN } from "./writer-state.js";
 import type { SetupTarget } from "./setup-result.js";
 
 export interface OwnershipRecord {
@@ -193,6 +194,8 @@ export function isRecord(value: unknown): value is OwnershipRecord {
   const target = x.target as Record<string, unknown>;
   if (!exactKeys(target, ["client", "scope", "alias"])) return false;
   const { client, scope, alias } = target;
+  const writer = typeof alias === "string" && alias.startsWith("pi-coding-") && WRITER_NAME_PATTERN.test(alias.slice("pi-coding-".length)) &&
+    (client === "codex" ? scope === "user" : client === "claude-code" && scope === "local");
   const registration = alias === "pi-session-mcp" &&
     (client === "codex" ? scope === "user" : client === "claude-code" && typeof scope === "string" && ["user", "project", "local"].includes(scope));
   const skillAlias = typeof alias === "string" ? SKILL_RECORD_ALIAS.exec(alias) : null;
@@ -204,7 +207,7 @@ export function isRecord(value: unknown): value is OwnershipRecord {
     (skill ? SKILL_TREE_FINGERPRINT_PATTERN.test(value) || LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(value) : /^[a-f0-9]{64}$/.test(value));
   // `replaces` belongs only to a pending skill record.
   if ("replaces" in x && !(skill && x.phase === "pending" && validFingerprint(x.replaces))) return false;
-  return (registration || skill) && validFingerprint(x.fingerprint) &&
+  return (registration || writer || skill) && validFingerprint(x.fingerprint) &&
     (x.phase === "pending" || x.phase === "owned") && x.previous === "absent" &&
     typeof x.transactionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.transactionId);
 }
