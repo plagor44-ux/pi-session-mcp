@@ -96,7 +96,8 @@ describe("orchestration skill start-error classification", () => {
     expect(orchestration).toMatch(/Never decide by the message, provider text or any other free text/);
     expect(orchestration).toMatch(/Any code not listed there is Unknown/);
     expect(orchestration).toMatch(/\]\(references\/start-errors\.md\)/);
-    expect(orchestration).toMatch(/do not switch profiles, retry at most once, and report the code/);
+    expect(orchestration).toMatch(/Until the code is classified, do not retry and do not switch profiles\./);
+    expect(orchestration).toMatch(/If the reference cannot be read, treat the code as Unknown\./);
   });
 
   it("keeps the classification out of SKILL.md so that it loads on demand", () => {
