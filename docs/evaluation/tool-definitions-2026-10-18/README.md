@@ -9,7 +9,7 @@ Nothing under `docs/evaluation/token-footprint-2026-10-17/` was modified.
 | Issue | Change | Status |
 | --- | --- | --- |
 | #88 | Short factual behavior hints appended to the descriptions of `pi_capabilities_get`, `pi_session_prompt`, `pi_session_close`, `pi_turn_get` | Implemented, +255 description bytes |
-| #90 | The six UUID input fields no longer repeat the 177-byte zod `pattern` in the input JSON Schema; `format: "uuid"` is kept | Implemented, -1,074 bytes; 156 compared cases byte-identical |
+| #90 | The six UUID input fields no longer repeat the zod `pattern` (179 bytes per occurrence as a JSON member) in the input JSON Schema; `format: "uuid"` is kept | Implemented, -1,074 bytes; 156 compared cases byte-identical |
 
 New descriptions (the other four are unchanged):
 
