@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createWriterRegistrationAdapter, registerWriter, unregisterWriter, type WriterRegistrationIntent } from "../src/client-adapters/writer-registration.js";
 import { DurableOwnershipStore, MemoryOwnershipStore, isRecord, type OwnershipAccess } from "../src/setup-ownership.js";
-import { wrapperDigest } from "../src/writer-state.js";
+import { wrapperDigest } from "../src/writer-wrapper.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);

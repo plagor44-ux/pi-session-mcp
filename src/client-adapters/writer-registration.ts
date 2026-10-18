@@ -4,7 +4,8 @@ import { isAbsolute } from "node:path";
 import { safeRunner } from "./command.js";
 import type { ClientName, CommandExecution, CommandRunner, RegistrationState } from "./types.js";
 import type { OwnershipAccess, OwnershipRecord, OwnershipStore } from "../setup-ownership.js";
-import { WRITER_NAME_PATTERN, wrapperDigest } from "../writer-state.js";
+import { WRITER_NAME_PATTERN } from "../writer-state.js";
+import { wrapperDigest } from "../writer-wrapper.js";
 
 export interface WriterRegistrationIntent {
   readonly client: ClientName;

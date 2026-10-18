@@ -2,6 +2,7 @@ import { chmod, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
+import { ALIAS_PATTERN } from "./execution-profile.js";
 import { runDoctor } from "./doctor.js";
 import type { WorkspaceModeEntry } from "./execution-modes.js";
 import { changeExecutionMode, type ModeRequest } from "./setup-modes.js";
@@ -35,7 +36,9 @@ export interface WriterSetupDependencies {
   lock?: typeof acquireOverrideLock;
   containerRuntime?: () => Promise<boolean>;
 }
-const targetFor = (alias: string, name: string): SetupTarget => ({ client: "writer", scope: alias, alias: name });
+const safeAlias = (alias: string): string => ALIAS_PATTERN.test(alias) ? alias : "invalid";
+const targetFor = (alias: string, name: string): SetupTarget => ({ client: "writer", scope: safeAlias(alias), alias: WRITER_NAME_PATTERN.test(name) || (alias === "host" && name === "control") ? name : "invalid" });
+const modesTarget = (alias: string): SetupTarget => ({ client: "modes", scope: "workspace", alias: safeAlias(alias) });
 const codeFor = (error: unknown): string => error instanceof OverrideLockError ? error.code : error instanceof Error && /^[a-z][a-z0-9_]{0,63}$/.test(error.message) ? error.message : "writer_operation_failed";
 function services(deps: WriterSetupDependencies) {
   const home = deps.home ?? homedir();
@@ -96,30 +99,15 @@ async function plan(ctx: lifecycle.WriterContext, entry: WorkspaceModeEntry) {
   return { keep, missing, surplus };
 }
 
-type ReconcileRequest = { apply: boolean; discard: boolean; baseRef?: string; codex: boolean };
-/** Standalone reconciliation shares the same lock as mode changes and named operations. */
-export async function reconcileWriters(configPath: string, alias: string, request: ReconcileRequest, deps: WriterSetupDependencies): Promise<SetupResult> {
-  const action = () => reconcileUnlocked(configPath, alias, request, deps);
-  try {
-    if ((deps.platform ?? process.platform) !== "linux") throw new Error("platform_unsupported");
-    const output = request.apply ? await locked(deps, action) : await action();
-    if (!request.apply || !output.findings.some((finding) => finding.status === "ok")) return output;
-    return result("apply", [...output.findings, { target: targetFor(alias, writerName(alias, 1)), status: "ok", code: "controllers_restart_required" }]);
-  } catch (error) { return result(request.apply ? "apply" : "dry-run", [{ target: targetFor(alias, writerName(alias, 1)), status: "failed", code: codeFor(error) }]); }
-}
+type ReconcileRequest = { discard: boolean; baseRef?: string; codex: boolean };
 async function reconcileUnlocked(configPath: string, alias: string, request: ReconcileRequest, deps: WriterSetupDependencies): Promise<SetupResult> {
-  const operation = request.apply ? "apply" : "dry-run", findings: SetupFinding[] = [];
+  const findings: SetupFinding[] = [];
   const ctx = await context(alias, { ...deps, configPath });
   const config = await loadConfig(configPath), entry = config.workspaceModes.get(alias)!;
   const planned = await plan(ctx, entry), { life, accept, ownership, adapter } = services(deps);
   const add = (name: string, outcome: lifecycle.WriterOutcome): void => { findings.push({ target: targetFor(alias, name), ...outcome }); };
-  if (request.apply) await doctorGate(ctx, deps);
+  await doctorGate(ctx, deps);
   await preflight(ctx, planned.surplus, request.discard, deps);
-  if (!request.apply) {
-    for (const name of planned.keep) add(name, { status: "planned", code: "writer_planned" });
-    for (const name of planned.surplus) add(name, { status: "planned", code: "writer_remove_planned" });
-    return result(operation, findings, "planned");
-  }
   const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8"));
   const failedProvision = new Set<string>();
   for (const name of planned.missing) {
@@ -128,8 +116,8 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   }
   for (const name of planned.keep) {
     if (failedProvision.has(name)) continue;
-    let state = await readWriterState(ctx.home, name);
-    if (state?.phase !== "ready") { const outcome = await accept.acceptWriter(ctx, name); add(name, outcome); if (outcome.status === "failed") continue; state = await readWriterState(ctx.home, name); }
+    const state = await readWriterState(ctx.home, name);
+    if (state?.phase !== "ready") add(name, await accept.acceptWriter(ctx, name));
   }
   for (const name of planned.keep) {
     if (failedProvision.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
@@ -143,13 +131,15 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
     try { add(name, await remove(ctx, name, request.discard, deps)); }
     catch (error) { add(name, { status: "failed", code: codeFor(error) }); }
   }
-  return result(operation, findings);
+  return result("apply", findings);
 }
 
 /** Serializes planning, destructive-work refusal, mode commit and writer reconciliation. */
 export async function changeWriterMode(configPath: string, request: ModeRequest, deps: WriterSetupDependencies): Promise<SetupResult> {
   const operation = request.apply ? "apply" : "dry-run";
-  const failed = (code: string) => result(operation, [{ target: targetFor(request.alias, writerName(request.alias, 1)), status: "failed", code }]);
+  const writerTarget = targetFor(request.alias, `${request.alias}-w1`);
+  const failed = (code: string) => result(operation, [{ target: writerTarget, status: "failed", code }]);
+  if (!ALIAS_PATTERN.test(request.alias)) return failed("alias_unknown");
   if ((deps.platform ?? process.platform) !== "linux") return failed("platform_unsupported");
   const action = async () => {
     let proposed: WorkspaceModeEntry;
@@ -164,13 +154,15 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
       },
       afterChange: async (modes) => {
         let writers: SetupResult;
-        if (request.apply) writers = await reconcileUnlocked(configPath, request.alias, { apply: true, discard: request.discard ?? false, codex: request.codex ?? false, ...(request.baseRef ? { baseRef: request.baseRef } : {}) }, deps);
-        else {
-          const ctx = await context(request.alias, deps), planned = await plan(ctx, proposed);
-          writers = result("dry-run", [...planned.keep.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_planned" })), ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" }))], "planned");
-        }
+        try {
+          if (request.apply) writers = await reconcileUnlocked(configPath, request.alias, { discard: request.discard ?? false, codex: request.codex ?? false, ...(request.baseRef ? { baseRef: request.baseRef } : {}) }, deps);
+          else {
+            const ctx = await context(request.alias, deps), planned = await plan(ctx, proposed);
+            writers = result("dry-run", [...planned.keep.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_planned" })), ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" }))], "planned");
+          }
+        } catch { writers = failed("writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
-        if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: { client: "modes", scope: "workspace", alias: request.alias }, status: "ok", code: "controllers_restart_required" });
+        if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
         return result(operation, findings, writers.exitCode ? "failed" : request.apply ? undefined : "planned");
       },
     });
@@ -181,13 +173,13 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
 
 const GLOBAL_ERRORS = new Set(["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid"]);
 export async function runWriterOperation(name: string, operation: WriterOperation, opts: WriterOptions, deps: WriterSetupDependencies): Promise<SetupResult> {
-  const reportOperation: SetupOperation = operation === "verify" || operation === "remove" ? operation : opts.apply ? "apply" : "dry-run";
+  const reportOperation: SetupOperation = operation === "verify" ? "verify" : opts.apply ? operation === "remove" ? "remove" : "apply" : "dry-run";
   if (!WRITER_NAME_PATTERN.test(name)) return result(reportOperation, [{ target: { client: "invalid", scope: "invalid", alias: "invalid" }, status: "failed", code: "usage_invalid" }], "failed", 64);
   const alias = name.slice(0, name.lastIndexOf("-w")), target = targetFor(alias, name);
   const done = (outcome: lifecycle.WriterOutcome) => result(reportOperation, [{ target, ...outcome }], outcome.status === "planned" ? "planned" : undefined);
   if ((deps.platform ?? process.platform) !== "linux") return done({ status: "failed", code: "platform_unsupported" });
   try {
-    if (!opts.apply && operation !== "verify" && operation !== "remove") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }
+    if (!opts.apply && operation !== "verify") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }
     return await locked(deps, async () => {
       const ctx = await context(alias, deps), { life, ownership, adapter } = services(deps);
       if (operation === "verify") {
@@ -196,9 +188,10 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
         for (const client of ["claude-code", "codex"] as const) {
           const expected = intent(ctx, name, client);
           const owned = await ownership.get({ client, scope: client === "codex" ? "user" : "local", alias: expected.name });
-          if ((client === "claude-code" || owned) && await adapter.inspect(expected) !== "equivalent") return done({ status: "failed", code: "registration_not_equivalent" });
+          const current = await adapter.inspect(expected);
+          if ((client === "claude-code" || owned || current !== "absent") && current !== "equivalent") return done({ status: "failed", code: "registration_not_equivalent" });
         }
-        const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { ...process.env, PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }) });
+        const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }) });
         return done({ status: checked.status === "verified" ? "ok" : "failed", code: `mcp_${checked.status}` });
       }
       await doctorGate(ctx, deps);

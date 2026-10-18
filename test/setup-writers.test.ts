@@ -41,6 +41,32 @@ async function fixture() {
 }
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it.each(["linux", "darwin"] as const)("sanitizes invalid aliases on %s", async (platform) => {
+    const f = await fixture();
+    const output = await changeWriterMode(f.configPath, { ...mode, alias: "../x" }, { ...f.deps, platform });
+    expect(output.exitCode).toBe(1);
+    expect(JSON.stringify(output)).not.toContain("../x");
+    expect(output.findings[0]?.target.alias).toBe("invalid");
+  });
+  it("preserves an applied mode when reconciliation throws", async () => {
+    const f = await fixture();
+    f.life.provisionWriter.mockRejectedValueOnce(new Error("/SECRET"));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "mode_applied", status: "ok" }),
+      { target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_reconcile_failed" },
+    ]));
+    expect(JSON.stringify(output)).not.toContain("SECRET");
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
+  });
+  it("does not remove when the API caller requests a dry run", async () => {
+    const f = await fixture();
+    const output = await runWriterOperation("x-w1", "remove", { apply: false, discard: true }, f.deps);
+    expect(output.findings[0]?.code).toBe("writer_remove_planned");
+    expect(f.deps.lock).not.toHaveBeenCalled();
+    expect(f.life.removeWriter).not.toHaveBeenCalled();
+  });
   it("provisions, accepts and registers two writers in order with one restart notice", async () => {
     const f = await fixture();
     const output = await changeWriterMode(f.configPath, mode, f.deps);
@@ -97,7 +123,9 @@ describe("writer setup reconciliation", () => {
   it("removes clean writers and owned registrations when leaving container mode", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps); f.calls.length = 0;
-    expect((await changeWriterMode(f.configPath, { alias: "x", mode: "read-only", apply: true, acceptHostWrites: false }, f.deps)).exitCode).toBe(0);
+    const output = await changeWriterMode(f.configPath, { alias: "x", mode: "read-only", apply: true, acceptHostWrites: false }, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings.find((finding) => finding.code === "controllers_restart_required")?.target).toEqual({ client: "modes", scope: "workspace", alias: "x" });
     expect(f.calls).toEqual(["unregister:claude-code:pi-coding-x-w1", "remove:x-w1", "unregister:claude-code:pi-coding-x-w2", "remove:x-w2"]);
   });
   it("keeps a writer not ready if the control is missing", async () => {
@@ -115,6 +143,26 @@ describe("writer setup reconciliation", () => {
     f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true });
     expect((await runWriterOperation("x-w1", "remove", { apply: true, discard: false }, f.deps)).findings[0]?.code).toBe("writer_uncollected");
     expect(f.life.removeWriter).not.toHaveBeenCalled();
+  });
+  it.each(["divergent", "unsupported", "equivalent"] as const)("checks unowned present Codex registrations (%s)", async (codexState) => {
+    const f = await fixture();
+    const adapter = { ...f.adapter, inspect: vi.fn(async (intent: { client: string }) => intent.client === "codex" ? codexState : "equivalent" as const) };
+    const launch = vi.fn();
+    const verify = vi.fn(async () => ({ status: "verified" as const, initialize: true, toolsList: true, capabilitiesGet: true, tools: [] }));
+    const output = await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, adapter, launch, verify });
+    expect(output.exitCode).toBe(codexState === "equivalent" ? 0 : 1);
+    expect(verify).toHaveBeenCalledTimes(codexState === "equivalent" ? 1 : 0);
+  });
+  it.each([undefined, "/runtime"])("passes only the minimal wrapper environment (runtime=%s)", async (runtime) => {
+    const f = await fixture();
+    vi.stubEnv("HOME", f.home); vi.stubEnv("PATH", "/bin"); vi.stubEnv("SECRET_SENTINEL", "secret"); vi.stubEnv("XDG_RUNTIME_DIR", runtime);
+    try {
+      f.adapter.inspect.mockResolvedValue("equivalent");
+      const launch = vi.fn();
+      const verify = vi.fn(async () => ({ status: "verified" as const, initialize: true, toolsList: true, capabilitiesGet: true, tools: [] }));
+      expect((await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, launch, verify })).exitCode).toBe(0);
+      expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], { HOME: f.home, PATH: "/bin", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }) });
+    } finally { vi.unstubAllEnvs(); }
   });
   it("verifies only relevant Doctor errors and launches with no credential refresh", async () => {
     const f = await fixture();
