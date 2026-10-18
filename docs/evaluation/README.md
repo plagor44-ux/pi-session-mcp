@@ -12,6 +12,15 @@ their historical PASS/FAIL decisions are not current-source qualifications.
 
 ## What ran
 
+The separately requested [token-footprint calibration](token-footprint-2026-10-17/README.md)
+records 80 provider-free transport cases, 50 filter cases and ten adverse report
+controls. Controller usage remains unknown. A separate synthetic Codex request
+probe measures client projection only on its declared local fixture route; the
+approved real-provider M1 pilot passed on 2026-10-18 on its third attempt, with
+two harness fixes recorded. A dedicated development
+executor preserves the existing gate and adds exact schedule approval. This is
+not a new live wave or production optimization.
+
 | Evidence | Observed result | Interpretation |
 |---|---|---|
 | [Original provider-free suite](2026-10-17-profile-evaluation-evidence.md) | 1,459 passed, six skipped; overlapping offline subset 308 passed | Historical harness/oracle calibration, not model quality |
