@@ -165,6 +165,13 @@ used separate full clones from the PR head `08b40f2`.
 | #79 decision | #79 | maintainer, integrator | ADR 0008 accepted for Linux (option 1); review point 2026-11-15; acceptance tooling and [runbook](../isolation-setup.md) added (uncontained control: 18 of 18 escapes detected, all canaries removed); Podman not installed, so no contained run yet; writer alias `pi-session-mcp-w1` on a full clone configured |
 | #93 probe | #93 | integrator | Option C approved (one pair, 10 USD advisory, unmetered acknowledged). [Attempt 1](../evaluation/m1-ab-proposal-2026-10-18/probe/attempt-1/README.md) failed: no `openai-codex` login here. Worker provider made a bound option; [attempt 2](../evaluation/m1-ab-proposal-2026-10-18/probe/attempt-2/README.md) on `openai`: arm A L1 passed, L2 repaired correctly without a JSON receipt; [attempt 3](../evaluation/m1-ab-proposal-2026-10-18/probe/attempt-3/README.md) without worker skills failed the same way, which falsified the skill explanation: the T2 implementer prompt asks for no JSON receipt, while the harness accepts only a JSON-only answer. Stopped; arm B never ran |
 
+After the operator approved fixing the receipt contract (the T2 implementer
+prompt now asks for one JSON object), [probe attempt 4](../evaluation/m1-ab-proposal-2026-10-18/probe/attempt-4/README.md)
+passed in both arms, and the approved four-pair wave ran: eight runs, all `PASS`
+([results](../evaluation/m1-ab-proposal-2026-10-18/results/README.md)). #91 now has
+a proposed decision: no bounded wait now, trigger C restated with the cost
+dimension.
+
 The new Doctor check ran on macOS 15 and macOS 26 in the PR's CI (its 18 tests
 are part of the suite); no run on a real Mac.
 
