@@ -397,14 +397,16 @@ describe("M1 A/B prerequisites: skill trees, worker skills and client version (P
       { name: "pi-session-review", tree_digest: "v2:rev" },
       { name: "pi-session-implementation", tree_digest: "v2:code" },
     ];
-    const l1Config = caseServerConfig("L1", "/fixture", workerSkills);
+    expect(() => caseServerConfig("L1", "/fixture", workerSkills)).toThrow("worker_skill_root_required");
+    const l1Config = caseServerConfig("L1", "/fixture", workerSkills, "/source/skills");
     expect(l1Config.skillCatalog).toEqual({
-      "pi-session-review": "builtin:pi-session-review",
-      "pi-session-implementation": "builtin:pi-session-implementation",
+      "pi-session-review": "/source/skills/pi-session-review/SKILL.md",
+      "pi-session-implementation": "/source/skills/pi-session-implementation/SKILL.md",
     });
+    expect(configSchema.safeParse(l1Config).success).toBe(true);
     expect(l1Config.executionProfiles.review).toHaveProperty("skills", ["pi-session-review"]);
 
-    const l2Config = caseServerConfig("L2", "/fixture", workerSkills);
+    const l2Config = caseServerConfig("L2", "/fixture", workerSkills, "/source/skills");
     expect(l2Config.executionProfiles.review).toHaveProperty("skills", ["pi-session-review"]);
     expect(l2Config.executionProfiles.code).toHaveProperty("skills", ["pi-session-implementation"]);
   });
