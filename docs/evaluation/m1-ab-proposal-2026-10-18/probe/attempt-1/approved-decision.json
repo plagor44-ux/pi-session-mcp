@@ -1,0 +1,79 @@
+{
+  "schema_version": "token-live-decision-1",
+  "approved": true,
+  "manifest_digest": "sha256:e768fb9c05d04b34f5ba6d627d82b69ca843459f3d3b0f2671d2d97b6514415f",
+  "budget_digest": "sha256:cfad1cd58c6c13c7f764d610756f48b60f841792d634884cb3d4146bb3b74c23",
+  "source_digest": "sha256:e8d6fa03346f25b94a32b5ed49f542f7b4c0750c99bdba69757e72197fc5720e",
+  "build_digest": "sha256:8f20039116457fbfde283bfafef31d276ed26b133c6dfed58790743fa078ec4b",
+  "matrix_digest": "sha256:9cdd89195dcb72d557c0b298bea796bdb8f2cfebb7ef8df249721596e572b27d",
+  "controller_skill_digest": "v2:25494639689d5dad58d5adbeefbb493c91b21175facbe44fe5b880e0c2e250ab",
+  "controller": {
+    "client": "codex",
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "auth": "existing-client-login-not-probed",
+    "version": "0.162.1"
+  },
+  "schedule": [
+    {
+      "id": "L1",
+      "task": "T1",
+      "starts": 1,
+      "turns": 1,
+      "route": "review",
+      "slots": [
+        "m1-l1"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L2",
+      "task": "T2",
+      "starts": 1,
+      "turns": 1,
+      "route": "code",
+      "slots": [
+        "m1-l2"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L3",
+      "task": "T1",
+      "starts": 2,
+      "turns": 3,
+      "route": "review",
+      "slots": [
+        "m1-l3-shared"
+      ],
+      "prompts": 3
+    }
+  ],
+  "worker_skills": [
+    {
+      "name": "pi-session-implementation",
+      "tree_digest": "v2:f8ce75eff83a5c952f6ca51c04e1e8025cb7c2c558c30d692f291a3f6594eb12"
+    },
+    {
+      "name": "pi-session-review",
+      "tree_digest": "v2:610c0b4829eeb1ce6c9b2000ad73f8e88ca230707eef7f7b1708a80767952bf0"
+    }
+  ],
+  "budget_limits": {
+    "max_starts": 4,
+    "max_retries": 0,
+    "parallelism": 1,
+    "run_timeout_ms": 600000,
+    "total_timeout_ms": 1800000,
+    "provider_cap_usd": null
+  },
+  "advisory_usd": 10,
+  "limits": {
+    "starts": 4,
+    "work_turns": 5,
+    "retries": 0,
+    "invocations": 3
+  },
+  "operator_acknowledges_advisory_not_cap": true
+}
