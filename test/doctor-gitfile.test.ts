@@ -17,6 +17,7 @@ function profile(alias: string, permissionProfile: "coding" | "read-only", isDef
 function configFor(workspaces: Record<string, string>, permissionProfiles: readonly ("coding" | "read-only")[]): () => Promise<AppConfig> {
   return async () => ({
     workspaces: new Map(Object.entries(workspaces)),
+    workspaceModes: new Map(Object.keys(workspaces).map((alias) => [alias, { mode: "host" as const }])),
     executionProfiles: new Map(permissionProfiles.map((permission, index) => [`p${index}`, profile(`p${index}`, permission, index === 0)])),
     defaultExecutionProfile: "p0",
     configuration: CONFIGURATION,

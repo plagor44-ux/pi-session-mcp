@@ -8,6 +8,7 @@ import { FakeAdapter } from "./fake-adapter.js";
 import { PiSessionCreationError } from "../src/pi-adapter.js";
 import packageMetadata from "../package.json" with { type: "json" };
 import { loadConfig, type ConfigurationMetadata } from "../src/config.js";
+import type { WorkspaceModeEntry } from "../src/execution-modes.js";
 import type { ConfiguredExecutionProfile } from "../src/execution-profile.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -26,6 +27,7 @@ describe("MCP contracts", () => {
     profiles?: ReadonlyMap<string, ConfiguredExecutionProfile>;
     defaultExecutionProfile?: string;
     configuration?: ConfigurationMetadata;
+    workspaceModes?: ReadonlyMap<string, WorkspaceModeEntry>;
   } = {}) {
     const workspaces = fixtures.workspaces ?? new Map([["repo", "/safe/repo"]]);
     const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, workspaces, registryOptions);
@@ -33,10 +35,53 @@ describe("MCP contracts", () => {
       ["safe", { alias: "safe", default: true, permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const }],
       ["coding", { alias: "coding", default: false, permissionProfile: "coding" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "high" as const }],
     ]);
-    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION);
+    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: "contract-test", version: "1.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); closers.push(async () => { await client.close(); await server.close(); await registry.shutdown(); }); return { client, adapter, registry };
   }
+
+  const modeProfiles = new Map<string, ConfiguredExecutionProfile>([
+    ["code", { alias: "code", default: true, permissionProfile: "coding", provider: "fake-provider", model: "fake-model", thinkingLevel: "off" }],
+    ["review", { alias: "review", default: false, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off" }],
+  ]);
+
+  it.each(["container", "read-only"] as const)("refuses a coding start on a %s workspace without creating a session", async (mode) => {
+    const connected = await client({}, {
+      workspaces: new Map([["a", "/safe/a"]]), profiles: modeProfiles, defaultExecutionProfile: "code",
+      workspaceModes: new Map([["a", { mode }]]),
+    });
+    const start = vi.spyOn(connected.registry, "start");
+    for (const args of [{ workspace: "a", executionProfile: "code" }, { workspace: "a" }]) {
+      const refused = await connected.client.callTool({ name: "pi_session_start", arguments: args });
+      expect(refused).toMatchObject({ isError: true, structuredContent: { ok: false, error: {
+        code: "workspace_mode_forbids_coding",
+        message: "The workspace's execution mode does not allow coding sessions on this server",
+      } } });
+    }
+    expect(start).not.toHaveBeenCalled();
+    expect(connected.adapter.createInputs).toHaveLength(0);
+    const listed = await connected.client.callTool({ name: "pi_session_list", arguments: {} });
+    expect(listed.structuredContent).toEqual({ ok: true, sessions: [] });
+  });
+
+  it.each(["container", "read-only", "unset", "host"] as const)("allows read-only profiles on %s workspaces", async (mode) => {
+    const connected = await client({}, {
+      workspaceModes: new Map([["repo", { mode }]]), profiles: modeProfiles, defaultExecutionProfile: "code",
+    });
+    const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile: "review" } });
+    expect(started.structuredContent).toMatchObject({ ok: true, session: { profile: "read-only" } });
+    expect(connected.adapter.createInputs).toHaveLength(1);
+  });
+
+  it.each([undefined, "unset", "host"] as const)("unset and host keep today's behavior (%s)", async (mode) => {
+    const connected = await client({}, {
+      workspaceModes: mode === undefined ? new Map() : new Map([["repo", { mode }]]),
+      profiles: modeProfiles, defaultExecutionProfile: "code",
+    });
+    const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile: "code" } });
+    expect(started.structuredContent).toMatchObject({ ok: true, session: { profile: "coding" } });
+    expect(connected.adapter.createInputs).toHaveLength(1);
+  });
 
   it("publishes eight tools with closed-world capability discovery annotations", async () => {
     const connected = await client();
@@ -68,7 +113,7 @@ describe("MCP contracts", () => {
             reloadPolicy: { type: "string", const: "restart-required" },
           },
         },
-        workspaces: { items: { required: ["alias"], additionalProperties: false } },
+        workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only"] } } } },
         executionProfiles: {
           items: {
             required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "skills"],
@@ -114,6 +159,7 @@ describe("MCP contracts", () => {
         }],
       ]),
       defaultExecutionProfile: "alpha-profile",
+      workspaceModes: new Map([["alpha-workspace", { mode: "container" }]]),
     });
 
     const registryList = vi.spyOn(connected.registry, "list");
@@ -123,7 +169,7 @@ describe("MCP contracts", () => {
       ok: true,
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: TEST_CONFIGURATION.fingerprint, reloadPolicy: "restart-required" },
-      workspaces: [{ alias: "alpha-workspace" }, { alias: "zeta-workspace" }],
+      workspaces: [{ alias: "alpha-workspace", mode: "container" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",

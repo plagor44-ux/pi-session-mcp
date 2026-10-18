@@ -29,6 +29,8 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 ## 3. Pick workspace and profile
 
+- Read each workspace's `mode` from `pi_capabilities_get`. For `container` workspaces, use the repository's `pi-coding-*` server for coding.
+- If a coding start is refused because of the workspace's execution mode, do not retry or switch profiles on that server. The code is listed in [references/start-errors.md](references/start-errors.md).
 - Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
 - A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
@@ -81,7 +83,7 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - `pi_session_abort` returns `abort_failed` if the abort was rejected. The turn may still be running. Poll it.
 - `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Decide an observation and cleanup budget before you abort, for example a fixed number of polling rounds within a few minutes. Poll `pi_turn_get` until the turn is terminal or the budget is spent, then close the session with `pi_session_close`. If the close fails or does not finish, stop using that workspace, treat it as unverified and report it. Never wait without a bound.
 - If `pi_session_start` fails, classify the error by its `code` alone. Never decide by the message, provider text or any other free text, and never infer a cause. Read [references/start-errors.md](references/start-errors.md) only now; it lists each known code in exactly one class. Any code not listed there is Unknown. Until the code is classified, do not retry and do not switch profiles. If the reference cannot be read, do not retry at all: report the code and stop that task. Always report the code.
-- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`invalid_execution_profile_config` or `invalid_thinking_level`). No MCP server is available; the operator must fix the configuration.
+- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`invalid_execution_profile_config`, `invalid_thinking_level` or `invalid_execution_modes`). No MCP server is available; the operator must fix the configuration.
 
 ## 10. Close every session
 

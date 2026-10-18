@@ -205,6 +205,33 @@ describe("setup executable", () => {
     }
   }, 15_000);
 
+  describe("--repo", () => {
+    it("dispatches without initializing client setup and defaults to dry-run", async () => {
+      const root = await temporaryRoot("pi-session-mcp-main-modes-");
+      const config = join(root, "config.json");
+      await writeFile(config, JSON.stringify({ workspaces: { a: "." }, executionProfiles: {
+        review: { default: true, permissionProfile: "read-only", provider: "example", model: "model", thinkingLevel: "off" },
+      } }));
+      process.env.PI_SESSION_MCP_CONFIG = config;
+      const writes: string[] = [];
+      vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+      const createSetup = vi.fn(async (): Promise<never> => { throw new Error("must_not_start"); });
+      expect(await main(["--json", "--repo", "a", "--mode", "read-only"], { createSetup })).toBe(0);
+      expect(JSON.parse(writes.join(""))).toMatchObject({ operation: "dry-run", status: "planned", findings: [{ target: { client: "modes", scope: "workspace", alias: "a" }, code: "mode_planned" }] });
+      expect(createSetup).not.toHaveBeenCalled();
+      await expect(stat(join(root, "execution-modes.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(writes.join("")).not.toContain(config);
+    });
+    it.each(["a", "/SECRET/path"])("reports only valid aliases on early failure (%s)", async (alias) => {
+      delete process.env.PI_SESSION_MCP_CONFIG;
+      const writes: string[] = [];
+      vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+      expect(await main(["--json", "--repo", alias])).toBe(1);
+      expect(JSON.parse(writes.join(""))).toMatchObject({ findings: [{ target: alias === "a" ? { client: "modes", scope: "workspace", alias } : { client: "invalid", scope: "invalid", alias: "invalid" }, code: "config_required" }] });
+      expect(writes.join("")).not.toContain("SECRET");
+    });
+  });
+
   describe("--customize-skill", () => {
     function captureStdout(): string[] {
       const writes: string[] = [];

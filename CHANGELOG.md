@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added: [per-repository execution modes](docs/execution-modes.md), decided in
+  [ADR 0009](docs/adr/0009-execution-modes.md) for minor release 0.9.0 (not yet
+  released). A separate `execution-modes.json` records acknowledged `host`,
+  `container` or `read-only`; missing entries remain `unset` with compatible
+  host behavior. Capabilities workspace entries include `mode`; coding starts
+  on container/read-only aliases fail with `workspace_mode_forbids_coding`.
+  Invalid modes fail startup with `invalid_execution_modes`. Setup `--repo`
+  plans by default and writes only with `--apply`; Doctor reports unset modes,
+  accepted host writes and unavailable rootless Podman. Controllers must restart
+  after changes. Plan B's automated container writers and periodic credential
+  refresh are pending; the manual isolation runbook remains the operational route.
+
 - Added: Doctor warning `workspace_gitfile` when a configured workspace has a
   `.git` gitfile (`gitdir:` pointer) and at least one execution profile uses the
   `coding` permission profile. A gitfile can mean a linked worktree, a submodule

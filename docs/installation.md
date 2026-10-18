@@ -6,6 +6,8 @@ Code, and covers configuration changes, upgrades and removal. Related documents:
 - [Client setup reference](client-setup.md): manual registration, the expected
   tool flow and troubleshooting.
 - [Acceptance](acceptance.md): how a release is accepted.
+- [Execution modes](execution-modes.md): choose host, container or read-only per
+  repository; container writer automation is pending.
 
 ## What gets installed
 
@@ -20,6 +22,7 @@ An installation consists of these locations:
 | --- | --- | --- |
 | Package | the npm global prefix, or a dedicated directory per release such as `~/.local/share/pi-session-mcp/releases/<tag>` | The built server, `setup` and Doctor. |
 | Configuration | a file outside the package, for example `~/.config/pi-session-mcp/pi-session-mcp.json` | Operator-owned, mode `0600`, never committed. |
+| Execution modes | `execution-modes.json` next to the configuration | Per-alias write policy; selected with `setup --repo`. See [Execution modes](execution-modes.md). |
 | Skill overrides (optional) | the `skills/` directory next to the configuration file, for example `~/.config/pi-session-mcp/skills/` | Your own or customized skills, plus `.pi-session-mcp-bases.json` and its lock file `.pi-session-mcp-bases.lock`. Created by you or by `setup --customize-skill`. See [Pi skills](#pi-skills). |
 | Controller skill | `~/.agents/skills/pi-session-orchestration` (Codex), `~/.claude/skills/pi-session-orchestration` or `<project>/.claude/skills/pi-session-orchestration` (Claude Code) | Written by `setup --apply`; see [Register a client](#4-register-a-client). |
 | Setup ownership state | `~/.local/state/pi-session-mcp/ownership.json` | Written by `setup` only. Path-free and secret-free. |
@@ -181,6 +184,21 @@ reports `config_missing`. There is no default file: a server's working
 directory is the client's project, so a file found there must never become the
 policy. Each registration stores the absolute configuration path, so registered
 clients do not depend on your shell environment.
+
+### Choose repository execution modes
+
+Before registering a client, choose a mode for every workspace alias with
+`pi-session-mcp-setup --repo <alias> --profiles <coding-alias>` (dry-run), then
+repeat with `--apply`. Container mode requires a non-empty list of configured
+coding-profile aliases (`--profiles a,b`); without it, setup reports
+`container_profiles_required` and writes nothing. See
+[Execution modes](execution-modes.md#choose-at-installation) for explicit
+host-write acknowledgment and all options. With usable rootless Podman, setup
+proposes container; otherwise it requires an explicit host or read-only choice.
+Container mode blocks host coding but does not provision writers: use the
+[manual isolation route](isolation-setup.md).
+Missing entries retain host behavior as `unset` for compatibility and warn in
+Doctor when a coding profile exists.
 
 ## 3. Check the installation
 
@@ -395,10 +413,16 @@ define every field and error code.
 
 The server reads the configuration once when it starts. After editing the file,
 start a new client session so that the client launches a new server process.
-`pi_capabilities_get` returns the SHA-256 fingerprint of the loaded
-bytes and `reloadPolicy: "restart-required"`, which shows which version of the
-file a running server uses. The same applies to changes of the local Pi provider
+`pi_capabilities_get` returns the SHA-256 fingerprint of the loaded main
+configuration file's bytes and `reloadPolicy: "restart-required"`, which shows
+which version of that file a running server uses. The fingerprint does not
+cover `execution-modes.json`; each workspace's `mode` in `pi_capabilities_get`
+confirms the running execution-mode policy. The same applies to changes of the local Pi provider
 configuration or credentials.
+
+Execution-mode changes also require a new server process; setup reports
+`controllers_restart_required` after applying a mode change and never restarts
+controllers itself. See the [restart rule](execution-modes.md#restart-rule).
 
 The configuration path is part of the registration. Editing the file in place
 needs no new registration; moving it does.
