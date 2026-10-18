@@ -82,6 +82,21 @@ describe("MCP contracts", () => {
     for (const name of ["pi_session_prompt", "pi_session_abort", "pi_session_close"]) expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it("publishes short behavior hints in the tool descriptions", async () => {
+    const connected = await client();
+    const descriptions = Object.fromEntries((await connected.client.listTools()).tools.map(({ name, description }) => [name, description]));
+    expect(descriptions).toEqual({
+      pi_capabilities_get: "List configured workspace and execution-profile aliases. This reports configured intent, not provider or runtime availability. Call once at the start of a run.",
+      pi_session_start: "Start a managed embedded Pi session for a configured workspace alias.",
+      pi_session_list: "List local Pi sessions and their state.",
+      pi_session_get: "Get one local Pi session by ID.",
+      pi_session_prompt: "Accept a prompt after Pi preflight and run the turn in the background. Returns a running turn at once; poll pi_turn_get with pauses.",
+      pi_session_abort: "Abort a running Pi turn; idle sessions are unchanged.",
+      pi_session_close: "Abort if needed, dispose, and remove a Pi session. Idempotent; close every started session.",
+      pi_turn_get: "Get the normalized observable result of a Pi turn. completed, failed and aborted are terminal and never change: read a terminal turn once. completed is not task success.",
+    });
+  });
+
   it("discovers only deterministic configured capabilities without runtime calls", async () => {
     const connected = await client({}, {
       workspaces: new Map([
