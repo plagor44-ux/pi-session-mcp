@@ -1939,5 +1939,12 @@ both builds, six skill, setup, package and probe test files (395 tests),
 itself (attempt 3, `PASS`, 10 runs) and the diff and relative-link checks. The
 full suite was not repeated for these text and evaluation-only changes.
 
-Open: the Codex projection of #88/#90 (the probe pins Codex 0.162.0), macOS
-runs of the new Doctor check outside CI, and every live effect.
+Follow-up the same day (see the Sprint 5 file): the Codex projection of #88/#90
+was measured with Codex 0.162.1 (before and after, 16 of 16 each, `PASS`); the
+M1 proxy forwards `server/discover`; deferred tool search was observed on a
+non-bare Claude Code route; A/B prerequisites P1–P3 were implemented. Their
+checks: typecheck, `eval:schemas -- --check`, `eval:profiles -- --plan`, and the
+touched probe, proxy, token-live and footprint test files.
+
+Open: every live effect, a run of the new Doctor check on a real Mac (it ran in
+CI on macOS 15 and 26), and Claude Code end to end behind the M1 proxy.
