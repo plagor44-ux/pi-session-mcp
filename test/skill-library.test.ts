@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -139,5 +139,14 @@ describe("skill library", () => {
     // The controller skill is a tree: SKILL.md plus the start-error reference it links.
     const orchestration = await readSkillTree(join(shippedSkillsDirectory(), "pi-session-orchestration"), { hidden: "reject" });
     expect(orchestration.files.map((file) => file.path)).toEqual(["SKILL.md", "references/start-errors.md"]);
+  });
+
+  it("keeps the worker final-report rules that never drop failures and define truncated", async () => {
+    for (const name of ["pi-session-implementation", "pi-session-review"]) {
+      const text = await readFile(join(shippedSkillsDirectory(), name, "SKILL.md"), "utf8");
+      expect(text).toContain("Never drop a failed check, blocker or risk to save space.");
+      expect(text).toContain("`truncated: true` means the report the controlling agent receives is incomplete.");
+      expect(text).toContain("`truncated: false` does not prove the report is complete or correct");
+    }
   });
 });

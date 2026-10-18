@@ -40,3 +40,11 @@ End with a report that has these parts:
 5. Open points: blockers, assumptions, work outside your change area, anything the controlling agent must verify.
 
 Report facts you observed. Do not claim a check passed unless you ran it and saw it pass.
+
+Keep the report concise:
+
+- Give the status, the actual changed paths, each check with its exit code, failures, blockers, risks, and relative evidence references (repository-relative paths and commands).
+- Do not paste full diffs, whole files or full logs by default. The controlling agent fetches them when needed.
+- For a failed check, quote only the failing lines.
+- Never drop a failed check, blocker or risk to save space. If required evidence does not fit, say so explicitly.
+- `truncated: true` means the report the controlling agent receives is incomplete. `truncated: false` does not prove the report is complete or correct, and does not prove that no SDK-side output limit applied.
