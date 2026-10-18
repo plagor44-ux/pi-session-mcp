@@ -72,7 +72,7 @@ Session and turn IDs were kept only transiently.
 - **#86 implemented.** Terminal turns are recorded once; cadence 10 s then
   15–30 s; fixed task and cleanup budgets; cost note as a Codex route
   observation; the start-code classification lives in
-  `references/start-errors.md`. `SKILL.md` went from 9,025 to 9,082 bytes; the
+  `references/start-errors.md`. `SKILL.md` went from 9,025 to 9,112 bytes; the
   reference adds 1,380 bytes, loaded only after a start failure. No token saving
   is claimed. The test still checks complete, unique coverage of every
   documented start code against `docs/tool-contracts.md`.
