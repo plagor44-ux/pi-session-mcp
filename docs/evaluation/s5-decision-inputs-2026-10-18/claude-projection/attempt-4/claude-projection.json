@@ -1,0 +1,1797 @@
+{
+  "schema_version": "token-claude-projection-1",
+  "binding": {
+    "commit": "5217824e2e6f20099d0c25448568ce0a4193d67c",
+    "digest": "sha256:71618efeb1215a0ec080a456f804420592ea1ec5a8f2037b11f44d521dd952cb"
+  },
+  "build_digest": "sha256:80fe35ea7d0ac3308882b9749159f72fe624754b45eff2e72349a69ad57cbb74",
+  "node": "26.11.1",
+  "fixture_digest": "sha256:89d7046116226de6fc138d56660c08c0a1225c1801d8a0fbb7b3b8895fe88314",
+  "route": "synthetic-loopback-messages",
+  "authentication": "fixed-dummy-api-key-disposable-client-home",
+  "client_version": "2.1.301 (Claude Code)",
+  "client_mode": "non-bare",
+  "started_at": "2026-10-18T12:48:17.500Z",
+  "ended_at": "2026-10-18T12:48:20.591Z",
+  "source_unchanged": true,
+  "build_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 0,
+      "pilot": true,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 9299,
+      "duration_ms": 389.256739,
+      "stream": {
+        "lines": 8,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 3,
+          "user": 2,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 3,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 3,
+      "main_request_count": 3,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45853,
+          "body_bytes": 45853,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 12,
+            "tools_bytes": 27472,
+            "defer_loading_count": 1,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": false
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_search"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45093,
+          "body_bytes": 45093,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45896,
+          "body_bytes": 45896,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 8,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            },
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 2,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 1,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 8107,
+      "duration_ms": 380.470457,
+      "stream": {
+        "lines": 6,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 2,
+          "user": 1,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 2,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 2,
+      "main_request_count": 2,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 68067,
+          "body_bytes": 68067,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 67255,
+          "body_bytes": 67255,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 1,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 2,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 8107,
+      "duration_ms": 381.8827779999999,
+      "stream": {
+        "lines": 6,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 2,
+          "user": 1,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 2,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 2,
+      "main_request_count": 2,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 0,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 68067,
+          "body_bytes": 68067,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 67255,
+          "body_bytes": 67255,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 1,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 3,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 8107,
+      "duration_ms": 380.7165839999998,
+      "stream": {
+        "lines": 6,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 2,
+          "user": 1,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 2,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 2,
+      "main_request_count": 2,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 0,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 68067,
+          "body_bytes": 68067,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 67255,
+          "body_bytes": 67255,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 28,
+            "tools_bytes": 50363,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 361,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": false
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 1,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 1,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 9299,
+      "duration_ms": 385.157295,
+      "stream": {
+        "lines": 8,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 3,
+          "user": 2,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 3,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 3,
+      "main_request_count": 3,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45853,
+          "body_bytes": 45853,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 12,
+            "tools_bytes": 27472,
+            "defer_loading_count": 1,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": false
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_search"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45093,
+          "body_bytes": 45093,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45896,
+          "body_bytes": 45896,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 8,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            },
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 2,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 2,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 9299,
+      "duration_ms": 386.2117980000003,
+      "stream": {
+        "lines": 8,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 3,
+          "user": 2,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 3,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 3,
+      "main_request_count": 3,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45853,
+          "body_bytes": 45853,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 12,
+            "tools_bytes": 27472,
+            "defer_loading_count": 1,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": false
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_search"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45093,
+          "body_bytes": 45093,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45896,
+          "body_bytes": 45896,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 8,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            },
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 2,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 3,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "leftover_processes": 0,
+      "temp_removed": true,
+      "stdout_bytes": 9299,
+      "duration_ms": 386.25588100000004,
+      "stream": {
+        "lines": 8,
+        "json_errors": 0,
+        "event_types": {
+          "system": 2,
+          "assistant": 3,
+          "user": 2,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 3,
+        "mcp_statuses": [
+          "connected"
+        ]
+      },
+      "tool_calls_scripted": 1,
+      "request_count": 3,
+      "main_request_count": 3,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "sockets": {
+        "samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0
+      },
+      "config_dir_files": 2,
+      "home_files": 3,
+      "isolation_ok": true,
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45853,
+          "body_bytes": 45853,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 12,
+            "tools_bytes": 27472,
+            "defer_loading_count": 1,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": false
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_search"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45093,
+          "body_bytes": 45093,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 5,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "tool_use"
+        },
+        {
+          "path": "messages_beta",
+          "wire_bytes": 45896,
+          "body_bytes": 45896,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 8,
+          "system_bytes": 6049,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [
+            {
+              "tool": "other",
+              "is_error": false,
+              "content_kind": "array",
+              "block_count": 1,
+              "text_block_count": 0,
+              "non_text_block_count": 1,
+              "serialized_bytes": 81,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            },
+            {
+              "tool": "fixture",
+              "is_error": false,
+              "content_kind": "string",
+              "block_count": 0,
+              "text_block_count": 1,
+              "non_text_block_count": 0,
+              "serialized_bytes": 493,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false,
+              "equal_text_blocks": false
+            }
+          ],
+          "projection": {
+            "tools_count": 13,
+            "tools_bytes": 27855,
+            "defer_loading_count": 2,
+            "tool_search_tool_present": true,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": true,
+            "fixture": {
+              "entry_bytes": 382,
+              "name_bytes": 39,
+              "description_bytes": 159,
+              "input_schema_bytes": 119,
+              "keys": [
+                "defer_loading",
+                "description",
+                "input_schema",
+                "name"
+              ],
+              "other_key_count": 0,
+              "output_schema_key_present": false,
+              "schema_marker_hits_entry": 0,
+              "defer_loading": true
+            }
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": 2,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": true
+    }
+  ],
+  "summaries": [
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 0,
+      "pilot": true,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": false
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 45853,
+        "tools_count": 12,
+        "tools_bytes": 27472,
+        "defer_loading_count": 1,
+        "tool_search_tool_present": true,
+        "fixture_in_first_tools": false,
+        "fixture_defer_loading": null
+      },
+      "requests": {
+        "total": 3,
+        "main": 3,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_search",
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 1,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": true,
+        "output_schema_key_present": false,
+        "schema_marker_hits_entry": 0,
+        "schema_marker_hits_whole_tools": 0,
+        "name_bytes": 39,
+        "description_bytes": 159,
+        "input_schema_bytes": 119,
+        "entry_bytes": 361,
+        "keys": [
+          "description",
+          "input_schema",
+          "name"
+        ],
+        "other_key_count": 0
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 68067,
+        "tools_count": 28,
+        "tools_bytes": 50363,
+        "defer_loading_count": 0,
+        "tool_search_tool_present": false,
+        "fixture_in_first_tools": true,
+        "fixture_defer_loading": false
+      },
+      "requests": {
+        "total": 2,
+        "main": 2,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 2,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": true,
+        "output_schema_key_present": false,
+        "schema_marker_hits_entry": 0,
+        "schema_marker_hits_whole_tools": 0,
+        "name_bytes": 39,
+        "description_bytes": 159,
+        "input_schema_bytes": 119,
+        "entry_bytes": 361,
+        "keys": [
+          "description",
+          "input_schema",
+          "name"
+        ],
+        "other_key_count": 0
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 68067,
+        "tools_count": 28,
+        "tools_bytes": 50363,
+        "defer_loading_count": 0,
+        "tool_search_tool_present": false,
+        "fixture_in_first_tools": true,
+        "fixture_defer_loading": false
+      },
+      "requests": {
+        "total": 2,
+        "main": 2,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 0,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 3,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": true,
+        "output_schema_key_present": false,
+        "schema_marker_hits_entry": 0,
+        "schema_marker_hits_whole_tools": 0,
+        "name_bytes": 39,
+        "description_bytes": 159,
+        "input_schema_bytes": 119,
+        "entry_bytes": 361,
+        "keys": [
+          "description",
+          "input_schema",
+          "name"
+        ],
+        "other_key_count": 0
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 68067,
+        "tools_count": 28,
+        "tools_bytes": 50363,
+        "defer_loading_count": 0,
+        "tool_search_tool_present": false,
+        "fixture_in_first_tools": true,
+        "fixture_defer_loading": false
+      },
+      "requests": {
+        "total": 2,
+        "main": 2,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 0,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 1,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": false
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 45853,
+        "tools_count": 12,
+        "tools_bytes": 27472,
+        "defer_loading_count": 1,
+        "tool_search_tool_present": true,
+        "fixture_in_first_tools": false,
+        "fixture_defer_loading": null
+      },
+      "requests": {
+        "total": 3,
+        "main": 3,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_search",
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 2,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": false
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 45853,
+        "tools_count": 12,
+        "tools_bytes": 27472,
+        "defer_loading_count": 1,
+        "tool_search_tool_present": true,
+        "fixture_in_first_tools": false,
+        "fixture_defer_loading": null
+      },
+      "requests": {
+        "total": 3,
+        "main": 3,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_search",
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    },
+    {
+      "scenario": "normal",
+      "tool_search": "true",
+      "repetition": 3,
+      "pilot": false,
+      "client_mode": "non-bare",
+      "technical_pass": true,
+      "isolation_ok": true,
+      "q1": {
+        "fixture_tool_present": false
+      },
+      "q2": {
+        "marker_hits": 1,
+        "error_marker_hits": 0,
+        "is_error": false,
+        "content_kind": "string",
+        "block_count": 0,
+        "text_block_count": 1,
+        "serialized_bytes": 493,
+        "structured_key_present": false,
+        "equal_text_blocks": false,
+        "server_representations": "content_text_equals_structured_json_by_fixture_construction"
+      },
+      "q3": {
+        "first_request_body_bytes": 45853,
+        "tools_count": 12,
+        "tools_bytes": 27472,
+        "defer_loading_count": 1,
+        "tool_search_tool_present": true,
+        "fixture_in_first_tools": false,
+        "fixture_defer_loading": null
+      },
+      "requests": {
+        "total": 3,
+        "main": 3,
+        "auxiliary": 0,
+        "classes": [
+          null,
+          null,
+          null
+        ],
+        "paths": [
+          "messages_beta",
+          "messages_beta",
+          "messages_beta"
+        ],
+        "scripted": [
+          "tool_search",
+          "tool_use",
+          "text"
+        ],
+        "any_authorization_header": false,
+        "all_dummy_key": true,
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected_http": 0
+      },
+      "isolation": {
+        "socket_samples": 5,
+        "loopback_connections_seen": 1,
+        "non_loopback_connections_seen": 0,
+        "config_dir_files": 2,
+        "home_files": 3
+      }
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "metric_semantics": {
+    "bytes": "direct-observation-of-serialized-utf8",
+    "marker_hits": "occurrences-in-tool_result-content-serialization",
+    "request_bytes": "whole-http-json-body-not-token-usage",
+    "model_usage": "unknown-no-model-executed",
+    "money": "unknown-no-meter-or-tariff",
+    "tool_search": "ENABLE_TOOL_SEARCH-env-forced-on-synthetic-route"
+  },
+  "harness_status": "PASS"
+}
