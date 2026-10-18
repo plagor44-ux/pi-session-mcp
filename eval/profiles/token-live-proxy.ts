@@ -309,10 +309,12 @@ export async function runTokenProxy(environment: NodeJS.ProcessEnv = process.env
   process.stdin.on("error", () => { meter.integrityPassed = false; stopForFailure(); });
   child.stdout.on("error", () => { meter.integrityPassed = false; });
   process.stdout.on("error", () => { meter.integrityPassed = false; stopForFailure(); });
-  // The Codex CLI routinely signals its MCP child during ordinary transport shutdown.
+  // Codex 0.162.0 ends an ordinary run by sending SIGTERM to its MCP child without
+  // closing stdin first. Forward that as stdin EOF so the real server takes its
+  // graceful exit-0 path; the bounded escalation below still signals a stuck server.
   // Controller timeout/cancellation is classified by the owning process supervisor;
   // a signal alone does not imply that framed bytes were lost or mutated.
-  const onSignal = () => { stopForFailure(); };
+  const onSignal = () => { process.stdin.pause(); meter.flush("request", bytes => child.stdin.write(bytes)); child.stdin.end(); inputEndedResolve(); };
   process.once("SIGTERM", onSignal); process.once("SIGINT", onSignal);
   const serverExitedBeforeInput = await Promise.race([exited.then(() => true), inputEnded.then(() => false)]);
   if (serverExitedBeforeInput) process.stdin.pause();
