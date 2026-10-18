@@ -9,9 +9,10 @@ import { runLive } from "./runner.js";
 import { measureFootprint } from "./token-footprint.js";
 import { footprintPlan } from "./token-footprint-plan.js";
 import { measureClientProjection } from "./token-client-projection.js";
+import { measureClaudeProjection } from "./token-claude-projection.js";
 
 export function parseArgs(args:string[]) {
-  const modes=["--plan","--offline","--live","--footprint-offline","--footprint-plan","--footprint-live","--footprint-client-offline"];
+  const modes=["--plan","--offline","--live","--footprint-offline","--footprint-plan","--footprint-live","--footprint-client-offline","--footprint-claude-offline"];
   const mode=args.filter(x=>modes.includes(x));
   if(mode.length>1)throw new Error("choose_one_mode");
   const options:Record<string,string>={};
@@ -45,6 +46,11 @@ async function main() {
   });
   if(mode==="--footprint-client-offline"){
     const result=await measureClientProjection(root,process.env.PI_PROFILE_EVAL_BUILD??join(root,".profile-eval"),output);
+    process.stdout.write(JSON.stringify({harness_status:result.harness_status,client_attempts:result.rows.length,external_provider_requests_forwarded:0})+"\n");
+    if(result.harness_status!=="PASS")process.exitCode=1;return;
+  }
+  if(mode==="--footprint-claude-offline"){
+    const result=await measureClaudeProjection(root,process.env.PI_PROFILE_EVAL_BUILD??join(root,".profile-eval"),output);
     process.stdout.write(JSON.stringify({harness_status:result.harness_status,client_attempts:result.rows.length,external_provider_requests_forwarded:0})+"\n");
     if(result.harness_status!=="PASS")process.exitCode=1;return;
   }

@@ -38,7 +38,7 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 ## 4. Keep a ledger
 
-Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status. Update it after every tool call. Decide the time budget per task when you start it. A cap on concurrent sessions and per-task budgets are your own policy for this run; the server enforces neither. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
+Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status, and once the turn is terminal its `assistantText` and `truncated`. Update it after every tool call. Decide the time budget per task and one fixed cleanup and observation budget (see section 9) when you start the run. A cap on concurrent sessions and per-task budgets are your own policy for this run; the server enforces neither. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
 
 ## 5. Start in parallel, wait on the first
 
@@ -50,13 +50,15 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 ## 6. Poll with pauses
 
 - Poll `pi_turn_get` with `sessionId` and `turnId`. There is no wait tool.
-- Pause between polls (several seconds, longer for long tasks). Do not hammer.
-- Cycle over all running tasks in the ledger. Handle whichever finishes first, then continue.
+- Cadence: first poll about 10 s after the prompt, then every 15 to 30 s, matched to the task budget: the short end for short budgets, the long end for long ones. Do not poll faster.
+- Poll only tasks that are still running in the ledger. Cycle over them and handle whichever finishes first, then continue.
 - Stop waiting on a task when its time budget is spent. Then abort it (see section 9).
+- Cost observation, specific to one client and route: in the measured Codex route (M1 pilot, 2026-10-18) every controller tool call was a new model request that re-sent the accumulated controller context, so fewer calls is the main lever there. This is not a universal billing promise for other clients or routes.
 
 ## 7. Interpret progress and results
 
 - `updatedAt` on a running turn is the time of the last observed public SDK activity: assistant message start, streaming updates and end, and tool execution start, update and end. Streaming is activity, not evidence of finished or useful work. Work without a public event stays invisible, for example inside an extension's own agent loop or in a long tool call without updates. A stamp that has not moved is therefore no proof of a hang. Judge by your time budget and by the workspace.
+- `completed`, `failed` and `aborted` are terminal and immutable. On the first terminal read, record `state`, `assistantText` and `truncated` in the ledger. In normal operation do not fetch that turn again. A deliberate re-fetch for a contract or invariance check is a separate exception; label it as such.
 - `completed` is a technical state: the turn ended and returned text. It does not mean the task succeeded. Read `assistantText` and check `truncated`.
 - Never accept a worker report as proof. A worker saying the tests pass is a claim, not evidence.
 
@@ -78,10 +80,7 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - `aborted` means the turn stopped. Look at what the workspace contains before reusing it.
 - `pi_session_abort` returns `abort_failed` if the abort was rejected. The turn may still be running. Poll it.
 - `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Decide an observation and cleanup budget before you abort, for example a fixed number of polling rounds within a few minutes. Poll `pi_turn_get` until the turn is terminal or the budget is spent, then close the session with `pi_session_close`. If the close fails or does not finish, stop using that workspace, treat it as unverified and report it. Never wait without a bound.
-- Classify every `pi_session_start` error by its `code` alone. Never decide by the message, provider text or any other free text, and never infer a cause. Each code below is in exactly one class:
-  - Operator needed (do not retry and do not switch to another profile; report the code and stop that task): `unknown_execution_profile`, `unknown_workspace`, `unknown_provider`, `unknown_model`, `model_unavailable`, `thinking_level_unavailable`, `local_authentication_missing`, `execution_selection_mismatch`, `skill_load_failed`, `extension_not_installed`, `extension_version_mismatch`, `extension_tool_conflict`, `external_mcp_no_tools`, `external_mcp_grant_tool_missing`, `external_mcp_activation_mismatch`, `server_stopping`. The last code means the server is shutting down: a new server process is needed, not a retry.
-  - Transient (retry at most once after a pause, then report): `external_mcp_unavailable` (an external MCP server that cannot connect, times out or breaks the protocol), `extension_load_failed` (an invalid package, but also a start timeout), `local_authentication_unavailable` (local authentication could not be resolved within its deadline).
-  - Unknown (report the code; at most one retry in a fresh session): `pi_session_creation_failed`. Any code not listed above is also unknown.
+- If `pi_session_start` fails, classify the error by its `code` alone. Never decide by the message, provider text or any other free text, and never infer a cause. Read [references/start-errors.md](references/start-errors.md) only now; it lists each known code in exactly one class. Any code not listed there is Unknown. Until the code is classified, do not retry and do not switch profiles. If the reference cannot be read, do not retry at all: report the code and stop that task. Always report the code.
 - If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`invalid_execution_profile_config` or `invalid_thinking_level`). No MCP server is available; the operator must fix the configuration.
 
 ## 10. Close every session

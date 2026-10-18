@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 const read = (relative: string): string => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 const contracts = read("../docs/tool-contracts.md");
 const skill = read("../skills/pi-session-orchestration/SKILL.md");
+const reference = read("../skills/pi-session-orchestration/references/start-errors.md");
 
 const CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
 const CLASSES = ["Operator needed", "Transient", "Unknown"] as const;
@@ -40,7 +41,7 @@ const orchestration = section(skill, /^## 9\. /, "skill section 9");
 const classBullets = (): Record<StartClass, string[]> => {
   const result = {} as Record<StartClass, string[]>;
   for (const name of CLASSES) {
-    const bullets = orchestration.split("\n").filter((line) => line.startsWith(`  - ${name} (`));
+    const bullets = reference.split("\n").filter((line) => line.startsWith(`- ${name} (`));
     if (bullets.length !== 1) throw new Error(`expected one class bullet for ${name}, found ${bullets.length}`);
     result[name] = backticked(bullets[0]!);
   }
@@ -85,13 +86,37 @@ describe("orchestration skill start-error classification", () => {
   });
 
   it("decides by the code alone and treats unlisted codes as unknown", () => {
+    expect(reference).toMatch(/by its `code` alone/);
+    expect(reference).toMatch(/Never decide by the message, provider text or any other free text/);
+    expect(reference).toMatch(/Any code not listed above is also unknown/);
+  });
+
+  it("keeps the code-only, Unknown and conservative rules and the reference link in SKILL.md", () => {
     expect(orchestration).toMatch(/by its `code` alone/);
     expect(orchestration).toMatch(/Never decide by the message, provider text or any other free text/);
-    expect(orchestration).toMatch(/Any code not listed above is also unknown/);
+    expect(orchestration).toMatch(/Any code not listed there is Unknown/);
+    expect(orchestration).toMatch(/\]\(references\/start-errors\.md\)/);
+    expect(orchestration).toMatch(/Until the code is classified, do not retry and do not switch profiles\./);
+    expect(orchestration).toMatch(/If the reference cannot be read, do not retry at all: report the code and stop that task\./);
+  });
+
+  it("keeps the classification out of SKILL.md so that it loads on demand", () => {
+    for (const name of CLASSES) expect(skill, name).not.toContain(`- ${name} (`);
+    for (const name of CLASSES) for (const code of classes[name]) expect(backticked(skill), code).not.toContain(code);
+  });
+
+  it("states the terminal-turn, cadence and cost rules", () => {
+    expect(skill).toMatch(/`completed`, `failed` and `aborted` are terminal and immutable/);
+    expect(skill).toMatch(/record `state`, `assistantText` and `truncated` in the ledger/);
+    expect(skill).toMatch(/do not fetch that turn again/);
+    expect(skill).toMatch(/first poll about 10 s after the prompt, then every 15 to 30 s/);
+    expect(skill).toMatch(/Poll only tasks that are still running/);
+    expect(skill).toMatch(/M1 pilot, 2026-10-18/);
+    expect(skill).toMatch(/not a universal billing promise/);
   });
 
   it("states the action of each class", () => {
-    const bullet = (name: StartClass) => orchestration.split("\n").find((line) => line.startsWith(`  - ${name} (`))!;
+    const bullet = (name: StartClass) => reference.split("\n").find((line) => line.startsWith(`- ${name} (`))!;
     expect(bullet("Operator needed")).toMatch(/do not retry and do not switch to another profile/);
     expect(bullet("Transient")).toMatch(/retry at most once after a pause/);
     expect(bullet("Unknown")).toMatch(/at most one retry in a fresh session/);

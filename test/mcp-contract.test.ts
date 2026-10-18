@@ -82,6 +82,21 @@ describe("MCP contracts", () => {
     for (const name of ["pi_session_prompt", "pi_session_abort", "pi_session_close"]) expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it("publishes short behavior hints in the tool descriptions", async () => {
+    const connected = await client();
+    const descriptions = Object.fromEntries((await connected.client.listTools()).tools.map(({ name, description }) => [name, description]));
+    expect(descriptions).toEqual({
+      pi_capabilities_get: "List configured workspace and execution-profile aliases. This reports configured intent, not provider or runtime availability. Call once at the start of a run.",
+      pi_session_start: "Start a managed embedded Pi session for a configured workspace alias.",
+      pi_session_list: "List local Pi sessions and their state.",
+      pi_session_get: "Get one local Pi session by ID.",
+      pi_session_prompt: "Accept a prompt after Pi preflight and run the turn in the background. Returns a running turn at once; poll pi_turn_get with pauses.",
+      pi_session_abort: "Abort a running Pi turn; idle sessions are unchanged.",
+      pi_session_close: "Abort if needed, dispose, and remove a Pi session. Idempotent; close every started session.",
+      pi_turn_get: "Get the normalized observable result of a Pi turn. completed, failed and aborted are terminal and never change: read a terminal turn once. completed is not task success.",
+    });
+  });
+
   it("discovers only deterministic configured capabilities without runtime calls", async () => {
     const connected = await client({}, {
       workspaces: new Map([
@@ -283,6 +298,56 @@ describe("MCP contracts", () => {
     const unknownTurn = await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId: turnSentinel } });
     expect(unknownTurn).toMatchObject({ isError: true, structuredContent: { error: { code: "unknown_turn", message: "Unknown turn" } } });
     expect(JSON.stringify(unknownTurn)).not.toContain(turnSentinel);
+  });
+
+  it("keeps strict UUID input validation while the input schemas omit the repeated pattern", async () => {
+    const connected = await client();
+    const tools = (await connected.client.listTools()).tools;
+    const fields: Array<[string, string]> = [
+      ["pi_session_get", "sessionId"], ["pi_session_prompt", "sessionId"], ["pi_session_abort", "sessionId"],
+      ["pi_session_close", "sessionId"], ["pi_turn_get", "sessionId"], ["pi_turn_get", "turnId"],
+    ];
+    for (const [tool, field] of fields) {
+      const properties = (tools.find(({ name }) => name === tool)?.inputSchema as { properties: Record<string, unknown> }).properties;
+      expect(properties[field]).toEqual({ type: "string", format: "uuid" });
+    }
+
+    const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } });
+    const sessionId = (started.structuredContent as { session: { id: string } }).session.id;
+    const prompted = await connected.client.callTool({ name: "pi_session_prompt", arguments: { sessionId, prompt: "pin" } });
+    const turnId = (prompted.structuredContent as { turn: { turnId: string } }).turn.turnId;
+    const observe = async () => JSON.stringify([
+      (await connected.client.callTool({ name: "pi_session_list", arguments: {} })).structuredContent,
+      (await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId } })).structuredContent,
+    ]);
+    const before = await observe();
+
+    const unknown = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const accepted = [unknown, unknown.toUpperCase(), "00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff"];
+    const rejected: unknown[] = [
+      "", "not-a-uuid", unknown.slice(0, -1), `${unknown}a`, unknown.replaceAll("-", ""), `${unknown}\n`,
+      "aaaaaaaa-aaaa-0aaa-8aaa-aaaaaaaaaaaa", "aaaaaaaa-aaaa-9aaa-8aaa-aaaaaaaaaaaa", "aaaaaaaa-aaaa-4aaa-7aaa-aaaaaaaaaaaa",
+      "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF", 1, null, true, {}, [unknown],
+    ];
+    for (const [tool, field] of fields) {
+      const call = (value: unknown) => connected.client.callTool({
+        name: tool,
+        arguments: { sessionId: field === "turnId" ? sessionId : unknown, ...(tool === "pi_turn_get" ? { turnId: unknown } : {}), ...(tool === "pi_session_prompt" ? { prompt: "p" } : {}), [field]: value },
+      });
+      for (const value of accepted) {
+        // Valid UUIDs reach the registry and yield its domain error, never an input-validation error.
+        expect(await call(value), `${tool}.${field} ${String(value)}`).toMatchObject({ isError: true, structuredContent: { ok: false, error: { code: field === "turnId" ? "unknown_turn" : "unknown_session" } } });
+      }
+      for (const value of rejected) {
+        const response = await call(value);
+        expect(response, `${tool}.${field} ${JSON.stringify(value)}`).toMatchObject({ isError: true });
+        expect(response.structuredContent).toBeUndefined();
+        expect(JSON.stringify(response.content)).toContain(`Input validation error: Invalid arguments for tool ${tool}: ${field}: `);
+      }
+    }
+    expect(await observe()).toBe(before);
+    expect(connected.adapter.handles).toHaveLength(1);
+    expect(connected.adapter.handles[0]!.aborted).toBe(0);
   });
 
   it("resolves default and explicit execution aliases server-side", async () => {

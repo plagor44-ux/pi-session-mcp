@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
-import { chmod, lstat, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { isRecord } from "../src/setup-ownership.js";
 import { MemoryOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
@@ -54,6 +55,17 @@ describe("setup controller skills", () => {
     expectSkill(await f.run("remove", [target]), "skill_removed", "ok", target);
     expect(existsSync(slot)).toBe(false); expect(await f.ownership.get(skillTarget(target, f.cwd))).toBeUndefined();
     expect(await readFile(sentinel, "utf8")).toBe("foreign");
+  });
+  it("installs the shipped controller skill with its start-error reference and verifies it", async () => {
+    const f = await fixture(); const slot = f.slot(targets[0]!);
+    const shipped = fileURLToPath(new URL("../skills/pi-session-orchestration", import.meta.url));
+    await rm(f.source, { recursive: true }); await cp(shipped, f.source, { recursive: true });
+    expectSkill(await f.run("apply"), "skill_installed", "ok");
+    for (const path of ["SKILL.md", "references/start-errors.md"]) expect(await readFile(join(slot, path))).toEqual(await readFile(join(shipped, path)));
+    expect((await readSkillTree(slot, { hidden: "reject" })).fingerprint).toBe((await readSkillTree(shipped)).fingerprint);
+    expectSkill(await f.run("verify"), "skill_verified", "ok");
+    await writeFile(join(slot, "references", "start-errors.md"), "changed");
+    expectSkill(await f.run("verify"), "skill_not_equivalent", "failed");
   });
   it("supports trusted home/project ancestors reached through system-style symlinks", async () => {
     const f = await fixture(true);
