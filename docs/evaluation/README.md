@@ -22,7 +22,11 @@ usage for its one Codex route (171,034 / 219,683 / 396,699 cumulative input
 tokens for L1 / L2 / L3, mostly cached). Worker usage remains unknown, and so do
 token usage and cost of the historical profile screenings below. A dedicated development
 executor preserves the existing gate and adds exact schedule approval. This is
-not a new live wave or production optimization.
+not a new live wave or production optimization. Sprint 5 added
+[decision inputs](s5-decision-inputs-2026-10-18/README.md) (including a
+provider-free Claude Code projection probe),
+[tool-definition measurements](tool-definitions-2026-10-18/README.md) and an
+unapproved [A/B proposal](m1-ab-proposal-2026-10-18/README.md).
 
 | Evidence | Observed result | Interpretation |
 |---|---|---|

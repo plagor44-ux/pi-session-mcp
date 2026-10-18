@@ -56,7 +56,7 @@ Session and turn IDs were kept only transiently.
 | E1 | #79 | agy `gemini-3.8-flash-high`, file-read tools only | main checkout, read-only | decision brief | delivered, verified by integrator | — |
 | E2 | #92 | Pi `review`, read-only | alias `pi-session-mcp` | SDK usage semantics | delivered; rechecked against 1.2.0 | session closed |
 | E3 | #91 | Claude researcher (agy web route blocked) | read-only | decision inputs | delivered | — |
-| E4 | #89 | Claude researcher, then Claude implementer | clone `e` | provider-free Claude projection probe | see status below | — |
+| E4 | #89 | Claude researcher, then Claude implementer | clone `e` | provider-free Claude projection probe | partial: q1/q2 answered, q3 unmeasurable, q4 not measured | typecheck, 2 files / 9 tests, eval:schemas --check; probe attempt 1 inconclusive, attempt 2 PASS (10 runs) |
 | F | #93 | integrator | integration clone | A/B proposal | delivered, unapproved | — |
 | G | — | integrator | integration clone | roadmap, sprint, evaluation summaries, CHANGELOG, ADR facts, acceptance | in progress | — |
 
@@ -91,7 +91,14 @@ Session and turn IDs were kept only transiently.
 - **#79 open maintainer decision.** [Decision brief](../reviews/2026-10-18-adr-0008-decision-brief.md);
   ADR 0008 facts updated (R10/R11 passed for Claude Code, macOS containment
   unproven, #81 delivered); status stays Proposed.
-- **#89** see the status below.
+- **#89 partially delivered.** A provider-free Claude Code probe uses the
+  documented gateway route (`ANTHROPIC_BASE_URL` to a loopback fake, dummy key,
+  fresh config, `--bare`). On that route: output schema not observed; one
+  tool-result representation observed; deferred tool search unmeasurable
+  (bare mode has no tool search); per-case controller input not measured.
+  Claude Code's `server/discover` request breaks the M1 frame proxy, a
+  prerequisite for any later Claude M1 plan. See the
+  [probe](../evaluation/s5-decision-inputs-2026-10-18/claude-projection/README.md).
 - **#91 decision inputs delivered** ([note](../evaluation/s5-decision-inputs-2026-10-18/bounded-wait.md));
   decision deferred until the A/B. No `waitMs`, no `pi_turn_wait`.
 - **#92 research delivered** ([note](../evaluation/s5-decision-inputs-2026-10-18/worker-usage.md));
