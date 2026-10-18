@@ -1,0 +1,128 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { ConfigError, loadConfig } from "../src/config.js";
+import {
+  codingAllowed, EXECUTION_MODES_FILE, executionModesPath, executionModesSchema,
+  loadExecutionModes, resolveExecutionModes,
+} from "../src/execution-modes.js";
+import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+
+afterAll(removeTemporaryRoots);
+
+const aliases = new Set(["a", "b"]);
+const profiles = new Map<string, { readonly permissionProfile: "read-only" | "coding"; readonly provider: string }>([
+  ["code", { permissionProfile: "coding", provider: "example-provider" }],
+  ["review", { permissionProfile: "read-only", provider: "example-provider" }],
+  ["cursor-code", { permissionProfile: "coding", provider: "cursor" }],
+]);
+const modes = (workspaces: Record<string, unknown>) => ({ schemaVersion: 1, workspaces });
+
+function expectInvalid(raw: unknown): void {
+  let thrown: unknown;
+  try { resolveExecutionModes(raw, aliases, profiles); } catch (error) { thrown = error; }
+  expect(thrown).toBeInstanceOf(ConfigError);
+  expect(thrown).toMatchObject({ code: "invalid_execution_modes", message: "Execution modes file is invalid" });
+  expect(JSON.stringify(thrown)).not.toContain("SECRET_SENTINEL");
+  expect(String(thrown)).not.toContain("SECRET_SENTINEL");
+}
+
+describe("resolveExecutionModes", () => {
+  it("fills every missing alias with unset", () => {
+    expect([...resolveExecutionModes(modes({}), aliases, profiles)]).toEqual([
+      ["a", { mode: "unset" }], ["b", { mode: "unset" }],
+    ]);
+  });
+
+  it("resolves container defaults", () => {
+    const loaded = resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"] } }), aliases, profiles);
+    expect(loaded.get("a")).toEqual({ mode: "container", container: {
+      writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta",
+    } });
+    expect(loaded.get("b")).toEqual({ mode: "unset" });
+  });
+
+  it("preserves explicit container settings and snapshots them immutably", () => {
+    const raw = modes({ a: { mode: "container", profiles: ["code"], writers: 16, lifecycle: "ephemeral", image: "custom-image", network: "none" } });
+    const loaded = resolveExecutionModes(raw, aliases, profiles);
+    const entry = loaded.get("a")!;
+    expect(entry.container).toEqual({ writers: 16, lifecycle: "ephemeral", profiles: ["code"], image: "custom-image", network: "none" });
+    expect(Object.isFrozen(entry)).toBe(true);
+    expect(Object.isFrozen(entry.container)).toBe(true);
+    expect(Object.isFrozen(entry.container?.profiles)).toBe(true);
+    expect(() => (loaded as Map<string, unknown>).set("a", {})).toThrow();
+  });
+
+  it("accepts acknowledged host and read-only modes", () => {
+    expect([...resolveExecutionModes(modes({ a: { mode: "host", acceptHostWrites: true }, b: { mode: "read-only" } }), aliases, profiles)])
+      .toEqual([["a", { mode: "host" }], ["b", { mode: "read-only" }]]);
+  });
+
+  it.each([
+    ["unknown alias", modes({ SECRET_SENTINEL: { mode: "read-only" } })],
+    ["missing host acknowledgment", modes({ a: { mode: "host" } })],
+    ["false host acknowledgment", modes({ a: { mode: "host", acceptHostWrites: false } })],
+    ["missing profiles", modes({ a: { mode: "container" } })],
+    ["empty profiles", modes({ a: { mode: "container", profiles: [] } })],
+    ["unknown profile", modes({ a: { mode: "container", profiles: ["SECRET_SENTINEL"] } })],
+    ["read-only profile", modes({ a: { mode: "container", profiles: ["review"] } })],
+    ["cursor profile", modes({ a: { mode: "container", profiles: ["cursor-code"] } })],
+    ...[0, 17, 1.5].map((writers) => [`writers ${writers}`, modes({ a: { mode: "container", profiles: ["code"], writers } })] as const),
+    ["unknown root key", { ...modes({}), SECRET_SENTINEL: true }],
+    ["unknown container key", modes({ a: { mode: "container", profiles: ["code"], SECRET_SENTINEL: true } })],
+    ["unknown host key", modes({ a: { mode: "host", acceptHostWrites: true, SECRET_SENTINEL: true } })],
+    ["unknown read-only key", modes({ a: { mode: "read-only", SECRET_SENTINEL: true } })],
+    ["unsupported schema version", { schemaVersion: 2, workspaces: {} }],
+  ] satisfies ReadonlyArray<readonly [string, unknown]>)("rejects %s with a sanitized ConfigError", (_name, raw) => { expectInvalid(raw); });
+
+  it("exports the strict file schema with defaults", () => {
+    expect(executionModesSchema.parse(modes({ a: { mode: "container", profiles: ["code"] } })).workspaces.a)
+      .toMatchObject({ writers: 1, lifecycle: "persistent", image: "node", network: "pasta" });
+  });
+});
+
+describe("loadExecutionModes", () => {
+  it("uses the configuration directory and a stable filename", () => {
+    expect(EXECUTION_MODES_FILE).toBe("execution-modes.json");
+    expect(executionModesPath(join("config dir", "custom.json"))).toBe(join("config dir", "execution-modes.json"));
+  });
+
+  it("defaults to unset when the file is absent", async () => {
+    const root = await temporaryRoot("pi-session-mcp-modes-");
+    expect([...await loadExecutionModes(join(root, "config.json"), aliases, profiles)])
+      .toEqual([["a", { mode: "unset" }], ["b", { mode: "unset" }]]);
+  });
+
+  it("rejects invalid JSON with a sanitized ConfigError", async () => {
+    const root = await temporaryRoot("pi-session-mcp-modes-");
+    await writeFile(join(root, EXECUTION_MODES_FILE), "SECRET_SENTINEL invalid JSON");
+    await expect(loadExecutionModes(join(root, "config.json"), aliases, profiles))
+      .rejects.toMatchObject({ name: "ConfigError", code: "invalid_execution_modes", message: "Execution modes file is invalid" });
+  });
+
+  it("does not treat an unreadable file as absent", async () => {
+    const root = await temporaryRoot("pi-session-mcp-modes-");
+    await mkdir(join(root, EXECUTION_MODES_FILE));
+    await expect(loadExecutionModes(join(root, "config.json"), aliases, profiles))
+      .rejects.toMatchObject({ code: "invalid_execution_modes" });
+  });
+
+  it("attaches validated modes when loading configuration", async () => {
+    const root = await temporaryRoot("pi-session-mcp-modes-");
+    const path = join(root, "config.json");
+    await writeFile(path, JSON.stringify({ workspaces: { a: "." }, executionProfiles: {
+      review: { default: true, permissionProfile: "read-only", provider: "example-provider", model: "model", thinkingLevel: "off" },
+      code: { default: false, permissionProfile: "coding", provider: "example-provider", model: "model", thinkingLevel: "off" },
+    } }));
+    await writeFile(join(root, EXECUTION_MODES_FILE), JSON.stringify(modes({ a: { mode: "container", profiles: ["code"] } })));
+    expect((await loadConfig(path)).workspaceModes.get("a")?.mode).toBe("container");
+    await writeFile(join(root, EXECUTION_MODES_FILE), JSON.stringify(modes({ a: { mode: "container", profiles: ["review"] } })));
+    await expect(loadConfig(path)).rejects.toMatchObject({ code: "invalid_execution_modes" });
+  });
+});
+
+it.each([
+  ["unset", true], ["host", true], ["container", false], ["read-only", false],
+] as const)("codingAllowed(%s) is %s", (mode, allowed) => {
+  expect(codingAllowed({ mode })).toBe(allowed);
+});

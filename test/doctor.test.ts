@@ -29,6 +29,7 @@ const TEST_CONFIGURATION: ConfigurationMetadata = {
 
 const healthyConfig = async () => ({
   workspaces: new Map([["repo", "/hidden/workspace"]]),
+  workspaceModes: new Map([["repo", { mode: "unset" as const }]]),
   executionProfiles: new Map([["safe", {
     alias: "safe",
     default: true,
