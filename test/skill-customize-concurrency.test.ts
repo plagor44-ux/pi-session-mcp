@@ -133,7 +133,7 @@ describe.skipIf(!linux)("skill customization across processes", () => {
     await first.result();
     await second.result();
     const config = async () => ({
-      workspaces: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "none",
+      workspaces: new Map(), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "none",
       configuration: { fingerprint: `sha256:${"0".repeat(64)}` as `sha256:${string}`, reloadPolicy: "restart-required" as const },
       skillOverrideDirectory: fx.override,
     });

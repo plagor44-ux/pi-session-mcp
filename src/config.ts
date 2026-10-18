@@ -13,6 +13,7 @@ import {
   type ThinkingLevel,
 } from "./execution-profile.js";
 import { builtinSkillPath, skillOverrideDirectory } from "./skill-library.js";
+import { loadExecutionModes, type WorkspaceModeEntry } from "./execution-modes.js";
 
 const alias = z.string().regex(ALIAS_PATTERN);
 const permissionProfile = z.enum(["read-only", "coding"] satisfies [PermissionProfile, PermissionProfile]);
@@ -40,12 +41,13 @@ const profileSchema = z.object({
   }
 });
 
-export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level";
+export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level" | "invalid_execution_modes";
 
 const CONFIG_ERROR_MESSAGES: Record<ConfigErrorCode, string> = {
   config_path_required: "Configuration path is required",
   invalid_execution_profile_config: "Execution profile configuration is invalid",
   invalid_thinking_level: "Execution profile thinking level is invalid",
+  invalid_execution_modes: "Execution modes file is invalid",
 };
 
 export class ConfigError extends Error {
@@ -90,6 +92,7 @@ export interface ConfigurationMetadata {
 
 export interface AppConfig {
   readonly workspaces: ReadonlyMap<string, string>;
+  readonly workspaceModes: ReadonlyMap<string, WorkspaceModeEntry>;
   readonly executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>;
   readonly defaultExecutionProfile: string;
   readonly configuration: ConfigurationMetadata;
@@ -156,7 +159,8 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       ...(selection === undefined ? {} : { skills: selection }),
     })] as const;
   }));
+  const workspaceModes = await loadExecutionModes(absoluteConfig, new Set(workspaces.keys()), executionProfiles);
   const defaultEntry = [...executionProfiles].find(([, profile]) => profile.default);
   if (!defaultEntry) throw new Error("Execution profile configuration is invalid");
-  return { workspaces, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, skillOverrideDirectory: overrideDirectory };
+  return { workspaces, workspaceModes, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, skillOverrideDirectory: overrideDirectory };
 }
