@@ -56,7 +56,7 @@ Session and turn IDs were kept only transiently.
 | E1 | #79 | agy `gemini-3.8-flash-high`, file-read tools only | main checkout, read-only | decision brief | delivered, verified by integrator | — |
 | E2 | #92 | Pi `review`, read-only | alias `pi-session-mcp` | SDK usage semantics | delivered; rechecked against 1.2.0 | session closed |
 | E3 | #91 | Claude researcher (agy web route blocked) | read-only | decision inputs | delivered | — |
-| E4 | #89 | Claude researcher, then Claude implementer | clone `e` | provider-free Claude projection probe | partial: q1/q2 answered, q3 unmeasurable, q4 not measured | typecheck, 2 files / 9 tests, eval:schemas --check; probe attempt 1 inconclusive, attempt 2 PASS (10 runs) |
+| E4 | #89 | Claude researcher, then Claude implementer | clone `e` | provider-free Claude projection probe | partial: q1/q2 answered, q3 unmeasurable, q4 not measured | typecheck, 2 files / 9 tests, eval:schemas --check; probe attempt 1 inconclusive, attempt 2 PASS (base), attempt 3 PASS (Sprint 5 head, after review fixes) |
 | F | #93 | integrator | integration clone | A/B proposal | delivered, unapproved | — |
 | G | — | integrator | integration clone | roadmap, sprint, evaluation summaries, CHANGELOG, ADR facts, acceptance | in progress | — |
 
@@ -123,7 +123,11 @@ The 2,246 bytes quoted in #88/#90 were not reproduced and are bound by no
 committed evidence; the committed Codex figure of 21,412 bytes is the whole
 client tools array including Codex's own tools. The actual Codex projection
 before and after is an open measurement gate (installed 0.162.1, probe pins
-0.162.0). Live token effect of any change in this sprint: unmeasured.
+0.162.0). On the provider-free Claude Code bare route (probe attempts 2 and 3)
+the request `tools[]` went from 7,144 to 6,325 bytes (−819) and the first
+request body from 11,608 to 9,004 bytes; the 1,785-byte remainder is
+unexplained. Bytes are not tokens. Live token effect of any change in this
+sprint: unmeasured.
 
 ## Gates for later sprints
 
