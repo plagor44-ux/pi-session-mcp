@@ -8,6 +8,8 @@ import { sourceBinding, digest, hash, snapshot, ownedTemporary } from "./files.j
 import { cleanupRegisteredServer, runOwnedController } from "./token-live.js";
 import { proxyMetricsSchema } from "./token-live-proxy.js";
 
+/** Exact Codex versions this probe accepts; each result records the one that ran. */
+const SUPPORTED_CODEX_VERSIONS = ["0.162.0", "0.162.1"] as const;
 export const MARKER = "token_probe_marker_74ac", ERROR_MARKER = "unknown_workspace";
 type Scenario = "normal" | "domain-error" | "truncated";
 type ProjectedTool = "pi_capabilities_get" | "pi_session_list" | "pi_session_start" | "pi_session_prompt" | "pi_turn_get" | "pi_session_close";
@@ -40,6 +42,31 @@ export function decodedObjects(value: unknown, depth = 0): Record<string, unknow
   const v = object(value);
   return [v, ...Object.values(v).flatMap(x => decodedObjects(x, depth + 1))];
 }
+/** Bytes of the projected entries that carry the fixture's pi tools (a namespace entry or the plain entries); null when none is found. */
+export function piToolsBytes(body: unknown): number | null {
+  const tools = object(body).tools;
+  if (!Array.isArray(tools)) return null;
+  const isPi = (name: unknown) => typeof name === "string" && /pi_(capabilities_get|session_|turn_get)/.test(name);
+  const entries = tools.map(object).filter(t => (t.type === "namespace" && Array.isArray(t.tools) && t.tools.map(object).some(n => isPi(n.name))) || isPi(t.name));
+  return entries.length ? entries.reduce((sum, t) => sum + Buffer.byteLength(JSON.stringify(t)), 0) : null;
+}
+
+/** Counts of `pattern` and `format` keys inside the projected pi tool entries; null when none is found. */
+export function piSchemaKeys(body: unknown): { pattern: number; format: number } | null {
+  const tools = object(body).tools;
+  if (!Array.isArray(tools)) return null;
+  const isPi = (name: unknown) => typeof name === "string" && /pi_(capabilities_get|session_|turn_get)/.test(name);
+  const entries = tools.map(object).filter(t => (t.type === "namespace" && Array.isArray(t.tools) && t.tools.map(object).some(n => isPi(n.name))) || isPi(t.name));
+  if (!entries.length) return null;
+  const counts = { pattern: 0, format: 0 };
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (value && typeof value === "object") for (const [key, inner] of Object.entries(value)) { if (key === "pattern") counts.pattern++; if (key === "format") counts.format++; visit(inner); }
+  };
+  entries.forEach(visit);
+  return counts;
+}
+
 export function projectedTool(body: unknown, suffix: string): { name: string; namespace?: string } | undefined {
   const tools = object(body).tools;
   if (!Array.isArray(tools)) return undefined;
@@ -83,7 +110,7 @@ export function writeSyntheticResponse(response: ServerResponse, index: number, 
 async function runProjectionCase(root: string, build: string, scenario: Scenario, repetition: number, pilot: boolean) {
   const temp = await ownedTemporary(), home = join(temp.root, "home"), codexHome = join(home, "codex"), workspace = join(temp.root, "workspace");
   const control = join(temp.root, "server-control.json");
-  const requests: Array<{ bytes: number; input_bytes: number; tools_bytes: number; outputs: OutputMetric[]; newly_added_output_bytes: number; previous_response_id: boolean; authorization_present: boolean }> = [];
+  const requests: Array<{ bytes: number; input_bytes: number; tools_bytes: number; pi_tools_bytes: number | null; pi_schema_keys: { pattern: number; format: number } | null; outputs: OutputMetric[]; newly_added_output_bytes: number; previous_response_id: boolean; authorization_present: boolean }> = [];
   const seenOutputs = new Set<unknown>();
   const calls = new Map<string, { tool: ProjectedTool; ordinal: number }>();
   let invalid = false, sessionId: string | undefined, turnId: string | undefined, completedViewObserved = false, closed = false, empty = false;
@@ -115,7 +142,7 @@ async function runProjectionCase(root: string, build: string, scenario: Scenario
       for (const item of input.map(object).filter(i => i.type === "function_call_output")) {
         if (!seenOutputs.has(item.call_id)) { newly_added_output_bytes += Buffer.byteLength(JSON.stringify(item.output)); seenOutputs.add(item.call_id); }
       }
-      requests.push({ bytes, input_bytes: Buffer.byteLength(JSON.stringify(input)), tools_bytes: Buffer.byteLength(JSON.stringify(object(body).tools ?? [])), outputs, newly_added_output_bytes,
+      requests.push({ bytes, input_bytes: Buffer.byteLength(JSON.stringify(input)), tools_bytes: Buffer.byteLength(JSON.stringify(object(body).tools ?? [])), pi_tools_bytes: piToolsBytes(body), pi_schema_keys: piSchemaKeys(body), outputs, newly_added_output_bytes,
         previous_response_id: typeof object(body).previous_response_id === "string", authorization_present: request.headers.authorization !== undefined });
       for (const suffix of desired) { const tool = projectedTool(body, suffix); if (tool) names.set(suffix, tool); }
       const suffix = desired[step++];
@@ -200,14 +227,15 @@ export async function measureClientProjection(root: string, build: string, outpu
   const buildBinding = async () => digest([await snapshot(join(build, "src")), await snapshot(join(build, "eval/profiles")), await snapshot(join(build, "test")), hash(await readFile(join(build, "package.json")))]);
   const build_digest = await buildBinding();
   const version = spawnSync("codex", ["--version"], { encoding: "utf8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] });
-  if (version.status !== 0 || version.stdout.trim() !== "codex-cli 0.162.0") throw new Error("unsupported_fixture_client");
+  const client_version = version.status === 0 ? SUPPORTED_CODEX_VERSIONS.find(v => version.stdout.trim() === `codex-cli ${v}`) : undefined;
+  if (!client_version) throw new Error("unsupported_fixture_client");
   const rows = [await runProjectionCase(root, build, "normal", 0, true)];
   if (rows[0]!.passed) for (const scenario of ["normal", "domain-error", "truncated"] as const) for (let repetition = 1; repetition <= 5; repetition++) rows.push(await runProjectionCase(root, build, scenario, repetition, false));
   const source_unchanged = digest(binding) === digest(await sourceBinding(root));
   const build_unchanged = build_digest === await buildBinding();
   const result = { schema_version: "token-client-projection-1", binding, build_digest, node: process.versions.node,
     fixture_digest: hash(await readFile(join(build, "eval/profiles/token-projection-server.js"))),
-    route: "synthetic-loopback-responses", authentication: "disabled-empty-disposable-client-home", client_version: "0.162.0", started_at, ended_at: new Date().toISOString(),
+    route: "synthetic-loopback-responses", authentication: "disabled-empty-disposable-client-home", client_version, started_at, ended_at: new Date().toISOString(),
     source_unchanged, build_unchanged, rows, model_usage: null, money: null, real_cloud_projection: null, os_egress_containment: null,
     metric_semantics: { bytes: "direct-observation-of-serialized-utf8", marker_hits: "occurrences-in-selected-function-output", newly_added_output_bytes: "first-observed-call-id-output-serialization", request_bytes: "whole-http-json-body-not-token-usage", model_usage: "unknown-no-model-executed", money: "unknown-no-meter-or-tariff" },
     harness_status: rows.length === 16 && rows.every(r => r.passed) && source_unchanged && build_unchanged ? "PASS" : "INCONCLUSIVE" };
