@@ -20,8 +20,8 @@
   profile. Credential checks run every 60 seconds, with host OAuth warmup only
   within 2 minutes of expiry, then a boundary copy. Provider credentials remain
   in the boundary and pasta networking is not limited. The controller skill
-  teaches finish before reuse; operator docs cover migration and the Go-cache
-  CLI limitation. No release or new live acceptance is claimed.
+  teaches finish before reuse; operator docs cover migration and selecting
+  the writer toolchain cache with `--cache none|go`. No release or new live acceptance is claimed.
 
 - Added: Doctor warning `workspace_gitfile` when a configured workspace has a
   `.git` gitfile (`gitdir:` pointer) and at least one execution profile uses the

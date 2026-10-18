@@ -128,13 +128,11 @@ For hand-made **`psm-alpha` and `go-app-alpha`**:
    `pi-session-mcp-setup --repo <alias> --mode container --profiles <coding-aliases> --apply`.
 5. Reconnect/restart controllers and verify the new alias-derived writer names.
 
-The Go-toolchain writer uses an operator-supplied local **image ID** plus
-`cache: "go"` in container settings. The CLI exposes `--image`, but **no
-`--cache` flag**: its mode requests rebuild options with cache defaulting to
-none, so editing JSON before CLI apply does not preserve a Go cache setting.
-Programmatic setup requests can supply `cache: "go"`; this CLI migration gap
-must be resolved by the operator/integrator, not hidden by an invented flag.
-The Go mount is `/pi/go`, with GOPATH, GOCACHE and `GOTOOLCHAIN=local`.
+The Go-toolchain writer uses an operator-supplied local **image ID** with
+`--image <image-id> --cache go`, recording `cache: "go"` in container settings.
+Mode requests rebuild options from supplied values/defaults: repeat the image
+and cache flags each time. The Go mount is `/pi/go`, with GOPATH, GOCACHE and
+`GOTOOLCHAIN=local`; setup does not build the operator's toolchain image.
 
 See [Execution modes](execution-modes.md#migration-from-manual-writers) for
 migration limitations and [Doctor](doctor-design.md) for offline writer checks.

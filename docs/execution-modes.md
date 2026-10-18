@@ -72,6 +72,7 @@ combined with `--target` registration or `--customize-skill`.
 | `--profiles a,b` | Required non-empty coding-profile aliases; no Cursor provider |
 | `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags |
 | `--network <value>` | `pasta` (default, not limited) or `none` |
+| `--cache <value>` | `none` (default) or `go` for the writer's Go module/build cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | Also register writers with Codex (user scope); Claude Code local registration is the default |
 | `--discard` | Explicitly allow loss of uncollected surplus writers on mode/count changes |
@@ -172,10 +173,19 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 
 Other than explicit `--remove` and `--verify`, omitting apply only plans.
 Reset/recreate/remove refuse changed uncollected work unless given `--discard`.
-Only reset accepts `--base`; finish does not accept discard. Writer verify sets
-`PI_WRITER_NO_CREDENTIAL_REFRESH=1` for its direct launch, touching no credential
-in that launch. Its Claude registration inspection still invokes the client's
-health check as noted above; that subprocess is not given this override by setup.
+Only reset accepts `--base`; finish does not accept discard.
+
+**Verify and registration health checks:** setup's registration inspect in apply,
+verify and remove uses `claude mcp get`, which health-checks a registered server
+through its normal writer launcher. That start may re-copy the boundary
+credentials. Only if a selected OAuth token expires within **2 minutes** (or is
+already expired; invalid/missing expiry is treated as needing refresh) may it
+run host login warmup through **Pi's own locked store**. The client CLI cannot
+be given a different environment for that health check. Verify's own direct MCP
+handshake uses `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, touching no credential in
+that launch and making no session or provider request. **Setup itself never
+writes the host credential file**; host login updates, when needed, are performed
+by Pi through its locked store.
 
 The server guard refuses coding when the clone differs from its recorded baseline
 (extra branches, stash, uncommitted/untracked changes, or different HEAD), and
@@ -280,16 +290,19 @@ state, wrappers or names.
    New names derive from the configured repository alias, not the old manual name.
 4. Restart/reconnect controllers and verify the new writer registrations before use.
 
-The Go-toolchain writer needs an **operator-supplied local image ID** containing
-Node, Git and the Go toolchain, plus `cache: "go"` in its container entry in
-`execution-modes.json`. There is **no `--cache` CLI flag**. Mode requests rebuild
-settings with defaults, so a later CLI mode request resets cache to `none`.
-There is currently no CLI reconcile-preserving-settings path for `cache: go`:
-an integration must supply it through the programmatic setup request's container
-settings. Merely editing the stored cache before another CLI mode apply will
-not preserve it. This is a CLI limitation for migrating `go-app-alpha`; do not
-claim the CLI alone reproduces its manual Go cache layout. The Go cache mounts
-at `/pi/go` with GOPATH, GOCACHE and `GOTOOLCHAIN=local`.
+For the Go-toolchain writer **`go-app-alpha`**, supply an **operator-supplied
+local image ID** containing Node, Git and the Go toolchain, plus `--cache go`:
+
+```sh
+pi-session-mcp-setup --repo <alias> --mode container --profiles <coding-aliases> \
+  --image <image-id> --cache go --apply
+```
+
+This records `cache: "go"` in the container entry in `execution-modes.json`.
+The Go cache mounts at `/pi/go` with GOPATH, GOCACHE and `GOTOOLCHAIN=local`.
+Container options are rebuilt from supplied values and defaults each time:
+repeat the image ID and `--cache go` on later mode requests, or cache defaults
+to `none`. Setup does not build or install the Go toolchain for you.
 
 See [Isolation setup](isolation-setup.md) for boundary prerequisites and what
 setup automates, and the historical manual acceptance evidence linked there.

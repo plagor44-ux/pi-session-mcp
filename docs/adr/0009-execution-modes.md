@@ -53,7 +53,7 @@ default or `ephemeral`), selected coding profiles, image (default `node`) and
 network (`pasta` by default or `none`). Profiles must exist, be coding profiles
 and not use the Cursor provider. These settings alone are intent, not proof
 of provisioned or accepted writers. Container entries also accept cache `none`
-(default) or `go`; the current CLI does not expose a cache flag.
+(default) or `go`, selected with `--cache` in the CLI.
 
 ## Contract change and versioning
 
@@ -121,8 +121,9 @@ This decision does not itself bump the package version or authorize publication.
    remove their local registration in its project, remove wrapper/state, then
    provision by configured alias with `--repo … --mode container --profiles …
    --apply`. Go requires an operator-supplied image ID and `cache: go` settings;
-   no `--cache` CLI exists and CLI mode requests rebuild defaults, a documented
-   migration limitation. Generated names and ownership are not the manual ones.
+   select it with `--image <image-id> --cache go`. CLI mode requests rebuild
+   supplied options/defaults, so repeat those flags. Generated names and
+   ownership are not the manual ones.
 
 These decisions keep local stdio and in-memory MCP sessions. Durable writer
 lifecycle metadata is not persistence/resume of sessions. No HTTP, remote or

@@ -93,7 +93,7 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   collect/reset/recreate/finish, wrappers, refusal server, registration and
   periodic credential checks with near-expiry host warmup. The
   [operator runbook](isolation-setup.md) covers migration of the manual writers,
-  including the Go-cache CLI limitation. New live acceptance, rollout and
+  including operator-supplied Go images and the `--cache go` selection. New live acceptance, rollout and
   release are not claimed; each writer must pass its readiness gates.
 
 ### Sprint 5 issue status
