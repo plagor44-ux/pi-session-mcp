@@ -82,3 +82,26 @@ clones came from the remote, and the host `auth.json` is only read.
 
 Still open: the host configuration keeps its coding profiles for other aliases
 (the Sprint 4 interim rules apply to them), other repositories, and macOS.
+
+## Workflow test through a registered wrapper (2026-10-18)
+
+From a Claude Code session with `pi-coding-psm-alpha` registered (`local`
+scope), the writer clone was first updated to main inside the boundary. A `code`
+worker then created a branch, ran `npm ci` and `test/doctor-gitfile.test.ts`
+(network allowed), committed one file, and tried `git push` once. The push failed
+(the clone's origin is a host path that is not mounted). A direct push to the
+GitHub remote from inside the boundary also failed: no credentials, prompts
+disabled.
+
+The review followed the runbook:
+- the redirect-file check found nothing;
+- the bundle was created in a throwaway container with the clone read-only and
+  no network, then verified and fetched into a namespaced ref on the host;
+- the commit changed only the requested file, and an independent test run inside
+  the boundary passed (18 tests);
+- the ref, the bundle and the branch were removed afterwards, and the clone was
+  reset inside the boundary.
+
+The branch deletion warned that `.git/config` could not be written, which is the
+read-only mount at work. One pitfall found: in zsh, unbraced `$CLONE:ro` in mount
+arguments mounts the wrong path; the runbook commands now use `${CLONE}`.
