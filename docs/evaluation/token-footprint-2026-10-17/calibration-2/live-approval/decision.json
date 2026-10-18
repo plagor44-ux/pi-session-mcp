@@ -1,0 +1,69 @@
+{
+  "schema_version": "token-live-decision-1",
+  "approved": false,
+  "manifest_digest": null,
+  "budget_digest": null,
+  "source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a",
+  "build_digest": "sha256:7ea163f799b30e2f9b52296c2fa0cd84d03838fb3a9d153cd2222353eb9de510",
+  "matrix_digest": "sha256:9cdd89195dcb72d557c0b298bea796bdb8f2cfebb7ef8df249721596e572b27d",
+  "controller_skill_digest": "sha256:50878a59971d685021561c3d2d7757d1cbcfed9b2f5095202f9edfefe039837c",
+  "controller": {
+    "client": "codex",
+    "version": "0.162.0",
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "auth": "existing-client-login-not-probed"
+  },
+  "schedule": [
+    {
+      "id": "L1",
+      "task": "T1",
+      "starts": 1,
+      "turns": 1,
+      "route": "review",
+      "slots": [
+        "m1-l1"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L2",
+      "task": "T2",
+      "starts": 1,
+      "turns": 1,
+      "route": "code",
+      "slots": [
+        "m1-l2"
+      ],
+      "prompts": 1
+    },
+    {
+      "id": "L3",
+      "task": "T1",
+      "starts": 2,
+      "turns": 3,
+      "route": "review",
+      "slots": [
+        "m1-l3-shared"
+      ],
+      "prompts": 3
+    }
+  ],
+  "budget_limits": {
+    "max_starts": 4,
+    "max_retries": 0,
+    "parallelism": 1,
+    "run_timeout_ms": 600000,
+    "total_timeout_ms": 1800000,
+    "provider_cap_usd": null
+  },
+  "advisory_usd": null,
+  "limits": {
+    "starts": 4,
+    "work_turns": 5,
+    "retries": 0,
+    "invocations": 3
+  },
+  "operator_acknowledges_advisory_not_cap": false
+}

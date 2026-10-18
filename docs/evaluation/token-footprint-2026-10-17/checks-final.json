@@ -1,0 +1,273 @@
+{
+  "schema_version": "token-footprint-checks-final-1",
+  "binding": {
+    "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+    "digest": "sha256:33c450601727e38cf63b1874df0fcadc158c3d06af3b472b3d1603da6383c929"
+  },
+  "build_digest": "sha256:59e7b855ea0bbb545246fbf28e27692ae3b1f35212a3d5526b3190ac58054065",
+  "attempts": [
+    {
+      "id": "preserved-first-calibration-and-development-failures",
+      "evidence": "checks.json",
+      "source_digest": "sha256:4700852ad8e150c1985604bb1e2951dc43db2b1ea511e26314151712bc3a25dc"
+    },
+    {
+      "id": "intermediate-root-targeted-suite",
+      "exit_code": 0,
+      "test_files": 5,
+      "tests_passed": 35,
+      "tests_failed": 0,
+      "source_binding": null,
+      "reason": "development-before-final-registered-server-review"
+    },
+    {
+      "id": "worker-final-targeted-check",
+      "exit_code": 0,
+      "tests_passed": 14,
+      "tests_failed": 0,
+      "provider_calls": 0
+    },
+    {
+      "id": "second-qualified-m0",
+      "exit_code": 0,
+      "evidence": "calibration-2/measurement.json",
+      "transport_cases": 80,
+      "filter_cases": 50,
+      "report_controls": 10,
+      "source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a"
+    },
+    {
+      "id": "second-qualified-client-projection",
+      "exit_code": 0,
+      "evidence": "calibration-2/client-projection.json",
+      "clients": 16,
+      "scripted_http_requests": 63,
+      "source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a"
+    },
+    {
+      "id": "strict-full-suite-max-workers-two",
+      "exit_code": 0,
+      "test_files_passed": 65,
+      "tests_passed": 1495,
+      "tests_skipped": 6,
+      "tests_failed": 0,
+      "duration_ms": 97640,
+      "source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a"
+    },
+    {
+      "id": "full-suite-source-typecheck-cli-build-server-build-schema-check",
+      "exit_code": 0,
+      "source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a"
+    },
+    {
+      "id": "late-cleanup-plan-metadata-correction",
+      "changed_files": [
+        "eval/profiles/token-footprint-plan.ts"
+      ],
+      "execution_code_changed": false,
+      "reconstructed_previous_source_matches": true,
+      "prior_source_digest": "sha256:a1596b99abd7fb9a4cf4c1c2c34edc3658681eb15bec67a39e7a78b0dfddd44a",
+      "new_source_digest": "sha256:33c450601727e38cf63b1874df0fcadc158c3d06af3b472b3d1603da6383c929",
+      "broad_suite_repeated": false
+    },
+    {
+      "id": "final-m0",
+      "exit_code": 0,
+      "evidence": "current-calibration/measurement.json",
+      "transport_cases": 80,
+      "filter_cases": 50,
+      "report_controls": 10,
+      "source_unchanged": true,
+      "build_unchanged": true
+    },
+    {
+      "id": "final-client-projection",
+      "exit_code": 0,
+      "evidence": "current-client-projection.json",
+      "clients": 16,
+      "scripted_http_requests": 63,
+      "source_unchanged": true,
+      "build_unchanged": true
+    },
+    {
+      "id": "final-current-source-typecheck-and-targeted-tests",
+      "exit_code": 0,
+      "test_files_passed": 2,
+      "tests_passed": 17,
+      "tests_failed": 0
+    },
+    {
+      "id": "current-footprint-plan-with-metadata-inventory",
+      "exit_code": 0,
+      "evidence": "live-package.json",
+      "approved": false
+    },
+    {
+      "id": "existing-generic-plan-gate-preserved",
+      "exit_code": 0,
+      "planned_slots": 8,
+      "approved": false
+    },
+    {
+      "id": "final-artifact-privacy-and-allowlist-scan",
+      "exit_code": 0,
+      "json_files_scanned": 28,
+      "raw_path_secret_marker_hits": 0,
+      "raw_payload_keys": 0
+    },
+    {
+      "id": "local-document-links-and-new-file-whitespace",
+      "exit_code": 0,
+      "broken_links": 0,
+      "whitespace_issues": 0
+    },
+    {
+      "id": "final-source-binding-readback",
+      "exit_code": 0,
+      "matches": true
+    },
+    {
+      "id": "known-owned-fixture-command-scan",
+      "exit_code": 0,
+      "remaining": 0
+    },
+    {
+      "id": "unapproved-current-M1-cli-negative-control",
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "passed": true,
+      "approval_flags": false,
+      "client_spawn_gate_covered_by_tests_and_review": true,
+      "real_model_runs": 0
+    },
+    {
+      "id": "report-numeric-consistency",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "final-diff-scope-and-whitespace",
+      "exit_code": 0,
+      "only_authorized_development_and_documentation_files": true
+    },
+    {
+      "id": "intermediate-client-event-and-projection-unit-tests",
+      "exit_code": 0,
+      "test_files_passed": 2,
+      "tests_passed": 7,
+      "source_binding": null,
+      "reason": "development-only-helper-tests"
+    },
+    {
+      "id": "worker-initial-M1-adapter-tests",
+      "exit_code": 0,
+      "tests_passed": 5,
+      "source_binding": null,
+      "reason": "superseded-before-review-fixes"
+    },
+    {
+      "id": "worker-review-revision-tests",
+      "exit_code": 0,
+      "tests_passed": 13,
+      "source_binding": null,
+      "reason": "superseded-before-registered-server-fix"
+    }
+  ],
+  "preserved_client_attempts": [
+    {
+      "evidence": "client-attempts/attempt-4.json",
+      "status": "INCONCLUSIVE",
+      "clients": 16,
+      "http_requests": 63
+    },
+    {
+      "evidence": "client-attempts/pilot-1.json",
+      "status": "INCONCLUSIVE",
+      "clients": 1,
+      "http_requests": 3
+    },
+    {
+      "evidence": "client-attempts/pilot-2.json",
+      "status": "INCONCLUSIVE",
+      "clients": 1,
+      "http_requests": 3
+    },
+    {
+      "evidence": "client-attempts/pilot-3.json",
+      "status": "INCONCLUSIVE",
+      "clients": 1,
+      "http_requests": 3
+    },
+    {
+      "evidence": "calibration-2/client-projection.json",
+      "status": "PASS",
+      "clients": 16,
+      "http_requests": 63
+    },
+    {
+      "evidence": "current-client-projection.json",
+      "status": "PASS",
+      "clients": 16,
+      "http_requests": 63
+    }
+  ],
+  "interpretation_corrections": [
+    {
+      "id": "client-json-decoding",
+      "raw_runs_changed": false,
+      "completed_truncated_metadata_decodable": true,
+      "reason": "corrected-overbroad-narrative-about-client-truncated-json"
+    }
+  ],
+  "independent_review": {
+    "native_reviewer_turns": 3,
+    "read_only": true,
+    "provider_calls": 0,
+    "remaining_implementation_blockers": 0,
+    "projection_scope": "observed-client-and-declared-synthetic-route",
+    "process_scope": "owned-controller-and-registered-server-groups",
+    "arbitrary_subprocess_containment": null
+  },
+  "overhead": {
+    "native_agents": 3,
+    "native_agent_turns": 9,
+    "native_agent_usage": null,
+    "production_capabilities_tool_calls": 1,
+    "metadata_inventory_successful_runs": 4,
+    "historical_chatlogs_read": 0,
+    "completed_m0_calibrations": 3,
+    "scripted_m0_session_starts": 240,
+    "scripted_m0_work_turns": 240,
+    "m0_pi_tool_calls": 1620,
+    "m0_oracle_processes": 195,
+    "filter_stub_sessions_in_completed_calibrations": 165,
+    "filter_stub_turns_in_completed_calibrations": 165,
+    "synthetic_codex_cli_invocations": 51,
+    "scripted_http_requests": 198,
+    "real_M1_controller_invocations": 0,
+    "real_pi_worker_session_starts": 0,
+    "real_pi_worker_work_turns": 0,
+    "real_provider_request_usage": null,
+    "fixture_provider_requests_forwarded": 0,
+    "test_session_count": null,
+    "test_session_count_reason": "not-aggregated-into-benchmarks",
+    "scripted_codex_sessions_in_completed_cases": 15,
+    "scripted_codex_work_turns_in_completed_cases": 15
+  },
+  "live_gates": {
+    "exact_current_operator_decision": false,
+    "advisory_usd": null,
+    "unmetered_cost_acknowledged": false,
+    "dedicated_executor_implemented": true,
+    "existing_gate_preserved": true,
+    "pilot_provider_path_executed": false,
+    "additional_repetitions_approved": 0,
+    "live_ab_approved": false,
+    "claude_comparison_run": false
+  },
+  "production_paths_unchanged": true,
+  "version": "0.8.3",
+  "commits_created": 0,
+  "pushes": 0,
+  "external_issues_or_prs_created": 0
+}

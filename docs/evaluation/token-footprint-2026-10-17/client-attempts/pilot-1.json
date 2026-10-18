@@ -1,0 +1,77 @@
+{
+  "schema_version": "token-client-projection-1",
+  "binding": {
+    "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+    "digest": "sha256:a7416697a8913404369cb2831b08a623fbd4cf02ebba460feeb686cd8f6481c8"
+  },
+  "route": "synthetic-loopback-responses",
+  "authentication": "disabled-empty-disposable-client-home",
+  "client_version": "0.162.0",
+  "started_at": "2026-10-17T20:36:15.088Z",
+  "ended_at": "2026-10-17T20:36:17.682Z",
+  "source_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "repetition": 0,
+      "pilot": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "stdout_bytes": 570,
+      "duration_ms": 2548.151647,
+      "proxy_integrity": false,
+      "requests": [
+        {
+          "bytes": 43712,
+          "outputs": [],
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 43986,
+          "outputs": [
+            {
+              "serialized_bytes": 39,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            }
+          ],
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44252,
+          "outputs": [
+            {
+              "serialized_bytes": 39,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            },
+            {
+              "serialized_bytes": 35,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            }
+          ],
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "response_marker_hits": [],
+      "completed_view_observed": false,
+      "session_closed_observed": true,
+      "empty_list_observed": false,
+      "invalid": false,
+      "passed": false
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "harness_status": "INCONCLUSIVE"
+}

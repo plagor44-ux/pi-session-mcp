@@ -1,0 +1,81 @@
+{
+  "schema_version": "token-client-projection-1",
+  "binding": {
+    "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+    "digest": "sha256:8e44c2d4cf8cc6d4351c68dbe560e0f24cb8c8d1b3c95002f9ba658eea41ca3a"
+  },
+  "build_digest": "sha256:5905bdf3c616075f93b9121df86ca2d33fbbff25480d4b31e45a395f891d57a7",
+  "node": "22.23.2",
+  "fixture_digest": "sha256:bf1afebb7f3df2fe82a9afd4ef3cec45dbcc3aa8f105a9a9ab48e32c36472270",
+  "route": "synthetic-loopback-responses",
+  "authentication": "disabled-empty-disposable-client-home",
+  "client_version": "0.162.0",
+  "started_at": "2026-10-17T20:39:26.615Z",
+  "ended_at": "2026-10-17T20:39:29.600Z",
+  "source_unchanged": true,
+  "build_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "repetition": 0,
+      "pilot": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": false,
+      "stdout_bytes": 2412,
+      "duration_ms": 2907.714669,
+      "proxy_integrity": false,
+      "requests": [
+        {
+          "bytes": 43712,
+          "outputs": [],
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44509,
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            }
+          ],
+          "previous_response_id": false,
+          "authorization_present": false
+        },
+        {
+          "bytes": 44840,
+          "outputs": [
+            {
+              "serialized_bytes": 529,
+              "marker_hits": 1,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            },
+            {
+              "serialized_bytes": 67,
+              "marker_hits": 0,
+              "error_marker_hits": 0,
+              "structured_key_present": false
+            }
+          ],
+          "previous_response_id": false,
+          "authorization_present": false
+        }
+      ],
+      "server_representation_counts": [],
+      "completed_view_observed": false,
+      "session_closed_observed": true,
+      "empty_list_observed": false,
+      "invalid": false,
+      "passed": false
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "harness_status": "INCONCLUSIVE"
+}

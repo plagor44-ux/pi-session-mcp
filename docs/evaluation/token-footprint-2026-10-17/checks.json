@@ -1,0 +1,190 @@
+{
+  "schema_version": "token-footprint-checks-1",
+  "binding": {
+    "commit": "d6f360926e26629f7b382583c077016daeb954ca",
+    "digest": "sha256:4700852ad8e150c1985604bb1e2951dc43db2b1ea511e26314151712bc3a25dc"
+  },
+  "build_digest": "sha256:8f010063809c417fdee615cbfde53bcb92a955c1e0e75d8a59e9b6add51aca1d",
+  "attempts": [
+    {
+      "id": "preflight-stale-checkout",
+      "exit_code": 4,
+      "passed": false,
+      "reason": "required-documents-absent-before-separate-branch-switch"
+    },
+    {
+      "id": "dependency-install",
+      "exit_code": 0,
+      "passed": true,
+      "packages_added": 248,
+      "vulnerabilities": 0
+    },
+    {
+      "id": "initial-typecheck-fake-handle",
+      "exit_code": 1,
+      "passed": false,
+      "errors": 4,
+      "reason": "fake-adapter-return-type-corrected"
+    },
+    {
+      "id": "concurrent-typecheck-filter-helper",
+      "exit_code": 1,
+      "passed": false,
+      "errors": 2,
+      "reason": "in-progress-helper-type-errors-corrected"
+    },
+    {
+      "id": "filter-helper-first-attempt",
+      "exit_code": null,
+      "passed": false,
+      "reason": "interrupted-scripted-runtime-hang-replaced-with-explicit-public-factory-stub"
+    },
+    {
+      "id": "targeted-stdio-first-attempt",
+      "exit_code": 1,
+      "passed": false,
+      "tests_passed": 9,
+      "tests_failed": 1,
+      "reason": "test-oracle-build-environment-missing-corrected"
+    },
+    {
+      "id": "inventory-build-during-helper-edit",
+      "exit_code": 1,
+      "passed": false,
+      "reason": "concurrent-compilation-errors-corrected"
+    },
+    {
+      "id": "targeted-stdio-after-correction",
+      "exit_code": 0,
+      "passed": true,
+      "tests_passed": 10,
+      "tests_failed": 0
+    },
+    {
+      "id": "targeted-three-files-mixed-final",
+      "exit_code": 1,
+      "passed": false,
+      "tests_passed": 14,
+      "tests_failed": 1,
+      "reason": "calibration-expectation-corrected-to-existing-concatenation"
+    },
+    {
+      "id": "targeted-three-files-after-review",
+      "exit_code": 0,
+      "passed": true,
+      "tests_passed": 17,
+      "tests_failed": 0
+    },
+    {
+      "id": "targeted-with-partial-frame-regression",
+      "exit_code": 0,
+      "passed": true,
+      "tests_passed": 18,
+      "tests_failed": 0
+    },
+    {
+      "id": "final-typecheck",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "m0-calibration",
+      "exit_code": 0,
+      "passed": true,
+      "transport_cases": 80,
+      "filter_cases": 50,
+      "adverse_report_controls": 10,
+      "external_worker_provider_requests": 0
+    },
+    {
+      "id": "final-build-cli",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "strict-full-suite-max-workers-two",
+      "exit_code": 0,
+      "passed": true,
+      "test_files_passed": 63,
+      "tests_passed": 1477,
+      "tests_skipped": 6,
+      "tests_failed": 0,
+      "duration_ms": 96270
+    },
+    {
+      "id": "final-server-build",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "existing-schema-drift-check",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "footprint-plan-with-offline-inventory",
+      "exit_code": 0,
+      "passed": true,
+      "external_worker_provider_requests": 0
+    },
+    {
+      "id": "git-diff-whitespace-check",
+      "exit_code": 0,
+      "passed": true
+    },
+    {
+      "id": "existing-plan-gate-preserved",
+      "exit_code": 0,
+      "passed": true,
+      "planned_slots": 8,
+      "live_approved": false
+    },
+    {
+      "id": "artifact-privacy-scan",
+      "exit_code": 0,
+      "passed": true,
+      "files_scanned": 5
+    },
+    {
+      "id": "final-source-binding-readback",
+      "exit_code": 0,
+      "passed": true,
+      "source_matches_measurement": true
+    }
+  ],
+  "independent_review": {
+    "reviewer_turns": 2,
+    "read_only": true,
+    "final_blocking_findings": 0,
+    "focused_synthetic_event_probes": 2,
+    "suites_run": 0,
+    "provider_calls": 0,
+    "reported_findings_fixed": true
+  },
+  "overhead": {
+    "native_subagents": 3,
+    "native_subagent_turns": 5,
+    "native_subagent_usage": null,
+    "capabilities_tool_calls": 1,
+    "metadata_inventory_successful_runs": 2,
+    "historical_chatlogs_read": 0,
+    "live_controller_invocations": 0,
+    "live_worker_session_starts": 0,
+    "live_worker_work_turns": 0,
+    "m0_oracle_processes": 65,
+    "filter_stub_sessions": 55,
+    "filter_stub_turns": 55
+  },
+  "unchanged_production_paths": true,
+  "production_version": "0.8.3",
+  "commits_created": 0,
+  "pushes": 0,
+  "external_issues_or_prs_created": 0,
+  "live_gates": {
+    "operator_approved": false,
+    "unmetered_cost_acknowledged": false,
+    "existing_executor_represents_matrix": false,
+    "fresh_controller_driver_implemented": false,
+    "claude_comparison_run": false
+  }
+}
