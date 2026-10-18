@@ -1,5 +1,6 @@
 import packageMetadata from "../package.json" with { type: "json" };
 import type { ConfigurationMetadata } from "./config.js";
+import type { WorkspaceModeEntry } from "./execution-modes.js";
 import type { ConfiguredExecutionProfile } from "./execution-profile.js";
 
 const compareAliases = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
@@ -9,6 +10,7 @@ export function projectCapabilities(
   workspaces: ReadonlyMap<string, string>,
   executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>,
   configuration: ConfigurationMetadata,
+  workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
 ) {
   return {
     ok: true as const,
@@ -19,7 +21,7 @@ export function projectCapabilities(
     },
     workspaces: [...workspaces.keys()]
       .sort(compareAliases)
-      .map((alias) => ({ alias })),
+      .map((alias) => ({ alias, mode: workspaceModes.get(alias)?.mode ?? "unset" })),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
       .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, skills }) => ({
