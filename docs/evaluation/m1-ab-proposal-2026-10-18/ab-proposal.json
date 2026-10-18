@@ -1,0 +1,70 @@
+{
+  "schema_version": "m1-ab-proposal-1",
+  "issue": 93,
+  "approved": false,
+  "advisory_usd": null,
+  "acknowledges_unmetered_cost": false,
+  "historical_approvals_reusable": false,
+  "executor": "--footprint-live",
+  "route": "codex-m1",
+  "controller": {
+    "client": "codex",
+    "version": null,
+    "version_rule": "bind-installed-version-at-approval-identical-for-all-runs",
+    "provider": "openai",
+    "model": "gpt-6.1-sol",
+    "effort": "high",
+    "skill_delivery": "embedded"
+  },
+  "worker_routes": [
+    { "from_configured_alias": "review", "provider": "openai-codex", "model": "gpt-6.1-sol", "effort": "high", "permission": "read-only" },
+    { "from_configured_alias": "code", "provider": "openai-codex", "model": "gpt-6.1-sol", "effort": "medium", "permission": "coding" }
+  ],
+  "arms": {
+    "A": { "source_commit": "612fbcb976d4563ea597e87be56123055b782c1a", "source_digest": null, "build_digest": null, "controller_skill_tree_digest": null, "worker_skill_tree_digests": null },
+    "B": { "source_commit": null, "source_digest": null, "build_digest": null, "controller_skill_tree_digest": null, "worker_skill_tree_digests": null }
+  },
+  "comparison": "package",
+  "per_measure_effects_claimed": false,
+  "worker_skills_selected_in_both_arms": false,
+  "untested_without_worker_skill_selection": [87],
+  "prerequisites": [
+    "P1-controller-skill-tree-digest-and-reference-availability",
+    "P2-explicit-worker-skill-selection-in-both-arms",
+    "P3-client-version-binding"
+  ],
+  "matrix": ["L1", "L2", "L3"],
+  "schedule": [
+    { "pair": 1, "order": ["A", "B"] },
+    { "pair": 2, "order": ["B", "A"] },
+    { "pair": 3, "order": ["A", "B"] }
+  ],
+  "per_run_limits": { "controller_invocations": 3, "worker_starts": 4, "work_turns": 5, "whole_run_retries": 0 },
+  "totals": { "matrix_runs": 6, "controller_invocations": 18, "worker_starts": 24, "work_turns": 30, "retries": 0 },
+  "metrics": [
+    "cumulative_input_tokens",
+    "cached_input_tokens",
+    "output_tokens",
+    "reasoning_output_tokens",
+    "controller_tool_calls_by_tool",
+    "turn_get_running_polls",
+    "turn_get_first_terminal_reads",
+    "turn_get_repeated_terminal_reads",
+    "turn_get_labelled_invariance_refetches",
+    "controller_runtime_ms",
+    "worker_final_answer_bytes",
+    "worker_truncated",
+    "independent_acceptance",
+    "cleanup"
+  ],
+  "stop_on": [
+    "gate-or-harness-failure",
+    "cleanup-failure",
+    "scope-violation",
+    "provider-quota-or-auth-error",
+    "time-limit",
+    "client-or-route-drift"
+  ],
+  "preserve_failed_attempts": true,
+  "claude_comparison": "separate-later-plan-depends-on-89"
+}
