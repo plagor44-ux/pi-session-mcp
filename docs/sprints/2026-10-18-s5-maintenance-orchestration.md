@@ -58,7 +58,9 @@ Session and turn IDs were kept only transiently.
 | E3 | #91 | Claude researcher (agy web route blocked) | read-only | decision inputs | delivered | — |
 | E4 | #89 | Claude researcher, then Claude implementer | clone `e` | provider-free Claude projection probe | partial: q1/q2 answered, q3 unmeasurable, q4 not measured | typecheck, 2 files / 9 tests, eval:schemas --check; probe attempt 1 inconclusive, attempt 2 PASS (base), attempt 3 PASS (Sprint 5 head, after review fixes) |
 | F | #93 | integrator | integration clone | A/B proposal | delivered, unapproved | — |
-| G | — | integrator | integration clone | roadmap, sprint, evaluation summaries, CHANGELOG, ADR facts, acceptance | in progress | — |
+| G | — | integrator | integration clone | roadmap, sprint, evaluation summaries, CHANGELOG, ADR facts, acceptance | delivered | relative-link check of all changed Markdown files |
+| R1 | all | agy `gemini-3.8-flash-high`, file-read tools only | frozen diff `612fbcb..87bde7a` | independent review | 5 findings, all fixed | — |
+| R2 | all | Pi `review-grok` (xAI), read-only | main checkout detached at `87bde7a` | independent review | 2 findings, fixed; turn budget extended once from 15 to 25 minutes, finished after 17 | session closed |
 
 ## Results per issue
 
@@ -128,6 +130,23 @@ the request `tools[]` went from 7,144 to 6,325 bytes (−819) and the first
 request body from 11,608 to 9,004 bytes; the 1,785-byte remainder is
 unexplained. Bytes are not tokens. Live token effect of any change in this
 sprint: unmeasured.
+
+## Verification and review
+
+See [Acceptance](../acceptance.md#sprint-5-provider-free-checks-2026-10-18):
+full suite (67 files, 1,531 passed, 6 skipped), builds, evaluation plan,
+offline harness and schema checks, package listing, diff check and Level 2
+setup acceptance (160 of 160) ran once on the integrated head `87bde7a`. Seven
+review findings were fixed afterwards and only the affected checks were
+repeated on the final code.
+
+## Cleanup
+
+Two Pi sessions were started (`review` for #92, `review-grok` for the final
+review); both were closed and `pi_session_list` was checked at the end. agy
+runs end with their process. Writer clones and the probe's owned temporary
+directories live outside the repository; the probe verified its own removal.
+The main checkout was detached for the frozen review and returned to `main`.
 
 ## Gates for later sprints
 
