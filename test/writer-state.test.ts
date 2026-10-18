@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import { lstat, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   acceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerName,
   writerPaths, writerRegistrationName, writersRoot, writeWriterState, WriterStateError,
@@ -60,6 +62,25 @@ it("round-trips and atomically replaces private state without temporary leftover
 it("returns undefined only for an absent file", async () => {
   const home = await temporaryRoot("pi-writer-state-");
   expect(await readWriterState(home, name)).toBeUndefined();
+});
+
+it("returns undefined when the file vanishes between lstat and open", async () => {
+  const home = await temporaryRoot("pi-writer-state-");
+  await writeWriterState(home, name, state);
+  const mock = vi.spyOn(fsPromises, "open").mockRejectedValueOnce(Object.assign(new Error("vanished"), { code: "ENOENT" }));
+  syncBuiltinESMExports();
+  try { expect(await readWriterState(home, name)).toBeUndefined(); } finally { mock.mockRestore(); syncBuiltinESMExports(); }
+});
+
+it.each(["EACCES", "EPERM", "EIO", "EMFILE"])("classifies %s as unreadable, not invalid", async (code) => {
+  const home = await temporaryRoot("pi-writer-state-");
+  await writeWriterState(home, name, state);
+  for (const method of ["lstat", "open"] as const) {
+    const mock = vi.spyOn(fsPromises, method).mockRejectedValueOnce(Object.assign(new Error("private"), { code }));
+    syncBuiltinESMExports();
+    try { await expect(readWriterState(home, name)).rejects.toMatchObject({ code: "writer_state_unreadable" }); } finally { mock.mockRestore(); syncBuiltinESMExports(); }
+  }
+  expect(await readWriterState(home, name)).toEqual(state);
 });
 
 describe("state validation", () => {
