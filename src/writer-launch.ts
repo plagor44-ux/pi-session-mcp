@@ -1,0 +1,103 @@
+import { spawn, type ChildProcess } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { CommandRunner } from "./client-adapters/types.js";
+import { isEntryPoint } from "./entry-point.js";
+import { PACKAGE_VERSION } from "./package-metadata.js";
+import { serveRefusal } from "./refusal-server.js";
+import { createProcessRunner } from "./setup-process.js";
+import { podmanInfo, serveArgs } from "./writer-boundary.js";
+import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
+import { acceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
+
+export function renderWrapper(nodePath: string, releaseRoot: string, name: string): string {
+  const quote = (value: string) => {
+    if (value.includes("'")) throw new Error("writer_wrapper_invalid");
+    return `'${value}'`;
+  };
+  return `#!/bin/sh\n# stdout is reserved for MCP frames.\nexec ${quote(nodePath)} ${quote(join(releaseRoot, "dist", "writer-launch.js"))} ${quote(name)} "$@"\n`;
+}
+export function wrapperDigest(text: string): string {
+  return `sha256:${createHash("sha256").update(text).digest("hex")}`;
+}
+export interface LaunchDependencies {
+  home: string;
+  nodePath: string;
+  releaseRoot: string;
+  runner: CommandRunner;
+  spawnPodman(args: string[]): ChildProcess;
+  env: NodeJS.ProcessEnv;
+  now(): number;
+  setInterval(callback: () => void, ms: number): ReturnType<typeof setInterval>;
+  clearInterval(timer: ReturnType<typeof setInterval>): void;
+}
+
+export async function launch(argv: readonly string[], deps: LaunchDependencies): Promise<number> {
+  const refuse = async (code: "writer_not_ready" | "container_runtime_unavailable") => { await serveRefusal(code); return 0; };
+  const name = argv[0];
+  if (!name || !WRITER_NAME_PATTERN.test(name)) return refuse("writer_not_ready");
+  const info = await podmanInfo(deps.runner);
+  if (!info.usable || !info.version) return refuse("container_runtime_unavailable");
+  const paths = writerPaths(deps.home, name);
+  let state;
+  try {
+    state = await readWriterState(deps.home, name);
+    if (!state) return refuse("writer_not_ready");
+    if (argv.length === 1) {
+      if (state.phase !== "ready" || state.acceptance?.fingerprint !== acceptanceFingerprint({
+        wrapperDigest: wrapperDigest(await readFile(paths.wrapper, "utf8")), packageVersion: PACKAGE_VERSION,
+        imageId: state.imageId, podmanVersion: info.version, network: state.network, cache: state.cache,
+      })) return refuse("writer_not_ready");
+    }
+  } catch { return refuse("writer_not_ready"); }
+  const providers = state.providers;
+  const names = providers.map(({ provider }) => provider);
+  const readHost = async (): Promise<unknown> => {
+    try { return JSON.parse(await readFile(join(deps.home, ".pi", "agent", "auth.json"), "utf8")) as unknown; }
+    catch { return undefined; }
+  };
+  const refresh = async () => {
+    const host = await readHost();
+    if (expiresWithin(host, names, REFRESH_THRESHOLD_MINUTES, deps.now())) {
+      try {
+        const warmupConfig = await ensureWarmupConfig(deps.home, providers);
+        if (warmupConfig) await refreshHostLogin({ nodePath: deps.nodePath, releaseRoot: deps.releaseRoot, warmupConfig, timeoutMs: 20_000 });
+      } catch { /* Copy even when host refresh fails. */ }
+    }
+    await writeBoundaryCredentials(paths.agent, selectBoundaryCredentials(await readHost(), names));
+  };
+  const enabled = deps.env.PI_WRITER_NO_CREDENTIAL_REFRESH !== "1";
+  try { if (enabled) await refresh(); } catch { return refuse("writer_not_ready"); }
+  const command = argv.length > 1 ? argv.slice(1) : ["node", "/opt/pi-session-mcp/dist/main.js"];
+  let child: ChildProcess;
+  try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot)); } catch { return 1; }
+  let busy = false;
+  const timer = enabled ? deps.setInterval(() => {
+    if (busy) return;
+    busy = true;
+    void refresh().catch(() => {}).finally(() => { busy = false; });
+  }, REFRESH_INTERVAL_MS) : undefined;
+  return new Promise<number>((resolveExit) => {
+    const interrupt = () => { child.kill("SIGINT"); };
+    const terminate = () => { child.kill("SIGTERM"); };
+    const finish = (code: number) => {
+      if (timer !== undefined) deps.clearInterval(timer);
+      process.off("SIGINT", interrupt); process.off("SIGTERM", terminate);
+      resolveExit(code);
+    };
+    process.on("SIGINT", interrupt); process.on("SIGTERM", terminate);
+    child.once("error", () => finish(1));
+    child.once("close", (code, signal) => finish(code ?? (signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 1)));
+  });
+}
+
+if (isEntryPoint(import.meta.url, process.argv[1])) {
+  void launch(process.argv.slice(2), {
+    home: homedir(), nodePath: process.execPath, releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+    runner: createProcessRunner(), spawnPodman: (args) => spawn("podman", args, { stdio: "inherit" }),
+    env: process.env, now: Date.now, setInterval, clearInterval,
+  }).then((code) => { process.exitCode = code; }).catch(() => { process.exitCode = 1; });
+}

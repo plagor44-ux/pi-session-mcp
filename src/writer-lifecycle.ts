@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { configSchema } from "./config.js";
+import { renderWrapper } from "./writer-launch.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
@@ -161,6 +162,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     await jsonFile(join(paths.config, "execution-modes.json"), { schemaVersion: 1, workspaces: { [ctx.alias]: { mode: "host", acceptHostWrites: true } } });
     await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: commit });
     await jsonFile(join(paths.agent, "auth.json"), {});
+    await writeFile(paths.wrapper, renderWrapper(ctx.nodePath, ctx.releaseRoot, name), { mode: 0o700, flag: "wx" });
     await writeWriterState(ctx.home, name, { ...state, phase: "not_ready" });
     return { code: "writer_provisioned", status: "ok" };
   } catch (error) { return failure(error); }
