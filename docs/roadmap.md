@@ -20,7 +20,8 @@ approval; historical evaluation approvals do not apply.
 Its [offline results](evaluation/token-footprint-2026-10-17/README.md) now record
 80 transport cases, 50 filter cases and ten adverse-report controls. Live usage
 remains unmeasured; a dedicated development driver preserves the existing live
-gate and adds exact schedule approval. The current operator decision is absent.
+gate and adds exact schedule approval. The operator-approved M1 pilot passed on 2026-10-18 after two harness fixes;
+an A/B still needs its own approval.
 
 Updated 2026-10-16. Base main `53ed581a0c5eb4e35c184e68a7c6a9b840de5985`
 (the merge of the 0.8.3 release).

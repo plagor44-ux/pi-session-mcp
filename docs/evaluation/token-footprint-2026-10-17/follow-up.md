@@ -7,7 +7,7 @@ priority. This file authorizes no implementation, provider request or publicatio
 
 | Priority / candidate | Observed benefit and quality | Cost / compatibility / decision |
 | --- | --- | --- |
-| 1. Consume a terminal result once | Two labelled re-fetches add 47,830 response bytes and two calls; removing them preserves T1 in 5/5 cases. No consistent latency gain. | Small controller-ledger/skill practice, current eight tools, no ADR/release change required for an operator prompt convention. Recommended for the tested lifecycle, with no claim that current real usage repeats results. |
+| 1. Consume a terminal result once | Two labelled re-fetches add 47,830 response bytes and two calls; removing them preserves T1 in 5/5 cases. No consistent latency gain. The M1 pilot's L3 repeated four terminal fetches live (one required). | Small controller-ledger/skill practice, current eight tools, no ADR/release change required for an operator prompt convention. Recommended for the tested lifecycle, with no claim that current real usage repeats results. |
 | 2. Compact worker reports | Removes 22,056 response bytes per tested terminal read/repair, 5/5 independent successes in each arm. Failed/blocked report fields retained in ten controls; no live obedience or larger-review proof. | Small draft skill instruction; conditionally recommended for a later approved A/B. Keep status, actual changes, checks including failures, blockers, risks and relative evidence. Load full logs/diffs only when necessary. 4 KiB is a test candidate, not a universal cap. |
 | 3. Discovery/schema reduction | Fresh discovery is 20,009 wire bytes; array 19,917. The synthetic Codex whole request tools array is 21,412 bytes; real-route reinjection/cache behavior and token impact remain unknown. | Not established. First measure concrete client projection/usage. Preserve discovery compatibility; any public field/tool change needs its own decision and minor release under ADR 0003. |
 | 4. Remove one representation | Two equal server representations; the synthetic Codex request probe sees one selected marker occurrence for normal, error and truncated replies. | No duplicate-removal benefit established for the tested client route. Preserve compatibility fields. Cloud routes and other clients remain unmeasured; a public change needs a separate decision and minor release. |
@@ -39,7 +39,7 @@ consumption. Each turn is keyed by actual session/turn identity transiently;
 records export only ordinals and allowlisted metrics. Independent oracles and
 scope snapshots remain separate from worker claims.
 
-The first paid/model pilot is still pending. Only after it establishes usable
+The first pilot has since passed (see `m1-pilot/README.md`). Only after it establishes usable
 routes, client-event measurements and cleanup should a new, specifically approved
 three-pair alternating A/B compare compact reports or terminal-consumption practice.
 No live quality, token saving, model ranking or Level-3 claim follows from the

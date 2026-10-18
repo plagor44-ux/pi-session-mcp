@@ -121,6 +121,10 @@ ready for the operator: one pilot, declared routes, bounded work/case/wave times
 separate cleanup observation phases and unknown model costs. Existing gates
 require an operator-selected positive advisory amount and acknowledgment of
 unmetered cost; all approval flags remain false and no amount was invented.
-No real-provider M1, live A/B, Claude comparison, token saving or Level-3
-qualification is claimed. Production and maintenance/isolation priorities remain
+On 2026-10-18 the operator approved the M1 pilot (10 USD advisory,
+unmetered use acknowledged). Two attempts failed on harness defects
+(controller SIGTERM forwarding; L2 coding default), both fixed with tests; the
+third [passed](../evaluation/token-footprint-2026-10-17/m1-pilot/README.md)
+with 4 starts, 5 turns and 0 retries. No live A/B, Claude comparison, token
+saving or Level-3 qualification is claimed. Production and maintenance/isolation priorities remain
 unchanged.
