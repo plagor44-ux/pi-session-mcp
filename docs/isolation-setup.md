@@ -101,25 +101,25 @@ podman image inspect --format '{{.Digest}}' docker.io/library/node:22-bookworm
 Per writer (`alpha` below), create state outside the clone:
 
 ```sh
-STATE="$HOME/pi-writers/alpha"
-mkdir -p "$STATE/agent" "$STATE/bundles"
+STATE="${HOME}/pi-writers/alpha"
+mkdir -p "${STATE}/agent" "${STATE}/bundles"
 
 # Full clone, no hard links into the source repository. Run this on the host, once, before the writer starts.
-git clone --no-hardlinks /path/to/source-repo "$STATE/clone"
+git clone --no-hardlinks /path/to/source-repo "${STATE}/clone"
 ```
 
 **Agent directory copy.** Copy only what this boundary needs and nothing else
 (not `mcp-auth.json`, not other providers' entries, not session history):
 
 ```sh
-install -m 0600 /dev/null "$STATE/agent/auth.json"
+install -m 0600 /dev/null "${STATE}/agent/auth.json"
 # Fill it with the entry of the one provider this boundary uses. Do not copy the whole host file.
 # Accepted variant: the access token only, with an empty refresh token, so the rotating refresh
 # token never enters the boundary (a session past the token's expiry then fails instead of refreshing):
-python3 -c 'import json,os,sys; e=json.load(open(os.path.expanduser("~/.pi/agent/auth.json")))["openai"]; e["refresh"]=""; json.dump({"openai":e}, open(sys.argv[1],"w"))' "$STATE/agent/auth.json"
-# Empty it again after use: echo '{}' > "$STATE/agent/auth.json"
-mkdir -p "$STATE/agent/npm"
-# If the profile allowlists extensions, install exactly those into $STATE/agent/npm (Pi's user install layout).
+python3 -c 'import json,os,sys; e=json.load(open(os.path.expanduser("~/.pi/agent/auth.json")))["openai"]; e["refresh"]=""; json.dump({"openai":e}, open(sys.argv[1],"w"))' "${STATE}/agent/auth.json"
+# Empty it again after use: echo '{}' > "${STATE}/agent/auth.json"
+mkdir -p "${STATE}/agent/npm"
+# If the profile allowlists extensions, install exactly those into ${STATE}/agent/npm (Pi's user install layout).
 ```
 
 Pi's install resolves extensions from `<agent dir>/npm/node_modules/<name>`;
@@ -138,6 +138,9 @@ in the agent directory copy.
 development checkout.
 
 ## 4. The wrapper
+
+Write variables as `${CLONE}` in these commands: in zsh, `$CLONE:ro` is read as the
+history modifier `:r` plus `o`, which silently mounts a different path.
 
 The accepted wrappers keep the copy current themselves: before `exec podman`,
 they run a host helper that refreshes the host login through Pi's locked
@@ -160,9 +163,9 @@ holds.
 ```sh
 #!/bin/sh
 # ~/.local/bin/pi-writer-alpha  (mode 0755). Stdout is reserved for MCP frames: no echo, no -t, exec the container.
-STATE="$HOME/pi-writers/alpha"
-CLONE="$STATE/clone"
-RELEASE="$HOME/.local/share/pi-session-mcp/releases/vX.Y.Z"
+STATE="${HOME}/pi-writers/alpha"
+CLONE="${STATE}/clone"
+RELEASE="${HOME}/.local/share/pi-session-mcp/releases/vX.Y.Z"
 IMAGE="docker.io/library/node@sha256:<pinned digest>"
 NETWORK="${PI_WRITER_NETWORK:-pasta}"   # Open decision: network egress policy (see below)
 
@@ -176,12 +179,12 @@ exec podman run -i --rm \
   --network="$NETWORK" \
   --tmpfs /tmp:rw,nosuid,nodev,size=512m \
   --tmpfs /pi/home:rw,nosuid,nodev,mode=0700,size=64m,U \
-  -v "$CLONE:$CLONE:rw" \
-  -v "$RELEASE:/opt/pi-session-mcp:ro" \
-  -v "$STATE/pi-session-mcp.json:/pi/config.json:ro" \
-  -v "$CLONE/.git/hooks:$CLONE/.git/hooks:ro" \
-  -v "$CLONE/.git/config:$CLONE/.git/config:ro" \
-  -v "$STATE/agent:/pi/agent:rw" \
+  -v "${CLONE}:${CLONE}:rw" \
+  -v "${RELEASE}:/opt/pi-session-mcp:ro" \
+  -v "${STATE}/pi-session-mcp.json:/pi/config.json:ro" \
+  -v "${CLONE}/.git/hooks:${CLONE}/.git/hooks:ro" \
+  -v "${CLONE}/.git/config:${CLONE}/.git/config:ro" \
+  -v "${STATE}/agent:/pi/agent:rw" \
   --workdir "$CLONE" \
   -e HOME=/pi/home \
   -e PI_SESSION_MCP_CONFIG=/pi/config.json \
@@ -214,8 +217,8 @@ registration; `setup` neither makes nor verifies it, and Doctor does not check
 it.
 
 ```sh
-claude mcp add pi-coding-alpha -s local -- "$HOME/.local/bin/pi-writer-alpha"
-codex mcp add pi-coding-alpha -- "$HOME/.local/bin/pi-writer-alpha"
+claude mcp add pi-coding-alpha -s local -- "${HOME}/.local/bin/pi-writer-alpha"
+codex mcp add pi-coding-alpha -- "${HOME}/.local/bin/pi-writer-alpha"
 ```
 
 Use the narrowest scope your client offers. Keep the host registration
@@ -238,7 +241,7 @@ redirect file exists:
 
 ```sh
 for f in commondir gitdir config.worktree; do
-  if [ -e "$CLONE/.git/$f" ]; then echo "refuse: .git/$f present" >&2; exit 1; fi
+  if [ -e "${CLONE}/.git/$f" ]; then echo "refuse: .git/$f present" >&2; exit 1; fi
 done
 ```
 
@@ -255,12 +258,12 @@ bundle, so that no host Git process reads the clone. (Which clone settings
 ```sh
 # 1. Create the bundle inside a throwaway container with the clone read-only, no network, no other mounts.
 podman run --rm --network=none --userns=keep-id --cap-drop=all --security-opt=no-new-privileges \
-  -v "$CLONE:$CLONE:ro" -v "$STATE/bundles:/bundles:rw" \
+  -v "${CLONE}:${CLONE}:ro" -v "${STATE}/bundles:/bundles:rw" \
   "$IMAGE" git -c safe.directory='*' -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
 
 # 2. On the host, in the source repository: verify and fetch into a namespaced ref.
-git -C /path/to/source-repo bundle verify "$STATE/bundles/alpha.bundle"
-git -C /path/to/source-repo fetch "$STATE/bundles/alpha.bundle" "HEAD:refs/remotes/writer-alpha/work"
+git -C /path/to/source-repo bundle verify "${STATE}/bundles/alpha.bundle"
+git -C /path/to/source-repo fetch "${STATE}/bundles/alpha.bundle" "HEAD:refs/remotes/writer-alpha/work"
 git -C /path/to/source-repo log --stat writer-alpha/work   # inspect on the host, then merge or cherry-pick yourself
 ```
 
@@ -314,10 +317,10 @@ The control shows that the checks can see an escape on this host. It runs
 without a boundary against a disposable clone and really performs the escapes.
 
 ```sh
-CACHE="$HOME/.cache/pi-session-mcp-isolation"; mkdir -p "$CACHE/control"
-git clone --no-hardlinks /path/to/any-repo "$CACHE/control/clone"
+CACHE="${HOME}/.cache/pi-session-mcp-isolation"; mkdir -p "${CACHE}/control"
+git clone --no-hardlinks /path/to/any-repo "${CACHE}/control/clone"
 node scripts/isolation-acceptance.mjs --mode uncontained-control --launch node \
-  --workspace "$CACHE/control/clone" --out "$HOME/isolation-control.json"
+  --workspace "${CACHE}/control/clone" --out "${HOME}/isolation-control.json"
 ```
 
 Expected: verdict `control_detected_escapes`, exit 0, every write attempt
@@ -329,9 +332,9 @@ escape: the checks cannot be trusted on this host, so fix that first.
 
 ```sh
 node scripts/isolation-acceptance.mjs --mode contained \
-  --agent-dir-copy-writable --agent-dir-copy "$HOME/pi-writers/alpha/agent" \
-  --launch "$HOME/.local/bin/pi-writer-alpha node" \
-  --workspace "$HOME/pi-writers/alpha/clone" --out "$HOME/isolation-alpha.json"
+  --agent-dir-copy-writable --agent-dir-copy "${HOME}/pi-writers/alpha/agent" \
+  --launch "${HOME}/.local/bin/pi-writer-alpha node" \
+  --workspace "${HOME}/pi-writers/alpha/clone" --out "${HOME}/isolation-alpha.json"
 ```
 
 Options:
