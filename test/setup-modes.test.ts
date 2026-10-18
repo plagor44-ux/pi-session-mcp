@@ -34,6 +34,27 @@ describe("setup execution modes", () => {
     expect(await changeExecutionMode(config, request({ mode: "host", acceptHostWrites: true, apply: true }))).toMatchObject({ exitCode: 0, findings: [{ code: "mode_applied" }, { code: "controllers_restart_required", status: "ok" }] });
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "host", acceptHostWrites: true });
   });
+  it.each([undefined, []])("requires explicit container profiles before probing the runtime (%j)", async (profiles) => {
+    for (const apply of [false, true]) {
+      const { config, path } = await fixture();
+      let probes = 0;
+      const dependencies = { containerRuntime: async () => { probes++; return false; } };
+      expect(await changeExecutionMode(config, request({ mode: "container", container: profiles === undefined ? {} : { profiles }, apply }), dependencies)).toMatchObject({
+        status: "failed", exitCode: 1, findings: [{ code: "container_profiles_required", status: "failed" }],
+      });
+      expect(probes).toBe(0);
+      await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  });
+  it.each([undefined, []])("requires profiles for a proposed container after a successful probe (%j)", async (profiles) => {
+    for (const apply of [false, true]) {
+      const { config, path } = await fixture();
+      expect(await changeExecutionMode(config, { alias: "a", acceptHostWrites: false, container: profiles === undefined ? {} : { profiles }, apply }, probe(true))).toMatchObject({
+        status: "failed", exitCode: 1, findings: [{ code: "container_profiles_required", status: "failed" }],
+      });
+      await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  });
   it("refuses an unavailable runtime and writes container defaults when usable", async () => {
     const { config, path } = await fixture();
     const input = request({ mode: "container", container: { profiles: ["code"] }, apply: true });

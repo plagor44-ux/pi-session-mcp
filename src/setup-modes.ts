@@ -45,12 +45,14 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
       resolveExecutionModes(current, aliases, config.executionProfiles);
     } catch { return done("failed", "modes_file_invalid"); }
     let mode = request.mode;
-    if (mode === undefined || mode === "container") {
-      const usable = await (dependencies.containerRuntime ?? containerRuntimeUsable)().catch(() => false);
-      if (!usable) return done("failed", mode === undefined ? "mode_choice_required" : "container_runtime_unavailable");
+    const runtimeUsable = () => (dependencies.containerRuntime ?? containerRuntimeUsable)().catch(() => false);
+    if (mode === undefined) {
+      if (!await runtimeUsable()) return done("failed", "mode_choice_required");
       mode = "container";
     }
     if (mode === "host" && !request.acceptHostWrites) return done("failed", "host_ack_required");
+    if (mode === "container" && !request.container?.profiles?.length) return done("failed", "container_profiles_required");
+    if (request.mode === "container" && !await runtimeUsable()) return done("failed", "container_runtime_unavailable");
     const entry = mode === "host" ? { mode, acceptHostWrites: true } : mode === "container" ? { ...request.container, mode } : { mode };
     let proposed;
     try {
