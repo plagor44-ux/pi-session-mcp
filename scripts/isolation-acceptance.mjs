@@ -9,7 +9,7 @@
 // Usage:
 //   node scripts/isolation-acceptance.mjs --launch "<prefix that runs node>" --workspace <dir> \
 //     --mode contained|uncontained-control [--out <json>] [--env-allow A,B] \
-//     [--agent-dir-copy-writable] [--no-remote-checks]
+//     [--agent-dir-copy-writable [--agent-dir-copy <host path of the copy>]] [--no-remote-checks]
 //
 // `--launch` is split into words (single and double quotes, backslash) and started without a shell;
 // the harness appends `- <probe configuration>` and pipes the probe to its stdin, so the prefix must
@@ -98,6 +98,7 @@ export function parseArguments(argv) {
         out: { type: "string" },
         "env-allow": { type: "string" },
         "agent-dir-copy-writable": { type: "boolean", default: false },
+        "agent-dir-copy": { type: "string" },
         "no-remote-checks": { type: "boolean", default: false },
         help: { type: "boolean", default: false },
       },
@@ -115,6 +116,7 @@ export function parseArguments(argv) {
   if (launch.length === 0 || launch[0] === "") throw new UsageError("--launch needs a command");
   if (!values.workspace) throw new UsageError("--workspace is required");
   if (values.mode === "uncontained-control" && values["agent-dir-copy-writable"]) throw new UsageError("--agent-dir-copy-writable only applies to --mode contained");
+  if (values["agent-dir-copy"] !== undefined && values["agent-dir-copy-writable"] !== true) throw new UsageError("--agent-dir-copy needs --agent-dir-copy-writable");
   let envAllow = null;
   if (values["env-allow"] !== undefined) {
     envAllow = values["env-allow"].split(",").map((name) => name.trim()).filter(Boolean);
@@ -128,6 +130,8 @@ export function parseArguments(argv) {
     out: values.out ? resolve(values.out) : null,
     envAllow,
     agentDirCopyWritable: values["agent-dir-copy-writable"] === true,
+    // Host path of the boundary's writable agent directory copy; canaries written there are found and removed too.
+    agentDirCopy: values["agent-dir-copy"] !== undefined ? resolve(values["agent-dir-copy"]) : null,
     skipRemote: values["no-remote-checks"] === true,
   };
 }
@@ -159,6 +163,13 @@ export function classifyNetwork(tcp) {
  * Decides the overall verdict from a report. Pure; the report holds only booleans, counts and ids.
  * Returns { verdict, exit_code, failed_checks, inconclusive_checks }.
  */
+/** True when the boundary's own configuration is byte-identical to the host's Pi Session MCP configuration. */
+function hostConfigExposed(ownDigest) {
+  if (typeof ownDigest !== "string") return false;
+  const hostConfig = process.env.PI_SESSION_MCP_CONFIG ?? join(homedir(), ".config", "pi-session-mcp", "pi-session-mcp.json");
+  try { return createHash("sha256").update(readFileSync(hostConfig)).digest("hex").slice(0, 12) === ownDigest; } catch { return false; }
+}
+
 export function evaluateVerdict(report, options = {}) {
   const copyWritable = options.agentDirCopyWritable === true;
   const failed = [];
@@ -186,12 +197,14 @@ export function evaluateVerdict(report, options = {}) {
 
   if (report.launch_binding.bound !== true) failed.push("launch_binding.not_bound");
   for (const write of writes) {
-    const exempt = copyWritable && AGENT_COPY_GROUPS.has(write.group);
+    // The boundary's own HOME on a tmpfs is ephemeral and never reaches the host; a host-mapped HOME is not exempt.
+    const exempt = (copyWritable && AGENT_COPY_GROUPS.has(write.group)) || (write.group === "home_inner" && report.boundary?.home_is_tmpfs === true);
     if (write.probe_blocked !== true && !exempt) failed.push(`writes.not_blocked.${write.id}`);
     if (write.host_changed) failed.push(`writes.host_changed.${write.id}`);
   }
   if (!report.digests.preexisting_unchanged_after_probe) failed.push("digests.preexisting_changed_after_probe");
   if (report.credentials.visible_count > 0) failed.push("credentials.visible");
+  if (report.credentials.host_config_exposed === true) failed.push("credentials.host_config_exposed");
   if (report.credentials.ssh_authenticated === true) failed.push("credentials.ssh_authenticated");
   if (report.credentials.ssh_authenticated === null) inconclusive.push("credentials.ssh_not_checked");
   if (report.persistence.marker_survivors > 0) failed.push("persistence.process_survived");
@@ -459,7 +472,8 @@ export async function runAcceptance(options) {
 
   let cleaned = false;
   const state = { canariesFound: 0, canariesRemoved: 0, markersKilled: 0 };
-  const scanDirs = () => [home, dirname(workspace), workspace, join(runRoot, "outside"), join(runRoot, "outside", "linkdir"), agentDir, extDir, userUnitDir, join(runRoot, "source"), join(runRoot, "source", ".git"), join(runRoot, "source", ".git", "hooks")];
+  const copyDirs = options.agentDirCopy ? [options.agentDirCopy, join(options.agentDirCopy, "npm", "node_modules")] : [];
+  const scanDirs = () => [...copyDirs, home, dirname(workspace), workspace, join(runRoot, "outside"), join(runRoot, "outside", "linkdir"), agentDir, extDir, userUnitDir, join(runRoot, "source"), join(runRoot, "source", ".git"), join(runRoot, "source", ".git", "hooks")];
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
@@ -582,6 +596,7 @@ export async function runAcceptance(options) {
         net_ns_differs: differs("net"),
         uid_differs: uidDiffers,
       },
+      boundary: { home_is_tmpfs: probe.home_mount_type === "tmpfs" },
       controls: {
         bash_available: probe.bash_available === true,
         workspace_write_node: controlNode ? controlNode.blocked === false : false,
@@ -593,6 +608,8 @@ export async function runAcceptance(options) {
         items: credentialItems,
         visible_count: visibleCount,
         pi_agent_auth_present: probe.pi_agent_auth?.exists === true,
+        own_config_present: probe.own_config?.present === true,
+        host_config_exposed: hostConfigExposed(probe.own_config?.digest),
         ssh_authenticated: probe.ssh_authenticated === null || probe.ssh_authenticated === undefined ? null : probe.ssh_authenticated === true,
       },
       persistence: {

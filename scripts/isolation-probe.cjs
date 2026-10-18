@@ -122,8 +122,31 @@ const credentials = {
   git_credential_config: gitCredentialConfig(),
   claude_client_config: visible([...underHomes(".claude.json"), ...underHomes(".claude")]),
   codex_client_config: visible([...underHomes(".codex")]),
-  pi_session_mcp_config: visible([...configDirs.map((dir) => path.join(dir, "pi-session-mcp")), ...(process.env.PI_SESSION_MCP_CONFIG ? [process.env.PI_SESSION_MCP_CONFIG] : [])]),
+  // The host configuration directories only; the boundary's own configuration is reported separately below.
+  pi_session_mcp_config: visible(configDirs.map((dir) => path.join(dir, "pi-session-mcp"))),
 };
+// The boundary's own server configuration must be readable; only a digest prefix leaves the probe, so the
+// harness can tell whether it is the host's configuration file.
+function ownConfig() {
+  const file = process.env.PI_SESSION_MCP_CONFIG;
+  if (!file) return { present: false, digest: null };
+  try { return { present: true, digest: require("node:crypto").createHash("sha256").update(fs.readFileSync(file)).digest("hex").slice(0, 12) }; }
+  catch { return { present: false, digest: null }; }
+}
+// The filesystem type of the mount that holds HOME, from /proc/self/mountinfo (longest matching mount point).
+function homeMountType() {
+  try {
+    const target = fs.realpathSync(home);
+    let best = { point: "", type: null };
+    for (const line of fs.readFileSync("/proc/self/mountinfo", "utf8").split("\n")) {
+      const [left, right] = line.split(" - ");
+      if (!left || !right) continue;
+      const point = left.split(" ")[4];
+      if (point && (target === point || target.startsWith(point.endsWith("/") ? point : point + "/")) && point.length > best.point.length) best = { point, type: right.split(" ")[0] };
+    }
+    return best.type;
+  } catch { return null; }
+}
 // Informational: the boundary's own provider authentication, expected to exist for a working session.
 const piAgentAuth = visible([path.join(agentDir, "auth.json")]);
 
@@ -169,6 +192,8 @@ function tcpProbe() {
     marker_started: markerStarted,
     credentials,
     pi_agent_auth: piAgentAuth,
+    own_config: ownConfig(),
+    home_mount_type: homeMountType(),
     ssh_authenticated: sshAuthenticated,
     network_tcp_443: networkTcp,
     child_env_names: childEnvNames,
