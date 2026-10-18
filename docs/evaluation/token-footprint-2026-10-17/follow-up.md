@@ -1,5 +1,12 @@
 # Local follow-up proposals; nothing published or approved
 
+*Status 2026-10-18:* the M1 pilot passed on its third attempt
+([m1-pilot](m1-pilot/README.md)). Sprint 5 implemented candidate 1 as skill
+guidance (#86), candidate 2 as worker-skill guidance (#87), and a slimmer input
+schema (#90); their live effect is unmeasured. The A/B for them is proposed,
+unapproved, in [`../m1-ab-proposal-2026-10-18/`](../m1-ab-proposal-2026-10-18/README.md).
+Statements below about a missing pilot decision are historical.
+
 The current evidence is linked from `README.md`; the first calibration remains
 separately preserved in the parent JSON records. Independent native review and
 verification attempts are recorded alongside each binding. Maintenance continues; isolation (#79) retains

@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+- Added: Doctor warning `workspace_gitfile` when a configured workspace has a
+  `.git` gitfile (`gitdir:` pointer) and at least one execution profile uses the
+  `coding` permission profile. A gitfile can mean a linked worktree, a submodule
+  or a separate Git directory, so hooks and config may be shared with another
+  repository. Advice only: Doctor never follows the pointer or runs Git, the
+  remediation recommends a separate full clone, exit status rules are unchanged.
+  Issue #81.
+- Changed: the `pi-session-orchestration` controller skill records a terminal
+  turn (`completed`, `failed`, `aborted`) once and does not fetch it again in
+  normal operation, gives a concrete polling cadence (first poll about 10 s
+  after the prompt, then every 15–30 s, running tasks only) with fixed task and
+  cleanup budgets, and notes as a Codex route observation that every controller
+  tool call re-sent the accumulated context. The `pi_session_start` error
+  classification moved to `references/start-errors.md` in the skill tree, read
+  only after a start failure; a start error is never retried before it is
+  classified. Issue #86.
+- Changed: the worker skills `pi-session-implementation` and
+  `pi-session-review` ask for concise final reports without full diffs or logs
+  by default, never drop failed checks, blockers or risks, and state what
+  `truncated` does and does not mean. Issue #87.
+- Changed: the descriptions of `pi_capabilities_get`, `pi_session_prompt`,
+  `pi_session_close` and `pi_turn_get` carry short behavior hints. No tool,
+  argument, result, state, annotation or error changed. Issue #88.
+- Changed: the input JSON Schemas of the six `sessionId`/`turnId` fields keep
+  `format: "uuid"` but no longer repeat the long `pattern`; the server still
+  validates with the same rule, and accepted values and error responses are
+  byte-identical (156 compared responses). `tools/list` shrinks by 1,074 bytes.
+  Output schemas are unchanged. Issue #90.
+
 ## 0.8.3 — 2026-10-15
 
 - Fixed: a fresh `npm install -g pi-session-mcp@0.8.2` produced a server that

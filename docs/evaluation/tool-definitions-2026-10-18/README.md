@@ -82,7 +82,12 @@ Description bytes alone: 488, 743, 743. The whole-definition sizes in the existi
 above gives 3,616 at base. Variants tried (same base state): without `$schema` 3,160;
 without `$schema` and `additionalProperties` 2,928; name and description only 836;
 `inputSchema` only 2,660. None gives 2,246, so the definition behind that figure is
-unknown here and the figure is not used as a target. Compare only like with like:
+unknown here and the figure is not used as a target. No committed evidence binds it:
+it appears only in the text of #88 and #90, while the committed Codex projection
+(`../token-footprint-2026-10-17/current-client-projection.json`) records only the whole
+request `tools` array (`tools_bytes` 21,412, including Codex's own tools, with the pi
+tools nested in a `namespace` entry). A Codex-side schema transformation may explain the
+difference; that is an inference, not a measurement. Compare only like with like:
 the deltas above (+255, -1,074) are exact for this formula, and the whole-frame
 numbers in (a) are exact.
 

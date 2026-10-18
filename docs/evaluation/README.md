@@ -14,10 +14,13 @@ their historical PASS/FAIL decisions are not current-source qualifications.
 
 The separately requested [token-footprint calibration](token-footprint-2026-10-17/README.md)
 records 80 provider-free transport cases, 50 filter cases and ten adverse report
-controls. Controller usage remains unknown. A separate synthetic Codex request
-probe measures client projection only on its declared local fixture route; the
-approved real-provider M1 pilot passed on 2026-10-18 on its third attempt, with
-two harness fixes recorded. A dedicated development
+controls. A separate synthetic Codex request probe measures client projection
+only on its declared local fixture route. The approved real-provider
+[M1 pilot](token-footprint-2026-10-17/m1-pilot/README.md) passed on 2026-10-18 on
+its third attempt, with two harness fixes recorded; it measured **controller**
+usage for its one Codex route (171,034 / 219,683 / 396,699 cumulative input
+tokens for L1 / L2 / L3, mostly cached). Worker usage remains unknown, and so do
+token usage and cost of the historical profile screenings below. A dedicated development
 executor preserves the existing gate and adds exact schedule approval. This is
 not a new live wave or production optimization.
 
@@ -29,8 +32,8 @@ not a new live wave or production optimization.
 | [Extension function checks](extension-functions-2026-10-17/README.md) | Seven selected candidates; actual functions and partial/inconclusive results distinguished | Provider-free component checks; no measured live B/C benefit |
 | [Publication verification](publication-2026-10-17/README.md) | Current checks and oracle early-exit regression evidence | Applies to the publishable implementation, separately from the historical live source |
 
-The two approved live waves used 13 starts in total. Actual token usage and cost
-remain unknown; the USD 5 amounts were advisory, with no demonstrated hard
+The two approved live waves used 13 starts in total. Their actual token usage and
+cost remain unknown; the USD 5 amounts were advisory, with no demonstrated hard
 provider cap. No pilot, ablation or additional live call is authorized by this PR.
 Historical screening eligibility does not transfer across source bindings.
 
