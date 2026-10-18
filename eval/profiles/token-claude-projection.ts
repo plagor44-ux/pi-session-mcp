@@ -1,6 +1,6 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { once } from "node:events";
-import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { spawnSync } from "node:child_process";
@@ -13,14 +13,19 @@ import { ERROR_MARKER, MARKER, decodedObjects } from "./token-client-projection.
 // a loopback Messages-API fake, a disposable client home, and the existing MCP
 // fixture server. The frame proxy is not used: Claude Code 2.1.301 opens MCP
 // with a server/discover request that the proxy's strict allowlist treats as a
-// fatal frame (preserved in attempt-1). Only sizes, counts, booleans, safe labels
-// and hashes leave this module; no body, prompt, header or tool data.
+// fatal frame (preserved in attempt-1; the proxy has since been taught that one
+// method, but this probe still launches the fixture server directly). Only sizes,
+// counts, booleans, safe labels and hashes leave this module; no body, prompt,
+// header or tool data.
+// Opt-in non-bare variant: the same probe without `--bare` (which disables tool
+// search), in the identical scrubbed environment, normal scenario only.
 
 const CLIENT_VERSION = "2.1.301 (Claude Code)", SERVER_NAME = "pi-projection", MODEL = "claude-sonnet-5-5";
 const DUMMY_KEY = "sk-ant-synthetic-loopback-dummy-0000";
 const MAX_REQUESTS = 12, BODY_CAP = 4 * 1024 * 1024, RUN_TIMEOUT_MS = 90_000;
 export type ClaudeScenario = "normal" | "domain-error";
 export type ToolSearchSetting = "false" | "true";
+export type ClientMode = "bare" | "non-bare";
 type Suffix = "pi_capabilities_get" | "pi_session_start";
 const object = (v: unknown): Record<string, unknown> => v !== null && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
 const count = (value: string, needle: string) => value.split(needle).length - 1;
@@ -166,10 +171,59 @@ async function processesReferencing(root: string): Promise<number[]> {
   return found;
 }
 
+const hexLoopback = (address: string) => /^[0-9A-F]{8}$/i.test(address) ? address.slice(6, 8) === "7F"
+  : /^[0-9A-F]{32}$/i.test(address) ? address === "00000000000000000000000001000000" || (address.toUpperCase().startsWith("0000000000000000FFFF0000") && address.slice(30, 32).toUpperCase() === "7F") : false;
+const hexUnspecified = (address: string) => /^0+$/.test(address);
+/** Counts connected sockets (tcp/udp, v4/v6) of the given inodes by remote address class; remote addresses are never kept. */
+export function classifySockets(table: string, inodes: ReadonlySet<string>): { loopback: number; non_loopback: number } {
+  const out = { loopback: 0, non_loopback: 0 };
+  for (const row of table.split("\n").slice(1)) {
+    const cols = row.trim().split(/\s+/);
+    if (cols.length < 10 || !inodes.has(cols[9]!)) continue;
+    const remote = (cols[2] ?? "").split(":")[0] ?? "";
+    if (hexUnspecified(remote)) continue;
+    if (hexLoopback(remote)) out.loopback++; else out.non_loopback++;
+  }
+  return out;
+}
+async function socketInodes(pids: number[]): Promise<Set<string>> {
+  const inodes = new Set<string>();
+  for (const pid of pids) for (const fd of await readdir(`/proc/${pid}/fd`).catch(() => [] as string[])) {
+    const target = await readlink(`/proc/${pid}/fd/${fd}`).catch(() => "");
+    const match = /^socket:\[(\d+)\]$/.exec(target);
+    if (match) inodes.add(match[1]!);
+  }
+  return inodes;
+}
+/** Samples the sockets of every process that references the owned root; a sample can miss short-lived sockets. */
+function startSocketSampler(root: string) {
+  const seen = { samples: 0, loopback_connections_seen: 0, non_loopback_connections_seen: 0 };
+  let stopped = false;
+  const loop = (async () => {
+    while (!stopped) {
+      try {
+        const inodes = await socketInodes(await processesReferencing(root));
+        if (inodes.size > 0) for (const table of ["tcp", "tcp6", "udp", "udp6"]) {
+          const c = classifySockets(await readFile(`/proc/net/${table}`, "utf8").catch(() => ""), inodes);
+          seen.loopback_connections_seen += c.loopback; seen.non_loopback_connections_seen += c.non_loopback;
+        }
+        seen.samples++;
+      } catch { /* a failed sample is simply not counted */ }
+      await new Promise(resolve => setTimeout(resolve, 60));
+    }
+  })();
+  return { stop: async () => { stopped = true; await loop; return seen; } };
+}
+async function countFiles(dir: string): Promise<number> {
+  let n = 0;
+  for (const entry of await readdir(dir, { withFileTypes: true }).catch(() => [])) n += entry.isDirectory() ? await countFiles(join(dir, entry.name)) : 1;
+  return n;
+}
+
 type Row = Awaited<ReturnType<typeof runClaudeCase>>;
 const suffixFor = (scenario: ClaudeScenario): Suffix => scenario === "normal" ? "pi_capabilities_get" : "pi_session_start";
 
-async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch: ToolSearchSetting, repetition: number, pilot: boolean) {
+async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch: ToolSearchSetting, repetition: number, pilot: boolean, mode: ClientMode = "bare") {
   const temp = await ownedTemporary(), home = join(temp.root, "home"), configDir = join(home, "claude-config"), workspace = join(temp.root, "workspace");
   const scratch = join(temp.root, "tmp"), suffix = suffixFor(scenario);
   const args = suffix === "pi_session_start" ? { workspace: "missing_probe", executionProfile: "fixture" } : {};
@@ -177,6 +231,7 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
   const stream = { lines: 0, json_errors: 0, event_types: {} as Record<string, number>, result_subtype: null as string | null, result_is_error: null as boolean | null, num_turns: null as number | null, mcp_statuses: [] as string[] };
   let exit_code: number | null = null, timed_out = false, process_cleanup = false, stdout_bytes = 0, line_integrity = false;
   let duration_ms = 0, invalid = false, temp_removed = false, leftover_processes = -1;
+  let sockets: { samples: number; loopback_connections_seen: number; non_loopback_connections_seen: number } | null = null, config_dir_files = -1, home_files = -1;
   try {
     for (const dir of [configDir, workspace, scratch, join(home, ".config"), join(home, ".local/share"), join(home, ".cache"), join(home, ".local/state")]) await mkdir(dir, { recursive: true });
     const config = join(temp.root, "config.json"), mcpConfig = join(temp.root, "mcp.json");
@@ -192,9 +247,10 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
       DISABLE_ERROR_REPORTING: "1", DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1", ENABLE_TOOL_SEARCH: toolSearch,
     };
     const tool = `mcp__${SERVER_NAME}__${suffix}`;
-    const argv = ["--bare", "-p", "--strict-mcp-config", "--mcp-config", mcpConfig, "--output-format", "stream-json", "--verbose", "--model", MODEL, "--allowedTools", tool, "--no-session-persistence", "--max-turns", "3",
+    const argv = [...mode === "bare" ? ["--bare"] : [], "-p", "--strict-mcp-config", "--mcp-config", mcpConfig, "--output-format", "stream-json", "--verbose", "--model", MODEL, "--allowedTools", tool, "--no-session-persistence", "--max-turns", "3",
       "This is a deterministic local client calibration. Call the one allowed MCP tool once, then answer briefly."];
     const began = performance.now();
+    const sampler = mode === "non-bare" ? startSocketSampler(temp.root) : null;
     const result = await runOwnedController("claude", argv, { cwd: workspace, env }, "", RUN_TIMEOUT_MS, line => {
       stream.lines++;
       try {
@@ -205,6 +261,8 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
       } catch { stream.json_errors++; }
     });
     duration_ms = performance.now() - began;
+    sockets = sampler ? await sampler.stop() : null;
+    if (mode === "non-bare") { config_dir_files = await countFiles(configDir); home_files = await countFiles(home); }
     const r = result as unknown as Record<string, unknown>;
     exit_code = typeof r.exit_code === "number" ? r.exit_code : null; timed_out = r.timed_out === true; process_cleanup = r.process_group_cleanup_observed === true;
     stdout_bytes = typeof r.stdout_bytes === "number" ? r.stdout_bytes : 0; line_integrity = r.line_integrity_passed === true;
@@ -224,13 +282,18 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
   const tool_calls_scripted = requests.filter(r => r.scripted_response === "tool_use").length;
   const technical = !invalid && !fake.state.invalid && exit_code === 0 && !timed_out && process_cleanup && line_integrity && leftover_processes === 0 && tool_calls_scripted === 1
     && temp_removed && requests.length > 0 && requests.every(r => r.credential_matches_dummy && !r.authorization_header_present) && fixtureResult !== null && stream.result_is_error === false;
-  return { scenario, tool_search: toolSearch, repetition, pilot, exit_code, timed_out, process_cleanup, line_integrity, leftover_processes, temp_removed, stdout_bytes, duration_ms, stream,
+  // Isolation facts only: every request reached the loopback fake with the dummy key and no Authorization header.
+  const isolation_ok = !invalid && !fake.state.invalid && requests.length > 0 && requests.every(r => r.credential_matches_dummy && !r.authorization_header_present)
+    && fake.state.auxiliary_http.unexpected === 0 && process_cleanup && leftover_processes === 0 && temp_removed && (sockets === null || sockets.non_loopback_connections_seen === 0);
+  return { scenario, tool_search: toolSearch, repetition, pilot, client_mode: mode, exit_code, timed_out, process_cleanup, line_integrity, leftover_processes, temp_removed, stdout_bytes, duration_ms, stream,
     tool_calls_scripted, request_count: requests.length, main_request_count: main.length, auxiliary_request_count: requests.length - main.length, auxiliary_http: fake.state.auxiliary_http,
+    sockets, config_dir_files, home_files, isolation_ok,
     requests, first_main_request_index: first ? requests.indexOf(first) : null, post_tool_request_index: post ? requests.indexOf(post) : null, fake_invalid: fake.state.invalid, invalid, passed: technical };
 }
 
 /** Declared test-only route; no external provider/auth and no semantic token usage. */
-export async function measureClaudeProjection(root: string, build: string, output: string) {
+export async function measureClaudeProjection(root: string, build: string, output: string, options: { mode?: ClientMode } = {}) {
+  const mode: ClientMode = options.mode ?? "bare";
   // The leftover-process check scans /proc; without it cleanup cannot be shown, so other platforms are refused up front.
   if (process.platform !== "linux") throw new Error("unsupported_probe_platform");
   const binding = await sourceBinding(root), started_at = new Date().toISOString();
@@ -243,29 +306,33 @@ export async function measureClaudeProjection(root: string, build: string, outpu
     version = out.status === 0 ? out.stdout.trim() : "unavailable";
   } finally { await versionHome.remove(); }
   if (version !== CLIENT_VERSION) throw new Error("unsupported_fixture_client");
-  // One technical pilot; the bounded repetitions run only after it passed.
-  const rows: Row[] = [await runClaudeCase(build, "normal", "false", 0, true)];
-  const variants: Array<[ClaudeScenario, ToolSearchSetting]> = [["normal", "false"], ["normal", "true"], ["domain-error", "false"]];
-  if (rows[0]!.passed) for (const [scenario, toolSearch] of variants) for (let repetition = 1; repetition <= 3; repetition++) rows.push(await runClaudeCase(build, scenario, toolSearch, repetition, false));
+  // One pilot; the bounded repetitions run only after it passed. The non-bare pilot gates on isolation facts
+  // (it sets tool search on, the setting under test) so that a non-passing tool-search flow is still measured.
+  const rows: Row[] = [await runClaudeCase(build, "normal", mode === "bare" ? "false" : "true", 0, true, mode)];
+  const variants: Array<[ClaudeScenario, ToolSearchSetting]> = mode === "bare" ? [["normal", "false"], ["normal", "true"], ["domain-error", "false"]] : [["normal", "false"], ["normal", "true"]];
+  if (mode === "bare" ? rows[0]!.passed : rows[0]!.isolation_ok && rows[0]!.exit_code === 0) for (const [scenario, toolSearch] of variants) for (let repetition = 1; repetition <= 3; repetition++) rows.push(await runClaudeCase(build, scenario, toolSearch, repetition, false, mode));
   const source_unchanged = digest(binding) === digest(await sourceBinding(root));
   const build_unchanged = build_digest === await buildBinding();
   const summarize = (row: Row) => {
     const first = row.first_main_request_index === null ? null : row.requests[row.first_main_request_index]!, post = row.post_tool_request_index === null ? null : row.requests[row.post_tool_request_index]!;
     const result = post?.tool_results.find(t => t.tool === "fixture") ?? null, p = first?.projection;
-    return { scenario: row.scenario, tool_search: row.tool_search, repetition: row.repetition, pilot: row.pilot, technical_pass: row.passed,
+    return { scenario: row.scenario, tool_search: row.tool_search, repetition: row.repetition, pilot: row.pilot, client_mode: row.client_mode, technical_pass: row.passed, isolation_ok: row.isolation_ok,
       q1: p && p.fixture_present ? { fixture_tool_present: true, output_schema_key_present: p.fixture.output_schema_key_present, schema_marker_hits_entry: p.fixture.schema_marker_hits_entry,
         schema_marker_hits_whole_tools: p.schema_marker_hits_whole_tools, name_bytes: p.fixture.name_bytes, description_bytes: p.fixture.description_bytes, input_schema_bytes: p.fixture.input_schema_bytes, entry_bytes: p.fixture.entry_bytes, keys: p.fixture.keys, other_key_count: p.fixture.other_key_count }
         : { fixture_tool_present: false },
       q2: result ? { marker_hits: result.marker_hits, error_marker_hits: result.error_marker_hits, is_error: result.is_error, content_kind: result.content_kind, block_count: result.block_count, text_block_count: result.text_block_count,
         serialized_bytes: result.serialized_bytes, structured_key_present: result.structured_key_present, equal_text_blocks: result.equal_text_blocks, server_representations: "content_text_equals_structured_json_by_fixture_construction" } : null,
       q3: first ? { first_request_body_bytes: first.body_bytes, tools_count: first.projection.tools_count, tools_bytes: first.projection.tools_bytes, defer_loading_count: first.projection.defer_loading_count,
-        tool_search_tool_present: first.projection.tool_search_tool_present, fixture_in_first_tools: first.projection.fixture_present, fixture_defer_loading: p && p.fixture_present ? p.fixture.defer_loading : null } : null };
+        tool_search_tool_present: first.projection.tool_search_tool_present, fixture_in_first_tools: first.projection.fixture_present, fixture_defer_loading: p && p.fixture_present ? p.fixture.defer_loading : null } : null,
+      requests: { total: row.request_count, main: row.main_request_count, auxiliary: row.auxiliary_request_count, classes: row.requests.map(r => r.request_class), paths: row.requests.map(r => r.path), scripted: row.requests.map(r => r.scripted_response),
+        any_authorization_header: row.requests.some(r => r.authorization_header_present), all_dummy_key: row.requests.every(r => r.credential_matches_dummy), count_tokens: row.auxiliary_http.count_tokens, hello_head: row.auxiliary_http.hello_head, unexpected_http: row.auxiliary_http.unexpected },
+      isolation: { socket_samples: row.sockets?.samples ?? null, loopback_connections_seen: row.sockets?.loopback_connections_seen ?? null, non_loopback_connections_seen: row.sockets?.non_loopback_connections_seen ?? null, config_dir_files: mode === "non-bare" ? row.config_dir_files : null, home_files: mode === "non-bare" ? row.home_files : null } };
   };
   const result = { schema_version: "token-claude-projection-1", binding, build_digest, node: process.versions.node, fixture_digest: hash(await readFile(join(build, "eval/profiles/token-projection-server.js"))),
-    route: "synthetic-loopback-messages", authentication: "fixed-dummy-api-key-disposable-client-home", client_version: CLIENT_VERSION, client_mode: "bare", started_at, ended_at: new Date().toISOString(),
+    route: "synthetic-loopback-messages", authentication: "fixed-dummy-api-key-disposable-client-home", client_version: CLIENT_VERSION, client_mode: mode, started_at, ended_at: new Date().toISOString(),
     source_unchanged, build_unchanged, rows, summaries: rows.map(summarize), model_usage: null, money: null, real_cloud_projection: null, os_egress_containment: null,
     metric_semantics: { bytes: "direct-observation-of-serialized-utf8", marker_hits: "occurrences-in-tool_result-content-serialization", request_bytes: "whole-http-json-body-not-token-usage", model_usage: "unknown-no-model-executed", money: "unknown-no-meter-or-tariff", tool_search: "ENABLE_TOOL_SEARCH-env-forced-on-synthetic-route" },
-    harness_status: rows.length === 10 && rows.every(r => r.passed) && source_unchanged && build_unchanged ? "PASS" : "INCONCLUSIVE" };
+    harness_status: rows.length === (mode === "bare" ? 10 : 7) && rows.every(r => r.passed) && source_unchanged && build_unchanged ? "PASS" : "INCONCLUSIVE" };
   await writeFile(join(output, "claude-projection.json"), JSON.stringify(result, null, 2) + "\n", { mode: 0o600, flag: "wx" });
   return result;
 }
