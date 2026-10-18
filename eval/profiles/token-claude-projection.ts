@@ -125,7 +125,8 @@ export function createFakeMessagesServer(options: FakeMessagesOptions) {
       for await (const chunk of request) { wire += Buffer.byteLength(chunk); if (wire > bodyCap) { state.invalid = true; response.writeHead(413); response.end(); return; } chunks.push(Buffer.from(chunk)); }
       let raw = Buffer.concat(chunks);
       const encoding = String(request.headers["content-encoding"] ?? "identity");
-      if (encoding === "gzip") raw = gunzipSync(raw); else if (encoding === "deflate") raw = inflateSync(raw); else if (encoding !== "identity") throw new Error("unsupported_encoding");
+      // The cap applies to the decoded body too, so a small compressed body cannot expand without bound.
+      if (encoding === "gzip") raw = gunzipSync(raw, { maxOutputLength: bodyCap }); else if (encoding === "deflate") raw = inflateSync(raw, { maxOutputLength: bodyCap }); else if (encoding !== "identity") throw new Error("unsupported_encoding");
       const body = JSON.parse(raw.toString("utf8")) as unknown, b = object(body), klass = classifyRequest(request.headers, body);
       const key = request.headers["x-api-key"], projection = projectToolsEntry(b.tools, options.suffix, options.schemaMarker);
       const metric: FakeRequestMetric = { path: url.searchParams.get("beta") === "true" ? "messages_beta" : "messages", wire_bytes: wire, body_bytes: raw.length, ...klass,
@@ -153,13 +154,13 @@ export function createFakeMessagesServer(options: FakeMessagesOptions) {
 }
 
 /** Own-user processes whose command line or environment still mention the owned temporary root. */
-async function processesReferencing(root: string): Promise<number> {
-  let found = 0;
+async function processesReferencing(root: string): Promise<number[]> {
+  const found: number[] = [];
   for (const name of (await readdir("/proc")).filter(value => /^\d+$/.test(value))) {
     if (Number(name) === process.pid) continue;
     for (const file of ["cmdline", "environ"]) {
       const text = await readFile(`/proc/${name}/${file}`, "latin1").catch(() => "");
-      if (text.includes(root)) { found++; break; }
+      if (text.includes(root)) { found.push(Number(name)); break; }
     }
   }
   return found;
@@ -207,7 +208,11 @@ async function runClaudeCase(build: string, scenario: ClaudeScenario, toolSearch
     const r = result as unknown as Record<string, unknown>;
     exit_code = typeof r.exit_code === "number" ? r.exit_code : null; timed_out = r.timed_out === true; process_cleanup = r.process_group_cleanup_observed === true;
     stdout_bytes = typeof r.stdout_bytes === "number" ? r.stdout_bytes : 0; line_integrity = r.line_integrity_passed === true;
-    for (const deadline = Date.now() + 3000; (leftover_processes = await processesReferencing(temp.root)) > 0 && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 100));
+    let leftovers: number[] = [];
+    for (const deadline = Date.now() + 3000; (leftovers = await processesReferencing(temp.root)).length > 0 && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 100));
+    // A leftover fails the case; it is still terminated before its temporary root is removed.
+    leftover_processes = leftovers.length;
+    for (const pid of leftovers) { try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ } }
   } catch { invalid = true; }
   finally {
     fake.server.closeAllConnections(); await new Promise<void>(resolve => fake.server.close(() => resolve()));
