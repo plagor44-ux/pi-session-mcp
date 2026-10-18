@@ -1,5 +1,11 @@
 # Orchestrator footprint evaluation, 2026-10-17
 
+**Update 2026-10-18:** the approved [M1 real-provider pilot](m1-pilot/README.md)
+passed on its third attempt after two harness fixes. It records Codex
+controller usage (171k–397k cumulative input tokens per case, mostly cached)
+and four repeated terminal fetches in L3. The sections below describe the
+provider-free evidence and the package as prepared on 2026-10-17.
+
 Actual model tokens, subscription cost and cloud-route behavior remain **unknown**.
 The current provider-free calibration passes transport, task, filter and cleanup
 checks. Actual Codex 0.162.0 request bodies on a declared synthetic loopback route

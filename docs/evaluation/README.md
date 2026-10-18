@@ -16,7 +16,8 @@ The separately requested [token-footprint calibration](token-footprint-2026-10-1
 records 80 provider-free transport cases, 50 filter cases and ten adverse report
 controls. Controller usage remains unknown. A separate synthetic Codex request
 probe measures client projection only on its declared local fixture route; the
-exact real-provider M1 proposal remains unapproved. A dedicated development
+approved real-provider M1 pilot passed on 2026-10-18 on its third attempt, with
+two harness fixes recorded. A dedicated development
 executor preserves the existing gate and adds exact schedule approval. This is
 not a new live wave or production optimization.
 
