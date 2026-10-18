@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
-import { createProcessRunner } from "../src/setup-process.js";
+import { createCommandMcpStdioLauncher, createProcessRunner } from "../src/setup-process.js";
 import { currentSetupPlatform } from "../src/setup-platform.js";
 import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readProcStatText, signalFixtureProcess, stopFixtureProcess, processState, waitForPidFile, waitForProcessTerminated } from "./process-fixture.js";
 
@@ -31,6 +31,14 @@ async function cleanupDescendants(parentPidFile: string, pidFile: string): Promi
 }
 
 describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
+  it("launches arbitrary stdio argv with the exact no-refresh environment", async () => {
+    const launch = createCommandMcpStdioLauncher([execPath, "-e", "process.stdin.on('data',()=>process.stdout.write(JSON.stringify({refresh:process.env.PI_WRITER_NO_CREDENTIAL_REFRESH,unexpected:process.env.UNEXPECTED_SECRET})+'\\n'))"], { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" });
+    const child = await launch(new AbortController().signal);
+    try {
+      await child.write("request\n");
+      expect(JSON.parse((await child.read())!)).toEqual({ refresh: "1" });
+    } finally { await child.kill(); }
+  });
   it("honors per-command cwd and merges per-command environment", async () => {
     const cwd = await temporaryRoot("setup-process-cwd-");
     const runner = createProcessRunner({ env: { BASE: "base", OVERRIDE: "old" } });

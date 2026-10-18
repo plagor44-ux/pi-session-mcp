@@ -79,6 +79,48 @@ export function createProcessRunner(options: ProcessRunnerOptions = {}): Command
   }); } };
 }
 
+/** Generalized bounded stdio transport for a generated writer wrapper. */
+export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv): (signal: AbortSignal) => Promise<McpStdioProcess> {
+  return async (signal) => {
+    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe"], env, detached: process.platform !== "win32" });
+    let buffer = "", closed = false, overflow = false;
+    child.stdout.on("data", (chunk: Buffer) => { if (!overflow) { buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer) > DEFAULT_MAX) { overflow = true; buffer = ""; } } });
+    child.stderr.resume();
+    child.on("error", () => { closed = true; });
+    child.on("close", () => { closed = true; });
+    const abort = (): void => terminateProcessGroup(child, "SIGTERM");
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    return {
+      write(frame) {
+        if (closed || overflow || Buffer.byteLength(frame) > DEFAULT_MAX) throw new Error("mcp_write_unavailable");
+        return new Promise<void>((resolve, reject) => child.stdin.write(frame, (error) => error ? reject(new Error("mcp_write_failed")) : resolve()));
+      },
+      async read() {
+        const deadline = Date.now() + DEFAULT_TIMEOUT;
+        while (!closed && !overflow && !buffer.includes("\n") && Date.now() < deadline) await delay(5);
+        if (overflow) return null;
+        const end = buffer.indexOf("\n");
+        if (end >= 0) { const frame = buffer.slice(0, end + 1); buffer = buffer.slice(end + 1); return frame; }
+        return null;
+      },
+      async kill() {
+        signal.removeEventListener("abort", abort);
+        child.stdin.end();
+        terminateProcessGroup(child, "SIGTERM");
+        await delay(100);
+        terminateProcessGroup(child, "SIGKILL");
+        const table = await currentProcessTable(), deadline = Date.now() + 1_000;
+        while (table && child.pid !== undefined && Date.now() < deadline) {
+          if (await table.groupState(child.pid) === "gone") return;
+          await delay(table.pollMs);
+        }
+        throw new Error("mcp_process_cleanup_failed");
+      },
+    };
+  };
+}
+
 export interface McpLauncherOptions { readonly nodePath: string; readonly entryPath: string; readonly configPath: string; readonly timeoutMs?: number; readonly maxFrameBytes?: number; }
 /** Starts the local MCP server with only the controlled configuration environment. */
 export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: AbortSignal) => Promise<McpStdioProcess> {

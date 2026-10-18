@@ -15,10 +15,13 @@ export interface ModeRequest {
   readonly acceptHostWrites: boolean;
   readonly container?: Partial<ContainerSettings>;
   readonly apply: boolean;
+  readonly discard?: boolean;
+  readonly baseRef?: string;
+  readonly codex?: boolean;
 }
 
 /** A dry run writes nothing; apply serializes the entire read/validate/replace transaction. */
-export async function changeExecutionMode(configPath: string, request: ModeRequest, dependencies: { containerRuntime?: () => Promise<boolean> } = {}): Promise<SetupResult> {
+export async function changeExecutionMode(configPath: string, request: ModeRequest, dependencies: { containerRuntime?: () => Promise<boolean>; beforeWrite?: (entry: import("./execution-modes.js").WorkspaceModeEntry) => Promise<SetupResult | undefined>; afterChange?: (output: SetupResult) => Promise<SetupResult> } = {}): Promise<SetupResult> {
   const target = { client: "modes", scope: "workspace", alias: ALIAS_PATTERN.test(request.alias) ? request.alias : "invalid" };
   const operation = request.apply ? "apply" : "dry-run";
   const done = (status: SetupStatus, code: string): SetupResult => result(operation, [{ target, status, code }], status === "planned" ? "planned" : undefined);
@@ -59,6 +62,9 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
       proposed = executionModesSchema.parse({ schemaVersion: 1, workspaces: { ...raw.workspaces, [request.alias]: entry } });
       resolveExecutionModes(proposed, aliases, config.executionProfiles);
     } catch { return done("failed", "modes_file_invalid"); }
+    const resolved = resolveExecutionModes(proposed, aliases, config.executionProfiles).get(request.alias)!;
+    const refused = await dependencies.beforeWrite?.(resolved);
+    if (refused) return refused;
     if (JSON.stringify(current.workspaces[request.alias]) === JSON.stringify(proposed.workspaces[request.alias])) return done("unchanged", "mode_unchanged");
     if (!request.apply) return done("planned", "mode_planned");
     // Preserve every other repository's entry verbatim, including omitted defaults.
@@ -75,10 +81,10 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
     return result(operation, [{ target, status: "ok", code: "mode_applied" }, { target, status: "ok", code: "controllers_restart_required" }]);
   };
   try {
-    if (!request.apply) return await change();
+    if (!request.apply) { const output = await change(); return output.exitCode === 0 && dependencies.afterChange ? await dependencies.afterChange(output) : output; }
     const directory = skillOverrideDirectory(configPath);
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const lock = await acquireOverrideLock(directory);
-    try { return await change(); } finally { await lock.release(); }
+    try { const output = await change(); return output.exitCode === 0 && dependencies.afterChange ? await dependencies.afterChange(output) : output; } finally { await lock.release(); }
   } catch (error) { return done("failed", error instanceof OverrideLockError ? error.code : "operation_failed"); }
 }

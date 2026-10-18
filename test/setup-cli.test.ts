@@ -5,6 +5,17 @@ import type { SetupResult } from "../src/setup-result.js";
 const sample: SetupResult = { schemaVersion: 1, operation: "dry-run", status: "planned", exitCode: 0, findings: [{ target: { client: "codex", scope: "user", alias: "pi-session-mcp" }, status: "absent", code: "absent" }] };
 
 describe("setup CLI", () => {
+  it("parses writer resets, explicit removal, repository base and Codex", () => {
+    expect(parseSetupArgs(["--writer", "a-w1", "--reset", "--base", "main", "--discard", "--apply"]).writer).toEqual({ name: "a-w1", operation: "reset", baseRef: "main", discard: true, apply: true });
+    expect(parseSetupArgs(["--writer", "a-w1", "--remove"]).writer).toMatchObject({ operation: "remove", apply: true });
+    expect(parseSetupArgs(["--repo", "a", "--base", "main", "--client", "codex"]).repo).toMatchObject({ baseRef: "main", codex: true });
+  });
+  it("requires only an alias for control and defaults to planning", () => {
+    expect(parseSetupArgs(["--isolation-control", "--repo", "a"]).isolationControl).toEqual({ alias: "a", apply: false });
+    expect(parseSetupArgs(["--isolation-control", "--repo", "a", "--apply"]).isolationControl?.apply).toBe(true);
+    expect(() => parseSetupArgs(["--isolation-control", "--repo", "a", "--mode", "container", "--apply"])).toThrow();
+    expect(() => parseSetupArgs(["--isolation-control", "--apply"])).toThrow();
+  });
   it("parses JSON and target options", () => { expect(parseSetupArgs(["--apply", "--json", "--target", "codex:user:pi-session-mcp"])).toEqual({ operation: "apply", json: true, targets: [{ client: "codex", scope: "user", alias: "pi-session-mcp" }] }); });
   it("defaults to human dry-run mode", () => { expect(parseSetupArgs(["--target", "codex:user:pi-session-mcp"])).toEqual({ json: false, targets: [{ client: "codex", scope: "user", alias: "pi-session-mcp" }] }); expect(formatSetupHuman(sample)).toContain("dry-run: planned"); });
   it("projects the same sanitized result in JSON", () => { const json = formatSetupResult(sample); expect(JSON.parse(json)).toEqual(sample); expect(json).not.toContain("/home/"); expect(json).not.toContain("sk_"); });

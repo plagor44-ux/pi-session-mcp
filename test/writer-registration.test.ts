@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createWriterRegistrationAdapter, registerWriter, unregisterWriter, type WriterRegistrationIntent } from "../src/client-adapters/writer-registration.js";
@@ -36,6 +36,20 @@ describe("writer registrations", () => {
     await unregisterWriter(f.ownership, f.adapter, f.intent);
     expect(f.run).toHaveBeenCalledWith("claude", ["mcp", "remove", f.intent.name, "-s", "local"], undefined, { cwd: f.intent.projectDir });
     expect(await f.ownership.get(record!.target)).toBeUndefined();
+  });
+  it.each([false, true])("sanitizes missing wrapper reads (owned=%s)", async (owned) => {
+    const f = await fixture();
+    if (owned) await registerWriter(f.ownership, f.adapter, f.intent);
+    await rm(f.intent.wrapperPath);
+    const code = owned ? "ownership_diverged" : "release_binding_mismatch";
+    await expect(registerWriter(f.ownership, f.adapter, f.intent)).rejects.toMatchObject({ message: code, code });
+    if (owned) await expect(unregisterWriter(f.ownership, f.adapter, f.intent)).rejects.toMatchObject({ message: code, code });
+  });
+  it("codes a wrapper read failure after pending ownership is written", async () => {
+    const f = await fixture();
+    const original = f.adapter.add;
+    vi.spyOn(f.adapter, "add").mockImplementation(async (...args) => { await original(...args); await rm(f.intent.wrapperPath); });
+    await expect(registerWriter(f.ownership, f.adapter, f.intent)).rejects.toMatchObject({ message: "ownership_diverged", code: "ownership_diverged" });
   });
   it("leaves an equivalent unowned registration unchanged", async () => {
     const f = await fixture(); f.setState("equivalent");
