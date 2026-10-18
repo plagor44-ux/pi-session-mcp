@@ -1,0 +1,126 @@
+{
+  "schema_version": "token-claude-projection-1",
+  "binding": {
+    "commit": "612fbcb976d4563ea597e87be56123055b782c1a",
+    "digest": "sha256:6bf167ff613c808f086db72b594cbe842218271eb1cffbb1d2af1c6ca800d197"
+  },
+  "build_digest": "sha256:b6c55172c69957bacd20b4c7a4beb457a4239fe7b52cbd3a1f822ccfe3b988bc",
+  "node": "26.11.1",
+  "fixture_digest": "sha256:89d7046116226de6fc138d56660c08c0a1225c1801d8a0fbb7b3b8895fe88314",
+  "route": "synthetic-loopback-messages",
+  "authentication": "fixed-dummy-api-key-disposable-client-home",
+  "client_version": "2.1.301 (Claude Code)",
+  "client_mode": "bare",
+  "started_at": "2026-10-18T12:03:55.626Z",
+  "ended_at": "2026-10-18T12:04:25.862Z",
+  "source_unchanged": true,
+  "build_unchanged": true,
+  "rows": [
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 0,
+      "pilot": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "process_cleanup": true,
+      "line_integrity": true,
+      "server_cleanup": false,
+      "registered_server_cleanup": true,
+      "temp_removed": true,
+      "stdout_bytes": 5204,
+      "duration_ms": 30205.6341,
+      "stream": {
+        "lines": 5,
+        "json_errors": 0,
+        "event_types": {
+          "system": 3,
+          "assistant": 1,
+          "result": 1
+        },
+        "result_subtype": "success",
+        "result_is_error": false,
+        "num_turns": 1
+      },
+      "proxy_integrity": false,
+      "call_schedule_matched": false,
+      "server_frame": null,
+      "request_count": 1,
+      "main_request_count": 1,
+      "auxiliary_request_count": 0,
+      "auxiliary_http": {
+        "count_tokens": 0,
+        "hello_head": 0,
+        "unexpected": 0
+      },
+      "requests": [
+        {
+          "path": "messages_beta",
+          "wire_bytes": 7816,
+          "body_bytes": 7816,
+          "role": "main",
+          "request_class": null,
+          "model_matches": true,
+          "messages_count": 2,
+          "system_bytes": 454,
+          "stream": true,
+          "max_tokens_present": true,
+          "tool_results": [],
+          "projection": {
+            "tools_count": 3,
+            "tools_bytes": 3352,
+            "defer_loading_count": 0,
+            "tool_search_tool_present": false,
+            "schema_marker_hits_whole_tools": 0,
+            "fixture_present": false
+          },
+          "credential_header_present": true,
+          "credential_matches_dummy": true,
+          "authorization_header_present": false,
+          "beta_header_present": true,
+          "scripted_response": "text"
+        }
+      ],
+      "first_main_request_index": 0,
+      "post_tool_request_index": null,
+      "fake_invalid": false,
+      "invalid": false,
+      "passed": false
+    }
+  ],
+  "summaries": [
+    {
+      "scenario": "normal",
+      "tool_search": "false",
+      "repetition": 0,
+      "pilot": true,
+      "technical_pass": false,
+      "q1": {
+        "fixture_tool_present": false
+      },
+      "q2": null,
+      "q3": {
+        "first_request_body_bytes": 7816,
+        "tools_count": 3,
+        "tools_bytes": 3352,
+        "defer_loading_count": 0,
+        "tool_search_tool_present": false,
+        "fixture_in_first_tools": false,
+        "fixture_defer_loading": null
+      }
+    }
+  ],
+  "model_usage": null,
+  "money": null,
+  "real_cloud_projection": null,
+  "os_egress_containment": null,
+  "metric_semantics": {
+    "bytes": "direct-observation-of-serialized-utf8",
+    "marker_hits": "occurrences-in-tool_result-content-serialization",
+    "request_bytes": "whole-http-json-body-not-token-usage",
+    "model_usage": "unknown-no-model-executed",
+    "money": "unknown-no-meter-or-tariff",
+    "tool_search": "ENABLE_TOOL_SEARCH-env-forced-on-synthetic-route"
+  },
+  "harness_status": "INCONCLUSIVE"
+}
