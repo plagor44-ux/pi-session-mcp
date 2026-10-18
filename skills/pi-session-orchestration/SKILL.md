@@ -83,7 +83,7 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - `pi_session_abort` returns `abort_failed` if the abort was rejected. The turn may still be running. Poll it.
 - `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Decide an observation and cleanup budget before you abort, for example a fixed number of polling rounds within a few minutes. Poll `pi_turn_get` until the turn is terminal or the budget is spent, then close the session with `pi_session_close`. If the close fails or does not finish, stop using that workspace, treat it as unverified and report it. Never wait without a bound.
 - If `pi_session_start` fails, classify the error by its `code` alone. Never decide by the message, provider text or any other free text, and never infer a cause. Read [references/start-errors.md](references/start-errors.md) only now; it lists each known code in exactly one class. Any code not listed there is Unknown. Until the code is classified, do not retry and do not switch profiles. If the reference cannot be read, do not retry at all: report the code and stop that task. Always report the code.
-- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`invalid_execution_profile_config` or `invalid_thinking_level`). No MCP server is available; the operator must fix the configuration.
+- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`invalid_execution_profile_config`, `invalid_thinking_level` or `invalid_execution_modes`). No MCP server is available; the operator must fix the configuration.
 
 ## 10. Close every session
 
