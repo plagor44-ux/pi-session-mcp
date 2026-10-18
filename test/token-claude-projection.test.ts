@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "node:net";
+import { gzipSync } from "node:zlib";
 import { classifyRequest, createFakeMessagesServer, messagesSseEvents, projectToolResults, projectToolsEntry } from "../eval/profiles/token-claude-projection.js";
 
 const tool = "mcp__pi-projection__pi_capabilities_get";
@@ -89,5 +90,18 @@ describe("loopback Messages fake", () => {
     await post(base, "/v1/messages", { model: "claude-sonnet-5-5", messages: [], tools: [] });
     expect((await post(base, "/v1/messages", { model: "claude-sonnet-5-5", messages: [], tools: [] })).status).toBe(400);
     expect(fake.state.invalid).toBe(true);
+  });
+
+  it("applies the body cap to the decoded body of a compressed request", async () => {
+    const fake = createFakeMessagesServer({ suffix: "pi_capabilities_get", args: {}, schemaMarker: "reloadPolicy", bodyCap: 64 * 1024 });
+    fake.server.listen(0, "127.0.0.1"); await new Promise<void>(resolve => fake.server.once("listening", () => resolve()));
+    servers.push({ close: () => { fake.server.closeAllConnections(); fake.server.close(); } });
+    const base = `http://127.0.0.1:${(fake.server.address() as AddressInfo).port}`;
+    const bomb = gzipSync(JSON.stringify({ model: "claude-sonnet-5-5", messages: [], pad: "a".repeat(1024 * 1024) }));
+    expect(bomb.length).toBeLessThan(64 * 1024);
+    const response = await fetch(base + "/v1/messages", { method: "POST", headers: { "content-type": "application/json", "content-encoding": "gzip", "x-api-key": "k" }, body: bomb });
+    expect(response.status).toBe(400);
+    expect(fake.state.invalid).toBe(true);
+    expect(fake.state.requests).toHaveLength(0);
   });
 });
