@@ -82,8 +82,11 @@ export function createWriterRegistrationAdapter(input: CommandRunner): WriterReg
   };
 }
 
-async function fingerprint(intent: WriterRegistrationIntent): Promise<string> {
-  return createHash("sha256").update(JSON.stringify({ wrapper: intent.wrapperPath, digest: wrapperDigest(await readFile(intent.wrapperPath, "utf8")) })).digest("hex");
+async function fingerprint(intent: WriterRegistrationIntent, owned = false): Promise<string> {
+  let text: string;
+  try { text = await readFile(intent.wrapperPath, "utf8"); }
+  catch { throw Object.assign(new Error(owned ? "ownership_diverged" : "release_binding_mismatch"), { code: owned ? "ownership_diverged" : "release_binding_mismatch" }); }
+  return createHash("sha256").update(JSON.stringify({ wrapper: intent.wrapperPath, digest: wrapperDigest(text) })).digest("hex");
 }
 const targetFor = (intent: WriterRegistrationIntent) => ({ client: intent.client, scope: intent.client === "codex" ? "user" : "local", alias: intent.name });
 function execution(access: OwnershipAccess): CommandExecution {
@@ -96,14 +99,14 @@ export async function registerWriter(ownership: OwnershipStore, adapter: WriterR
   await ownership.transaction(async (access) => {
     access.assertHealthy?.();
     const target = targetFor(intent);
-    const expected = await fingerprint(intent);
     const owned = await access.get(target);
+    const expected = await fingerprint(intent, !!owned);
     const current = await adapter.inspect(intent);
     access.assertHealthy?.();
     if (owned && owned.fingerprint !== expected) throw new Error("release_binding_mismatch");
     if (current === "absent" && owned?.phase === "owned") throw new Error("ownership_diverged");
     if (current === "equivalent") {
-      if (await fingerprint(intent) !== expected) throw new Error("registration_fingerprint_mismatch");
+      if (await fingerprint(intent, !!owned) !== expected) throw new Error("registration_fingerprint_mismatch");
       access.assertHealthy?.();
       if (owned?.phase === "pending") {
         await access.put({ ...owned, phase: "owned" });
@@ -120,7 +123,7 @@ export async function registerWriter(ownership: OwnershipStore, adapter: WriterR
     access.assertHealthy?.();
     const after = await adapter.inspect(intent);
     access.assertHealthy?.();
-    if (after !== "equivalent" || await fingerprint(intent) !== expected) throw new Error("post_apply_mismatch");
+    if (after !== "equivalent" || await fingerprint(intent, true) !== expected) throw new Error("post_apply_mismatch");
     await access.put({ ...pending, phase: "owned" });
     access.assertHealthy?.();
   });
@@ -135,7 +138,7 @@ export async function unregisterWriter(ownership: OwnershipStore, adapter: Write
     if (!owned) throw new Error("ownership_unavailable");
     const current = await adapter.inspect(intent);
     access.assertHealthy?.();
-    if (!["equivalent", "absent"].includes(current) || (current === "equivalent" && await fingerprint(intent) !== owned.fingerprint)) throw new Error("ownership_diverged");
+    if (!["equivalent", "absent"].includes(current) || (current === "equivalent" && await fingerprint(intent, true) !== owned.fingerprint)) throw new Error("ownership_diverged");
     if (current === "equivalent") {
       await adapter.remove(intent, execution(access));
       access.assertHealthy?.();

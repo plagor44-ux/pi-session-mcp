@@ -19,6 +19,17 @@ async function fixture() {
 const request = (overrides: Partial<ModeRequest> = {}): ModeRequest => ({ alias: "a", mode: "read-only", acceptHostWrites: false, apply: false, ...overrides });
 const probe = (usable: boolean) => ({ containerRuntime: async () => usable });
 describe("setup execution modes", () => {
+  it("allows writer preflight to refuse before a mode write or reconciliation", async () => {
+    const { config, path } = await fixture();
+    let after = false;
+    const output = await changeExecutionMode(config, request({ apply: true }), {
+      beforeWrite: async () => ({ schemaVersion: 1, operation: "apply", status: "failed", exitCode: 1, findings: [{ target: { client: "writer", scope: "a", alias: "a-w1" }, status: "failed", code: "writer_uncollected" }] }),
+      afterChange: async (value) => { after = true; return value; },
+    });
+    expect(output.findings[0]?.code).toBe("writer_uncollected");
+    expect(after).toBe(false);
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("plans without creating a modes file or lock", async () => {
     const { config, path } = await fixture();
     expect(await changeExecutionMode(config, request())).toMatchObject({ status: "planned", exitCode: 0, findings: [{ code: "mode_planned", target: { client: "modes", scope: "workspace", alias: "a" } }] });
