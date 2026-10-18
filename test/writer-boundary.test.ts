@@ -1,8 +1,9 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
-import { BOUNDARY_GIT, BoundaryError, NODE_IMAGE_REF, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
+import { DEFAULT_COMMAND_TIMEOUT_MS } from "../src/client-adapters/command.js";
+import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
 import { writerPaths, type WriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -56,6 +57,7 @@ async function clone() {
   const root = await temporaryRoot("pi-writer-boundary-");
   await mkdir(join(root, ".git", "hooks"), { recursive: true });
   await writeFile(join(root, ".git", "hooks", "pre-commit.sample"), "sample");
+  await writeFile(join(root, ".git", "config"), "[core]\n");
   return root;
 }
 it("accepts a regular .git directory with sample hooks", async () => {
@@ -67,6 +69,17 @@ it.each(["commondir", "gitdir", "config.worktree", "hooks/pre-commit", "hooks/di
   if (entry === "hooks/directory.sample") await mkdir(target);
   else if (entry === "hooks/link.sample") await symlink("pre-commit.sample", target);
   else await writeFile(target, "SECRET_SENTINEL");
+  await expect(verifyCloneLayout(root)).rejects.toMatchObject({ code: "clone_verification_failed" });
+});
+it.each(["missing", "symlink", "directory"])("refuses a %s .git/config", async (kind) => {
+  const root = await clone();
+  const config = join(root, ".git", "config");
+  await unlink(config);
+  if (kind === "symlink") {
+    await writeFile(join(root, "other-config"), "[core]\n");
+    await symlink(join(root, "other-config"), config);
+  }
+  if (kind === "directory") await mkdir(config);
   await expect(verifyCloneLayout(root)).rejects.toMatchObject({ code: "clone_verification_failed" });
 });
 it("refuses a gitfile, missing .git, and a symlinked .git", async () => {
@@ -99,6 +112,28 @@ it("resolves the accepted node image locally or by explicit pull then inspection
     ["image", "inspect", "--format", "{{.Id}}", NODE_IMAGE_REF],
   ]);
   expect(await resolveImage(runner(ok(`${imageId}\n`)), "node", false)).toBe(imageId);
+});
+it("gives only image pulls a dedicated timeout and a distinct signal", async () => {
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  try {
+    const fake = runner(ok("true\n"), ok("6.1.4\n"), failed, ok("pulled"), ok(imageId));
+    expect(await podmanInfo(fake)).toEqual({ usable: true, version: "6.1.4" });
+    expect(await resolveImage(fake, "node", true)).toBe(imageId);
+    expect(IMAGE_PULL_TIMEOUT_MS).toBe(900_000);
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([
+      DEFAULT_COMMAND_TIMEOUT_MS, DEFAULT_COMMAND_TIMEOUT_MS, DEFAULT_COMMAND_TIMEOUT_MS,
+      IMAGE_PULL_TIMEOUT_MS, DEFAULT_COMMAND_TIMEOUT_MS,
+    ]);
+    const signals = fake.run.mock.calls.map(([, , signal]) => signal);
+    expect(signals[3]).toBeInstanceOf(AbortSignal);
+    expect(signals[3]).not.toBe(signals[2]);
+    expect(signals[3]).not.toBe(signals[4]);
+  } finally { timeout.mockRestore(); }
+});
+it("pulls and reinspects node when a successful inspect yields an invalid ID", async () => {
+  const fake = runner(ok("not-an-id\n"), ok("pulled"), ok(imageId));
+  expect(await resolveImage(fake, "node", true)).toBe(imageId);
+  expect(fake.run.mock.calls.map(([, args]) => args[0])).toEqual(["image", "pull", "image"]);
 });
 it("never pulls local IDs or disabled pulls, and rejects invalid IDs and output", async () => {
   expect(await resolveImage(runner(ok(`sha256:${imageId}`)), imageId, true)).toBe(imageId);

@@ -44,3 +44,25 @@ One Task 2 commit on `feature/execution-modes-b`, with subject `feat(writers): b
 - The full suite is not green due to the explicitly documented environment failures; no unrelated fixes were attempted.
 - The brief did not specify the optional base mount destination; the helper uses `/base:ro`, with `/bundles:rw` matching the downstream provisioning and collection scripts. Callers should use those destinations.
 - Timeout enforcement relies on the injected runner honoring its abort signal, as required by the CommandRunner contract.
+
+## Fix round 1
+
+Status: DONE_WITH_CONCERNS. Starting HEAD was verified as `5d91a62` with a clean worktree. All three requested review fixes are implemented in one commit, titled `fix(writers): give image pulls their own timeout and check the clone config file`; its SHA is supplied in the final response.
+
+Changes and self-review:
+
+- `src/writer-boundary.ts` now exports `IMAGE_PULL_TIMEOUT_MS = 900_000` and uses it only for `podman pull -q`. Both probes and all image inspections retain `DEFAULT_COMMAND_TIMEOUT_MS`.
+- Image-resolution pull decisions now use the parsed, successful inspection ID rather than exit status alone. A successful inspection with malformed output triggers the explicitly permitted Node pull and re-inspection. Local IDs still never pull.
+- Clone layout verification now requires a regular `.git/config` via `lstat`, rejecting missing files, symlinks, and directories with `clone_verification_failed`.
+- `test/writer-boundary.test.ts` fixtures now include a regular config. Added regression coverage for missing/symlinked/directory config, malformed successful inspection fallback, exact requested timeout values, and distinct pull/inspection signals. The timeout spy is restored in a `finally` block.
+- No dependencies or unrelated files changed. Real Podman pulls remain unverified in this environment.
+
+Commands and results:
+
+- `git rev-parse --short HEAD && git status --short`: passed; expected HEAD and clean worktree.
+- `npx vitest run test/writer-boundary.test.ts` before implementation: expected red; 15 passed and 5 failed, covering the requested regressions.
+- `npx vitest run test/writer-boundary.test.ts && npm run typecheck`: passed; all 20 focused tests passed and TypeScript exited 0.
+- `npx vitest run > /tmp/task-2-fix-1-vitest.log 2>&1; result=$?; tail -n 110 /tmp/task-2-fix-1-vitest.log; exit "$result"`: full suite run once; 1,716 passed, 8 failed, 7 skipped (72 files passed, 3 failed, 1 skipped). Failures remain the three override-lock waiter timeouts, four skill-customize concurrency timeouts, and package-contents ENOSPC documented above. Podman smoke coverage remains skipped.
+- Final staging and commit use `git diff --check`, explicit staging of the three changed files, `git diff --cached --check`, and the requested identity flags and co-author trailer. The final response records the resulting commit SHA.
+
+Concerns: only the previously documented environment failures and unavailable real Podman execution remain; no unrelated repairs were attempted.

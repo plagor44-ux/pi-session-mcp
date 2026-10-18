@@ -5,6 +5,7 @@ import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
 import type { writerPaths, WriterState } from "./writer-state.js";
 
 export const NODE_IMAGE_REF = "docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d";
+export const IMAGE_PULL_TIMEOUT_MS = 900_000;
 export const BOUNDARY_GIT = "git -c safe.directory=* -c core.fsmonitor=false -c core.hooksPath=/dev/null";
 
 type WriterPaths = ReturnType<typeof writerPaths>;
@@ -58,8 +59,8 @@ export function throwawayArgs(
   return [...result, imageId, "sh", "-c", script, "sh", ...args];
 }
 
-async function podman(runner: CommandRunner, args: readonly string[]): Promise<CommandResult> {
-  return runner.run("podman", args, AbortSignal.timeout(DEFAULT_COMMAND_TIMEOUT_MS));
+async function podman(runner: CommandRunner, args: readonly string[], timeoutMs = DEFAULT_COMMAND_TIMEOUT_MS): Promise<CommandResult> {
+  return runner.run("podman", args, AbortSignal.timeout(timeoutMs));
 }
 
 export async function podmanInfo(runner: CommandRunner): Promise<{ usable: boolean; version?: string }> {
@@ -80,14 +81,15 @@ export async function resolveImage(runner: CommandRunner, image: string, pull: b
   const ref = image === "node" ? NODE_IMAGE_REF : image;
   try {
     const inspect = () => podman(runner, ["image", "inspect", "--format", "{{.Id}}", ref]);
-    let result = await inspect();
-    if (result.exitCode !== 0 && image === "node" && pull) {
-      const pulled = await podman(runner, ["pull", "-q", ref]);
+    const imageId = (result: CommandResult): string | undefined => result.exitCode === 0
+      ? /^(?:sha256:)?([0-9a-f]{64})$/.exec(result.stdout.trim())?.[1] : undefined;
+    let id = imageId(await inspect());
+    if (!id && image === "node" && pull) {
+      const pulled = await podman(runner, ["pull", "-q", ref], IMAGE_PULL_TIMEOUT_MS);
       if (pulled.exitCode !== 0) throw new BoundaryError("image_unavailable");
-      result = await inspect();
+      id = imageId(await inspect());
     }
-    const match = /^(?:sha256:)?([0-9a-f]{64})$/.exec(result.stdout.trim());
-    if (result.exitCode === 0 && match?.[1]) return match[1];
+    if (id) return id;
   } catch {
     throw new BoundaryError("image_unavailable");
   }
@@ -98,6 +100,7 @@ export async function verifyCloneLayout(clone: string): Promise<void> {
   try {
     const git = join(clone, ".git");
     if (!(await lstat(git)).isDirectory()) throw new BoundaryError("clone_verification_failed");
+    if (!(await lstat(join(git, "config"))).isFile()) throw new BoundaryError("clone_verification_failed");
     for (const entry of ["commondir", "gitdir", "config.worktree"]) {
       try {
         await lstat(join(git, entry));
