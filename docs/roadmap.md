@@ -17,14 +17,16 @@ The explicit 2026-10-17 user request adds a bounded development-only
 PR #84. It does not change maintenance mode or the isolation priority below.
 Live measurement requires its own current source-bound matrix/route/budget
 approval; historical evaluation approvals do not apply.
-Its [offline results](evaluation/token-footprint-2026-10-17/README.md) now record
-80 transport cases, 50 filter cases and ten adverse-report controls. Live usage
-remains unmeasured; a dedicated development driver preserves the existing live
-gate and adds exact schedule approval. The operator-approved M1 pilot passed on 2026-10-18 after two harness fixes;
-an A/B still needs its own approval.
+Its [offline results](evaluation/token-footprint-2026-10-17/README.md) record
+80 transport cases, 50 filter cases and ten adverse-report controls. The
+operator-approved [M1 pilot](evaluation/token-footprint-2026-10-17/m1-pilot/README.md)
+passed on 2026-10-18 on its third attempt (attempts 1 and 2 failed on harness
+defects and are preserved); it measured Codex **controller** usage on one route.
+Worker usage and money cost remain unknown. An A/B is proposed, not approved.
 
-Updated 2026-10-16. Base main `53ed581a0c5eb4e35c184e68a7c6a9b840de5985`
-(the merge of the 0.8.3 release).
+Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
+(the merge of PR #85). Sprint 5 is the
+[maintenance and orchestration sprint](sprints/2026-10-18-s5-maintenance-orchestration.md).
 
 - R21 (this roadmap) was delivered as documentation by
   [#58](https://github.com/plagor44-ux/pi-session-mcp/pull/58), which closed
@@ -79,6 +81,28 @@ Updated 2026-10-16. Base main `53ed581a0c5eb4e35c184e68a7c6a9b840de5985`
   is proposed: [ADR 0008](adr/0008-coding-profile-isolation.md). It stays
   Proposed until the maintainer accepts it.
 
+### Sprint 5 issue status
+
+Implemented means the code or text exists on the Sprint 5 branch; verified
+means its named checks passed with evidence. Nothing here is released.
+
+| Issue | Scope | Owner | Depends on | Status |
+| --- | --- | --- | --- | --- |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | open decision; [brief](reviews/2026-10-18-adr-0008-decision-brief.md) ready, ADR stays Proposed |
+| [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
+| [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
+| [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
+| [#88](https://github.com/plagor44-ux/pi-session-mcp/issues/88) | Tool-description hints | Sprint 5 | — | implemented; server-side bytes measured; Claude Code bare-route projection measured with #90 (request `tools[]` −819 bytes); Codex projection gate open |
+| [#89](https://github.com/plagor44-ux/pi-session-mcp/issues/89) | Claude Code projection | Sprint 5 research | — | partial: provider-free probe answers q1 (output schema not observed) and q2 (one representation); q3 unmeasurable on the bare route; q4 needs approval |
+| [#90](https://github.com/plagor44-ux/pi-session-mcp/issues/90) | Input schemas without the UUID pattern | Sprint 5 | compatibility proof | implemented after the proof (156 identical responses); Codex projection gate open |
+| [#91](https://github.com/plagor44-ux/pi-session-mcp/issues/91) | Bounded wait decision | maintainer | #93 results | decision inputs delivered; decision deferred |
+| [#92](https://github.com/plagor44-ux/pi-session-mcp/issues/92) | Worker usage research | Sprint 5 research | — | research note delivered; no contract change |
+| [#93](https://github.com/plagor44-ux/pi-session-mcp/issues/93) | M1 A/B | operator approval | P1–P3 | proposal delivered, not approved |
+
+Gates for later sprints: the #79 decision before any isolation work; the #93
+approval before the A/B; the A/B before the final #91 decision; a public
+contract decision before any minor-release work.
+
 ### Sprint 3 task status
 
 | Task | Issue | Status |
@@ -93,8 +117,9 @@ Updated 2026-10-16. Base main `53ed581a0c5eb4e35c184e68a7c6a9b840de5985`
 
 Status words: planned, in progress, implemented (code exists), verified (named
 criteria met with evidence), blocked, failed (ran and missed its criteria; kept
-on record). Sprints 1 to 4 are closed; the next investment is the isolation
-decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79).
+on record). Sprints 1 to 4 are closed; Sprint 5 is a maintenance sprint; the next
+investment remains the isolation decision in
+[#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79).
 
 ## Sprints and exit gates
 

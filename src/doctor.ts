@@ -1,4 +1,4 @@
-import { access, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, type AppConfig } from "./config.js";
@@ -14,7 +14,7 @@ export type DoctorCheckId =
   | "node_version_unsupported" | "package_metadata_unreadable" | "build_missing"
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
-  | "workspace_not_writable" | "extension_missing" | "extension_version_mismatch"
+  | "workspace_not_writable" | "workspace_gitfile" | "extension_missing" | "extension_version_mismatch"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
 
 export interface DoctorCheck {
@@ -39,6 +39,10 @@ export interface DoctorFileSystem {
   readonly access: (path: string, mode: number) => Promise<void>;
   /** Canonical path; defaults to the real file system when an injected fake omits it. */
   readonly realpath?: (path: string) => Promise<string>;
+  /** Metadata without following a final symbolic link; defaults to the real file system when omitted. */
+  readonly lstat?: (path: string) => Promise<{ readonly isFile: () => boolean; readonly isSymbolicLink: () => boolean; readonly size?: number }>;
+  /** At most `maxBytes` of a regular file's start, never following a symbolic link; defaults to the real file system when omitted. */
+  readonly readPrefix?: (path: string, maxBytes: number) => Promise<string>;
 }
 export interface DoctorDependencies {
   readonly packageRoot?: string;
@@ -52,8 +56,21 @@ export interface DoctorDependencies {
   readonly releasedSkillTrees?: readonly ReleasedSkillTree[];
 }
 
+/** Largest `.git` file Doctor inspects; a real gitfile is one short line. */
+const MAX_GITFILE_BYTES = 4096;
+/** Reads at most `maxBytes` from a regular file; a final symbolic link or a non-regular file is rejected. */
+async function readPrefix(path: string, maxBytes: number): Promise<string> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    if (!(await handle.stat()).isFile()) throw new Error("not a regular file");
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally { await handle.close(); }
+}
+
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -124,6 +141,24 @@ async function skillOverrideChecks(overrideDirectory: string | undefined, shippe
   return checks;
 }
 
+/**
+ * True when `<workspace>/.git` is a regular file whose content starts with a `gitdir:` pointer.
+ * A gitfile does not prove a linked worktree: submodules and `git init --separate-git-dir` use
+ * one too, and telling them apart would need the pointer target, which is never followed.
+ * A symbolic link, an absent or unreadable entry, an oversized file, or any other content is not
+ * a match, so no error here can fail Doctor.
+ */
+async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promise<boolean> {
+  const entry = join(workspace, ".git");
+  try {
+    const info = await (fs.lstat ?? lstat)(entry);
+    if (info.isSymbolicLink() || !info.isFile() || (info.size ?? 0) > MAX_GITFILE_BYTES) return false;
+    // One byte more than the cap proves the file grew after the size check.
+    const content = await (fs.readPrefix ?? readPrefix)(entry, MAX_GITFILE_BYTES + 1);
+    return Buffer.byteLength(content, "utf8") <= MAX_GITFILE_BYTES && /^gitdir:[ \t]*\S/.test(content);
+  } catch { return false; }
+}
+
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
   const fs = dependencies.fileSystem ?? defaultFileSystem;
   const root = dependencies.packageRoot ?? process.cwd();
@@ -189,6 +224,10 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           catch { checks.push(failure("workspace_unreadable", alias, "grant workspace read access")); }
           const canWrite = [...config.executionProfiles.values()].some((profile) => profile.permissionProfile === "coding");
           if (canWrite) { try { await fs.access(path, constants.W_OK); checks.push(ok("workspace_not_writable", alias)); } catch { checks.push(failure("workspace_not_writable", alias, "grant coding workspace write access")); } }
+          if (canWrite) {
+            if (await hasGitfilePointer(fs, path)) checks.push(warning("workspace_gitfile", alias, "the workspace has a gitfile pointer (possible linked worktree or Git metadata stored outside the workspace); hooks and config may be shared with another repository, so give coding workers a separate full clone"));
+            else checks.push(ok("workspace_gitfile", alias));
+          }
         }
       } catch (error) { checks.push(failure(isMissing(error) ? "workspace_missing" : "workspace_unreadable", alias, isMissing(error) ? "fix the workspace alias target" : "grant workspace access")); }
     }

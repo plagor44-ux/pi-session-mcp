@@ -3,8 +3,18 @@
 **Update 2026-10-18:** the approved [M1 real-provider pilot](m1-pilot/README.md)
 passed on its third attempt after two harness fixes. It records Codex
 controller usage (171k–397k cumulative input tokens per case, mostly cached)
-and four repeated terminal fetches in L3. The sections below describe the
-provider-free evidence and the package as prepared on 2026-10-17.
+and four repeated terminal fetches in L3, one of them the deliberate invariance
+re-fetch. All three attempts are preserved: [1](m1-pilot/attempt-1/token-live-result.json)
+(FAIL), [2](m1-pilot/attempt-2/token-live-result.json) (FAIL),
+[3](m1-pilot/attempt-3/token-live-result.json) (PASS). The sections below describe
+the provider-free evidence and the package **as prepared on 2026-10-17**; their
+statements that live usage is unknown and that the operator decision is missing
+are historical partial states, superseded for controller usage by the pilot.
+Worker usage, money cost and cloud-route projection remain unknown. A follow-up A/B
+is proposed, unapproved, in [`../m1-ab-proposal-2026-10-18/`](../m1-ab-proposal-2026-10-18/README.md).
+The [integrity index](integrity.json) binds the files as packaged on 2026-10-17;
+this README and `follow-up.md` have since received dated status notes and no
+longer match their recorded hashes. The JSON run records are unchanged.
 
 Actual model tokens, subscription cost and cloud-route behavior remain **unknown**.
 The current provider-free calibration passes transport, task, filter and cleanup
@@ -154,7 +164,9 @@ invalid JSON claim is made about this probe. The full answer text did not surviv
 Both ordinary plaintext tool-echo and `<think>`-wrapped echo markers survive
 once in this selected projected result. Only hit counts persist.
 
-The complete request tools array was 21,412 bytes; a normal first whole request
+The complete request tools array was 21,412 bytes, including Codex's own tools;
+it is not the size of the eight pi definitions alone (see
+[tool-definition evidence](../tool-definitions-2026-10-18/README.md)); a normal first whole request
 was 43,712 bytes. These include the client's own tools/instructions. Per-request
 `input_bytes`, whole-body bytes and newly added tool-output bytes remain distinct.
 Later requests contain previous outputs again; `new_in_request` and opaque call
@@ -221,8 +233,9 @@ Selected production skill-directory digests remain unavailable/null; no repair
 was made. Claude Code 2.1.302 is inventoried separately and was not invoked for a
 comparison. No alternative subscription, provider credential or route was acquired.
 
-**The missing gate is the explicit current operator decision for this exact
-matrix/routes/budget.** All three templates have approval false. Subscription USD
+*Historical state of 2026-10-17; the operator approved the pilot on 2026-10-18
+(approved copies in `m1-pilot/attempt-*`).* **The missing gate was the explicit
+current operator decision for this exact matrix/routes/budget.** All three templates have approval false. Subscription USD
 and provider hard cap remain null. The existing gate additionally requires a
 positive operator-selected advisory amount and explicit unmetered-cost
 acknowledgment. No amount was invented, and an advisory is not a measured cost

@@ -142,6 +142,19 @@ frontmatter with only `name` and `description`.
 | `pi-session-review` | A Pi worker | A review of a fixed target with findings and evidence. Register it as `builtin:pi-session-review` and select it on read-only profiles. |
 | `pi-session-orchestration` | The controlling Claude Code or Codex agent | How to run Pi worker sessions through this server. `setup --apply` installs it into the clients. It is not a Pi worker skill: do not select it in a profile. |
 
+The worker skills ask for concise final reports: status, actual changed paths,
+checks with exit codes, failures, blockers, risks and repository-relative
+evidence references, without full diffs or logs by default. A failed check,
+blocker or risk is never dropped to save space. `truncated: true` means the
+report the controller receives is incomplete; `truncated: false` does not prove
+that it is complete or correct.
+
+The orchestration skill is a small skill tree: `SKILL.md` plus
+`references/start-errors.md`, the classification of `pi_session_start` error
+codes, which the controller reads only after a start failure. Setup copies the
+whole tree and the tree fingerprint covers both files; a copy of only
+`SKILL.md` lacks the referenced file.
+
 A package update can change the shipped skills. Close affected sessions before
 you update, as for any skill change.
 

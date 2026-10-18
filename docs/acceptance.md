@@ -1894,3 +1894,50 @@ This check does not cover:
   resume, and Intel Macs.
 - Model capability on larger work. The tasks are deliberately small, and a
   local model of the 35B class answered them.
+
+## Sprint 5 provider-free checks (2026-10-18)
+
+Sprint 5 ([plan and ledger](sprints/2026-10-18-s5-maintenance-orchestration.md))
+changed Doctor, tool descriptions, input schemas and the shipped skills, so the
+provider-free acceptance below ran on the integrated head. Linux workstation,
+Node.js from `PATH`, fresh full clone after `npm ci`. No session with a real
+provider, no live client cycle and no Level 3 claim; nothing here is a release
+acceptance.
+
+On the integrated head `87bde7a` (all implementation, before review fixes):
+
+- `npm ci`, `npm run typecheck`, `npm run build:cli`, `npm run build`: exit 0.
+- `NODE_OPTIONS=--unhandled-rejections=strict npm test -- --maxWorkers=2`:
+  67 files, 1,531 tests passed, 6 skipped, 0 failed. This includes
+  `test/token-live.test.ts`, whose cleanup test had failed in a cloud review
+  environment on a namespace/`/proc` mismatch; natively it passed, with no
+  timeout or identity check relaxed.
+- `npm run eval:profiles -- --plan` (live status `BLOCKED`, as intended),
+  `--offline` (`PASS`, 310 of 310), `npm run eval:schemas -- --check`: exit 0.
+- `npm pack --dry-run --json`: 550 files, including
+  `skills/pi-session-orchestration/references/start-errors.md` and both worker
+  skills.
+- `git diff --check 612fbcb HEAD`: clean.
+- Level 2 setup acceptance with disposable homes
+  (`scripts/setup-acceptance.mjs`, label `s5-working-tree`): 160 of 160 checks,
+  all four client targets 9 of 9 steps, real registrations unchanged, no
+  leftover processes, no path leak, build unchanged, disposable directory
+  removed. Claude Code 2.1.301 and Codex 0.162.1.
+- Doctor without `PI_SESSION_MCP_CONFIG`: exit 2 with `config_missing`, as
+  expected.
+
+Independent review of the frozen diff `612fbcb..87bde7a` by two non-authoring
+model families: agy (Gemini 3.8 Flash, file-read tools only) and a Pi
+`review-grok` worker (xAI Grok 4.7, read-only). Seven findings were accepted
+and fixed: start errors are not retried when the reference cannot be read; the
+Claude probe refuses non-Linux platforms, caps decoded bodies and terminates
+leftover processes; the A/B order asymmetry, the net `tools/list` change
+against 0.8.3 and the historical status of the 2026-10-17 draft are stated.
+After the fixes, the affected checks ran again on the final code: typecheck,
+both builds, six skill, setup, package and probe test files (395 tests),
+`eval:schemas -- --check`, `eval:profiles -- --offline` (`PASS`), the probe
+itself (attempt 3, `PASS`, 10 runs) and the diff and relative-link checks. The
+full suite was not repeated for these text and evaluation-only changes.
+
+Open: the Codex projection of #88/#90 (the probe pins Codex 0.162.0), macOS
+runs of the new Doctor check outside CI, and every live effect.

@@ -1,6 +1,7 @@
 # ADR 0008: Isolation for coding profiles on non-disposable repositories
 
-**Status:** Proposed (2026-10-16). Issue
+**Status:** Proposed (2026-10-16; facts rechecked 2026-10-18, see the
+[decision brief](../reviews/2026-10-18-adr-0008-decision-brief.md)). Issue
 [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79). Follows the
 fired isolation trigger of [ADR 0003](0003-post-mvp-maintenance.md#revisit-triggers)
 and the [Sprint 4 decision](../sprints/2026-10-15-s4-decision.md).
@@ -46,8 +47,10 @@ Facts the options must meet:
   such as `core.fsmonitor` or `diff.external` runs commands, so a writer that
   changes a repository's `.git` can run code in the operator's later Git
   commands.
-- Linux and macOS are supported platforms; macOS live acceptance on real
-  hardware (R10, R11) is open. The server runs without root.
+- Linux and macOS are supported platforms. macOS live acceptance on real
+  hardware (R10, R11) passed for Claude Code on 2026-10-16 (release 0.8.3);
+  it covers setup and smoke, not containment, and Codex on macOS is not
+  established. The server runs without root.
 - Each client starts its own server over stdio, so a client can register a
   second server under another name with another command. A registration that
   setup did not make is not bound to a build and not owned or verified by
@@ -82,7 +85,8 @@ Sources were read on 2026-10-16.
    - One wrapped registration sees the union of what it mounts. Writers are
      isolated from each other only with one boundary per writer.
    - Linux first. On macOS it needs a Linux VM (for example Lima or Podman
-     machine); not accepted there while R10/R11 are open.
+     machine); no macOS VM setup has been tried or accepted (R10/R11 cover
+     setup and smoke only).
    - Adds no code, dependency or platform path to the server. The operator
      carries the setup, and setup does not own or verify the wrapped
      registration.
@@ -171,7 +175,10 @@ Follow-ups, each with its own issue:
 - The installation guide documents the wrapped registration.
 - First, because linked worktrees are in use today: an offline Doctor
   advisory when a workspace alias is a linked Git worktree while a coding
-  profile exists ([#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81)). Refusing coding sessions on such an alias would add a public
+  profile exists ([#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81)).
+  Implemented in Sprint 5 as the warning `workspace_gitfile`, which detects a
+  possible linked worktree from a `.git` gitfile without following it; not yet
+  released. Refusing coding sessions on such an alias would add a public
   error code and needs a minor release and its own decision.
 - Setup support for a wrapped registration would change setup's contract and
   needs its own decision.
