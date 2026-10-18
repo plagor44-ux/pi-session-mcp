@@ -8,8 +8,8 @@ import { ALIAS_PATTERN } from "./execution-profile.js";
 export const WRITER_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,63}-w([1-9]|1[0-6])$/;
 
 export class WriterStateError extends Error {
-  constructor(readonly code: "writer_state_invalid") {
-    super("Writer state is invalid");
+  constructor(readonly code: "writer_state_invalid" | "writer_state_unreadable") {
+    super(code);
     this.name = "WriterStateError";
   }
 }
@@ -83,7 +83,7 @@ export async function readWriterState(home: string, name: string): Promise<Write
   let stat;
   try { stat = await lstat(path); } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
-    throw new WriterStateError("writer_state_invalid");
+    throw new WriterStateError("writer_state_unreadable");
   }
   if (!stat.isFile()) throw new WriterStateError("writer_state_invalid");
   try {
@@ -93,8 +93,14 @@ export async function readWriterState(home: string, name: string): Promise<Write
       if (!(await handle.stat()).isFile()) throw new WriterStateError("writer_state_invalid");
       return validateState(JSON.parse(await handle.readFile("utf8")) as unknown, name);
     } finally { await handle.close(); }
-  } catch {
-    throw new WriterStateError("writer_state_invalid");
+  } catch (error) {
+    if (error instanceof WriterStateError) throw error;
+    if (error instanceof SyntaxError) throw new WriterStateError("writer_state_invalid");
+    if (error instanceof Error && "code" in error) {
+      if (error.code === "ENOENT") return undefined;
+      if (error.code === "ELOOP") throw new WriterStateError("writer_state_invalid");
+    }
+    throw new WriterStateError("writer_state_unreadable");
   }
 }
 
