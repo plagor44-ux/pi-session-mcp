@@ -8,7 +8,7 @@ import { sourceBinding, digest, hash, snapshot, ownedTemporary } from "./files.j
 import { cleanupRegisteredServer, runOwnedController } from "./token-live.js";
 import { proxyMetricsSchema } from "./token-live-proxy.js";
 
-const MARKER = "token_probe_marker_74ac", ERROR_MARKER = "unknown_workspace";
+export const MARKER = "token_probe_marker_74ac", ERROR_MARKER = "unknown_workspace";
 type Scenario = "normal" | "domain-error" | "truncated";
 type ProjectedTool = "pi_capabilities_get" | "pi_session_list" | "pi_session_start" | "pi_session_prompt" | "pi_turn_get" | "pi_session_close";
 type OutputMetric = ReturnType<typeof projectedOutputs>[number] & { tool: ProjectedTool | "other"; call_ordinal: number | null; new_in_request: boolean };
