@@ -1,4 +1,4 @@
-# ADR 0008 Linux acceptance, 2026-10-18: writer `psm-alpha`
+# ADR 0008 Linux acceptance, 2026-10-18: writers `psm-alpha` and `go-app-alpha`
 
 Setup under test, following [Isolation setup](../../isolation-setup.md): rootless
 Podman 6.1.4 (overlay, netavark), image `docker.io/library/node` pinned at
@@ -49,3 +49,36 @@ Not covered: escapes from the container runtime itself, exfiltration over the
 provider connection, trusted extension code (none selected), macOS, other
 writers or images. Repeat the acceptance after any change of wrapper, image or
 Podman version.
+
+## Follow-up the same day: credential sync, second writer, registrations
+
+Other Claude Code and Codex sessions were running on this host and use the host
+configuration and `~/.pi/agent`. To leave them undisturbed, the host
+configuration and its coding profiles were not changed, no server was
+restarted, no new uncontained control run was made (it writes real canaries
+into `$HOME` and `~/.pi/agent`; the host's control run above stands), new
+clones came from the remote, and the host `auth.json` is only read.
+
+- **Credential sync.** With an access-only copy, a boundary fails
+  (`local_authentication_unavailable`) once the host token has expired, because
+  Pi refreshes only on demand. The wrappers now run
+  [`auth-warmup.mjs`](auth-warmup.mjs) first: if the host token expires within
+  20 minutes, it starts and closes one session of the released server with a
+  minimal read-only configuration (no model request), which lets Pi refresh the
+  host login through its own locked credential store, the same path the
+  running sessions use. The wrapper then copies the fresh access token with an
+  empty refresh token. The wrapper change was followed by new contained runs.
+- **`psm-alpha`** after the change: [contained.json](contained.json) `pass`.
+- **`go-app-alpha`** (Go repository): image built from the pinned Node image plus
+  Go 1.26.9 with its official checksum ([Containerfile](go-app-alpha/Containerfile)),
+  pinned by image ID with `--pull=never`; a writable `$STATE/go` for the module
+  and build cache. [Contained](go-app-alpha/contained.json): `pass`.
+  [Live](go-app-alpha/live.json): `pass`, the same pattern as `psm-alpha`.
+  [Wrapper](go-app-alpha/wrapper.sh).
+- **Registrations:** `pi-coding-psm-alpha` (this repository) and
+  `pi-coding-go-app-alpha` (go-app) in Claude Code's `local` scope only. A running
+  session sees a new server after `/mcp` reconnects. Codex has no
+  project-local scope, so no Codex registration was added.
+
+Still open: the host configuration keeps its coding profiles for other aliases
+(the Sprint 4 interim rules apply to them), other repositories, and macOS.

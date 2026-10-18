@@ -139,6 +139,19 @@ development checkout.
 
 ## 4. The wrapper
 
+The accepted wrappers keep the copy current themselves: before `exec podman`,
+they run a host helper that refreshes the host login through Pi's locked
+credential store when it expires within 20 minutes (one session start and close
+of the released server, no model request; see
+[`auth-warmup.mjs`](evaluation/isolation-acceptance-2026-10-18/auth-warmup.mjs)),
+then copy the access token with an empty refresh token into `$STATE/agent`.
+Without that, a boundary stops working whenever the host token has expired.
+A locally built image cannot be pinned by `@sha256` digest (Podman then tries a
+registry); pin it by its full image ID and add `--pull=never`. Language
+toolchains belong in the image (for Go: a module and build cache mounted from
+`$STATE/go` and `GOTOOLCHAIN=local`). The accepted wrappers are kept with the
+[acceptance evidence](evaluation/isolation-acceptance-2026-10-18/README.md).
+
 Keep the container command in one script, so that the client registration and
 the acceptance run use the same flags and mounts. This is an **illustrative,
 untested** starting point; adapt it and let the acceptance show whether it
