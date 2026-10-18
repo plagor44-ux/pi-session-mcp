@@ -1,3 +1,4 @@
+import { stdoutGuard } from "./stdout-guard-install.js";
 import { McpServer } from "@modelcontextprotocol/server";
 import { serveStdio, StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { Readable, Writable } from "node:stream";
@@ -20,5 +21,8 @@ export async function serveRefusal(code: RefusalCode, io?: { stdin: Readable; st
       });
     }
     return server;
-  }, { transport: new StdioServerTransport(io?.stdin ?? process.stdin, io?.stdout ?? process.stdout) });
+  }, {
+    transport: new StdioServerTransport(io?.stdin ?? process.stdin, io?.stdout ?? stdoutGuard.transportStdout),
+    onerror: () => { process.stderr.write(JSON.stringify({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }) + "\n"); },
+  });
 }

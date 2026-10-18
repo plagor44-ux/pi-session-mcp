@@ -1,8 +1,18 @@
 import { PassThrough } from "node:stream";
 import { Client } from "@modelcontextprotocol/client";
 import type { Transport, JSONRPCMessage } from "@modelcontextprotocol/client";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { serveRefusal } from "../src/refusal-server.js";
+it("reports transport failure with one fixed stderr diagnostic", async () => {
+  const stdin = new PassThrough(), stdout = new PassThrough();
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  try {
+    await serveRefusal("writer_not_ready", { stdin, stdout });
+    stdin.emit("error", new Error("secret /private/path"));
+    await vi.waitFor(() => expect(stderr).toHaveBeenCalledTimes(1));
+    expect(stderr.mock.calls).toEqual([[JSON.stringify({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }) + "\n"]]);
+  } finally { stdin.end(); stderr.mockRestore(); }
+});
 it("lists all eight tools and returns fixed structured refusals over frames only", async () => {
   const stdin = new PassThrough(), stdout = new PassThrough(); const frames: unknown[] = [];
   const transport: Transport = {

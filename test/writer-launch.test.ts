@@ -5,7 +5,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { launch, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
+import { launch, launchEntry, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
 import { acceptanceFingerprint, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { serveArgs } from "../src/writer-boundary.js";
@@ -23,12 +23,28 @@ beforeEach(async () => {
     spawnPodman: vi.fn(() => { setImmediate(() => child.emit("close", 7)); return child; }),
     setInterval: vi.fn((fn) => { tick = fn; return setInterval(() => {}, 100000); }), clearInterval: vi.fn(clearInterval) };
 });
-afterEach(async () => { vi.useRealTimers(); await rm(home, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await rm(home, { recursive: true, force: true }); });
 async function save(ready = false, version = "5.0.0") {
   await writeWriterState(home, "x-w1", state);
   await writeFile(writerPaths(home, "x-w1").wrapper, "wrapper");
   if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache }) } });
 }
+it.each(["throw", "error"])("reports a Podman spawn %s once without leaking error details", async (kind) => {
+  await save(); const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  vi.mocked(deps.spawnPodman).mockImplementation(() => {
+    if (kind === "throw") throw new Error("/private/path secret-token");
+    setImmediate(() => { child.emit("error", new Error("/private/path secret-token")); child.emit("close", -2); });
+    return child;
+  });
+  expect(await launchEntry(["x-w1", "node", "probe"], deps)).toBe(1);
+  expect(stderr.mock.calls).toEqual([[JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "spawn", code: "writer_launch_failed" }) + "\n"]]);
+});
+it("reports entry-point rejection once without leaking error details", async () => {
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  vi.mocked(serveRefusal).mockRejectedValueOnce(new Error("/private/path secret-token"));
+  expect(await launchEntry([], deps)).toBe(1);
+  expect(stderr.mock.calls).toEqual([[JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "entry", code: "writer_launch_failed" }) + "\n"]]);
+});
 it("renders a shell-valid fully quoted wrapper and rejects quotes", () => {
   const text = renderWrapper("/node space", "/release space", "x-w1");
   execFileSync("sh", ["-n"], { input: text });
