@@ -3,6 +3,7 @@ import { z } from "zod";
 import packageMetadata from "../package.json" with { type: "json" };
 import { projectCapabilities } from "./capabilities.js";
 import { CONFIGURATION_FINGERPRINT_PATTERN, RELOAD_POLICY, type ConfigurationMetadata } from "./config.js";
+import { codingAllowed, type WorkspaceModeEntry } from "./execution-modes.js";
 import { PiSessionCreationError } from "./pi-adapter.js";
 import { ALIAS_PATTERN, toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
 import { RegistryError, type SessionRegistry } from "./session-registry.js";
@@ -37,7 +38,7 @@ const capabilitiesSchema = z.object({
     fingerprint: z.string().regex(CONFIGURATION_FINGERPRINT_PATTERN),
     reloadPolicy: z.literal(RELOAD_POLICY),
   }).strict(),
-  workspaces: z.array(z.object({ alias: aliasSchema }).strict()),
+  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only"]) }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,
     default: z.boolean(),
@@ -67,6 +68,7 @@ export function createServer(
   executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>,
   defaultExecutionProfile: string,
   configuration: ConfigurationMetadata,
+  workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
 ): McpServer {
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
@@ -74,7 +76,7 @@ export function createServer(
     inputSchema: z.object({}).strict(),
     outputSchema: capabilitiesSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration)));
+  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes)));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
     inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
@@ -83,6 +85,9 @@ export function createServer(
     const alias = executionProfile ?? defaultExecutionProfile;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
+    if (configured.permissionProfile === "coding" && !codingAllowed(workspaceModes.get(workspace) ?? { mode: "unset" })) {
+      throw new RegistryError("workspace_mode_forbids_coding");
+    }
     return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured)) };
   }));
   server.registerTool("pi_session_list", {

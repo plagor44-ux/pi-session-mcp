@@ -59,7 +59,7 @@ describe("orchestration skill start-error classification", () => {
     expect(mcpErrorCodes).toContain("local_authentication_unavailable");
     expect(mcpErrorCodes).toContain("server_stopping");
     expect(new Set(mcpErrorCodes).size).toBe(mcpErrorCodes.length);
-    expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level"]);
+    expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes"]);
   });
 
   it("puts every documented start code in exactly one class", () => {

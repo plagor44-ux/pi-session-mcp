@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     const config = await loadConfig();
     registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces);
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),

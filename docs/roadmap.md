@@ -83,6 +83,16 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   boundary per writer. The Linux acceptance passed on 2026-10-18 for one writer
   ([evidence](evaluation/isolation-acceptance-2026-10-18/README.md)); review point
   2026-11-15. macOS keeps the interim rules.
+- [ADR 0009](adr/0009-execution-modes.md), accepted 2026-10-18, records
+  [per-repository execution modes](execution-modes.md). Plan A is implemented
+  on `feature/execution-modes-a`: separate modes file, host-server enforcement,
+  setup selection and offline Doctor checks. It is unreleased and requires
+  minor release 0.9.0; no package version bump or live rollout is claimed here.
+  Container mode blocks host coding but does not create a boundary. The
+  [manual runbook](isolation-setup.md) remains the route for accepted writers.
+  Follow-up: **Plan B, issue to be opened** — automated provisioning,
+  collect/reset, wrappers, refusal server, writer registration and periodic
+  credential refresh for long-running contained servers.
 
 ### Sprint 5 issue status
 
@@ -91,7 +101,7 @@ means its named checks passed with evidence. Nothing here is released.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `go-app-alpha` (contained and live), both registered in Claude Code's local scope; remaining: the host configuration's other coding routes and other repositories, review point 2026-11-15 |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008; execution policy, ADR 0009 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `go-app-alpha` (contained and live), both registered in Claude Code's local scope; Plan A per-repository modes implemented on `feature/execution-modes-a`, unreleased (0.9.0 required), no live rollout claimed; Plan B, issue to be opened, for automated container writers and periodic credential refresh; remaining host routes/repositories need operator choices, review point 2026-11-15 |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
@@ -121,8 +131,9 @@ contract decision before any minor-release work.
 Status words: planned, in progress, implemented (code exists), verified (named
 criteria met with evidence), blocked, failed (ran and missed its criteria; kept
 on record). Sprints 1 to 4 are closed; Sprint 5 is a maintenance sprint; the next
-investment remains the isolation decision in
-[#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79).
+investment remains isolation under
+[#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79), now decided in
+ADRs 0008 and 0009; automated container writers remain Plan B, issue to be opened.
 
 ## Sprints and exit gates
 

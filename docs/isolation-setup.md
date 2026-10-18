@@ -3,9 +3,14 @@
 This is the operator runbook for [ADR 0008](adr/0008-coding-profile-isolation.md)
 (issue [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79)): a
 coding-only registration whose server runs inside a rootless Podman container,
-one container per writer, on Linux. Pi Session MCP does not change. It does not
-start, own or verify this registration, and `pi-session-mcp-setup` does not
-know about it.
+one container per writer, on Linux. This remains the **manual route**:
+Pi Session MCP does not start, own or verify this wrapped registration.
+[Execution modes](execution-modes.md) (ADR 0009, Plan A) now let setup record a
+per-repository choice and block host coding for container aliases, but do not
+provision writers. Plan B's automated provisioning, collect/reset, wrappers,
+refusal server, registration and periodic credential refresh for long-running
+contained servers are pending. Selecting container mode alone does not perform
+this runbook or establish containment.
 
 **Status.** Accepted on Linux on 2026-10-18 for one writer of this repository
 (`psm-alpha`, rootless Podman 6.1.4), with the wrapper below after three
@@ -52,6 +57,13 @@ collected in [Operator decisions](#operator-decisions).
   workspace. The environment is an explicit allowlist.
 - The writer's result leaves the boundary as a Git bundle that the host
   fetches. Host Git never runs inside a writer's clone.
+
+For a host alias intended for this route, select `container` as described in
+[Execution modes](execution-modes.md#choose-at-installation), then restart the
+host server. The separately configured server inside the boundary can use an
+explicit `host` entry with `acceptHostWrites: true` for its clone: inside that
+boundary, writing the clone is intended. Do not apply that acknowledgment to the
+operator's host checkout merely to bypass a container-mode refusal.
 
 A linked Git worktree is not a boundary clone: it shares `hooks/` and `config`
 with its main repository. Use a full clone (`.git` is a directory).

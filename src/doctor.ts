@@ -2,6 +2,7 @@ import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/
 import { constants } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, type AppConfig } from "./config.js";
+import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
@@ -14,7 +15,9 @@ export type DoctorCheckId =
   | "node_version_unsupported" | "package_metadata_unreadable" | "build_missing"
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
-  | "workspace_not_writable" | "workspace_gitfile" | "extension_missing" | "extension_version_mismatch"
+  | "workspace_not_writable" | "workspace_gitfile"
+  | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
+  | "extension_missing" | "extension_version_mismatch"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
 
 export interface DoctorCheck {
@@ -50,6 +53,8 @@ export interface DoctorDependencies {
   readonly fileSystem?: DoctorFileSystem;
   readonly loadConfig?: () => Promise<AppConfig>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
+  /** Offline rootless Podman probe; called only when a workspace uses container mode. */
+  readonly containerRuntime?: () => Promise<boolean>;
   /** Reads the installed manifest of a pinned extension; never imports extension code. */
   readonly resolveExtension?: (extension: ExtensionSpec) => Promise<string>;
   /** Reference trees that resolve legacy skill bases; defaults to the released shipped skills. */
@@ -70,7 +75,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -230,6 +235,21 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           }
         }
       } catch (error) { checks.push(failure(isMissing(error) ? "workspace_missing" : "workspace_unreadable", alias, isMissing(error) ? "fix the workspace alias target" : "grant workspace access")); }
+    }
+  }
+  if (config) {
+    const canWrite = [...config.executionProfiles.values()].some((profile) => profile.permissionProfile === "coding");
+    let runtimeUsable: boolean | undefined;
+    for (const alias of [...config.workspaces.keys()].sort((a, b) => a.localeCompare(b))) {
+      const mode = config.workspaceModes.get(alias)?.mode ?? "unset";
+      if (mode === "unset" && canWrite) checks.push(warning("workspace_mode_unset", alias, "choose an explicit execution mode for the workspace"));
+      else if (mode === "host") checks.push(ok("workspace_host_writes_accepted", alias));
+      else if (mode === "container") {
+        runtimeUsable ??= await (dependencies.containerRuntime ?? containerRuntimeUsable)();
+        checks.push(runtimeUsable
+          ? ok("container_runtime_unavailable", alias)
+          : failure("container_runtime_unavailable", alias, "make rootless Podman available or choose a different execution mode"));
+      }
     }
   }
   if (config) {

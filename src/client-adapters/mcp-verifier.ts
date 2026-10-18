@@ -94,7 +94,8 @@ function validCapabilities(value: unknown): boolean {
   if (!workspaces.every((workspace) => {
     if (!workspace || typeof workspace !== "object") return false;
     const record = workspace as Record<string, unknown>;
-    return exactKeys(record, ["alias"]) && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias);
+    return exactKeys(record, ["alias", "mode"]) && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
+      && typeof record.mode === "string" && ["unset", "host", "container", "read-only"].includes(record.mode);
   })) return false;
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
