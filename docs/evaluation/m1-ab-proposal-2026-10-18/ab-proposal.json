@@ -17,11 +17,33 @@
     "skill_delivery": "embedded"
   },
   "worker_routes": [
-    { "from_configured_alias": "review", "provider": "openai-codex", "model": "gpt-6.1-sol", "effort": "high", "permission": "read-only" },
-    { "from_configured_alias": "code", "provider": "openai-codex", "model": "gpt-6.1-sol", "effort": "medium", "permission": "coding" }
+    {
+      "from_configured_alias": "review",
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "effort": "high",
+      "permission": "read-only"
+    },
+    {
+      "from_configured_alias": "code",
+      "provider": "openai-codex",
+      "model": "gpt-6.1-sol",
+      "effort": "medium",
+      "permission": "coding"
+    }
   ],
   "arms": {
-    "A": { "source_commit": "612fbcb976d4563ea597e87be56123055b782c1a", "source_digest": null, "build_digest": null, "controller_skill_tree_digest": null, "worker_skill_tree_digests": null },
+    "A": {
+      "source_commit": null,
+      "source_rule": "final-head-harness-with-skills-and-src-server-ts-from-612fbcb976d4563ea597e87be56123055b782c1a",
+      "source_digest": null,
+      "build_digest": null,
+      "controller_skill_tree_digest": "v2:25494639689d5dad58d5adbeefbb493c91b21175facbe44fe5b880e0c2e250ab",
+      "worker_skill_tree_digests": {
+        "pi-session-review": "v2:610c0b4829eeb1ce6c9b2000ad73f8e88ca230707eef7f7b1708a80767952bf0",
+        "pi-session-implementation": "v2:f8ce75eff83a5c952f6ca51c04e1e8025cb7c2c558c30d692f291a3f6594eb12"
+      }
+    },
     "B": {
       "source_commit": null,
       "source_digest": null,
@@ -30,7 +52,8 @@
       "worker_skill_tree_digests": {
         "pi-session-review": "v2:30f0e1f8f54dd5c38bf0c0008eb701a8c68edba129a7e182c0da1416ea46c1a4",
         "pi-session-implementation": "v2:d9487905a9dc429239de39695190f8a459d1921d9c97db2d9bc17ac18abbeab5"
-      }
+      },
+      "source_rule": "sprint-5-final-head"
     }
   },
   "comparison": "package",
@@ -42,14 +65,47 @@
     "P2-explicit-worker-skill-selection-in-both-arms",
     "P3-client-version-binding"
   ],
-  "matrix": ["L1", "L2", "L3"],
-  "schedule": [
-    { "pair": 1, "order": ["A", "B"] },
-    { "pair": 2, "order": ["B", "A"] },
-    { "pair": 3, "order": ["A", "B"] }
+  "matrix": [
+    "L1",
+    "L2",
+    "L3"
   ],
-  "per_run_limits": { "controller_invocations": 3, "worker_starts": 4, "work_turns": 5, "whole_run_retries": 0 },
-  "totals": { "matrix_runs": 6, "controller_invocations": 18, "worker_starts": 24, "work_turns": 30, "retries": 0 },
+  "schedule": [
+    {
+      "pair": 1,
+      "order": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "pair": 2,
+      "order": [
+        "B",
+        "A"
+      ]
+    },
+    {
+      "pair": 3,
+      "order": [
+        "A",
+        "B"
+      ]
+    }
+  ],
+  "per_run_limits": {
+    "controller_invocations": 3,
+    "worker_starts": 4,
+    "work_turns": 5,
+    "whole_run_retries": 0
+  },
+  "totals": {
+    "matrix_runs": 6,
+    "controller_invocations": 18,
+    "worker_starts": 24,
+    "work_turns": 30,
+    "retries": 0
+  },
   "metrics": [
     "cumulative_input_tokens",
     "cached_input_tokens",
