@@ -68,12 +68,17 @@ export function parseWorkerSkills(value: unknown): readonly WorkerSkillBinding[]
 }
 
 /** Per-case server configuration. The server requires a read-only default, so L2 keeps `review` as default and selects `code` explicitly. */
-export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, workerSkills: readonly WorkerSkillBinding[] = []) {
+/**
+ * Selected worker skills point at the digest-verified source trees (`<skillsRoot>/<name>/SKILL.md`), not at
+ * `builtin:`: the evaluation server runs from a compiled build without a shipped `skills/` directory.
+ */
+export function caseServerConfig(caseId: "L1" | "L2" | "L3", workspace: string, workerSkills: readonly WorkerSkillBinding[] = [], skillsRoot?: string) {
   const hasReview = workerSkills.some((s) => s.name === "pi-session-review");
   const hasCode = workerSkills.some((s) => s.name === "pi-session-implementation");
+  if ((hasReview || hasCode) && skillsRoot === undefined) throw new Error("worker_skill_root_required");
   const skillCatalog: Record<string, string> = {};
-  if (hasReview) skillCatalog["pi-session-review"] = "builtin:pi-session-review";
-  if (hasCode) skillCatalog["pi-session-implementation"] = "builtin:pi-session-implementation";
+  if (hasReview) skillCatalog["pi-session-review"] = join(skillsRoot!, "pi-session-review", "SKILL.md");
+  if (hasCode) skillCatalog["pi-session-implementation"] = join(skillsRoot!, "pi-session-implementation", "SKILL.md");
   const review = {
     permissionProfile: "read-only",
     provider: "openai-codex",
@@ -541,7 +546,7 @@ export async function runTokenLive(root: string, build: string, approvals: { pro
       for (let invocation = 0; invocation < turns.length && caseStatus === "PASS"; invocation++) {
         const cfg = join(temp, `config-${invocation}.json`), metrics = join(temp, `proxy-${invocation}.json`), control = join(temp, `server-${invocation}.json`), proxyEntry = fileURLToPath(new URL("./token-live-proxy.js", import.meta.url));
         const proxyEnv = { TOKEN_LIVE_REAL_ENTRY: join(resolve(build), "src/main.js"), TOKEN_LIVE_CONFIG: cfg, TOKEN_LIVE_METRICS_FILE: metrics, TOKEN_LIVE_CONTROL_FILE: control, TOKEN_LIVE_MAX_STARTS: String(spec.starts), TOKEN_LIVE_MAX_PROMPTS: String(spec.prompts), TOKEN_LIVE_WORKER_TURN_MS: "180000" };
-        const config = caseServerConfig(spec.id, workspace, expected.decisionTemplate.worker_skills);
+        const config = caseServerConfig(spec.id, workspace, expected.decisionTemplate.worker_skills, join(root, "skills"));
         await writeFile(cfg, JSON.stringify(config), { mode: 0o600, flag: "wx" });
         const envToml = `{${Object.entries(proxyEnv).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join(",")}}`;
         const controllerCwd = join(temp, "controller"); await mkdir(controllerCwd, { mode: 0o700 });
