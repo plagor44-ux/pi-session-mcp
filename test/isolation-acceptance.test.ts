@@ -83,6 +83,20 @@ describe("verdict logic", () => {
     expect(h.evaluateVerdict(containedReport())).toMatchObject({ verdict: "pass", exit_code: 0, failed_checks: [] });
   });
 
+  it("exempts writes to the boundary's own HOME only when it is a tmpfs", () => {
+    const innerWrite = [write("home_inner.node", "home_inner", { host_observable: false, applicable: true, probe_blocked: false })];
+    expect(h.evaluateVerdict(containedReport({ writes: innerWrite, boundary: { home_is_tmpfs: true } })).verdict).toBe("pass");
+    expect(h.evaluateVerdict(containedReport({ writes: innerWrite, boundary: { home_is_tmpfs: false } })).failed_checks).toContain("writes.not_blocked.home_inner.node");
+    expect(h.evaluateVerdict(containedReport({ writes: innerWrite })).failed_checks).toContain("writes.not_blocked.home_inner.node");
+    const landed = [write("home_inner.node", "home_inner", { probe_blocked: false, host_changed: true })];
+    expect(h.evaluateVerdict(containedReport({ writes: landed, boundary: { home_is_tmpfs: true } })).failed_checks).toContain("writes.host_changed.home_inner.node");
+  });
+
+  it("fails when the boundary's own configuration is the host configuration", () => {
+    const exposed = containedReport({ credentials: { visible_count: 0, ssh_authenticated: false, host_config_exposed: true } });
+    expect(h.evaluateVerdict(exposed).failed_checks).toContain("credentials.host_config_exposed");
+  });
+
   it("fails when an escape was not blocked or the host changed", () => {
     const leaked = containedReport({ writes: [write("abs.node", "abs", { probe_blocked: false })] });
     expect(h.evaluateVerdict(leaked)).toMatchObject({ verdict: "fail", exit_code: 1, failed_checks: ["writes.not_blocked.abs.node"] });
