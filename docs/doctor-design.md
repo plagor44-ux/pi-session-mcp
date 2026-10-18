@@ -36,6 +36,9 @@ and owners are:
 | `workspace_mode_unset` | Warning. A workspace has mode `unset` while at least one execution profile has the `coding` permission profile | validated workspace alias |
 | `workspace_host_writes_accepted` | Always `ok`, without remediation. The operator has explicitly accepted host writes for this workspace | validated workspace alias |
 | `container_runtime_unavailable` | A workspace has mode `container` and the local rootless Podman probe fails | validated workspace alias |
+| `writer_not_ready` | State is missing or invalid, phase is not ready, acceptance fingerprint is stale, or the local image is absent (error) | validated writer name |
+| `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning) | validated writer name |
+| `writer_uncollected_bundle` | Bundles directory contains entries other than base.bundle (warning) | validated writer name |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
 | `skill_missing` | The `SKILL.md` file that a profile's selected skill alias names does not exist; a `builtin:<name>` value that matches no override and no shipped skill resolves to the shipped location and is reported here | `<profile>:<skill-alias>` |
@@ -48,7 +51,19 @@ and owners are:
 For choosing modes, setup findings and host-server enforcement, see
 [Execution modes](execution-modes.md). Invalid `execution-modes.json` content
 fails the `config_invalid` check; a valid container entry does not prove that a
-writer is provisioned or accepted.
+writer is provisioned or accepted. Doctor checks every configured writer separately.
+
+Writer subjects use `<alias>-w<n>`. Readiness fingerprints share the launcher's
+helper and bind current wrapper bytes, package version, image ID, Podman version,
+network and cache settings. The injected `writerRuntime` probe defaults to bounded,
+offline `podman info`, `podman version`, and `podman image exists` commands; it never
+pulls an image. Dirty checks run no Git: they inspect HEAD, recursive local branch
+refs and packed-refs with 64 KiB per-file limits, rejecting symbolic links and
+unsafe directory entries. These checks do not inspect uncommitted worktree edits.
+Bundle warnings detect outstanding entries without reading their contents.
+Each successful check emits an `ok` entry; remediation text contains no paths.
+Acceptance and the disposable-clone control run are explicit setup operations,
+never Doctor actions.
 
 Execution-mode checks follow `workspace_gitfile`. Unset modes warn only when a coding profile exists; explicit host modes always show the accepted write risk as an `ok` line. If any alias uses container mode, Doctor probes the local runtime once with `podman info --format {{.Host.Security.Rootless}}`, without a shell, with a 10-second timeout and a 4 KiB stdout cap. Only exit status 0 and trimmed stdout `true` pass; a missing binary, timeout, excessive output or any other error fails each container alias, even with only read-only profiles. No runtime diagnostics or paths enter reports. This local probe stays offline and never runs Git.
 

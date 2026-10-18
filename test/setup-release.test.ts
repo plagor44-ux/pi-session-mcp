@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +27,11 @@ afterEach(async () => {
 });
 
 describe("immutable setup release binding", () => {
+  it("packs both provider-free isolation scripts", () => {
+    const report = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] })) as { files: { path: string }[] }[] | Record<string, { files: { path: string }[] }>;
+    const entry = Array.isArray(report) ? report[0]! : Object.values(report)[0]!;
+    expect(entry.files.map(({ path }) => path)).toEqual(expect.arrayContaining(["scripts/isolation-acceptance.mjs", "scripts/isolation-probe.cjs"]));
+  }, 120_000);
   it("changes when any built runtime module changes", async () => {
     const root = await releaseFixture();
     const before = await immutableReleaseBinding(root);
