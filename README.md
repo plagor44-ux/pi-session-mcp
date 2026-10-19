@@ -30,7 +30,7 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.9.0**.
+The package version is **0.9.1**.
 
 Since 0.9.0, [per-repository execution modes](docs/execution-modes.md) make host writes explicit and block host coding for container/read-only aliases, and setup provisions, accepts, collects and resets rootless-Podman container writers on Linux.
 
