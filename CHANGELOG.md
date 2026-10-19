@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Changed: Pi SDK `@earendil-works/pi-coding-agent` from `1.2.0` to `1.3.0`,
+  together with its family packages `pi-ai`, `pi-mcp`, `pi-tui`,
+  `pi-codemode`, `pi-agent-core` and `pi-telemetry`, all at `1.3.0`. The public
+  MCP contract is unchanged. The SDK's stop reasons, its `AssistantMessage`
+  type and its reserved MCP tool names (`isMcpToolName`) are unchanged, and the
+  SDK now pins its own family packages exactly. Operator note from upstream:
+  a `models.json` override of the `kimi-coding` base URL must now include
+  `/v1`. Upstream also retries more gateway errors automatically and rejects
+  tool calls with malformed JSON arguments instead of running them partially.
+
 ## 0.9.0 — 2026-10-19
 
 - Added: [per-repository execution modes](docs/execution-modes.md), decided in
