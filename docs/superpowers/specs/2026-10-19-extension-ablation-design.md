@@ -1,0 +1,240 @@
+# Pi extension ablation for worker profiles — design
+
+Date: 2026-10-19. Status: approved by the operator on 2026-10-19, together
+with their answers below. Nothing live runs before the plan that follows from
+it is in place.
+
+## Intent
+
+The operator delegates work from controller sessions (Claude Code, Codex) to Pi
+workers through pi-session-mcp. The operator does not rework worker results;
+the controller does, on the most expensive model in the loop. A worker result
+that the controller can accept without a correction round therefore saves the
+most money.
+
+The question: does adding a Pi extension to a worker profile make worker
+results better for the controller (accepted without correction more often, at
+the same or lower total cost)? If yes, which extension for which profile?
+
+Cost is a co-goal, not a side issue: an extension that improves results but
+costs more is acceptable only if it saves more correction work than it costs.
+
+## Evidence this builds on
+
+- The extension allowlist per execution profile exists since 0.8 (#34).
+  Profiles name exact `npm:<name>@<version>` pins, resolved from Pi's install
+  without installing.
+- Today only `pi-cursor-sdk@0.5.3` is enabled, on `code-cursor` and
+  `review-cursor`.
+- [Extension audit](../../evaluation/extension-audit-2026-10-17/README.md) and
+  [functional evidence](../../evaluation/extension-functions-2026-10-17/README.md)
+  (2026-10-17) cover packages, licences and provider-free function checks.
+  They did not measure any benefit over the baseline.
+- Recorded usage, 2026-10-12 to 2026-10-19: Claude Code controllers ran 210
+  real worker sessions; Codex controllers none.
+  - Profiles: `review-grok` and `code` 55 each, `review` 39, `review-glm` 26,
+    `code-deepseek` 15.
+  - Tasks: about half are read-only reviews of a diff or branch; about 50 are
+    implementations or bug fixes from a plan; the rest are tests, docs and
+    audits.
+  - About a quarter of the coding sessions and 27 % of the reviews needed a
+    further round. Most fix rounds came from a cross-family review by design;
+    about 4 came from real worker defects.
+  - These counts come from a heuristic scan of controller transcripts. Treat
+    them as orientation, not as a baseline.
+- The pi-session-mcp server keeps Pi sessions in memory and exposes no usage or
+  cost. Worker usage must be measured on the evaluation side
+  ([#92 note](../../evaluation/s5-decision-inputs-2026-10-18/worker-usage.md)).
+- The [M1 A/B proposal and results](../../evaluation/m1-ab-proposal-2026-10-18/README.md)
+  are the template for arms, pairing, stop rules and evidence handling.
+
+## Goals
+
+1. For each candidate pairing below, run the same tasks with and without the
+   extension, and report per task and per arm:
+   - acceptance by the task oracle;
+   - worker usage and catalog cost;
+   - runtime;
+   - any network or file activity outside the task.
+2. Make a recommendation per profile: enable, do not enable, or inconclusive.
+3. Keep every attempt, including failed and stopped ones, as evidence in
+   `docs/evaluation/extension-ablation-<date>/`.
+
+## Candidate pairings (the operator agreed to this selection)
+
+| Arm B adds | Profiles | Why |
+| --- | --- | --- |
+| `pi-lens@4.4.3` | `review-grok`, `review` | Code navigation and diagnostics for the most-used review profiles. |
+| `openwiki@0.7.2` | `code`, `code-deepseek` | Repository knowledge from the existing OpenWiki of each repo; all five aliased repos have one (17–29 pages). |
+| `pi-cache-optimizer@2.9.3`, warming disabled | `code`, `review` (OpenAI) | Cost lever only. Report its cost effect, not a quality claim. |
+
+Arm A is the profile exactly as configured today. Arm B adds one extension.
+Only one variable changes per pair. Profiles that appear in two pairings share
+their arm A runs.
+
+Product constraint (verified in `src/session-tools.ts`, `composeSessionTools`):
+extension tools are active only in `coding` profiles. In `read-only` profiles
+the model gets exactly `read`, `grep`, `find` and `ls`; only an extension's
+hooks still act. Tool-based extensions such as `pi-lens` therefore do nothing
+useful on the review profiles. Hook-based ones such as `pi-cache-optimizer` do
+act there. Operator decision (2026-10-19): review profiles shall get
+extension tool access too. That is a separate product change, a granted
+extension-tool list for `read-only` profiles with its own design, ADR and
+release. The `pi-lens` pairing on `review-grok` and `review` runs only after
+that change is released. Until then it stays out of the wave. The other
+pairings do not depend on it and may run first.
+
+The workstation profiles `code` and `review` use the `openai` provider, not
+`openai-codex`, so `pi-cache-optimizer` is not a no-op there.
+
+Out of scope:
+- `context-mode`, `pi-permission-system`, `pi-web-access` (blocked by the
+  resolver);
+- the Cursor profiles;
+- the GLM and Mistral profiles. They had six instant `turn_failed` results in
+  recorded usage, which should be investigated separately.
+
+## Tasks
+
+- About 6 to 8 real tasks replayed from recorded sessions in the operator's
+  repositories, at the commit before the original solution. The operator
+  allowed replaying real tasks.
+- Two kinds, matching recorded usage:
+  - **Reviews** of a diff or candidate whose real findings are known from
+    later rounds. Oracle: recall of the known findings, plus false findings
+    counted against a fixed list.
+  - **Implementations** from a plan or brief with tests that decide
+    correctness. Oracle: the decisive tests pass, and only files within scope
+    changed.
+- Selection criterion: the original outcome is unambiguous and checkable
+  without a model. A task whose oracle needs judgment is dropped.
+- Prompts are the original prompts with paths and aliases rewritten to the
+  disposable clone. They are not improved, so that only the extension differs.
+- Replay unit (designer's call): the first task prompt of the recorded
+  session, as one turn. "Accepted" means the oracle passes on that first turn.
+  Follow-up rounds are not replayed.
+- Source: the operator's Claude Code transcripts under `~/.claude/projects/`.
+  The operator allowed replaying real tasks. The repositories are the ones the
+  recorded sessions already sent to the same providers.
+- Review oracle (designer's call): for each known finding, pre-registered
+  deterministic anchors (file, symbol or line range plus a key term) are fixed
+  before the live wave. A review is accepted when it hits every finding marked
+  as critical and reports no finding from the fixed false-finding list.
+  Recall and false findings are reported as numbers too. No model or human
+  judges matches.
+- OpenWiki (designer's call): the clone uses the wiki as committed at the
+  task's base commit. Tasks are limited to base commits where the repository
+  already had an `openwiki/` directory. The extension's writer tools stay
+  active, as shipped. A write into `openwiki/` counts as out of scope in the
+  scored result; it does not stop the wave.
+
+## Constraints
+
+- **Budget: at most USD 10 in total**, provider costs and controller quota
+  combined, as decided by the operator.
+  - Count worker cost as catalog cost from the measured usage.
+  - Stop the wave before a run would exceed the remaining budget, using the
+    most expensive run observed so far as the estimate.
+  - Subscription quota (OpenAI OAuth, Claude) is unmetered; record that it was
+    used, not as money.
+- **Isolation:**
+  - Everything runs on disposable full clones under a work directory outside
+    the operator's repositories, with an evaluation-owned Pi agent directory
+    (`PI_CODING_AGENT_DIR`).
+  - Extensions are installed only there, at the exact pins.
+  - The production configuration, the production Pi install, the client
+    registrations and the operator's repositories stay unchanged.
+  - Copy provider credentials into the evaluation agent directory the way the
+    writer wrappers do (access token only, refresh token emptied). Never print
+    or archive them.
+- **Extension hazards from the audit:**
+  - `pi-lens`: disable auto-install of LSP servers and tools, grammar
+    downloads and format/autofix writes, or account for them in the scope
+    oracle.
+  - `pi-cache-optimizer`: warming must be off, because it can trigger
+    billable requests.
+  - `openwiki`: it attempted one outgoing fetch in the audit. Log network
+    attempts per run.
+- **Measurement:** worker usage comes from the evaluation side (for example a
+  harness that drives the Pi SDK session directly and sums assistant `usage`
+  per turn). pi-session-mcp itself gets no new field, no runtime change and no
+  internal import for this. Product sources stay unchanged.
+- **No controller model in the loop for this wave** (designer's call). The
+  oracles stand in for "the controller accepts". A controller-in-the-loop
+  wave with Claude Opus would not fit USD 10 for 2 arms × 6–8 tasks × the
+  pairings above. It can follow if this wave shows a signal.
+- **Stop rules, adapted from M1 (designer's call):**
+  - **Scored outcomes, the wave continues:**
+    - a worker task failure (`turn_failed`);
+    - an out-of-scope edit inside the clone;
+    - a per-run timeout of 15 minutes.
+  - **Stop the wave and keep every attempt, without retrying within the
+    approval:**
+    - any write outside the clone, or into the production Pi install or a
+      client registration (detected by before/after hashes);
+    - a harness or cleanup failure (open session, residual process);
+    - a provider, quota or authentication error;
+    - the budget stop;
+    - a wave runtime over 4 hours.
+- **Observation (designer's call):** record each worker process tree's
+  outgoing connections with `strace -f -e trace=connect`. Unlike the earlier
+  JS-level probes, this also covers LSP binaries and other subprocesses. Any
+  destination other than the configured provider endpoints and the package
+  registry during setup is reported per run. Workers run on the host with
+  clone isolation, not inside the Podman boundary. The before/after hashes
+  above guard the anti-goals. `strace` is a prerequisite. The operator
+  approved installing it (`pacman -S strace`, which needs the operator's sudo
+  password). Without it, fall back to the JS-level instrumentation of the
+  audit probes and state the gap in the report.
+- **Budget accounting.** Operator decision: every worker run counts against
+  the USD 10 at catalog price, including runs on subscription logins.
+  Designer's calls:
+  - Start with a calibration of one task per arm on the cheapest pairing. Its
+    observed cost then serves as the per-run estimate for the budget stop.
+  - Priority order if the budget cannot cover everything:
+    1. `openwiki` on `code-deepseek`, then on `code`;
+    2. the `pi-lens` pairing;
+    3. `pi-cache-optimizer`.
+  - Fewer tasks per pairing is preferred over dropping a pairing entirely,
+    with at least 3 tasks per pairing.
+  - Record cache-read tokens per run and alternate the A/B order per task, so
+    the provider prompt cache does not favour one arm silently.
+- **Recommendation rule (designer's call, fixed before the wave):**
+  - **Enable:** arm B is accepted on at least as many tasks as arm A, is
+    strictly better on at least one, and costs no more than 25 % above arm A
+    in total for that pairing.
+  - **Do not enable:** arm B is worse on acceptance.
+  - **Inconclusive:** everything else. Cost and acceptance are reported side
+    by side, not netted into one figure.
+- **Reporting:** report all attempts. Predict no saving, ranking or success
+  rate beyond what was observed. With one run per task and arm, say plainly
+  that the result is indicative, not significant.
+
+## Non-goals
+
+- Changing production profiles. That needs a separate operator decision after
+  the results.
+- Proving security properties of extensions or containment.
+- Comparing models or providers with each other.
+- New public MCP fields or a release.
+
+## Anti-goals (failure even if it technically works)
+
+- A run writes into the operator's repositories, the production Pi install or
+  a client registration.
+- Credentials or full prompts end up in tracked evidence.
+- Spending goes over USD 10, or the evaluation effort grows beyond what a
+  per-profile recommendation is worth.
+- An extension sends repository content somewhere and this goes unnoticed.
+
+## Left to the builder
+
+- Harness structure, and whether it reuses `eval/profiles` or adds a new
+  `eval/extensions` module.
+- The exact task list within the criteria above, documented with its source
+  session and oracle before the live wave. The heuristic scan scripts from the
+  usage recon may be reused as a starting point; they are not tracked.
+- The order of runs. Interleave A and B per task (A/B, then B/A), as in M1.
+- Price table source for catalog cost (the Pi model catalog of the pinned SDK).
+- Evidence file layout and the integrity index, following earlier evaluation
+  folders.
