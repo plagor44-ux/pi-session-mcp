@@ -48,6 +48,41 @@ describe("writer setup reconciliation", () => {
     expect(JSON.stringify(output)).not.toContain("../x");
     expect(output.findings[0]?.target.alias).toBe("invalid");
   });
+  it.each(["read-only", "host"] as const)("applies %s on macOS without writer work", async (selected) => {
+    const f = await fixture();
+    const output = await changeWriterMode(f.configPath, { alias: "x", mode: selected, apply: true, acceptHostWrites: selected === "host" }, { ...f.deps, platform: "darwin" });
+    expect(output.findings.some((finding) => finding.code === "mode_applied")).toBe(true);
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe(selected);
+    expect(f.deps.lock).not.toHaveBeenCalled();
+    expect(f.life.inspectWork).not.toHaveBeenCalled();
+    expect(f.calls).toEqual([]);
+  });
+  it("requires an explicit choice when the macOS automatic probe fails", async () => {
+    const f = await fixture();
+    const output = await changeWriterMode(f.configPath, { alias: "x", apply: false, acceptHostWrites: false }, { ...f.deps, platform: "darwin", containerRuntime: async () => false });
+    expect(output.findings[0]?.code).toBe("mode_choice_required");
+    expect(f.deps.lock).not.toHaveBeenCalled();
+  });
+  it("refuses a requested or automatically proposed container on macOS", async () => {
+    const f = await fixture();
+    for (const selected of ["container", undefined] as const) {
+      const output = await changeWriterMode(f.configPath, { alias: "x", container: mode.container, apply: true, acceptHostWrites: false, ...(selected ? { mode: selected } : {}) }, { ...f.deps, platform: "darwin" });
+      expect(output.findings[0]?.code).toBe("platform_unsupported");
+    }
+  });
+  it.each(["host", "read-only", "container", undefined] as const)("refuses changing a current container to %s on macOS", async (selected) => {
+    const f = await fixture();
+    await writeFile(executionModesPath(f.configPath), JSON.stringify({ schemaVersion: 1, workspaces: { x: { mode: "container", profiles: ["code"] } } }));
+    const output = await changeWriterMode(f.configPath, { alias: "x", container: mode.container, apply: true, acceptHostWrites: true, ...(selected ? { mode: selected } : {}) }, { ...f.deps, platform: "darwin" });
+    expect(output.findings[0]?.code).toBe("platform_unsupported");
+    expect(f.deps.lock).not.toHaveBeenCalled();
+  });
+  it("refuses non-container changes with leftover writer state on macOS", async () => {
+    const f = await fixture();
+    await writeWriterState(f.home, "x-w16", state(16));
+    const output = await changeWriterMode(f.configPath, { alias: "x", mode: "read-only", apply: true, acceptHostWrites: false }, { ...f.deps, platform: "darwin" });
+    expect(output.findings[0]?.code).toBe("platform_unsupported");
+  });
   it("preserves an applied mode when reconciliation throws", async () => {
     const f = await fixture();
     f.life.provisionWriter.mockRejectedValueOnce(new Error("/SECRET"));
