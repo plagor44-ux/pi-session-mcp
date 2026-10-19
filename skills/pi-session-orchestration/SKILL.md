@@ -10,7 +10,7 @@ You control Pi worker sessions through the pi-session-mcp tools. You choose only
 ## 1. Discover first
 
 - Call `pi_capabilities_get` before anything else in a run. Use only the workspace and profile aliases it lists. Never invent an alias or pass a path.
-- Each profile lists `permissionProfile` (`read-only` or `coding`), `extensions` and `skills`. `skills` names the configured skill aliases. That is configuration intent only. It does not prove that a session loaded the skill or that the model will read it.
+- Each profile lists `permissionProfile` (`read-only` or `coding`), `extensions`, `grantedExtensionTools` and `skills`. These are configuration intent only: grants name configured extension tools, not proven availability; `skills` names configured skill aliases, not proof that a session loaded the skill or that the model will read it.
 - Capabilities do not prove that a provider or model is reachable. A successful `pi_session_start` shows that the session was created with the selected provider, model and thinking level, and that local authentication, the extensions, external MCP servers and selected skills passed their start checks. It does not prove that the provider accepts requests: credentials, quota and network show only when a turn runs.
 
 ## 2. Scope each task
@@ -31,7 +31,7 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 - Read each workspace's `mode` from `pi_capabilities_get`. For `container` workspaces, use the repository's `pi-coding-*` server for coding.
 - If a coding start is refused because of the workspace's execution mode, do not retry or switch profiles on that server. The code is listed in [references/start-errors.md](references/start-errors.md).
-- Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change.
+- Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change. A `read-only` profile with granted extension tools may change files through those third-party tools in every workspace mode; never treat it as unable to write.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
 - A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
 - Every concurrently writing worker needs its own prepared full-clone workspace alias on the base commit you specified. Never let two writers share a clone. Read-only workers may share one.
