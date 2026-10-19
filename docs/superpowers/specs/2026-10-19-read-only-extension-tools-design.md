@@ -14,8 +14,8 @@ tools only in `coding` profiles
 
 The operator wants review workers to use extension tools such as code
 navigation (for example `pi-lens`), so that reviews hit the real findings
-more often and the controller needs fewer re-review rounds. The planned
-[extension ablation](2026-10-19-extension-ablation-design.md) measures that.
+more often and the controller needs fewer re-review rounds. This is measured by
+the planned extension ablation (its design is on a separate branch).
 This change makes it possible.
 
 ## Decision taken with the operator
@@ -62,7 +62,7 @@ This change makes it possible.
 7. **Doctor** stays offline and imports no extension code, so it cannot see
    tool names. It only reports what config validation already guarantees.
    The registration check happens at session start (goal 3), as documented.
-8. **Setup verify:** the bounded capabilities check accepts and compares the
+8. **Setup verify:** the bounded capabilities check accepts and validates the
    new field, so `--verify` does not regress as it did in #36.
 
 ## Clarifications after the builder check (designer's calls)
@@ -106,12 +106,13 @@ This change makes it possible.
     likely keeps LSP spawning and auto-install off. That is the production
     behaviour this release ships.
   - Spend: at most USD 0.50 at catalog price, separate from the ablation
-    budget. Network observation as in the ablation design.
+    budget. Network observation follows the planned extension ablation (its design is on a separate branch).
 - **Workspace modes:** grants are allowed in every mode, as read-only
   profiles are today. Extension hooks already act with full rights in those
   workspaces. The threat model and the execution-modes guide state that a
   granted tool is third-party code that may write, and that `container` or
   `read-only` workspace modes do not restrict it.
+- **Diagnostics (deviation accepted in the final review):** the `extension_tool_missing` diagnostic carries the stage, code and profile fields only, not the tool name, so no third-party tool name reaches stderr; with several grants the operator checks each against the extension's registered tools.
 
 ## Release and records
 

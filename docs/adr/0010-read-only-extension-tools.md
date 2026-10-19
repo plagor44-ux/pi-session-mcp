@@ -42,7 +42,7 @@ Granting such a tool fails closed. Extensions that register tools lazily in
 
 Capabilities expose `grantedExtensionTools` directly after `extensions` for
 every profile, in configured order, or `[]` when absent. This is configuration
-intent only. Setup verify compares it; Doctor remains offline and cannot inspect
+intent only. Setup verify validates it; Doctor remains offline and cannot inspect
 registered tools without importing extension code.
 
 ## Contract change and versioning

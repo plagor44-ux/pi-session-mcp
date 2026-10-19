@@ -34,7 +34,7 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 - Use a `read-only` profile for review, analysis and questions. Use a `coding` profile only when files must change. A `read-only` profile with granted extension tools may change files through those third-party tools in every workspace mode; never treat it as unable to write.
 - Pick a profile whose listed `skills`, `extensions` and model fit the task, for example a profile that lists `pi-session-implementation` for implementation work or `pi-session-review` for review work.
 - A listed skill is something the worker can use, not a task. Do not tell a worker to follow a skill, and never widen a task, just because its profile lists that skill. Name a skill in the prompt only when the task itself needs it.
-- Every concurrently writing worker needs its own prepared full-clone workspace alias on the base commit you specified. Never let two writers share a clone. Read-only workers may share one.
+- Every concurrently writing worker needs its own prepared full-clone workspace alias on the base commit you specified. Never let two writers share a clone. Read-only workers without extension tool grants may share one.
 - Each automated writer has the synthetic default profile `boundary-read-only`. Name the coding `executionProfile` explicitly; omitting it does not start coding.
 - A session's workspace and profile are fixed at start. Never try to switch them; start a new session instead.
 - The profile's tools set the limit. A skill grants no rights. If no listed profile can do the task, stop and report that instead of picking a more powerful one than needed.

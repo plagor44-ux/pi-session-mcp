@@ -342,7 +342,7 @@ the configured spec strings, empty for profiles without extensions. The field
 is path-free and secret-free. Each profile also has `grantedExtensionTools`
 directly after `extensions`, in configured order, or `[]` when absent. It is
 configuration intent only, not proof of runtime availability; setup verify
-compares it. `capabilitiesSchema` and
+validates it. `capabilitiesSchema` and
 `docs/tool-contracts.md` change accordingly.
 
 ### Doctor
