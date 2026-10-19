@@ -5,6 +5,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError, loadConfig } from "../src/config.js";
 import { shippedSkillsDirectory } from "../src/skill-library.js";
+import { toResolvedExecutionProfile } from "../src/execution-profile.js";
+import { PROFILE_TOOLS } from "../src/session-tools.js";
 
 afterAll(removeTemporaryRoots);
 
@@ -179,6 +181,54 @@ describe("execution profile extensions", () => {
     expect(config.executionProfiles.get("safe")?.extensions).toEqual([{ spec: "npm:pi-cursor-sdk@0.5.3", name: "pi-cursor-sdk", version: "0.5.3" }]);
     expect(config.executionProfiles.get("code")?.extensions?.map((extension) => extension.name)).toEqual(["@scope/ext", "other"]);
     expect(Object.isFrozen(config.executionProfiles.get("code")?.extensions)).toBe(true);
+  });
+
+  it("resolves granted extension tools in configured order as frozen snapshots", async () => {
+    const grantedExtensionTools = ["symbol_search", "project_report"];
+    const config = await loadProfiles({ safe: { ...safe, extensions: ["npm:pi-lens@4.4.3"], grantedExtensionTools } });
+    const profile = config.executionProfiles.get("safe")!;
+    const resolved = toResolvedExecutionProfile(profile);
+    expect(profile.grantedExtensionTools).toEqual(grantedExtensionTools);
+    expect(resolved.grantedExtensionTools).toEqual(grantedExtensionTools);
+    expect(Object.isFrozen(profile.grantedExtensionTools)).toBe(true);
+    expect(Object.isFrozen(resolved.grantedExtensionTools)).toBe(true);
+    expect(resolved.grantedExtensionTools).not.toBe(profile.grantedExtensionTools);
+  });
+
+  it("keeps profiles without grants free of the grantedExtensionTools key when resolved", async () => {
+    const config = await loadProfiles({ safe: { ...safe, extensions: ["npm:pi-lens@4.4.3"] } });
+    const profile = config.executionProfiles.get("safe")!;
+    expect("grantedExtensionTools" in profile).toBe(false);
+    expect("grantedExtensionTools" in toResolvedExecutionProfile(profile)).toBe(false);
+  });
+
+  it("accepts the 32-name grant limit and an explicitly empty grant", async () => {
+    for (const grantedExtensionTools of [Array.from({ length: 32 }, (_, index) => `tool_${index}`), []]) {
+      const config = await loadProfiles({ safe: { ...safe, extensions: ["npm:pi-lens@4.4.3"], grantedExtensionTools } });
+      expect(toResolvedExecutionProfile(config.executionProfiles.get("safe")!).grantedExtensionTools).toEqual(grantedExtensionTools);
+    }
+  });
+
+  it("rejects granted extension tools on coding profiles", async () => {
+    await expect(loadProfiles({
+      safe,
+      code: { ...safe, default: false, permissionProfile: "coding", extensions: ["npm:pi-lens@4.4.3"], grantedExtensionTools: ["symbol_search"] },
+    })).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
+
+  it.each([undefined, []])("rejects granted extension tools without extensions %j", async (extensions) => {
+    await expect(loadProfiles({ safe: { ...safe, extensions, grantedExtensionTools: ["symbol_search"] } }))
+      .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
+
+  it.each([
+    [["symbol_search", "symbol_search"]],
+    [Array.from({ length: 33 }, (_, index) => `tool_${index}`)],
+    ...["Symbol Search", " symbol_search", "-x", "mcp__x"].map((name) => [[name]]),
+    ...[...new Set([...PROFILE_TOOLS.coding, ...PROFILE_TOOLS["read-only"]])].map((name) => [[name]]),
+  ])("rejects invalid granted extension tools %j", async (grantedExtensionTools) => {
+    await expect(loadProfiles({ safe: { ...safe, extensions: ["npm:pi-lens@4.4.3"], grantedExtensionTools } }))
+      .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
   });
 
   it("keeps profiles without extensions free of the field", async () => {

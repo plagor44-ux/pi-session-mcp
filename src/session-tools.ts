@@ -5,6 +5,8 @@ export const PROFILE_TOOLS: Readonly<Record<PermissionProfile, readonly string[]
   coding: ["read", "bash", "edit", "write", "grep", "find", "ls"],
 };
 
+export const MAX_GRANTED_EXTENSION_TOOLS = 32;
+
 /**
  * Letters, digits, `_` and `-`, at most 64 characters, which fits the common provider
  * function-name limit `^[a-zA-Z0-9_-]{1,64}$`. The SDK reads `*` in an allowlist as a glob
@@ -22,7 +24,7 @@ const EXTENSION_TOOL_NAME = /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/;
 const MCP_RESERVED_PREFIX = "mcp__";
 const MCP_RESERVED_NAMES: ReadonlySet<string> = new Set(["list_mcp_resources", "list_mcp_resource_templates", "read_mcp_resource"]);
 
-function isAcceptableExtensionToolName(name: string): boolean {
+export function isAcceptableExtensionToolName(name: string): boolean {
   return EXTENSION_TOOL_NAME.test(name) && !name.startsWith(MCP_RESERVED_PREFIX) && !MCP_RESERVED_NAMES.has(name);
 }
 
