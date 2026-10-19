@@ -1690,6 +1690,100 @@ writer lifecycle is Linux-only; on macOS the release keeps `host` and
 `read-only` mode selection. The published-release acceptance follows after
 publication.
 
+### v0.9.0 post-release evidence
+
+The published-release acceptance of `v0.9.0` ran on 2026-10-19 from 12:40 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.303`. It passed for the tag and for the installed npm
+package.
+
+Tag binding: a fresh clone of the annotated tag `v0.9.0` (tag object
+`b1a7f3800ec74b3f99c84d2e2c96841f2d2ea08f`) peels to
+`b9d254a9f6628c7435cd61cf565a1da8f26190be`, the merge of #100, and
+`git describe --tags --exact-match` reports `v0.9.0`. CI passed on the merge
+commit (run `39207028658`) and on the tag (run `39207320511`) on Linux,
+macOS 15 and macOS 26.
+
+Provider-free (Level 1), on that clone. Every command exited with `0`:
+- 90 test files: 1915 passed and 6 skipped, with strict unhandled rejections
+  and no unhandled error.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- `git diff --check` and `git status --short` printed nothing.
+- Offline Doctor reported `packageVersion` `0.9.0`. With the example
+  configuration its findings were the placeholder workspace
+  (`workspace_missing`) and `workspace_mode_unset` for that alias.
+
+`package.json`, `package-lock.json`, `dist/main.js` and the `dist` tree were
+byte-identical before and after the client cycles; `dist/main.js` has the
+SHA-256 `4c36369fd9151969ee6cfe300d4833001db2728979e8a5d096e0bac715e378da`.
+
+Package publication, a release fact and not an acceptance level: the npm
+package `pi-session-mcp@0.9.0` was published by the maintainer from the tag
+at 06:42 UTC. It has 666 files, shasum
+`f57f150ad9d4bc55263e450aabea6f448e88d8d8` and integrity
+`sha512-qSWggifyAUPVSE32iER+/1jAvTPkn/0YTg4rDmCsu6La3EE+Gf/fTUL0DU/kAqulxea2HyBGPug4sBXVLvP3tw==`.
+The `dist` and `skills` trees of the registry tarball are identical to the
+installed package. It has no provenance attestation.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed; all nine steps passed on all four
+  targets.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile: version `0.9.0`, the same `dist/main.js`, and
+  every `@earendil-works` package at `1.2.0` with one copy each, although
+  `1.3.0` of the SDK family had been published in the meantime. The install
+  smoke reported `smoke_passed`, and 160 of 160 checks passed.
+- In both runs the real client registrations were unchanged, no process
+  remained, and the build stayed byte-identical.
+
+Installation on the Linux workstation: the npm prefix in the home directory
+holds `0.9.0`, byte-identical to the registry tarball. `--verify` for
+`claude-code:user`, the only owned target there, reported `mcp_verified` and
+`skill_verified`; Doctor with the operator configuration reported no error,
+only `workspace_gitfile` and `workspace_mode_unset` warnings. The Linux server
+was still on `0.8.3` and is upgraded with the next release.
+
+Not established for `0.9.0` after publication: the same gates as before
+publication (live container writers, migration of the manual writers, Level 3,
+macOS on real hardware).
+
+### v0.9.1 pre-release acceptance
+
+Before its release, `v0.9.1` passed Level 1, the working-tree Level 2 and the
+packed-tarball Level 2 on its release candidate `e42610e` on Linux (`x64`),
+with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code
+`2.1.303`, on 2026-10-19. The release moves the Pi SDK and its six family
+packages from `1.2.0` to `1.3.0`. Before the move, `scripts/pi-sdk-canary.sh
+1.3.0` reported the candidate compatible (typecheck passed, 13 SDK-facing test
+files with 313 passed and 1 skipped).
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor
+  as noted below.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    90 files, 1915 passed and 6 skipped, and no unhandled error, including the
+    rootless Podman integration tests against real Podman.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 666 files.
+  - Doctor reported `packageVersion` `0.9.1` and exited with `2`, as expected
+    for the example configuration: its findings were the placeholder workspace
+    (`workspace_missing`, an error) and `workspace_mode_unset` for that alias.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. The real client registrations were
+  unchanged, no process remained, the built files were unchanged, and the
+  path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball (shasum
+  `5f5673d1b311ec8d376db939a77d6e3dc9222829`), installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.3.0` with a single copy each. The
+  install smoke reported `smoke_passed` with version `0.9.1`. Level 2 against
+  the installed package passed 160 of 160 checks, with the same results for
+  registrations, processes, build and path leaks.
+
+Not established for `0.9.1`: any live run on Pi SDK `1.3.0` (Level 3, the
+container writers or a single provider turn), the migration of the manual
+writers, and macOS on real hardware. CI covers macOS 15 and 26. The
+published-release acceptance follows after publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

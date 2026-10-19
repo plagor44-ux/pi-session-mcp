@@ -30,7 +30,7 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.9.0**.
+The package version is **0.9.1**.
 
 Since 0.9.0, [per-repository execution modes](docs/execution-modes.md) make host writes explicit and block host coding for container/read-only aliases, and setup provisions, accepts, collects and resets rootless-Podman container writers on Linux.
 
@@ -39,7 +39,7 @@ Since 0.9.0, [per-repository execution modes](docs/execution-modes.md) make host
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
 - **Out of scope by design:** HTTP, a web UI, persistence, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process.
 - **Not a sandbox.** A `coding` profile restricts the Pi tools that a session may use. It does not isolate the process from the operating system.
-- **Acceptance.** Every release passes the provider-free checks. The live two-client acceptance has not yet been repeated on a build with Pi SDK `1.x`; see [Acceptance](docs/acceptance.md).
+- **Acceptance.** Every release passes the provider-free checks. The last live two-client acceptance (Level 3) ran on Pi SDK `1.1.0` with one provider pair on Linux and has not been repeated on later SDK pins; see [Acceptance](docs/acceptance.md).
 
 ## How it works
 

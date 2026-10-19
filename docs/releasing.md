@@ -37,13 +37,15 @@ SDK's own packages are pinned directly (see [Update the Pi SDK](#update-the-pi-s
 The Pi SDK is pinned exactly, together with the SDK's internal
 `@earendil-works` packages: `pi-ai`, `pi-mcp`, `pi-tui`, `pi-codemode` and
 `pi-agent-core`, which the SDK declares, and `pi-telemetry`, which `pi-ai`
-declares. They are declared with caret ranges, and npm does not ship our
-lockfile inside the package, so a consumer install resolves those ranges fresh.
-A newer family member can then break the pinned SDK, as in
+declares. Up to `1.2.0` they were declared with caret ranges, and npm does not
+ship our lockfile inside the package, so a consumer install resolved those
+ranges fresh. A newer family member could then break the pinned SDK, as in
 [#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78), where
-`pi-codemode` 1.2.0 removed an export that `pi-coding-agent` 1.1.0 imports. We
-do not import the family members; they are direct, exactly pinned dependencies
-only so that a fresh install resolves the SDK's ranges to the tested versions.
+`pi-codemode` 1.2.0 removed an export that `pi-coding-agent` 1.1.0 imports.
+Since `1.3.0` the SDK pins its family exactly. We do not import the family
+members; they stay direct, exactly pinned dependencies as a guard, so that a
+fresh install resolves to the tested versions even if upstream returns to
+ranges.
 The SDK and the six packages therefore always move together, each to the
 version the canary resolves from the declared ranges.
 
