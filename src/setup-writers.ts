@@ -1,7 +1,8 @@
-import { chmod, mkdir, readFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
+import { containerRuntimeUsable } from "./container-runtime.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { runDoctor } from "./doctor.js";
 import type { WorkspaceModeEntry } from "./execution-modes.js";
@@ -140,11 +141,29 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
   const writerTarget = targetFor(request.alias, `${request.alias}-w1`);
   const failed = (code: string) => result(operation, [{ target: writerTarget, status: "failed", code }]);
   if (!ALIAS_PATTERN.test(request.alias)) return failed("alias_unknown");
-  if ((deps.platform ?? process.platform) !== "linux") return failed("platform_unsupported");
+  let runtimeProbe: Promise<boolean> | undefined;
+  const containerRuntime = () => runtimeProbe ??= (deps.containerRuntime ?? containerRuntimeUsable)().catch(() => false);
+  const modeDependencies = { containerRuntime };
+  try {
+    let writerWork = request.mode === "container";
+    if (!writerWork) {
+      let config;
+      try { config = await loadConfig(configPath); }
+      catch { return changeExecutionMode(configPath, request, modeDependencies); }
+      writerWork = config.workspaceModes.get(request.alias)?.mode === "container";
+      for (let index = 1; index <= 16 && !writerWork; index++) {
+        try { await lstat(join(writersRoot(deps.home ?? homedir()), writerName(request.alias, index))); writerWork = true; }
+        catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+      }
+      if (!writerWork && request.mode === undefined) writerWork = await containerRuntime();
+    }
+    if (!writerWork) return changeExecutionMode(configPath, request, modeDependencies);
+    if ((deps.platform ?? process.platform) !== "linux") return failed("platform_unsupported");
+  } catch (error) { return failed(codeFor(error)); }
   const action = async () => {
     let proposed: WorkspaceModeEntry;
     return changeExecutionMode(configPath, request, {
-      ...(deps.containerRuntime ? { containerRuntime: deps.containerRuntime } : {}),
+      ...modeDependencies,
       beforeWrite: async (entry) => {
         proposed = entry;
         const ctx = await context(request.alias, deps), planned = await plan(ctx, entry);
