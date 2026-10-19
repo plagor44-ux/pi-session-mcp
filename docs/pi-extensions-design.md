@@ -52,7 +52,7 @@ Success means:
 | Capability scope | Full: providers, tools, hooks, system-prompt changes. |
 | Naming and pinning | `npm:<name>@<exact version>`, resolved from Pi's user install; any other installed version fails closed. |
 | Granularity | Per execution profile. |
-| `read-only` profiles | Extensions allowed; the model's tools stay read/grep/find/ls. |
+| `read-only` profiles | Extensions allowed; read/grep/find/ls plus granted MCP tools and individually granted extension tools (ADR 0010). |
 | Integration approach | Pi SDK session lifecycle API (`createAgentSessionServices`, `createAgentSessionFromServices`, `AgentSessionRuntime`). |
 
 ## Current behavior and constraints
@@ -200,8 +200,10 @@ For a profile with `extensions`, `SdkPiSessionAdapter.create` runs:
    failure is `extension_load_failed`.
 8. **Postchecks.** Model, thinking level and active tools. For extension
    sessions no active tool may be outside the composed allowlist, but fewer
-   active tools are allowed: an extension may deactivate tools, as
-   `pi-cursor-sdk` does with its own tool in `session_start`. Sessions without
+   active tools are allowed except for explicitly granted extension tools in
+   read-only profiles: each must be active and declared to the model at admission
+   (ADR 0010). An extension may otherwise deactivate tools, as `pi-cursor-sdk`
+   does with its own tool in `session_start`. Sessions without
    extensions keep the exact-equality check as today.
 
 Step 3, step 6 and step 7 are each bounded by the existing session-creation
@@ -213,11 +215,26 @@ and step 6 leaves no session to dispose.
 
 ### Tools, hooks and prompts
 
-- **`read-only`.** The tool list is `read`, `grep`, `find`, `ls`, exactly as
-  today. Extension tools are registered but inactive. An extension that calls
-  `setActiveTools` cannot activate a tool outside the list; a contract test
-  proves this against the real SDK. If the SDK does not enforce it, the
-  adapter adds its own check before the implementation is accepted.
+- **`read-only`.** Under [ADR 0010](adr/0010-read-only-extension-tools.md),
+  the active tools are `read`, `grep`, `find`, `ls`, the granted MCP tools and
+  exactly the extension tools named in `grantedExtensionTools`. Without grants,
+  extension tools remain inactive. An extension's `setActiveTools` cannot add
+  others. The field is allowed only on read-only profiles with at least one
+  extension: at most 32 unique names satisfying the extension name rule below,
+  with no built-in names. A violation prevents startup with
+  `invalid_execution_profile_config`.
+  Each grant must be registered at extension load, before bind; after bind the
+  existing re-check applies. Each granted tool must also be active and declared
+  to the model at admission, or start fails with `extension_tool_missing`,
+  message `Granted Pi extension tool is not available`, class `needs_operator`.
+  Resolution errors (`extension_not_installed`, `extension_version_mismatch`)
+  take precedence; conflicts are checked first as `extension_tool_conflict`.
+  The SDK activates only declarable tools, so registration alone is insufficient.
+  Several registered `pi-lens` tools were never active in the
+  [evaluation](evaluation/pi-lens-registration-2026-10-19/); granting one fails
+  closed. Lazy registration in `session_start` or later is unsupported.
+  A grant is the operator's trust decision: third-party tools may write, and
+  workspace modes `container` and `read-only` do not restrict them.
 - **`coding`.** The tool list is the built-in coding tools, the granted MCP
   tools, and every tool registered by the profile's extensions. The adapter
   reads the registered tool names from the services' resource loader after
@@ -319,7 +336,10 @@ cannot be intercepted in Node.js; this is a documented residual risk.
 
 `pi_capabilities_get` adds `extensions` to every execution profile: an array of
 the configured spec strings, empty for profiles without extensions. The field
-is path-free and secret-free. `capabilitiesSchema` and
+is path-free and secret-free. Each profile also has `grantedExtensionTools`
+directly after `extensions`, in configured order, or `[]` when absent. It is
+configuration intent only, not proof of runtime availability; setup verify
+compares it. `capabilitiesSchema` and
 `docs/tool-contracts.md` change accordingly.
 
 ### Doctor
@@ -352,6 +372,7 @@ admitted:
 | `extension_version_mismatch` | Configured Pi extension version is not installed | The installed version differs from the pinned version. |
 | `extension_load_failed` | Configured Pi extension could not be loaded | Invalid manifest, entry outside the package, load or bind error, services diagnostic of type `error`. |
 | `extension_tool_conflict` | Configured Pi extension tools conflict | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe (see *Name conflicts*). |
+| `extension_tool_missing` | Granted Pi extension tool is not available | A read-only grant is not registered at load, or is not active and declared to the model at admission; class `needs_operator`. |
 
 Existing codes keep their meaning. An extension provider that is unknown after
 loading is `unknown_provider`.

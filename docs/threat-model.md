@@ -75,7 +75,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 - **Missing/auth-refresh failure:** a catalog entry alone does not prove authentication. `checkAuth()`, `getAuth(model)`, and local availability are checked with a deadline before creation. Auth values and raw refresh failures never leave the adapter.
 - **Thinking-level clamping:** SDK capability handling can alter a requested level. The adapter compares the effective `session.thinkingLevel` after creation and disposes on a mismatch.
 - **Orphaned SDK session:** a post-creation mismatch or later registry failure could otherwise leave a live Pi handle. The adapter holds it locally until all postconditions pass, best-effort disposes on each later failure, and the registry admits only verified handles.
-- **Excess capability:** the execution profile selects a permission-derived tool allowlist. Read-only permits only `read`, `grep`, `find`, and `ls`; coding remains high impact.
+- **Excess capability:** the execution profile selects a permission-derived tool allowlist. Read-only permits `read`, `grep`, `find`, `ls`, granted MCP tools and exactly the individually granted extension tools; coding remains high impact.
 - **Project resource code execution:** Pi resource loading disables extension discovery, default skill directories, prompts, and themes; only a profile's allowlisted extensions and its explicitly selected catalog skills load (see below). A skill, prompt template or theme that an extension package ships is not made available by the allowlist. Non-executable `AGENTS.md` context remains untrusted instruction content, never authorization.
 - **Concurrent state corruption:** a per-session queue serializes prompt admission and close; concurrent abort callers share one attempt for the active turn. Closing is terminal, settles an active turn, and disposes once.
 - **Secret/prompt disclosure:** stdout is protocol-only. Stderr diagnostics use stable code and safe context only. Public metadata is whitelisted and omits auth objects/sources, credential paths, headers, base URLs, complete model objects, SDK IDs, raw provider errors, prompts, transcripts, and tool data. Completed `assistantText` can still repeat model-visible data and is potentially sensitive.
@@ -85,7 +85,20 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 - **Allowlisted Pi extensions:** a profile's `extensions` load operator-trusted code into the server process with the user's full rights; it may start processes, use the network and write files (for example `pi-cursor-sdk` below `~/.pi/agent`, `~/.cursor/projects/` and `<workspace>/.pi/`). Mitigations:
   - Only exact `npm:<name>@<version>` specs from the operator's configuration load; the MCP client cannot name an extension.
   - Resolution never installs, and a different installed version fails closed. Only Pi's own user install (`<Pi agent dir>/npm/node_modules/<name>`, normally below `~/.pi/agent`) counts; a package installed elsewhere, for example with `npm i -g`, is reported as not installed.
-  - `read-only` profiles never activate extension tools. At session start, after load and again after binding, no extension tool may shadow a built-in or granted tool; later registrations are covered in the residual risks.
+  - `read-only` profiles activate only extension tools individually named in
+    `grantedExtensionTools`; without grants they remain inactive. The grant is
+    the operator's trust decision, not a read-only classification: granted tools
+    are third-party code and may write. Workspace modes `container` and
+    `read-only` do not restrict them. See
+    [ADR 0010](adr/0010-read-only-extension-tools.md).
+  - Grants must be registered at extension load and active and declared to the
+    model at admission, or start fails closed with `extension_tool_missing`
+    (class `needs_operator`). The SDK activates only declarable tools;
+    registration alone is insufficient. Lazy registration in `session_start`
+    or later is unsupported. An extension's `setActiveTools` cannot add
+    ungranted tools. After load and again after binding, no extension tool may
+    shadow a built-in or granted tool; later registrations are covered in the
+    residual risks.
   - Client prompts never dispatch extension commands, but extension input hooks can still see, rewrite or consume a prompt. They receive it with `source: "rpc"`, Pi's marker for input from a program, so a hook that reads the source sees that no human typed it. A hook that ignores the source treats it like any other input.
   - Each extension session gets its own model runtime, and close emits `session_shutdown`.
 - **Skills as prompt content:** a profile's `skills` select files from the operator's `skillCatalog`. The MCP client cannot name a skill, a path or a catalog entry; `pi_session_start` and `pi_session_prompt` take no skill input. Mitigations:
@@ -139,4 +152,5 @@ Session MCP's in-memory boundary. Extension tool names are checked for
 conflicts and for unsafe or MCP-reserved names after loading and again after binding; a tool that an extension
 registers later, during a turn, is not re-checked and may replace a built-in
 tool, `read` included, because allowlisted extensions are trusted code. An extension may deactivate built-in or granted
-tools for its own session.
+tools for its own session, but deactivating a granted extension tool before
+admission fails the start with `extension_tool_missing`.

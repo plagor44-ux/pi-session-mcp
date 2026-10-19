@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Added: individual `grantedExtensionTools` on read-only profiles with
+  extensions, decided in [ADR 0010](docs/adr/0010-read-only-extension-tools.md),
+  amending ADR 0006. Active tools include exactly these grants alongside the
+  read-only built-ins and granted MCP tools. A grant must be registered at load
+  and active and declared to the model at admission, or start fails closed with
+  `extension_tool_missing` (`needs_operator`). Capabilities expose the configured
+  grants; setup verify compares them. This is a public contract change for minor
+  release **0.10.0** under [ADR 0003](docs/adr/0003-post-mvp-maintenance.md#versioning).
+  Grants are operator trust decisions: third-party tools may write, and workspace
+  modes `container` and `read-only` do not restrict them. Lazy registration in
+  `session_start` or later is unsupported.
+
 ## 0.9.1 — 2026-10-19
 
 - Changed: Pi SDK `@earendil-works/pi-coding-agent` from `1.2.0` to `1.3.0`,

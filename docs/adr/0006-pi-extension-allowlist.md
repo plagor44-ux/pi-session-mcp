@@ -1,6 +1,8 @@
 # ADR 0006: Execution profiles may load pinned Pi extensions
 
-**Status:** Accepted (2026-10-11). Issue #34. Design:
+**Status:** Accepted (2026-10-11); amended by
+[ADR 0010](0010-read-only-extension-tools.md) for granted extension tools in
+read-only profiles. Issue #34. Design:
 [Pi extensions design](../pi-extensions-design.md).
 
 Amended by [ADR 0007](0007-profile-skill-selection.md) for skills that extension

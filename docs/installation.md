@@ -454,6 +454,42 @@ pin the installed version in the profile:
 }
 ```
 
+For a review profile, grant individual extension tools rather than every tool
+in a package. This example assumes the named tool is available from the pinned
+extension; it is not evidence of a live provider check:
+
+```json
+"review-navigation": {
+  "default": false,
+  "permissionProfile": "read-only",
+  "provider": "your-configured-provider",
+  "model": "your-configured-model",
+  "thinkingLevel": "medium",
+  "extensions": ["npm:pi-lens@4.4.3"],
+  "grantedExtensionTools": ["symbol_search"]
+}
+```
+
+- **Grants.** `grantedExtensionTools` is allowed only on `read-only` profiles
+  with at least one extension. At most 32 unique names are allowed, each 1–64
+  characters of `[A-Za-z0-9_-]`, not starting with `-`, not MCP-reserved (see
+  **Fail-closed start** below), and not a built-in name (`read`, `bash`, `edit`,
+  `write`, `grep`, `find`, `ls`). A violation prevents startup with
+  `invalid_execution_profile_config`. A grant is your trust decision, not proof
+  that a tool only reads: third-party tools may write. Workspace modes
+  `container` and `read-only` do not restrict them. See
+  [ADR 0010](adr/0010-read-only-extension-tools.md).
+- **Availability.** Each grant must be registered when extensions load; the
+  registered set is re-checked after bind. Each grant must also be active and
+  declared to the model at admission, or `pi_session_start` fails with
+  `extension_tool_missing`, message `Granted Pi extension tool is not available`,
+  class `needs_operator`. Resolution errors (`extension_not_installed`,
+  `extension_version_mismatch`) take precedence; tool conflicts are checked
+  first. Lazy registration in `session_start` or later is unsupported. The SDK
+  activates only declarable tools: several registered `pi-lens` tools were never
+  active in the [evaluation](evaluation/pi-lens-registration-2026-10-19/).
+  Granting such a tool fails closed. Capabilities show configured grants only;
+  Doctor stays offline and does not import extensions to inspect tool names.
 - **Install location.** Only Pi's own user install counts:
   `<Pi agent dir>/npm/node_modules/<name>`, normally `~/.pi/agent/npm/…`,
   created by `pi install npm:<name>`. A package installed with `npm i -g` is
@@ -464,9 +500,11 @@ pin the installed version in the profile:
   `extension_version_mismatch` and Doctor reports it. After `pi update
   --extensions`, update the pinned version and restart the client.
 - **Full capabilities.** An extension loads with its providers, tools, hooks
-  and system-prompt changes. In `read-only` profiles the model still gets only
-  `read`, `grep`, `find` and `ls`; in `coding` profiles every extension tool
-  may be active. Extension commands never run from client prompts, but
+  and system-prompt changes. In `read-only` profiles the active tools are
+  `read`, `grep`, `find`, `ls`, the granted MCP tools and exactly the granted
+  extension tools. Without grants extension tools remain inactive. An
+  extension's `setActiveTools` cannot add others. In `coding` profiles every
+  extension tool may be active. Extension commands never run from client prompts, but
   extension input hooks can still see, rewrite or consume a client prompt;
   they receive it with `source: "rpc"`, never `interactive`.
 - **Fail-closed start.** A session start fails with `extension_load_failed` if

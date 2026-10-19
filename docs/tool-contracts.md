@@ -54,12 +54,20 @@ records name the package version and the build they ran on, see
     "model": "configured-model",
     "thinkingLevel": "medium",
     "extensions": [],
+    "grantedExtensionTools": [],
     "skills": []
   }]
 }
 ```
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases and workspace modes, and the eight documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, or `read-only`; a missing modes entry is reported as `unset`. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, configured aliases and workspace modes, and the nine documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, or `read-only`; a missing modes entry is reported as `unset`. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `grantedExtensionTools`, directly after `extensions`, lists the configured extension tool grants in configured order, `[]` when absent. It is configuration intent only, not proof of registration, activation or declaration to the model. `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+
+Setup verify accepts and compares `grantedExtensionTools` in its bounded direct
+MCP capabilities check, without starting a session or using a provider.
+**Verifier limit:** at maximum field sizes (8 extension specs of 256 characters,
+32 grants of 64 characters, provider and model of 256 characters each), at most
+6 such profiles fit the verifier's 65,536-byte frame bound. Real configurations
+with short values fit far more.
 
 Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint: true`, and `openWorldHint: false`. Clients may use them for presentation, but the strict input schema and server-owned projection enforce the contract.
 
@@ -76,6 +84,27 @@ The former `profile` input is rejected; it is not reinterpreted as an execution-
 Successful session metadata is a whitelist: `id`, `workspace`, `executionProfile`, `profile`, `provider`, `model`, `thinkingLevel`, `state`, `createdAt`, and `updatedAt`. `profile` remains derived permission metadata (`read-only` or `coding`) for compatibility; it is not client-selectable. Provider, model, and thinking level are projected only after SDK post-verification.
 
 The selected skills of an execution profile are never an input. A session loads exactly the skills that the profile selects from the operator's skill catalog, validated at start; a failure is `skill_load_failed`. A catalog value is the path of one `SKILL.md` or `builtin:<name>`, which names a skill of the skill library: the operator's override next to the configuration file if it exists, else the skill shipped in the package. It is resolved when the server loads the configuration, and the value never appears in tool output. See [Pi skills](skills.md).
+
+A read-only profile may configure `grantedExtensionTools` only if it lists at
+least one extension. The array has at most 32 unique extension tool names:
+1–64 characters of `[A-Za-z0-9_-]`, not starting with `-`, not MCP-reserved
+(`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`,
+`read_mcp_resource`) and not a built-in name (`read`, `bash`, `edit`, `write`,
+`grep`, `find`, `ls`). Violations prevent startup with
+`invalid_execution_profile_config`.
+
+With grants, active tools are `read`, `grep`, `find`, `ls`, the granted MCP
+tools and exactly the granted extension tools; an extension's `setActiveTools`
+cannot add others. Each grant must be registered when extensions load. After
+bind, the existing registered-set re-check applies; each grant must also be
+active and declared to the model at admission. Otherwise start fails with
+`extension_tool_missing`. Resolution errors `extension_not_installed` and
+`extension_version_mismatch` take precedence, and conflict checks run first,
+still failing with `extension_tool_conflict`. The SDK activates only declarable
+tools: registered-but-inactive tools fail closed too. Lazy registration in
+`session_start` or later is unsupported. A grant is the operator's trust
+decision: third-party tools may write, and workspace modes `container` and
+`read-only` do not restrict them. See [ADR 0010](adr/0010-read-only-extension-tools.md).
 
 ## Automated writer boundary (Plan B)
 
@@ -118,6 +147,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_version_mismatch` | Pi's installed extension package has another version than the configured one. |
 | `extension_load_failed` | A configured extension has an invalid manifest, failed to load or failed to bind. |
 | `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
+| `extension_tool_missing` | A granted extension tool is not registered at load or is not active and declared to the model at admission. Fixed message: `Granted Pi extension tool is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
 | `skill_load_failed` | A skill that the profile selects could not be loaded: a missing (also a `builtin:` name that matches no override and no shipped skill), unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `writer_uncollected` | The writer is not at its collected baseline, or its guard/Git state could not be verified; controller must collect and reset it. |
