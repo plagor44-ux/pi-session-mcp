@@ -256,9 +256,12 @@ and step 6 leaves no session to dispose.
   This server's own MCP bridge tools use a single underscore (`mcp_<server>_<tool>`)
   and never collide.
   The check runs after load and again after binding, because a `session_start`
-  handler can register a tool during `bindExtensions`. If the registered tool
-  set then differs from the one the session was created with, the start fails
-  with `extension_tool_conflict`. Tools an extension registers later, during a
+  handler can register a tool during `bindExtensions`. In read-only profiles,
+  the re-check fails on a name conflict (`extension_tool_conflict`) or a missing
+  grant (`extension_tool_missing`); an extra, non-colliding registration stays
+  inactive outside the allowlist. In coding profiles the composed list includes
+  all registered extension tools, so a changed registered set fails with
+  `extension_tool_conflict`. Tools an extension registers later, during a
   turn, are not re-checked; allowlisted extensions are trusted code.
 - **Hook errors while binding.** A hook error reported while binding fails the
   start with `extension_load_failed`. Failure cleanup disposes the session

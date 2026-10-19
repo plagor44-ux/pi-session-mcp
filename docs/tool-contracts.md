@@ -162,7 +162,7 @@ Invalid execution-profile configuration prevents startup, so it cannot be an MCP
 
 | Startup diagnostic code | Meaning |
 | --- | --- |
-| `invalid_execution_profile_config` | The execution-profile configuration violates its invariants or strict shape, including an unknown or duplicate selected skill alias, two selected skill aliases with the same path, or an invalid `skillCatalog` entry (including a malformed `builtin:` name). |
+| `invalid_execution_profile_config` | The execution-profile configuration violates its invariants or strict shape, including `grantedExtensionTools` on a coding profile or a profile without extensions, more than 32 grants, duplicate, unsafe, MCP-reserved or built-in grant names, an unknown or duplicate selected skill alias, two selected skill aliases with the same path, or an invalid `skillCatalog` entry (including a malformed `builtin:` name). |
 | `invalid_thinking_level` | A configured thinking level is outside the supported enum. |
 | `invalid_execution_modes` | The execution modes file is invalid or unreadable, including an unknown alias, an unrecognized shape, or an invalid container profile selection. |
 
