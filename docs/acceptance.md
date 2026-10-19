@@ -1649,6 +1649,47 @@ Installation upgrades on 2026-10-16, following
 - Client sessions that were open during an upgrade keep their old server
   process until they end.
 
+### v0.9.0 pre-release acceptance
+
+Before its release, `v0.9.0` passed Level 1, the working-tree Level 2 and the
+packed-tarball Level 2 on its release candidate `4a2d514` on Linux (`x64`),
+with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code
+`2.1.302`, on 2026-10-19:
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor
+  as noted below.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    90 files, 1915 passed and 6 skipped, and no unhandled error. The suite
+    includes the rootless Podman integration tests for writer provisioning,
+    collect and reset, which ran against real Podman.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 666 files. These include the three skills,
+    `scripts/isolation-acceptance.mjs`, `scripts/isolation-probe.cjs`,
+    `dist/writer-launch.js` and `dist/refusal-server.js`. They include no
+    sources, tests, lockfile or implementation plan.
+  - Doctor reported `packageVersion` `0.9.0`. With the example configuration
+    its findings were the placeholder workspace (`workspace_missing`) and the
+    new `workspace_mode_unset` warning for that alias.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. All nine steps passed on all four targets.
+  The real client registrations were unchanged, the built files were
+  unchanged, and the path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball, installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.2.0` with a single copy each. The
+  install smoke reported `smoke_passed` with version `0.9.0`. Level 2 against
+  the installed package passed 160 of 160 checks, with the same results for
+  registrations, build and path leaks.
+
+Not established for `0.9.0`: a live run of the automated container writers
+(the explicit host isolation control run, provisioning with contained
+acceptance, a coding session through a generated writer registration, and
+`--finish`), the migration of the manual writers `psm-alpha` and `thoth-alpha`,
+the ten-task Level 3 cycle, and macOS on real hardware for this release. The
+writer lifecycle is Linux-only; on macOS the release keeps `host` and
+`read-only` mode selection. The published-release acceptance follows after
+publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
