@@ -1,8 +1,7 @@
 # Granted extension tools for read-only profiles — design
 
-Date: 2026-10-19. Status: draft; the operator agreed to the approach in chat
-on 2026-10-19 (explicit grants per tool). The written design is pending
-approval.
+Date: 2026-10-19. Status: approved by the operator on 2026-10-19, including
+the designer's calls listed under "Clarifications after the builder check".
 
 ## Intent
 
