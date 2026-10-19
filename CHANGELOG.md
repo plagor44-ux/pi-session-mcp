@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.10.0 — 2026-10-19
+
 - Added: individual `grantedExtensionTools` on read-only profiles with
   extensions, decided in [ADR 0010](docs/adr/0010-read-only-extension-tools.md),
   amending ADR 0006. Active tools include exactly these grants alongside the
