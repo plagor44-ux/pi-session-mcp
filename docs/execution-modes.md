@@ -61,6 +61,8 @@ pi-session-mcp-setup --repo my-project --mode container --profiles code,code-loc
 
 Repeat the reviewed request with `--apply` to mutate. Mode requests cannot be
 combined with `--target` registration or `--customize-skill`.
+A `--repo` dry run for a container alias inspects existing writers using
+read-only throwaway containers: no network access and nothing written.
 
 | Flag | Accepted values and defaults |
 | --- | --- |
@@ -173,6 +175,8 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 
 Other than explicit `--remove` and `--verify`, omitting apply only plans.
 Reset/recreate/remove refuse changed uncollected work unless given `--discard`.
+`--reset`, `--recreate` or `--remove` with `--discard` cannot see open sessions
+in the writer; close those sessions first.
 Only reset accepts `--base`; finish does not accept discard.
 
 **Verify and registration health checks:** setup's registration inspect in apply,

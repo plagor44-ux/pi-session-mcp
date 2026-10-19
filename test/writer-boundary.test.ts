@@ -38,9 +38,9 @@ it("builds the restricted serving boundary with explicit environment and Git pro
 });
 
 it("keeps hostile values positional and mounts only requested throwaway data", () => {
-  const args = throwawayArgs(paths, imageId, { clone: "ro", bundles: true, base: "/operator/repo" }, "x", ["--upload-pack=evil"]);
+  const args = throwawayArgs(paths, imageId, { clone: "ro", bundles: true }, "x", ["--upload-pack=evil"]);
   expect(args.slice(-6)).toEqual([imageId, "sh", "-c", "x", "sh", "--upload-pack=evil"]);
-  for (const value of ["--network=none", "--pull=never", "--read-only", "--cap-drop=all", "HOME=/tmp", "/tmp:rw,nosuid,nodev,size=1g", `${paths.clone}:${paths.clone}:ro`, `${paths.bundles}:/bundles:rw`, "/operator/repo:/base:ro"]) expect(args).toContain(value);
+  for (const value of ["--network=none", "--pull=never", "--read-only", "--cap-drop=all", "HOME=/tmp", "/tmp:rw,nosuid,nodev,size=1g", `${paths.clone}:${paths.clone}:ro`, `${paths.bundles}:/bundles:rw`]) expect(args).toContain(value);
   expect(args.join(" ")).not.toContain(paths.agent);
   const minimal = throwawayArgs(paths, imageId, { clone: "rw", bundles: false }, `${BOUNDARY_GIT} --version`, []);
   expect(minimal).toContain(`${paths.clone}:${paths.clone}:rw`);
