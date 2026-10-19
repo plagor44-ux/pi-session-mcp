@@ -1784,6 +1784,78 @@ container writers or a single provider turn), the migration of the manual
 writers, and macOS on real hardware. CI covers macOS 15 and 26. The
 published-release acceptance follows after publication.
 
+### v0.9.1 post-release evidence
+
+The published-release acceptance of `v0.9.1` ran on 2026-10-19 from 14:11 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.303`. It passed for the tag and for the installed npm
+package.
+
+Tag binding: a fresh clone of the annotated tag `v0.9.1` (tag object
+`f517163d7a4bc1e95a58d3a106a4ab225733538b`) peels to
+`891a3937959dadc0ddb222015bb20f35c6c9070d`, the merge of #101, and
+`git describe --tags --exact-match` reports `v0.9.1`. CI passed on the merge
+commit (run `39263723693`) and on the tag (run `39264797691`) on Linux,
+macOS 15 and macOS 26. In both runs the macOS 26 job first failed on a Vitest
+timeout in `test/multi-session-acceptance.test.ts` and passed when rerun; the
+same timeout also hit the release branch, and a deadline test in
+`test/mcp-stdio-e2e.test.ts` failed once the same way. The test budgets were
+raised afterwards.
+
+Provider-free (Level 1), on that clone. Every command exited with `0`:
+- 90 test files: 1915 passed and 6 skipped, with strict unhandled rejections
+  and no unhandled error.
+- `npm audit` and `npm audit --omit=dev`: 0 vulnerabilities.
+- `git diff --check` and `git status --short` printed nothing.
+- Offline Doctor reported `packageVersion` `0.9.1`.
+
+`package.json`, `package-lock.json`, `dist/main.js` and the `dist` tree were
+byte-identical before and after the client cycles; `dist/main.js` has the
+SHA-256 `4c36369fd9151969ee6cfe300d4833001db2728979e8a5d096e0bac715e378da`,
+the same as in `0.9.0`, because the entry module itself did not change.
+
+Package publication, a release fact and not an acceptance level: the npm
+package `pi-session-mcp@0.9.1` was staged with `npm stage publish` from a fresh
+clone of the tag and approved by the maintainer. It has 666 files, shasum
+`fb4ccdf3cd389149365ffa54e8643303a302c491` and integrity
+`sha512-sfX9ipU9HISNYcKLG9xVsi28CyaF6DrySjoegeSHLGupiZak+Z9CAGwbZx0AXXP97R7LWUI59m4eU1Jk8q5CNA==`;
+the registry serves the staged shasum. It has no provenance attestation.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile: version `0.9.1`, the same `dist/main.js`, and
+  every `@earendil-works` package at `1.3.0` with one copy each. The install
+  smoke reported `smoke_passed`, and 160 of 160 checks passed.
+- In both runs the real client registrations were unchanged, no process
+  remained, and the build stayed byte-identical.
+
+Installation upgrades on 2026-10-19, following
+[Installation](installation.md#npm-installation):
+- Linux workstation, npm prefix in the home directory: from `0.9.0` to
+  `0.9.1` for `claude-code:user`, the only owned target there. `--remove`
+  reported `removed` and `skill_removed`, Doctor with the operator
+  configuration reported warnings only (`workspace_gitfile`,
+  `workspace_mode_unset`), and `--apply` then `--verify` reported
+  `mcp_verified` and `skill_verified`.
+- Linux server (npm prefix `~/.npm-global`): from `0.8.3` to `0.9.1` for
+  `claude-code:user` and `codex:user`, with the same sequence and results.
+  Setup ran with Node.js `24.22.0` first on `PATH`, the runtime of the
+  existing registrations, so the new registrations kept it.
+- Two client sessions on the server were open during the upgrade at the
+  operator's request; they keep their old server process until they end.
+
+Single-turn provider smoke, after publication and not an acceptance level:
+on each machine, a stdio MCP client started one session per execution
+profile, sent one short prompt that asked for a fixed one-word reply, polled
+the turn to `completed` and closed the session. All ten configured profiles
+passed on the workstation and on the server, including the two profiles with
+the `pi-cursor-sdk@0.5.3` extension; on the workstation the two manual
+container writers `psm-alpha` and `thoth-alpha`, which mount the installed
+package, passed for their `code` and `review` profiles. No workspace or
+writer clone changed. This is the first provider use on Pi SDK `1.3.0`; it
+says nothing about task quality, Level 3 or the automated container writers.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
