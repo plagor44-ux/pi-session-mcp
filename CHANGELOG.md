@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+## 0.9.0 — 2026-10-19
+
 - Added: [per-repository execution modes](docs/execution-modes.md), decided in
-  [ADR 0009](docs/adr/0009-execution-modes.md) for minor release 0.9.0 (not yet
-  released). A separate `execution-modes.json` records acknowledged `host`,
+  [ADR 0009](docs/adr/0009-execution-modes.md) as a minor release because the
+  public MCP contract changes. A separate `execution-modes.json` records acknowledged `host`,
   `container` or `read-only`; missing entries remain `unset` with compatible
   host behavior. Capabilities workspace entries include `mode`; coding starts
   on container/read-only aliases fail with `workspace_mode_forbids_coding`.
