@@ -1764,9 +1764,9 @@ files with 313 passed and 1 skipped).
     rootless Podman integration tests against real Podman.
   - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
   - `npm pack --dry-run` listed 666 files.
-  - Doctor reported `packageVersion` `0.9.1`. With the example configuration
-    its findings were the placeholder workspace (`workspace_missing`) and
-    `workspace_mode_unset` for that alias.
+  - Doctor reported `packageVersion` `0.9.1` and exited with `2`, as expected
+    for the example configuration: its findings were the placeholder workspace
+    (`workspace_missing`, an error) and `workspace_mode_unset` for that alias.
 - Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
   tree: 160 of 160 checks passed. The real client registrations were
   unchanged, no process remained, the built files were unchanged, and the
