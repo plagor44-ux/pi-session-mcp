@@ -84,6 +84,11 @@ release. The `pi-lens` pairing on `review-grok` and `review` runs only after
 that change is released. Until then it stays out of the wave. The other
 pairings do not depend on it and may run first.
 
+pi-session-mcp creates sessions with `projectTrusted: false`. `pi-lens` likely
+keeps LSP spawning and tool auto-install off in that state. The pairing
+measures `pi-lens` as it behaves under pi-session-mcp, which is the production
+behaviour, not its best case.
+
 The workstation profiles `code` and `review` use the `openai` provider, not
 `openai-codex`, so `pi-cache-optimizer` is not a no-op there.
 
