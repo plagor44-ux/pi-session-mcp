@@ -17,6 +17,7 @@ export interface ConfiguredExecutionProfile {
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
+  readonly grantedExtensionTools?: readonly string[];
   /** The selected catalog skills in configured order; absent when the profile selects none. */
   readonly skills?: readonly SkillSelection[];
 }
@@ -30,6 +31,7 @@ export interface ResolvedExecutionProfile {
   readonly thinkingLevel: ThinkingLevel;
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
+  readonly grantedExtensionTools?: readonly string[];
   readonly skills?: readonly SkillSelection[];
 }
 
@@ -42,6 +44,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
     thinkingLevel: profile.thinkingLevel,
     ...(profile.mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(profile.mcpServers) }),
     ...(profile.extensions === undefined ? {} : { extensions: profile.extensions }),
+    ...(profile.grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...profile.grantedExtensionTools]) }),
     ...(profile.skills === undefined ? {} : { skills: profile.skills }),
   });
 }
