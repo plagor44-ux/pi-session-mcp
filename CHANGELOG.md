@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.1 — 2026-10-19
+
 - Changed: Pi SDK `@earendil-works/pi-coding-agent` from `1.2.0` to `1.3.0`,
   together with its family packages `pi-ai`, `pi-mcp`, `pi-tui`,
   `pi-codemode`, `pi-agent-core` and `pi-telemetry`, all at `1.3.0`. The public
