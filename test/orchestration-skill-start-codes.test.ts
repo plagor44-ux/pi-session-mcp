@@ -8,7 +8,7 @@ const skill = read("../skills/pi-session-orchestration/SKILL.md");
 const reference = read("../skills/pi-session-orchestration/references/start-errors.md");
 
 const CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
-const CLASSES = ["Operator needed", "Transient", "Unknown"] as const;
+const CLASSES = ["Operator needed", "Controller action", "Transient", "Unknown"] as const;
 type StartClass = (typeof CLASSES)[number];
 
 function section(markdown: string, heading: RegExp, name: string): string {
@@ -51,6 +51,13 @@ const classes = classBullets();
 const classOf = (code: string): StartClass[] => CLASSES.filter((name) => classes[name].includes(code));
 
 describe("orchestration skill start-error classification", () => {
+  it("teaches finish and classifies writer refusals exactly once", () => {
+    expect(skill).toContain("--finish");
+    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "container_runtime_unavailable"]) {
+      expect(classOf(code), code).toHaveLength(1);
+      expect(backticked(reference).filter((value) => value === code), code).toHaveLength(1);
+    }
+  });
   it("reads the documented codes from the contract", () => {
     expect(mcpErrorCodes).toContain("unknown_execution_profile");
     expect(mcpErrorCodes).toContain("unknown_provider");
@@ -58,6 +65,8 @@ describe("orchestration skill start-error classification", () => {
     expect(mcpErrorCodes).toContain("local_authentication_missing");
     expect(mcpErrorCodes).toContain("local_authentication_unavailable");
     expect(mcpErrorCodes).toContain("server_stopping");
+    expect(mcpErrorCodes).toContain("writer_uncollected");
+    expect(mcpErrorCodes).toContain("writer_busy");
     expect(new Set(mcpErrorCodes).size).toBe(mcpErrorCodes.length);
     expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes"]);
   });
@@ -118,6 +127,9 @@ describe("orchestration skill start-error classification", () => {
   it("states the action of each class", () => {
     const bullet = (name: StartClass) => reference.split("\n").find((line) => line.startsWith(`- ${name} (`))!;
     expect(bullet("Operator needed")).toMatch(/do not retry and do not switch to another profile/);
+    expect(classes["Controller action"]).toEqual(["writer_uncollected", "writer_busy"]);
+    expect(bullet("Controller action")).toMatch(/collect and reset the writer/);
+    expect(bullet("Controller action")).toMatch(/wait for or close the open coding session/);
     expect(bullet("Transient")).toMatch(/retry at most once after a pause/);
     expect(bullet("Unknown")).toMatch(/at most one retry in a fresh session/);
   });

@@ -19,6 +19,17 @@ async function fixture() {
 const request = (overrides: Partial<ModeRequest> = {}): ModeRequest => ({ alias: "a", mode: "read-only", acceptHostWrites: false, apply: false, ...overrides });
 const probe = (usable: boolean) => ({ containerRuntime: async () => usable });
 describe("setup execution modes", () => {
+  it("allows writer preflight to refuse before a mode write or reconciliation", async () => {
+    const { config, path } = await fixture();
+    let after = false;
+    const output = await changeExecutionMode(config, request({ apply: true }), {
+      beforeWrite: async () => ({ schemaVersion: 1, operation: "apply", status: "failed", exitCode: 1, findings: [{ target: { client: "writer", scope: "a", alias: "a-w1" }, status: "failed", code: "writer_uncollected" }] }),
+      afterChange: async (value) => { after = true; return value; },
+    });
+    expect(output.findings[0]?.code).toBe("writer_uncollected");
+    expect(after).toBe(false);
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("plans without creating a modes file or lock", async () => {
     const { config, path } = await fixture();
     expect(await changeExecutionMode(config, request())).toMatchObject({ status: "planned", exitCode: 0, findings: [{ code: "mode_planned", target: { client: "modes", scope: "workspace", alias: "a" } }] });
@@ -61,7 +72,13 @@ describe("setup execution modes", () => {
     expect(await changeExecutionMode(config, input, probe(false))).toMatchObject({ exitCode: 1, findings: [{ code: "container_runtime_unavailable" }] });
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta" });
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none" });
+  });
+  it("records the Go toolchain cache in a container entry", async () => {
+    const { config, path } = await fixture();
+    const input = request({ mode: "container", container: { profiles: ["code"], cache: "go" }, apply: true });
+    expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("go");
   });
   it("chooses container only when usable and never falls back to host", async () => {
     const { config } = await fixture();

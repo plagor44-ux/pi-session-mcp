@@ -11,8 +11,17 @@
   Invalid modes fail startup with `invalid_execution_modes`. Setup `--repo`
   plans by default and writes only with `--apply`; Doctor reports unset modes,
   accepted host writes and unavailable rootless Podman. Controllers must restart
-  after changes. Plan B's automated container writers and periodic credential
-  refresh are pending; the manual isolation runbook remains the operational route.
+  after changes.
+- Added: Plan B automated Linux rootless-Podman writers: separate full clones,
+  generated wrappers, explicit isolation control and contained acceptance,
+  readiness/refusal servers, registration, collect/reset/recreate/remove/verify
+  and controller `--finish`. Collected refs remain untrusted until reviewed.
+  Each writer defaults to `boundary-read-only`; coding requires an explicit
+  profile. Credential checks run every 60 seconds, with host OAuth warmup only
+  within 2 minutes of expiry, then a boundary copy. Provider credentials remain
+  in the boundary and pasta networking is not limited. The controller skill
+  teaches finish before reuse; operator docs cover migration and selecting
+  the writer toolchain cache with `--cache none|go`. No release or new live acceptance is claimed.
 
 - Added: Doctor warning `workspace_gitfile` when a configured workspace has a
   `.git` gitfile (`gitdir:` pointer) and at least one execution profile uses the

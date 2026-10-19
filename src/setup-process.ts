@@ -45,8 +45,8 @@ const delay = (milliseconds: number): Promise<void> => new Promise((resolve) => 
 /** Runs only an explicit executable/argv pair, with bounded output and termination. */
 export function createProcessRunner(options: ProcessRunnerOptions = {}): CommandRunner {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT; const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX;
-  return { async run(command, args, signal): Promise<CommandResult> { const effectiveSignal = options.signal && signal ? AbortSignal.any([options.signal, signal]) : options.signal ?? signal; const table = await currentProcessTable(); if (!table) return { exitCode: 126, stdout: "", stderr: "" }; return new Promise((resolve) => {
-    const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"], env: options.env, detached: process.platform !== "win32" }); let stdout = ""; let stderr = ""; let overflow = false; let aborted = false;
+  return { async run(command, args, signal, runOptions): Promise<CommandResult> { const effectiveSignal = options.signal && signal ? AbortSignal.any([options.signal, signal]) : options.signal ?? signal; const table = await currentProcessTable(); if (!table) return { exitCode: 126, stdout: "", stderr: "" }; return new Promise((resolve) => {
+    const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"], env: runOptions?.env ? { ...(options.env ?? process.env), ...runOptions.env } : options.env, cwd: runOptions?.cwd, detached: process.platform !== "win32" }); let stdout = ""; let stderr = ""; let overflow = false; let aborted = false;
     const collect = (part: "stdout" | "stderr") => (chunk: Buffer): void => { const value = chunk.toString("utf8"); const current = part === "stdout" ? stdout : stderr; if (Buffer.byteLength(current + value, "utf8") > maxOutputBytes) { overflow = true; return; } if (part === "stdout") stdout += value; else stderr += value; };
     child.stdout.on("data", collect("stdout")); child.stderr.on("data", collect("stderr")); let done = false; let timedOut = false; let killTimer: NodeJS.Timeout | undefined; let hardTimer: NodeJS.Timeout | undefined; let groupPoll: NodeJS.Timeout | undefined; let groupDeadline = 0;
     const finish = (exitCode: number): void => { if (done) return; done = true; effectiveSignal?.removeEventListener("abort", abort); clearTimeout(timer); if (!timedOut && killTimer) clearTimeout(killTimer); if (!timedOut && hardTimer) clearTimeout(hardTimer); if (groupPoll) clearTimeout(groupPoll); resolve({ exitCode, stdout: overflow ? Buffer.from(stdout).subarray(0, maxOutputBytes).toString("utf8") : stdout, stderr: overflow ? "output_limit" : stderr }); };
@@ -77,6 +77,48 @@ export function createProcessRunner(options: ProcessRunnerOptions = {}): Command
     }, timeoutMs);
     child.on("error", () => { if (!timedOut) { if (aborted) finishAfterGroup(125); else finish(127); } }); child.on("close", (code) => { if (!timedOut) { if (aborted) finishAfterGroup(125); else finish(code ?? 1); } });
   }); } };
+}
+
+/** Generalized bounded stdio transport for a generated writer wrapper. */
+export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv): (signal: AbortSignal) => Promise<McpStdioProcess> {
+  return async (signal) => {
+    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe"], env, detached: process.platform !== "win32" });
+    let buffer = "", closed = false, overflow = false;
+    child.stdout.on("data", (chunk: Buffer) => { if (!overflow) { buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer) > DEFAULT_MAX) { overflow = true; buffer = ""; } } });
+    child.stderr.resume();
+    child.on("error", () => { closed = true; });
+    child.on("close", () => { closed = true; });
+    const abort = (): void => terminateProcessGroup(child, "SIGTERM");
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+    return {
+      write(frame) {
+        if (closed || overflow || Buffer.byteLength(frame) > DEFAULT_MAX) throw new Error("mcp_write_unavailable");
+        return new Promise<void>((resolve, reject) => child.stdin.write(frame, (error) => error ? reject(new Error("mcp_write_failed")) : resolve()));
+      },
+      async read() {
+        const deadline = Date.now() + DEFAULT_TIMEOUT;
+        while (!closed && !overflow && !buffer.includes("\n") && Date.now() < deadline) await delay(5);
+        if (overflow) return null;
+        const end = buffer.indexOf("\n");
+        if (end >= 0) { const frame = buffer.slice(0, end + 1); buffer = buffer.slice(end + 1); return frame; }
+        return null;
+      },
+      async kill() {
+        signal.removeEventListener("abort", abort);
+        child.stdin.end();
+        terminateProcessGroup(child, "SIGTERM");
+        await delay(100);
+        terminateProcessGroup(child, "SIGKILL");
+        const table = await currentProcessTable(), deadline = Date.now() + 1_000;
+        while (table && child.pid !== undefined && Date.now() < deadline) {
+          if (await table.groupState(child.pid) === "gone") return;
+          await delay(table.pollMs);
+        }
+        throw new Error("mcp_process_cleanup_failed");
+      },
+    };
+  };
 }
 
 export interface McpLauncherOptions { readonly nodePath: string; readonly entryPath: string; readonly configPath: string; readonly timeoutMs?: number; readonly maxFrameBytes?: number; }
@@ -222,14 +264,14 @@ export async function acquireSetupGuardian(lockFd: number, timeoutMs: number, si
   child.once("close", () => { if (!released) { unsafe = true; compromised.abort(); failPending(); } });
 
   const runner: CommandRunner = {
-    run(command, args, runSignal): Promise<CommandResult> {
-      if (released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
+    run(command, args, runSignal, runOptions): Promise<CommandResult> {
+      if (runOptions?.env !== undefined || released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
       const id = nextId++;
       return new Promise((resolve) => {
         const abort = (): void => { if (child.connected) child.send({ type: "abort", id }, undefined, undefined, () => undefined); };
         pending = { id, resolve, ...(runSignal ? { signal: runSignal } : {}), abort };
         runSignal?.addEventListener("abort", abort, { once: true });
-        child.send({ type: "run", id, command, args: [...args], timeoutMs: DEFAULT_TIMEOUT, maxOutputBytes: DEFAULT_MAX }, undefined, undefined, (error) => { if (error) failPending(); });
+        child.send({ type: "run", id, command, args: [...args], timeoutMs: DEFAULT_TIMEOUT, maxOutputBytes: DEFAULT_MAX, ...(runOptions?.cwd !== undefined ? { cwd: runOptions.cwd } : {}) }, undefined, undefined, (error) => { if (error) failPending(); });
       });
     },
   };

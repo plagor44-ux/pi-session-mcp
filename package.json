@@ -28,6 +28,8 @@
     "dist/",
     ".pi-session-mcp-cli/",
     "scripts/doctor.mjs",
+    "scripts/isolation-acceptance.mjs",
+    "scripts/isolation-probe.cjs",
     "pi-session-mcp.example.json",
     "skills/",
     "docs/",
