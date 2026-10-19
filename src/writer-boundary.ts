@@ -44,7 +44,7 @@ export function serveArgs(paths: WriterPaths, state: WriterState, command: reado
 
 export function throwawayArgs(
   paths: WriterPaths, imageId: string,
-  opts: { clone: "ro" | "rw"; bundles: boolean; base?: string },
+  opts: { clone: "ro" | "rw"; bundles: boolean },
   script: string, args: readonly string[],
 ): string[] {
   const result = [
@@ -55,7 +55,6 @@ export function throwawayArgs(
     "--workdir", paths.clone,
   ];
   if (opts.bundles) result.push("-v", `${paths.bundles}:/bundles:rw`);
-  if (opts.base !== undefined) result.push("-v", `${opts.base}:/base:ro`);
   return [...result, imageId, "sh", "-c", script, "sh", ...args];
 }
 

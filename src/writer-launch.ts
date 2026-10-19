@@ -73,7 +73,9 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   const timer = enabled ? deps.setInterval(() => {
     if (busy) return;
     busy = true;
-    void refresh().catch(() => {}).finally(() => { busy = false; });
+    void refresh().catch(() => {
+      process.stderr.write(JSON.stringify({ level: "warning", event: "writer_refresh_failed", code: "writer_refresh_failed" }) + "\n");
+    }).finally(() => { busy = false; });
   }, REFRESH_INTERVAL_MS) : undefined;
   return new Promise<number>((resolveExit) => {
     const interrupt = () => { child.kill("SIGINT"); };

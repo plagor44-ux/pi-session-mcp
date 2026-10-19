@@ -92,6 +92,22 @@ it("recopies at the configured interval across 300000 ms and forwards signals", 
   child.emit("close", 0); expect(await running).toBe(0);
   await vi.advanceTimersByTimeAsync(60_000); expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(6);
 });
+it("logs a sanitized periodic refresh failure and retries on the next tick", async () => {
+  await save(); deps.env = {}; vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  const running = launch(["x-w1", "node", "probe"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  vi.mocked(credentials.writeBoundaryCredentials).mockRejectedValueOnce(new Error("/private/path secret-token"));
+  tick();
+  await vi.waitFor(() => expect(stderr).toHaveBeenCalledTimes(1));
+  expect(stderr.mock.calls).toEqual([[JSON.stringify({ level: "warning", event: "writer_refresh_failed", code: "writer_refresh_failed" }) + "\n"]]);
+  tick();
+  await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(3));
+  expect(stderr).toHaveBeenCalledTimes(1);
+  expect(serveRefusal).not.toHaveBeenCalled();
+  child.emit("close", 0); expect(await running).toBe(0);
+  expect(deps.clearInterval).toHaveBeenCalled();
+});
 it("reads fresh credentials, copies after failed refresh, skips overlapping ticks and clears on exit", async () => {
   await save(); deps.env = {}; vi.mocked(credentials.ensureWarmupConfig).mockResolvedValue("warmup");
   const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
