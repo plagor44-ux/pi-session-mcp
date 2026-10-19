@@ -3,8 +3,8 @@
 Execution modes record the operator's choice **per configured repository workspace alias**.
 A profile selects tools and provider; the mode decides whether the host server
 permits coding. [ADR 0009](adr/0009-execution-modes.md) covers policy (Plan A)
-and automated rootless-Podman writers (Plan B). This implementation is unreleased;
-it does not itself prove a live rollout or acceptance on your machine.
+and automated rootless-Podman writers (Plan B). Both ship in 0.9.0; the release
+does not itself prove a live rollout or acceptance on your machine.
 
 ## Modes and risks
 
