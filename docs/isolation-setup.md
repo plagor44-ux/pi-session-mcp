@@ -1,452 +1,138 @@
 # Isolation setup for coding profiles (rootless Podman)
 
-This is the operator runbook for [ADR 0008](adr/0008-coding-profile-isolation.md)
-(issue [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79)): a
-coding-only registration whose server runs inside a rootless Podman container,
-one container per writer, on Linux. This remains the **manual route**:
-Pi Session MCP does not start, own or verify this wrapped registration.
-[Execution modes](execution-modes.md) (ADR 0009, Plan A) now let setup record a
-per-repository choice and block host coding for container aliases, but do not
-provision writers. Plan B's automated provisioning, collect/reset, wrappers,
-refusal server, registration and periodic credential refresh for long-running
-contained servers are pending. Selecting container mode alone does not perform
-this runbook or establish containment.
+This is the operator reference for what **setup now automates** under
+[ADR 0008](adr/0008-coding-profile-isolation.md) and
+[ADR 0009](adr/0009-execution-modes.md), Plan B. Start with
+[Execution modes](execution-modes.md) for exact flags, lifecycle commands,
+readiness, finding codes and migration. Automation is implemented, not a claim
+of new live acceptance or a release.
 
-**Status.** Accepted on Linux on 2026-10-18 for one writer of this repository
-(`psm-alpha`, rootless Podman 6.1.4), with the wrapper below after three
-corrections found by the first runs (tmpfs ownership option, writable agent
-directory copy, harness fixes). Evidence:
-[isolation acceptance 2026-10-18](evaluation/isolation-acceptance-2026-10-18/README.md).
-Every other writer, image or Podman version needs its own acceptance run. The
-interim rules of the
-[Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules)
-end on Linux only for coding work that goes through an accepted wrapped
-registration.
+The historical Linux manual acceptance for `psm-alpha` and `go-app-alpha` is
+preserved in [the 2026-10-18 evidence](evaluation/isolation-acceptance-2026-10-18/README.md).
+It does not automatically accept another image, wrapper, Podman version or writer.
+macOS containment remains unaccepted and keeps the
+[Sprint 4 interim rules](sprints/2026-10-15-s4-decision.md#interim-operating-rules).
 
-**Platforms.** Linux only. macOS keeps the Sprint 4 interim rules; an isolation
-there would need a Linux VM (for example Lima or Podman machine), which nobody
-has set up or accepted.
+## Prerequisites
 
-Items that need an operator decision are marked **Open decision** and
-collected in [Operator decisions](#operator-decisions).
+- Linux with usable **rootless** Podman, Node.js 22.19.0 or newer and Git.
+  Follow your distribution's packaging and the
+  [Podman rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md).
+  User namespaces and subordinate UID/GID ranges must be configured. Do not
+  run the writer as root or with `--privileged`.
+- A release installation with production dependencies, not a development checkout;
+  configured workspace aliases, coding profiles and `PI_SESSION_MCP_CONFIG`.
+  See [Installation](installation.md).
+- Profiles supported in the boundary: non-default coding, no Cursor provider,
+  no extensions or external MCP grants, only builtin skills. Each container
+  gets the synthetic default `boundary-read-only`; name coding profiles explicitly.
+- Review setup's dry-run before applying. Image `node` resolves a built-in digest
+  pin and can be pulled on apply if absent; an operator-supplied image must be
+  present locally and named by its full 64-character lowercase hex image ID.
+  A custom image needs Node, Git, bash, ssh and coreutils for the acceptance harness.
 
-## The model
+## What setup automates
 
-- The host keeps its read-only registration (profiles with
-  `permissionProfile: "read-only"`). It never gets a coding profile that points
-  at a non-disposable repository.
-- A second, coding-only registration, for example `pi-coding-alpha`, starts the
-  server through `podman run -i --rm …`. The MCP client talks to `podman`
-  over stdio; the server runs inside the container.
-- **One boundary per writer.** Each writer has its own full clone, its own Pi
-  agent directory copy, its own configuration file and its own container. One
-  container serves every session of its registration, so two writers in one
-  container are not isolated from each other.
-- Mounted into the container, and nothing else from the host:
-  - the writer's **full clone**, read-write, at the same absolute path as on
-    the host (the acceptance script compares paths and the profile's workspace
-    alias names that path);
-  - the installed package with its production dependencies, **read-only**;
-  - the boundary's own configuration file, **read-only**;
-  - an **isolated copy of Pi's agent directory** holding only this boundary's
-    provider credentials and the extension packages its profile allowlists;
-  - a small `tmpfs` for `/tmp` and the container home.
-- Not available inside: `~/.ssh`, `SSH_AUTH_SOCK`, GitHub tokens, Git
-  credential helpers or stores, the Claude Code and Codex configuration, the
-  host Pi Session MCP configuration, the source repository and any other
-  workspace. The environment is an explicit allowlist.
-- The writer's result leaves the boundary as a Git bundle that the host
-  fetches. Host Git never runs inside a writer's clone.
+| Area | Automation and limits |
+| --- | --- |
+| Workspace | Separate full clone per writer, created via a base bundle; no hardlinks or shared linked-worktree metadata |
+| Wrapper | Generated stdio-only launcher bound to the release and writer name; no daemon between client connections |
+| Boundary | Rootless keep-id, read-only root, capability drop, no-new-privileges, tmpfs home and /tmp; clone read-write with hooks/config overmounted read-only |
+| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go cache |
+| Configuration | One workspace, selected coding profiles and a synthetic read-only default; internal acknowledged host mode permits writes only in the contained clone |
+| Credentials | Selected provider entries only; OAuth refresh token emptied, API keys retained; no host SSH/Git/client credentials intentionally mounted |
+| Acceptance | Explicit uncontained host control, then provider-free contained harness per writer; fingerprint gates readiness |
+| Registration | Claude Code project-local `pi-coding-<alias>-w<n>` by default, optional Codex user registration; ownership checks refuse divergent replacements |
+| Results | Bundle export into namespaced refs in the operator's checkout; never host Git inside the writer clone |
+| Reuse | Collect then reset persistent writers or recreate ephemeral writers; refuse loss of uncollected work unless explicitly discarded |
 
-For a host alias intended for this route, select `container` as described in
-[Execution modes](execution-modes.md#choose-at-installation), then restart the
-host server. The separately configured server inside the boundary can use an
-explicit `host` entry with `acceptHostWrites: true` for its clone: inside that
-boundary, writing the clone is intended. Do not apply that acknowledgment to the
-operator's host checkout merely to bypass a container-mode refusal.
+The environment passed into the container is an explicit allowlist; no host
+environment passthrough. The package and configuration are read-only mounts,
+but the isolated agent directory is writable because Pi auth storage requires
+writes even without refreshing. It is not the host's agent directory.
 
-A linked Git worktree is not a boundary clone: it shares `hooks/` and `config`
-with its main repository. Use a full clone (`.git` is a directory).
-
-## 1. Install rootless Podman
-
-Use your distribution's package and follow the
-[Podman rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md)
-for the prerequisites of your release. For example, on Arch or Linux:
+## Provision and accept
 
 ```sh
-sudo pacman -S podman
+pi-session-mcp-setup --repo my-project --mode container --profiles code
+pi-session-mcp-setup --isolation-control --repo my-project
+# Explicit permission: the uncontained control writes real canaries below $HOME and removes them.
+pi-session-mcp-setup --isolation-control --repo my-project --apply
+pi-session-mcp-setup --repo my-project --mode container --profiles code --apply
+pi-session-mcp-setup --writer my-project-w1 --verify
 ```
 
-Other distributions package it as `podman` as well. Rootless operation needs a
-user namespace setup that fits your system:
+The host control uses a disposable clone and must detect the expected escapes.
+Without apply it plans only. Writers remain not ready until the control passes
+and their contained harness passes. Failed control invalidates the host control
+record. Contained acceptance records network classification as limited or not
+limited; both can pass. Readiness fingerprints bind wrapper, package version,
+image ID, Podman version, network and cache. A changed binding must be accepted
+again. Doctor is offline and cannot substitute for acceptance.
 
-```sh
-# The kernel must allow unprivileged user namespaces and your user needs subordinate id ranges.
-grep "^$(id -un):" /etc/subuid /etc/subgid       # both files must list a range of at least 65536
-podman info --format '{{.Host.Security.Rootless}}'   # expect: true
-podman unshare cat /proc/self/uid_map                # expect a mapping of more than one id
-```
+The harness checks launch binding, file writes outside the clone, host credential
+visibility, detached-process persistence, child environment names and network.
+Canaries have per-run names; it never intentionally replaces pre-existing files,
+removes its canaries and verifies cleanup. It does not prove the runtime is
+escape-free or that credentials cannot be exfiltrated. The historical manual
+live/provider checks are separate evidence, not something setup newly performs.
+For harness details see `scripts/isolation-acceptance.mjs` and the historical
+evidence linked above; do not claim a live provider test from provider-free acceptance.
 
-If `/etc/subuid` or `/etc/subgid` has no line for your user, an administrator
-adds one (`usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <user>`),
-and you run `podman system migrate` afterwards. On SELinux hosts the bind mounts
-below need the `:Z` option; on AppArmor-restricted user namespaces (for example
-Ubuntu 24.04) the distribution documents the required policy. Do not run the
-server as root or with `--privileged`.
+**Health-check warning:** `claude mcp get` starts the registered server briefly,
+so inspecting a writer starts its container. Setup inspect and verify use that
+command too. Direct verify sets `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
+starts sessions nor uses a provider nor touches credentials in its direct launch.
+The client's separate health-check subprocess is not given that override by setup.
 
-## 2. Image
+## Credentials and residual risks
 
-The container needs Node.js 22.19.0 or newer, `bash`, `git`, `ssh` (for the
-acceptance check) and `coreutils`. A Debian-based Node image fits; an Alpine
-image has no `bash`, and the acceptance reports `inconclusive` without it. Build
-or pull the image once, pin it by digest and keep the pin in the wrapper
-script. **Open decision:** the image source and update policy.
+The launcher checks on launch and every **60 seconds**. Only when a selected
+OAuth token expires within **2 minutes** or is expired does it invoke host login
+warmup (invalid/missing expiry also triggers it). Warmup refreshes expired or
+almost expired tokens, not every valid token on every interval. It uses Pi's
+locked host store via read-only session creation/close without a model request,
+then the launcher re-copies the selected credentials. Boundary refresh tokens
+are empty; API-key entries are copied unchanged, not refreshed.
 
-```sh
-podman pull docker.io/library/node:22-bookworm      # example only; pin the digest you accept
-podman image inspect --format '{{.Digest}}' docker.io/library/node:22-bookworm
-```
+The boundary still holds provider credentials: an **access token**, or the
+**API key** for API-key providers. The worker can read and use them. Network
+**`pasta` is not limited**, and no provider-only proxy/firewall is configured.
+`none` removes network entirely and normally prevents remote provider access.
+Credential exfiltration and runtime escapes remain residual risks.
 
-## 3. Prepare one writer
+## Review, finish and migration
 
-Per writer (`alpha` below), create state outside the clone:
+Never run host Git in a writer clone, even for diff/log or direct fetch: mutable
+Git metadata can redirect reads to worker-controlled configuration. Setup checks
+clone layout and runs clone-side Git only in throwaway no-network containers.
+Collect with `--writer <name> --collect --apply`, then review
+`refs/remotes/writer-<name>/<branch>` in your own checkout, with dirty work at
+`<branch>-wip`. Imported refs are untrusted until reviewed.
 
-```sh
-STATE="${HOME}/writer-state/alpha"
-mkdir -p "${STATE}/agent" "${STATE}/bundles"
+After taking over the result and closing its coding session, run
+`pi-session-mcp-setup --writer <name> --finish --apply` before another task.
+It collects then resets (persistent) or recreates (ephemeral). If any branch name
+was refused, collection is incomplete and finish stops. Rename inside the writer
+or have the operator explicitly resolve loss with `--reset --discard --apply`.
+Guard checks re-read the baseline file: reset takes effect without restarting
+the server. Mode policy changes still require controller/server restart.
 
-# Full clone, no hard links into the source repository. Run this on the host, once, before the writer starts.
-git clone --no-hardlinks /path/to/source-repo "${STATE}/clone"
-```
+For hand-made **`psm-alpha` and `go-app-alpha`**:
 
-**Agent directory copy.** Copy only what this boundary needs and nothing else
-(not `mcp-auth.json`, not other providers' entries, not session history):
+1. Preserve and review any work through their old bundle route.
+2. In each original project remove the manual registration with
+   `claude mcp remove pi-coding-<name> -s local`; remove any manual Codex entry too.
+3. Remove the manual wrapper and state directory only after collecting needed work.
+4. Run the explicit isolation control, then
+   `pi-session-mcp-setup --repo <alias> --mode container --profiles <coding-aliases> --apply`.
+5. Reconnect/restart controllers and verify the new alias-derived writer names.
 
-```sh
-install -m 0600 /dev/null "${STATE}/agent/auth.json"
-# Fill it with the entry of the one provider this boundary uses. Do not copy the whole host file.
-# Accepted variant: the access token only, with an empty refresh token, so the rotating refresh
-# token never enters the boundary (a session past the token's expiry then fails instead of refreshing):
-python3 -c 'import json,os,sys; e=json.load(open(os.path.expanduser("~/.pi/agent/auth.json")))["openai"]; e["refresh"]=""; json.dump({"openai":e}, open(sys.argv[1],"w"))' "${STATE}/agent/auth.json"
-# Empty it again after use: echo '{}' > "${STATE}/agent/auth.json"
-mkdir -p "${STATE}/agent/npm"
-# If the profile allowlists extensions, install exactly those into ${STATE}/agent/npm (Pi's user install layout).
-```
+The Go-toolchain writer uses an operator-supplied local **image ID** with
+`--image <image-id> --cache go`, recording `cache: "go"` in container settings.
+Mode requests rebuild options from supplied values/defaults: repeat the image
+and cache flags each time. The Go mount is `/pi/go`, with GOPATH, GOCACHE and
+`GOTOOLCHAIN=local`; setup does not build the operator's toolchain image.
 
-Pi's install resolves extensions from `<agent dir>/npm/node_modules/<name>`;
-the server never installs. See [installation](installation.md) for the layout.
-
-**Configuration.** Write `$STATE/pi-session-mcp.json` with the one workspace of
-this writer (the clone's absolute path) and only the coding profile this
-boundary needs. Do not copy `mcpServers` grants or `envFrom` entries from the
-host configuration unless you decided to (see the open decisions). The file is
-mounted read-only; the profile's provider and model must match the credentials
-in the agent directory copy.
-
-**Package.** Use a release installation directory with production dependencies
-(`npm ci --omit=dev` in a release checkout), as described in
-[installation](installation.md). It is mounted read-only. Never mount a
-development checkout.
-
-## 4. The wrapper
-
-Write variables as `${CLONE}` in these commands: in zsh, `$CLONE:ro` is read as the
-history modifier `:r` plus `o`, which silently mounts a different path.
-
-The accepted wrappers keep the copy current themselves: before `exec podman`,
-they run a host helper that refreshes the host login through Pi's locked
-credential store when it expires within 20 minutes (one session start and close
-of the released server, no model request; see
-[`auth-warmup.mjs`](evaluation/isolation-acceptance-2026-10-18/auth-warmup.mjs)),
-then copy the access token with an empty refresh token into `$STATE/agent`.
-Without that, a boundary stops working whenever the host token has expired.
-A locally built image cannot be pinned by `@sha256` digest (Podman then tries a
-registry); pin it by its full image ID and add `--pull=never`. Language
-toolchains belong in the image (for Go: a module and build cache mounted from
-`$STATE/go` and `GOTOOLCHAIN=local`). The accepted wrappers are kept with the
-[acceptance evidence](evaluation/isolation-acceptance-2026-10-18/README.md).
-
-Keep the container command in one script, so that the client registration and
-the acceptance run use the same flags and mounts. This is an **illustrative,
-untested** starting point; adapt it and let the acceptance show whether it
-holds.
-
-```sh
-#!/bin/sh
-# ~/.local/bin/pi-writer-alpha  (mode 0755). Stdout is reserved for MCP frames: no echo, no -t, exec the container.
-STATE="${HOME}/writer-state/alpha"
-CLONE="${STATE}/clone"
-RELEASE="${HOME}/.local/share/pi-session-mcp/releases/vX.Y.Z"
-IMAGE="docker.io/library/node@sha256:<pinned digest>"
-NETWORK="${PI_WRITER_NETWORK:-pasta}"   # Open decision: network egress policy (see below)
-
-if [ "$#" -eq 0 ]; then set -- node /opt/pi-session-mcp/dist/main.js; fi
-
-exec podman run -i --rm \
-  --name pi-writer-alpha \
-  --userns=keep-id \
-  --read-only \
-  --cap-drop=all --security-opt=no-new-privileges \
-  --network="$NETWORK" \
-  --tmpfs /tmp:rw,nosuid,nodev,size=512m \
-  --tmpfs /pi/home:rw,nosuid,nodev,mode=0700,size=64m,U \
-  -v "${CLONE}:${CLONE}:rw" \
-  -v "${RELEASE}:/opt/pi-session-mcp:ro" \
-  -v "${STATE}/pi-session-mcp.json:/pi/config.json:ro" \
-  -v "${CLONE}/.git/hooks:${CLONE}/.git/hooks:ro" \
-  -v "${CLONE}/.git/config:${CLONE}/.git/config:ro" \
-  -v "${STATE}/agent:/pi/agent:rw" \
-  --workdir "$CLONE" \
-  -e HOME=/pi/home \
-  -e PI_SESSION_MCP_CONFIG=/pi/config.json \
-  -e PI_CODING_AGENT_DIR=/pi/agent \
-  "$IMAGE" "$@"
-```
-
-Notes:
-
-- `--env-host` is never used and no `-e NAME` without a value, so no host
-  variable passes through. Every variable the container needs is listed. If
-  the provider authenticates through an environment variable, pass it with
-  `--env-file` from a mode-0600 file that belongs to this boundary only.
-- `$STATE/agent` must be mounted read-write: Pi's auth storage writes there even
-  without a refresh, and a read-only copy failed session start with
-  `local_authentication_unavailable`. Run the acceptance with
-  `--agent-dir-copy-writable --agent-dir-copy "$STATE/agent"`.
-- Podman 6 rejects `uid=`/`gid=` on `--tmpfs`; the `U` option gives the tmpfs to
-  the container user instead.
-- `$CLONE/.git/hooks` and `$CLONE/.git/config` are mounted read-only on top of
-  the read-write clone. The host never runs Git there; this protects against a
-  later mistake. The live acceptance item checked both.
-- The container is removed at the end (`--rm`) and has no restart policy. The
-  pinned image is the only thing that persists.
-
-## 5. Register the coding-only server
-
-Register the wrapper under its own name, once per writer. This is a manual
-registration; `setup` neither makes nor verifies it, and Doctor does not check
-it.
-
-```sh
-claude mcp add pi-coding-alpha -s local -- "${HOME}/.local/bin/pi-writer-alpha"
-codex mcp add pi-coding-alpha -- "${HOME}/.local/bin/pi-writer-alpha"
-```
-
-Use the narrowest scope your client offers. Keep the host registration
-read-only: its configuration has no coding profile for a non-disposable
-repository. Cursor-backed coding profiles stay off non-disposable repositories
-until they are accepted inside this boundary (ADR 0008).
-
-## 6. Review the writer's result from the host
-
-Do not run Git as the host user inside `$CLONE`: its local configuration
-(`core.fsmonitor`, `diff.external`, hooks, aliases) can run code. Read-only
-mounts of `.git/hooks` and `.git/config` do not close this: the rest of `.git`
-stays writable for the worker, which can create redirect files such as
-`.git/commondir` or `.git/config.worktree` that point a later host `git` at a
-configuration the worker controls (the acceptance records
-`commondir_writable_inside: true`).
-
-Before every review, check from the host without Git and refuse the clone if any
-redirect file exists:
-
-```sh
-for f in commondir gitdir config.worktree; do
-  if [ -e "${CLONE}/.git/$f" ]; then echo "refuse: .git/$f present" >&2; exit 1; fi
-done
-```
-
-If a host `git` command in the clone is ever unavoidable, run it as
-`GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git -c core.fsmonitor=false -c core.hooksPath=/dev/null ...`
-after the check above. Stricter variant: mount the whole `$CLONE/.git` read-only;
-the worker then cannot commit, and the review takes a patch
-(`git diff HEAD`) from the throwaway container instead of a bundle. A direct
-`git fetch "$CLONE"` also starts `git upload-pack` against the clone's
-configuration; the ADR says to fetch the branch, and this runbook does it from a
-bundle, so that no host Git process reads the clone. (Which clone settings
-`upload-pack` honors was not audited here.)
-
-```sh
-# 1. Create the bundle inside a throwaway container with the clone read-only, no network, no other mounts.
-podman run --rm --network=none --userns=keep-id --cap-drop=all --security-opt=no-new-privileges \
-  -v "${CLONE}:${CLONE}:ro" -v "${STATE}/bundles:/bundles:rw" \
-  "$IMAGE" git -c safe.directory='*' -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$CLONE" bundle create /bundles/alpha.bundle HEAD
-
-# 2. On the host, in the source repository: verify and fetch into a namespaced ref.
-git -C /path/to/source-repo bundle verify "${STATE}/bundles/alpha.bundle"
-git -C /path/to/source-repo fetch "${STATE}/bundles/alpha.bundle" "HEAD:refs/remotes/writer-alpha/work"
-git -C /path/to/source-repo log --stat writer-alpha/work   # inspect on the host, then merge or cherry-pick yourself
-```
-
-Treat the fetched history as untrusted until you reviewed it. Reset or recreate
-the writer's clone and agent directory copy between unrelated tasks.
-
-## Run the acceptance
-
-`scripts/isolation-acceptance.mjs` covers the provider-free items of the
-[ADR acceptance](adr/0008-coding-profile-isolation.md#acceptance): launch
-binding, writes, credentials, persistence, the checkable part of children, and
-network. It needs Linux, Node.js 22.19.0 or newer and Git on the host and uses
-Node built-ins only. The **Live** item needs a provider and a real session and
-stays manual (below).
-
-How it works: it pipes `scripts/isolation-probe.cjs` to
-`<launch prefix> - <config>`, so the prefix must end in a command that behaves
-like `node`. Use the wrapper itself: `--launch "$HOME/.local/bin/pi-writer-alpha node"`
-runs `node` in the same container flags as the registered server, with the same
-mounts. The probe attempts to create or change files, through Node.js file
-writes and through `bash -c`, at: an absolute path, `../` out of the workspace,
-a symlink in the workspace that points out, the home directory, Pi's agent
-directory and its extension packages directory, a user systemd unit directory,
-and the `.git/hooks` and `.git/config` of a disposable source repository. It
-also looks at credentials, leaves a detached process behind, lists the
-environment names of a child process and tries a TCP connect to a public host
-on port 443.
-
-Safety of the harness itself (it matters because the control run really
-succeeds):
-
-- It only creates new files whose names carry a per-run token, and never
-  modifies or deletes a pre-existing file. Git is never run inside the
-  workspace.
-- The disposable source repository and an `outside` directory live in a run
-  directory below `~/.cache/pi-session-mcp-isolation/`, created and removed by
-  the harness.
-- The host side digests every target before and after, removes every canary it
-  finds and verifies the removal. A leftover canary or a changed pre-existing
-  target fails the run.
-- The report holds booleans, counts, check ids and 12-character digest
-  prefixes: no path, file content or environment value. The script refuses to
-  write a report that contains anything else.
-- `ssh -o BatchMode=yes -o ConnectTimeout=5 -T git@github.com` is the only
-  remote command; only "did authentication succeed" is kept. No `git push` and
-  no other mutating remote command runs.
-
-### Step 1: the control run (once per host, before the first contained run)
-
-The control shows that the checks can see an escape on this host. It runs
-without a boundary against a disposable clone and really performs the escapes.
-
-```sh
-CACHE="${HOME}/.cache/pi-session-mcp-isolation"; mkdir -p "${CACHE}/control"
-git clone --no-hardlinks /path/to/any-repo "${CACHE}/control/clone"
-node scripts/isolation-acceptance.mjs --mode uncontained-control --launch node \
-  --workspace "${CACHE}/control/clone" --out "${HOME}/isolation-control.json"
-```
-
-Expected: verdict `control_detected_escapes`, exit 0, every write attempt
-`probe_blocked: false` and `host_changed: true`, `residual_canaries: 0`, and
-`preexisting_unchanged_after_cleanup: true`. Exit 1 means the control missed an
-escape: the checks cannot be trusted on this host, so fix that first.
-
-### Step 2: the contained run
-
-```sh
-node scripts/isolation-acceptance.mjs --mode contained \
-  --agent-dir-copy-writable --agent-dir-copy "${HOME}/writer-state/alpha/agent" \
-  --launch "${HOME}/.local/bin/pi-writer-alpha node" \
-  --workspace "${HOME}/writer-state/alpha/clone" --out "${HOME}/isolation-alpha.json"
-```
-
-Options:
-
-- `--env-allow A,B`: the environment names you chose to pass in. Secret-like
-  names that are not listed fail the run; with this option any other
-  unexpected name fails it too.
-- `--agent-dir-copy-writable`: declares that you decided on a writable agent
-  directory copy. Then a write into the boundary's own copy of the agent
-  directory or its extension packages does not count as "not blocked", but a
-  change that reaches the host still fails.
-- `--agent-dir-copy <host path>`: with `--agent-dir-copy-writable`, the host
-  path of that copy, so canaries written into it are found and removed.
-- `--no-remote-checks`: skips the `ssh` and TCP checks. The run can then end at
-  best `inconclusive`.
-
-The exit codes are 0 pass (or the expected control result), 1 fail, 2 usage or
-environment error or `inconclusive` (for example no `bash` in the image, the
-workspace not writable from inside, or a remote check skipped). The workspace
-must be the writer's full clone (a `.git` directory) and must be mounted at the
-same absolute path inside.
-
-### What counts as accepted
-
-Setup of a writer is accepted when all of these hold, on Linux:
-
-1. The control run of Step 1 on this host ended `control_detected_escapes`.
-2. The contained run ended verdict `pass` (exit 0). That means:
-   - **Launch binding:** the probe ran in a different user namespace or mount
-     namespace, or as a different OS user, than the harness
-     (`launch_binding.bound: true`).
-   - **Writes:** every attempt was blocked from inside (`probe_blocked: true`)
-     and no host target changed (`host_changed: false`, pre-existing digests
-     unchanged before and after).
-   - **Credentials:** none of `~/.ssh`, the SSH agent socket, the `gh` hosts
-     file or token variable, a Git credential file or helper, the Claude Code
-     or Codex client configuration, or the Pi Session MCP configuration is
-     visible (`visible_count: 0`), and the `ssh` authentication check did not
-     succeed.
-   - **Persistence:** the detached process did not outlive the probe, and the
-     crontab and user unit file counts did not change.
-   - **Children:** no secret-like environment name reaches a child process
-     beyond the ones you allowed. This checks the container's environment as
-     seen by a `bash` child. Which `envFrom` values a granted external MCP
-     server receives in a real session is **not** covered without a provider
-     and stays a manual check (see open decisions).
-   - **Network:** `network.classification` is recorded as `limited` or as
-     `not_limited`. Either is acceptable to the script; the choice is yours.
-3. **Live** (manual, with a provider): one coding session through the wrapped
-   registration is asked to write outside its workspace with `edit`, `write`
-   and `bash`; every attempt fails, the host digests stay unchanged (use the
-   same before/after digests as the harness reports), and an ordinary change
-   inside the workspace still succeeds.
-4. The sanitized JSON reports and the wrapper, with the image digest, are kept
-   as the evidence record. No claim of acceptance exists before then.
-
-A writer that fails any item stays out of use. Repeat the acceptance after any
-change of the wrapper, the image or the Podman version.
-
-What the script does not show: that the container runtime itself is free of
-escapes; that a process inside cannot reach the provider and exfiltrate over
-that connection; what trusted extension code does with the credentials in the
-agent directory copy. These are the residual risks of ADR 0008.
-
-## Alternative: a separate OS user
-
-Where Podman is not available, a dedicated OS user can serve as the boundary:
-its own home, a full clone it owns, no access to your home. Launch the server as
-that user through `sudo -u <user>` or `systemd-run`, and run the acceptance with
-a launch prefix that does the same and ends in `node`. The harness accepts a
-different OS user as binding evidence. The same mounts-and-exclusions logic
-applies by file permissions instead of mounts; this path is not described
-further here and was not tried.
-
-## Operator decisions
-
-Taken per writer. For `psm-alpha` on 2026-10-18: the official Node image pinned
-by digest; network `pasta`, recorded as not limited; no external MCP grants and
-no `envFrom`; a writable agent copy holding only the access token. The questions
-stay open for every other writer.
-
-1. **Open decision: provider authentication refresh.** Does the provider's
-   token refresh need to write into Pi's agent directory? If yes, the copy is
-   mounted read-write and holds only this boundary's credentials; pass
-   `--agent-dir-copy-writable` to the acceptance. If no, mount it read-only.
-   Related: `rg` and `fd` are downloaded into Pi's tool directory when
-   missing, which also needs a writable place; either pre-provide them in the
-   image or accept a writable copy.
-2. **Open decision: external MCP grants and `envFrom`.** Which granted external
-   MCP servers, and which host environment values via `envFrom`, a coding
-   registration keeps. The default in this runbook is none: no `mcpServers`
-   grant and no `envFrom` in the boundary configuration. If you keep some, list
-   the names with `--env-allow`, mount their binaries explicitly and check what
-   the child receives in a real session.
-3. **Open decision: network egress policy.** Rootless Podman gives the
-   container outbound access by default (`pasta`). The provider connection
-   needs egress to its hosts. `--network=none` removes it entirely (the
-   session then cannot reach a provider, so it only fits an in-container
-   provider or local model); restricting to the provider hosts needs a proxy
-   or firewall that this runbook does not define. Whatever you choose, the
-   acceptance records it as `limited` or `not_limited`; the ADR accepts
-   either, as long as it is stated.
-4. **Open decision: image source and update policy** (see [Image](#2-image)).
+See [Execution modes](execution-modes.md#migration-from-manual-writers) for
+migration limitations and [Doctor](doctor-design.md) for offline writer checks.

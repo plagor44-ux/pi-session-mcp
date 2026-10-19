@@ -7,6 +7,7 @@ import { createServer } from "./server.js";
 import { SessionRegistry } from "./session-registry.js";
 import { SdkPiSessionAdapter, type SdkPiAdapterDiagnostic } from "./sdk-pi-adapter.js";
 import { shutdownAndTerminate } from "./shutdown.js";
+import { createWriterGuard } from "./writer-guard.js";
 
 type ProcessDiagnostic = SdkPiAdapterDiagnostic | StartupDiagnostic | {
   readonly level: "error";
@@ -29,7 +30,9 @@ async function main(): Promise<void> {
   let handle: ReturnType<typeof serveStdio> | undefined;
   try {
     const config = await loadConfig();
-    registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces);
+    const guardPath = process.env.PI_SESSION_MCP_WRITER_GUARD;
+    registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces,
+      guardPath === undefined ? {} : { writerGuard: createWriterGuard(guardPath, config.workspaces) });
     handle = serveStdio(
       () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes),
       {

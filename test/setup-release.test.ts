@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,7 @@ async function releaseFixture(): Promise<string> {
   await writeFile(join(root, "dist", "main.js"), "export const main = true;\n");
   await writeFile(join(root, "dist", "setup-command-guardian.js"), "export const guardian = true;\n");
   await writeFile(join(root, "dist", "setup-platform.js"), "export const platform = true;\n");
+  await writeFile(join(root, "dist", "writer-launch.js"), "export const launcher = true;\n");
   await writeFile(join(root, "dist", "nested", "runtime.js"), "export const runtime = 1;\n");
   return root;
 }
@@ -25,6 +27,11 @@ afterEach(async () => {
 });
 
 describe("immutable setup release binding", () => {
+  it("packs both provider-free isolation scripts", () => {
+    const report = JSON.parse(execFileSync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"], { encoding: "utf8", timeout: 120_000, stdio: ["ignore", "pipe", "pipe"] })) as { files: { path: string }[] }[] | Record<string, { files: { path: string }[] }>;
+    const entry = Array.isArray(report) ? report[0]! : Object.values(report)[0]!;
+    expect(entry.files.map(({ path }) => path)).toEqual(expect.arrayContaining(["scripts/isolation-acceptance.mjs", "scripts/isolation-probe.cjs"]));
+  }, 120_000);
   it("changes when any built runtime module changes", async () => {
     const root = await releaseFixture();
     const before = await immutableReleaseBinding(root);
@@ -64,6 +71,16 @@ describe("immutable setup release binding", () => {
     const linked = await releaseFixture();
     await rm(join(linked, "dist", "setup-platform.js"));
     await symlink("main.js", join(linked, "dist", "setup-platform.js"));
+    await expect(immutableReleaseBinding(linked)).rejects.toThrow("release_symlink_invalid");
+  });
+
+  it("requires a regular non-symlink writer launcher in the immutable runtime", async () => {
+    const missing = await releaseFixture();
+    await rm(join(missing, "dist", "writer-launch.js"));
+    await expect(immutableReleaseBinding(missing)).rejects.toThrow("release_entry_missing");
+    const linked = await releaseFixture();
+    await rm(join(linked, "dist", "writer-launch.js"));
+    await symlink("main.js", join(linked, "dist", "writer-launch.js"));
     await expect(immutableReleaseBinding(linked)).rejects.toThrow("release_symlink_invalid");
   });
 

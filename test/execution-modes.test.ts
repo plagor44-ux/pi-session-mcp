@@ -37,20 +37,24 @@ describe("resolveExecutionModes", () => {
   it("resolves container defaults", () => {
     const loaded = resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"] } }), aliases, profiles);
     expect(loaded.get("a")).toEqual({ mode: "container", container: {
-      writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta",
+      writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta", cache: "none",
     } });
     expect(loaded.get("b")).toEqual({ mode: "unset" });
   });
 
   it("preserves explicit container settings and snapshots them immutably", () => {
-    const raw = modes({ a: { mode: "container", profiles: ["code"], writers: 16, lifecycle: "ephemeral", image: "custom-image", network: "none" } });
+    const raw = modes({ a: { mode: "container", profiles: ["code"], writers: 16, lifecycle: "ephemeral", image: "a".repeat(64), network: "none", cache: "go" } });
     const loaded = resolveExecutionModes(raw, aliases, profiles);
     const entry = loaded.get("a")!;
-    expect(entry.container).toEqual({ writers: 16, lifecycle: "ephemeral", profiles: ["code"], image: "custom-image", network: "none" });
+    expect(entry.container).toEqual({ writers: 16, lifecycle: "ephemeral", profiles: ["code"], image: "a".repeat(64), network: "none", cache: "go" });
     expect(Object.isFrozen(entry)).toBe(true);
     expect(Object.isFrozen(entry.container)).toBe(true);
     expect(Object.isFrozen(entry.container?.profiles)).toBe(true);
     expect(() => (loaded as Map<string, unknown>).set("a", {})).toThrow();
+  });
+
+  it.each(["node", "a".repeat(64)])("accepts image %s", (image) => {
+    expect(resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"], image } }), aliases, profiles).get("a")?.container?.image).toBe(image);
   });
 
   it("accepts acknowledged host and read-only modes", () => {
@@ -63,6 +67,8 @@ describe("resolveExecutionModes", () => {
     ["missing host acknowledgment", modes({ a: { mode: "host" } })],
     ["false host acknowledgment", modes({ a: { mode: "host", acceptHostWrites: false } })],
     ["missing profiles", modes({ a: { mode: "container" } })],
+    ...["latest", "a".repeat(65), "A".repeat(64)].map((image) => [`invalid image ${image}`, modes({ a: { mode: "container", profiles: ["code"], image } })] as const),
+    ["invalid cache", modes({ a: { mode: "container", profiles: ["code"], cache: "all" } })],
     ["empty profiles", modes({ a: { mode: "container", profiles: [] } })],
     ["unknown profile", modes({ a: { mode: "container", profiles: ["SECRET_SENTINEL"] } })],
     ["read-only profile", modes({ a: { mode: "container", profiles: ["review"] } })],
@@ -77,7 +83,7 @@ describe("resolveExecutionModes", () => {
 
   it("exports the strict file schema with defaults", () => {
     expect(executionModesSchema.parse(modes({ a: { mode: "container", profiles: ["code"] } })).workspaces.a)
-      .toMatchObject({ writers: 1, lifecycle: "persistent", image: "node", network: "pasta" });
+      .toMatchObject({ writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none" });
   });
 });
 

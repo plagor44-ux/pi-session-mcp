@@ -69,11 +69,33 @@ Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint:
 
 Coding profiles are refused on `container` and `read-only` workspaces with `workspace_mode_forbids_coding` before registry admission or adapter session creation. Read-only profiles remain allowed on every mode; `unset` and `host` preserve existing coding behavior.
 
+Inside a writer boundary only, `PI_SESSION_MCP_WRITER_GUARD` names the read-only, server-owned baseline guard file. Coding admission re-reads it on every check: the guarded workspace must have no open coding session, HEAD and its sole local branch must match the baseline commit/ref, no stash may exist, and `status --porcelain=v1 -uall` must be clean. Missing or invalid guards and failed Git probes fail closed. Other configured workspaces and read-only profiles are unaffected. Without this boundary-only variable, admission is unchanged. The controller must collect and reset uncollected writers, or wait for or close an open coding session; clients must not bypass refusals by switching profiles.
+
 The former `profile` input is rejected; it is not reinterpreted as an execution-profile alias. Raw `provider`, `model`, `thinkingLevel`, credential-like fields, and every other unknown field are rejected. MCP annotations are hints only; authorization and selection come from schema validation, alias lookup, and the server-owned profile.
 
 Successful session metadata is a whitelist: `id`, `workspace`, `executionProfile`, `profile`, `provider`, `model`, `thinkingLevel`, `state`, `createdAt`, and `updatedAt`. `profile` remains derived permission metadata (`read-only` or `coding`) for compatibility; it is not client-selectable. Provider, model, and thinking level are projected only after SDK post-verification.
 
 The selected skills of an execution profile are never an input. A session loads exactly the skills that the profile selects from the operator's skill catalog, validated at start; a failure is `skill_load_failed`. A catalog value is the path of one `SKILL.md` or `builtin:<name>`, which names a skill of the skill library: the operator's override next to the configuration file if it exists, else the skill shipped in the package. It is resolved when the server loads the configuration, and the value never appears in tool output. See [Pi skills](skills.md).
+
+## Automated writer boundary (Plan B)
+
+The host's container-mode policy does not route calls. Use the generated
+`pi-coding-<alias>-w<n>` registration, which starts its own contained stdio server.
+Its synthetic default `boundary-read-only` means coding starts must name an
+explicit coding profile. A refusal server exposes the same eight tool names
+but returns a sanitized domain error for every call, including capabilities.
+No session is created by a refusal.
+
+The guard rejects extra branches, stash, uncommitted/untracked changes and a
+HEAD different from the recorded baseline, as well as another open coding
+session. It re-reads its baseline file on every coding check so reset takes
+effect without restarting that server. After review and session close, the
+controller runs `pi-session-mcp-setup --writer <name> --finish --apply`: collect,
+then reset persistent or recreate ephemeral. Incomplete collection stops finish;
+never bypass admission by switching profiles. Host Git must never run inside
+the clone. See [Execution modes](execution-modes.md) for lifecycle findings,
+readiness, credential refresh, verification and migration. These are operator
+CLI operations, not extra MCP tools or tool arguments.
 
 ## Deterministic MCP errors
 
@@ -98,6 +120,10 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
 | `skill_load_failed` | A skill that the profile selects could not be loaded: a missing (also a `builtin:` name that matches no override and no shipped skill), unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
+| `writer_uncollected` | The writer is not at its collected baseline, or its guard/Git state could not be verified; controller must collect and reset it. |
+| `writer_busy` | The writer already has an open coding session; wait for or close it before starting another. |
+| `writer_not_ready` | The writer launcher cannot establish current readiness; operator must run repository setup/acceptance. All refusal-server tools return this error. |
+| `container_runtime_unavailable` | The writer launcher found no usable rootless Podman; all refusal-server tools refuse work, with no host fallback. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 
 Lifecycle errors include `unknown_workspace`, `unknown_session`, `session_running`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.

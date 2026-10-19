@@ -18,6 +18,27 @@ describe("setup executable", () => {
     else process.env.PI_SESSION_MCP_CONFIG = originalConfig;
   });
 
+  it("reports writer targets and rejects malformed writer names as usage", async () => {
+    delete process.env.PI_SESSION_MCP_CONFIG;
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+    expect(await main(["--json", "--writer", "x-w1", "--verify"])).toBe(1);
+    expect(JSON.parse(writes.join("")).findings[0]).toMatchObject({ target: { client: "writer", scope: "x", alias: "x-w1" }, code: "config_required" });
+    writes.length = 0;
+    expect(await main(["--json", "--writer", "/SECRET", "--verify"])).toBe(64);
+    expect(writes.join("")).not.toContain("SECRET");
+  });
+  it("routes isolation control dry runs without creating a controller registration", async () => {
+    const root = await temporaryRoot("setup-control-main-");
+    process.env.PI_SESSION_MCP_CONFIG = join(root, "config.json");
+    await writeFile(process.env.PI_SESSION_MCP_CONFIG, JSON.stringify({ workspaces: { x: root }, executionProfiles: { review: { default: true, permissionProfile: "read-only", provider: "example", model: "model", thinkingLevel: "off" } } }));
+    const writes: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
+    // Writer operations, including the control run, are Linux-only.
+    const linux = process.platform === "linux";
+    expect(await main(["--json", "--isolation-control", "--repo", "x"])).toBe(linux ? 0 : 1);
+    expect(JSON.parse(writes.join("")).findings[0]).toMatchObject({ target: { client: "writer", scope: "host", alias: "control" }, code: linux ? "isolation_control_planned" : "platform_unsupported" });
+  });
   it("returns a strict sanitized misuse result", async () => {
     const writes: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
