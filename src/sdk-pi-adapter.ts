@@ -498,11 +498,13 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     }
     const model = await this.resolveVerifiedModel(services.modelRuntime, executionProfile);
     const mcpTools = await this.connectMcpTools(input);
-    const tools = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools);
-    if (!tools) {
+    const grantedTools = executionProfile.grantedExtensionTools ?? [];
+    const composed = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools, grantedTools);
+    if (!composed.ok) {
       await mcpTools.close();
-      throw this.failure(executionProfile, "extension_load", "extension_tool_conflict");
+      throw this.failure(executionProfile, "extension_load", composed.code);
     }
+    const tools = composed.tools;
     let sessionRuntime: AgentSessionRuntime;
     try {
       sessionRuntime = await withCreationDeadline(
@@ -546,8 +548,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       // A `session_start` handler may register a tool that replaces a built-in or granted tool.
       // Tools an extension registers later, during a turn, are not re-checked: allowlisted
       // extensions are trusted code.
-      const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services));
-      if (!recheck || recheck.length !== tools.length || recheck.some((name, index) => name !== tools[index])) conflict = true;
+      const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services), grantedTools);
+      if (!recheck.ok) throw this.failure(executionProfile, "extension_bind", recheck.code);
+      if (recheck.tools.length !== tools.length || recheck.tools.some((name, index) => name !== tools[index])) conflict = true;
     } catch (error) {
       await cleanUp();
       if (error instanceof PiSessionCreationError) throw error;
@@ -558,7 +561,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools);
   }
 
   private async loadSkills(input: { cwd: string; executionProfile: ResolvedExecutionProfile }): Promise<Skill[]> {
@@ -660,6 +663,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     // `subset` lets an extension narrow its own active tools; nothing outside the allowlist may be active.
     toolCheck: "exact" | "subset" = "exact",
     skills: readonly Skill[] = [],
+    requiredTools: readonly string[] = [],
   ): Promise<PiSessionHandle> {
     try {
       this.checkResources(session.resourceLoader, skills, executionProfile, "postcheck");
@@ -669,13 +673,16 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       if (session.thinkingLevel !== executionProfile.thinkingLevel) {
         throw this.failure(executionProfile, "postcheck", "thinking_level_unavailable");
       }
-      if (toolMismatch !== undefined) {
+      if (toolMismatch !== undefined || requiredTools.length > 0) {
         const active = new Set(session.getActiveToolNames());
+        if (requiredTools.some((name) => !active.has(name))) {
+          throw this.failure(executionProfile, "postcheck", "extension_tool_missing");
+        }
         const allowed = new Set(tools);
         const mismatch = toolCheck === "subset"
           ? [...active].some((name) => !allowed.has(name))
           : active.size !== tools.length || tools.some((name) => !active.has(name));
-        if (mismatch) {
+        if (mismatch && toolMismatch !== undefined) {
           throw this.failure(executionProfile, "postcheck", toolMismatch);
         }
       }
