@@ -448,7 +448,9 @@ describe("real stdio transport, error and lifecycle behavior", () => {
       slow: { name: "slow_note", readOnly: true },
       echo: { name: "echo_note", readOnly: true },
     });
-    const session = await openSession(servers, log, { callMs: 250 });
+    // slow_note answers after 5 s; 2 s keeps it well past the deadline while leaving the later
+    // echo call room on slow CI runners (250 ms timed out the echo on macOS 26).
+    const session = await openSession(servers, log, { callMs: 2_000 });
     try {
       const slow = session.tools.find((candidate) => candidate.name === "mcp_knowledge_slow");
       const echo = session.tools.find((candidate) => candidate.name === "mcp_knowledge_echo");
