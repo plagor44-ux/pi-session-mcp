@@ -84,17 +84,16 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   ([evidence](evaluation/isolation-acceptance-2026-10-18/README.md)); review point
   2026-11-15. macOS keeps the interim rules.
 - [ADR 0009](adr/0009-execution-modes.md), accepted 2026-10-18, records
-  [per-repository execution modes](execution-modes.md). Plan A is implemented
-  on `feature/execution-modes-a`: separate modes file, host-server enforcement,
-  setup selection and offline Doctor checks. It is unreleased and requires
-  minor release 0.9.0; no package version bump or live rollout is claimed here.
-  Plan B is implemented on `feature/execution-modes-b`: automated Linux
+  [per-repository execution modes](execution-modes.md). Both plans ship as
+  minor release 0.9.0 (Plan A in #98, Plan B in #99). Plan A: separate modes
+  file, host-server enforcement, setup selection and offline Doctor checks.
+  Plan B: automated Linux
   rootless-Podman provisioning, explicit host control and contained acceptance,
   collect/reset/recreate/finish, wrappers, refusal server, registration and
   periodic credential checks with near-expiry host warmup. The
   [operator runbook](isolation-setup.md) covers migration of the manual writers,
-  including operator-supplied Go images and the `--cache go` selection. New live acceptance, rollout and
-  release are not claimed; each writer must pass its readiness gates.
+  including operator-supplied Go images and the `--cache go` selection. New live acceptance and
+  rollout are not claimed; each writer must pass its readiness gates.
 
 ### Sprint 5 issue status
 
@@ -103,7 +102,7 @@ means its named checks passed with evidence. Nothing here is released.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008; execution policy, ADR 0009 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `thoth-alpha` (contained and live), both registered in Claude Code's local scope; Plan A per-repository modes implemented on `feature/execution-modes-a`, unreleased (0.9.0 required), no live rollout claimed; Plan B automated container writers and near-expiry credential refresh implemented on `feature/execution-modes-b`, unreleased, with no new live acceptance claimed; remaining host routes/repositories need operator choices, review point 2026-11-15 |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008; execution policy, ADR 0009 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `thoth-alpha` (contained and live), both registered in Claude Code's local scope; Plan A per-repository modes (#98) and Plan B automated container writers with near-expiry credential refresh (#99) ship in 0.9.0; no live rollout or new live writer acceptance claimed yet; remaining host routes/repositories need operator choices, review point 2026-11-15 |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |
@@ -135,9 +134,8 @@ criteria met with evidence), blocked, failed (ran and missed its criteria; kept
 on record). Sprints 1 to 4 are closed; Sprint 5 is a maintenance sprint; the next
 investment remains isolation under
 [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79), now decided in
-ADRs 0008 and 0009; Plan B automated container writers are implemented but
-unreleased. Operator migration, current-source acceptance and release gates
-remain separate from implementation status.
+ADRs 0008 and 0009; both plans ship as 0.9.0. Operator migration and live
+writer acceptance remain separate from the release.
 
 ## Sprints and exit gates
 

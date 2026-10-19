@@ -30,9 +30,9 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.8.3**.
+The package version is **0.9.0**.
 
-Unreleased: [per-repository execution modes](docs/execution-modes.md) make host writes explicit and block host coding for container/read-only aliases; automated container writers remain pending.
+Since 0.9.0, [per-repository execution modes](docs/execution-modes.md) make host writes explicit and block host coding for container/read-only aliases, and setup provisions, accepts, collects and resets rootless-Podman container writers on Linux.
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is recorded for Claude Code only; Codex is still pending. See [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.
