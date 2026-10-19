@@ -10,7 +10,7 @@
   read-only built-ins and granted MCP tools. A grant must be registered at load
   and active and declared to the model at admission, or start fails closed with
   `extension_tool_missing` (`needs_operator`). Capabilities expose the configured
-  grants; setup verify compares them. This is a public contract change for minor
+  grants; setup verify validates them. This is a public contract change for minor
   release **0.10.0** under [ADR 0003](docs/adr/0003-post-mvp-maintenance.md#versioning).
   Grants are operator trust decisions: third-party tools may write, and workspace
   modes `container` and `read-only` do not restrict them. Lazy registration in

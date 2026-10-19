@@ -1909,8 +1909,7 @@ first showed that `pi-lens@4.4.3` registers `symbol_search` and
     resolver and the provider endpoint. The clone had no changed, untracked
     or ignored file afterwards. The agent directory with the copied key was
     removed.
-  - Three provider turns were used (one control, two grant runs), well below
-    the USD 0.50 limit.
+  - Three `deepseek` turns were used (one control without extensions, two grant runs), plus three `xai` attempts that failed before any model output, well below the USD 0.50 limit.
 
 Not established for `0.10.0`: a live grant with OAuth providers in an
 isolated agent directory, Level 3, the automated container writers, and macOS

@@ -15,6 +15,10 @@ describe("composeSessionTools", () => {
     expect(composeSessionTools("read-only", [], [["b_tool"]], [name])).toEqual({ ok: false, code: "extension_tool_missing" });
   });
 
+  it("does not satisfy an unregistered extension grant with a granted MCP tool", () => {
+    expect(composeSessionTools("read-only", ["mcp_note"], [["fixture_tool"]], ["mcp_note"])).toEqual({ ok: false, code: "extension_tool_missing" });
+  });
+
   it("checks conflicts before missing grants", () => {
     expect(composeSessionTools("read-only", ["mcp_note"], [["mcp_note"]], ["c_tool"])).toEqual({ ok: false, code: "extension_tool_conflict" });
   });
