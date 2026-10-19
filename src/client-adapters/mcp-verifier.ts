@@ -1,4 +1,5 @@
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "../extension-spec.js";
+import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS } from "../session-tools.js";
 import { MAX_PROFILE_SKILLS } from "../skill-catalog.js";
 import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-metadata.js";
 
@@ -100,7 +101,7 @@ function validCapabilities(value: unknown): boolean {
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
     const record = profile as Record<string, unknown>;
-    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "skills"])
+    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"])
       && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
       && typeof record.default === "boolean"
       && (record.permissionProfile === "read-only" || record.permissionProfile === "coding")
@@ -109,6 +110,9 @@ function validCapabilities(value: unknown): boolean {
       && typeof record.thinkingLevel === "string" && ["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(record.thinkingLevel)
       && Array.isArray(record.extensions) && record.extensions.length <= MAX_PROFILE_EXTENSIONS
       && record.extensions.every((spec) => typeof spec === "string" && parseExtensionSpec(spec) !== undefined)
+      && Array.isArray(record.grantedExtensionTools) && record.grantedExtensionTools.length <= MAX_GRANTED_EXTENSION_TOOLS
+      && record.grantedExtensionTools.every((name) => typeof name === "string" && isAcceptableExtensionToolName(name))
+      && new Set(record.grantedExtensionTools).size === record.grantedExtensionTools.length
       && Array.isArray(record.skills) && record.skills.length <= MAX_PROFILE_SKILLS
       && record.skills.every((skill) => typeof skill === "string" && ALIAS_PATTERN.test(skill))
       && new Set(record.skills).size === record.skills.length;
