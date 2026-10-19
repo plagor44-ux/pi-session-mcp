@@ -42,6 +42,12 @@ const recordedProcesses = (path: string): Recorded[] => { const state = readStat
 const stillAlive = (list: Recorded[]): Recorded[] => list.filter((p) => h.alive(p));
 const killAll = (list: Recorded[]): void => { for (const p of stillAlive(list)) { try { process.kill(p.pid, "SIGKILL"); } catch { /* gone */ } } };
 
+/**
+ * Suites that build a fixture run (`buildRun`) create several Git repositories per test. On macOS CI
+ * runners that exceeded Vitest's 5 s default, so these suites get a larger budget.
+ */
+const FIXTURE_RUN_TIMEOUT = { timeout: 30_000 };
+
 /** Spawns a Node child and resolves with its exit code, or null when it had to be killed after `limitMs`. */
 function runNode(args: string[], options: { env?: NodeJS.ProcessEnv; limitMs: number }): Promise<{ code: number | null; stdout: string; stderr: string; wallMs: number }> {
   const started = Date.now();
@@ -212,7 +218,7 @@ async function fixtureWithBaseline(task: string) {
 const compare = (dir: string, baseline: unknown, task: string) => h.compareToBaseline(dir, baseline, h.ALLOWED_CHANGES[task]);
 const commitAll = (dir: string, message: string) => { h.git(dir, "add", "-A"); h.git(dir, "commit", "-q", "-m", message); };
 
-describe("changes against the fixed baseline", () => {
+describe("changes against the fixed baseline", FIXTURE_RUN_TIMEOUT, () => {
   it("stores the initial commit and a manifest without .git, outside the workspace", async () => {
     const { dir, baseline } = await fixtureWithBaseline("slug");
     expect(baseline.commit).toBe(h.git(dir, "rev-parse", "HEAD").trim());
@@ -442,7 +448,7 @@ const variants: Array<[string, string, (r: Run) => void]> = [
 ];
 
 // ---- D3: bound resources and preserved findings --------------------------------------------------
-describe("bound resources", () => {
+describe("bound resources", FIXTURE_RUN_TIMEOUT, () => {
   it("records a digest for every resource the acceptance relies on", async () => {
     const run = await buildRun();
     expect(Object.keys(run.info.resources).sort()).toEqual([
@@ -674,7 +680,7 @@ describe("bound resources", () => {
 });
 
 // ---- #66: the loaded extension package contents -----------------------------------------------------
-describe("extension package binding", () => {
+describe("extension package binding", FIXTURE_RUN_TIMEOUT, () => {
   const packageKey = `extension:${EXTENSION}`;
   const npm = (r: Run) => join(r.agentDir, "npm");
   const mutations: Array<[string, string[], (r: Run) => void]> = [
@@ -753,7 +759,7 @@ async function prepareRun(run: Run, { withExtensions, env, context = {} }: { wit
 }
 
 // ---- #66, #67: content behind links -------------------------------------------------------------------
-describe("binding digest", () => {
+describe("binding digest", FIXTURE_RUN_TIMEOUT, () => {
   const recompute = (r: Run) => h.computeResources(r.run, r.candidate, r.context);
 
   it("invalidates the run when a file changes behind a linked dependency outside the npm installation", async () => {
@@ -861,7 +867,7 @@ describe("binding digest", () => {
 });
 
 // ---- #66, #67: a binding that is not complete binds nothing -----------------------------------------
-describe("incomplete bindings", () => {
+describe("incomplete bindings", FIXTURE_RUN_TIMEOUT, () => {
   const notRoot = process.getuid?.() !== 0;
   const threeFiles = (dir: string) => { for (const name of ["a", "b", "c"]) put(join(dir, "skill", name), name); };
 
@@ -957,7 +963,7 @@ describe("incomplete bindings", () => {
 });
 
 // ---- #66: prepare passes the bound agent directory to the server of both clients ---------------------
-describe("prepare binds the agent directory", () => {
+describe("prepare binds the agent directory", FIXTURE_RUN_TIMEOUT, () => {
   it("gives both clients' servers the resolved PI_CODING_AGENT_DIR and binds the extension contents", async () => {
     const run = await buildRun({ extensions: true });
     const link = join(run.root, "agent-link");
@@ -1113,7 +1119,7 @@ describe("handshake profile split", () => {
 });
 
 // ---- #71: the trio scenario: fixture, profiles and prompt -------------------------------------------------
-describe("trio scenario: fixture and prompt", () => {
+describe("trio scenario: fixture and prompt", FIXTURE_RUN_TIMEOUT, () => {
   const info = { node: process.execPath, entry: "/entry.js", agentDir: "/agent" };
   const promptOf = (client: string, scenario: string): string => {
     const args = h.command(client, info, "/private", "/controller", { scenario }).args as string[];
@@ -1249,7 +1255,7 @@ describe("abort scenario: every abort call is judged", () => {
 });
 
 // ---- #71: the trio scenario: transcript analysis, oracle and criteria ----------------------------------------------
-describe("trio scenario: criteria", () => {
+describe("trio scenario: criteria", FIXTURE_RUN_TIMEOUT, () => {
   const ids = { slug: "00000000-0000-4000-8000-000000000001", wait: "00000000-0000-4000-8000-000000000002", review: "00000000-0000-4000-8000-000000000003" };
   const turnIds = { slug: "10000000-0000-4000-8000-000000000001", wait: "10000000-0000-4000-8000-000000000002", review: "10000000-0000-4000-8000-000000000003" };
   const profiles = { slug: "accept-code", wait: "accept-code", review: "accept-read" };
@@ -1971,7 +1977,7 @@ describe.skipIf(notLinux)("runs against a synthetic layout with a controlled cli
 });
 
 // ---- D4: controlled extension support ------------------------------------------------------------
-describe("extension allowlist", () => {
+describe("extension allowlist", FIXTURE_RUN_TIMEOUT, () => {
   it("accepts only exact npm:<name>@<version> pins and reports names and versions", () => {
     expect(h.parseExtensionAllowlist(["npm:pi-cursor-sdk@0.5.3", "npm:@scope/ext@1.0.0-rc.1"])).toEqual([
       { spec: "npm:pi-cursor-sdk@0.5.3", name: "pi-cursor-sdk", version: "0.5.3" },
