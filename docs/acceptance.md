@@ -1747,6 +1747,43 @@ Not established for `0.9.0` after publication: the same gates as before
 publication (live container writers, migration of the manual writers, Level 3,
 macOS on real hardware).
 
+### v0.9.1 pre-release acceptance
+
+Before its release, `v0.9.1` passed Level 1, the working-tree Level 2 and the
+packed-tarball Level 2 on its release candidate `e42610e` on Linux (`x64`),
+with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code
+`2.1.303`, on 2026-10-19. The release moves the Pi SDK and its six family
+packages from `1.2.0` to `1.3.0`. Before the move, `scripts/pi-sdk-canary.sh
+1.3.0` reported the candidate compatible (typecheck passed, 13 SDK-facing test
+files with 313 passed and 1 skipped).
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor
+  as noted below.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    90 files, 1915 passed and 6 skipped, and no unhandled error, including the
+    rootless Podman integration tests against real Podman.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 666 files.
+  - Doctor reported `packageVersion` `0.9.1`. With the example configuration
+    its findings were the placeholder workspace (`workspace_missing`) and
+    `workspace_mode_unset` for that alias.
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. The real client registrations were
+  unchanged, no process remained, the built files were unchanged, and the
+  path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball (shasum
+  `5f5673d1b311ec8d376db939a77d6e3dc9222829`), installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.3.0` with a single copy each. The
+  install smoke reported `smoke_passed` with version `0.9.1`. Level 2 against
+  the installed package passed 160 of 160 checks, with the same results for
+  registrations, processes, build and path leaks.
+
+Not established for `0.9.1`: any live run on Pi SDK `1.3.0` (Level 3, the
+container writers or a single provider turn), the migration of the manual
+writers, and macOS on real hardware. CI covers macOS 15 and 26. The
+published-release acceptance follows after publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
