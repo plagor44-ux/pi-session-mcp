@@ -28,25 +28,33 @@ export function isAcceptableExtensionToolName(name: string): boolean {
   return EXTENSION_TOOL_NAME.test(name) && !name.startsWith(MCP_RESERVED_PREFIX) && !MCP_RESERVED_NAMES.has(name);
 }
 
+export type ComposedSessionTools =
+  | { readonly ok: true; readonly tools: string[] }
+  | { readonly ok: false; readonly code: "extension_tool_conflict" | "extension_tool_missing" };
+
 /**
- * The tool allowlist of a session, or undefined when an extension tool name conflicts.
- * Extension tools are active only in coding profiles, but a conflict fails closed in both,
- * so an extension can never shadow a built-in or granted tool. A name outside the safe
- * character set, or one the SDK treats as an MCP tool, also fails closed.
+ * The tool allowlist of a session. Read-only activates exactly the granted extension
+ * names; coding activates all registered extension tools. Conflicts are checked first
+ * in both profiles so an extension can never shadow a built-in or granted MCP tool.
+ * Unsafe names and names the SDK treats as MCP tools also fail closed.
  */
 export function composeSessionTools(
   permissionProfile: PermissionProfile,
   mcpToolNames: readonly string[],
   extensionToolNames: readonly (readonly string[])[],
-): string[] | undefined {
+  grantedExtensionTools: readonly string[] = [],
+): ComposedSessionTools {
   const reserved = new Set([...PROFILE_TOOLS.coding, ...PROFILE_TOOLS["read-only"], ...mcpToolNames]);
   const extensionTools: string[] = [];
   for (const names of extensionToolNames) {
     for (const name of names) {
-      if (!isAcceptableExtensionToolName(name) || reserved.has(name)) return undefined;
+      if (!isAcceptableExtensionToolName(name) || reserved.has(name)) return { ok: false, code: "extension_tool_conflict" };
       reserved.add(name);
       extensionTools.push(name);
     }
   }
-  return [...PROFILE_TOOLS[permissionProfile], ...mcpToolNames, ...(permissionProfile === "coding" ? extensionTools : [])];
+  if (permissionProfile === "read-only" && grantedExtensionTools.some((name) => !extensionTools.includes(name))) {
+    return { ok: false, code: "extension_tool_missing" };
+  }
+  return { ok: true, tools: [...PROFILE_TOOLS[permissionProfile], ...mcpToolNames, ...(permissionProfile === "coding" ? extensionTools : grantedExtensionTools)] };
 }
