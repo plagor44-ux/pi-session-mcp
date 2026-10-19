@@ -34,8 +34,10 @@ describe("setup executable", () => {
     await writeFile(process.env.PI_SESSION_MCP_CONFIG, JSON.stringify({ workspaces: { x: root }, executionProfiles: { review: { default: true, permissionProfile: "read-only", provider: "example", model: "model", thinkingLevel: "off" } } }));
     const writes: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
-    expect(await main(["--json", "--isolation-control", "--repo", "x"])).toBe(0);
-    expect(JSON.parse(writes.join("")).findings[0]).toMatchObject({ target: { client: "writer", scope: "host", alias: "control" }, code: "isolation_control_planned" });
+    // Writer operations, including the control run, are Linux-only.
+    const linux = process.platform === "linux";
+    expect(await main(["--json", "--isolation-control", "--repo", "x"])).toBe(linux ? 0 : 1);
+    expect(JSON.parse(writes.join("")).findings[0]).toMatchObject({ target: { client: "writer", scope: "host", alias: "control" }, code: linux ? "isolation_control_planned" : "platform_unsupported" });
   });
   it("returns a strict sanitized misuse result", async () => {
     const writes: string[] = [];

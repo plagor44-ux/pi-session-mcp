@@ -2,7 +2,7 @@ import { execPath } from "node:process";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import fs, { existsSync } from "node:fs";
-import { open, readFile, writeFile } from "node:fs/promises";
+import { open, readFile, realpath, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -44,7 +44,8 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
     const runner = createProcessRunner({ env: { BASE: "base", OVERRIDE: "old" } });
     const pwd = await runner.run("/bin/pwd", [], undefined, { cwd });
     expect(pwd.exitCode).toBe(0);
-    expect(pwd.stdout.trim()).toBe(cwd);
+    // macOS temporary roots live behind the /var -> /private/var symlink; pwd prints the real path.
+    expect(pwd.stdout.trim()).toBe(await realpath(cwd));
     const env = await runner.run(execPath, ["-e", "process.stdout.write(process.env.BASE + ':' + process.env.OVERRIDE)"], undefined, { env: { OVERRIDE: "new" } });
     expect(env.stdout).toBe("base:new");
   });
@@ -58,7 +59,7 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
       const request = { type: "run", id: 1, command: "/bin/pwd", args: [], timeoutMs: 1000, maxOutputBytes: 4096, cwd: directory };
       const result = once(child, "message");
       child.send(request);
-      expect((await result)[0]).toMatchObject({ type: "result", id: 1, exitCode: 0, stdout: `${directory}\n` });
+      expect((await result)[0]).toMatchObject({ type: "result", id: 1, exitCode: 0, stdout: `${await realpath(directory)}\n` });
       const missing = once(child, "message");
       child.send({ ...request, id: 2, cwd: join(directory, "missing") });
       expect((await missing)[0]).toMatchObject({ type: "result", id: 2, exitCode: 127 });
