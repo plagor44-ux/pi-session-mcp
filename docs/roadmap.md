@@ -98,7 +98,8 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
 ### Sprint 5 issue status
 
 Implemented means the code or text exists on the Sprint 5 branch; verified
-means its named checks passed with evidence. Nothing here is released.
+means its named checks passed with evidence. The implemented items shipped in
+0.9.0; live acceptance stays as stated per row.
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
