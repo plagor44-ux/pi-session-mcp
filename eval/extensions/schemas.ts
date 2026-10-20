@@ -31,11 +31,15 @@ export const implementationOracleSchema = z.object({
 export type ImplementationOracle = z.infer<typeof implementationOracleSchema>;
 export const oracleSchema = z.discriminatedUnion("kind", [reviewOracleSchema, implementationOracleSchema]);
 
+/** A repo-relative directory prefix such as `dist/`: trailing slash, no leading slash, no `..` segment, no glob characters. */
+export const scopeIgnoreEntrySchema = z.string().min(1).refine((p) =>
+  p.endsWith("/") && !p.startsWith("/") && !p.split("/").includes("..") && !/[*?[\]{}]/.test(p), { message: "scope_ignore_prefix_invalid" });
+
 export const taskSpecSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/), kind: z.enum(["review", "implementation"]),
   repo: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), baseCommit: z.string().regex(/^[a-f0-9]{40}$/),
   promptRef: relativePathSchema.refine((p) => p.startsWith("eval/results/")), promptHash: hashSchema,
-  sourceSession: z.string().min(1), allowedPaths: z.array(relativePathSchema), scopeIgnore: z.array(z.string().min(1)),
+  sourceSession: z.string().min(1), allowedPaths: z.array(relativePathSchema), scopeIgnore: z.array(scopeIgnoreEntrySchema),
   oracle: oracleSchema,
 }).strict().refine((t) => t.kind === t.oracle.kind, { message: "oracle_kind_mismatch", path: ["oracle"] });
 export type TaskSpec = z.infer<typeof taskSpecSchema>;
