@@ -26,7 +26,7 @@ describe("STRACE_ARGS", () => {
     expect(STRACE_ARGS[4]).toBe("-y");
     expect(STRACE_ARGS).toHaveLength(5);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
-    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir"]) expect(set).toContain(name);
+    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup"]) expect(set).toContain(name);
   });
 });
 
@@ -68,15 +68,27 @@ describe("write detection", () => {
     expect(f.outsideWrites).toEqual(["/etc/passwd", "/tmp/x"]);
   });
 
-  it("allows the null device, terminals and /proc/self", () => {
+  it("allows only the null device, the controlling terminal and numbered ptys", () => {
     const f = parseStraceLog(lines(
       `100 openat(${at()}, "/dev/null", O_WRONLY) = 3</dev/null>`,
       `100 openat(${at()}, "/dev/tty", O_RDWR|O_NOCTTY) = 4</dev/tty>`,
       `100 openat(${at()}, "/dev/pts/3", O_RDWR) = 5</dev/pts/3>`,
-      `100 openat(${at()}, "/proc/self/oom_score_adj", O_WRONLY) = 6</proc/100/oom_score_adj>`,
+      `100 openat(${at()}, "/dev/pts/ptmx", O_RDWR) = 6</dev/pts/ptmx>`,
       `100 openat(${at()}, "/dev/shm/x", O_WRONLY|O_CREAT, 0600) = 7</dev/shm/x>`,
+      `100 openat(${at()}, "/proc/self/oom_score_adj", O_WRONLY) = 8</proc/100/oom_score_adj>`,
     ), ctx({}));
-    expect(f.outsideWrites).toEqual(["/dev/shm/x"]);
+    expect(f.outsideWrites).toEqual(["/dev/pts/ptmx", "/dev/shm/x", "/proc/100/oom_score_adj"]);
+  });
+
+  it("does not exempt /proc/self magic links", () => {
+    const f = parseStraceLog(lines(
+      `100 openat(${at()}, "/proc/self/root/home/u/.bashrc", O_WRONLY|O_APPEND) = 3</home/u/.bashrc>`,
+      `100 openat(${at()}, "/proc/self/fd/7", O_WRONLY|O_TRUNC) = 4</home/u/other>`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/.bashrc", "/home/u/other"]);
+    const lexical = parseStraceLog(lines(`100 openat(${at()}, "/proc/self/root/home/u/.bashrc", O_WRONLY) = -1 EACCES (Keine Berechtigung)`), ctx({}));
+    expect(lexical).toMatchObject({ outsideWrites: [], deniedWriteAttempts: 1 });
+    expect(parseStraceLog(lines(`100 openat(${at()}, "/proc/self/fd/7", O_WRONLY <unfinished ...>`), ctx({})).outsideWrites).toEqual(["/proc/self/fd/7"]);
   });
 
   it("uses the dirfd annotation of a real directory fd before the tracked cwd", () => {
@@ -131,7 +143,7 @@ describe("write detection", () => {
   });
 
   it("unescapes quoted paths", () => {
-    const f = parseStraceLog(lines(`100 creat("/etc/a\\"b\\n\\303\\244", 0644) = 3</etc/x>`), ctx({}));
+    const f = parseStraceLog(lines(`100 creat("/etc/a\\"b\\n\\303\\244", 0644) = 3`), ctx({}));
     expect(f.outsideWrites).toEqual(["/etc/a\"b\nä"]);
   });
 
@@ -197,7 +209,203 @@ describe("failed and in-progress calls", () => {
       ``,
       `garbage`,
     ), ctx({}));
-    expect(f).toEqual({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0 });
+    expect(f).toEqual({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0 });
+  });
+});
+
+describe("cwd inheritance races (strace -f orders the child before the parent's return)", () => {
+  it("keeps a child's chdir made before the parent's vfork return", () => {
+    const f = parseStraceLog(lines(
+      `100 vfork( <unfinished ...>`,
+      `101 chdir("/home/u") = 0`,
+      `100 <... vfork resumed>) = 101`,
+      `101 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("keeps a subshell's chdir made before the parent's clone return", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f059670ae50 <unfinished ...>`,
+      `101 chdir("/home/u") = 0`,
+      `100 <... clone resumed>) = 101`,
+      `101 mkdir("x", 0777) = 0`,
+      `100 mkdir("y", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("leaves a child unresolved that writes relatively before any cwd is known", () => {
+    const f = parseStraceLog(lines(
+      `100 vfork( <unfinished ...>`,
+      `101 mkdir("x", 0777) = 0`,
+      `100 <... vfork resumed>) = 101`,
+    ), ctx({}));
+    expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: [] });
+  });
+
+  it("forgets the cwd of an exited pid", () => {
+    const f = parseStraceLog(lines(`100 fork() = 101`, `101 +++ exited with 0 +++`, `101 creat("c", 0644) = 3`), ctx({}));
+    expect(f.unresolvedWrites).toBe(1);
+  });
+});
+
+describe("CLONE_FS threads share the cwd", () => {
+  const thread = `100 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS, exit_signal=0, stack=0x7f0, stack_size=0x100}, 88) = 101`;
+
+  it("shows a chdir of the parent to the thread", () => {
+    const f = parseStraceLog(lines(thread, `100 chdir("/home/u") = 0`, `101 mkdir("x", 0777) = 0`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("shows a chdir of the thread to the parent", () => {
+    const f = parseStraceLog(lines(thread, `101 chdir("/home/u") = 0`, `100 mkdir("x", 0777) = 0`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("applies a thread chdir that came before the parent's return line", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD <unfinished ...>`,
+      `101 chdir("/home/u") = 0`,
+      `100 <... clone resumed>) = 101`,
+      `100 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("keeps cwds separate for fork, vfork and clone without CLONE_FS", () => {
+    const f = parseStraceLog(lines(
+      `100 fork() = 101`,
+      `100 clone(child_stack=NULL, flags=CLONE_VM|CLONE_VFORK|SIGCHLD) = 102`,
+      `100 chdir("/home/u") = 0`,
+      `101 mkdir("a", 0777) = 0`,
+      `102 mkdir("b", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual([]);
+  });
+});
+
+describe("symlink differentials", () => {
+  it("judges the path the kernel opened, not the lexical one", () => {
+    const f = parseStraceLog(lines(`100 openat(${at()}, "lnk/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("lets the kernel path clear a lexically outside name and handles deleted files", () => {
+    const f = parseStraceLog(lines(
+      `100 openat(${at()}, "/tmp/alias/x", O_WRONLY|O_CREAT, 0644) = 3</scope/x>`,
+      `100 openat(${at()}, "gone", O_RDWR|O_TMPFILE, 0600) = 4</home/u/#12 (deleted)>`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/#12"]);
+  });
+
+  it("falls back to the lexical path when the fd has no path annotation", () => {
+    const f = parseStraceLog(lines(`100 openat(${at()}, "/etc/x", O_WRONLY|O_CREAT, 0644) = 3<anon_inode:[eventfd]>`, `100 creat("/etc/y", 0644) = 4`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/etc/x", "/etc/y"]);
+  });
+
+  it("judges creat and open by their returned path too", () => {
+    const f = parseStraceLog(lines(`100 creat("lnk", 0644) = 3</home/u/c>`, `100 open("lnk2", O_WRONLY) = 4</home/u/o>`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/c", "/home/u/o"]);
+  });
+
+  it("counts a symlink to an absolute target outside the roots as an outside write", () => {
+    expect(parseStraceLog(lines(`100 symlink("/home/u", "/scope/clone/lnk") = 0`), ctx({})).outsideWrites).toEqual(["/home/u"]);
+  });
+
+  it("resolves a relative symlink target against the link's directory", () => {
+    const f = parseStraceLog(lines(
+      `100 symlinkat("../../home/u", ${at()}, "l") = 0`,
+      `100 symlinkat("inner", ${at()}, "l2") = 0`,
+      `100 symlinkat("../../../x", ${at()}, "sub/l3") = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u", "/x"]);
+  });
+
+  it("counts a relative symlink target as unresolved when the link path is", () => {
+    expect(parseStraceLog(lines(`999 symlink("rel", "lnk") = 0`), ctx({})).unresolvedWrites).toBe(1);
+  });
+
+  it("reports a failed outside symlink only as denied", () => {
+    const f = parseStraceLog(lines(`100 symlink("/home/u", "/scope/clone/lnk") = -1 EEXIST (Die Datei existiert bereits)`), ctx({}));
+    expect(f).toMatchObject({ outsideWrites: [], deniedWriteAttempts: 1 });
+  });
+});
+
+describe("return value and annotation edge cases", () => {
+  it("keeps an interrupted write that will be restarted in progress", () => {
+    const f = parseStraceLog(lines(
+      `100 creat("/etc/x", 0644) = ? ERESTARTSYS (To be restarted if SA_RESTART is set)`,
+      `100 creat("/etc/y", 0644) = -1 ERESTARTSYS (To be restarted if SA_RESTART is set)`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/etc/x", "/etc/y"]);
+  });
+
+  it("decodes escapes in return and dirfd annotations like in arguments", () => {
+    const f = parseStraceLog(lines(
+      `100 openat(${at()}, "a>b, \\"c d\\303\\244", O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC, 0666) = 3</home/u/a\\76b, \\"c d\\303\\244>`,
+      `100 openat(7</home/u/d\\303\\244 x>, "n", O_WRONLY|O_CREAT, 0600) = -1 EACCES (Keine Berechtigung)`,
+      `100 openat(7</home/u/d\\303\\244 x>, "m", O_WRONLY|O_CREAT <unfinished ...>`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/a>b, \"c dä", "/home/u/dä x/m"]);
+    expect(f.deniedWriteAttempts).toBe(1);
+  });
+
+  it("counts a resumed half without a head as unresolved", () => {
+    expect(parseStraceLog(lines(`100 <... openat resumed>, 0644) = 3</etc/x>`), ctx({})).unresolvedWrites).toBe(1);
+    expect(parseStraceLog(lines(`100 <... connect resumed>) = 0`), ctx({})).unresolvedEgress).toBe(1);
+    expect(parseStraceLog(lines(`100 <... clone resumed>) = 101`), ctx({}))).toMatchObject({ unresolvedWrites: 0, unresolvedEgress: 0 });
+  });
+});
+
+describe("egress without connect", () => {
+  const V4 = (ip: string, port = 9) => `{sa_family=AF_INET, sin_port=htons(${port}), sin_addr=inet_addr("${ip}")}`;
+  const unexpected = (log: string, extra: Parameters<typeof ctx>[0] = {}) => parseStraceLog(lines(log), ctx(extra)).unexpectedConnects;
+
+  it("judges the destination of sendto", () => {
+    expect(unexpected(`100 sendto(3<socket:[1]>, "x", 1, 0, ${V4("203.0.113.9")}, 16) = 1`)).toEqual([{ family: "inet", address: "203.0.113.9", port: 9 }]);
+    expect(unexpected(`100 sendto(3<socket:[1]>, "x", 1, 0, ${V4("198.51.100.1")}, 16) = 1`, { provider: ["198.51.100.1"] })).toEqual([]);
+    expect(unexpected(`100 sendto(3<socket:[1]>, "q", 1, 0, ${V4("127.0.0.53", 53)}, 16) = 1`, { dns: ["127.0.0.53"] })).toEqual([]);
+  });
+
+  it("judges IPv6 sendto and ignores unix and connected-socket sends", () => {
+    expect(unexpected(`100 sendto(4<socket:[2]>, "x", 1, 0, {sa_family=AF_INET6, sin6_port=htons(9), sin6_flowinfo=htonl(0), inet_pton(AF_INET6, "::1", &sin6_addr), sin6_scope_id=0}, 28) = 1`))
+      .toEqual([{ family: "inet6", address: "::1", port: 9 }]);
+    expect(unexpected(`100 sendto(3<socket:[1]>, "x", 1, 0, NULL, 0) = -1 ECONNREFUSED (Verbindungsaufbau abgelehnt)`)).toEqual([]);
+    expect(unexpected(`100 sendto(3<socket:[1]>, "x", 1, 0, {sa_family=AF_UNIX, sun_path="/run/x"}, 110) = 1`)).toEqual([]);
+  });
+
+  it("judges msg_name of sendmsg and ignores msg_name=NULL", () => {
+    const hdr = (name: string) => `{msg_name=${name}, msg_namelen=16, msg_iov=[{iov_base="y", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}`;
+    expect(unexpected(`100 sendmsg(3<socket:[1]>, ${hdr(V4("203.0.113.9"))}, 0) = 1`)).toEqual([{ family: "inet", address: "203.0.113.9", port: 9 }]);
+    expect(unexpected(`100 sendmsg(3<socket:[1]>, ${hdr("NULL")}, 0) = 1`)).toEqual([]);
+  });
+
+  it("judges every msg_name of sendmmsg", () => {
+    const msg = (name: string) => `{msg_hdr={msg_name=${name}, msg_namelen=16, msg_iov=[{iov_base="y", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, msg_len=1}`;
+    expect(unexpected(`100 sendmmsg(3<socket:[1]>, [${msg("NULL")}, ${msg(V4("203.0.113.9"))}, ${msg(V4("203.0.113.10"))}], 3, 0) = 3`).map((d) => d.address)).toEqual(["203.0.113.9", "203.0.113.10"]);
+    expect(unexpected(`100 sendmmsg(3<socket:[1]>, [${msg("NULL")}], 1, 0) = 1`)).toEqual([]);
+  });
+
+  it("does not count sends as connects", () => {
+    expect(parseStraceLog(lines(`100 sendto(3, "x", 1, 0, ${V4("203.0.113.9")}, 16) = 1`), ctx({})).connects).toBe(0);
+  });
+
+  it("counts every io_uring_setup as unresolved egress", () => {
+    const f = parseStraceLog(lines(
+      `100 io_uring_setup(4, {flags=0, sq_thread_cpu=0, sq_thread_idle=0, sq_entries=4, cq_entries=8, features=IORING_FEAT_SINGLE_MMAP|IORING_FEAT_NODROP}) = 5<anon_inode:[io_uring]>`,
+      `100 io_uring_setup(4, 0x7ffc) = -1 ENOSYS (Funktion nicht implementiert)`,
+    ), ctx({}));
+    expect(f.unresolvedEgress).toBe(2);
+  });
+
+  it("reports an unreadable inet sockaddr as unexpected with address unknown", () => {
+    const unknown = [{ family: "inet", address: "unknown", port: 0 }];
+    expect(unexpected(`100 connect(3, 0x7ffd1234, 16) = -1 EFAULT (Ungültige Adresse)`)).toEqual(unknown);
+    expect(unexpected(`100 sendto(3, "x", 1, 0, 0x7ffd1234, 16) = 1`)).toEqual(unknown);
+    expect(unexpected(`100 connect(3, {sa_family=AF_INET, sa_data="\\0\\0"}, 16) = 0`)).toEqual(unknown);
+    expect(unexpected(`100 sendmsg(3, 0x7ffd1234, 0) = 1`)).toEqual(unknown);
+    expect(parseStraceLog(lines(`100 connect(3, 0x7ffd1234, 16) = -1 EFAULT (Ungültige Adresse)`), ctx({})).connects).toBe(1);
   });
 });
 
@@ -261,7 +469,7 @@ describe("write syscalls (real strace output shapes)", () => {
     expect(f).toMatchObject({ outsideWrites: ["/etc/fd0"], unresolvedWrites: 1 });
   });
 
-  it("checks both paths of rename and link and only the link path of symlink", () => {
+  it("checks both paths of rename and link and the link path of symlink", () => {
     const f = parseStraceLog(lines(
       `100 rename("/scope/a", "/etc/b") = 0`,
       `100 renameat2(${at()}, "x", ${at("/home/u")}, "y", RENAME_NOREPLACE) = 0`,
@@ -272,7 +480,8 @@ describe("write syscalls (real strace output shapes)", () => {
       `100 symlinkat("/etc/target2", ${at()}, "/etc/link2") = 0`,
       `100 symlinkat("/etc/target3", ${at()}, "link3") = 0`,
     ), ctx({}));
-    expect(f.outsideWrites).toEqual(["/etc/b", "/home/u/y", "/etc/r1", "/etc/r2", "/etc/l1", "/etc/l3", "/etc/link2"]);
+    // symlink targets are judged separately (see "symlinks"), here every target is outside or the link path is
+    expect(f.outsideWrites).toEqual(["/etc/b", "/home/u/y", "/etc/r1", "/etc/r2", "/etc/l1", "/etc/l3", "/etc/target", "/etc/link2", "/etc/target2", "/etc/target3"]);
   });
 
   it("reports one unresolved write per call even when several paths are unresolved", () => {
@@ -311,7 +520,7 @@ describe("real strace sample", () => {
 
   it("classifies the whole log against the scratch root", () => {
     expect(parseStraceLog(sample, ctx({ initialCwd: S, allowed: [S] }))).toEqual({
-      outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0,
+      outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0,
     });
     expect(parseStraceLog(sample, ctx({ initialCwd: S, allowed: [`${S}/w2dir`] })).outsideWrites).toEqual([`${S}/zz1`]);
   });
@@ -402,7 +611,7 @@ describe("production guard", () => {
     const home = await fakeHome();
     const a = await guardSnapshot(home);
     expect(Object.keys(a.files).sort()).toEqual([
-      ".claude.json#mcpServers.pi-*", ".codex/config.toml#mcp_servers.pi-*", ".config/pi-session-mcp/pi-session-mcp.json",
+      ".claude.json#mcpServers.pi-*", ".codex/config.toml", ".config/pi-session-mcp/pi-session-mcp.json",
       ".pi/agent/mcp.json", ".pi/agent/npm", ".pi/agent/settings.json",
     ]);
     for (const value of Object.values(a.files)) expect(value).toMatch(/^sha256:[0-9a-f]{64}$/);
@@ -435,14 +644,20 @@ describe("production guard", () => {
     expect(guardDiff(base, await guardSnapshot(home))).toEqual([".claude.json#mcpServers.pi-*"]);
   });
 
-  it("scopes the codex check to pi-* tables and their subtables", async () => {
+  it("hashes the whole codex config so inline-table and dotted-key pi-* entries are covered", async () => {
     const home = await fakeHome();
     const base = await guardSnapshot(home);
     const toml = join(home, ".codex", "config.toml");
     const text = await readFile(toml, "utf8");
-    await writeFile(toml, text.replace("command = \"o\"", "command = \"changed\"").replace("model = \"x\"", "model = \"z\""));
+    for (const next of [
+      `${text}\n[mcp_servers]\npi-extra = { command = "x" }\n`,
+      `${text}\nmcp_servers.pi-dotted.command = "x"\n`,
+      text.replace("model = \"x\"", "model = \"z\""),
+    ]) {
+      await writeFile(toml, next);
+      expect(guardDiff(base, await guardSnapshot(home))).toEqual([".codex/config.toml"]);
+    }
+    await writeFile(toml, text);
     expect(guardDiff(base, await guardSnapshot(home))).toEqual([]);
-    await writeFile(toml, text.replace("K = \"v\"", "K = \"w\""));
-    expect(guardDiff(base, await guardSnapshot(home))).toEqual([".codex/config.toml#mcp_servers.pi-*"]);
   });
 });

@@ -7,7 +7,8 @@ export interface GuardSnapshot { files: Record<string, string /* sha256 or "abse
 
 const ABSENT = "absent";
 const CLAUDE_KEY = ".claude.json#mcpServers.pi-*";
-const CODEX_KEY = ".codex/config.toml#mcp_servers.pi-*";
+// The whole file: pi-* entries can also be written as dotted keys or inline tables, which no section extraction would catch.
+const CODEX_KEY = ".codex/config.toml";
 const NPM_KEY = ".pi/agent/npm";
 const FILE_KEYS = [".config/pi-session-mcp/pi-session-mcp.json", ".pi/agent/settings.json", ".pi/agent/mcp.json"];
 
@@ -33,19 +34,6 @@ function claudeEntries(raw: Buffer): string {
   return digest(canonical(Object.fromEntries(entries)));
 }
 
-/** Text of every `[mcp_servers.pi-*]` table, subtables included, from header to the next header. */
-function codexTables(toml: string): string {
-  const header = /^\s*\[\[?\s*([^\]]+?)\s*\]\]?\s*(?:#.*)?$/;
-  const kept: string[] = [];
-  let inPi = false;
-  for (const line of toml.split("\n")) {
-    const name = header.exec(line)?.[1]?.replaceAll("\"", "").replaceAll("'", "");
-    if (name !== undefined) inPi = name.startsWith("mcp_servers.pi-");
-    if (inPi) kept.push(line);
-  }
-  return kept.join("\n");
-}
-
 export async function guardSnapshot(home: string): Promise<GuardSnapshot> {
   const files: Record<string, string> = {};
   for (const key of FILE_KEYS) {
@@ -61,7 +49,7 @@ export async function guardSnapshot(home: string): Promise<GuardSnapshot> {
   const claude = await readOptional(join(home, ".claude.json"));
   files[CLAUDE_KEY] = claude === null ? ABSENT : claudeEntries(claude);
   const codex = await readOptional(join(home, ".codex", "config.toml"));
-  files[CODEX_KEY] = codex === null ? ABSENT : hash(codexTables(codex.toString("utf8")));
+  files[CODEX_KEY] = codex === null ? ABSENT : hash(codex);
   return { files };
 }
 
