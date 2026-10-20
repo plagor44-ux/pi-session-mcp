@@ -150,6 +150,60 @@ describe("scoreReview", () => {
     expect(scoreReview("src/a.ts: race\n```\n\n| x |\n**src/b.ts**\n```\nlock", reviewOracle).criticalHit).toBe(1);
   });
 
+  it("does not mistake dotted identifiers, slash words or URLs for paths (R30)", () => {
+    const accepted = (text: string): boolean => scoreReview(text, reviewOracle).criticalHit === 1;
+    expect(accepted("## src/a.ts:42\nRace: `this.lock.release()` runs before the write completes.")).toBe(true);
+    expect(accepted("### src/a.ts\n- race in the read/write lock path")).toBe(true);
+    expect(accepted("### src/a.ts\n- race in Node.js handler; the lock is released early")).toBe(true);
+    expect(accepted("**File:** src/a.ts:42\n**Issue:** race, `mutex.unlock()` releases the lock early")).toBe(true);
+    expect(accepted("### src/a.ts\n- race (see https://example.com/x/y.html); the lock is released early")).toBe(true);
+    const o: ReviewOracle = { ...reviewOracle, falseFindings: [{ id: "x1", anchors: [{ file: "src/a.ts", terms: ["sql injection"] }] }] };
+    expect(scoreReview("### src/a.ts\n- SQL injection via `db.query()`", o).falseFindings).toEqual(["x1"]);
+    expect(accepted("### src/a.ts\n- race in lib/util.ts; the lock is released early")).toBe(false);
+  });
+
+  it("gives the first pathless block of a section the full heading text (R27f)", () => {
+    const two: ReviewOracle = { kind: "review", falseFindings: [], findings: [
+      { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    const r = scoreReview("### 1. Race condition in src/a.ts:42\nThe lock is released before `cache.set()` completes.\n\n### 2. SQL injection in src/db/query.ts:17\nUser input is concatenated.", two);
+    expect(r).toMatchObject({ accepted: true, criticalHit: 2 });
+    // later blocks only receive the path tokens, not the heading words
+    expect(scoreReview("### Race in src/a.ts\nfirst.\n\nthe lock is released", reviewOracle).criticalHit).toBe(0);
+  });
+
+  it("carries the inherited path into a bodyless heading", () => {
+    const two: ReviewOracle = { kind: "review", falseFindings: [], findings: [
+      { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    expect(scoreReview("## src/a.ts\n### Race: the lock is released early\n## src/db/query.ts\n### SQL injection via concatenation", two))
+      .toMatchObject({ accepted: true, criticalHit: 2 });
+  });
+
+  it("drops terminated fences and treats an unterminated opener as text (R27e)", () => {
+    const accepted = (text: string): boolean => scoreReview(text, reviewOracle).criticalHit === 1;
+    expect(accepted("- src/a.ts:42: race in handler\n```ts\nfoo();\n\n- src/b.ts: the lock is never released")).toBe(false);
+    expect(accepted("- src/a.ts:42: race and lock in handler\n```ts\nfoo();\n\nbar();\n```\nmore")).toBe(true);
+    expect(accepted("- race and lock in the handler\n```ts\n// src/a.ts\n```")).toBe(false);
+    expect(accepted("- src/a.ts: race\n```\nlock\n```")).toBe(false);
+    expect(accepted("- src/a.ts: race ```x``` and lock")).toBe(true);
+    expect(accepted("- src/a.ts: race\n```ts\nx\n```ts\n\n- src/b.ts: lock")).toBe(false);
+  });
+
+  it("treats a path-only line as a pseudo-heading (R27g)", () => {
+    const accepted = (text: string): boolean => scoreReview(text, reviewOracle).criticalHit === 1;
+    expect(accepted("**src/a.ts**\n- race: the lock is released early")).toBe(true);
+    expect(accepted("src/a.ts:\n- race; lock")).toBe(true);
+    expect(accepted("`src/a.ts:12`\n- race; lock")).toBe(true);
+    expect(accepted("**src/a.ts**\n- race when\n- the lock is released early")).toBe(false);
+    expect(accepted("**src/b.ts**\n- race; lock")).toBe(false);
+    expect(accepted("**src/a.ts**\n- race: the lock\n**src/b.ts**\n- other thing")).toBe(true);
+    expect(accepted("src/a.ts:\n\nA paragraph.\n\n- race; lock")).toBe(false);
+    expect(accepted("src/a.ts:\n\n- race; lock")).toBe(true);
+  });
+
   it("requires terms to start at a word boundary but allows prefix stems", () => {
     expect(scoreReview("- src/a.ts: trace logging around the block", reviewOracle).accepted).toBe(false);
     expect(scoreReview("- src/a.ts: races while locking", reviewOracle).criticalHit).toBe(1);
@@ -194,7 +248,7 @@ describe("scopeIgnore schema", () => {
 describe("anchor file schema", () => {
   it("rejects characters an anchor could never match as a path token", () => {
     expect(anchorSchema.safeParse({ file: "src/a-b_c.d.ts", terms: ["x"] }).success).toBe(true);
-    for (const file of ["src/a b.ts", "src/ä.ts", "src/a:1.ts", "src/a#1.ts", "src/(a).ts", "src/a,b.ts"]) {
+    for (const file of ["src/a.ts.", "src/a b.ts", "src/ä.ts", "src/a:1.ts", "src/a#1.ts", "src/(a).ts", "src/a,b.ts"]) {
       expect(anchorSchema.safeParse({ file, terms: ["x"] }).success, file).toBe(false);
     }
   });
@@ -289,6 +343,22 @@ describe("changedPaths", () => {
     writeFileSync(join(repo, "lib", ".git"), "gitdir: elsewhere");
     expect(await changedPaths(repo, base, [])).toEqual(["lib/.git", "src/.git"]);
     expect(await changedPaths(repo, base, ["src/"])).toEqual(["lib/.git"]);
+  });
+
+  it("ignores .git entries at gitlink paths of the base tree but not elsewhere", async () => {
+    const repo = makeRepo();
+    git(repo, "update-index", "--add", "--cacheinfo", `160000,${revParse(repo)},sub`);
+    git(repo, "commit", "-m", "gitlink");
+    const gitDir = join(tmp("oracle-bare-"), "base.git");
+    execFileSync("git", ["clone", "--bare", "--quiet", repo, gitDir], { stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: repo } });
+    const base = { gitDir, commit: revParse(repo) };
+    mkdirSync(join(repo, "sub"));
+    git(join(repo, "sub"), "init");
+    mkdirSync(join(repo, "other"));
+    writeFileSync(join(repo, "other", ".git"), "gitdir: x");
+    const changed = await changedPaths(repo, base, []);
+    expect(changed).toContain("other/.git");
+    expect(changed).not.toContain("sub/.git");
   });
 
   it("rejects a malformed base commit", async () => {
