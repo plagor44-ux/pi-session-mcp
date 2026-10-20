@@ -3,10 +3,12 @@ import { closeSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runHelper, type HelperRunner } from "./helpers.js";
 import { encodeKey } from "./output-mac.js";
 import { STRACE_ARGS } from "./trace.js";
+import { sandboxed } from "./sandbox.js";
 import { resolveTool, type ToolPaths } from "./tools.js";
 import type { RunScope } from "./workspace.js";
 
@@ -15,33 +17,39 @@ const EXIT_WAIT_AFTER_KILL_MS = 5_000;
 export const CORE_LIMIT = "--core=0:0";
 
 /** The run unit's own command line: no inspector can open (`--disable-sigusr1`, R44). */
+/** The build the run unit loads from (`<build>/eval/extensions/run-one.js`); it lives under /tmp, which the sandbox replaces, so it is bound back read-only. */
+export const BUILD_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
 const runOneArgs = (runInput: string): string[] => ["--disable-sigusr1", fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput];
 
-/** `prlimit` (hard core limit 0), then `strace` as the process group leader, then the run unit; every executable is an absolute path (R44). */
-export function tracedCommand(tools: Pick<ToolPaths, "strace" | "prlimit">, log: string, runInput: string): { file: string; args: string[] } {
-  return { file: tools.prlimit, args: [CORE_LIMIT, tools.strace, ...STRACE_ARGS, "-o", log, "--", process.execPath, ...runOneArgs(runInput)] };
+/**
+ * `prlimit` (hard core limit 0), then `strace` as the process group leader, then bubblewrap around the run unit (R46); every executable
+ * is an absolute path (R44).
+ */
+export function tracedCommand(tools: Pick<ToolPaths, "strace" | "prlimit" | "bwrap">, scopeRoot: string, log: string, runInput: string): { file: string; args: string[] } {
+  return { file: tools.prlimit, args: [CORE_LIMIT, "--", tools.strace, ...STRACE_ARGS, "-o", log, "--", ...sandboxed(tools, scopeRoot, [process.execPath, ...runOneArgs(runInput)], [], [BUILD_ROOT])] };
 }
 
-/** The untraced preflight command. */
-export function untracedCommand(tools: Pick<ToolPaths, "prlimit">, runInput: string): { file: string; args: string[] } {
-  return { file: tools.prlimit, args: [CORE_LIMIT, process.execPath, ...runOneArgs(runInput)] };
+/** The untraced preflight command, inside the same sandbox. */
+export function untracedCommand(tools: Pick<ToolPaths, "prlimit" | "bwrap">, scopeRoot: string, runInput: string): { file: string; args: string[] } {
+  return { file: tools.prlimit, args: [CORE_LIMIT, "--", ...sandboxed(tools, scopeRoot, [process.execPath, ...runOneArgs(runInput)], [], [BUILD_ROOT])] };
 }
 
 /**
  * The traced worker: cwd = the scope root. stdin is a pipe so the supervisor can hand over the per-run key (R35); stderr goes to a file
  * in the scope.
  */
-export function spawnTracedRunOne(tools: Pick<ToolPaths, "strace" | "prlimit">, scope: RunScope, runInput: string, log: string): ChildProcess {
+export function spawnTracedRunOne(tools: Pick<ToolPaths, "strace" | "prlimit" | "bwrap">, scope: RunScope, runInput: string, log: string): ChildProcess {
   const stderr = openSync(join(scope.root, "run-one.stderr"), "a", 0o600);
   try {
-    const { file, args } = tracedCommand(tools, log, runInput);
+    const { file, args } = tracedCommand(tools, scope.root, log, runInput);
     return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", stderr] });
   } finally { closeSync(stderr); }
 }
 
 /** The run unit without `strace` (the preflight PONG touches no repository). */
-export function spawnRunOne(tools: Pick<ToolPaths, "prlimit">, scope: RunScope, runInput: string): ChildProcess {
-  const { file, args } = untracedCommand(tools, runInput);
+export function spawnRunOne(tools: Pick<ToolPaths, "prlimit" | "bwrap">, scope: RunScope, runInput: string): ChildProcess {
+  const { file, args } = untracedCommand(tools, scope.root, runInput);
   return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", "ignore"] });
 }
 

@@ -16,6 +16,12 @@ export const STRACE_ARGS: readonly string[] = [
   "-e", "inject=io_uring_setup:error=ENOSYS",
 ];
 
+/*
+ * The lexical path model below is a DETECTOR, not a boundary. It resolves `..` and relative paths textually, so a symlink inside the
+ * scope (`ln -s . a`, then `a/../x`) can make the kernel act somewhere the parser does not see; it also judges AF_UNIX paths by name.
+ * The enforcement is the bubblewrap containment around every traced command (R46: read-only root, writable scope only, hidden
+ * /run/user and /run/dbus). Writes the kernel refuses appear here as `deniedWriteAttempts`; this audit is the second line of defence.
+ */
 export interface TraceContext {
   rootPid: number;
   initialCwd: string;
@@ -24,6 +30,12 @@ export interface TraceContext {
   dnsAddresses: ReadonlySet<string>;
   /** Directories whose Unix sockets a worker may connect to besides the built-in name-service allowlist (R43); the wave passes the scope root. */
   allowedSocketRoots?: string[];
+  /**
+   * The traced command is `bwrap … -- <workload>` (R46). bubblewrap's own setup (the user and mount namespace, `uid_map`, mounts, the
+   * `newroot` directories on a private tmpfs) happens before the workload and is not a host action: the root pid and the process it
+   * clones with CLONE_NEWPID are muted for everything except process and cwd tracking; the first child of that process is the workload.
+   */
+  sandboxed?: boolean;
 }
 
 export interface TraceFindings {
@@ -287,6 +299,8 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   /** Pids whose clone return line has been seen (or the root); a pid that emits lines before that is unclaimed. */
   const claimed = new Set<number>([ctx.rootPid]);
   const unclaimed = new Map<number, { exited: boolean }>();
+  /** Pids whose writes, mounts and sockets are not judged: bubblewrap's setup processes (see `TraceContext.sandboxed`). */
+  const muted = new Set<number>(ctx.sandboxed === true ? [ctx.rootPid] : []);
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
@@ -422,9 +436,11 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
    */
   function clone(pid: number, call: Call, seq: number, headSeq: number): void {
     const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
-    if (call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) unresolvedWrites++;
+    const mutedParent = muted.has(pid);
+    if (!mutedParent && call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) unresolvedWrites++;
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
     const child = call.ret.value;
+    if (mutedParent && flags !== undefined && /\bCLONE_NEWPID\b/.test(flags)) muted.add(child);
     uncertain.delete(child);
     const born = unclaimed.get(child);
     children.set(pid, [...(children.get(pid) ?? []), child]);
@@ -468,13 +484,20 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   function handle(pid: number, body: string, seq: number, headSeq: number): void {
     const call = parseCall(body);
     if (!call) return;
+    if (muted.has(pid) && !CLONES.has(call.name) && call.name !== "chdir" && call.name !== "fchdir") return;
     const spec = SPECS[call.name];
     if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
     // Even absolute paths cannot be audited after a successful root/namespace change.
     if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") unresolvedWrites++; return; }
     if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) unresolvedEgress++; return sendTarget(call.args[1], true); }
-    if (call.name === "sendto") return sendTarget(call.args[4]);
-    if (call.name === "sendmsg" || call.name === "sendmmsg") return messageDestinations(call.args[1]).forEach(judgeDestination);
+    if (call.name === "sendto") { if (unixConnectEscapes(call.args[4], call.ret)) unresolvedEgress++; return sendTarget(call.args[4]); }
+    if (call.name === "sendmsg" || call.name === "sendmmsg") {
+      // Every msg_name of family AF_UNIX is judged like a connect (datagram sockets need no connect); a failed send is ignored.
+      if (call.ret.kind !== "failed") {
+        for (const name of (call.args[1] ?? "").matchAll(/msg_name=(\{[^}]*\})/g)) if (/sa_family=AF_UNIX\b/.test(name[1]!) && unixPathEscapes(name[1]!)) unresolvedEgress++;
+      }
+      return messageDestinations(call.args[1]).forEach(judgeDestination);
+    }
     // A failed setup (`= -1 E...`) creates no ring and cannot be used for I/O (R23b); a successful or in-progress one counts.
     if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") unresolvedEgress++; return; }
     if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
@@ -487,6 +510,11 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
    */
   function unixConnectEscapes(token: string | undefined, ret: Return): boolean {
     if (ret.kind === "failed" || token === undefined || !/sa_family=AF_UNIX\b/.test(token)) return false;
+    return unixPathEscapes(token);
+  }
+
+  /** The AF_UNIX destination judged by name: abstract, relative or outside the allowed roots. */
+  function unixPathEscapes(token: string): boolean {
     const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
     if (!m) return true; // no readable path: cannot be judged
     if (m[1] === "@") return true;
@@ -547,6 +575,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       if (head === undefined) {
         // The arguments are lost, so the call cannot be judged: fail closed.
         const name = resumed[1]!;
+        if (muted.has(pid) && !CLONES.has(name) && name !== "chdir" && name !== "fchdir") continue;
         if (SPECS[name]) { attachPendingGroup(pid, seq); unresolvedWrites++; }
         else if (ROOT_CHANGES.has(name)) {
           if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedWrites++;
