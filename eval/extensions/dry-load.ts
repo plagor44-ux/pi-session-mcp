@@ -8,7 +8,7 @@ import { z } from "zod";
 import { parseProductionConfig } from "./approval.js";
 import { auditLog } from "./audit.js";
 import { containmentSelfTest } from "./containment.js";
-import { removeTree } from "./evidence.js";
+import { WaveDirGuard, removeTree } from "./evidence.js";
 import { fixedCode } from "./classify.js";
 import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { dnsServers } from "./network.js";
@@ -49,6 +49,8 @@ export interface DryLoadPair {
     /** Informational (not part of `ok`): inet connect attempts of the loaded session. */
     connects: number;
   };
+  /** Every inet destination the session connected to that is not name resolution; must be empty (R53). Private: addresses are allowed here only. */
+  unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
   /** A fixed code naming the first thing that went wrong; null when `ok`. */
   failure: string | null;
   ok: boolean;
@@ -83,6 +85,7 @@ export interface DryLoadDeps {
   planSandbox?: ((tools: ToolPaths) => Promise<SandboxPlan>) | undefined;
   residualCheck?: ((pgid: number) => Promise<boolean>) | undefined;
   changedPaths?: typeof changedPaths | undefined;
+  removeTree?: ((path: string) => Promise<void>) | undefined;
   newKey?: (() => Uint8Array) | undefined;
   /** Absolute path of the compiled `dry-load-entry.js`; defaults to the one next to this module. */
   entry?: string | undefined;
@@ -132,9 +135,8 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), repoRoot]);
   const plan = await (deps.planSandbox ?? ((t: ToolPaths) => planSandbox({ tools: t, repoRoot, buildRoot: deps.buildRoot ?? BUILD_ROOT })))(tools);
   await (deps.containmentCheck ?? containmentSelfTest)(tools, plan);
-  await mkdir(input.waveDir, { recursive: true, mode: 0o700 });
-  await mkdir(join(input.waveDir, "private"), { recursive: true, mode: 0o700 });
-  await mkdir(join(input.waveDir, "scopes"), { recursive: true, mode: 0o700 });
+  // The wave directory, `private` and `scopes` are pinned by device and inode; nothing is created or removed below them unless all three are intact.
+  const guard = await WaveDirGuard.capture(input.waveDir);
 
   // Nothing of an earlier attempt may be overwritten or mixed in: refuse before anything starts.
   for (const { run } of jobs) if (existsSync(privateRunDir(input.waveDir, run.runId)) || existsSync(scopeRoot(input.waveDir, run.runId))) throw new Error("output_exists");
@@ -150,6 +152,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   const prepareScope = deps.prepareScope ?? prepareRunScope;
   const residualCheck = deps.residualCheck ?? groupIsEmpty;
   const diff = deps.changedPaths ?? changedPaths;
+  const remove = deps.removeTree ?? removeTree;
   // No provider is contacted, so every inet destination is unexpected; only the resolver's nameservers are tolerated.
   const addresses = { providerAddresses: new Set<string>(), dnsAddresses: await dnsServers() };
 
@@ -157,7 +160,6 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   for (const { pairing, run, task, profile, source } of jobs) {
     if (deps.signal?.aborted) throw new Error("interrupted");
     const privateRun = privateRunDir(input.waveDir, run.runId);
-    await mkdir(privateRun, { recursive: true, mode: 0o700 });
     const key = (deps.newKey ?? (() => randomBytes(RUN_KEY_BYTES)))();
     let scope: RunScope | undefined;
     let failure: string | null = null;
@@ -166,7 +168,10 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
     let ioUring = 0;
     let cloneWrites: string[] = [];
     let interrupted = false;
+    let cleanupFailed = false;
     try {
+      await guard.assertIntact();
+      await mkdir(privateRun, { recursive: true, mode: 0o700 });
       scope = await prepareScope({
         waveDir: input.waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.templateDir, hostAuth: {},
         productionProfile: { ...profile, provider: DRY_PROVIDER, model: DRY_MODEL }, skillCatalog: config.skillCatalog, pairing, tools,
@@ -201,9 +206,12 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
     } catch (error) {
       failure ??= fixedCode(error instanceof Error ? error.message : "") ?? "dry_load_step_failed";
     } finally {
-      // R42: nothing derived from the session is kept beyond the report.
-      await removeTree(privateRun).catch(() => undefined);
-      if (scope) await removeTree(scope.root).catch(() => undefined);
+      // R42: nothing derived from the session is kept beyond the report. Every ancestor must still be the pinned directory, or nothing is removed.
+      try {
+        await guard.assertIntact();
+        await remove(privateRun);
+        if (scope) await remove(scope.root);
+      } catch { cleanupFailed = true; }
     }
     if (interrupted) throw new Error("interrupted");
     const activeTools = output?.started === true ? output.activeTools : [];
@@ -213,10 +221,13 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
       unresolvedEgress: findings?.unresolvedEgress ?? 0, ioUringSetupsSucceeded: ioUring, connects: findings?.connects ?? 0,
     };
     const clean = trace.outsideWrites === 0 && trace.unresolvedWrites === 0 && trace.deniedWriteAttempts === 0 && trace.unresolvedEgress === 0 && trace.ioUringSetupsSucceeded === 0;
-    const ok = failure === null && grantedOk && clean;
+    // R53: a provider-free load opens no connection but name resolution; the destinations are in this private report.
+    const unexpectedConnects = findings?.unexpectedConnects.map((destination) => ({ ...destination })) ?? [];
+    if (cleanupFailed) failure = "cleanup_failed";
+    const ok = failure === null && grantedOk && clean && unexpectedConnects.length === 0;
     pairs.push({
-      pairing: pairing.id, extension: pairing.extension, profile: pairing.profile, activeTools, grantedOk, cloneWrites, trace,
-      failure: ok ? null : failure ?? (grantedOk ? "trace_not_clean" : "granted_tool_missing"), ok,
+      pairing: pairing.id, extension: pairing.extension, profile: pairing.profile, activeTools, grantedOk, cloneWrites, trace, unexpectedConnects,
+      failure: ok ? null : failure ?? (!grantedOk ? "granted_tool_missing" : !clean ? "trace_not_clean" : "unexpected_connect"), ok,
     });
   }
   return { deviation: DEVIATION, pairs };

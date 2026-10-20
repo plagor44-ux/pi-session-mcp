@@ -1,8 +1,9 @@
+import { existsSync } from "node:fs";
 import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
-import { parseArgs } from "../eval/extensions/cli.js";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { parseArgs, scanCommand } from "../eval/extensions/cli.js";
 import { scanTranscripts, writeScan } from "../eval/extensions/scan.js";
 import { hash } from "../eval/profiles/files.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -17,6 +18,14 @@ const result = (id: string, content: unknown, extra: Record<string, unknown> = {
   line({ type: "user", ...top, message: { content: [{ type: "tool_result", tool_use_id: id, content, ...extra }] } });
 const session = (id: string, executionProfile: string) => ({ id, workspace: "repo", executionProfile });
 const turn = (turnId: string, state: string) => ({ turnId, state });
+
+/** Runs `body` and returns what it wrote to stdout. */
+async function captureStdout(body: () => Promise<void>): Promise<string> {
+  let shown = "";
+  const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => { shown += String(chunk); return true; }) as typeof process.stdout.write);
+  try { await body(); } finally { spy.mockRestore(); }
+  return shown;
+}
 
 async function scanLines(lines: string[]) {
   const dir = await temporaryRoot("ablation-scan-");
@@ -92,7 +101,7 @@ describe("transcript scanner", () => {
     expect(scan.skippedLines).toBe(2);
   });
 
-  it("scans only the files directly in the directory, in name order", async () => {
+  it("reads transcripts in subdirectories too (subagents), in path order, and never follows links", async () => {
     const dir = await temporaryRoot("ablation-scan-order-");
     const body = (id: string) => [
       use("a", "mcp__pi-session-mcp__pi_session_start", { workspace: "repo", executionProfile: "review" }),
@@ -102,9 +111,17 @@ describe("transcript scanner", () => {
     ].join("\n");
     await writeFile(join(dir, "b.jsonl"), body("second"));
     await writeFile(join(dir, "a.jsonl"), body("first"));
-    await mkdir(join(dir, "nested"));
+    await mkdir(join(dir, "nested", "deeper"), { recursive: true });
     await writeFile(join(dir, "nested", "c.jsonl"), body("nested"));
-    expect((await scanTranscripts(dir)).candidates.map((c) => [c.transcript, c.sessionId])).toEqual([["a.jsonl", "first"], ["b.jsonl", "second"]]);
+    await writeFile(join(dir, "nested", "deeper", "d.jsonl"), body("deeper"));
+    // Links to a file or a directory outside are skipped.
+    const outside = await temporaryRoot("ablation-scan-outside-");
+    await writeFile(join(outside, "e.jsonl"), body("linked"));
+    await symlink(join(outside, "e.jsonl"), join(dir, "link.jsonl"));
+    await symlink(outside, join(dir, "linked-dir"));
+    const scan = await scanTranscripts(dir);
+    expect(scan.candidates.map((c) => [c.transcript, c.sessionId])).toEqual([["a.jsonl", "first"], ["b.jsonl", "second"], ["nested/c.jsonl", "nested"], ["nested/deeper/d.jsonl", "deeper"]]);
+    expect(JSON.stringify(scan)).not.toContain(dir);
   });
 });
 
@@ -123,6 +140,29 @@ describe("scan output", () => {
     await mkdir(outside);
     await symlink(outside, join(results, "link"));
     await expect(writeScan(scan, join(results, "link", "x.json"), results)).rejects.toThrow("scan_out_outside_results");
+    // A directory that does not exist yet below a link: nothing is created outside before the refusal.
+    await expect(writeScan(scan, join(results, "link", "sub", "deeper", "x.json"), results)).rejects.toThrow("scan_out_outside_results");
+    expect(existsSync(join(outside, "sub"))).toBe(false);
+    // A dangling link is refused as well.
+    await symlink(join(base, "nowhere"), join(results, "dangling"));
+    await expect(writeScan(scan, join(results, "dangling", "sub", "x.json"), results)).rejects.toThrow("scan_out_outside_results");
+    expect(existsSync(join(base, "nowhere"))).toBe(false);
+  });
+
+  it("wires --scan to the results root and prints counts only", async () => {
+    const base = await temporaryRoot("ablation-scan-cli-");
+    const results = join(base, "eval", "results");
+    const transcripts = join(base, "transcripts");
+    await mkdir(transcripts);
+    await writeFile(join(transcripts, "t.jsonl"), await readFile(join(FIXTURES, "transcript.jsonl")));
+    const out = join(results, "scan", "candidates.json");
+    const shown = await captureStdout(() => scanCommand(parseArgs(["--scan", "--transcripts", transcripts, "--out", out]), results));
+    expect(JSON.parse(shown)).toEqual({ candidates: 2, skippedLines: 1 });
+    expect(shown).not.toContain(base);
+    expect((JSON.parse(await readFile(out, "utf8")) as { candidates: unknown[] }).candidates).toHaveLength(2);
+    await expect(scanCommand(parseArgs(["--scan", "--transcripts", transcripts, "--out", out]), results)).rejects.toThrow("output_exists");
+    await expect(scanCommand(parseArgs(["--scan", "--transcripts", transcripts, "--out", join(base, "elsewhere.json")]), results)).rejects.toThrow("scan_out_outside_results");
+    expect(existsSync(join(base, "elsewhere.json"))).toBe(false);
   });
 
   it("parses --scan with its two required options only", () => {

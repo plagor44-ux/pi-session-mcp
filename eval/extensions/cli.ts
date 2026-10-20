@@ -8,7 +8,7 @@ import { z } from "zod";
 import { isEntryPoint } from "../../src/entry-point.js";
 import { matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApproval, type ProductionConfig } from "./approval.js";
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
-import { dryLoad } from "./dry-load.js";
+import { dryLoad, type DryLoadDeps } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
 import { assertPreflightPassed, runPreflight } from "./preflight.js";
@@ -203,9 +203,9 @@ async function report(parsed: ParsedArgs): Promise<void> {
 }
 
 /** Candidates are private: they go to the ignored `eval/results/` only, and the console gets counts. */
-async function scan(parsed: ParsedArgs): Promise<void> {
+export async function scanCommand(parsed: ParsedArgs, resultsRoot = resolve("eval", "results")): Promise<void> {
   const result = await scanTranscripts(resolve(parsed.options["--transcripts"]!));
-  await writeScan(result, parsed.options["--out"]!, resolve("eval", "results"));
+  await writeScan(result, parsed.options["--out"]!, resultsRoot);
   write({ candidates: result.candidates.length, skippedLines: result.skippedLines });
 }
 
@@ -213,17 +213,17 @@ async function scan(parsed: ParsedArgs): Promise<void> {
  * Provider-free load of every arm-B extension from the template (R5). The report is private (paths in `cloneWrites`): it goes into the
  * fresh `--out` directory, and the console gets counts and codes only. Like `--plan`, it refuses a dirty tracked tree.
  */
-async function dryLoadCommand(parsed: ParsedArgs): Promise<void> {
+export async function dryLoadCommand(parsed: ParsedArgs, options: { sourceCwd?: string; deps?: DryLoadDeps } = {}): Promise<void> {
   const tasks = await loadTasks(parsed.options["--tasks"]!);
-  await sourceCommit();
+  await sourceCommit(options.sourceCwd);
   const productionConfig = await loadProductionConfig(parsed.options["--config"]);
   const waveDir = resolve(parsed.options["--out"]!);
   if (existsSync(waveDir)) throw new Error("output_exists");
-  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir }, { signal }));
+  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir }, { ...options.deps, signal }));
   await writeFile(join(waveDir, "dry-load.json"), `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   write({
     ok: report.pairs.every((p) => p.ok),
-    pairs: report.pairs.map((p) => ({ pairing: p.pairing, ok: p.ok, failure: p.failure, activeTools: p.activeTools.length, grantedOk: p.grantedOk, cloneWrites: p.cloneWrites.length, trace: p.trace })),
+    pairs: report.pairs.map((p) => ({ pairing: p.pairing, ok: p.ok, failure: p.failure, activeTools: p.activeTools.length, grantedOk: p.grantedOk, cloneWrites: p.cloneWrites.length, trace: p.trace, unexpectedConnects: p.unexpectedConnects.length })),
   });
   if (!report.pairs.every((p) => p.ok)) process.exitCode = 1;
 }
@@ -231,7 +231,7 @@ async function dryLoadCommand(parsed: ParsedArgs): Promise<void> {
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.mode === "--dry-load") await dryLoadCommand(parsed);
-  else if (parsed.mode === "--scan") await scan(parsed);
+  else if (parsed.mode === "--scan") await scanCommand(parsed);
   else if (parsed.mode === "--plan") await plan(parsed);
   else if (parsed.mode === "--preflight") await preflight(parsed);
   else if (parsed.mode === "--report") await report(parsed);
