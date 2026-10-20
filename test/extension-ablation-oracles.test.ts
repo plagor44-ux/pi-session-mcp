@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { changedPaths, scoreImplementation, scoreReview } from "../eval/extensions/oracles.js";
-import { taskSpecSchema, type ImplementationOracle, type ReviewOracle } from "../eval/extensions/schemas.js";
+import { anchorSchema, taskSpecSchema, type ImplementationOracle, type ReviewOracle } from "../eval/extensions/schemas.js";
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -120,6 +120,36 @@ describe("scoreReview", () => {
     expect(accepted("  - src/a.ts: race\n    - the lock")).toBe(true);
   });
 
+  it("lets a heading supply only its path tokens, and only to blocks without a path of their own", () => {
+    const o: ReviewOracle = { ...reviewOracle, falseFindings: [{ id: "x1", anchors: [{ file: "src/a.ts", terms: ["sql injection"] }] }] };
+    const accepted = (text: string): boolean => scoreReview(text, o).criticalHit === 1;
+    expect(accepted("### src/a.ts\nLooks fine.\n\n- src/b.ts: race; the lock is never released")).toBe(false);
+    expect(accepted("## Findings (src/a.ts, src/b.ts)\n\n- src/b.ts: race; the lock is never released")).toBe(false);
+    expect(accepted("### src/a.ts\n| src/b.ts | race, lock |")).toBe(false);
+    const mixed = scoreReview("### src/a.ts\n- race when the lock is released\n\n- src/b.ts: SQL injection in the parser", o);
+    expect(mixed).toMatchObject({ criticalHit: 1, falseFindings: [] });
+    expect(accepted("### src/a.ts:12\n\nRace when the lock is released early.")).toBe(true);
+    expect(accepted("### Race and lock\n\n- src/a.ts: parser")).toBe(false);
+    expect(accepted("## src/a.ts\n### Issue 1\n- race when the lock is released")).toBe(true);
+    expect(accepted("## src/a.ts\n## src/b.ts\n- race; lock")).toBe(false);
+    expect(accepted("## src/a.ts\n### src/b.ts\n- race; lock")).toBe(false);
+    expect(accepted("## src/a.ts\n### Issue 1\n#### Detail\n- race when the lock is released")).toBe(true);
+    expect(accepted("## src/a.ts\n### Issue 1\n## Other\n- race when the lock is released")).toBe(false);
+  });
+
+  it("starts a bold block only for unindented, non-list lines with a path, so field labels continue", () => {
+    const accepted = (text: string): boolean => scoreReview(text, reviewOracle).criticalHit === 1;
+    expect(accepted("**File:** src/a.ts:12\n**Issue:** race when the lock is released early")).toBe(true);
+    expect(accepted("- **src/a.ts:12** - race in handler\n  **Impact:** the lock is released early")).toBe(true);
+    expect(accepted("1. **Race in src/a.ts:12**\n   **Why:** the lock is released early")).toBe(true);
+    expect(accepted("**src/a.ts**: race.\n**src/b.ts**: lock never released.")).toBe(false);
+  });
+
+  it("keeps fenced code inside its block and never reads headings from it", () => {
+    expect(scoreReview("```python\n# src/a.ts\n```\n\nrace and lock in b.ts", reviewOracle).accepted).toBe(false);
+    expect(scoreReview("src/a.ts: race\n```\n\n| x |\n**src/b.ts**\n```\nlock", reviewOracle).criticalHit).toBe(1);
+  });
+
   it("requires terms to start at a word boundary but allows prefix stems", () => {
     expect(scoreReview("- src/a.ts: trace logging around the block", reviewOracle).accepted).toBe(false);
     expect(scoreReview("- src/a.ts: races while locking", reviewOracle).criticalHit).toBe(1);
@@ -158,6 +188,15 @@ describe("scopeIgnore schema", () => {
     ["empty", ""],
   ])("rejects %s", (_name, entry) => {
     expect(taskSpecSchema.safeParse(spec([entry])).success).toBe(false);
+  });
+});
+
+describe("anchor file schema", () => {
+  it("rejects characters an anchor could never match as a path token", () => {
+    expect(anchorSchema.safeParse({ file: "src/a-b_c.d.ts", terms: ["x"] }).success).toBe(true);
+    for (const file of ["src/a b.ts", "src/ä.ts", "src/a:1.ts", "src/a#1.ts", "src/(a).ts", "src/a,b.ts"]) {
+      expect(anchorSchema.safeParse({ file, terms: ["x"] }).success, file).toBe(false);
+    }
   });
 });
 
@@ -224,6 +263,32 @@ describe("changedPaths", () => {
     writeFileSync(join(repo, "a.ts"), "export const a = 5;\n");
     expect(await changedPaths(repo, base, [])).toEqual(["a.ts"]);
     expect(existsSync(marker)).toBe(false);
+  });
+
+  it("fails closed on an unreadable directory", async () => {
+    const { repo, base } = makeBase();
+    const hid = join(repo, "hid");
+    mkdirSync(hid);
+    writeFileSync(join(hid, "x.ts"), "x");
+    chmodSync(hid, 0o111);
+    try {
+      await expect(changedPaths(repo, base, [])).rejects.toThrow("scope_unreadable");
+    } finally { chmodSync(hid, 0o755); }
+  });
+
+  it("fails closed when git exits non-zero", async () => {
+    const { repo, base } = makeBase();
+    await expect(changedPaths(repo, { ...base, commit: "0".repeat(40) }, [])).rejects.toThrow("scope_unreadable");
+  });
+
+  it("reports a nested .git entry that git itself would never list", async () => {
+    const { repo, base } = makeBase({ "src/a.ts": "1\n" });
+    mkdirSync(join(repo, "src", ".git"));
+    writeFileSync(join(repo, "src", ".git", "payload.js"), "x");
+    mkdirSync(join(repo, "lib"));
+    writeFileSync(join(repo, "lib", ".git"), "gitdir: elsewhere");
+    expect(await changedPaths(repo, base, [])).toEqual(["lib/.git", "src/.git"]);
+    expect(await changedPaths(repo, base, ["src/"])).toEqual(["lib/.git"]);
   });
 
   it("rejects a malformed base commit", async () => {
@@ -347,6 +412,29 @@ describe("scoreImplementation", () => {
     const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", setup: [["setup-one", "x"]], command: ["the-command", "y"], timeoutMs: 10_000 }), { gitDir: base.gitDir, wrap });
     expect(r.testsPassed).toBe(true);
     expect(readFileSync(log, "utf8")).toBe("setup-one x\nthe-command y\n");
+  });
+
+  it("replaces the clone's .git so its hooks and config never run, while git keeps working", async () => {
+    const { repo, base } = makeBase();
+    const markers = tmp("oracle-markers-");
+    const hook = join(markers, "fsmonitor.sh");
+    writeFileSync(hook, `#!/bin/sh\ntouch ${JSON.stringify(join(markers, "fsmonitor"))}\nexit 0\n`);
+    chmodSync(hook, 0o755);
+    git(repo, "config", "core.fsmonitor", hook);
+    const preCommit = join(repo, ".git", "hooks", "pre-commit");
+    mkdirSync(join(repo, ".git", "hooks"), { recursive: true });
+    writeFileSync(preCommit, `#!/bin/sh\ntouch ${JSON.stringify(join(markers, "pre-commit"))}\nexit 0\n`);
+    chmodSync(preCommit, 0o755);
+    writeFileSync(join(repo, "a.ts"), "export const a = 6;\n");
+    const useGit = node(`const {execFileSync}=require('child_process');
+      const out=execFileSync('git',['status','--porcelain'],{encoding:'utf8'});
+      if(out!==' M a.ts\\n') process.exit(2);
+      execFileSync('git',['-c','user.name=a','-c','user.email=a@b.invalid','commit','--allow-empty','-q','-m','x'],{stdio:'ignore'});`);
+    const r = await scoreImplementation(repo, task({ allowedPaths: ["a.ts"] }, base, { kind: "implementation", setup: [useGit], command: useGit, timeoutMs: 20_000 }), { gitDir: base.gitDir });
+    expect(r).toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
+    expect(existsSync(join(markers, "fsmonitor"))).toBe(false);
+    expect(existsSync(join(markers, "pre-commit"))).toBe(false);
+    expect(readFileSync(join(repo, "a.ts"), "utf8")).toBe("export const a = 6;\n");
   });
 
   it("passes only PATH, HOME and CI=1; HOME defaults to a fresh directory outside the clone", async () => {

@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
@@ -7,32 +7,70 @@ import type { Anchor, ImplementationOracle, ReviewOracle } from "./schemas.js";
 
 const execFileAsync = promisify(execFile);
 const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
-const HEADING = /^\s{0,3}#{1,6}\s+(\S.*)$/;
+const HEADING = /^\s{0,3}(#{1,6})\s+(\S.*)$/;
+
+const PATH_RUN = /[a-z0-9_.\-/]+/g;
+const NOT_PATHS = new Set(["e.g", "i.e"]);
+/** Path-like tokens of lower-cased text: maximal path-character runs (trailing dots trimmed) with a slash or a file extension. */
+function pathTokens(text: string): string[] {
+  const tokens: string[] = [];
+  for (const match of text.matchAll(PATH_RUN)) {
+    const token = match[0].replace(/\.+$/, "");
+    if (token === "" || NOT_PATHS.has(token)) continue;
+    if (token.includes("/") || /^[a-z0-9_-]+(?:\.[a-z0-9_-]+)*\.[a-z][a-z0-9]*$/.test(token)) tokens.push(token);
+  }
+  return tokens;
+}
+
+const FENCE = /^\s*(```+|~~~+)/;
 
 /**
  * Splits review text into lower-cased blocks.
  * A block ends at a blank line, at a list item that is not nested deeper than the block's first list item, at a heading,
- * at a table row (`|...`, one block per row) and before a line starting with `**`.
- * Each heading's text is prefixed to every following block until the next heading; a heading without a body is a block itself.
+ * at a table row (`|...`, one block per row) and before an unindented `**` line outside a list item that contains a path token
+ * (field labels such as `**Why:**` continue the block). Fenced code never starts headings, rows or `**` blocks and stays in its block.
+ * A heading supplies its path tokens (only those) to the following blocks that have no path token of their own, until the next
+ * heading of the same or a higher level; a heading without path tokens inherits those of the nearest enclosing lower-level heading.
+ * A heading without a body is a block itself.
  */
 function blocksOf(text: string): string[] {
   const blocks: string[] = [];
   let heading: string | undefined;
+  const headingStack: { level: number; tokens: string }[] = [];
+  let headingTokens = "";
   let sectionHasBody = false;
   let current: string[] = [];
   let listIndent: number | undefined;
+  let fence: string | undefined;
   const push = (lines: string[]): void => {
-    blocks.push((heading === undefined ? lines.join("\n") : `${heading}\n${lines.join("\n")}`).toLowerCase());
+    const body = lines.join("\n").toLowerCase();
+    blocks.push(headingTokens !== "" && pathTokens(body).length === 0 ? `${headingTokens}\n${body}` : body);
     sectionHasBody = true;
   };
   const flush = (): void => { if (current.length > 0) push(current); current = []; listIndent = undefined; };
   const closeSection = (): void => { if (heading !== undefined && !sectionHasBody) blocks.push(heading.toLowerCase()); };
   for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
+    const fenceMatch = FENCE.exec(line);
+    if (fence !== undefined) {
+      current.push(line);
+      if (fenceMatch && fenceMatch[1]?.[0] === fence) fence = undefined;
+      continue;
+    }
     if (line.trim() === "") { flush(); continue; }
+    if (fenceMatch) { fence = fenceMatch[1]?.[0]; current.push(line); continue; }
     const headingMatch = HEADING.exec(line);
-    if (headingMatch) { flush(); closeSection(); heading = headingMatch[1] ?? ""; sectionHasBody = false; continue; }
+    if (headingMatch) {
+      flush(); closeSection();
+      const level = (headingMatch[1] ?? "").length;
+      heading = headingMatch[2] ?? "";
+      while (headingStack.length > 0 && (headingStack[headingStack.length - 1]?.level ?? 0) >= level) headingStack.pop();
+      headingTokens = pathTokens(heading.toLowerCase()).join(" ") || (headingStack[headingStack.length - 1]?.tokens ?? "");
+      headingStack.push({ level, tokens: headingTokens });
+      sectionHasBody = false;
+      continue;
+    }
     if (/^\s*\|/.test(line)) { flush(); push([line]); continue; }
-    if (/^\s*\*\*/.test(line)) { flush(); current.push(line); continue; }
+    if (line.startsWith("**") && listIndent === undefined && pathTokens(line.toLowerCase()).length > 0) { flush(); current.push(line); continue; }
     const item = LIST_ITEM.exec(line);
     if (item) {
       const indent = (item[1] ?? "").replace(/\t/g, "    ").length;
@@ -96,13 +134,32 @@ const IGNORED_ALWAYS = [".codegraph/"];
 const isInsideGitDir = (path: string): boolean => path === ".git" || path.startsWith(".git/");
 
 /**
+ * Walks the clone without following symlinks and skipping the top-level `.git`. Any permission error fails closed with
+ * `scope_unreadable`, and every non-root entry named `.git` (file or directory) is returned as a changed path because git never lists
+ * its content. Known git limit: empty directories are not reported.
+ */
+async function walkClone(root: string, relative = ""): Promise<string[]> {
+  const found: string[] = [];
+  let entries;
+  try { entries = await readdir(join(root, relative), { withFileTypes: true }); } catch { throw new Error("scope_unreadable"); }
+  for (const entry of entries) {
+    const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
+    if (entry.name === ".git") { if (relative !== "") found.push(path); continue; }
+    if (entry.isDirectory()) found.push(...await walkClone(root, path));
+  }
+  return found;
+}
+
+/**
  * Lists every path of `clone` that differs from the base commit: modified, deleted, untracked and ignored files, repo-relative.
  * All git calls use the pristine `base.gitDir` with a fresh temporary index and config, so worker commits, `skip-worktree` and
  * `assume-unchanged` flags and repository configuration in the clone's own `.git` cannot hide or trigger anything.
+ * Fails closed: a non-zero git exit, any git stderr output or an unreadable directory throws `scope_unreadable`.
  * `options.home` overrides the (otherwise fresh, removed afterwards) HOME of the git calls.
  */
 export async function changedPaths(clone: string, base: ScopeBase, scopeIgnore: string[], options: { home?: string } = {}): Promise<string[]> {
   if (!/^[0-9a-f]{40,64}$/.test(base.commit)) throw new Error("base_commit_invalid");
+  const nestedGit = await walkClone(clone);
   const scratch = await mkdtemp(join(tmpdir(), "oracle-scope-"));
   try {
     const home = options.home ?? join(scratch, "home");
@@ -111,14 +168,20 @@ export async function changedPaths(clone: string, base: ScopeBase, scopeIgnore: 
       PATH: process.env.PATH ?? "", HOME: home, GIT_DIR: base.gitDir, GIT_WORK_TREE: clone, GIT_INDEX_FILE: join(scratch, "index"),
       GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null",
     };
-    const git = async (...args: string[]): Promise<string> =>
-      (await execFileAsync("git", [...GIT_CONFIG_FLAGS, ...args], { cwd: clone, env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 })).stdout;
+    const git = async (...args: string[]): Promise<string> => {
+      try {
+        const { stdout, stderr } = await execFileAsync("git", [...GIT_CONFIG_FLAGS, ...args], { cwd: clone, env, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+        if (stderr.trim() !== "") throw new Error("scope_unreadable");
+        return stdout;
+      } catch { throw new Error("scope_unreadable"); }
+    };
     await git("read-tree", base.commit);
     await git("update-index", "-q", "--refresh");
     const modified = (await git("diff-files", "--name-only", "-z")).split("\0");
     const untracked = (await git("ls-files", "--others", "-z")).split("\0");
     const ignored = [...scopeIgnore, ...IGNORED_ALWAYS];
     const paths = new Set([...modified, ...untracked].filter((path) => path !== "" && !isInsideGitDir(path)));
+    for (const path of nestedGit) paths.add(path);
     return [...paths].filter((path) => !ignored.some((prefix) => path.startsWith(prefix))).sort();
   } finally {
     await rm(scratch, { recursive: true, force: true });
@@ -159,6 +222,25 @@ async function removeIgnoredDirectories(clone: string, scopeIgnore: string[]): P
   }
 }
 
+/**
+ * Replaces the clone's `.git` with a fresh one taken from the pristine git directory, so worker-written config and hooks cannot run
+ * during setup or tests. The index is reset to the base commit only; the worktree keeps the worker's changes.
+ */
+async function neutralizeGitDir(clone: string, base: ScopeBase): Promise<void> {
+  const scratch = await mkdtemp(join(tmpdir(), "oracle-git-"));
+  try {
+    const env = { PATH: process.env.PATH ?? "", HOME: join(scratch, "home"), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
+    await mkdir(env.HOME, { recursive: true });
+    const fresh = join(scratch, "fresh");
+    await execFileAsync("git", ["-c", "core.hooksPath=/dev/null", "clone", "--no-checkout", "--quiet", base.gitDir, fresh], { env });
+    await rm(join(clone, ".git"), { recursive: true, force: true });
+    await cp(join(fresh, ".git"), join(clone, ".git"), { recursive: true });
+    await execFileAsync("git", ["-C", clone, "-c", "core.hooksPath=/dev/null", "reset", "-q", base.commit], { env });
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 export interface ImplementationScore { accepted: boolean; testsPassed: boolean; outOfScope: string[] }
 
 /**
@@ -170,8 +252,8 @@ export interface ImplementationTask { allowedPaths: string[]; scopeIgnore: strin
 const isAllowed = (path: string, allowed: string): boolean => allowed.endsWith("/") ? path.startsWith(allowed) : path === allowed;
 
 /**
- * Computes the changed-file scope against the pristine base first, then deletes the ignored state directories from the clone and
- * runs the setup commands and the decisive command, which share one deadline of `oracle.timeoutMs`.
+ * Computes the changed-file scope against the pristine base first, then deletes the ignored state directories from the clone,
+ * neutralizes the clone's `.git` and runs the setup commands and the decisive command, which share one deadline of `oracle.timeoutMs`.
  * HOME defaults to a fresh temporary directory; `wrap` rewrites every argv (for example to run it under strace).
  */
 export async function scoreImplementation(
@@ -179,9 +261,11 @@ export async function scoreImplementation(
   task: ImplementationTask,
   options: { gitDir: string; home?: string; wrap?: (argv: readonly string[]) => string[] },
 ): Promise<ImplementationScore> {
-  const changed = await changedPaths(clone, { gitDir: options.gitDir, commit: task.baseCommit }, task.scopeIgnore);
+  const base = { gitDir: options.gitDir, commit: task.baseCommit };
+  const changed = await changedPaths(clone, base, task.scopeIgnore);
   const outOfScope = changed.filter((path) => !task.allowedPaths.some((allowed) => isAllowed(path, allowed)));
   await removeIgnoredDirectories(clone, task.scopeIgnore);
+  await neutralizeGitDir(clone, base);
   const ownHome = options.home === undefined ? await mkdtemp(join(tmpdir(), "oracle-home-")) : undefined;
   const home = options.home ?? ownHome ?? clone;
   try {

@@ -15,7 +15,9 @@ export const pairingSchema = z.object({
 }).strict();
 export type Pairing = z.infer<typeof pairingSchema>;
 
-export const anchorSchema = z.object({ file: relativePathSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
+/** Anchor files are matched as path tokens in review text, so only token characters are allowed. */
+const anchorFileSchema = relativePathSchema.refine((p) => /^[A-Za-z0-9_.\-/]+$/.test(p), { message: "anchor_file_charset" });
+export const anchorSchema = z.object({ file: anchorFileSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
 export type Anchor = z.infer<typeof anchorSchema>;
 export const reviewOracleSchema = z.object({
   kind: z.literal("review"),
