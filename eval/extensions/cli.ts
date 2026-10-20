@@ -9,7 +9,7 @@ import { matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApp
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
-import { runPreflight } from "./preflight.js";
+import { assertPreflightPassed, runPreflight } from "./preflight.js";
 import { taskSpecSchema, type Pairing, type RunSpec, type TaskSpec } from "./schemas.js";
 import { runWave } from "./wave.js";
 
@@ -17,7 +17,7 @@ const execFileAsync = promisify(execFile);
 
 const MODES = ["--plan", "--preflight", "--wave"] as const;
 type Mode = typeof MODES[number];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template"] as const;
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir"] as const;
 const FLAG_OPTIONS = ["--trim"] as const;
 
 export interface ParsedArgs { mode: Mode; options: Partial<Record<typeof VALUE_OPTIONS[number], string>>; trim: boolean }
@@ -41,7 +41,10 @@ export function parseArgs(args: string[]): ParsedArgs {
   const mode = modes[0] as Mode;
   if (!options["--tasks"]) throw new Error("tasks_required");
   if (mode !== "--plan" && !options["--approval"]) throw new Error("approval_required");
+  if (mode !== "--plan" && !options["--out"]) throw new Error("out_required");
+  if (mode !== "--plan" && !options["--ledger"]) throw new Error("ledger_required");
   if (mode === "--wave" && !options["--template"]) throw new Error("template_required");
+  if (mode !== "--wave" && options["--preflight-dir"]) throw new Error("invalid_argument");
   return { mode, options, trim };
 }
 
@@ -51,8 +54,13 @@ async function loadTasks(path: string): Promise<TaskSpec[]> {
   return z.array(taskSpecSchema).min(1).parse(await readJson(path));
 }
 
-async function sourceCommit(): Promise<string> {
-  try { return (await execFileAsync("git", ["rev-parse", "HEAD"], { encoding: "utf8" })).stdout.trim(); } catch { return "unknown"; }
+/** The commit an approval binds to; a dirty tracked tree (or no repository) refuses, because the bound code would not be what runs. */
+export async function sourceCommit(cwd?: string): Promise<string> {
+  const run = async (args: string[]): Promise<string> => {
+    try { return (await execFileAsync("git", args, { encoding: "utf8", ...(cwd === undefined ? {} : { cwd }) })).stdout; } catch { throw new Error("source_unavailable"); }
+  };
+  if ((await run(["status", "--porcelain", "--untracked-files=no"])).trim() !== "") throw new Error("source_dirty");
+  return (await run(["rev-parse", "HEAD"])).trim();
 }
 
 /** The production configuration with its workspace paths made absolute, as the config loader would resolve them. */
@@ -72,9 +80,9 @@ function selectedPairings(csv: string | undefined): readonly Pairing[] {
 interface Projection { projectedUsd: (runs: RunSpec[]) => number; remainingUsd: number }
 
 /** Initial estimate per run, or the ledger's own estimates and remaining budget once a ledger file exists. */
-async function projection(ledgerDir: string | undefined): Promise<Projection> {
-  if (ledgerDir === undefined) return { projectedUsd: (runs) => runs.length * INITIAL_RUN_ESTIMATE_USD, remainingUsd: BUDGET_USD };
-  const { ledger } = await PersistedLedger.open(ledgerDir);
+async function projection(ledgerPath: string | undefined): Promise<Projection> {
+  if (ledgerPath === undefined) return { projectedUsd: (runs) => runs.length * INITIAL_RUN_ESTIMATE_USD, remainingUsd: BUDGET_USD };
+  const { ledger } = await PersistedLedger.open(resolve(ledgerPath));
   return { projectedUsd: (runs) => runs.reduce((sum, run) => sum + ledger.estimate(run.profile), 0), remainingUsd: BUDGET_USD - ledger.spentUsd };
 }
 
@@ -121,30 +129,35 @@ async function liveInputs(parsed: ParsedArgs) {
     sourceCommit: await sourceCommit(), tasks, runs, routes: routesOf(productionConfig, runs.map((r) => r.profile)),
   });
   const hostAuth = await readJson(parsed.options["--auth"] ?? join(homedir(), ".pi", "agent", "auth.json"));
-  const waveDir = resolve(parsed.options["--out"] ?? join("eval", "results", "extension-ablation", `wave-${new Date().toISOString().replace(/[:.]/g, "-")}`));
+  const waveDir = resolve(parsed.options["--out"]!);
   await mkdir(waveDir, { recursive: true, mode: 0o700 });
-  return { tasks, runs, productionConfig, approval, hostAuth, waveDir };
+  return { tasks, runs, productionConfig, approval, hostAuth, waveDir, ledgerPath: resolve(parsed.options["--ledger"]!) };
 }
 
-async function withAbort<T>(body: (signal: AbortSignal) => Promise<T>): Promise<T> {
+/**
+ * Runs `body` with an abort signal tied to SIGINT and SIGTERM. The listeners stay for the whole body and `stop` is idempotent, so a second
+ * Ctrl-C (or the wrapper's forward) cannot fall back to the default action and kill the CLI while a detached worker is still running.
+ */
+export async function withAbort<T>(body: (signal: AbortSignal) => Promise<T>, emitter: Pick<NodeJS.EventEmitter, "on" | "off"> = process): Promise<T> {
   const controller = new AbortController();
-  const stop = (): void => controller.abort();
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
-  try { return await body(controller.signal); } finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); }
+  const stop = (): void => { if (!controller.signal.aborted) controller.abort(); };
+  emitter.on("SIGINT", stop);
+  emitter.on("SIGTERM", stop);
+  try { return await body(controller.signal); } finally { emitter.off("SIGINT", stop); emitter.off("SIGTERM", stop); }
 }
 
 async function preflight(parsed: ParsedArgs): Promise<void> {
-  const { approval, hostAuth, productionConfig, waveDir } = await liveInputs(parsed);
-  const result = await withAbort((signal) => runPreflight({ approval, waveDir, hostAuth, productionConfig, signal }));
+  const { approval, hostAuth, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
+  const result = await withAbort((signal) => runPreflight({ approval, waveDir, ledgerPath, hostAuth, productionConfig, signal }));
   write(result);
   if (result.routes.some((r) => !r.ok)) process.exitCode = 1;
 }
 
 async function wave(parsed: ParsedArgs): Promise<void> {
-  const { tasks, runs, approval, hostAuth, productionConfig, waveDir } = await liveInputs(parsed);
+  const { tasks, runs, approval, hostAuth, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
+  await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval);
   const result = await withAbort((signal) => runWave({
-    approval, tasks, runs, waveDir, hostAuth, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
+    approval, tasks, runs, waveDir, ledgerPath, hostAuth, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
   }));
   write({
     stopReason: result.stopReason, spentUsd: result.spentUsd, runs: result.records.length,

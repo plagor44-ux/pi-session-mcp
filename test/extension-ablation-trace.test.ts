@@ -25,7 +25,9 @@ describe("STRACE_ARGS", () => {
   it("keeps the brief's shape with the extended syscall set", () => {
     expect(STRACE_ARGS.slice(0, 3)).toEqual(["-f", "-q", "-e"]);
     expect(STRACE_ARGS[4]).toBe("-y");
-    expect(STRACE_ARGS).toHaveLength(5);
+    // R36: strace makes every io_uring_setup fail, so libuv falls back to its thread pool.
+    expect(STRACE_ARGS.slice(5)).toEqual(["-e", "inject=io_uring_setup:error=ENOSYS"]);
+    expect(STRACE_ARGS).toHaveLength(7);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
     for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]) expect(set).toContain(name);
   });
@@ -820,6 +822,16 @@ describe("egress without connect", () => {
     expect(parseStraceLog(lines(ok), ctx({})).unresolvedEgress).toBe(1);
     expect(parseStraceLog(lines(enomem, enosys), ctx({})).unresolvedEgress).toBe(0);
     expect(parseStraceLog(lines(enomem, ok, enosys, ok), ctx({})).unresolvedEgress).toBe(2);
+  });
+
+  it("reads no egress from a real capture where strace injected ENOSYS into every io_uring_setup (R36)", async () => {
+    const text = await readFile(fileURLToPath(new URL("./fixtures/extension-ablation/io-uring-injected.strace", import.meta.url)), "utf8");
+    const setups = text.split("\n").filter((line) => line.includes("io_uring_setup("));
+    expect(setups.length).toBeGreaterThan(0);
+    for (const line of setups) expect(line).toMatch(/= -1 ENOSYS .*\(INJECTED\)$/);
+    const first = Number(/^(\d+)/.exec(text)![1]);
+    const f = parseStraceLog(text, { ...ctx({}), rootPid: first });
+    expect(f).toMatchObject({ unresolvedEgress: 0, outsideWrites: [], unresolvedWrites: 0 });
   });
 
   it("judges a resumed io_uring_setup by its return value, and an unfinished one as in progress", () => {

@@ -2,6 +2,7 @@ import { posix } from "node:path";
 
 /**
  * The caller appends `-o <log> --` and the command. `-y` annotates fds (including AT_FDCWD) with their paths.
+ * The trailing `-e inject=...` makes every `io_uring_setup` fail with ENOSYS (R36).
  * `-q` (not `-qq`) keeps the `+++ exited +++` lines that free a pid's cwd; signal and exit lines are skipped by the parser.
  */
 export const STRACE_ARGS: readonly string[] = [
@@ -10,6 +11,9 @@ export const STRACE_ARGS: readonly string[] = [
     + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
     + ",sendto,sendmsg,sendmmsg,io_uring_setup,chroot,pivot_root,setns,unshare,mount,open_tree,move_mount,fsopen,fsmount,fsconfig,mount_setattr,umount2",
   "-y",
+  // R36: Node's libuv calls io_uring_setup even with UV_USE_IO_URING=0 and it succeeds on some hosts. Failing it makes libuv fall back to its
+  // thread pool, as on kernels without io_uring; the injected call returns -1, which the parser ignores (R23b).
+  "-e", "inject=io_uring_setup:error=ENOSYS",
 ];
 
 export interface TraceContext {

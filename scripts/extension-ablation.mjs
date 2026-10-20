@@ -12,8 +12,10 @@ await writeFile(join(temporary,'.owner'),token,{mode:0o600});
 let child,stopped=false;
 const controller=new AbortController();
 const stop=signal=>{stopped=true;controller.abort();child?.kill(signal);};
-const interrupt=()=>stop('SIGINT'),terminate=()=>stop('SIGTERM');
-process.once('SIGINT',interrupt);process.once('SIGTERM',terminate);
+// Once the CLI runs, a terminal Ctrl-C reaches it directly (same foreground process group). The wrapper must not forward it or die from it:
+// a second SIGINT after a consumed handler would kill the wrapper's child path while a detached worker still runs. Only SIGTERM is forwarded.
+const interrupt=()=>{if(!child)stop('SIGINT');},terminate=()=>stop('SIGTERM');
+process.on('SIGINT',interrupt);process.on('SIGTERM',terminate);
 try{
   const build=join(temporary,'build');
   await promisify(execFile)(process.execPath,[join(root,'node_modules/typescript/bin/tsc'),'-p',join(root,'tsconfig.eval.json'),'--outDir',build],{cwd:root,timeout:120000,maxBuffer:1024*1024,signal:controller.signal});

@@ -7,6 +7,7 @@ import { loadConfig } from "../src/config.js";
 import { toResolvedExecutionProfile } from "../src/execution-profile.js";
 import { PiExtensionError } from "../src/extension-spec.js";
 import { resolvePiExtension } from "../src/pi-extensions.js";
+import { macMatches, sha256Hex } from "../eval/extensions/output-mac.js";
 import { runOne, type RunOneInput, type RunOutput } from "../eval/extensions/run-one.js";
 import { createCapturingAdapter } from "../eval/extensions/seams.js";
 import { classifyProviderError, UsageCollector } from "../eval/extensions/usage.js";
@@ -121,6 +122,20 @@ describe("extension ablation run unit", () => {
     expect(await readFile(join(privateDir, out.assistantTextRef!), "utf8")).toBe("ok");
     expect((await stat(join(privateDir, out.assistantTextRef!))).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(out)).not.toContain("synthetic prompt");
+  });
+
+  it("hashes the stored text and signs the output with the supervisor's key (R35)", async () => {
+    const key = Buffer.alloc(32, 7);
+    const out = await runOne(input("read-only"), { adapterOptions: scripted([{ text: "ok" }]), macKey: key });
+    expect(out.assistantTextSha256).toBe(sha256Hex("ok"));
+    expect(out.mac).toMatch(/^[0-9a-f]{64}$/);
+    expect(macMatches({ ...out }, key)).toBe(true);
+    expect(macMatches({ ...out }, Buffer.alloc(32, 8))).toBe(false);
+    expect(macMatches({ ...out, usage: { ...out.usage, session: { ...out.usage.session!, costUsd: 0 } } }, key)).toBe(false);
+    const unsigned = await runOne(input("read-only"), { adapterOptions: scripted([{ text: "ok" }]) });
+    expect(unsigned.mac).toBeNull();
+    const noText = await runOne(input("read-only"), { adapterOptions: scripted([{ throws: true }]), macKey: key });
+    expect(noText.assistantTextSha256).toBeNull();
   });
 
   it("reports no cost of record for a failed stream that billed nothing", async () => {

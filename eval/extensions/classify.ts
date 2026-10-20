@@ -6,7 +6,7 @@ import type { TraceFindings } from "./trace.js";
 import type { RunUsage } from "./usage.js";
 
 export type StopReason =
-  | "outside_write" | "unresolved_write" | "unresolved_egress" | "guard_changed" | "harness_failure" | "cleanup_failure"
+  | "outside_write" | "unresolved_write" | "unresolved_egress" | "output_integrity" | "guard_changed" | "harness_failure" | "cleanup_failure"
   | "provider_error" | "credential_expiring" | "budget" | "wave_timeout" | "interrupted";
 
 /** Path-free projection of the trace findings; the raw findings stay under the wave's private directory. */
@@ -55,8 +55,14 @@ export const runOutputSchema = z.object({
     providerError: z.enum(["auth", "quota", "rate_limit", "other"]).nullable(),
   }),
   durationMs: z.number(), sessionsLeft: z.number(), assistantTextRef: z.string().nullable(),
-  assistantTextTruncated: z.boolean(), harnessError: z.string().nullable(),
+  assistantTextTruncated: z.boolean(), assistantTextSha256: z.string().nullable(), mac: z.string().nullable(), harnessError: z.string().nullable(),
 });
+
+/** Only fixed codes reach a record; any other string (a message, a path) is replaced. */
+export function fixedCode(value: string | null | undefined, fallback = "wave_step_failed"): string | null {
+  if (value === null || value === undefined) return null;
+  return /^[a-z][a-z0-9_]{0,60}$/.test(value) ? value : fallback;
+}
 
 export function summarizeTrace(trace: TraceFindings): TraceSummary {
   return {
@@ -89,6 +95,8 @@ export interface RunFacts {
   /** Null when the strace log is missing or empty, which means the run cannot be audited. */
   trace: TraceFindings | null;
   guardChanged: boolean;
+  /** The output file exists but its MAC, schema or text hash did not verify (R35); `output` is then null. */
+  integrityFailed?: boolean;
   /** A failure of the wave's own steps for this run (scope, prompt, spawn, oracle), as a fixed code. */
   waveFailure: string | null;
 }
@@ -99,7 +107,7 @@ export interface RunFacts {
  */
 export function classifyRun(facts: RunFacts): { stopReason: StopReason | null; harnessError: string | null } {
   const { output, trace } = facts;
-  const harnessError = facts.waveFailure ?? output?.harnessError
+  const harnessError = facts.waveFailure ?? fixedCode(output?.harnessError, "invalid_harness_error")
     ?? (output === null && !facts.interrupted ? (facts.timedOut ? "run_timeout_killed" : "run_output_missing") : null)
     ?? (output?.terminal === "start_failed" ? "start_failed" : null)
     ?? (trace === null && !facts.interrupted ? "trace_missing" : null);
@@ -107,6 +115,7 @@ export function classifyRun(facts: RunFacts): { stopReason: StopReason | null; h
     ["outside_write", (trace?.outsideWrites.length ?? 0) > 0],
     ["unresolved_write", (trace?.unresolvedWrites ?? 0) > 0],
     ["unresolved_egress", (trace?.unresolvedEgress ?? 0) > 0],
+    ["output_integrity", facts.integrityFailed === true],
     ["guard_changed", facts.guardChanged],
     ["cleanup_failure", !facts.residualClean || (output?.sessionsLeft ?? 0) > 0],
     ["harness_failure", harnessError !== null],

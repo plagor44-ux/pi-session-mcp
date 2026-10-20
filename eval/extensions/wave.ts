@@ -1,39 +1,40 @@
-import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import type { ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { expiresWithin } from "../../src/writer-credentials.js";
 import { parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
-import { classifyRun, mergeTrace, runOutputSchema, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
+import { auditLog, readVerifiedOutput } from "./audit.js";
+import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
-import { PersistedLedger } from "./ledger-file.js";
+import { PersistedLedger, isValidCost } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix } from "./matrix.js";
+import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
+import { RUN_KEY_BYTES } from "./output-mac.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
-import { STRACE_ARGS, parseStraceLog, type TraceFindings } from "./trace.js";
-import { pairingOf, prepareRunScope, privateRunDir, renderPrompt, type RunScope, type ScopeInput } from "./workspace.js";
+import { groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
+import { STRACE_ARGS, type TraceFindings } from "./trace.js";
+import { pairingOf, prepareRunScope, privateRunDir, renderPrompt, scopeRoot, scrubCredentials, type RunScope, type ScopeInput } from "./workspace.js";
 
 export type { Approval } from "./approval.js";
 export type { RunRecord, StopReason, TraceSummary } from "./classify.js";
 export type { RunScope } from "./workspace.js";
 
-const execFileAsync = promisify(execFile);
-
 export const RUN_TIMEOUT_MS = 15 * 60_000;
 export const KILL_GRACE_MS = 30_000;
 export const WAVE_TIMEOUT_MS = 4 * 60 * 60_000;
 const CREDENTIAL_MARGIN_MINUTES = 20;
-const EXIT_WAIT_AFTER_KILL_MS = 5_000;
 
 export interface WaveInput {
   approval: Approval;
   tasks: TaskSpec[];
   waveDir: string;
+  /** The one budget ledger of the whole evaluation: preflight, waves and re-approvals share it (R37). */
+  ledgerPath: string;
   signal?: AbortSignal | undefined;
   hostAuth: unknown;
   /** The production configuration: `workspaces` (absolute paths by repo alias), `executionProfiles` and `skillCatalog`. */
@@ -55,90 +56,13 @@ export interface WaveDeps {
   guard?: (() => Promise<GuardSnapshot>) | undefined;
   residualCheck?: ((pgid: number) => Promise<boolean>) | undefined;
   scoreImplementation?: typeof scoreImplementation | undefined;
+  /** Provider and DNS addresses for the connect audit; the default resolves the approved routes' endpoints. */
+  resolveAddresses?: ((routes: Approval["routes"]) => Promise<AuditAddresses>) | undefined;
   now?: (() => number) | undefined;
 }
 
-/** The traced worker: `strace` as the process group leader, the run unit below it, cwd = the scope root. */
-export function spawnTracedRunOne(scope: RunScope, runInput: string, log: string): ChildProcess {
-  const stderr = openSync(join(scope.root, "run-one.stderr"), "a", 0o600);
-  try {
-    return spawn("strace", [...STRACE_ARGS, "-o", log, "--", process.execPath, fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput], {
-      cwd: scope.root, env: scope.env, detached: true, stdio: ["ignore", "ignore", stderr],
-    });
-  } finally { closeSync(stderr); }
-}
-
-export function killProcessGroup(pid: number | undefined): void {
-  if (pid === undefined) return;
-  try { process.kill(-pid, "SIGKILL"); } catch { /* already exited or no group */ }
-}
-
-/** True once no non-zombie process is left in the group; ps exits 1 when it selects nothing. */
-export async function groupIsEmpty(pgid: number): Promise<boolean> {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    let stdout: string;
-    try { stdout = (await execFileAsync("ps", ["-o", "pid=,stat=", "-g", String(pgid)], { encoding: "utf8" })).stdout; } catch (error) {
-      if ((error as { code?: unknown }).code !== 1) return false;
-      stdout = "";
-    }
-    const live = stdout.split("\n").map((line) => /^\s*\d+\s+(\S+)/.exec(line)?.[1]).filter((stat) => stat !== undefined && !stat.startsWith("Z"));
-    if (live.length === 0) return true;
-    await sleep(100);
-  }
-  return false;
-}
-
-export interface Supervised { timedOut: boolean; interrupted: boolean }
-
-/** Waits for the group leader to exit; kills the whole group at the deadline or on abort. */
-export function supervise(child: ChildProcess, timeoutMs: number, signal: AbortSignal | undefined): Promise<Supervised> {
-  return new Promise((resolve) => {
-    const state = { timedOut: false, interrupted: false };
-    let done = false;
-    let hard: NodeJS.Timeout | undefined;
-    const finish = (): void => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer); clearTimeout(hard); signal?.removeEventListener("abort", onAbort);
-      resolve(state);
-    };
-    const stop = (): void => {
-      killProcessGroup(child.pid);
-      hard ??= setTimeout(finish, EXIT_WAIT_AFTER_KILL_MS);
-    };
-    const onAbort = (): void => { state.interrupted = true; stop(); };
-    const timer = setTimeout(() => { state.timedOut = true; stop(); }, timeoutMs);
-    child.once("exit", finish);
-    child.once("error", finish);
-    signal?.addEventListener("abort", onAbort, { once: true });
-    if (signal?.aborted) onAbort();
-    if (child.exitCode !== null || child.signalCode !== null) finish();
-  });
-}
-
-/** Parses a strace log; null when it is missing or has no line, which means nothing can be audited. */
-async function auditLog(path: string, roots: string[], initialCwd: string): Promise<TraceFindings | null> {
-  let text: string;
-  try { text = await readFile(path, "utf8"); } catch { return null; }
-  const first = /^(?:\[pid\s+(\d+)\]|(\d+))\s/m.exec(text);
-  if (!first) return null;
-  return parseStraceLog(text, {
-    rootPid: Number(first[1] ?? first[2]), initialCwd, allowedWriteRoots: roots, providerAddresses: new Set(), dnsAddresses: new Set(),
-  });
-}
-
-export async function readOutput(path: string): Promise<RunOutput | null> {
-  try {
-    const parsed = runOutputSchema.safeParse(JSON.parse(await readFile(path, "utf8")));
-    return parsed.success ? parsed.data : null;
-  } catch { return null; }
-}
-
 /** Only fixed codes reach the record; an error message may carry command lines and paths. */
-const failureCode = (error: unknown): string => {
-  const message = error instanceof Error ? error.message : "";
-  return /^[a-z][a-z0-9_]{0,60}$/.test(message) ? message : "wave_step_failed";
-};
+const failureCode = (error: unknown): string => fixedCode(error instanceof Error ? error.message : "") ?? "wave_step_failed";
 
 const baseOf = (run: RunSpec): Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings"> =>
   ({ runId: run.runId, taskId: run.taskId, profile: run.profile, arm: run.arm, pairings: [...run.pairings] });
@@ -147,6 +71,8 @@ const notRun = (run: RunSpec, stopReason: StopReason | null): RunRecord => ({
   ...baseOf(run), outcome: "not_run", terminal: null, accepted: null, usage: null, durationMs: null, trace: null, stopReason,
   harnessError: null, assistantTextTruncated: null,
 });
+
+const failedRun = (run: RunSpec, harnessError: string): RunRecord => ({ ...notRun(run, "harness_failure"), outcome: "stopped", harnessError });
 
 export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ records: RunRecord[]; stopReason: StopReason | null; spentUsd: number }> {
   const now = deps.now ?? Date.now;
@@ -162,6 +88,12 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   }
 
   const { waveDir } = input;
+  // Nothing of an earlier attempt may be overwritten or mixed in: refuse before anything starts.
+  for (const run of runs) {
+    if ([join(waveDir, "runs", `${run.runId}.json`), privateRunDir(waveDir, run.runId), scopeRoot(waveDir, run.runId)].some((path) => existsSync(path))) {
+      throw new Error("output_exists");
+    }
+  }
   const runTimeoutMs = input.runTimeoutMs ?? RUN_TIMEOUT_MS;
   const killGraceMs = input.killGraceMs ?? KILL_GRACE_MS;
   const turnTimeoutMs = input.turnTimeoutMs ?? Math.max(1_000, runTimeoutMs - 60_000);
@@ -174,7 +106,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const score = deps.scoreImplementation ?? scoreImplementation;
 
   await mkdir(join(waveDir, "runs"), { recursive: true, mode: 0o700 });
-  const ledger = await PersistedLedger.open(waveDir);
+  const ledger = await PersistedLedger.open(input.ledgerPath);
+  const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
   const g0 = await guard();
   const waveStart = now();
 
@@ -184,8 +117,11 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   async function execute(run: RunSpec, task: TaskSpec, productionConfig: ProductionConfig): Promise<RunRecord> {
     const privateRun = privateRunDir(waveDir, run.runId);
     await mkdir(privateRun, { recursive: true, mode: 0o700 });
+    const key = randomBytes(RUN_KEY_BYTES);
     let scope: RunScope | undefined;
     let output: RunOutput | null = null;
+    let text: string | null = null;
+    let tampered = false;
     let trace: TraceFindings | null = null;
     let waveFailure: string | null = null;
     let executed = false;
@@ -204,22 +140,28 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
       const inputPath = join(scope.root, "run-input.json");
       await writeFile(inputPath, JSON.stringify(runOneInput), { mode: 0o600 });
       const log = join(privateRun, "strace.log");
-      const child = spawnRun(scope, inputPath, log);
-      executed = true;
-      supervised = await supervise(child, runTimeoutMs + killGraceMs, input.signal);
-      if (child.pid !== undefined) residualClean = await residualCheck(child.pid);
-      killProcessGroup(child.pid);
-      output = await readOutput(join(scope.root, "run-output.json"));
-      trace = await auditLog(log, [scope.root], scope.root);
+      if (input.signal?.aborted) supervised = { timedOut: false, interrupted: true };
+      else {
+        const child = spawnRun(scope, inputPath, log);
+        executed = true;
+        startWithKey(child, key);
+        supervised = await supervise(child, runTimeoutMs + killGraceMs, input.signal);
+        if (child.pid !== undefined) residualClean = await residualCheck(child.pid);
+        killProcessGroup(child.pid);
+        const verified = await readVerifiedOutput(scope.root, scope.privateDir, run.runId, key);
+        ({ output, text, tampered } = verified);
+        trace = await auditLog(log, [scope.root], scope.root, addresses);
+      }
     } catch (error) { waveFailure = failureCode(error); }
+    if (tampered) waveFailure ??= "output_integrity";
 
     if (executed) {
-      try { await ledger.record(run.runId, run.profile, output?.usage.session?.costUsd ?? null); } catch {
-        await ledger.record(run.runId, run.profile, null);
-        waveFailure ??= "invalid_cost";
-      }
+      // A cost the ledger would reject is recorded as unobserved, once.
+      const cost = output?.usage.session?.costUsd ?? null;
+      if (!isValidCost(cost)) waveFailure ??= "invalid_cost";
+      await ledger.record(run.runId, run.profile, isValidCost(cost) ? cost : null);
     }
-    const facts = { output, timedOut: supervised.timedOut, interrupted: supervised.interrupted, residualClean, trace, guardChanged: false, waveFailure };
+    const facts = { output, timedOut: supervised.timedOut, interrupted: supervised.interrupted, residualClean, trace, guardChanged: false, integrityFailed: tampered, waveFailure };
     let verdict = classifyRun(facts);
     const terminal = output?.terminal ?? (supervised.timedOut ? "timeout" : null);
 
@@ -236,6 +178,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
         }, {
           gitDir: scope.baseGitDir, home: oracleHome,
           wrap: (argv) => {
+            // Outside the scope root, so the worker's candidate code cannot touch the log.
             const path = join(privateRun, `oracle-${sequence += 1}.strace`);
             oracleLogs.push(path);
             return ["strace", ...STRACE_ARGS, "-o", path, "--", ...argv];
@@ -246,8 +189,9 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
         else waveFailure = "oracle_failed";
       }
       for (const path of oracleLogs) {
-        const found = await auditLog(path, [scope.root, oracleHome], scope.clone);
+        const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses);
         if (found) trace = trace ? mergeTrace(trace, found) : found;
+        else waveFailure ??= "trace_missing";
       }
     }
     let guardChanged = false;
@@ -265,52 +209,58 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
     } else if (terminal !== "completed") {
       record = { ...base, outcome: "scored", accepted: false, stopReason: null };
     } else if (task.oracle.kind === "review") {
-      const ref = output?.assistantTextRef;
-      const text = ref && scope ? await readFile(join(scope.privateDir, ref), "utf8").catch(() => "") : "";
-      const review = scoreReview(text, task.oracle);
-      record = { ...base, outcome: "scored", accepted: review.accepted && text !== "", review, stopReason: null };
+      const review = scoreReview(text ?? "", task.oracle);
+      record = { ...base, outcome: "scored", accepted: review.accepted && text !== null && text !== "", review, stopReason: null };
     } else {
       const result = implementation ?? { accepted: false, testsPassed: false, outOfScope: [] };
       record = { ...base, outcome: "scored", accepted: result.accepted, implementation: result, stopReason: null };
     }
 
-    if (trace) await writeFile(join(privateRun, "trace.json"), `${JSON.stringify(trace, null, 2)}\n`, { mode: 0o600 });
-    if (scope && output?.assistantTextRef) await copyFile(join(scope.privateDir, output.assistantTextRef), join(privateRun, "assistant.txt")).catch(() => undefined);
-    await rm(oracleHome, { recursive: true, force: true }).catch(() => undefined);
-    if (scope) {
-      if (record.outcome === "scored" && record.accepted === true) {
-        await rm(scope.root, { recursive: true, force: true }).catch(() => undefined);
-        await rm(scope.baseGitDir, { recursive: true, force: true }).catch(() => undefined);
-      } else await rename(scope.root, join(privateRun, "scope")).catch(() => undefined);
+    // Persisting and cleaning up: a failure here turns the run into a harness failure, never into a lost loop.
+    try {
+      if (trace) await writeFile(join(privateRun, "trace.json"), `${JSON.stringify(trace, null, 2)}\n`, { mode: 0o600 });
+      if (text !== null) await writeFile(join(privateRun, "assistant.txt"), text, { mode: 0o600 });
+      await rm(oracleHome, { recursive: true, force: true });
+      if (scope) {
+        if (!executed || (record.outcome === "scored" && record.accepted === true)) {
+          await rm(scope.root, { recursive: true, force: true });
+          await rm(scope.baseGitDir, { recursive: true, force: true });
+        } else {
+          // A kept scope never carries credentials.
+          try { await scrubCredentials(scope.agentDir); } catch (error) { await rm(scope.root, { recursive: true, force: true }); throw error; }
+          await rename(scope.root, join(privateRun, "scope"));
+        }
+      }
+    } catch (error) {
+      record = { ...record, outcome: "stopped", accepted: null, stopReason: "harness_failure", harnessError: failureCode(error) };
     }
     return record;
   }
 
   const records: RunRecord[] = [];
   let stopReason: StopReason | null = null;
+  const persist = async (record: RunRecord): Promise<void> => {
+    records.push(record);
+    try { await writeRecord(record); } catch { stopReason ??= "harness_failure"; }
+  };
   for (const run of runs) {
-    if (stopReason === null) {
-      const task = tasks.get(run.taskId)!;
-      const provider = config.executionProfiles[run.profile]!.provider;
-      if (now() - waveStart >= waveTimeoutMs) stopReason = "wave_timeout";
-      else if (input.signal?.aborted) stopReason = "interrupted";
-      else if (!ledger.ledger.allows(run.profile)) stopReason = "budget";
-      else if (typeof provider === "string" && expiresWithin(input.hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) stopReason = "credential_expiring";
-      if (stopReason !== null) {
-        const record = notRun(run, stopReason);
-        records.push(record);
-        await writeRecord(record);
-        continue;
-      }
-      const record = await execute(run, task, config);
-      records.push(record);
-      await writeRecord(record);
-      stopReason = record.stopReason;
+    if (stopReason !== null) { await persist(notRun(run, null)); continue; }
+    const task = tasks.get(run.taskId)!;
+    const provider = config.executionProfiles[run.profile]!.provider;
+    let before: StopReason | null = null;
+    if (now() - waveStart >= waveTimeoutMs) before = "wave_timeout";
+    else if (input.signal?.aborted) before = "interrupted";
+    else if (!ledger.ledger.allows(run.profile)) before = "budget";
+    else if (typeof provider === "string" && expiresWithin(input.hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
+    if (before !== null) {
+      stopReason = before;
+      await persist(notRun(run, before));
       continue;
     }
-    const record = notRun(run, null);
-    records.push(record);
-    await writeRecord(record);
+    let record: RunRecord;
+    try { record = await execute(run, task, config); } catch (error) { record = failedRun(run, failureCode(error)); }
+    stopReason = record.stopReason;
+    await persist(record);
   }
   return { records, stopReason, spentUsd: ledger.ledger.spentUsd };
 }
