@@ -26,8 +26,8 @@ describe("STRACE_ARGS", () => {
     expect(STRACE_ARGS.slice(0, 3)).toEqual(["-f", "-q", "-e"]);
     expect(STRACE_ARGS[4]).toBe("-y");
     // R36: strace makes every io_uring_setup fail, so libuv falls back to its thread pool.
-    expect(STRACE_ARGS.slice(5)).toEqual(["-e", "inject=io_uring_setup:error=ENOSYS"]);
-    expect(STRACE_ARGS).toHaveLength(7);
+    expect(STRACE_ARGS.slice(5)).toEqual(["-e", "inject=io_uring_setup:error=ENOSYS", "--decode-pids=pidns"]);
+    expect(STRACE_ARGS).toHaveLength(8);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
     for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]) expect(set).toContain(name);
   });
@@ -1273,5 +1273,55 @@ describe("bubblewrap setup (R46)", () => {
     const log = lines("100 mount(\"none\", \"/\", NULL, MS_REC|MS_PRIVATE, NULL) = 0", "100 openat(AT_FDCWD</scope>, \"newroot\", O_WRONLY|O_CREAT, 0644) = 3</newroot>");
     expect(parseStraceLog(log, context({ rootPid: 100 })).unresolvedWrites).toBeGreaterThan(0);
     expect(parseStraceLog(log, context({ rootPid: 100, sandboxed: true }))).toMatchObject({ unresolvedWrites: 0, outsideWrites: [] });
+  });
+});
+
+describe("PID namespace decoding and sandbox-private mounts (R49b, M2)", () => {
+  const fileOps = () => readFile(fileURLToPath(new URL("./fixtures/extension-ablation/bwrap-pidns-fileops.strace", import.meta.url)), "utf8");
+  const context = (rootPid: number, extra: Partial<TraceContext> = {}): TraceContext =>
+    ({ ...ctx({ initialCwd: "/scope", allowed: ["/scope"] }), rootPid, allowedSocketRoots: ["/scope"], sandboxed: true, ...extra });
+
+  it("reads the decoded pid of a clone return, so benign relative writes in the scope stay clean", async () => {
+    // A real capture through prlimit, strace --decode-pids=pidns and bwrap: a shell does mkdir, redirect, rename, unlink, rmdir by relative paths.
+    const text = await fileOps();
+    expect(text).toMatch(/= \d+ \/\* \d+ in strace's PID NS \*\//);
+    const rootPid = Number(/^(\d+)/.exec(text)![1]);
+    expect(parseStraceLog(text, context(rootPid))).toMatchObject({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unresolvedEgress: 0 });
+  });
+
+  it("would not have worked on the undecoded value: the namespace pid is not a pid of the log", async () => {
+    const text = (await fileOps()).replace(/ \/\* \d+ in strace's PID NS \*\//g, "");
+    const rootPid = Number(/^(\d+)/.exec(text)![1]);
+    expect(parseStraceLog(text, context(rootPid)).unresolvedWrites).toBeGreaterThan(0);
+  });
+
+  it("decodes the value in resumed halves and ignores a comment on other calls", () => {
+    const log = lines(
+      "100 clone(child_stack=NULL, flags=SIGCHLD <unfinished ...>",
+      "100 <... clone resumed>) = 2 /* 200 in strace's PID NS */",
+      "200 chdir(\"/scope/sub\") = 0",
+      "200 mkdir(\"x\", 0777) = 0",
+    );
+    expect(parseStraceLog(log, ctx({ initialCwd: "/scope", allowed: ["/scope"] }))).toMatchObject({ outsideWrites: [], unresolvedWrites: 0 });
+    const outside = lines(
+      "100 clone(child_stack=NULL, flags=SIGCHLD) = 2 /* 200 in strace's PID NS */",
+      "200 chdir(\"/etc\") = 0",
+      "200 mkdir(\"x\", 0777) = 0",
+    );
+    expect(parseStraceLog(outside, ctx({ initialCwd: "/scope", allowed: ["/scope"] })).outsideWrites).toEqual(["/etc/x"]);
+  });
+
+  it("counts /tmp, /dev/shm and /run as private only in a sandboxed parse", () => {
+    const log = lines(
+      "100 openat(AT_FDCWD</scope>, \"/dev/shm/x\", O_WRONLY|O_CREAT, 0600) = 3</dev/shm/x>",
+      "100 openat(AT_FDCWD</scope>, \"/tmp/y\", O_WRONLY|O_CREAT, 0600) = 4</tmp/y>",
+      "100 mkdir(\"/run/z\", 0755) = 0",
+      "100 openat(AT_FDCWD</scope>, \"/var/tmp/w\", O_WRONLY|O_CREAT, 0600) = 5</var/tmp/w>",
+    );
+    const plain = parseStraceLog(log, ctx({ initialCwd: "/scope", allowed: ["/scope"] }));
+    expect(plain.outsideWrites).toEqual(["/dev/shm/x", "/tmp/y", "/run/z", "/var/tmp/w"]);
+    // The root pid is bwrap itself (muted); pid 100 stands for the workload.
+    const sandboxed = parseStraceLog(log, { ...ctx({ initialCwd: "/scope", allowed: ["/scope"] }), rootPid: 99, sandboxed: true });
+    expect(sandboxed.outsideWrites).toEqual(["/var/tmp/w"]);
   });
 });

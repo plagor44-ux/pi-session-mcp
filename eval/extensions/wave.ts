@@ -15,10 +15,11 @@ import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
-import { containmentSelfTest, sandboxed } from "./sandbox.js";
+import { containmentSelfTest } from "./containment.js";
+import { planSandbox, sandboxed, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
-import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
+import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
 import { resolveTools, assertWaveDirOutsideSources, type ToolPaths } from "./tools.js";
 import { STRACE_ARGS, type TraceFindings } from "./trace.js";
 import { pairingOf, prepareRunScope, privateRunDir, renderPrompt, scopeRoot, type RunScope, type ScopeInput } from "./workspace.js";
@@ -66,7 +67,9 @@ export interface WaveDeps {
   /** Host safety checks (`prlimit` present, Yama ptrace_scope >= 1); defaults to the real probes. */
   hostCheck?: (() => Promise<void>) | undefined;
   /** The bubblewrap containment self-test (R46); the default runs the real one through the production command shape. */
-  containmentCheck?: ((tools: ToolPaths) => Promise<void>) | undefined;
+  containmentCheck?: ((tools: ToolPaths, plan: SandboxPlan) => Promise<void>) | undefined;
+  /** The host-dependent part of the sandbox (R48, R49); the default inspects the host once. */
+  planSandbox?: ((tools: ToolPaths) => Promise<SandboxPlan>) | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -94,7 +97,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const tools = await (deps.resolveTools ?? resolveTools)();
   // Broad on purpose: no configured workspace, and not the evaluation repository itself, may contain the wave directory or sit inside it.
   await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), input.repoRoot ?? process.cwd()]);
-  await (deps.containmentCheck ?? ((t: ToolPaths) => containmentSelfTest(t)))(tools);
+  const plan = await (deps.planSandbox ?? ((t: ToolPaths) => planSandbox({ tools: t, repoRoot: input.repoRoot ?? process.cwd(), buildRoot: BUILD_ROOT })))(tools);
+  await (deps.containmentCheck ?? containmentSelfTest)(tools, plan);
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   for (const run of runs) {
     const task = tasks.get(run.taskId);
@@ -115,7 +119,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const guard = deps.guard ?? (() => guardSnapshot(homedir()));
   const residualCheck = deps.residualCheck ?? groupIsEmpty;
   const prepareScope = deps.prepareScope ?? prepareRunScope;
-  const spawnRun = deps.spawnRun ?? ((scope: RunScope, runInput: string, log: string) => spawnTracedRunOne(tools, scope, runInput, log));
+  const spawnRun = deps.spawnRun ?? ((scope: RunScope, runInput: string, log: string) => spawnTracedRunOne(tools, plan, scope, runInput, log));
   const score = deps.scoreImplementation ?? scoreImplementation;
 
   // Everything below works on the real path, and the wave directory, `private` and `scopes` are pinned by device and inode.
@@ -213,7 +217,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
               // Outside the scope root, so the worker's candidate code cannot touch the log.
               const path = join(privateRun, `oracle-${sequence += 1}.strace`);
               oracleLogs.push(path);
-              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...sandboxed(tools, sandboxRoot, argv, [oracleHome])];
+              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...sandboxed(tools, plan, sandboxRoot, argv, [oracleHome])];
             },
           });
         } catch (error) {
