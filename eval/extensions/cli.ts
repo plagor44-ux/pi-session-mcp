@@ -10,26 +10,30 @@ import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
 import { assertPreflightPassed, runPreflight } from "./preflight.js";
+import { writeEvidence } from "./report.js";
 import { taskSpecSchema, type Pairing, type RunSpec, type TaskSpec } from "./schemas.js";
 import { runWave } from "./wave.js";
 
 const execFileAsync = promisify(execFile);
 
-const MODES = ["--plan", "--preflight", "--wave"] as const;
+const MODES = ["--plan", "--preflight", "--wave", "--report"] as const;
 type Mode = typeof MODES[number];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir"] as const;
+/** `--report` reads a finished wave, so `--wave` is its value option there and not a mode. */
+const REPORT_MODES: readonly string[] = ["--plan", "--preflight", "--report"];
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence"] as const;
 const FLAG_OPTIONS = ["--trim"] as const;
 
 export interface ParsedArgs { mode: Mode; options: Partial<Record<typeof VALUE_OPTIONS[number], string>>; trim: boolean }
 
 export function parseArgs(args: string[]): ParsedArgs {
-  const modes = args.filter((a) => (MODES as readonly string[]).includes(a));
+  const modeNames: readonly string[] = args.includes("--report") ? REPORT_MODES : MODES.filter((m) => m !== "--report");
+  const modes = args.filter((a) => modeNames.includes(a));
   if (modes.length !== 1) throw new Error(modes.length === 0 ? "mode_required" : "choose_one_mode");
   const options: ParsedArgs["options"] = {};
   let trim = false;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!;
-    if ((MODES as readonly string[]).includes(arg)) continue;
+    if (modeNames.includes(arg)) continue;
     if ((FLAG_OPTIONS as readonly string[]).includes(arg)) { trim = true; continue; }
     const next = args[i + 1];
     if (!(VALUE_OPTIONS as readonly string[]).includes(arg) || next === undefined || next.startsWith("--") || options[arg as typeof VALUE_OPTIONS[number]] !== undefined) {
@@ -39,6 +43,14 @@ export function parseArgs(args: string[]): ParsedArgs {
     i += 1;
   }
   const mode = modes[0] as Mode;
+  if (mode === "--report") {
+    if (!options["--wave"]) throw new Error("wave_required");
+    if (!options["--ledger"]) throw new Error("ledger_required");
+    if (!options["--evidence"]) throw new Error("evidence_required");
+    if (Object.keys(options).length !== 3 || trim) throw new Error("invalid_argument");
+    return { mode, options, trim };
+  }
+  if (options["--evidence"]) throw new Error("invalid_argument");
   if (!options["--tasks"]) throw new Error("tasks_required");
   if (mode !== "--plan" && !options["--approval"]) throw new Error("approval_required");
   if (mode !== "--plan" && !options["--out"]) throw new Error("out_required");
@@ -166,10 +178,19 @@ async function wave(parsed: ParsedArgs): Promise<void> {
   if (result.stopReason !== null) process.exitCode = 1;
 }
 
+async function report(parsed: ParsedArgs): Promise<void> {
+  const summary = await writeEvidence(resolve(parsed.options["--wave"]!), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!));
+  process.stdout.write(`${JSON.stringify({
+    spentUsd: summary.spentUsd, spend: summary.spend, stopReason: summary.stopReason,
+    pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, complete: p.complete, recommendation: p.recommendation })),
+  })}\n`);
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
   if (parsed.mode === "--plan") await plan(parsed);
   else if (parsed.mode === "--preflight") await preflight(parsed);
+  else if (parsed.mode === "--report") await report(parsed);
   else await wave(parsed);
 }
 
