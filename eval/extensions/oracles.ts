@@ -205,7 +205,7 @@ export function scoreReview(text: string, oracle: ReviewOracle): ReviewScore {
   };
 }
 
-function minimalEnv(home: string): NodeJS.ProcessEnv { return { PATH: process.env.PATH ?? "", HOME: home, CI: "1" }; }
+function minimalEnv(home: string, tmpdir: string): NodeJS.ProcessEnv { return { PATH: process.env.PATH ?? "", HOME: home, TMPDIR: tmpdir, CI: "1" }; }
 
 /** Pristine base: a git directory (in production a bare clone made before the worker starts) and the base commit in it. */
 export interface ScopeBase { gitDir: string; commit: string }
@@ -282,13 +282,13 @@ function killProcessGroup(pid: number | undefined, fallback: boolean): void {
 }
 
 /** Runs an argv list without a shell in the clone; true only on exit code 0 within the timeout. The process group is killed afterwards in every case. */
-function runArgv(argv: readonly string[], clone: string, home: string, timeoutMs: number): Promise<boolean> {
+function runArgv(argv: readonly string[], clone: string, home: string, tmpdir: string, timeoutMs: number): Promise<boolean> {
   const [file, ...args] = argv;
   if (file === undefined || timeoutMs <= 0) return Promise.resolve(false);
   return new Promise((resolvePromise) => {
     let settled = false;
     const settle = (ok: boolean): void => { if (settled) return; settled = true; clearTimeout(timer); resolvePromise(ok); };
-    const child = spawn(file, args, { cwd: clone, env: minimalEnv(home), stdio: "ignore", detached: true });
+    const child = spawn(file, args, { cwd: clone, env: minimalEnv(home, tmpdir), stdio: "ignore", detached: true });
     const timer = setTimeout(() => { killProcessGroup(child.pid, true); settle(false); }, timeoutMs);
     child.on("error", () => settle(false));
     child.on("exit", (code) => { killProcessGroup(child.pid, false); settle(code === 0); });
@@ -340,12 +340,13 @@ const isAllowed = (path: string, allowed: string): boolean => allowed.endsWith("
 /**
  * Computes the changed-file scope against the pristine base first, then deletes the ignored state directories from the clone,
  * neutralizes the clone's `.git` and runs the setup commands and the decisive command, which share one deadline of `oracle.timeoutMs`.
- * HOME defaults to a fresh temporary directory; `wrap` rewrites every argv (for example to run it under strace).
+ * HOME defaults to a fresh temporary directory and TMPDIR to `<HOME>/tmp` (R33), so tools that honour TMPDIR stay inside HOME;
+ * `wrap` rewrites every argv (for example to run it under strace).
  */
 export async function scoreImplementation(
   clone: string,
   task: ImplementationTask,
-  options: { gitDir: string; home?: string; wrap?: (argv: readonly string[]) => string[] },
+  options: { gitDir: string; home?: string; tmpdir?: string; wrap?: (argv: readonly string[]) => string[] },
 ): Promise<ImplementationScore> {
   const base = { gitDir: options.gitDir, commit: task.baseCommit };
   const changed = await changedPaths(clone, base, task.scopeIgnore);
@@ -355,8 +356,10 @@ export async function scoreImplementation(
   const ownHome = options.home === undefined ? await mkdtemp(join(tmpdir(), "oracle-home-")) : undefined;
   const home = options.home ?? ownHome ?? clone;
   try {
+    const tmp = options.tmpdir ?? join(home, "tmp");
+    await mkdir(tmp, { recursive: true });
     const deadline = Date.now() + task.oracle.timeoutMs;
-    const run = (argv: readonly string[]): Promise<boolean> => runArgv(options.wrap ? options.wrap(argv) : argv, clone, home, deadline - Date.now());
+    const run = (argv: readonly string[]): Promise<boolean> => runArgv(options.wrap ? options.wrap(argv) : argv, clone, home, tmp, deadline - Date.now());
     let testsPassed = true;
     for (const setup of task.oracle.setup ?? []) {
       if (!await run(setup)) { testsPassed = false; break; }

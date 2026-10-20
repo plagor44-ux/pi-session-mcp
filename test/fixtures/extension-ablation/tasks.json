@@ -1,0 +1,30 @@
+[
+  {
+    "id": "synthetic-review",
+    "kind": "review",
+    "repo": "synthetic-repo",
+    "baseCommit": "1111111111111111111111111111111111111111",
+    "promptRef": "eval/results/extension-ablation-fixture/prompts/synthetic-review.txt",
+    "promptHash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sourceSession": "synthetic-session-review",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "findings": [{ "id": "F1", "critical": true, "anchors": [{ "file": "src/example.ts", "terms": ["race"] }] }],
+      "falseFindings": [{ "id": "X1", "anchors": [{ "file": "src/example.ts", "terms": ["typo"] }] }]
+    }
+  },
+  {
+    "id": "synthetic-impl",
+    "kind": "implementation",
+    "repo": "synthetic-repo",
+    "baseCommit": "2222222222222222222222222222222222222222",
+    "promptRef": "eval/results/extension-ablation-fixture/prompts/synthetic-impl.txt",
+    "promptHash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "sourceSession": "synthetic-session-impl",
+    "allowedPaths": ["src/example.ts"],
+    "scopeIgnore": ["dist/"],
+    "oracle": { "kind": "implementation", "command": ["npm", "test"], "timeoutMs": 120000 }
+  }
+]

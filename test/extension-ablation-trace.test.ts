@@ -592,7 +592,8 @@ describe("uncertain pending child ownership (N3/N4)", () => {
       `200 <... ${name} resumed>) = 201`, `201 mkdir("after", 0777) = 0`,
       `300 <... clone3 resumed>) = 301`, `100 mkdir("group-after", 0777) = 0`,
     ), ctx({ allowed: [CWD] }));
-    expect(f).toMatchObject({ outsideWrites: ["/home/u/after"], unresolvedWrites: 1 });
+    // The child wrote before its parent's clone return, so it is window-born (R24): both of its relative writes are unresolved.
+    expect(f).toMatchObject({ outsideWrites: ["/home/u/after"], unresolvedWrites: 2 });
   });
 
   it("detaches a resolved non-CLONE_FS child before its later chdir (R5/N4)", () => {
@@ -603,7 +604,8 @@ describe("uncertain pending child ownership (N3/N4)", () => {
       `200 <... clone resumed>) = 201`, `300 <... clone3 resumed>) = 301`,
       `201 chdir("/usr/share") = 0`, `100 mkdir("y", 0777) = 0`, `201 mkdir("child", 0777) = 0`,
     ), ctx({ allowed: [CWD] }));
-    expect(f).toMatchObject({ outsideWrites: ["/usr/share/child"], unresolvedWrites: 0 });
+    // 201 emitted a line before the clone return (window-born, R24): its cwd is resolved but its relative write also counts as unresolved.
+    expect(f).toMatchObject({ outsideWrites: ["/usr/share/child"], unresolvedWrites: 1 });
   });
 });
 
@@ -811,12 +813,21 @@ describe("egress without connect", () => {
     expect(parseStraceLog(lines(`100 sendto(3, "x", 1, 0, ${V4("203.0.113.9")}, 16) = 1`), ctx({})).connects).toBe(0);
   });
 
-  it("counts every io_uring_setup as unresolved egress", () => {
-    const f = parseStraceLog(lines(
-      `100 io_uring_setup(4, {flags=0, sq_thread_cpu=0, sq_thread_idle=0, sq_entries=4, cq_entries=8, features=IORING_FEAT_SINGLE_MMAP|IORING_FEAT_NODROP}) = 5<anon_inode:[io_uring]>`,
-      `100 io_uring_setup(4, 0x7ffc) = -1 ENOSYS (Funktion nicht implementiert)`,
-    ), ctx({}));
-    expect(f.unresolvedEgress).toBe(2);
+  it("counts a successful io_uring_setup as unresolved egress and ignores a failed one (R23b)", () => {
+    const ok = `100 io_uring_setup(4, {flags=0, sq_thread_cpu=0, sq_thread_idle=0, sq_entries=4, cq_entries=8, features=IORING_FEAT_SINGLE_MMAP|IORING_FEAT_NODROP}) = 5<anon_inode:[io_uring]>`;
+    const enomem = `100 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOMEM (Cannot allocate memory)`;
+    const enosys = `100 io_uring_setup(4, 0x7ffc) = -1 ENOSYS (Funktion nicht implementiert)`;
+    expect(parseStraceLog(lines(ok), ctx({})).unresolvedEgress).toBe(1);
+    expect(parseStraceLog(lines(enomem, enosys), ctx({})).unresolvedEgress).toBe(0);
+    expect(parseStraceLog(lines(enomem, ok, enosys, ok), ctx({})).unresolvedEgress).toBe(2);
+  });
+
+  it("judges a resumed io_uring_setup by its return value, and an unfinished one as in progress", () => {
+    expect(parseStraceLog(lines(`100 io_uring_setup(256, {flags=0} <unfinished ...>`, `100 <... io_uring_setup resumed>) = -1 ENOMEM (Cannot allocate memory)`), ctx({})).unresolvedEgress).toBe(0);
+    expect(parseStraceLog(lines(`100 io_uring_setup(256, {flags=0} <unfinished ...>`, `100 <... io_uring_setup resumed>) = 5<anon_inode:[io_uring]>`), ctx({})).unresolvedEgress).toBe(1);
+    expect(parseStraceLog(lines(`100 io_uring_setup(256, {flags=0} <unfinished ...>`), ctx({})).unresolvedEgress).toBe(1);
+    expect(parseStraceLog(lines(`100 <... io_uring_setup resumed>) = -1 ENOMEM (Cannot allocate memory)`), ctx({})).unresolvedEgress).toBe(0);
+    expect(parseStraceLog(lines(`100 <... io_uring_setup resumed>) = 5<anon_inode:[io_uring]>`), ctx({})).unresolvedEgress).toBe(1);
   });
 
   it("reports an unreadable inet sockaddr as unexpected with address unknown", () => {
@@ -1079,5 +1090,85 @@ describe("production guard", () => {
     }
     await writeFile(toml, text);
     expect(guardDiff(base, await guardSnapshot(home))).toEqual([]);
+  });
+});
+
+describe("window-born taint (R24)", () => {
+  const TH = "flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD";
+  const FORKHEAD = "clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f0 <unfinished ...>";
+  const strict = ctx({ allowed: ["/scope/clone"] });
+  const flagged = (...l: string[]) => {
+    const f = parseStraceLog(lines(...l), strict);
+    return f.outsideWrites.length + f.unresolvedWrites;
+  };
+
+  it("flags a cloned thread of a fork child that ran before its parent's clone return (X1)", () => {
+    expect(flagged(
+      "100 fork() = 200", `200 ${FORKHEAD}`,
+      "201 chdir(\"/scope/clone\") = 0",
+      `201 clone3({${TH}|CLONE_SYSVSEM|CLONE_SETTLS, exit_signal=0, stack=0x7f0, stack_size=0x100}, 88) = 202`,
+      "200 <... clone resumed>) = 201",
+      "201 chdir(\"/home/u\") = 0", "202 mkdir(\"x\", 0777) = 0",
+    )).toBeGreaterThan(0);
+  });
+
+  it("flags the same thread when it was cloned through a pending head (X1b)", () => {
+    expect(flagged(
+      "100 fork() = 200", `200 ${FORKHEAD}`,
+      "201 chdir(\"/scope/clone\") = 0",
+      `201 clone3({${TH}, exit_signal=0}, 88 <unfinished ...>`, "202 openat(AT_FDCWD</scope/clone>, \"/dev/null\", O_RDONLY) = 3</dev/null>",
+      "201 <... clone3 resumed>) = 202",
+      "200 <... clone resumed>) = 201",
+      "201 chdir(\"/home/u\") = 0", "202 mkdir(\"x\", 0777) = 0",
+    )).toBeGreaterThan(0);
+  });
+
+  it("flags a thread cloned by an uncertain, window-born child (X2)", () => {
+    expect(flagged(
+      `100 clone(child_stack=0x7f0, ${TH}) = 300`, "100 fork() = 200", "200 chdir(\"/home/u\") = 0",
+      "300 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD}, 88 <unfinished ...>", `200 ${FORKHEAD}`,
+      "201 openat(AT_FDCWD</home/u>, \"/etc/ld.so.cache\", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>",
+      `201 clone3({${TH}, exit_signal=0}, 88) = 202`,
+      "202 mkdir(\"x\", 0777) = 0",
+      "200 <... clone resumed>) = 201", "300 <... clone3 resumed>) = 301",
+    )).toBeGreaterThan(0);
+  });
+
+  it("flags a grandchild forked by an uncertain, window-born child (X2b)", () => {
+    expect(flagged(
+      `100 clone(child_stack=0x7f0, ${TH}) = 300`, "100 fork() = 200", "200 chdir(\"/home/u\") = 0",
+      "300 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD}, 88 <unfinished ...>", `200 ${FORKHEAD}`,
+      "201 openat(AT_FDCWD</home/u>, \"/etc/ld.so.cache\", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>",
+      "201 fork() = 202",
+      "200 <... clone resumed>) = 201", "300 <... clone3 resumed>) = 301",
+      "202 mkdir(\"x\", 0777) = 0",
+    )).toBeGreaterThan(0);
+  });
+
+  it("flags a relative chdir and write of an uncertain, window-born child (X3)", () => {
+    expect(flagged(
+      "100 chdir(\"/scope/clone/a\") = 0", `100 clone(child_stack=0x7f0, ${TH}) = 300`,
+      "100 fork() = 200", "200 chdir(\"/scope/clone\") = 0",
+      "300 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD}, 88 <unfinished ...>", `200 ${FORKHEAD}`,
+      "201 openat(AT_FDCWD</scope/clone>, \"/etc/ld.so.cache\", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>",
+      "201 chdir(\"..\") = 0",
+      "200 <... clone resumed>) = 201", "300 <... clone3 resumed>) = 301",
+      "201 mkdir(\"evil\", 0777) = 0",
+    )).toBeGreaterThan(0);
+  });
+
+  it("leaves a child alone that only started after its parent's clone return", () => {
+    expect(flagged(
+      "100 chdir(\"/scope/clone/a\") = 0", `100 ${FORKHEAD}`, "100 <... clone resumed>) = 200",
+      "200 chdir(\"/scope/clone/b\") = 0", "200 mkdir(\"x\", 0777) = 0",
+    )).toBe(0);
+  });
+
+  it("does not carry the taint of an earlier, exited pid onto a reused pid with a normal start", () => {
+    expect(flagged(
+      "100 fork() = 200", "200 chdir(\"/scope/clone\") = 0", "200 +++ exited with 0 +++",
+      "100 fork() = 200",
+      "200 chdir(\"/scope/clone/b\") = 0", "200 mkdir(\"x\", 0777) = 0",
+    )).toBe(0);
   });
 });
