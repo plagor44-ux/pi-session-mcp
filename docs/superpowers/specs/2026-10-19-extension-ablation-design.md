@@ -65,7 +65,7 @@ costs more is acceptable only if it saves more correction work than it costs.
 | Arm B adds | Profiles | Why |
 | --- | --- | --- |
 | `pi-lens@4.4.3` | `review-grok`, `review` | Code navigation and diagnostics for the most-used review profiles. |
-| `openwiki@0.7.2` (superseded, see Amendments) | `code`, `code-deepseek` | Repository knowledge from the existing OpenWiki of each repo; all five aliased repos have one (17–29 pages). |
+| `openwiki@0.7.2` (superseded, see Amendments: replaced by `pi-lens@4.4.3` on these profiles) | `code`, `code-deepseek` | Repository knowledge from the existing OpenWiki of each repo; all five aliased repos have one (17–29 pages). |
 | `pi-cache-optimizer@2.9.3`, warming disabled | `code`, `review` (OpenAI) | Cost lever only. Report its cost effect, not a quality claim. |
 
 Arm A is the profile exactly as configured today. Arm B adds one extension.
@@ -75,8 +75,10 @@ their arm A runs.
 Product constraint (verified in `src/session-tools.ts`, `composeSessionTools`):
 extension tools are active only in `coding` profiles. In `read-only` profiles
 the model gets exactly `read`, `grep`, `find` and `ls`; only an extension's
-hooks still act. Tool-based extensions such as `pi-lens` therefore do nothing
-useful on the review profiles. Hook-based ones such as `pi-cache-optimizer` do
+hooks still act (superseded, see Amendments: v0.10.0 grants a fixed set of
+extension tools on review profiles). Tool-based extensions such as `pi-lens`
+therefore do nothing useful on the review profiles (superseded, see
+Amendments). Hook-based ones such as `pi-cache-optimizer` do
 act there. Operator decision (2026-10-19): review profiles shall get
 extension tool access too. That is a separate product change, a granted
 extension-tool list for `read-only` profiles with its own design, ADR and
@@ -132,7 +134,8 @@ Out of scope:
   task's base commit. Tasks are limited to base commits where the repository
   already had an `openwiki/` directory. The extension's writer tools stay
   active, as shipped. A write into `openwiki/` counts as out of scope in the
-  scored result; it does not stop the wave.
+  scored result; it does not stop the wave. (Superseded, see Amendments: the
+  OpenWiki pairing is replaced, so this restriction no longer applies.)
 
 ## Constraints
 
@@ -159,11 +162,12 @@ Out of scope:
     oracle.
   - `pi-cache-optimizer`: warming must be off, because it can trigger
     billable requests.
-  - `openwiki`: it attempted one outgoing fetch in the audit. Log network
-    attempts per run.
+  - `openwiki` (superseded, see Amendments: pairing replaced): it attempted
+    one outgoing fetch in the audit. Log network attempts per run.
 - **Measurement:** worker usage comes from the evaluation side (for example a
   harness that drives the Pi SDK session directly and sums assistant `usage`
-  per turn). pi-session-mcp itself gets no new field, no runtime change and no
+  per turn; superseded, see Amendments: `getSessionStats()` is the cost of
+  record). pi-session-mcp itself gets no new field, no runtime change and no
   internal import for this. Product sources stay unchanged.
 - **No controller model in the loop for this wave** (designer's call). The
   oracles stand in for "the controller accepts". A controller-in-the-loop
@@ -177,7 +181,8 @@ Out of scope:
   - **Stop the wave and keep every attempt, without retrying within the
     approval:**
     - any write outside the clone, or into the production Pi install or a
-      client registration (detected by before/after hashes);
+      client registration (detected by before/after hashes; superseded, see Amendments: the `strace`
+      write audit is the primary detector);
     - a harness or cleanup failure (open session, residual process);
     - a provider, quota or authentication error;
     - the budget stop;
@@ -188,7 +193,8 @@ Out of scope:
   destination other than the configured provider endpoints and the package
   registry during setup is reported per run. Workers run on the host with
   clone isolation, not inside the Podman boundary. The before/after hashes
-  above guard the anti-goals. `strace` is a prerequisite. The operator
+  above guard the anti-goals (superseded, see Amendments: they guard only the
+  production config, the Pi install and the client registrations). `strace` is a prerequisite. The operator
   approved installing it (`pacman -S strace`, which needs the operator's sudo
   password). Without it, fall back to the JS-level instrumentation of the
   audit probes and state the gap in the report.
@@ -289,7 +295,11 @@ text above, they win.
 - **Codegraph index.** Clones get a `codegraph` index (`codegraph init -y`),
   because every profile under test configures the `codegraph` MCP server.
 - **Out-of-clone writes.** They are detected primarily by the `strace` write
-  audit. Before/after hashes guard the production config, the Pi install and
+  audit. The trace set is extended from `connect` to file-writing syscalls plus
+  process and cwd tracking: `open`/`openat` with write flags, `creat`,
+  `rename*`, `unlink*`, `mkdir*`, `symlink*`, `link*`, `truncate`,
+  `chdir`/`fchdir` and `clone`/`clone3`/`fork`/`vfork`, with paths resolved
+  against the per-process cwd. Before/after hashes guard the production config, the Pi install and
   the client registrations. Hashing the operator's repositories would misfire
   on concurrent work.
 - **Budget estimate** before each run: the most expensive run observed so far,
