@@ -181,7 +181,7 @@ async function wave(parsed: ParsedArgs): Promise<void> {
 async function report(parsed: ParsedArgs): Promise<void> {
   const summary = await writeEvidence(resolve(parsed.options["--wave"]!), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!));
   process.stdout.write(`${JSON.stringify({
-    spentUsd: summary.spentUsd, spend: summary.spend, stopReason: summary.stopReason,
+    spentUsd: summary.spentUsd, budgetSpend: summary.budgetSpend, waveSpend: summary.waveSpend, stopReason: summary.stopReason,
     pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, complete: p.complete, recommendation: p.recommendation })),
   })}\n`);
 }

@@ -10,7 +10,8 @@ const entrySchema = z.object({
   /** Set when the run left no trusted output and the profile's current estimate stands in for its cost (R41). */
   estimated: z.literal(true).optional(),
 }).strict();
-const ledgerFileSchema = z.object({ ledgerId: z.string().uuid(), limitUsd: z.literal(BUDGET_USD), spentUsd: z.number().min(0), entries: z.array(entrySchema) }).strict();
+/** The ledger file as `PersistedLedger` writes and replays it; the report validates the bytes it copies with the same schema. */
+export const ledgerFileSchema = z.object({ ledgerId: z.string().uuid(), limitUsd: z.literal(BUDGET_USD), spentUsd: z.number().min(0), entries: z.array(entrySchema) }).strict();
 /** A cost the ledger would reject; callers record null for it instead of recording twice. */
 export const isValidCost = (cost: number | null): boolean => cost === null || (Number.isFinite(cost) && cost >= 0);
 export type LedgerEntry = z.infer<typeof entrySchema>;

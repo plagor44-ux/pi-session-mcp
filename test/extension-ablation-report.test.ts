@@ -1,7 +1,10 @@
 import { execFileSync } from "node:child_process";
+import { classifyRun, summarizeTrace, type RunRecord } from "../eval/extensions/classify.js";
+import type { RunOutput } from "../eval/extensions/run-one.js";
+import type { TraceFindings } from "../eval/extensions/trace.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parseArgs } from "../eval/extensions/cli.js";
 import { PersistedLedger } from "../eval/extensions/ledger-file.js";
@@ -68,8 +71,16 @@ describe("summarize", () => {
       record("t1", "A", true, {}, 0.1, { input: 100, cacheRead: 25 }), record("t1", "pi-lens", true, {}, 0.1, { input: 200, cacheRead: 150 }),
       record("t2", "A", true, {}, 0.1, { input: 100, cacheRead: 25 }), record("t2", "pi-lens", true, {}, 0.1, { input: 200, cacheRead: 150 }),
     ]);
-    expect(found.cacheReadShare).toEqual({ a: 0.25, b: 0.75 });
+    // Pi's `input` excludes cache reads: share = cacheRead / (input + cacheRead).
+    expect(found.cacheReadShare.a).toBeCloseTo(50 / 250);
+    expect(found.cacheReadShare.b).toBeCloseTo(300 / 700);
     expect(result([record("t1", "A", true, { usage: null })]).cacheReadShare).toEqual({ a: 0, b: 0 });
+  });
+
+  it("refuses duplicate records", () => {
+    const first = record("t1", "A", true);
+    expect(() => summarize([first, { ...record("t2", "A", true), runId: first.runId }])).toThrow("duplicate_run_record");
+    expect(() => summarize([first, record("t1", "A", false)])).toThrow("duplicate_run_record");
   });
 
   it("reports the first stop reason in run order and the observed cost of the records", () => {
@@ -82,114 +93,258 @@ describe("summarize", () => {
 });
 
 const RUN_COUNT = 6;
-async function makeWave(extra: (dir: string) => void = () => undefined): Promise<{ root: string; waveDir: string; ledgerPath: string; evidenceDir: string }> {
+const GIT_ENV = { PATH: process.env.PATH ?? "", HOME: "/nonexistent" };
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync("git", ["-c", "user.name=Report Test", "-c", "user.email=report@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8", env: GIT_ENV, stdio: ["ignore", "pipe", "ignore"] });
+function commitAll(repo: string, message: string): void { git(repo, "add", "-A"); git(repo, "commit", "-m", message); }
+
+/** A throwaway repository that stands in for the evaluated one: the real tree is dirty while this task is under review. */
+function makeRepo(root: string): string {
+  const repo = join(root, "repo");
+  mkdirSync(join(repo, "src"), { recursive: true });
+  mkdirSync(join(repo, "eval", "extensions"), { recursive: true });
+  mkdirSync(join(repo, "docs"), { recursive: true });
+  writeFileSync(join(repo, "src", "a.ts"), "export const a = 1;\n");
+  writeFileSync(join(repo, "eval", "extensions", "x.ts"), "export const x = 1;\n");
+  writeFileSync(join(repo, "docs", "notes.md"), "notes\n");
+  git(repo, "init", "--quiet");
+  commitAll(repo, "base");
+  return repo;
+}
+
+interface Wave { root: string; repo: string; waveDir: string; ledgerPath: string; evidenceDir: string; runIds: string[] }
+async function makeWave(extra: (dir: string) => void = () => undefined): Promise<Wave> {
   const root = await temporaryRoot("ablation-report-");
+  const repo = makeRepo(root);
   const waveDir = join(root, "wave");
   mkdirSync(join(waveDir, "runs"), { recursive: true });
   const records = [...pair("t1", false, true), ...pair("t2", true, true), ...pair("t3", true, true)];
   expect(records).toHaveLength(RUN_COUNT);
   for (const r of records) writeFileSync(join(waveDir, "runs", `${r.runId}.json`), `${JSON.stringify({ ...r, durationMs: 5, harnessError: null })}\n`);
+  // The ledger is shared by the whole evaluation: a preflight entry and entries of an earlier wave sit beside this wave's three.
   const ledgerPath = join(root, "ledger", "ledger.json");
   const ledger = new PersistedLedger(ledgerPath);
+  await ledger.record("preflight-code-deepseek", "code-deepseek", 0.4);
   await ledger.record(records[0]!.runId, "code-deepseek", 0.3);
   await ledger.record(records[1]!.runId, "code-deepseek", 0.2);
   await ledger.recordEstimate(records[2]!.runId, "code-deepseek");
+  await ledger.record("900-old-wave-t1-code-deepseek-A", "code-deepseek", 0.15);
+  await ledger.recordEstimate("901-old-wave-t1-code-deepseek-pi-lens", "code-deepseek");
   extra(waveDir);
-  return { root, waveDir, ledgerPath, evidenceDir: join(root, "evidence") };
+  return { root, repo, waveDir, ledgerPath, evidenceDir: join(root, "evidence"), runIds: records.map((r) => r.runId) };
 }
+/** Adds fields to the first run record of the wave. */
+function tamper(wave: Wave, extra: Record<string, unknown>): void {
+  const file = join(wave.waveDir, "runs", `${wave.runIds[0]}.json`);
+  writeFileSync(file, JSON.stringify({ ...(JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>), ...extra }));
+}
+const write = (w: Wave, evidenceDir = w.evidenceDir) => writeEvidence(w.waveDir, evidenceDir, w.ledgerPath, { repoRoot: w.repo });
 
 const tree = (dir: string): string[] => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => join(e.parentPath, e.name).slice(dir.length + 1)).sort();
+const integrityOf = (dir: string) => JSON.parse(readFileSync(join(dir, "integrity.json"), "utf8")) as {
+  kind: string; source_binding: { commit: string; digest: string }; files: { path: string; hash: string }[];
+};
 
 describe("writeEvidence", () => {
   it("writes the runs, the ledger, the summary and an integrity index that matches the files", async () => {
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave();
-    const summary = await writeEvidence(waveDir, evidenceDir, ledgerPath);
+    const wave = await makeWave();
+    const summary = await write(wave);
     expect(summary.pairings.find((p) => p.id === pairing.id)?.recommendation).toBe("enable");
 
-    const files = tree(evidenceDir);
+    const files = tree(wave.evidenceDir);
     expect(files).toHaveLength(RUN_COUNT + 3);
     expect(files).toContain("ledger.json");
     expect(files).toContain("summary.json");
     expect(files).toContain("integrity.json");
 
-    const integrity = JSON.parse(readFileSync(join(evidenceDir, "integrity.json"), "utf8")) as {
-      kind: string; source_binding: { commit: string; digest: string }; files: { path: string; hash: string }[];
-    };
+    const integrity = integrityOf(wave.evidenceDir);
     expect(integrity.kind).toBe("extension-ablation-evidence-integrity");
-    expect(integrity.source_binding.commit).toBe(execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim());
+    expect(integrity.source_binding.commit).toBe(git(wave.repo, "rev-parse", "HEAD").trim());
     expect(integrity.source_binding.digest).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(integrity.files.map((f) => f.path)).toEqual(files.filter((f) => f !== "integrity.json"));
-    for (const entry of integrity.files) expect(entry.hash).toBe(hash(readFileSync(join(evidenceDir, entry.path))));
+    for (const entry of integrity.files) expect(entry.hash).toBe(hash(readFileSync(join(wave.evidenceDir, entry.path))));
 
-    for (const name of readdirSync(join(waveDir, "runs"))) {
-      expect(readFileSync(join(evidenceDir, "runs", name), "utf8")).toBe(readFileSync(join(waveDir, "runs", name), "utf8"));
+    for (const name of readdirSync(join(wave.waveDir, "runs"))) {
+      expect(readFileSync(join(wave.evidenceDir, "runs", name), "utf8")).toBe(readFileSync(join(wave.waveDir, "runs", name), "utf8"));
     }
+    expect(readFileSync(join(wave.evidenceDir, "ledger.json"), "utf8")).toBe(readFileSync(wave.ledgerPath, "utf8"));
   });
 
-  it("reports observed and estimated spend separately", async () => {
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave();
-    await writeEvidence(waveDir, evidenceDir, ledgerPath);
-    const written = JSON.parse(readFileSync(join(evidenceDir, "summary.json"), "utf8")) as { spend: { observedUsd: number; estimatedUsd: number }; spentUsd: number };
-    expect(written.spend.observedUsd).toBeCloseTo(0.5);
-    expect(written.spend.estimatedUsd).toBeCloseTo(0.3);
-    expect(written.spentUsd).toBeCloseTo(0.8);
+  it("reports the budget spend and the wave spend separately, each as observed and estimated", async () => {
+    const wave = await makeWave();
+    await write(wave);
+    const written = JSON.parse(readFileSync(join(wave.evidenceDir, "summary.json"), "utf8")) as {
+      budgetSpend: { observedUsd: number; estimatedUsd: number }; waveSpend: { observedUsd: number; estimatedUsd: number }; spentUsd: number;
+    };
+    // Budget: every ledger entry. Estimates are the largest observed cost at the time: 0.4 (preflight) twice.
+    expect(written.budgetSpend.observedUsd).toBeCloseTo(0.4 + 0.3 + 0.2 + 0.15);
+    expect(written.budgetSpend.estimatedUsd).toBeCloseTo(0.8);
+    expect(written.spentUsd).toBeCloseTo(0.4 + 0.3 + 0.2 + 0.15 + 0.8);
+    // Wave: only the entries of runs that have a record here.
+    expect(written.waveSpend.observedUsd).toBeCloseTo(0.5);
+    expect(written.waveSpend.estimatedUsd).toBeCloseTo(0.4);
+  });
+
+  it("binds the evidence to the ablation code and to nothing outside the bound paths", async () => {
+    const wave = await makeWave();
+    await write(wave);
+    const first = integrityOf(wave.evidenceDir).source_binding;
+
+    writeFileSync(join(wave.repo, "docs", "notes.md"), "changed notes\n");
+    commitAll(wave.repo, "docs");
+    await write(wave, join(wave.root, "evidence-docs"));
+    const afterDocs = integrityOf(join(wave.root, "evidence-docs")).source_binding;
+    expect(afterDocs.commit).not.toBe(first.commit);
+    expect(afterDocs.digest).toBe(first.digest);
+
+    writeFileSync(join(wave.repo, "eval", "extensions", "x.ts"), "export const x = 2;\n");
+    commitAll(wave.repo, "extensions");
+    await write(wave, join(wave.root, "evidence-ext"));
+    expect(integrityOf(join(wave.root, "evidence-ext")).source_binding.digest).not.toBe(first.digest);
+  });
+
+  it.each([
+    ["a modified tracked file", (repo: string) => writeFileSync(join(repo, "eval", "extensions", "x.ts"), "export const x = 3;\n")],
+    ["a new file", (repo: string) => writeFileSync(join(repo, "eval", "extensions", "new.ts"), "export {};\n")],
+    ["a changed source file", (repo: string) => writeFileSync(join(repo, "src", "a.ts"), "export const a = 2;\n")],
+  ])("refuses evidence when the tree has %s under a bound path", async (_name, change) => {
+    const wave = await makeWave();
+    change(wave.repo);
+    await expect(write(wave)).rejects.toThrow("source_dirty");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+  });
+
+  it("refuses a staged change under a bound path and ignores changes outside the bound paths", async () => {
+    const wave = await makeWave();
+    writeFileSync(join(wave.repo, "docs", "notes.md"), "edited\n");
+    writeFileSync(join(wave.repo, "docs", "untracked.md"), "new\n");
+    await expect(write(wave)).resolves.toBeDefined();
+
+    writeFileSync(join(wave.repo, "eval", "extensions", "x.ts"), "export const x = 4;\n");
+    git(wave.repo, "add", "eval/extensions/x.ts");
+    await expect(write(wave, join(wave.root, "second"))).rejects.toThrow("source_dirty");
+    git(wave.repo, "mv", "eval/extensions/x.ts", "docs/x.ts");
+    await expect(write(wave, join(wave.root, "third"))).rejects.toThrow("source_dirty");
   });
 
   it("only copies run records, never other files of the wave", async () => {
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave((dir) => {
+    const wave = await makeWave((dir) => {
       mkdirSync(join(dir, "private", "x"), { recursive: true });
       writeFileSync(join(dir, "private", "x", "strace.log"), "secret");
       writeFileSync(join(dir, "runs", "notes.txt"), "not a record");
     });
-    await writeEvidence(waveDir, evidenceDir, ledgerPath);
-    expect(tree(evidenceDir).filter((f) => !f.startsWith("runs/"))).toEqual(["integrity.json", "ledger.json", "summary.json"]);
-    expect(tree(evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT);
+    await write(wave);
+    expect(tree(wave.evidenceDir).filter((f) => !f.startsWith("runs/"))).toEqual(["integrity.json", "ledger.json", "summary.json"]);
+    expect(tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT);
   });
 
   it("refuses an existing evidence directory and leaves it untouched", async () => {
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave();
-    mkdirSync(evidenceDir);
-    writeFileSync(join(evidenceDir, "keep.txt"), "x");
-    await expect(writeEvidence(waveDir, evidenceDir, ledgerPath)).rejects.toThrow("evidence_dir_exists");
-    expect(readdirSync(evidenceDir)).toEqual(["keep.txt"]);
+    const wave = await makeWave();
+    mkdirSync(wave.evidenceDir);
+    writeFileSync(join(wave.evidenceDir, "keep.txt"), "x");
+    await expect(write(wave)).rejects.toThrow("evidence_dir_exists");
+    expect(readdirSync(wave.evidenceDir)).toEqual(["keep.txt"]);
   });
 
   it("refuses a record whose name does not match its run id", async () => {
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave((dir) => writeFileSync(join(dir, "runs", "other.json"), JSON.stringify(record("t1", "A", true))));
-    await expect(writeEvidence(waveDir, evidenceDir, ledgerPath)).rejects.toThrow("run_record_invalid");
-    expect(existsSync(evidenceDir)).toBe(false);
+    const wave = await makeWave((dir) => writeFileSync(join(dir, "runs", "other.json"), JSON.stringify(record("t1", "A", true))));
+    await expect(write(wave)).rejects.toThrow("run_record_invalid");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+  });
+
+  it("refuses two records that share a task, profile and arm", async () => {
+    const twin = { ...record("t1", "A", true), runId: "800-t1-code-deepseek-A" };
+    const wave = await makeWave((dir) => writeFileSync(join(dir, "runs", `${twin.runId}.json`), JSON.stringify(twin)));
+    await expect(write(wave)).rejects.toThrow("duplicate_run_record");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+  });
+
+  it("refuses a ledger that does not match the ledger schema", async () => {
+    const wave = await makeWave();
+    const ledger = JSON.parse(readFileSync(wave.ledgerPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(wave.ledgerPath, JSON.stringify({ ...ledger, extra: true }));
+    await expect(write(wave)).rejects.toThrow("ledger_file_invalid");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
   });
 
   const leaks: [string, (waveDir: string) => Record<string, unknown>][] = [
     ["the home path", () => ({ harnessError: `read ${homedir()}` })],
     ["the wave directory", (waveDir) => ({ harnessError: `at ${waveDir}` })],
     ["an absolute path", () => ({ harnessError: "/etc/passwd" })],
+    ["an embedded absolute path", () => ({ harnessError: "x at /tmp/y" })],
+    ["an absolute path after a separator", () => ({ harnessError: "path=/tmp/y" })],
+    ["a path-like key", () => ({ "/tmp/y": 1 })],
+    ["a nested path-like key", () => ({ nested: { "x /tmp/y": 1 } })],
     ["a credential key", () => ({ nested: { access: "x" } })],
     ["a refresh key", () => ({ refresh: "x" })],
     ["a key field", () => ({ key: "x" })],
     ["a long string", () => ({ note: "a".repeat(2_001) })],
   ];
   it.each(leaks)("refuses evidence that leaks %s and leaves no partial directory", async (_name, extra) => {
-    const first = record("t1", "A", true);
-    const { root, waveDir, ledgerPath, evidenceDir } = await makeWave((dir) =>
-      writeFileSync(join(dir, "runs", `${first.runId}.json`), JSON.stringify({ ...first, ...extra(dir) })));
-    await expect(writeEvidence(waveDir, evidenceDir, ledgerPath)).rejects.toThrow("evidence_contains_private_data");
-    expect(existsSync(evidenceDir)).toBe(false);
-    expect(readdirSync(root).sort()).toEqual(["ledger", "wave"]);
+    const wave = await makeWave();
+    tamper(wave, extra(wave.waveDir));
+    await expect(write(wave)).rejects.toThrow("evidence_contains_private_data");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+    expect(readdirSync(wave.root).sort()).toEqual(["ledger", "repo", "wave"]);
   });
 
-  it("accepts a string of exactly 2,000 characters", async () => {
-    const first = record("t1", "A", true);
-    const { waveDir, ledgerPath, evidenceDir } = await makeWave((dir) =>
-      writeFileSync(join(dir, "runs", `${first.runId}.json`), JSON.stringify({ ...first, note: "a".repeat(2_000) })));
-    await expect(writeEvidence(waveDir, evidenceDir, ledgerPath)).resolves.toBeDefined();
+  it("accepts a string of exactly 2,000 characters and slashes that do not start a path", async () => {
+    const wave = await makeWave();
+    tamper(wave, { note: "a".repeat(2_000), other: "and/or a/b 1/2 https://example.invalid" });
+    await expect(write(wave)).resolves.toBeDefined();
   });
 
-  it("refuses a missing ledger without creating the evidence directory", async () => {
-    const { waveDir, root, evidenceDir } = await makeWave();
-    await expect(writeEvidence(waveDir, evidenceDir, join(root, "nope", "ledger.json"))).rejects.toThrow("ledger_missing");
-    expect(existsSync(evidenceDir)).toBe(false);
-    expect(existsSync(dirname(evidenceDir))).toBe(true);
+  it("keeps a record built through classifyRun clean even when the worker controlled its inputs", async () => {
+    const hostile = "/home/evil/.pi/agent/auth.json";
+    const runId = "700-t9-code-deepseek-A";
+    const output: RunOutput = {
+      runId, terminal: "failed", startErrorCode: null,
+      usage: {
+        session: { input: 10, output: 1, cacheRead: 5, cacheWrite: 0, total: 16, costUsd: 0.2 },
+        assistant: { messages: 1, input: 10, output: 1, cacheRead: 5, cacheWrite: 0, costUsd: 0.2 }, providerError: null,
+      },
+      durationMs: 5, sessionsLeft: 0, assistantTextRef: null, assistantTextTruncated: false, assistantTextSha256: null, mac: null, harnessError: hostile,
+    };
+    const trace: TraceFindings = {
+      outsideWrites: [hostile], unresolvedWrites: 0, deniedWriteAttempts: 0, connects: 1, unresolvedEgress: 0,
+      unexpectedConnects: [{ family: "inet6", address: "2001:db8::1", port: 443 }],
+    };
+    const verdict = classifyRun({ output, timedOut: false, interrupted: false, residualClean: true, trace, guardChanged: false, waveFailure: null });
+    expect(verdict).toEqual({ stopReason: "outside_write", harnessError: "invalid_harness_error" });
+    const stopped: RunRecord = {
+      runId, taskId: "t9", profile: "code-deepseek", arm: "A", pairings: [pairing.id], outcome: "stopped", terminal: output.terminal, accepted: null,
+      usage: output.usage, durationMs: output.durationMs, trace: summarizeTrace(trace), stopReason: verdict.stopReason, harnessError: verdict.harnessError,
+      assistantTextTruncated: false, assistantTextSha256: null,
+    };
+    const wave = await makeWave((dir) => writeFileSync(join(dir, "runs", `${runId}.json`), `${JSON.stringify(stopped, null, 2)}\n`));
+    const summary = await write(wave);
+    expect(summary.stopReason).toBe("outside_write");
+    for (const file of tree(wave.evidenceDir)) expect(readFileSync(join(wave.evidenceDir, file), "utf8")).not.toContain("/home/evil");
+  });
+
+  it("refuses a missing ledger without creating the evidence directory or its parent", async () => {
+    const wave = await makeWave();
+    const evidenceDir = join(wave.root, "new", "parent", "evidence");
+    await expect(writeEvidence(wave.waveDir, evidenceDir, join(wave.root, "nope", "ledger.json"), { repoRoot: wave.repo })).rejects.toThrow("ledger_missing");
+    expect(existsSync(join(wave.root, "new"))).toBe(false);
+  });
+
+  it("creates a missing parent directory on success and leaves none behind on refusal", async () => {
+    const refused = await makeWave((dir) => writeFileSync(join(dir, "runs", "bad.json"), "{}"));
+    const deep = join(refused.root, "new", "parent", "evidence");
+    await expect(write(refused, deep)).rejects.toThrow("run_record_invalid");
+    expect(existsSync(join(refused.root, "new"))).toBe(false);
+
+    const leak = await makeWave();
+    tamper(leak, { harnessError: "/tmp/y" });
+    await expect(write(leak, join(leak.root, "new", "parent", "evidence"))).rejects.toThrow("evidence_contains_private_data");
+    expect(existsSync(join(leak.root, "new"))).toBe(false);
+
+    const wave = await makeWave();
+    const target = join(wave.root, "new", "parent", "evidence");
+    await write(wave, target);
+    expect(tree(target)).toContain("integrity.json");
+    expect(readdirSync(join(wave.root, "new", "parent"))).toEqual(["evidence"]);
   });
 });
 
@@ -198,6 +353,7 @@ describe("--report arguments", () => {
   it("takes --wave as a value option in report mode", () => {
     expect(parseArgs(base)).toMatchObject({ mode: "--report", options: { "--wave": "w", "--ledger": "l.json", "--evidence": "e" } });
     expect(parseArgs(["--wave", "w", "--ledger", "l.json", "--evidence", "e", "--report"]).mode).toBe("--report");
+    expect(parseArgs(["--wave", "w", "--report", "--ledger", "l.json", "--evidence", "e"])).toMatchObject({ mode: "--report", options: { "--wave": "w" } });
   });
   it("requires its three options and rejects the others", () => {
     expect(() => parseArgs(["--report", "--ledger", "l.json", "--evidence", "e"])).toThrow("wave_required");
