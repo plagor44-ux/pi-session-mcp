@@ -30,7 +30,14 @@ function select(tasks: TaskSpec[], pairings: readonly Pairing[], limits: Readonl
   }));
 }
 
+function assertUniqueTaskIds(tasks: TaskSpec[]): void {
+  if (new Set(tasks.map((t) => t.id)).size !== tasks.length) throw new Error("duplicate_task_id");
+}
+
 function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
+  // Position within the task's kind (task-list order), so alternation holds for interleaved lists.
+  const seen = { review: 0, implementation: 0 };
+  const kindIndex = new Map<TaskSpec, number>(tasks.map((t) => [t, seen[t.kind]++]));
   const drafts = new Map<string, Draft>();
   const profilePos = new Map<ProfileId, number>();
   selections.forEach(({ pairing }, i) => { if (!profilePos.has(pairing.profile)) profilePos.set(pairing.profile, i); });
@@ -40,7 +47,7 @@ function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
         const key = `${task.id}\u0000${pairing.profile}\u0000${arm}`;
         const draft = drafts.get(key);
         if (draft) { draft.priority = Math.min(draft.priority, pairing.priority); draft.pairings.push(pairing.id); continue; }
-        drafts.set(key, { task, taskIndex: tasks.indexOf(task), profile: pairing.profile, arm, priority: pairing.priority, profilePos: profilePos.get(pairing.profile)!, pairings: [pairing.id] });
+        drafts.set(key, { task, taskIndex: kindIndex.get(task)!, profile: pairing.profile, arm, priority: pairing.priority, profilePos: profilePos.get(pairing.profile)!, pairings: [pairing.id] });
       }
     }
   }
@@ -55,12 +62,14 @@ function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
 }
 
 export function buildMatrix(tasks: TaskSpec[], pairings: readonly Pairing[]): RunSpec[] {
+  assertUniqueTaskIds(tasks);
   return plan(tasks, select(tasks, pairings, new Map()));
 }
 
 export function trimMatrix(
   tasks: TaskSpec[], pairings: readonly Pairing[], projectedUsd: (runs: RunSpec[]) => number, remainingUsd: number,
 ): { pairings: Pairing[]; tasksPerPairing: Record<string, string[]>; runs: RunSpec[] } {
+  assertUniqueTaskIds(tasks);
   const limits = new Map<string, number>();
   let kept = [...pairings];
   const current = () => plan(tasks, select(tasks, kept, limits));

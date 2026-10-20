@@ -11,6 +11,7 @@ export class BudgetLedger {
   constructor(private readonly limitUsd: number) {}
   record(profile: ProfileId, costUsd: number | null): void {
     if (costUsd === null) return;
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error("invalid_cost");
     this.spent += costUsd;
     this.maxObserved = Math.max(this.maxObserved, costUsd);
     this.observed.add(profile);
