@@ -53,6 +53,18 @@ const reviewOracle: ReviewOracle = {
 };
 
 describe("scoreReview", () => {
+  it.each([
+    ["bold titles (P1)", "**Race on cache write**\nsrc/a.ts:42\nThe lock is released early.\n\n**SQL injection**\nsrc/db/query.ts:17\nInput is concatenated."],
+    ["numbered titles (P3)", "1. Race on cache write\n`src/a.ts:42`\nThe lock is released early.\n\n2. SQL injection\n`src/db/query.ts:17`\nInput is concatenated."],
+    ["prose followed by location (P6)", "Race: the lock is released early, in\nsrc/a.ts:42\n\nSQL injection via concatenation, in\nsrc/db/query.ts:17"],
+  ])("keeps a path-only continuation with %s", (_name, text) => {
+    const oracle: ReviewOracle = { ...reviewOracle, findings: [
+      reviewOracle.findings[0]!,
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    expect(scoreReview(text, oracle)).toMatchObject({ accepted: true, criticalHit: 2, falseFindings: [] });
+  });
+
   it("accepts a review that hits every critical finding in one block", () => {
     expect(scoreReview("- src/a.ts: race when the lock is released early", reviewOracle))
       .toMatchObject({ accepted: true, criticalHit: 1, criticalTotal: 1, recall: 0.5, falseFindings: [] });
@@ -120,7 +132,7 @@ describe("scoreReview", () => {
     expect(accepted("  - src/a.ts: race\n    - the lock")).toBe(true);
   });
 
-  it("lets a heading supply only its path tokens, and only to blocks without a path of their own", () => {
+  it("limits heading path tokens to blocks without a path of their own (R27b)", () => {
     const o: ReviewOracle = { ...reviewOracle, falseFindings: [{ id: "x1", anchors: [{ file: "src/a.ts", terms: ["sql injection"] }] }] };
     const accepted = (text: string): boolean => scoreReview(text, o).criticalHit === 1;
     expect(accepted("### src/a.ts\nLooks fine.\n\n- src/b.ts: race; the lock is never released")).toBe(false);
@@ -129,7 +141,7 @@ describe("scoreReview", () => {
     const mixed = scoreReview("### src/a.ts\n- race when the lock is released\n\n- src/b.ts: SQL injection in the parser", o);
     expect(mixed).toMatchObject({ criticalHit: 1, falseFindings: [] });
     expect(accepted("### src/a.ts:12\n\nRace when the lock is released early.")).toBe(true);
-    expect(accepted("### Race and lock\n\n- src/a.ts: parser")).toBe(false);
+    expect(accepted("### Race and lock\n\n- src/a.ts: parser")).toBe(true);
     expect(accepted("## src/a.ts\n### Issue 1\n- race when the lock is released")).toBe(true);
     expect(accepted("## src/a.ts\n## src/b.ts\n- race; lock")).toBe(false);
     expect(accepted("## src/a.ts\n### src/b.ts\n- race; lock")).toBe(false);
@@ -173,6 +185,27 @@ describe("scoreReview", () => {
     expect(scoreReview("### Race in src/a.ts\nfirst.\n\nthe lock is released", reviewOracle).criticalHit).toBe(0);
   });
 
+  it.each([
+    ["file field (P4)", "### Race condition in cache write\n**File:** `src/a.ts:42`\n**Issue:** The lock is released early."],
+    ["pseudo-heading (P5)", "### Race condition in cache write\n`src/a.ts:42`\nThe lock is released early."],
+    ["location label (P10)", "### Race condition in cache write\nLocation: src/a.ts:42\nThe lock is released early."],
+  ])("prefixes heading words to the first located body: %s (R27h)", (_name, text) => {
+    expect(scoreReview(text, reviewOracle)).toMatchObject({ accepted: true, criticalHit: 1, falseFindings: [] });
+  });
+
+  it("never lends a heading's path to a first block naming another file (R27h)", () => {
+    expect(scoreReview("### Race in src/a.ts\n- src/b.ts: the lock is released", reviewOracle).criticalHit).toBe(0);
+    expect(scoreReview("### Race in src/a.ts\n- src/b.ts: the lock is released", {
+      ...reviewOracle, findings: [{ id: "f", critical: true, anchors: [{ file: "src/b.ts", terms: ["race", "lock"] }] }],
+    }).criticalHit).toBe(1);
+    expect(scoreReview("### race.ts\n- src/a.ts: lock", reviewOracle).criticalHit).toBe(0);
+  });
+
+  it("does not repeat heading words on later located or pseudo-heading blocks", () => {
+    expect(scoreReview("### Race\n- src/a.ts: context\n- src/a.ts: lock", reviewOracle).criticalHit).toBe(0);
+    expect(scoreReview("### Race\n**src/a.ts**\n- context\n- lock", reviewOracle).criticalHit).toBe(0);
+  });
+
   it("carries the inherited path into a bodyless heading", () => {
     const two: ReviewOracle = { kind: "review", falseFindings: [], findings: [
       { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
@@ -180,6 +213,24 @@ describe("scoreReview", () => {
     ] };
     expect(scoreReview("## src/a.ts\n### Race: the lock is released early\n## src/db/query.ts\n### SQL injection via concatenation", two))
       .toMatchObject({ accepted: true, criticalHit: 2 });
+  });
+
+  it.each(["```markdown", "```md", "```", "~~~text"])("unwraps a whole review fence opened by %s (P7)", (open) => {
+    const close = open.startsWith("~") ? "~~~~" : "````";
+    const oracle: ReviewOracle = { ...reviewOracle, findings: [
+      reviewOracle.findings[0]!,
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    const text = `  \n${open}\n## src/a.ts:42\nRace: the lock is released early.\n\n## src/db/query.ts:17\nSQL injection via concatenation.\n${close}\n  `;
+    expect(scoreReview(text, oracle)).toMatchObject({ accepted: true, criticalHit: 2, falseFindings: [] });
+  });
+
+  it.each(["md", "markdown"])("reads an embedded %s fence as review text", (info) => {
+    expect(scoreReview(`Review follows.\n\n\`\`\`${info}\n- src/a.ts: race and lock\n\`\`\`\n\nEnd.`, reviewOracle).accepted).toBe(true);
+  });
+
+  it("still drops quoted code inside an unwrapped review fence", () => {
+    expect(scoreReview("````markdown\n- src/a.ts: race\n```ts\nlock\n```\n````", reviewOracle).criticalHit).toBe(0);
   });
 
   it("drops terminated fences and treats an unterminated opener as text (R27e)", () => {
@@ -246,6 +297,19 @@ describe("scopeIgnore schema", () => {
 });
 
 describe("anchor file schema", () => {
+  it.each(["mts", "cts", "proto", "graphql", "gql"])("accepts .%s anchors and inherits their heading path", (extension) => {
+    const anchor = anchorSchema.parse({ file: `src/x.${extension}`, terms: ["race", "lock"] });
+    const oracle: ReviewOracle = { kind: "review", findings: [{ id: "f", critical: true, anchors: [anchor] }], falseFindings: [] };
+    // Use the second block, which receives only path tokens, never the title itself.
+    expect(scoreReview(`### ${anchor.file}\n- context\n- race and lock`, oracle)).toMatchObject({ accepted: true, criticalHit: 1 });
+  });
+
+  it("rejects an anchor file that is not a recognized path token", () => {
+    for (const file of ["Makefile", "node.js", "src/noextension", "src/a.unsupported"]) {
+      expect(anchorSchema.safeParse({ file, terms: ["race"] }).success, file).toBe(false);
+    }
+  });
+
   it("rejects characters an anchor could never match as a path token", () => {
     expect(anchorSchema.safeParse({ file: "src/a-b_c.d.ts", terms: ["x"] }).success).toBe(true);
     for (const file of ["src/a.ts.", "src/a b.ts", "src/ä.ts", "src/a:1.ts", "src/a#1.ts", "src/(a).ts", "src/a,b.ts"]) {
@@ -345,7 +409,7 @@ describe("changedPaths", () => {
     expect(await changedPaths(repo, base, ["src/"])).toEqual(["lib/.git"]);
   });
 
-  it("ignores .git entries at gitlink paths of the base tree but not elsewhere", async () => {
+  it("rejects a pristine base containing any gitlink (R31)", async () => {
     const repo = makeRepo();
     git(repo, "update-index", "--add", "--cacheinfo", `160000,${revParse(repo)},sub`);
     git(repo, "commit", "-m", "gitlink");
@@ -356,9 +420,10 @@ describe("changedPaths", () => {
     git(join(repo, "sub"), "init");
     mkdirSync(join(repo, "other"));
     writeFileSync(join(repo, "other", ".git"), "gitdir: x");
-    const changed = await changedPaths(repo, base, []);
-    expect(changed).toContain("other/.git");
-    expect(changed).not.toContain("sub/.git");
+    await expect(changedPaths(repo, base, [])).rejects.toThrow("base_has_submodules");
+    // The pristine base decides this, even when the worker deletes the submodule.
+    rmSync(join(repo, "sub"), { recursive: true });
+    await expect(changedPaths(repo, base, ["sub/"])).rejects.toThrow("base_has_submodules");
   });
 
   it("rejects a malformed base commit", async () => {

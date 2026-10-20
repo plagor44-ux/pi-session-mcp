@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pathTokens } from "./path-tokens.js";
 import { hashSchema, relativePathSchema } from "../profiles/schemas.js";
 
 export const profileIdSchema = z.enum(["review-grok", "review", "code", "code-deepseek"]);
@@ -16,7 +17,13 @@ export const pairingSchema = z.object({
 export type Pairing = z.infer<typeof pairingSchema>;
 
 /** Anchor files are matched as path tokens in review text, so only token characters are allowed. */
-const anchorFileSchema = relativePathSchema.refine((p) => /^[A-Za-z0-9_.\-/]+$/.test(p) && !p.endsWith("."), { message: "anchor_file_charset" });
+const anchorFileSchema = relativePathSchema
+  .refine((p) => /^[A-Za-z0-9_.\-/]+$/.test(p) && !p.endsWith("."), { message: "anchor_file_charset" })
+  .refine((file) => {
+    const lower = file.toLowerCase();
+    const tokens = pathTokens(lower);
+    return tokens.length === 1 && tokens[0] === lower;
+  }, { message: "anchor_file_path_token" });
 export const anchorSchema = z.object({ file: anchorFileSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
 export type Anchor = z.infer<typeof anchorSchema>;
 export const reviewOracleSchema = z.object({
