@@ -1,12 +1,14 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { hash, sourceBinding } from "../profiles/files.js";
+import { digest, hash } from "../profiles/files.js";
 import type { RunRecord, StopReason } from "./classify.js";
-import { PersistedLedger } from "./ledger-file.js";
+import { ledgerFileSchema } from "./ledger-file.js";
 import { PAIRINGS } from "./matrix.js";
 import { armSchema, profileIdSchema } from "./schemas.js";
 import { readRegularFile } from "./safe-read.js";
@@ -19,6 +21,11 @@ const MAX_STRING_CHARS = 2_000;
 const MAX_RECORD_BYTES = 1024 * 1024;
 const MAX_LEDGER_BYTES = 4 * 1024 * 1024;
 const FORBIDDEN_KEYS = new Set(["access", "refresh", "key"]);
+/** A path-like segment anywhere in a string: a slash that starts the string or follows whitespace, a quote or a separator. */
+const PATH_LIKE = /(^|[\s"'=:(,])\/[A-Za-z0-9._-]/;
+/** What the evidence is bound to: the profile evaluation's sources plus the ablation code itself. */
+const BOUND_PATH = /^(src\/|eval\/(profiles|fixtures|extensions)\/|test\/|scripts\/|package(-lock)?\.json$|tsconfig.*\.json$)/;
+const exec = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** The pre-registered rule: enable only when B loses nothing, wins at least one task A lost, and costs at most 1.25 times A. */
@@ -35,14 +42,20 @@ export type SummaryRecord = Pick<RunRecord, "runId" | "taskId" | "profile" | "ar
   usage: { session: { input: number; cacheRead: number; costUsd: number } | null } | null;
 };
 
+const STOP_REASONS = [
+  "outside_write", "unresolved_write", "unresolved_egress", "output_integrity", "guard_changed", "harness_failure", "cleanup_failure",
+  "provider_error", "credential_expiring", "budget", "wave_timeout", "interrupted",
+] as const;
+type Equal<X, Y> = (<T>() => T extends X ? 1 : 2) extends (<T>() => T extends Y ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+/** Compile-time check: the list above is exactly `StopReason`, so a new stop reason cannot be silently rejected when records are read. */
+export type StopReasonListMatches = Assert<Equal<typeof STOP_REASONS[number], StopReason>>;
+
 const summaryRecordSchema = z.object({
   runId: z.string().min(1), taskId: z.string().min(1), profile: profileIdSchema, arm: armSchema, pairings: z.array(z.string()),
   outcome: z.enum(["scored", "stopped", "not_run"]), accepted: z.boolean().nullable(),
   usage: z.object({ session: z.object({ input: z.number(), cacheRead: z.number(), costUsd: z.number() }).nullable() }).nullable(),
-  stopReason: z.enum([
-    "outside_write", "unresolved_write", "unresolved_egress", "output_integrity", "guard_changed", "harness_failure", "cleanup_failure",
-    "provider_error", "credential_expiring", "budget", "wave_timeout", "interrupted",
-  ]).nullable(),
+  stopReason: z.enum(STOP_REASONS).nullable(),
 });
 const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchema.parse(value);
 
@@ -58,7 +71,17 @@ export interface PairingResult {
   cacheReadShare: { a: number; b: number };
 }
 export interface Spend { observedUsd: number; estimatedUsd: number }
-export interface ReportSummary { pairings: PairingResult[]; spentUsd: number; spend: Spend; stopReason: StopReason | null }
+export interface ReportSpend { budget: Spend; wave: Spend }
+export interface ReportSummary {
+  pairings: PairingResult[];
+  /** Everything charged against the budget so far (`budgetSpend`, observed plus estimated). */
+  spentUsd: number;
+  /** All ledger entries: preflight, earlier waves and this wave. */
+  budgetSpend: Spend;
+  /** Only the ledger entries of runs that have a record in this wave. */
+  waveSpend: Spend;
+  stopReason: StopReason | null;
+}
 
 const costOf = (record: SummaryRecord): number => record.usage?.session?.costUsd ?? 0;
 
@@ -75,11 +98,24 @@ function totals(records: SummaryRecord[]): { arm: ArmTotals; input: number; cach
   return { arm, input, cacheRead };
 }
 
+function assertNoDuplicates(records: readonly SummaryRecord[]): void {
+  const ids = new Set<string>();
+  const slots = new Set<string>();
+  for (const record of records) {
+    const slot = `${record.taskId}\u0000${record.profile}\u0000${record.arm}`;
+    if (ids.has(record.runId) || slots.has(slot)) throw new Error("duplicate_run_record");
+    ids.add(record.runId);
+    slots.add(slot);
+  }
+}
+
 /**
  * Per pairing, only tasks scored in both arms count (R6). Fewer than three such tasks is inconclusive and incomplete, none at all is
  * not run. `spend` defaults to the cost observed in the records; the ledger adds the estimates charged for runs without trusted output.
+ * The cache-read share uses Pi's token split, where `input` excludes cache reads.
  */
-export function summarize(records: readonly SummaryRecord[], spend?: Spend): ReportSummary {
+export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend): ReportSummary {
+  assertNoDuplicates(records);
   const pairings = PAIRINGS.map((pairing): PairingResult => {
     const scoredBy = (arm: SummaryRecord["arm"]): Map<string, SummaryRecord> => new Map(records
       .filter((r) => r.outcome === "scored" && r.accepted !== null && r.arm === arm && r.profile === pairing.profile && r.pairings.includes(pairing.id))
@@ -89,43 +125,42 @@ export function summarize(records: readonly SummaryRecord[], spend?: Spend): Rep
     const tasks = [...armA.keys()].filter((id) => armB.has(id)).sort();
     const a = totals(tasks.map((id) => armA.get(id)!));
     const b = totals(tasks.map((id) => armB.get(id)!));
-    const share = (t: { input: number; cacheRead: number }): number => (t.input > 0 ? t.cacheRead / t.input : 0);
+    const share = (t: { input: number; cacheRead: number }): number => (t.input + t.cacheRead > 0 ? t.cacheRead / (t.input + t.cacheRead) : 0);
     const base = { id: pairing.id, tasks, a: a.arm, b: b.arm, cacheReadShare: { a: share(a), b: share(b) } };
     if (tasks.length === 0) return { ...base, complete: false, recommendation: "not-run" };
     if (tasks.length < MIN_PAIRED_TASKS) return { ...base, complete: false, recommendation: "inconclusive" };
     const perTask = tasks.map((id) => ({ a: armA.get(id)!.accepted === true, b: armB.get(id)!.accepted === true }));
     return { ...base, complete: true, recommendation: recommend(a.arm, b.arm, perTask) };
   });
-  const observed = spend ?? { observedUsd: records.reduce((sum, r) => sum + costOf(r), 0), estimatedUsd: 0 };
+  const observed: Spend = { observedUsd: records.reduce((sum, r) => sum + costOf(r), 0), estimatedUsd: 0 };
+  const { budget, wave } = spend ?? { budget: observed, wave: observed };
   const ordered = [...records].sort((x, y) => (x.runId < y.runId ? -1 : x.runId > y.runId ? 1 : 0));
   return {
-    pairings, spend: observed, spentUsd: observed.observedUsd + observed.estimatedUsd,
+    pairings, spentUsd: budget.observedUsd + budget.estimatedUsd, budgetSpend: budget, waveSpend: wave,
     stopReason: ordered.find((r) => r.stopReason !== null)?.stopReason ?? null,
   };
 }
 
-const ledgerSpendSchema = z.object({
-  entries: z.array(z.object({ costUsd: z.number().min(0).nullable(), estimated: z.literal(true).optional() }).passthrough()),
-}).passthrough();
-
-/** Observed and estimated spend, separately, from a ledger file that has passed the ledger's own strict validation. */
-function ledgerSpend(bytes: Buffer): Spend {
-  const parsed = ledgerSpendSchema.parse(JSON.parse(bytes.toString("utf8")));
-  const spend: Spend = { observedUsd: 0, estimatedUsd: 0 };
-  for (const entry of parsed.entries) {
-    if (entry.estimated === true) spend.estimatedUsd += entry.costUsd ?? 0;
-    else spend.observedUsd += entry.costUsd ?? 0;
+/** Validates the very bytes that are copied, then splits the entries into observed and estimated, for the budget and for this wave. */
+function ledgerSpend(bytes: Buffer, waveRunIds: ReadonlySet<string>): ReportSpend {
+  let parsed;
+  try { parsed = ledgerFileSchema.safeParse(JSON.parse(bytes.toString("utf8"))); } catch { throw new Error("ledger_file_invalid"); }
+  if (!parsed.success) throw new Error("ledger_file_invalid");
+  const spend: ReportSpend = { budget: { observedUsd: 0, estimatedUsd: 0 }, wave: { observedUsd: 0, estimatedUsd: 0 } };
+  for (const entry of parsed.data.entries) {
+    const field = entry.estimated === true ? "estimatedUsd" : "observedUsd";
+    spend.budget[field] += entry.costUsd ?? 0;
+    if (waveRunIds.has(entry.runId)) spend.wave[field] += entry.costUsd ?? 0;
   }
   return spend;
 }
 
-async function readLedger(path: string): Promise<{ bytes: Buffer; spend: Spend }> {
+async function readLedger(path: string, waveRunIds: ReadonlySet<string>): Promise<{ bytes: Buffer; spend: ReportSpend }> {
   let bytes: Buffer;
   try { bytes = await readRegularFile(path, MAX_LEDGER_BYTES); } catch (error) {
     throw new Error((error as NodeJS.ErrnoException).code === "ENOENT" ? "ledger_missing" : "ledger_unreadable");
   }
-  await PersistedLedger.open(path);
-  return { bytes, spend: ledgerSpend(bytes) };
+  return { bytes, spend: ledgerSpend(bytes, waveRunIds) };
 }
 
 async function readRuns(waveDir: string): Promise<{ name: string; bytes: Buffer; record: SummaryRecord }[]> {
@@ -142,11 +177,13 @@ async function readRuns(waveDir: string): Promise<{ name: string; bytes: Buffer;
   return runs;
 }
 
-/** True when a parsed value holds a forbidden key, an over-long string or an absolute path anywhere. */
+/** True when a parsed value holds a forbidden key, an over-long string or a path-like segment in any string or key. */
 function leaks(value: unknown): boolean {
-  if (typeof value === "string") return value.length > MAX_STRING_CHARS || value.startsWith("/");
+  if (typeof value === "string") return value.length > MAX_STRING_CHARS || PATH_LIKE.test(value);
   if (Array.isArray(value)) return value.some(leaks);
-  if (value !== null && typeof value === "object") return Object.entries(value).some(([key, inner]) => FORBIDDEN_KEYS.has(key) || leaks(inner));
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value).some(([key, inner]) => FORBIDDEN_KEYS.has(key) || leaks(key) || leaks(inner));
+  }
   return false;
 }
 
@@ -171,6 +208,37 @@ async function absent(path: string): Promise<boolean> {
 const json = (value: unknown): Buffer => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 
 /**
+ * The commit and a digest of the bound sources (profiles evaluation plus the ablation code). Evidence from a tree that differs from
+ * the commit under a bound path would claim code that did not run, so any change there refuses with `source_dirty`.
+ */
+async function boundSource(root: string): Promise<{ commit: string; digest: `sha256:${string}` }> {
+  const git = async (args: string[]): Promise<string> => {
+    try { return (await exec("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })).stdout; } catch { throw new Error("source_unavailable"); }
+  };
+  const tokens = (await git(["status", "--porcelain", "-z", "--untracked-files=all"])).split("\0").filter((t) => t !== "");
+  for (let i = 0; i < tokens.length; i += 1) {
+    const token = tokens[i]!;
+    const paths = [token.slice(3)];
+    if (/[RC]/.test(token.slice(0, 2))) { i += 1; if (tokens[i] !== undefined) paths.push(tokens[i]!); }
+    if (paths.some((path) => BOUND_PATH.test(path))) throw new Error("source_dirty");
+  }
+  const commit = (await git(["rev-parse", "HEAD"])).trim();
+  const listed = (await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])).split("\0").filter((p) => BOUND_PATH.test(p)).sort();
+  const records: [string, string][] = [];
+  for (const path of listed) records.push([path, hash(await readFile(join(root, path)))]);
+  return { commit, digest: digest(records) };
+}
+
+/** Removes the directories this call created, innermost first, and stops at the first one that is not empty. */
+async function removeCreatedParents(parent: string, firstCreated: string | undefined): Promise<void> {
+  if (firstCreated === undefined) return;
+  for (let dir = parent; ; dir = dirname(dir)) {
+    try { await rmdir(dir); } catch { return; }
+    if (dir === firstCreated) return;
+  }
+}
+
+/**
  * Copies the wave's sanitized `runs/*.json` and the budget ledger into a new evidence directory and adds `summary.json` and
  * `integrity.json`. Everything is built in memory and checked for private data first; the directory appears only complete.
  * `evidenceDir` must not exist. Returns the summary that was written.
@@ -180,30 +248,41 @@ export async function writeEvidence(waveDir: string, evidenceDir: string, ledger
   const target = resolve(evidenceDir);
   if (!(await absent(target))) throw new Error("evidence_dir_exists");
   const runs = await readRuns(wave);
-  const ledger = await readLedger(resolve(ledgerPath));
+  const ledger = await readLedger(resolve(ledgerPath), new Set(runs.map((r) => r.record.runId)));
   const summary = summarize(runs.map((r) => r.record), ledger.spend);
 
   const files = new Map<string, Buffer>();
   for (const run of runs) files.set(`runs/${run.name}`, run.bytes);
   files.set("ledger.json", ledger.bytes);
   files.set("summary.json", json(summary));
-  const binding = await sourceBinding(options.repoRoot ?? REPO_ROOT);
-  const integrity = json({
+  const binding = await boundSource(options.repoRoot ?? REPO_ROOT);
+  files.set("integrity.json", json({
     kind: "extension-ablation-evidence-integrity", source_binding: binding,
     files: [...files.entries()].sort(([x], [y]) => (x < y ? -1 : 1)).map(([path, bytes]) => ({ path, hash: hash(bytes) })),
-  });
-  files.set("integrity.json", integrity);
+  }));
   await assertNoPrivateData(files, wave);
 
+  // Only now does anything appear on disk. The target is created without `recursive`, so "must not exist" is decided by the
+  // kernel at creation time; the files are staged beside it and renamed in.
+  const parent = dirname(target);
+  const firstCreated = await mkdir(parent, { recursive: true });
   const staging = `${target}.tmp-${randomUUID()}`;
+  let targetCreated = false;
   try {
     for (const [path, bytes] of files) {
       await mkdir(dirname(join(staging, path)), { recursive: true });
       await writeFile(join(staging, path), bytes, { flag: "wx" });
     }
-    await rename(staging, target);
+    try { await mkdir(target); } catch (error) {
+      throw new Error((error as NodeJS.ErrnoException).code === "EEXIST" ? "evidence_dir_exists" : "evidence_write_failed");
+    }
+    targetCreated = true;
+    for (const name of await readdir(staging)) await rename(join(staging, name), join(target, name));
+    await rm(staging, { recursive: true, force: true });
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
+    if (targetCreated) await rm(target, { recursive: true, force: true });
+    await removeCreatedParents(parent, firstCreated);
     throw error;
   }
   return summary;
