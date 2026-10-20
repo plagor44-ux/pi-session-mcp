@@ -13,7 +13,8 @@ import type { ImplementationScore } from "../eval/extensions/oracles.js";
 import { runHelper } from "../eval/extensions/helpers.js";
 import { readVerifiedOutput } from "../eval/extensions/audit.js";
 import { WaveDirGuard, removeTree } from "../eval/extensions/evidence.js";
-import { bwrapArgs, containmentSelfTest, sandboxed } from "../eval/extensions/sandbox.js";
+import { containmentSelfTest } from "../eval/extensions/containment.js";
+import { EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type SandboxPlan } from "../eval/extensions/sandbox.js";
 import { assertWaveDirOutsideSources, resolveTool, resolveTools, type ToolPaths } from "../eval/extensions/tools.js";
 import { encodeKey, macOf, sha256Hex } from "../eval/extensions/output-mac.js";
 import { readRegularFile } from "../eval/extensions/safe-read.js";
@@ -189,13 +190,13 @@ async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "
     input, runs, waveDir, root,
     deps: (steps, extra = {}) => {
       const { spawnRun, captured } = fake(steps, root);
-      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, containmentCheck: async () => undefined, resolveTools: async () => TOOLS, ...extra }, captured };
+      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, containmentCheck: async () => undefined, planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, ...extra }, captured };
     },
   };
 }
 
 const TOOLS: ToolPaths = { strace: "/opt/tools/bin/strace", prlimit: "/opt/tools/bin/prlimit", git: "/opt/tools/bin/git", codegraph: "/opt/tools/bin/codegraph", bwrap: "/opt/tools/bin/bwrap" };
-const baseDeps = (): WaveDeps => ({ prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, containmentCheck: async () => undefined, resolveTools: async () => TOOLS });
+const baseDeps = (): WaveDeps => ({ prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, containmentCheck: async () => undefined, planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS });
 /** Every directory below `dir` with the given name. */
 async function findDirs(dir: string, name: string): Promise<string[]> {
   const found: string[] = [];
@@ -1285,18 +1286,20 @@ describe("source isolation (N5)", () => {
 
 describe("hardening (R44)", () => {
   it("builds every command from absolute tool paths, inside bubblewrap, without an inspector", () => {
-    const traced = tracedCommand(TOOLS, "/scope", "/priv/strace.log", "/scope/run-input.json");
+    const traced = tracedCommand(TOOLS, EMPTY_PLAN, "/scope", "/priv/strace.log", "/scope/run-input.json");
     expect(traced.file).toBe(TOOLS.prlimit);
     expect(traced.args.slice(0, 3)).toEqual([CORE_LIMIT, "--", TOOLS.strace]);
     const afterStrace = traced.args.slice(traced.args.indexOf("-o") + 2);
     expect(afterStrace.slice(0, 2)).toEqual(["--", TOOLS.bwrap]);
     // The build the run unit loads from lives under /tmp, which the sandbox hides: it is bound back read-only, after the tmpfs.
-    const roAt = afterStrace.findIndex((arg, i) => arg === "--ro-bind" && afterStrace[i + 1] === BUILD_ROOT && afterStrace[i + 2] === BUILD_ROOT);
-    expect(roAt).toBeGreaterThan(afterStrace.indexOf("--tmpfs"));
+    const withBuild = tracedCommand(TOOLS, { ...EMPTY_PLAN, extraReadOnly: [BUILD_ROOT] }, "/scope", "/priv/strace.log", "/scope/run-input.json");
+    const sandboxArgs = withBuild.args.slice(withBuild.args.indexOf("-o") + 2);
+    const roAt = sandboxArgs.findIndex((arg, i) => arg === "--ro-bind" && sandboxArgs[i + 1] === BUILD_ROOT && sandboxArgs[i + 2] === BUILD_ROOT);
+    expect(roAt).toBeGreaterThan(sandboxArgs.indexOf("--tmpfs"));
     const sandboxEnd = afterStrace.indexOf("--", 2);
     expect(afterStrace.slice(sandboxEnd + 1, sandboxEnd + 3)).toEqual([process.execPath, "--disable-sigusr1"]);
     expect(traced.args.at(-1)).toBe("/scope/run-input.json");
-    const plain = untracedCommand(TOOLS, "/scope", "/scope/run-input.json");
+    const plain = untracedCommand(TOOLS, EMPTY_PLAN, "/scope", "/scope/run-input.json");
     expect(plain.file).toBe(TOOLS.prlimit);
     expect(plain.args.slice(0, 3)).toEqual([CORE_LIMIT, "--", TOOLS.bwrap]);
     expect(plain.args.slice(plain.args.indexOf("--", 2) + 1, plain.args.indexOf("--", 2) + 3)).toEqual([process.execPath, "--disable-sigusr1"]);
@@ -1361,7 +1364,7 @@ describe("hardening (R44)", () => {
     expect(existsSync(s.waveDir)).toBe(false);
     const tasks = s.input.tasks;
     const approval = approvalFor(tasks, s.runs);
-    await expect(runPreflight({ approval, waveDir: s.waveDir, ledgerPath: s.input.ledgerPath, productionConfig: inside, hostAuth: {} }, { hostCheck: async () => undefined, containmentCheck: async () => undefined, resolveTools: async () => TOOLS })).rejects.toThrow("wave_dir_in_source");
+    await expect(runPreflight({ approval, waveDir: s.waveDir, ledgerPath: s.input.ledgerPath, productionConfig: inside, hostAuth: {} }, { hostCheck: async () => undefined, containmentCheck: async () => undefined, planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS })).rejects.toThrow("wave_dir_in_source");
   });
 
   it("gives the scope no session bus and no runtime directory, whatever the supervisor has", async () => {
@@ -1409,45 +1412,123 @@ describe("Unix socket stop and preflight charge", () => {
 describe("bubblewrap containment (R46)", () => {
   const hasBwrap = existsSync("/usr/bin/bwrap");
 
-  it("builds the sandbox with the scope bind after the tmpfs mounts and nothing else writable", () => {
-    const args = bwrapArgs("/tmp/x/scope", ["/tmp/x/oracle-home"]);
+  const HOME = "/home/op";
+  const plan: SandboxPlan = {
+    runReadOnly: ["/run/systemd/resolve"], varRunDirectory: false, home: HOME,
+    homeReadOnly: [`${HOME}/repo/node_modules`, `${HOME}/.local/bin`], extraReadOnly: ["/tmp/build"],
+  };
+
+  it("builds the sandbox: /run and the home hidden, name resolution and needs bound back read-only, scope bind after the tmpfs mounts", () => {
+    const args = bwrapArgs("/tmp/x/scope", plan, ["/tmp/x/oracle-home"]);
     expect(args.slice(0, 3)).toEqual(["--ro-bind", "/", "/"]);
     const at = (flag: string, value: string) => args.findIndex((arg, i) => arg === flag && args[i + 1] === value);
-    const bindScope = args.findIndex((arg, i) => arg === "--bind" && args[i + 1] === "/tmp/x/scope" && args[i + 2] === "/tmp/x/scope");
+    const bind = (flag: string, path: string) => args.findIndex((arg, i) => arg === flag && args[i + 1] === path && args[i + 2] === path);
+    const bindScope = bind("--bind", "/tmp/x/scope");
     expect(at("--tmpfs", "/tmp")).toBeGreaterThan(-1);
     expect(bindScope).toBeGreaterThan(at("--tmpfs", "/tmp"));
-    expect(args.findIndex((arg, i) => arg === "--bind" && args[i + 1] === "/tmp/x/oracle-home")).toBeGreaterThan(bindScope);
-    expect(at("--tmpfs", "/run/user")).toBeGreaterThan(-1);
-    expect(at("--tmpfs", "/run/dbus")).toBeGreaterThan(-1);
+    expect(bind("--bind", "/tmp/x/oracle-home")).toBeGreaterThan(bindScope);
+    // R48: all of /run is a tmpfs; no dedicated /run/user or /run/dbus entry is left to forget a sibling socket.
+    expect(at("--tmpfs", "/run")).toBeGreaterThan(-1);
+    expect(args.some((arg, i) => arg === "--tmpfs" && (args[i + 1] === "/run/user" || args[i + 1] === "/run/dbus"))).toBe(false);
+    expect(bind("--ro-bind", "/run/systemd/resolve")).toBeGreaterThan(at("--tmpfs", "/run"));
+    // R49: the home is a tmpfs, the needs are bound back read-only after it, the writable binds come last, then the home is remounted read-only.
+    const home = at("--tmpfs", HOME);
+    expect(home).toBeGreaterThan(at("--tmpfs", "/run"));
+    expect(bind("--ro-bind", `${HOME}/repo/node_modules`)).toBeGreaterThan(home);
+    expect(bind("--ro-bind", `${HOME}/.local/bin`)).toBeGreaterThan(home);
+    expect(bindScope).toBeGreaterThan(bind("--ro-bind", `${HOME}/.local/bin`));
+    expect(bind("--ro-bind", "/tmp/build")).toBeGreaterThan(at("--tmpfs", "/tmp"));
+    expect(at("--remount-ro", HOME)).toBeGreaterThan(bind("--bind", "/tmp/x/oracle-home"));
     expect(args.filter((arg) => arg === "--bind")).toHaveLength(2);
     for (const flag of ["--dev", "--proc", "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid"]) expect(args).toContain(flag);
     expect(args).not.toContain("--share-net");
     expect(args).not.toContain("--unshare-net");
     expect(args.at(-1)).toBe("--");
-    expect(sandboxed(TOOLS, "/s", ["echo", "x"]).slice(0, 1)).toEqual([TOOLS.bwrap]);
-    expect(sandboxed(TOOLS, "/s", ["echo", "x"]).slice(-2)).toEqual(["echo", "x"]);
+    expect(sandboxed(TOOLS, plan, "/s", ["echo", "x"]).slice(0, 1)).toEqual([TOOLS.bwrap]);
+    expect(sandboxed(TOOLS, plan, "/s", ["echo", "x"]).slice(-2)).toEqual(["echo", "x"]);
+    expect(bwrapArgs("/s", { ...plan, varRunDirectory: true })).toContain("/var/run");
+    expect(bwrapArgs("/s", { ...EMPTY_PLAN })).not.toContain("--remount-ro");
   });
 
-  const probe = (out: unknown) => async () => ({ stdout: `noise\n${JSON.stringify(out)}\n`, stderr: "" });
+  it("plans the host-dependent part: name resolution, the home with its needs, and a bundle's root", async () => {
+    const root = await temporaryRoot("ablation-plan-");
+    const home = join(root, "home");
+    const repo = join(home, "repo");
+    await mkdir(join(repo, "node_modules"), { recursive: true });
+    await mkdir(join(repo, "skills"));
+    const bundle = join(home, ".tools", "cg", "v1");
+    await mkdir(join(bundle, "bin"), { recursive: true });
+    await writeFile(join(bundle, "bin", "codegraph"), "#!/bin/sh\n");
+    await mkdir(join(home, ".local", "bin"), { recursive: true });
+    symlinkSync(join(bundle, "bin", "codegraph"), join(home, ".local", "bin", "codegraph"));
+    await writeFile(join(home, ".local", "bin", "node"), "x");
+    const planned = await planSandbox({ tools: { codegraph: join(home, ".local", "bin", "codegraph") }, repoRoot: repo, buildRoot: "/tmp/build", home, nodePath: join(home, ".local", "bin", "node") });
+    expect(planned.home).toBe(await (await import("node:fs/promises")).realpath(home));
+    expect(planned.homeReadOnly.sort()).toEqual([
+      join(repo, "node_modules"), join(repo, "skills"), join(home, ".local", "bin"), join(bundle, "bin"), bundle,
+    ].map((path) => path).sort());
+    // A root directly below the home (`~/.local`) is never bound, however deep the binary sits.
+    expect(planned.homeReadOnly).not.toContain(join(home, ".local"));
+    expect(planned.extraReadOnly).toEqual(["/tmp/build"]);
+    expect(planned.varRunDirectory).toBe(false);
+  });
+
+  const SOCKETS = ["/run/user/1000/bus", "/run/dbus/system_bus_socket", "/run/systemd/private", "/run/systemd/journal/socket", "/run/docker.sock"];
+  const good = { home: "EROFS", ssh: "ENOENT", scope: true, oracleHome: true, tmp: true, sockets: Object.fromEntries(SOCKETS.map((p) => [p, "ENOENT"])) };
+  /** A fake sandbox run: writes the strace log of a clean probe where `-o` says, then prints `result`. */
+  const probe = (result: unknown, logText: (root: number) => string = () => `${benignTrace()}`) => async (_file: string, args: readonly string[]) => {
+    const log = args[args.indexOf("-o") + 1]!;
+    await writeFile(log, logText(4240));
+    return { stdout: `noise\n${JSON.stringify(result)}\n`, stderr: "" };
+  };
+  const mutate = (patch: Record<string, unknown>) => ({ ...good, ...patch });
+
   it.each([
-    ["a home that could be written", { home: "created", scope: true, bus: "ENOENT" }],
-    ["a home with another error", { home: "EACCES", scope: true, bus: "ENOENT" }],
-    ["a scope that cannot be written", { home: "EROFS", scope: "EROFS", bus: "ENOENT" }],
-    ["a reachable bus", { home: "EROFS", scope: true, bus: "connected" }],
-    ["a bus failing differently", { home: "EROFS", scope: true, bus: "ECONNREFUSED" }],
+    ["a real home that could be written", mutate({ home: "created" })],
+    ["a home failing with another error", mutate({ home: "EACCES" })],
+    ["a readable .ssh", mutate({ ssh: true })],
+    ["a .ssh failing differently", mutate({ ssh: "EACCES" })],
+    ["a scope that cannot be written", mutate({ scope: "EROFS" })],
+    ["an oracle home that cannot be written", mutate({ oracleHome: "EROFS" })],
+    ["a /tmp that cannot be written", mutate({ tmp: "EROFS" })],
+    ["a reachable user bus", mutate({ sockets: { ...good.sockets, "/run/user/1000/bus": "connected" } })],
+    ["a reachable system bus", mutate({ sockets: { ...good.sockets, "/run/dbus/system_bus_socket": "connected" } })],
+    ["a reachable docker socket", mutate({ sockets: { ...good.sockets, "/run/docker.sock": "connected" } })],
+    ["a socket failing differently", mutate({ sockets: { ...good.sockets, "/run/systemd/private": "ECONNREFUSED" } })],
+    ["a missing socket result", mutate({ sockets: {} })],
   ])("refuses with containment_failed for %s", async (_name, result) => {
-    await expect(containmentSelfTest(TOOLS, { run: probe(result), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: probe(result), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
   });
 
-  it("refuses when the sandbox does not start or prints garbage, and passes on the expected result", async () => {
-    await expect(containmentSelfTest(TOOLS, { run: async () => { throw Object.assign(new Error("helper_failed"), { code: 1 }); } })).rejects.toThrow("containment_failed");
-    await expect(containmentSelfTest(TOOLS, { run: async () => ({ stdout: "not json", stderr: "" }) })).rejects.toThrow("containment_failed");
+  it("refuses when the probe's own strace log shows an outside write or is missing", async () => {
+    const outside = (root: number) => `${benignTrace()}${root + 2} openat(AT_FDCWD</scope>, "/home/x/leak", O_WRONLY|O_CREAT, 0644) = 3</home/x/leak>\n`;
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: probe(good, outside), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: async () => ({ stdout: JSON.stringify(good), stderr: "" }), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+  });
+
+  it("refuses when a marker created in the sandbox's /tmp exists on the host afterwards", async () => {
+    const leaking = async (_file: string, args: readonly string[]) => {
+      await writeFile(args[args.indexOf("-o") + 1]!, benignTrace());
+      const marker = args.find((arg) => arg.startsWith("/tmp/ablation-containment-marker-"))!;
+      await writeFile(marker, "leaked");
+      return { stdout: JSON.stringify(good), stderr: "" };
+    };
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: leaking, home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+  });
+
+  it("refuses when the sandbox does not start or prints garbage, and passes on the expected result through the production command", async () => {
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: async () => { throw Object.assign(new Error("helper_failed"), { code: 1 }); } })).rejects.toThrow("containment_failed");
+    await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: async () => ({ stdout: "not json", stderr: "" }) })).rejects.toThrow("containment_failed");
     const seen: string[][] = [];
-    await containmentSelfTest(TOOLS, { run: async (file, args) => { seen.push([file, ...args]); return probe({ home: "EROFS", scope: true, bus: "ENOENT" })(); }, home: "/home/x", uid: 4242 });
-    expect(seen[0]![0]).toBe(TOOLS.bwrap);
-    expect(seen[0]).toContain("--ro-bind");
+    const inner = probe(good);
+    await containmentSelfTest(TOOLS, plan, { run: async (file, args) => { seen.push([file, ...args]); return inner(file, args); }, home: "/home/x", uid: 4242 });
+    // The production shape: prlimit, then strace, then bubblewrap with the plan and the oracle-home bind.
+    expect(seen[0]!.slice(0, 4)).toEqual([TOOLS.prlimit, CORE_LIMIT, "--", TOOLS.strace]);
+    expect(seen[0]).toContain(TOOLS.bwrap);
+    expect(seen[0]).toContain("--remount-ro");
     expect(seen[0]).toContain("/home/x");
     expect(seen[0]).toContain("4242");
+    expect(seen[0]!.filter((arg) => arg === "--bind")).toHaveLength(2);
   });
 
   it("makes the wave refuse to start when the containment check fails, before anything exists", async () => {
@@ -1458,19 +1539,29 @@ describe("bubblewrap containment (R46)", () => {
     expect(existsSync(s.waveDir)).toBe(false);
   });
 
-  it.skipIf(!hasBwrap)("really contains: the real self-test passes, a write to the real $HOME fails, the scope is writable and the whole sandbox dies with its leader", async () => {
-    const tools = { bwrap: "/usr/bin/bwrap" };
-    await containmentSelfTest(tools);
+  it.skipIf(!hasBwrap)("really contains: the real self-test passes through the production shape; $HOME, host sockets and /tmp are sealed; the scope may sit below /tmp or $HOME; the sandbox dies with its leader", async () => {
+    const real = { bwrap: "/usr/bin/bwrap", strace: "/usr/bin/strace", prlimit: "/usr/bin/prlimit", codegraph: "/nonexistent/codegraph" };
+    const realPlan = await planSandbox({ tools: real, repoRoot: process.cwd(), buildRoot: BUILD_ROOT });
+    await containmentSelfTest(real, realPlan);
+    const run = (scope: string, script: string) => runHelper(real.bwrap, sandboxed(real, realPlan, scope, ["sh", "-c", script]).slice(1));
+    // Below /tmp.
     const scope = await temporaryRoot("ablation-real-bwrap-");
     const marker = `.ablation-contain-${process.pid}`;
-    const run = (script: string) => runHelper(tools.bwrap, sandboxed(tools, scope, ["sh", "-c", script]).slice(1));
-    await expect(run(`echo x > "${homedir()}/${marker}"`)).rejects.toThrow();
+    await expect(run(scope, `echo x > "${homedir()}/${marker}"`)).rejects.toThrow();
     expect(existsSync(join(homedir(), marker))).toBe(false);
-    await run(`echo ok > "${scope}/inside" && test -d /run/user && test -z "$(ls -A /run/user)"`);
+    await run(scope, `echo ok > "${scope}/inside" && test -d /run && test ! -e /run/docker.sock && test ! -e /run/dbus && test ! -e "${homedir()}/.ssh"`);
     expect(await readFile(join(scope, "inside"), "utf8")).toBe("ok\n");
+    // Below the (hidden, read-only) home: the writable bind still works and is the only writable thing there.
+    const homeScope = join(homedir(), `.ablation-scope-test-${process.pid}`);
+    await mkdir(homeScope);
+    try {
+      await run(homeScope, `echo ok > "${homeScope}/inside" && ! (echo x > "${homedir()}/${marker}") 2>/dev/null`);
+      expect(await readFile(join(homeScope, "inside"), "utf8")).toBe("ok\n");
+      expect(existsSync(join(homedir(), marker))).toBe(false);
+    } finally { await rm(homeScope, { recursive: true, force: true }); }
     // A background child does not survive the death of its leader: kill the process group like the supervisor does.
     const duration = String(40000 + (process.pid % 1000));
-    const child = spawn(tools.bwrap, sandboxed(tools, scope, ["sh", "-c", `sleep ${duration} & sleep ${duration}`]).slice(1), { detached: true, stdio: "ignore" });
+    const child = spawn(real.bwrap, sandboxed(real, realPlan, scope, ["sh", "-c", `sleep ${duration} & sleep ${duration}`]).slice(1), { detached: true, stdio: "ignore" });
     await new Promise((resolve) => setTimeout(resolve, 800));
     const alive = async () => (await exec("ps", ["-eo", "args"])).stdout.split("\n").filter((line) => line.trim() === `sleep ${duration}`).length;
     expect(await alive()).toBeGreaterThan(0);
@@ -1523,7 +1614,7 @@ describe("canonical paths and wave directory scope (items 4 and 6)", () => {
     expect(captured).toHaveLength(0);
     const approval = approvalFor(s.input.tasks, s.runs);
     await expect(runPreflight({ approval, waveDir: s.waveDir, ledgerPath: s.input.ledgerPath, productionConfig, hostAuth: {}, repoRoot: s.root }, {
-      hostCheck: async () => undefined, containmentCheck: async () => undefined, resolveTools: async () => TOOLS,
+      hostCheck: async () => undefined, containmentCheck: async () => undefined, planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS,
     })).rejects.toThrow("wave_dir_in_source");
   });
 });

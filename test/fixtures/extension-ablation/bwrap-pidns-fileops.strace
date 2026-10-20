@@ -1,0 +1,429 @@
+3376432 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376432 openat(AT_FDCWD</scope>, "/usr/lib/libcap.so.2", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libcap.so.2.78>
+3376432 openat(AT_FDCWD</scope>, "/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libgcc_s.so.1>
+3376432 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376432 openat(AT_FDCWD</scope>, "/proc/sys/kernel/overflowuid", O_RDONLY|O_CLOEXEC) = 3</proc/sys/kernel/overflowuid>
+3376432 openat(AT_FDCWD</scope>, "/proc/sys/kernel/overflowgid", O_RDONLY|O_CLOEXEC) = 3</proc/sys/kernel/overflowgid>
+3376432 openat(AT_FDCWD</scope>, "/proc", O_RDONLY|O_PATH) = 3</proc>
+3376432 clone(child_stack=NULL, flags=CLONE_NEWNS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|SIGCHLD) = 3376433
+3376432 openat(3</proc>, "3376433/ns", O_RDONLY|O_PATH) = 6</proc/3376433/ns>
+3376432 openat(3</proc>, "self/fd", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 5</proc/3376432/fd>
+3376433 openat(3</proc>, "self", O_RDONLY|O_PATH) = 5</proc/3376433>
+3376433 openat(5</proc/3376433>, "uid_map", O_RDWR|O_CLOEXEC) = 6</proc/3376433/uid_map>
+3376433 openat(5</proc/3376433>, "setgroups", O_RDWR|O_CLOEXEC) = 6</proc/3376433/setgroups>
+3376433 openat(5</proc/3376433>, "gid_map", O_RDWR|O_CLOEXEC) = 6</proc/3376433/gid_map>
+3376433 mount(NULL, "/", NULL, MS_REC|MS_SILENT|MS_SLAVE, NULL) = 0
+3376433 mount("tmpfs", "/tmp", "tmpfs", MS_NOSUID|MS_NODEV, NULL) = 0
+3376433 chdir("/tmp")                   = 0
+3376433 mkdir("newroot", 0755)          = 0
+3376433 mount("newroot", "newroot", NULL, MS_MGC_VAL|MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 mkdir("oldroot", 0755)          = 0
+3376433 pivot_root("/tmp", "oldroot")   = 0
+3376433 chdir("/")                      = 0
+3376433 mkdir("proc", 0755)             = 0
+3376433 mount("oldroot/proc", "proc", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, ".", 0755) = -1 EEXIST (File exists)
+3376433 openat(7</newroot>, ".", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot>
+3376433 mount_setattr(8</newroot>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "dev", 0755) = -1 EEXIST (File exists)
+3376433 openat(6</newroot>, "dev", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev>
+3376433 mount("tmpfs", "/proc/self/fd/5", "tmpfs", MS_NOSUID|MS_NODEV, "mode=0755") = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/dev", {flags=O_RDONLY|O_NOFOLLOW|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/dev>
+3376433 openat(7</newroot/dev>, "null", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/null>
+3376433 openat(7</newroot/dev>, "null", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/null>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/null", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/null>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/null", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/null>
+3376433 mount_setattr(8</newroot/dev/null>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(7</newroot/dev>, "zero", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/zero>
+3376433 openat(7</newroot/dev>, "zero", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/zero>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/zero", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/zero>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/zero", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/zero>
+3376433 mount_setattr(8</newroot/dev/zero>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(7</newroot/dev>, "full", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/full>
+3376433 openat(7</newroot/dev>, "full", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/full>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/full", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/full>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/full", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/full>
+3376433 mount_setattr(8</newroot/dev/full>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(7</newroot/dev>, "random", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/random>
+3376433 openat(7</newroot/dev>, "random", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/random>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/random", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/random>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/random", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/random>
+3376433 mount_setattr(8</newroot/dev/random>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(7</newroot/dev>, "urandom", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/urandom>
+3376433 openat(7</newroot/dev>, "urandom", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/urandom>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/urandom", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/urandom>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/urandom", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/urandom>
+3376433 mount_setattr(8</newroot/dev/urandom>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(7</newroot/dev>, "tty", O_WRONLY|O_CREAT|O_EXCL|O_NOCTTY|O_NOFOLLOW|O_CLOEXEC, 0444) = 5</newroot/dev/tty>
+3376433 openat(7</newroot/dev>, "tty", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/dev/tty>
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 8</oldroot>
+3376433 openat2(8</oldroot>, "/dev/tty", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 9</oldroot/dev/tty>
+3376433 mount("/proc/self/fd/9", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/dev/tty", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/dev/tty>
+3376433 mount_setattr(8</newroot/dev/tty>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 symlinkat("/proc/self/fd/0", 7</newroot/dev>, "stdin") = 0
+3376433 symlinkat("/proc/self/fd/1", 7</newroot/dev>, "stdout") = 0
+3376433 symlinkat("/proc/self/fd/2", 7</newroot/dev>, "stderr") = 0
+3376433 symlinkat("/proc/self/fd", 7</newroot/dev>, "fd") = 0
+3376433 symlinkat("/proc/kcore", 7</newroot/dev>, "core") = 0
+3376433 mkdirat(7</newroot/dev>, "shm", 0755) = 0
+3376433 mkdirat(7</newroot/dev>, "pts", 0755) = 0
+3376433 openat(7</newroot/dev>, "pts", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH|O_DIRECTORY) = 5</newroot/dev/pts>
+3376433 mount("devpts", "/proc/self/fd/5", "devpts", MS_NOSUID|MS_NOEXEC, "newinstance,ptmxmode=0666,mode=6"...) = 0
+3376433 symlinkat("pts/ptmx", 7</newroot/dev>, "ptmx") = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "proc", 0755) = -1 EEXIST (File exists)
+3376433 openat(6</newroot>, "proc", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/proc>
+3376433 mount("proc", "/proc/self/fd/5", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/proc", {flags=O_RDONLY|O_NOFOLLOW|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/proc>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "tmp", 0755) = -1 EEXIST (File exists)
+3376433 openat(6</newroot>, "tmp", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/tmp>
+3376433 mount("tmpfs", "/proc/self/fd/5", "tmpfs", MS_NOSUID|MS_NODEV, "mode=0755") = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "run", 0755) = -1 EEXIST (File exists)
+3376433 openat(6</newroot>, "run", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/run>
+3376433 mount("tmpfs", "/proc/self/fd/5", "tmpfs", MS_NOSUID|MS_NODEV, "mode=0755") = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/run/systemd/resolve", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/run/systemd/resolve>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "run", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/run", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/run>
+3376433 mkdirat(8</newroot/run>, "systemd", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/run/systemd", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/run/systemd>
+3376433 mkdirat(7</newroot/run/systemd>, "resolve", 0755) = 0
+3376433 openat(7</newroot/run/systemd>, "resolve", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/run/systemd/resolve>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/run/systemd/resolve", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/run/systemd/resolve>
+3376433 mount_setattr(8</newroot/run/systemd/resolve>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "home", 0755) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home>
+3376433 mkdirat(7</newroot/home>, "user", 0755) = -1 EEXIST (File exists)
+3376433 openat(7</newroot/home>, "user", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user>
+3376433 mount("tmpfs", "/proc/self/fd/5", "tmpfs", MS_NOSUID|MS_NODEV, "mode=0755") = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/home/user/Projekte/pi-session-mcp/node_modules", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/Projekte/pi-session-mcp/node_modules>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home>
+3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
+3376433 mkdirat(7</newroot/home/user>, "Projekte", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
+3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/Projekte/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/Projekte/pi-session-mcp>
+3376433 mkdirat(7</newroot/home/user/Projekte/pi-session-mcp>, "node_modules", 0755) = 0
+3376433 openat(7</newroot/home/user/Projekte/pi-session-mcp>, "node_modules", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/Projekte/pi-session-mcp/node_modules>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/Projekte/pi-session-mcp/node_modules", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/Projekte/pi-session-mcp/node_modules>
+3376433 mount_setattr(8</newroot/home/user/Projekte/pi-session-mcp/node_modules>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/home/user/Projekte/pi-session-mcp/skills", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/Projekte/pi-session-mcp/skills>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home>
+3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
+3376433 mkdirat(7</newroot/home/user>, "Projekte", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
+3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/Projekte/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/Projekte/pi-session-mcp>
+3376433 mkdirat(7</newroot/home/user/Projekte/pi-session-mcp>, "skills", 0755) = 0
+3376433 openat(7</newroot/home/user/Projekte/pi-session-mcp>, "skills", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/Projekte/pi-session-mcp/skills>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/Projekte/pi-session-mcp/skills", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/Projekte/pi-session-mcp/skills>
+3376433 mount_setattr(8</newroot/home/user/Projekte/pi-session-mcp/skills>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/home/user/.local/bin", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/.local/bin>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home>
+3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
+3376433 mkdirat(7</newroot/home/user>, ".local", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.local", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/.local>
+3376433 mkdirat(8</newroot/home/user/.local>, "bin", 0755) = 0
+3376433 openat(8</newroot/home/user/.local>, "bin", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/.local/bin>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/.local/bin", O_RDONLY|O_CLOEXEC|O_PATH) = 7</newroot/home/user/.local/bin>
+3376433 mount_setattr(7</newroot/home/user/.local/bin>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/home/user/.codegraph/versions/v1.6.2/bin", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/.codegraph/versions/v1.6.2/bin>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home>
+3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
+3376433 mkdirat(7</newroot/home/user>, ".codegraph", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.codegraph", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/.codegraph>
+3376433 mkdirat(8</newroot/home/user/.codegraph>, "versions", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.codegraph/versions", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/.codegraph/versions>
+3376433 mkdirat(7</newroot/home/user/.codegraph/versions>, "v1.6.2", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.codegraph/versions/v1.6.2", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/.codegraph/versions/v1.6.2>
+3376433 mkdirat(8</newroot/home/user/.codegraph/versions/v1.6.2>, "bin", 0755) = 0
+3376433 openat(8</newroot/home/user/.codegraph/versions/v1.6.2>, "bin", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/.codegraph/versions/v1.6.2/bin>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/.codegraph/versions/v1.6.2/bin", O_RDONLY|O_CLOEXEC|O_PATH) = 7</newroot/home/user/.codegraph/versions/v1.6.2/bin>
+3376433 mount_setattr(7</newroot/home/user/.codegraph/versions/v1.6.2/bin>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/home/user/.codegraph/versions/v1.6.2", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/.codegraph/versions/v1.6.2>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home>
+3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
+3376433 mkdirat(7</newroot/home/user>, ".codegraph", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.codegraph", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/.codegraph>
+3376433 mkdirat(8</newroot/home/user/.codegraph>, "versions", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home/user/.codegraph/versions", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/.codegraph/versions>
+3376433 mkdirat(7</newroot/home/user/.codegraph/versions>, "v1.6.2", 0755) = -1 EEXIST (File exists)
+3376433 openat(7</newroot/home/user/.codegraph/versions>, "v1.6.2", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/.codegraph/versions/v1.6.2>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/.codegraph/versions/v1.6.2", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/.codegraph/versions/v1.6.2>
+3376433 mount_setattr(8</newroot/home/user/.codegraph/versions/v1.6.2>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/scope", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/scope>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "tmp", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp>
+3376433 mkdirat(8</newroot/tmp>, "user-1", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1>
+3376433 mkdirat(7</newroot/tmp/user-1>, "-project", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp/user-1/-project>
+3376433 mkdirat(8</newroot/tmp/user-1/-project>, "08a7ffb9-cc54-4b70-9751-8a3f04fd8409", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409>
+3376433 mkdirat(7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409>, "scratchpad", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad>
+3376433 mkdirat(8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad>, "smoke6", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6>
+3376433 mkdirat(7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6>, "probes", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/probes", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/probes>
+3376433 mkdirat(8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/probes>, "fx", 0700) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/work", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/work>
+3376433 mkdirat(7</newroot/work>, "scope", 0755) = 0
+3376433 openat(7</newroot/work>, "scope", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/scope>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/scope", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/scope>
+3376433 mount_setattr(8</newroot/scope>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
+3376433 openat2(5</oldroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build>
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
+3376433 mkdirat(7</newroot>, "tmp", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp>
+3376433 mkdirat(8</newroot/tmp>, "user-1", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1>
+3376433 mkdirat(7</newroot/tmp/user-1>, "-project", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp/user-1/-project>
+3376433 mkdirat(8</newroot/tmp/user-1/-project>, "08a7ffb9-cc54-4b70-9751-8a3f04fd8409", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409>
+3376433 mkdirat(7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409>, "scratchpad", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad>
+3376433 mkdirat(8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad>, "smoke6", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6>
+3376433 mkdirat(7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6>, "build", 0755) = 0
+3376433 openat(7</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6>, "build", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build>
+3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build>
+3376433 mount_setattr(8</newroot/tmp/user-1/-project/08a7ffb9-cc54-4b70-9751-8a3f04fd8409/scratchpad/smoke6/build>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</newroot>
+3376433 mkdirat(6</newroot>, "home", 0700) = -1 EEXIST (File exists)
+3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
+3376433 openat2(5</newroot>, "/home", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home>
+3376433 openat(7</newroot/home>, "user", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user>
+3376433 openat(AT_FDCWD</>, "/newroot/home/user", O_RDONLY|O_CLOEXEC|O_PATH) = 6</newroot/home/user>
+3376433 mount_setattr(6</newroot/home/user>, "", AT_EMPTY_PATH, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 mount("oldroot", "oldroot", NULL, MS_REC|MS_SILENT|MS_PRIVATE, NULL) = 0
+3376433 umount2("oldroot", MNT_DETACH)  = 0
+3376433 openat(AT_FDCWD</>, "/", O_RDONLY|O_DIRECTORY) = 5</>
+3376433 chdir("/newroot")               = 0
+3376433 pivot_root(".", ".")            = 0
+3376433 fchdir(5</>)                    = 0
+3376433 umount2(".", MNT_DETACH)        = 0
+3376433 chdir("/")                      = 0
+3376433 unshare(CLONE_NEWUSER)          = 0
+3376433 openat(3</proc>, "self", O_RDONLY|O_PATH) = 5</proc/3376433>
+3376433 openat(5</proc/3376433>, "uid_map", O_RDWR|O_CLOEXEC) = 6</proc/3376433/uid_map>
+3376433 openat(5</proc/3376433>, "gid_map", O_RDWR|O_CLOEXEC) = 6</proc/3376433/gid_map>
+3376433 chdir("/scope") = 0
+3376433 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7fa959c80e90) = 2 /* 3376434 in strace's PID NS */
+3376433 openat(3</proc>, "self/fd", O_RDONLY|O_NOCTTY|O_NONBLOCK|O_CLOEXEC|O_DIRECTORY) = 5</proc/3376433/fd>
+3376434 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libz.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libz.so.1.3.1.zlib-ng>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libuv.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libuv.so.1.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_raw_hash_set.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_raw_hash_set.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_hash.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_hash.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_str_format_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_str_format_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_synchronization.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_synchronization.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_kernel_timeout_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_kernel_timeout_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_throw_delegate.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_throw_delegate.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libada.so.4", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libada.so.4.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libsimdjson.so.34", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libsimdjson.so.34.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libbrotlidec.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libbrotlidec.so.1.2.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libbrotlienc.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libbrotlienc.so.1.2.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libcares.so.2", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libcares.so.2.19.7>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libnghttp2.so.14", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libnghttp2.so.14.29.5>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libffi.so.8", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libffi.so.8.5.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libzstd.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libzstd.so.1.5.7>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libcrypto.so.3", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libcrypto.so.3>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libssl.so.3", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libssl.so.3>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libicui18n.so.78", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libicui18n.so.78.3>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libicuuc.so.78", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libicuuc.so.78.3>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libstdc++.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libstdc++.so.6.0.36>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libm.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libm.so.6>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libgcc_s.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libgcc_s.so.1>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/glibc-hwcaps/x86-64-v4/libabsl_hashtablez_sampler.so.2608.0.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/glibc-hwcaps/x86-64-v3/libabsl_hashtablez_sampler.so.2608.0.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/glibc-hwcaps/x86-64-v2/libabsl_hashtablez_sampler.so.2608.0.0", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_hashtablez_sampler.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_hashtablez_sampler.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_raw_logging_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_raw_logging_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_city.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_city.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_strings.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_strings.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_int128.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_int128.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_strings_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_strings_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_stacktrace.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_stacktrace.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_time.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_time.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_tracing_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_tracing_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_malloc_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_malloc_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_base.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_base.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_spinlock_wait.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_spinlock_wait.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libbrotlicommon.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libbrotlicommon.so.1.2.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libicudata.so.78", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libicudata.so.78.3>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_debugging_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_debugging_internal.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/usr/lib/libabsl_time_zone.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_time_zone.so.2608.0.0>
+3376434 openat(AT_FDCWD</scope>, "/etc/ssl/openssl.cnf", O_RDONLY) = 3</etc/ssl/openssl.cnf>
+3376434 openat(AT_FDCWD</scope>, "/proc/version_signature", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+3376434 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Function not implemented) (INJECTED)
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f34629ffce8, parent_tid=0x7f34629ff990, exit_signal=0, stack=0x7f34621ff000, stack_size=0x7ffd00, tls=0x7f34629ff6c0} => {parent_tid=[3 /* 3376437 in strace's PID NS */]}, 88) = 3 /* 3376437 in strace's PID NS */
+3376437 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Function not implemented) (INJECTED)
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f34621fece8, parent_tid=0x7f34621fe990, exit_signal=0, stack=0x7f34619fe000, stack_size=0x7ffd00, tls=0x7f34621fe6c0} => {parent_tid=[4 /* 3376438 in strace's PID NS */]}, 88) = 4 /* 3376438 in strace's PID NS */
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f34619fdce8, parent_tid=0x7f34619fd990, exit_signal=0, stack=0x7f34611fd000, stack_size=0x7ffd00, tls=0x7f34619fd6c0} => {parent_tid=[5 /* 3376444 in strace's PID NS */]}, 88) = 5 /* 3376444 in strace's PID NS */
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f34611fcce8, parent_tid=0x7f34611fc990, exit_signal=0, stack=0x7f34609fc000, stack_size=0x7ffd00, tls=0x7f34611fc6c0} => {parent_tid=[6 /* 3376445 in strace's PID NS */]}, 88) = 6 /* 3376445 in strace's PID NS */
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f34609fbce8, parent_tid=0x7f34609fb990, exit_signal=0, stack=0x7f34601fb000, stack_size=0x7ffd00, tls=0x7f34609fb6c0} => {parent_tid=[7 /* 3376446 in strace's PID NS */]}, 88) = 7 /* 3376446 in strace's PID NS */
+3376434 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Function not implemented) (INJECTED)
+3376434 openat(AT_FDCWD</scope>, "/proc/self/maps", O_RDONLY|O_CLOEXEC) = 17</proc/2/maps>
+3376434 openat(AT_FDCWD</scope>, "/proc/self/cgroup", O_RDONLY|O_CLOEXEC) = 17</proc/2/cgroup>
+3376434 openat(AT_FDCWD</scope>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.max", O_RDONLY|O_CLOEXEC) = 17</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.max>
+3376434 openat(AT_FDCWD</scope>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.high", O_RDONLY|O_CLOEXEC) = 17</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.high>
+3376434 openat(AT_FDCWD</scope>, "/proc/meminfo", O_RDONLY|O_CLOEXEC) = 17</proc/meminfo>
+3376434 openat(AT_FDCWD</scope>, "/proc/self/maps", O_RDONLY) = 17</proc/2/maps>
+3376434 openat(AT_FDCWD</scope>, "/usr/bin/node", O_RDONLY) = 17</usr/bin/node>
+3376434 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f3465498ce8, parent_tid=0x7f3465498990, exit_signal=0, stack=0x7f3465490000, stack_size=0x7d00, tls=0x7f34654986c0} => {parent_tid=[8 /* 3376447 in strace's PID NS */]}, 88) = 8 /* 3376447 in strace's PID NS */
+3376434 openat(AT_FDCWD</scope>, "/sys/devices/system/cpu/online", O_RDONLY|O_CLOEXEC) = 17</sys/devices/system/cpu/online>
+3376434 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Function not implemented) (INJECTED)
+3376434 openat(AT_FDCWD</scope>, "/dev/null", O_RDONLY|O_CLOEXEC) = 21</dev/null>
+3376434 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f346549bc90) = 9 /* 3376448 in strace's PID NS */
+3376448 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376448 openat(AT_FDCWD</scope>, "/usr/lib/libreadline.so.8", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libreadline.so.8.3>
+3376448 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376448 openat(AT_FDCWD</scope>, "/usr/lib/libncursesw.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libncursesw.so.6.6>
+3376448 openat(AT_FDCWD</scope>, "/dev/tty", O_RDWR|O_NONBLOCK) = -1 ENXIO (No such device or address)
+3376448 openat(AT_FDCWD</scope>, "/etc/nsswitch.conf", O_RDONLY|O_CLOEXEC) = 3</etc/nsswitch.conf>
+3376448 openat(AT_FDCWD</scope>, "/etc/passwd", O_RDONLY|O_CLOEXEC) = 3</etc/passwd>
+3376448 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f379f36fe50) = 10 /* 3376449 in strace's PID NS */
+3376449 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376449 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376449 mkdir("sub", 0777)              = 0
+3376449 +++ exited with 0 +++
+3376448 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=10, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3376448 openat(AT_FDCWD</scope>, "f", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</scope/f>
+3376448 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f379f36fe50) = 11 /* 3376450 in strace's PID NS */
+3376450 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376450 openat(AT_FDCWD</scope>, "/usr/lib/libacl.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libacl.so.1.2.2400>
+3376450 openat(AT_FDCWD</scope>, "/usr/lib/libattr.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libattr.so.1.1.2600>
+3376450 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376450 renameat2(AT_FDCWD</scope>, "f", AT_FDCWD</scope>, "g", RENAME_NOREPLACE) = 0
+3376450 +++ exited with 0 +++
+3376448 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=11, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3376448 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f379f36fe50) = 12 /* 3376451 in strace's PID NS */
+3376451 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376451 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376451 unlink("g")                     = 0
+3376451 +++ exited with 0 +++
+3376448 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=12, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3376448 openat(AT_FDCWD</scope>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+3376448 openat(AT_FDCWD</scope>, "/usr/lib/libc.so.6", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libc.so.6>
+3376448 rmdir("sub")                    = 0
+3376448 +++ exited with 0 +++
+3376437 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=9 /* 3376448 in strace's PID NS */, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3376434 openat(AT_FDCWD</scope>, "/dev/null", O_RDONLY|O_CLOEXEC) = 17</dev/null>
+3376446 +++ exited with 0 +++
+3376438 +++ exited with 0 +++
+3376444 +++ exited with 0 +++
+3376445 +++ exited with 0 +++
+3376437 +++ exited with 0 +++
+3376447 +++ exited with 0 +++
+3376434 +++ exited with 0 +++
+3376432 +++ exited with 0 +++
+3376433 +++ exited with 0 +++

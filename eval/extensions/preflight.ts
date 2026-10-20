@@ -12,9 +12,10 @@ import { WaveDirGuard, removeTree } from "./evidence.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
 import { routeAddresses } from "./network.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
-import { containmentSelfTest } from "./sandbox.js";
+import { containmentSelfTest } from "./containment.js";
+import { planSandbox, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
-import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
+import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
 import { assertWaveDirOutsideSources, resolveTools, type ToolPaths } from "./tools.js";
 import { prepareEmptyScope, privateRunDir, scopeRoot, type RunScope } from "./workspace.js";
 
@@ -51,7 +52,8 @@ export interface PreflightDeps {
   /** Resolves the route's endpoint; a failure fails that route (`provider_host_unresolvable`). */
   checkRoute?: ((route: { provider: string; model: string }) => Promise<unknown>) | undefined;
   hostCheck?: (() => Promise<void>) | undefined;
-  containmentCheck?: ((tools: ToolPaths) => Promise<void>) | undefined;
+  containmentCheck?: ((tools: ToolPaths, plan: SandboxPlan) => Promise<void>) | undefined;
+  planSandbox?: ((tools: ToolPaths) => Promise<SandboxPlan>) | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -76,7 +78,8 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
   await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), input.repoRoot ?? process.cwd()]);
-  await (deps.containmentCheck ?? ((t: ToolPaths) => containmentSelfTest(t)))(tools);
+  const plan = await (deps.planSandbox ?? ((t: ToolPaths) => planSandbox({ tools: t, repoRoot: input.repoRoot ?? process.cwd(), buildRoot: BUILD_ROOT })))(tools);
+  await (deps.containmentCheck ?? containmentSelfTest)(tools, plan);
   const names = input.approval.routes.map((route) => `preflight-${route.profile}`);
   if ([join(input.waveDir, "preflight.json"), ...names.flatMap((name) => [scopeRoot(input.waveDir, name), privateRunDir(input.waveDir, name)])].some((path) => existsSync(path))) {
     throw new Error("output_exists");
@@ -112,7 +115,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       const inputPath = join(scope.root, "run-input.json");
       await writeFile(inputPath, JSON.stringify(runOneInput), { mode: 0o600 });
       if (input.signal?.aborted) { fail("interrupted"); continue; }
-      const child = (deps.spawnRun ?? ((sc: RunScope, ri: string) => spawnRunOne(tools, sc, ri)))(scope, inputPath);
+      const child = (deps.spawnRun ?? ((sc: RunScope, ri: string) => spawnRunOne(tools, plan, sc, ri)))(scope, inputPath);
       executed = true;
       startWithKey(child, key);
       const supervised: Supervised = await supervise(child, timeoutMs, input.signal);

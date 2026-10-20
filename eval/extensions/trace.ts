@@ -14,6 +14,8 @@ export const STRACE_ARGS: readonly string[] = [
   // R36: Node's libuv calls io_uring_setup even with UV_USE_IO_URING=0 and it succeeds on some hosts. Failing it makes libuv fall back to its
   // thread pool, as on kernels without io_uring; the injected call returns -1, which the parser ignores (R23b).
   "-e", "inject=io_uring_setup:error=ENOSYS",
+  // R49b: inside bubblewrap's PID namespace a clone returns the namespace pid; strace appends the real one as `/* N in strace's PID NS */`.
+  "--decode-pids=pidns",
 ];
 
 /*
@@ -154,7 +156,9 @@ function parseReturn(tail: string): Return | null {
   if (!m) return null;
   // `= ? ERESTARTSYS (...)`: the call is interrupted and will be restarted, so it stays in progress and fails closed.
   if (m[3]?.startsWith("ERESTART") || m[1] === "?") return { kind: "progress" };
-  const value = Number(m[1]);
+  // With --decode-pids=pidns a PID-namespace return is `= 2 /* 3372303 in strace's PID NS */`: the decoded pid is the one the log uses.
+  const decoded = /\/\*\s*(\d+) in strace's PID NS\s*\*\//.exec(tail)?.[1];
+  const value = decoded !== undefined ? Number(decoded) : Number(m[1]);
   if (value < 0) return { kind: "failed" };
   return m[2] === undefined ? { kind: "ok", value } : { kind: "ok", value, annotation: decodeEscapes(m[2]) };
 }
@@ -314,8 +318,10 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   newCell(ctx.rootPid, [posix.resolve("/", ctx.initialCwd)], -1);
 
   // Magic links such as /proc/self/root and /proc/self/fd/N are deliberately not exempt.
+  // Inside bubblewrap /tmp, /dev/shm and /run are fresh tmpfs mounts private to the sandbox (M2); a write there is not a host write.
+  const privateRoots = ctx.sandboxed === true ? ["/tmp", "/dev/shm", "/run"] : [];
   const allowed = (p: string): boolean =>
-    p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
+    privateRoots.some((r) => p === r || p.startsWith(`${r}/`)) || p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
   const cellOf = (pid: number): Cell | undefined => { const c = live.get(pid); return c && root(c); };
 
