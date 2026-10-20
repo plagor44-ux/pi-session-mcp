@@ -1,8 +1,11 @@
 import { posix } from "node:path";
 
-/** The caller appends `-o <log> --` and the command. `-y` annotates fds (including AT_FDCWD) with their paths. */
+/**
+ * The caller appends `-o <log> --` and the command. `-y` annotates fds (including AT_FDCWD) with their paths.
+ * `-q` (not `-qq`) keeps the `+++ exited +++` lines that free a pid's cwd; signal and exit lines are skipped by the parser.
+ */
 export const STRACE_ARGS: readonly string[] = [
-  "-f", "-qq", "-e",
+  "-f", "-q", "-e",
   "trace=connect,openat,open,creat,rename,renameat,renameat2,unlink,unlinkat,mkdir,mkdirat,symlink,symlinkat,link,linkat,truncate,chdir,fchdir,clone,clone3,fork,vfork"
     + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
     + ",sendto,sendmsg,sendmmsg,io_uring_setup",
@@ -134,7 +137,7 @@ function parseReturn(tail: string): Return | null {
   if (m[3]?.startsWith("ERESTART") || m[1] === "?") return { kind: "progress" };
   const value = Number(m[1]);
   if (value < 0) return { kind: "failed" };
-  return m[2] === undefined ? { kind: "ok", value } : { kind: "ok", value, annotation: annotationPath(m[2]) };
+  return m[2] === undefined ? { kind: "ok", value } : { kind: "ok", value, annotation: decodeEscapes(m[2]) };
 }
 
 /** A call cut off before its return value (an unfinished line that never resumed, a truncated log) is in progress. */
@@ -165,9 +168,13 @@ function decodeEscapes(body: string): string {
   return Buffer.from(bytes).toString("utf8");
 }
 
-/** A `-y` annotation is escaped like a string argument and carries ` (deleted)` for unlinked files. */
-function annotationPath(raw: string): string {
-  return decodeEscapes(raw).replace(/ \(deleted\)$/, "");
+/**
+ * A `-y` annotation is escaped like a string argument and carries ` (deleted)` for unlinked files. A real directory can also be
+ * named "x (deleted)", so every verdict is made on the annotation as printed and on the stripped form, and the stricter one wins.
+ */
+function pathVariants(annotation: string): string[] {
+  const stripped = annotation.replace(/ \(deleted\)$/, "");
+  return stripped === annotation ? [annotation] : [annotation, stripped];
 }
 
 /** `undefined` when the token is not a string literal, `null` for NULL. */
@@ -182,11 +189,16 @@ interface Fd { cwd: boolean; annotation?: string }
 function parseFd(token: string | undefined): Fd | null {
   const m = token === undefined ? null : /^(AT_FDCWD|-?\d+)(?:<([^]*)>)?$/.exec(token);
   if (!m) return null;
-  const annotation = m[2] === undefined ? undefined : annotationPath(m[2]);
+  const annotation = m[2] === undefined ? undefined : decodeEscapes(m[2]);
   return { cwd: m[1] === "AT_FDCWD" || m[1] === "-100", ...(annotation === undefined ? {} : { annotation }) };
 }
 
-type Resolved = { path: string } | { unresolved: true } | { ignore: true };
+/** `alt` is the ` (deleted)`-stripped reading of the same target; both are judged. */
+type Resolved = { path: string; alt?: string } | { unresolved: true } | { ignore: true };
+function fromVariants(bases: string[], rest?: string): Resolved {
+  const [path, alt] = bases.map((b) => (rest === undefined ? posix.resolve(b) : posix.resolve(b, rest)));
+  return alt === undefined || alt === path ? { path: path! } : { path: path!, alt };
+}
 const UNRESOLVED: Resolved = { unresolved: true };
 type Destination = { family: "inet" | "inet6"; address: string; port: number };
 const UNKNOWN_DESTINATION: Destination = { family: "inet", address: "unknown", port: 0 };
@@ -219,15 +231,18 @@ const normalizeAddress = (address: string): string => {
 const FLAGS_WRITE = /\bO_(?:WRONLY|RDWR|CREAT|TRUNC|TMPFILE)\b/;
 const EXIT_LINE = /^\+\+\+ (?:exited|killed)\b/;
 
-/** One cwd value; CLONE_FS threads share a cell, so a chdir by one is seen by all. */
-interface Cell { cwd: string | null }
+/**
+ * One cwd value; CLONE_FS threads share a cell, so a chdir by one is seen by all. `at` is the log line of the last change and
+ * `created` the line that made the cell: both order events, because under `-f` lines of different pids arrive out of order.
+ */
+interface Cell { cwd: string | null; at: number; created: number }
 
 export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
   const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
-  const cells = new Map<number, Cell>([[ctx.rootPid, { cwd: posix.resolve("/", ctx.initialCwd) }]]);
-  const pending = new Map<number, string>();
+  const cells = new Map<number, Cell>([[ctx.rootPid, { cwd: posix.resolve("/", ctx.initialCwd), at: -1, created: -1 }]]);
+  const pending = new Map<number, { head: string; seq: number }>();
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
@@ -237,30 +252,30 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
   const cwdOf = (pid: number): string | null | undefined => cells.get(pid)?.cwd;
-  function setCwd(pid: number, cwd: string | null): void {
+  function setCwd(pid: number, cwd: string | null, seq: number): void {
     const cell = cells.get(pid);
-    if (cell) cell.cwd = cwd;
-    else cells.set(pid, { cwd });
+    if (cell) { cell.cwd = cwd; cell.at = seq; }
+    else cells.set(pid, { cwd, at: seq, created: seq });
   }
 
   function resolveTarget(pid: number, args: string[], t: Target): Resolved {
     if ("fd" in t) {
       const fd = parseFd(args[t.fd]);
       if (fd?.annotation === undefined) return UNRESOLVED;
-      return fd.annotation.startsWith("/") ? { path: posix.resolve(fd.annotation) } : { ignore: true }; // socket:[n], pipe:[n], ...
+      return fd.annotation.startsWith("/") ? fromVariants(pathVariants(fd.annotation)) : { ignore: true }; // socket:[n], pipe:[n], ...
     }
     const path = unquote(args[t.path]);
     if (path === null && t.nullIsDir) return resolveTarget(pid, args, { fd: t.dir! });
     if (path === undefined || path === null) return UNRESOLVED;
-    if (path.startsWith("/")) return { path: posix.resolve(path) };
-    let base: string | null | undefined;
-    if (t.dir === undefined) base = cwdOf(pid);
+    if (path.startsWith("/")) return fromVariants([path]);
+    let bases: string[] = [];
+    if (t.dir === undefined) bases = [cwdOf(pid)].filter((b): b is string => !!b);
     else {
       const dir = parseFd(args[t.dir]);
-      if (dir?.annotation?.startsWith("/")) base = dir.annotation;
-      else if (dir?.cwd) base = cwdOf(pid);
+      if (dir?.annotation?.startsWith("/")) bases = pathVariants(dir.annotation);
+      else if (dir?.cwd) bases = [cwdOf(pid)].filter((b): b is string => !!b);
     }
-    return base ? { path: posix.resolve(base, path) } : UNRESOLVED;
+    return bases.length ? fromVariants(bases, path) : UNRESOLVED;
   }
 
   function write(pid: number, call: Call, spec: Spec): void {
@@ -273,21 +288,28 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     let unresolved = false, denied = false;
     const judge = (r: Resolved): void => {
       if ("unresolved" in r) unresolved = true;
-      else if ("path" in r && !allowed(r.path)) {
-        if (failed) denied = true;
-        else outside.add(r.path);
+      else if ("path" in r) {
+        for (const path of [r.path, ...(r.alt === undefined ? [] : [r.alt])]) {
+          if (allowed(path)) continue;
+          if (failed) denied = true;
+          else outside.add(path);
+        }
       }
     };
     const resolved = spec.targets.map((target) => resolveTarget(pid, call.args, target));
     const kernel = spec.kernelPath && call.ret.kind === "ok" ? call.ret.annotation : undefined;
-    if (kernel?.startsWith("/")) judge({ path: posix.resolve(kernel) }); // the path the kernel really opened, symlinks followed
-    else resolved.forEach(judge);
+    if (kernel?.startsWith("/")) {
+      // The annotation is what the kernel opened (symlinks followed); it can only make the verdict stricter than the lexical path.
+      resolved.forEach((r) => { if (!("unresolved" in r)) judge(r); });
+      judge(fromVariants(pathVariants(kernel)));
+    } else resolved.forEach(judge);
     if (spec.symlinkTarget !== undefined) {
       const target = unquote(call.args[spec.symlinkTarget]);
       const link = resolved[0];
       if (typeof target !== "string") judge(UNRESOLVED);
-      else if (target.startsWith("/")) judge({ path: posix.resolve(target) });
-      else judge(link && "path" in link ? { path: posix.resolve(posix.dirname(link.path), target) } : UNRESOLVED);
+      else if (target.startsWith("/")) judge(fromVariants([target]));
+      else if (link && "path" in link) judge(fromVariants([link.path, ...(link.alt === undefined ? [] : [link.alt])].map((l) => posix.dirname(l)), target));
+      else judge(UNRESOLVED);
     }
     if (failed) { if (denied) deniedWriteAttempts++; } else if (unresolved) unresolvedWrites++;
   }
@@ -299,23 +321,40 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     unexpected.set(`${dest.family}|${dest.address}|${dest.port}`, dest);
   }
 
-  function clone(pid: number, call: Call): void {
+  /** `headSeq` is the line where the call started (the unfinished head, or the full line), `seq` the line of its return. */
+  function clone(pid: number, call: Call, seq: number, headSeq: number): void {
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
-    const child = call.ret.value, parent = cells.get(pid), own = cells.get(child);
-    const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1] ?? "";
-    if (/\bCLONE_FS\b/.test(flags)) {
-      // Threads share one cell. If the child already changed directory, that change is the latest state.
-      const cell = parent ?? own ?? { cwd: null };
-      if (parent && own && own.cwd !== null) parent.cwd = own.cwd;
+    const child = call.ret.value, parent = cells.get(pid), found = cells.get(child);
+    // Under -f the child may run, and chdir, between the head and the return line. A cell from before the head belongs to an
+    // earlier process with the same pid and is replaced.
+    const own = found && found.created > headSeq ? found : undefined;
+    const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
+    if (flags !== undefined && /\bCLONE_FS\b/.test(flags)) {
+      // Threads share one cell; the later change by sequence wins, including an unknown cwd.
+      const cell = parent ?? { cwd: null, at: -1, created: seq };
+      if (own && own !== cell && own.at > cell.at) { cell.cwd = own.cwd; cell.at = own.at; }
       cells.set(pid, cell);
       cells.set(child, cell);
     } else if (!own) {
-      // Under -f the child often runs, and may chdir, before the parent's return line: never overwrite what it did.
-      cells.set(child, { cwd: parent?.cwd ?? null });
+      // clone/clone3 whose flags cannot be read may have shared the cwd: fail closed with an unknown cwd.
+      const unreadable = flags === undefined && (call.name === "clone" || call.name === "clone3");
+      cells.set(child, { cwd: unreadable ? null : (parent?.cwd ?? null), at: seq, created: seq });
     }
   }
 
-  function handle(pid: number, body: string): void {
+  function chdir(pid: number, call: Call, seq: number): void {
+    if (call.ret.kind !== "ok" && call.ret.kind !== "progress") return;
+    if (call.name === "fchdir") {
+      const annotation = parseFd(call.args[0])?.annotation;
+      setCwd(pid, annotation?.startsWith("/") ? posix.resolve(annotation) : null, seq);
+      return;
+    }
+    const path = unquote(call.args[0]);
+    const base = cwdOf(pid);
+    setCwd(pid, typeof path !== "string" ? null : path.startsWith("/") ? posix.resolve(path) : base ? posix.resolve(base, path) : null, seq);
+  }
+
+  function handle(pid: number, body: string, seq: number, headSeq: number): void {
     const call = parseCall(body);
     if (!call) return;
     const spec = SPECS[call.name];
@@ -324,17 +363,8 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     if (call.name === "sendto") return sendTarget(call.args[4]);
     if (call.name === "sendmsg" || call.name === "sendmmsg") return messageDestinations(call.args[1]).forEach(judgeDestination);
     if (call.name === "io_uring_setup") { unresolvedEgress++; return; }
-    if (CLONES.has(call.name)) return clone(pid, call);
-    if ((call.name === "chdir" || call.name === "fchdir") && (call.ret.kind === "ok" || call.ret.kind === "progress")) {
-      if (call.name === "fchdir") {
-        const annotation = parseFd(call.args[0])?.annotation;
-        setCwd(pid, annotation?.startsWith("/") ? posix.resolve(annotation) : null);
-        return;
-      }
-      const path = unquote(call.args[0]);
-      const base = cwdOf(pid);
-      setCwd(pid, typeof path !== "string" ? null : path.startsWith("/") ? posix.resolve(path) : base ? posix.resolve(base, path) : null);
-    }
+    if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
+    if (call.name === "chdir" || call.name === "fchdir") chdir(pid, call, seq);
   }
 
   function sendTarget(token: string | undefined, isConnect = false): void {
@@ -343,7 +373,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     judgeDestination(d);
   }
 
-  for (const line of text.split("\n")) {
+  for (const [seq, line] of text.split("\n").entries()) {
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
@@ -357,17 +387,18 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
         const name = resumed[1]!;
         if (SPECS[name]) unresolvedWrites++;
         else if (SEND_CALLS.has(name) || name === "io_uring_setup") unresolvedEgress++;
+        else if (name === "chdir" || name === "fchdir") setCwd(pid, null, seq);
         continue;
       }
       pending.delete(pid);
-      handle(pid, head + resumed[2]!);
+      handle(pid, head.head + resumed[2]!, seq, head.seq);
       continue;
     }
     const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
-    if (unfinished) { pending.set(pid, unfinished[1]!); continue; }
-    handle(pid, body);
+    if (unfinished) { pending.set(pid, { head: unfinished[1]!, seq }); continue; }
+    handle(pid, body, seq, seq);
   }
-  for (const [pid, head] of pending) handle(pid, head); // never resumed: still in progress
+  for (const [pid, head] of pending) handle(pid, head.head, head.seq, head.seq); // never resumed: still in progress
 
   return {
     outsideWrites: [...outside],

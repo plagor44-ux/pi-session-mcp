@@ -22,7 +22,7 @@ const at = (cwd = CWD) => `AT_FDCWD<${cwd}>`;
 
 describe("STRACE_ARGS", () => {
   it("keeps the brief's shape with the extended syscall set", () => {
-    expect(STRACE_ARGS.slice(0, 3)).toEqual(["-f", "-qq", "-e"]);
+    expect(STRACE_ARGS.slice(0, 3)).toEqual(["-f", "-q", "-e"]);
     expect(STRACE_ARGS[4]).toBe("-y");
     expect(STRACE_ARGS).toHaveLength(5);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
@@ -77,7 +77,7 @@ describe("write detection", () => {
       `100 openat(${at()}, "/dev/shm/x", O_WRONLY|O_CREAT, 0600) = 7</dev/shm/x>`,
       `100 openat(${at()}, "/proc/self/oom_score_adj", O_WRONLY) = 8</proc/100/oom_score_adj>`,
     ), ctx({}));
-    expect(f.outsideWrites).toEqual(["/dev/pts/ptmx", "/dev/shm/x", "/proc/100/oom_score_adj"]);
+    expect(f.outsideWrites).toEqual(["/dev/pts/ptmx", "/dev/shm/x", "/proc/self/oom_score_adj", "/proc/100/oom_score_adj"]);
   });
 
   it("does not exempt /proc/self magic links", () => {
@@ -85,7 +85,7 @@ describe("write detection", () => {
       `100 openat(${at()}, "/proc/self/root/home/u/.bashrc", O_WRONLY|O_APPEND) = 3</home/u/.bashrc>`,
       `100 openat(${at()}, "/proc/self/fd/7", O_WRONLY|O_TRUNC) = 4</home/u/other>`,
     ), ctx({}));
-    expect(f.outsideWrites).toEqual(["/home/u/.bashrc", "/home/u/other"]);
+    expect(f.outsideWrites).toEqual(["/proc/self/root/home/u/.bashrc", "/home/u/.bashrc", "/proc/self/fd/7", "/home/u/other"]);
     const lexical = parseStraceLog(lines(`100 openat(${at()}, "/proc/self/root/home/u/.bashrc", O_WRONLY) = -1 EACCES (Keine Berechtigung)`), ctx({}));
     expect(lexical).toMatchObject({ outsideWrites: [], deniedWriteAttempts: 1 });
     expect(parseStraceLog(lines(`100 openat(${at()}, "/proc/self/fd/7", O_WRONLY <unfinished ...>`), ctx({})).outsideWrites).toEqual(["/proc/self/fd/7"]);
@@ -244,9 +244,112 @@ describe("cwd inheritance races (strace -f orders the child before the parent's 
     expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: [] });
   });
 
-  it("forgets the cwd of an exited pid", () => {
+  it("forgets the cwd of an exited pid (exit lines exist because STRACE_ARGS uses -q, not -qq)", () => {
     const f = parseStraceLog(lines(`100 fork() = 101`, `101 +++ exited with 0 +++`, `101 creat("c", 0644) = 3`), ctx({}));
     expect(f.unresolvedWrites).toBe(1);
+  });
+});
+
+describe("-q exit and signal lines", () => {
+  // Captured with strace 7.2 -f -q -y.
+  it("skips signal and exit lines and frees the exited pid's cwd", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f38ad69de50) = 101`,
+      `101 openat(AT_FDCWD</scope/clone>, "/dev/null", O_RDONLY) = 3</dev/null>`,
+      `101 +++ killed by SIGKILL +++`,
+      `100 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_KILLED, si_pid=101, si_uid=1000, si_status=SIGKILL, si_utime=0, si_stime=0} ---`,
+      `100 +++ exited with 0 +++`,
+      `101 creat("late", 0644) = 3`,
+    ), ctx({}));
+    expect(f).toMatchObject({ outsideWrites: [], unresolvedWrites: 1 });
+  });
+});
+
+describe("pid reuse and write ordering by sequence", () => {
+  it("replaces a cell that predates the clone head (reused pid without exit line)", () => {
+    const f = parseStraceLog(lines(
+      `100 fork() = 101`,
+      `100 chdir("/home/u") = 0`,
+      `100 fork() = 101`,
+      `101 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("replaces a stale shared thread cell when the tid is reused by a fork", () => {
+    const f = parseStraceLog(lines(
+      `100 chdir("/home/u") = 0`,
+      `100 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD, exit_signal=0}, 88) = 101`,
+      `100 fork() = 101`,
+      `100 chdir("/scope/clone") = 0`,
+      `101 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("keeps a cell created after the unfinished head even when the head is far above the return", () => {
+    const f = parseStraceLog(lines(
+      `100 fork( <unfinished ...>`,
+      `200 openat(AT_FDCWD</scope/clone>, "/dev/null", O_RDONLY) = 3</dev/null>`,
+      `101 chdir("/home/u") = 0`,
+      `200 openat(AT_FDCWD</scope/clone>, "/dev/null", O_RDONLY) = 3</dev/null>`,
+      `100 <... fork resumed>) = 101`,
+      `101 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("lets the later chdir of a CLONE_FS sibling win by line order", () => {
+    const f = parseStraceLog(lines(
+      `100 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD, exit_signal=0}, 88) = 102`,
+      `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_THREAD <unfinished ...>`,
+      `101 chdir("/scope/clone/sub") = 0`,
+      `102 chdir("/home/u") = 0`,
+      `100 <... clone resumed>) = 101`,
+      `100 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("lets the later chdir of the child win when it came after the sibling's", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_THREAD <unfinished ...>`,
+      `100 chdir("/home/u") = 0`,
+      `101 chdir("/scope/clone/sub") = 0`,
+      `100 <... clone resumed>) = 101`,
+      `100 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f).toMatchObject({ outsideWrites: [], unresolvedWrites: 0 });
+  });
+});
+
+describe("unknown cwds fail closed", () => {
+  it("keeps a CLONE_FS child's unknown cwd for both threads", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD <unfinished ...>`,
+      `101 chdir("../..") = 0`,
+      `100 <... clone resumed>) = 101`,
+      `101 mkdir("x", 0777) = 0`,
+      `100 mkdir("y", 0777) = 0`,
+    ), ctx({}));
+    expect(f).toMatchObject({ unresolvedWrites: 2, outsideWrites: [] });
+  });
+
+  it("gives a child of a clone3 with unreadable flags an unknown cwd", () => {
+    const f = parseStraceLog(lines(`100 clone3(0x7ffc, 88) = 101`, `100 chdir("/home/u") = 0`, `101 mkdir("x", 0777) = 0`, `100 mkdir("y", 0777) = 0`), ctx({}));
+    expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: ["/home/u/y"] });
+  });
+
+  it("still copies the cwd for fork and vfork, which have no flags to read", () => {
+    const f = parseStraceLog(lines(`100 chdir("/home/u") = 0`, `100 fork() = 101`, `101 mkdir("x", 0777) = 0`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("forgets the cwd after a headless resumed chdir or fchdir", () => {
+    for (const name of ["chdir", "fchdir"]) {
+      const f = parseStraceLog(lines(`100 <... ${name} resumed>) = 0`, `100 mkdir("x", 0777) = 0`), ctx({}));
+      expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: [] });
+    }
   });
 });
 
@@ -291,12 +394,31 @@ describe("symlink differentials", () => {
     expect(f.outsideWrites).toEqual(["/home/u/x"]);
   });
 
-  it("lets the kernel path clear a lexically outside name and handles deleted files", () => {
+  it("never lets the kernel path clear a lexically outside name", () => {
+    const f = parseStraceLog(lines(`100 openat(${at()}, "/tmp/alias/x", O_WRONLY|O_CREAT, 0644) = 3</scope/clone/x>`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/tmp/alias/x"]);
+  });
+
+  it("judges an unlinked file by the annotation as printed and with the suffix stripped", () => {
+    const f = parseStraceLog(lines(`100 openat(${at()}, "gone", O_RDWR|O_TMPFILE, 0600) = 4</home/u/#12 (deleted)>`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/#12 (deleted)", "/home/u/#12"]);
+  });
+
+  it("does not let a (deleted) suffix hide a sibling of the root (real strace 7.2 capture)", () => {
+    // Root /r/clone; "../clone (deleted)" is the sibling directory named "clone (deleted)": stripping the suffix would land on the root.
+    const f = parseStraceLog(lines(`100 openat(AT_FDCWD</r/clone>, "../clone (deleted)", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3</r/clone (deleted)>`), ctx({ initialCwd: "/r/clone", allowed: ["/r/clone"] }));
+    expect(f.outsideWrites).toEqual(["/r/clone (deleted)"]);
+  });
+
+  it("also applies the suffix rule to absolute names, dirfds and fd-based calls", () => {
     const f = parseStraceLog(lines(
-      `100 openat(${at()}, "/tmp/alias/x", O_WRONLY|O_CREAT, 0644) = 3</scope/x>`,
-      `100 openat(${at()}, "gone", O_RDWR|O_TMPFILE, 0600) = 4</home/u/#12 (deleted)>`,
-    ), ctx({}));
-    expect(f.outsideWrites).toEqual(["/home/u/#12"]);
+      `100 openat(AT_FDCWD</scope/clone>, "/scope/clone (deleted)", O_WRONLY|O_CREAT|O_TRUNC, 0644) = 3</scope/clone (deleted)>`,
+      `100 openat(7</scope/clone (deleted)>, "x", O_WRONLY|O_CREAT, 0644) = -1 EACCES (Keine Berechtigung)`,
+      `100 mkdirat(7</scope/clone (deleted)>, "y", 0777) = 0`,
+      `100 fchmod(8</scope/other (deleted)>, 0600) = 0`,
+    ), ctx({ allowed: ["/scope/clone"] }));
+    expect(f.outsideWrites).toEqual(["/scope/clone (deleted)", "/scope/clone (deleted)/y", "/scope/other (deleted)", "/scope/other"]);
+    expect(f.deniedWriteAttempts).toBe(1);
   });
 
   it("falls back to the lexical path when the fd has no path annotation", () => {
