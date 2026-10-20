@@ -65,7 +65,7 @@ costs more is acceptable only if it saves more correction work than it costs.
 | Arm B adds | Profiles | Why |
 | --- | --- | --- |
 | `pi-lens@4.4.3` | `review-grok`, `review` | Code navigation and diagnostics for the most-used review profiles. |
-| `openwiki@0.7.2` | `code`, `code-deepseek` | Repository knowledge from the existing OpenWiki of each repo; all five aliased repos have one (17–29 pages). |
+| `openwiki@0.7.2` (superseded, see Amendments) | `code`, `code-deepseek` | Repository knowledge from the existing OpenWiki of each repo; all five aliased repos have one (17–29 pages). |
 | `pi-cache-optimizer@2.9.3`, warming disabled | `code`, `review` (OpenAI) | Cost lever only. Report its cost effect, not a quality claim. |
 
 Arm A is the profile exactly as configured today. Arm B adds one extension.
@@ -82,7 +82,8 @@ extension tool access too. That is a separate product change, a granted
 extension-tool list for `read-only` profiles with its own design, ADR and
 release. The `pi-lens` pairing on `review-grok` and `review` runs only after
 that change is released. Until then it stays out of the wave. The other
-pairings do not depend on it and may run first.
+pairings do not depend on it and may run first. (Superseded, see Amendments:
+the change is released, so this pairing is in the wave.)
 
 pi-session-mcp creates sessions with `projectTrusted: false`. `pi-lens` likely
 keeps LSP spawning and tool auto-install off in that state. The pairing
@@ -196,7 +197,8 @@ Out of scope:
   Designer's calls:
   - Start with a calibration of one task per arm on the cheapest pairing. Its
     observed cost then serves as the per-run estimate for the budget stop.
-  - Priority order if the budget cannot cover everything:
+  - Priority order if the budget cannot cover everything (superseded, see
+    Amendments):
     1. `openwiki` on `code-deepseek`, then on `code`;
     2. the `pi-lens` pairing;
     3. `pi-cache-optimizer`.
@@ -243,3 +245,60 @@ Out of scope:
 - Price table source for catalog cost (the Pi model catalog of the pinned SDK).
 - Evidence file layout and the integrity index, following earlier evaluation
   folders.
+
+## Amendments (2026-10-20)
+
+Decisions taken after the approval on 2026-10-19. Where they contradict the
+text above, they win.
+
+- **OpenWiki pairing replaced.** `openwiki@0.7.2` (latest on npm) registers
+  only `openwiki_begin`, `openwiki_submit_plan`, `openwiki_next_page`,
+  `openwiki_inspect_page_claims`, `openwiki_submit_page` and `openwiki_finish`
+  (`dist/integrations/pi/openwiki.js`). It has no retrieval tool and no context
+  hook, so it cannot supply repository knowledge to a worker. Operator
+  decision 2026-10-20: replace that pairing with `pi-lens@4.4.3` on `code` and
+  `code-deepseek`.
+- **New priority order** if the budget cannot cover everything:
+  1. `pi-lens` on `code-deepseek`;
+  2. `pi-lens` on `code`;
+  3. `pi-lens` on `review-grok` and `review`;
+  4. `pi-cache-optimizer` on `code` and `review`.
+
+  Calibration runs on pairing 1.
+- **The `pi-lens` review pairing is unblocked.** v0.10.0 (ADR 0010) shipped
+  `grantedExtensionTools`. Granted set on the review profiles: `symbol_search`,
+  `project_report`, `read_symbol`, `read_enclosing`, `module_report`,
+  `ast_grep_search` and `ast_grep_outline`. Left out: `ast_grep_replace`
+  (writes), `lens_diagnostic_mark`, `pi_lens_activate_tools`, `lsp_navigation`,
+  `lens_diagnostics` (LSP spawning is off in untrusted projects) and
+  `effective_config`. Coding profiles activate every registered tool; that is
+  product behaviour.
+- **"Warming disabled"** means `PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING=1`,
+  the extension's only warming lever. Pi's own `cacheWarming` stays at its
+  default `streaming` in both arms
+  (`node_modules/@earendil-works/pi-coding-agent/docs/settings.md`), because
+  that is production behaviour and only one variable changes.
+- **`pi-lens` safety.** Untrusted projects already block tool install and LSP
+  spawn (`isToolInstallAllowedByTrust`, `isLspSpawnAllowedByTrust`). Both arms
+  additionally set `PI_LENS_DISABLE_TOOL_INSTALL=1`,
+  `PI_LENS_DISABLE_LSP_INSTALL=1` and `PI_LENS_HOME` inside the run scope.
+- **Usage source.** The public `AgentSession`, captured through the adapter
+  seams. Per run, `getSessionStats()` is the cost of record: there is one turn
+  per session, so it is the run total, including warming refreshes. The sum of
+  assistant `usage` is a cross-check.
+- **Codegraph index.** Clones get a `codegraph` index (`codegraph init -y`),
+  because every profile under test configures the `codegraph` MCP server.
+- **Out-of-clone writes.** They are detected primarily by the `strace` write
+  audit. Before/after hashes guard the production config, the Pi install and
+  the client registrations. Hashing the operator's repositories would misfire
+  on concurrent work.
+- **Budget estimate** before each run: the most expensive run observed so far,
+  as in the spec, but at least USD 1.00 for a profile with no observed run yet.
+  This is stricter than the spec, never looser. Calibration counts as the first
+  task pair of the wave.
+- **Token expiry stop.** Before each run, the wave stops with an auth stop if a
+  needed OAuth access token expires within 20 minutes (`expiresWithin` from
+  `src/writer-credentials.ts`), instead of letting the run fail.
+- **Arm B start failures.** Arm B session-start failures
+  (`extension_load_failed`, `extension_tool_missing`) are harness failures and
+  stop the wave.
