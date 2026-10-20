@@ -55,7 +55,7 @@ function pathOnlyLine(line: string): string | undefined {
 
 /** Heading words are inherited independently of paths, so a located body cannot gain a different file. */
 function wordsOfHeading(title: string): string {
-  const lower = title.toLowerCase();
+  const lower = title.toLowerCase().replace(/[a-z][a-z0-9+.-]*:\/\/\S*/g, " ");
   const paths = new Set(pathTokens(lower));
   return lower.replace(/[a-z0-9_.\-/]+/g, (token) => paths.has(token.replace(/\.+$/, "")) ? " " : token);
 }
@@ -68,12 +68,14 @@ interface HeadingEntry { level: number; tokens: string; text: string; words: str
  * at a table row (`|...`, one block per row) and before an unindented `**` line outside a list item that contains a path token
  * (field labels such as `**Why:**` continue the block). Whole-review and md/markdown fences are unwrapped; other terminated
  * fenced code is dropped and neither splits a block nor contributes tokens or terms. An unterminated fence opener is plain text.
- * Headings form a stack by level. The first block of a section always gets the heading's non-path words;
+ * Headings form a stack by level. The first block gets the heading's non-path words only if the heading names no path
+ * or every body path agrees by segment suffix in either direction with a heading path;
  * pathless blocks also get its path tokens (inherited from the nearest enclosing lower-level heading when it has none);
  * a heading without a body is a block itself, with the inherited path prepended.
  * A path-only line (`**src/a.ts**`, `src/a.ts:`) acts as a heading one level below the current one until the next heading,
  * the next path-only line, or a blank line followed by a non-list line. A path-only continuation stays in its current block,
- * except for a bold path-only line inside a list. A pseudo-heading inherits the words of a pathless parent heading.
+ * except for a bold path-only line, which also starts a pseudo-heading after prose or inside a list.
+ * Only the first pseudo-heading inherits a pathless parent's words.
  */
 function blocksOf(text: string): string[] {
   const blocks: string[] = [];
@@ -88,8 +90,12 @@ function blocksOf(text: string): string[] {
   let pseudoBlank = false;
   const push = (lines: string[]): void => {
     const body = lines.join("\n").toLowerCase();
-    const words = heading !== undefined && !sectionHasBody ? headingWords : "";
-    const tokens = heading !== undefined && pathTokens(body).length === 0 ? headingTokens : "";
+    const ownPaths = heading !== undefined ? pathTokens(heading.toLowerCase()) : [];
+    const bodyPaths = pathTokens(body);
+    const agrees = ownPaths.length === 0 || bodyPaths.every((path) => ownPaths.some((own) =>
+      isSegmentSuffix(segmentsOf(path), segmentsOf(own)) || isSegmentSuffix(segmentsOf(own), segmentsOf(path))));
+    const words = heading !== undefined && !sectionHasBody && agrees ? headingWords : "";
+    const tokens = heading !== undefined && bodyPaths.length === 0 ? headingTokens : "";
     blocks.push(`${words}\n${tokens}\n${body}`);
     sectionHasBody = true;
   };
@@ -106,12 +112,13 @@ function blocksOf(text: string): string[] {
     heading = top?.text; headingTokens = top?.tokens ?? ""; headingWords = top?.words ?? ""; sectionHasBody = true;
   };
   const startSection = (level: number, title: string, pseudo: boolean): void => {
+    const firstInSection = !sectionHasBody;
     while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= level) stack.pop();
     const parent = stack[stack.length - 1];
     heading = title;
     headingTokens = pathTokens(title.toLowerCase()).join(" ") || (parent?.tokens ?? "");
     headingWords = wordsOfHeading(title);
-    if (pseudo && parent !== undefined && pathTokens(parent.text.toLowerCase()).length === 0) {
+    if (pseudo && firstInSection && parent !== undefined && pathTokens(parent.text.toLowerCase()).length === 0) {
       headingWords = `${parent.words}\n${headingWords}`;
     }
     stack.push({ level, tokens: headingTokens, text: title, words: headingWords });
@@ -130,7 +137,7 @@ function blocksOf(text: string): string[] {
       startSection((headingMatch[1] ?? "").length, headingMatch[2] ?? "", false);
       continue;
     }
-    if ((current.length === 0 || (listIndent !== undefined && line.startsWith("**"))) && pathOnlyLine(line) !== undefined) {
+    if ((current.length === 0 || line.startsWith("**")) && pathOnlyLine(line) !== undefined) {
       flush(); closeSection(); endPseudo();
       startSection((stack[stack.length - 1]?.level ?? 0) + 1, line.trim(), true);
       continue;
@@ -176,7 +183,10 @@ const anyAnchorHits = (blocks: string[], anchors: Anchor[]): boolean => anchors.
  * Known limits (task curation validates each review oracle against real review text, so they are caught per task):
  * - negation ("X was not found") is invisible to keyword anchors;
  * - title-first field labels (`**Title:** ... **Location:** src/a.ts ...`) are split before the location;
- * - a heading that names several paths gives all of them to pathless blocks.
+ * - a heading that names several paths gives all of them to pathless blocks;
+ * - a pathless summary heading naming several issues (`# Review: race in cache and SQL injection in query`)
+ *   lends all its words to the first block;
+ * - anchors cannot name dotfiles or extensionless files (`.env`, `Dockerfile`, `go.mod`).
  */
 export interface ReviewScore { accepted: boolean; criticalHit: number; criticalTotal: number; recall: number; falseFindings: string[] }
 

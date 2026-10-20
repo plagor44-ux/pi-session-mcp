@@ -193,17 +193,54 @@ describe("scoreReview", () => {
     expect(scoreReview(text, reviewOracle)).toMatchObject({ accepted: true, criticalHit: 1, falseFindings: [] });
   });
 
-  it("never lends a heading's path to a first block naming another file (R27h)", () => {
+  it("never lends a heading's path or words to a first block naming another file (R27i)", () => {
     expect(scoreReview("### Race in src/a.ts\n- src/b.ts: the lock is released", reviewOracle).criticalHit).toBe(0);
     expect(scoreReview("### Race in src/a.ts\n- src/b.ts: the lock is released", {
       ...reviewOracle, findings: [{ id: "f", critical: true, anchors: [{ file: "src/b.ts", terms: ["race", "lock"] }] }],
-    }).criticalHit).toBe(1);
+    }).criticalHit).toBe(0);
     expect(scoreReview("### race.ts\n- src/a.ts: lock", reviewOracle).criticalHit).toBe(0);
+  });
+
+  it("does not lend SQL heading words to another file mentioned in the first block (B1)", () => {
+    const oracle: ReviewOracle = { ...reviewOracle, findings: [
+      reviewOracle.findings[0]!,
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    const text = "### Race in src/a.ts\nThe lock is released early.\n\n### SQL injection in src/db/query.ts\nInput from src/a.ts reaches src/db/query.ts:17 unescaped (injection).";
+    expect(scoreReview(text, oracle)).toMatchObject({ accepted: true, criticalHit: 2, criticalTotal: 2, falseFindings: [] });
+  });
+
+  it.each([
+    ["a.ts", "src/a.ts", true],
+    ["/workspace/src/a.ts", "a.ts", true],
+    ["src/a.ts and src/b.ts", "src/a.ts and src/b.ts", true],
+    ["src/a.ts", "src/a.ts and src/b.ts", false],
+  ])("requires every body path to agree by segment suffix with heading %s (B1)", (heading, body, accepted) => {
+    expect(scoreReview(`### Race in ${heading}\n- ${body}: the lock is released`, reviewOracle).accepted).toBe(accepted);
   });
 
   it("does not repeat heading words on later located or pseudo-heading blocks", () => {
     expect(scoreReview("### Race\n- src/a.ts: context\n- src/a.ts: lock", reviewOracle).criticalHit).toBe(0);
     expect(scoreReview("### Race\n**src/a.ts**\n- context\n- lock", reviewOracle).criticalHit).toBe(0);
+  });
+
+  it("removes URLs before inheriting heading words (B4)", () => {
+    const text = "### Race (https://github.com/o/r/blob/main/src/a.ts)\n- src/b.ts: the lock is released";
+    expect(scoreReview(text, reviewOracle)).toMatchObject({ accepted: false, criticalHit: 0, falseFindings: [] });
+  });
+
+  it("lends a pathless parent's words only to its first pseudo-heading (B2)", () => {
+    const oracle: ReviewOracle = { ...reviewOracle, findings: [
+      reviewOracle.findings[0]!,
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    const text = "## Race and SQL injection\n**src/db/query.ts**\n- injection via concatenation\n**src/a.ts**\n- race: the lock is released early";
+    expect(scoreReview(text, oracle)).toMatchObject({ accepted: true, criticalHit: 2, criticalTotal: 2, falseFindings: [] });
+  });
+
+  it("does not repeat parent heading words after a blank before another pseudo-heading (B2)", () => {
+    const text = "### Race\n**src/b.ts**\n- context\n\n**src/a.ts**\n- the lock is released early";
+    expect(scoreReview(text, reviewOracle)).toMatchObject({ accepted: false, criticalHit: 0, falseFindings: [] });
   });
 
   it("carries the inherited path into a bodyless heading", () => {
@@ -253,6 +290,15 @@ describe("scoreReview", () => {
     expect(accepted("**src/a.ts**\n- race: the lock\n**src/b.ts**\n- other thing")).toBe(true);
     expect(accepted("src/a.ts:\n\nA paragraph.\n\n- race; lock")).toBe(false);
     expect(accepted("src/a.ts:\n\n- race; lock")).toBe(true);
+  });
+
+  it("starts a bold file pseudo-heading after introductory prose (B3)", () => {
+    const oracle: ReviewOracle = { ...reviewOracle, findings: [
+      reviewOracle.findings[0]!,
+      { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
+    ] };
+    const text = "Here are my findings:\n**src/a.ts**\n- race: the lock is released early\n\n**src/db/query.ts**\n- SQL injection";
+    expect(scoreReview(text, oracle)).toMatchObject({ accepted: true, criticalHit: 2, criticalTotal: 2, falseFindings: [] });
   });
 
   it("requires terms to start at a word boundary but allows prefix stems", () => {
