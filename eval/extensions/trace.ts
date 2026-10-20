@@ -193,13 +193,11 @@ function parseFd(token: string | undefined): Fd | null {
   return { cwd: m[1] === "AT_FDCWD" || m[1] === "-100", ...(annotation === undefined ? {} : { annotation }) };
 }
 
-/** `alt` is the ` (deleted)`-stripped reading of the same target; both are judged. */
-type Resolved = { path: string; alt?: string } | { unresolved: true } | { ignore: true };
-function fromVariants(bases: string[], rest?: string): Resolved {
-  const [path, alt] = bases.map((b) => (rest === undefined ? posix.resolve(b) : posix.resolve(b, rest)));
-  return alt === undefined || alt === path ? { path: path! } : { path: path!, alt };
-}
-const UNRESOLVED: Resolved = { unresolved: true };
+/** Every reading of a target that must be judged (cwd candidates, ` (deleted)` variants); `unresolved` when some reading is unknown. */
+type Resolved = { paths: string[]; unresolved: boolean } | { ignore: true };
+const UNRESOLVED: Resolved = { paths: [], unresolved: true };
+const resolveAll = (bases: string[], rest?: string): string[] =>
+  [...new Set(bases.map((b) => (rest === undefined ? posix.resolve(b) : posix.resolve(b, rest))))];
 type Destination = { family: "inet" | "inet6"; address: string; port: number };
 const UNKNOWN_DESTINATION: Destination = { family: "inet", address: "unknown", port: 0 };
 
@@ -229,53 +227,78 @@ const normalizeAddress = (address: string): string => {
 };
 
 const FLAGS_WRITE = /\bO_(?:WRONLY|RDWR|CREAT|TRUNC|TMPFILE)\b/;
-const EXIT_LINE = /^\+\+\+ (?:exited|killed)\b/;
+const EXIT_LINE = /^\+\+\+ (?:exited|killed|superseded)\b/;
 
 /**
- * One cwd value; CLONE_FS threads share a cell, so a chdir by one is seen by all. `at` is the log line of the last change and
- * `created` the line that made the cell: both order events, because under `-f` lines of different pids arrive out of order.
+ * Possible cwds of one process, or of a CLONE_FS thread group (a shared cell). `null` means unknown. The set only ever
+ * over-approximates: lines of different pids arrive out of order under `-f`, so instead of trusting an order the parser keeps
+ * every cwd a pid may have had and judges a relative write against all of them.
  */
-interface Cell { cwd: string | null; at: number; created: number }
+interface Cell {
+  cwds: Set<string | null>;
+  /** Set once a CLONE_FS merge happened: chdirs then add candidates instead of replacing them. */
+  shared: boolean;
+  /** Line of the last change, used only to decide which records of a reused pid count for a clone return. */
+  touched: number;
+  forward?: Cell;
+}
+const root = (cell: Cell): Cell => (cell.forward ? root(cell.forward) : cell);
 
 export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
   const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
-  const cells = new Map<number, Cell>([[ctx.rootPid, { cwd: posix.resolve("/", ctx.initialCwd), at: -1, created: -1 }]]);
+  const live = new Map<number, Cell>();
+  /** Every cell ever made for a pid, live or exited, so a clone return can find what a fast child did before it. */
+  const records = new Map<number, { cell: Cell; created: number }[]>();
   const pending = new Map<number, { head: string; seq: number }>();
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
 
+  function newCell(pid: number, cwds: Iterable<string | null>, seq: number): Cell {
+    const cell: Cell = { cwds: new Set(cwds), shared: false, touched: seq };
+    live.set(pid, cell);
+    records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
+    return cell;
+  }
+  newCell(ctx.rootPid, [posix.resolve("/", ctx.initialCwd)], -1);
+
   // Magic links such as /proc/self/root and /proc/self/fd/N are deliberately not exempt.
   const allowed = (p: string): boolean =>
     p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
-  const cwdOf = (pid: number): string | null | undefined => cells.get(pid)?.cwd;
-  function setCwd(pid: number, cwd: string | null, seq: number): void {
-    const cell = cells.get(pid);
-    if (cell) { cell.cwd = cwd; cell.at = seq; }
-    else cells.set(pid, { cwd, at: seq, created: seq });
+  const cellOf = (pid: number): Cell | undefined => { const c = live.get(pid); return c && root(c); };
+
+  /** A chdir replaces the candidates of a lone process and adds to those of a thread group. */
+  function changeCwd(pid: number, map: (cwd: string | null) => string | null, seq: number): void {
+    const cell = cellOf(pid);
+    if (!cell) { newCell(pid, [map(null)], seq); return; }
+    const next = [...cell.cwds].map(map);
+    if (cell.shared) next.forEach((c) => cell.cwds.add(c));
+    else cell.cwds = new Set(next);
+    cell.touched = seq;
   }
 
   function resolveTarget(pid: number, args: string[], t: Target): Resolved {
     if ("fd" in t) {
       const fd = parseFd(args[t.fd]);
       if (fd?.annotation === undefined) return UNRESOLVED;
-      return fd.annotation.startsWith("/") ? fromVariants(pathVariants(fd.annotation)) : { ignore: true }; // socket:[n], pipe:[n], ...
+      return fd.annotation.startsWith("/") ? { paths: resolveAll(pathVariants(fd.annotation)), unresolved: false } : { ignore: true }; // socket:[n], pipe:[n], ...
     }
     const path = unquote(args[t.path]);
     if (path === null && t.nullIsDir) return resolveTarget(pid, args, { fd: t.dir! });
     if (path === undefined || path === null) return UNRESOLVED;
-    if (path.startsWith("/")) return fromVariants([path]);
-    let bases: string[] = [];
-    if (t.dir === undefined) bases = [cwdOf(pid)].filter((b): b is string => !!b);
-    else {
-      const dir = parseFd(args[t.dir]);
-      if (dir?.annotation?.startsWith("/")) bases = pathVariants(dir.annotation);
-      else if (dir?.cwd) bases = [cwdOf(pid)].filter((b): b is string => !!b);
-    }
-    return bases.length ? fromVariants(bases, path) : UNRESOLVED;
+    if (path.startsWith("/")) return { paths: resolveAll([path]), unresolved: false };
+    const fromCwd = (): Resolved => {
+      const cwds = cellOf(pid)?.cwds;
+      const known = [...(cwds ?? [])].filter((c): c is string => c !== null);
+      return { paths: resolveAll(known, path), unresolved: !cwds || cwds.size === 0 || cwds.has(null) };
+    };
+    if (t.dir === undefined) return fromCwd();
+    const dir = parseFd(args[t.dir]);
+    if (dir?.annotation?.startsWith("/")) return { paths: resolveAll(pathVariants(dir.annotation), path), unresolved: false };
+    return dir?.cwd ? fromCwd() : UNRESOLVED;
   }
 
   function write(pid: number, call: Call, spec: Spec): void {
@@ -287,28 +310,27 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const failed = call.ret.kind === "failed";
     let unresolved = false, denied = false;
     const judge = (r: Resolved): void => {
-      if ("unresolved" in r) unresolved = true;
-      else if ("path" in r) {
-        for (const path of [r.path, ...(r.alt === undefined ? [] : [r.alt])]) {
-          if (allowed(path)) continue;
-          if (failed) denied = true;
-          else outside.add(path);
-        }
+      if ("ignore" in r) return;
+      if (r.unresolved) unresolved = true;
+      for (const path of r.paths) {
+        if (allowed(path)) continue;
+        if (failed) denied = true;
+        else outside.add(path);
       }
     };
     const resolved = spec.targets.map((target) => resolveTarget(pid, call.args, target));
     const kernel = spec.kernelPath && call.ret.kind === "ok" ? call.ret.annotation : undefined;
     if (kernel?.startsWith("/")) {
       // The annotation is what the kernel opened (symlinks followed); it can only make the verdict stricter than the lexical path.
-      resolved.forEach((r) => { if (!("unresolved" in r)) judge(r); });
-      judge(fromVariants(pathVariants(kernel)));
+      resolved.forEach((r) => { if (!("ignore" in r)) judge({ paths: r.paths, unresolved: false }); });
+      judge({ paths: resolveAll(pathVariants(kernel)), unresolved: false });
     } else resolved.forEach(judge);
     if (spec.symlinkTarget !== undefined) {
       const target = unquote(call.args[spec.symlinkTarget]);
       const link = resolved[0];
       if (typeof target !== "string") judge(UNRESOLVED);
-      else if (target.startsWith("/")) judge(fromVariants([target]));
-      else if (link && "path" in link) judge(fromVariants([link.path, ...(link.alt === undefined ? [] : [link.alt])].map((l) => posix.dirname(l)), target));
+      else if (target.startsWith("/")) judge({ paths: resolveAll([target]), unresolved: false });
+      else if (link && !("ignore" in link)) judge({ paths: resolveAll(link.paths.map((l) => posix.dirname(l)), target), unresolved: link.unresolved });
       else judge(UNRESOLVED);
     }
     if (failed) { if (denied) deniedWriteAttempts++; } else if (unresolved) unresolvedWrites++;
@@ -321,37 +343,51 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     unexpected.set(`${dest.family}|${dest.address}|${dest.port}`, dest);
   }
 
-  /** `headSeq` is the line where the call started (the unfinished head, or the full line), `seq` the line of its return. */
+  /**
+   * The child starts with the parent's candidates plus every cell the child pid had since the clone head (it may have run, changed
+   * directory and exited before this return line). Records older than the head belong to an earlier process with the same pid; when
+   * a record might be newer it is included, because over-approximating only risks a false positive.
+   */
   function clone(pid: number, call: Call, seq: number, headSeq: number): void {
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
-    const child = call.ret.value, parent = cells.get(pid), found = cells.get(child);
-    // Under -f the child may run, and chdir, between the head and the return line. A cell from before the head belongs to an
-    // earlier process with the same pid and is replaced.
-    const own = found && found.created > headSeq ? found : undefined;
+    const child = call.ret.value;
+    const parent = cellOf(pid);
+    const own = [...new Set((records.get(child) ?? [])
+      .filter((r) => r.created > headSeq || root(r.cell).touched > headSeq)
+      .map((r) => root(r.cell)))].filter((c) => c !== parent);
     const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
-    if (flags !== undefined && /\bCLONE_FS\b/.test(flags)) {
-      // Threads share one cell; the later change by sequence wins, including an unknown cwd.
-      const cell = parent ?? { cwd: null, at: -1, created: seq };
-      if (own && own !== cell && own.at > cell.at) { cell.cwd = own.cwd; cell.at = own.at; }
-      cells.set(pid, cell);
-      cells.set(child, cell);
-    } else if (!own) {
-      // clone/clone3 whose flags cannot be read may have shared the cwd: fail closed with an unknown cwd.
-      const unreadable = flags === undefined && (call.name === "clone" || call.name === "clone3");
-      cells.set(child, { cwd: unreadable ? null : (parent?.cwd ?? null), at: seq, created: seq });
+    const unreadable = flags === undefined && (call.name === "clone" || call.name === "clone3");
+    if (unreadable || (flags !== undefined && /\bCLONE_FS\b/.test(flags))) {
+      const group = parent ?? newCell(pid, [null], seq);
+      group.shared = true;
+      if (unreadable) group.cwds.add(null);
+      for (const cell of own) { cell.cwds.forEach((c) => group.cwds.add(c)); cell.forward = group; }
+      group.touched = seq;
+      live.set(child, group);
+      records.set(child, [...(records.get(child) ?? []), { cell: group, created: seq }]);
+      return;
     }
+    const base: (string | null)[] = parent ? [...parent.cwds] : [null];
+    const [target, ...rest] = own;
+    if (!target) { newCell(child, base, seq); return; }
+    for (const cell of rest) { cell.cwds.forEach((c) => target.cwds.add(c)); cell.forward = target; }
+    base.forEach((c) => target.cwds.add(c));
+    target.touched = seq;
+    live.set(child, target);
   }
 
   function chdir(pid: number, call: Call, seq: number): void {
     if (call.ret.kind !== "ok" && call.ret.kind !== "progress") return;
     if (call.name === "fchdir") {
       const annotation = parseFd(call.args[0])?.annotation;
-      setCwd(pid, annotation?.startsWith("/") ? posix.resolve(annotation) : null, seq);
+      const target = annotation?.startsWith("/") ? posix.resolve(annotation) : null;
+      changeCwd(pid, () => target, seq);
       return;
     }
     const path = unquote(call.args[0]);
-    const base = cwdOf(pid);
-    setCwd(pid, typeof path !== "string" ? null : path.startsWith("/") ? posix.resolve(path) : base ? posix.resolve(base, path) : null, seq);
+    if (typeof path !== "string") changeCwd(pid, () => null, seq);
+    else if (path.startsWith("/")) changeCwd(pid, () => posix.resolve(path), seq);
+    else changeCwd(pid, (cwd) => (cwd === null ? null : posix.resolve(cwd, path)), seq);
   }
 
   function handle(pid: number, body: string, seq: number, headSeq: number): void {
@@ -373,11 +409,23 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     judgeDestination(d);
   }
 
+  /** A head whose resume never came (killed process, reused pid, end of log) is still an in-progress call. */
+  function flush(pid: number): void {
+    const head = pending.get(pid);
+    if (!head) return;
+    pending.delete(pid);
+    handle(pid, head.head, head.seq, head.seq);
+  }
+
   for (const [seq, line] of text.split("\n").entries()) {
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
-    if (EXIT_LINE.test(body)) { cells.delete(pid); continue; }
+    if (EXIT_LINE.test(body)) {
+      flush(pid);
+      live.delete(pid); // the records stay: a clone return after this line still has to find the cell
+      continue;
+    }
     if (body.startsWith("--- ") || body.startsWith("+++ ")) continue;
     const resumed = /^<\.\.\. (\w+) resumed>([^]*)$/.exec(body);
     if (resumed) {
@@ -387,18 +435,19 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
         const name = resumed[1]!;
         if (SPECS[name]) unresolvedWrites++;
         else if (SEND_CALLS.has(name) || name === "io_uring_setup") unresolvedEgress++;
-        else if (name === "chdir" || name === "fchdir") setCwd(pid, null, seq);
+        else if (name === "chdir" || name === "fchdir") changeCwd(pid, () => null, seq);
         continue;
       }
       pending.delete(pid);
-      handle(pid, head.head + resumed[2]!, seq, head.seq);
+      handle(pid, head.head + resumed[2]!.replace(/\s*<unfinished \.\.\.>/, ""), seq, head.seq);
       continue;
     }
+    flush(pid);
     const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
     if (unfinished) { pending.set(pid, { head: unfinished[1]!, seq }); continue; }
     handle(pid, body, seq, seq);
   }
-  for (const [pid, head] of pending) handle(pid, head.head, head.seq, head.seq); // never resumed: still in progress
+  for (const pid of [...pending.keys()]) flush(pid);
 
   return {
     outsideWrites: [...outside],

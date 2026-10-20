@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { guardDiff, guardSnapshot } from "../eval/extensions/guard.js";
 import { STRACE_ARGS, parseStraceLog, type TraceContext } from "../eval/extensions/trace.js";
@@ -265,7 +266,7 @@ describe("-q exit and signal lines", () => {
   });
 });
 
-describe("pid reuse and write ordering by sequence", () => {
+describe("pid reuse and CLONE_FS siblings", () => {
   it("replaces a cell that predates the clone head (reused pid without exit line)", () => {
     const f = parseStraceLog(lines(
       `100 fork() = 101`,
@@ -310,17 +311,6 @@ describe("pid reuse and write ordering by sequence", () => {
     ), ctx({}));
     expect(f.outsideWrites).toEqual(["/home/u/x"]);
   });
-
-  it("lets the later chdir of the child win when it came after the sibling's", () => {
-    const f = parseStraceLog(lines(
-      `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_THREAD <unfinished ...>`,
-      `100 chdir("/home/u") = 0`,
-      `101 chdir("/scope/clone/sub") = 0`,
-      `100 <... clone resumed>) = 101`,
-      `100 mkdir("x", 0777) = 0`,
-    ), ctx({}));
-    expect(f).toMatchObject({ outsideWrites: [], unresolvedWrites: 0 });
-  });
 });
 
 describe("unknown cwds fail closed", () => {
@@ -335,9 +325,14 @@ describe("unknown cwds fail closed", () => {
     expect(f).toMatchObject({ unresolvedWrites: 2, outsideWrites: [] });
   });
 
-  it("gives a child of a clone3 with unreadable flags an unknown cwd", () => {
+  it("treats a clone3 with unreadable flags as a thread group with an unknown cwd", () => {
     const f = parseStraceLog(lines(`100 clone3(0x7ffc, 88) = 101`, `100 chdir("/home/u") = 0`, `101 mkdir("x", 0777) = 0`, `100 mkdir("y", 0777) = 0`), ctx({}));
-    expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: ["/home/u/y"] });
+    expect(f).toMatchObject({ unresolvedWrites: 2, outsideWrites: ["/home/u/x", "/home/u/y"] });
+  });
+
+  it("does not create a child for a failed clone3 with unreadable flags", () => {
+    const f = parseStraceLog(lines(`100 clone3(0x7ffc, 88) = -1 EAGAIN (Ressource zur Zeit nicht verfügbar)`, `100 chdir("/home/u") = 0`, `100 mkdir("y", 0777) = 0`), ctx({}));
+    expect(f).toMatchObject({ unresolvedWrites: 0, outsideWrites: ["/home/u/y"] });
   });
 
   it("still copies the cwd for fork and vfork, which have no flags to read", () => {
@@ -350,6 +345,124 @@ describe("unknown cwds fail closed", () => {
       const f = parseStraceLog(lines(`100 <... ${name} resumed>) = 0`, `100 mkdir("x", 0777) = 0`), ctx({}));
       expect(f).toMatchObject({ unresolvedWrites: 1, outsideWrites: [] });
     }
+  });
+});
+
+describe("candidate cwds (R20)", () => {
+  const T = "flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD";
+  const FIXTURES = fileURLToPath(new URL("./fixtures/extension-ablation/", import.meta.url));
+
+  it("sees a CLONE_FS child that chdirs out and exits before the parent's clone return (real strace 7.2 shape)", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>`,
+      `101 chdir("/s/vfs2/out") = 0`,
+      `101 +++ exited with 0 +++`,
+      `100 <... clone resumed>)            = 101`,
+      `100 mkdir("y50", 0777)              = 0`,
+      `100 chdir("/scope/clone") = 0`,
+      `100 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>`,
+      `102 chdir("/s/vfs2/out") = 0`,
+      `102 +++ exited with 0 +++`,
+      `100 <... clone resumed>)            = 102`,
+      `100 mkdir("y51", 0777)              = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/s/vfs2/out/y50", "/s/vfs2/out/y51"]);
+  });
+
+  it("flags all 300 outside mkdirs of the full real capture (paths rewritten to /s)", async () => {
+    const log = await readFile(join(FIXTURES, "clone-fs-chdir-exit.strace"), "utf8");
+    const f = parseStraceLog(log, { rootPid: Number(log.split(" ")[0]), initialCwd: "/s/vfs2/clone", allowedWriteRoots: ["/s/vfs2/clone"], providerAddresses: new Set(), dnsAddresses: new Set() });
+    expect(f.outsideWrites).toEqual(Array.from({ length: 300 }, (_, i) => `/s/vfs2/out/y${i}`));
+    expect(f.unresolvedWrites).toBe(0);
+  });
+
+  it("reports unresolved when a relative chdir of an exited CLONE_FS child had no known base (P1b)", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, ${T} <unfinished ...>`,
+      `101 chdir("../..") = 0`,
+      `101 +++ exited with 0 +++`,
+      `100 <... clone resumed>) = 101`,
+      `100 mkdir("y", 0777) = 0`,
+    ), ctx({}));
+    expect(f.unresolvedWrites).toBe(1);
+  });
+
+  it("never judges a reused pid inside when an earlier incarnation exited before the return (P2)", () => {
+    const f = parseStraceLog(lines(
+      `200 chdir("/home/u") = 0`,
+      `200 fork( <unfinished ...>`,
+      `100 fork( <unfinished ...>`,
+      `101 +++ exited with 0 +++`,
+      `100 <... fork resumed>) = 101`,
+      `101 mkdir("x", 0777) = 0`,
+      `200 <... fork resumed>) = 101`,
+      `101 mkdir("z", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toContain("/home/u/z");
+  });
+
+  it("repoints a grandchild thread created before the merge (P3b)", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, ${T} <unfinished ...>`,
+      `101 chdir("/scope/clone/sub") = 0`,
+      `101 clone(child_stack=0x7f1, ${T}) = 102`,
+      `100 <... clone resumed>) = 101`,
+      `100 chdir("/home/u") = 0`,
+      `102 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("covers a child of unreadable clone3 flags that chdirs out while the parent writes relatively (P4)", () => {
+    const f = parseStraceLog(lines(`100 clone3(0x7ffc, 88) = 101`, `101 chdir("/home/u") = 0`, `100 mkdir("y", 0777) = 0`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/y"]);
+  });
+
+  it("judges an unfinished head that a new head of the same pid overwrites (P5c)", () => {
+    const f = parseStraceLog(lines(
+      `100 chdir("/home/u") = 0`,
+      `100 fork() = 101`,
+      `100 chdir("/scope/clone") = 0`,
+      `101 mkdir("x", 0777 <unfinished ...>`,
+      `101 +++ killed by SIGKILL +++`,
+      `100 fork() = 101`,
+      `101 openat(AT_FDCWD</scope/clone>, "/dev/null", O_RDONLY <unfinished ...>`,
+      `101 openat(AT_FDCWD</scope/clone>, "/dev/null", O_RDONLY <unfinished ...>`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("judges an unfinished head of a pid that is killed before its resume", () => {
+    const f = parseStraceLog(lines(`100 chdir("/home/u") = 0`, `100 fork() = 101`, `101 mkdir("x", 0777 <unfinished ...>`, `101 +++ killed by SIGKILL +++`), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("treats a failed clone as creating nothing and superseded lines like exits", () => {
+    const f = parseStraceLog(lines(
+      `100 fork() = -1 EAGAIN (Ressource zur Zeit nicht verfügbar)`,
+      `101 mkdir("a", 0777) = 0`,
+      `100 fork() = 102`,
+      `102 +++ superseded by execve in pid 100 +++`,
+      `102 mkdir("b", 0777) = 0`,
+    ), ctx({}));
+    expect(f.unresolvedWrites).toBe(2);
+  });
+
+  it("replaces the candidates of a lone process on chdir but only adds for a thread group", () => {
+    const lone = parseStraceLog(lines(`100 chdir("/home/u") = 0`, `100 chdir("/scope/clone") = 0`, `100 mkdir("x", 0777) = 0`), ctx({}));
+    expect(lone.outsideWrites).toEqual([]);
+    const group = parseStraceLog(lines(`100 clone(child_stack=0x7f0, ${T}) = 101`, `100 chdir("/home/u") = 0`, `100 chdir("/scope/clone") = 0`, `100 mkdir("x", 0777) = 0`), ctx({}));
+    expect(group.outsideWrites).toEqual(["/home/u/x"]);
+  });
+
+  it("maps every candidate through a relative chdir", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(child_stack=0x7f0, ${T}) = 101`,
+      `100 chdir("/home/u") = 0`,
+      `100 chdir("sub") = 0`,
+      `100 mkdir("x", 0777) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toEqual(["/home/u/x", "/home/u/sub/x"]);
   });
 });
 

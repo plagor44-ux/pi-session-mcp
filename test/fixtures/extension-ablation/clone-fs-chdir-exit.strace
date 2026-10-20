@@ -1,0 +1,1809 @@
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383208
+3383208 chdir("/s/vfs2/out") = 0
+3383208 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383208, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y0", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383209
+3383209 chdir("/s/vfs2/out") = 0
+3383209 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383209, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y1", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383210
+3383210 chdir("/s/vfs2/out") = 0
+3383210 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383210, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y2", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383211
+3383211 chdir("/s/vfs2/out") = 0
+3383211 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383211, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y3", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383212
+3383212 chdir("/s/vfs2/out") = 0
+3383212 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383212, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y4", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383213
+3383213 chdir("/s/vfs2/out") = 0
+3383213 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383213, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y5", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383216
+3383216 chdir("/s/vfs2/out") = 0
+3383216 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383216, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y6", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383219
+3383219 chdir("/s/vfs2/out") = 0
+3383219 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383219, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y7", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383220
+3383220 chdir("/s/vfs2/out") = 0
+3383220 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383220, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y8", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383221
+3383221 chdir("/s/vfs2/out") = 0
+3383221 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383221, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y9", 0777)               = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383222
+3383222 chdir("/s/vfs2/out") = 0
+3383222 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383222, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y10", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383223
+3383223 chdir("/s/vfs2/out") = 0
+3383223 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383223, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y11", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383224
+3383224 chdir("/s/vfs2/out") = 0
+3383224 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383224, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y12", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383225
+3383225 chdir("/s/vfs2/out") = 0
+3383225 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383225, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y13", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383226
+3383226 chdir("/s/vfs2/out") = 0
+3383226 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383226, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y14", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383227
+3383227 chdir("/s/vfs2/out") = 0
+3383227 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383227, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y15", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383228
+3383228 chdir("/s/vfs2/out") = 0
+3383228 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383228, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y16", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383229
+3383229 chdir("/s/vfs2/out") = 0
+3383229 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383229, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y17", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383230
+3383230 chdir("/s/vfs2/out") = 0
+3383230 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383230, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y18", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383231
+3383231 chdir("/s/vfs2/out") = 0
+3383231 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383231, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y19", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383236
+3383236 chdir("/s/vfs2/out") = 0
+3383236 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383236, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y20", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383237
+3383237 chdir("/s/vfs2/out") = 0
+3383237 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383237, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y21", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383238
+3383238 chdir("/s/vfs2/out") = 0
+3383238 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383238, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y22", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383239
+3383239 chdir("/s/vfs2/out") = 0
+3383239 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383239, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y23", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383240
+3383240 chdir("/s/vfs2/out") = 0
+3383240 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383240, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y24", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383241
+3383241 chdir("/s/vfs2/out") = 0
+3383241 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383241, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y25", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383242
+3383242 chdir("/s/vfs2/out") = 0
+3383242 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383242, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y26", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383243 chdir("/s/vfs2/out" <unfinished ...>
+3383206 <... clone resumed>)            = 3383243
+3383243 <... chdir resumed>)            = 0
+3383243 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383243, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y27", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383244
+3383244 chdir("/s/vfs2/out") = 0
+3383244 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383244, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y28", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383248
+3383248 chdir("/s/vfs2/out") = 0
+3383248 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383248, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y29", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383251
+3383251 chdir("/s/vfs2/out") = 0
+3383251 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383251, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y30", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383252
+3383252 chdir("/s/vfs2/out") = 0
+3383252 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383252, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y31", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383253
+3383253 chdir("/s/vfs2/out") = 0
+3383253 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383253, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y32", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383254
+3383254 chdir("/s/vfs2/out") = 0
+3383254 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383254, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y33", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383255
+3383255 chdir("/s/vfs2/out") = 0
+3383255 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383255, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y34", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383256
+3383256 chdir("/s/vfs2/out") = 0
+3383256 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383256, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y35", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383261
+3383261 chdir("/s/vfs2/out") = 0
+3383261 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383261, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y36", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383263
+3383263 chdir("/s/vfs2/out") = 0
+3383263 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383263, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y37", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383264
+3383264 chdir("/s/vfs2/out") = 0
+3383264 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383264, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y38", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383265
+3383265 chdir("/s/vfs2/out") = 0
+3383265 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383265, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y39", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383266
+3383266 chdir("/s/vfs2/out") = 0
+3383266 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383266, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y40", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383267
+3383267 chdir("/s/vfs2/out") = 0
+3383267 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383267, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y41", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383268
+3383268 chdir("/s/vfs2/out") = 0
+3383268 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383268, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y42", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383273
+3383273 chdir("/s/vfs2/out") = 0
+3383273 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383273, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y43", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383275
+3383275 chdir("/s/vfs2/out") = 0
+3383275 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383275, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y44", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383276
+3383276 chdir("/s/vfs2/out") = 0
+3383276 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383276, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y45", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383277
+3383277 chdir("/s/vfs2/out") = 0
+3383277 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383277, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y46", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383278
+3383278 chdir("/s/vfs2/out") = 0
+3383278 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383278, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y47", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383287
+3383287 chdir("/s/vfs2/out") = 0
+3383287 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383287, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y48", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383288
+3383288 chdir("/s/vfs2/out") = 0
+3383288 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383288, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y49", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383289 chdir("/s/vfs2/out") = 0
+3383289 +++ exited with 0 +++
+3383206 <... clone resumed>)            = 3383289
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383289, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y50", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383291
+3383291 chdir("/s/vfs2/out") = 0
+3383291 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383291, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y51", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383292
+3383292 chdir("/s/vfs2/out") = 0
+3383292 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383292, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y52", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383298
+3383298 chdir("/s/vfs2/out") = 0
+3383298 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383298, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y53", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383299
+3383299 chdir("/s/vfs2/out") = 0
+3383299 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383299, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y54", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383300
+3383300 chdir("/s/vfs2/out") = 0
+3383300 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383300, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y55", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383301
+3383301 chdir("/s/vfs2/out") = 0
+3383301 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383301, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y56", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383302
+3383302 chdir("/s/vfs2/out") = 0
+3383302 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383302, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y57", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383303
+3383303 chdir("/s/vfs2/out") = 0
+3383303 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383303, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y58", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383308
+3383308 chdir("/s/vfs2/out") = 0
+3383308 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383308, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y59", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383317
+3383317 chdir("/s/vfs2/out") = 0
+3383317 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383317, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y60", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383319
+3383319 chdir("/s/vfs2/out") = 0
+3383319 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383319, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y61", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383332
+3383332 chdir("/s/vfs2/out") = 0
+3383332 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383332, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y62", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383333
+3383333 chdir("/s/vfs2/out") = 0
+3383333 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383333, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y63", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383334
+3383334 chdir("/s/vfs2/out") = 0
+3383334 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383334, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y64", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383335
+3383335 chdir("/s/vfs2/out") = 0
+3383335 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383335, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y65", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383336
+3383336 chdir("/s/vfs2/out") = 0
+3383336 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383336, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y66", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383341
+3383341 chdir("/s/vfs2/out") = 0
+3383341 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383341, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y67", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383342
+3383342 chdir("/s/vfs2/out") = 0
+3383342 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383342, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y68", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383343
+3383343 chdir("/s/vfs2/out") = 0
+3383343 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383343, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y69", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383344
+3383344 chdir("/s/vfs2/out") = 0
+3383344 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383344, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y70", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383349 chdir("/s/vfs2/out") = 0
+3383349 +++ exited with 0 +++
+3383206 <... clone resumed>)            = 3383349
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383349, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y71", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383355
+3383355 chdir("/s/vfs2/out") = 0
+3383355 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383355, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y72", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383356
+3383356 chdir("/s/vfs2/out") = 0
+3383356 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383356, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y73", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383362
+3383362 chdir("/s/vfs2/out") = 0
+3383362 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383362, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y74", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383364
+3383364 chdir("/s/vfs2/out") = 0
+3383364 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383364, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y75", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383368
+3383368 chdir("/s/vfs2/out") = 0
+3383368 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383368, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y76", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383369
+3383369 chdir("/s/vfs2/out") = 0
+3383369 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383369, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y77", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383382
+3383382 chdir("/s/vfs2/out") = 0
+3383382 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383382, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y78", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383383
+3383383 chdir("/s/vfs2/out") = 0
+3383383 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383383, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y79", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383384
+3383384 chdir("/s/vfs2/out") = 0
+3383384 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383384, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y80", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383389
+3383389 chdir("/s/vfs2/out") = 0
+3383389 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383389, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y81", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383394
+3383394 chdir("/s/vfs2/out") = 0
+3383394 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383394, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y82", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383401
+3383401 chdir("/s/vfs2/out") = 0
+3383401 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383401, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y83", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383409
+3383409 chdir("/s/vfs2/out") = 0
+3383409 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383409, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y84", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383410
+3383410 chdir("/s/vfs2/out") = 0
+3383410 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383410, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y85", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383415
+3383415 chdir("/s/vfs2/out") = 0
+3383415 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383415, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y86", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383416
+3383416 chdir("/s/vfs2/out") = 0
+3383416 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383416, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y87", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383417
+3383417 chdir("/s/vfs2/out") = 0
+3383417 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383417, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y88", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383423
+3383423 chdir("/s/vfs2/out") = 0
+3383423 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383423, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y89", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383424
+3383424 chdir("/s/vfs2/out") = 0
+3383424 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383424, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y90", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383429
+3383429 chdir("/s/vfs2/out") = 0
+3383429 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383429, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y91", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383430
+3383430 chdir("/s/vfs2/out") = 0
+3383430 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383430, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y92", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383431
+3383431 chdir("/s/vfs2/out") = 0
+3383431 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383431, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y93", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383435
+3383435 chdir("/s/vfs2/out") = 0
+3383435 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383435, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y94", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383437
+3383437 chdir("/s/vfs2/out") = 0
+3383437 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383437, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y95", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383442
+3383442 chdir("/s/vfs2/out") = 0
+3383442 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383442, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y96", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383449
+3383449 chdir("/s/vfs2/out") = 0
+3383449 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383449, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y97", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383453
+3383453 chdir("/s/vfs2/out") = 0
+3383453 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383453, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y98", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383459
+3383459 chdir("/s/vfs2/out") = 0
+3383459 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383459, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y99", 0777)              = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383465
+3383465 chdir("/s/vfs2/out") = 0
+3383465 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383465, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y100", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383466
+3383466 chdir("/s/vfs2/out") = 0
+3383466 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383466, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y101", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383467
+3383467 chdir("/s/vfs2/out") = 0
+3383467 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383467, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y102", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383469
+3383469 chdir("/s/vfs2/out") = 0
+3383469 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383469, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y103", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383474
+3383474 chdir("/s/vfs2/out") = 0
+3383474 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383474, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y104", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383475
+3383475 chdir("/s/vfs2/out") = 0
+3383475 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383475, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y105", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383476
+3383476 chdir("/s/vfs2/out") = 0
+3383476 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383476, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y106", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383477
+3383477 chdir("/s/vfs2/out") = 0
+3383477 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383477, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y107", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383478
+3383478 chdir("/s/vfs2/out") = 0
+3383478 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383478, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y108", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383479
+3383479 chdir("/s/vfs2/out") = 0
+3383479 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383479, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y109", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383480
+3383480 chdir("/s/vfs2/out") = 0
+3383480 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383480, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y110", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383481
+3383481 chdir("/s/vfs2/out") = 0
+3383481 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383481, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y111", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383482
+3383482 chdir("/s/vfs2/out") = 0
+3383482 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383482, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y112", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383483
+3383483 chdir("/s/vfs2/out") = 0
+3383483 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383483, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y113", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383484
+3383484 chdir("/s/vfs2/out") = 0
+3383484 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383484, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y114", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383485
+3383485 chdir("/s/vfs2/out") = 0
+3383485 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383485, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y115", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383486 chdir("/s/vfs2/out" <unfinished ...>
+3383206 <... clone resumed>)            = 3383486
+3383486 <... chdir resumed>)            = 0
+3383486 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383486, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y116", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383487
+3383487 chdir("/s/vfs2/out") = 0
+3383487 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383487, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y117", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383488
+3383488 chdir("/s/vfs2/out") = 0
+3383488 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383488, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y118", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383489
+3383489 chdir("/s/vfs2/out") = 0
+3383489 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383489, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y119", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383490
+3383490 chdir("/s/vfs2/out") = 0
+3383490 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383490, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y120", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383491
+3383491 chdir("/s/vfs2/out") = 0
+3383491 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383491, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y121", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383492
+3383492 chdir("/s/vfs2/out") = 0
+3383492 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383492, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y122", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383493
+3383493 chdir("/s/vfs2/out") = 0
+3383493 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383493, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y123", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383494
+3383494 chdir("/s/vfs2/out") = 0
+3383494 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383494, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y124", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383495
+3383495 chdir("/s/vfs2/out") = 0
+3383495 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383495, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y125", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383496
+3383496 chdir("/s/vfs2/out") = 0
+3383496 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383496, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y126", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383497
+3383497 chdir("/s/vfs2/out") = 0
+3383497 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383497, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y127", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383498 chdir("/s/vfs2/out") = 0
+3383498 +++ exited with 0 +++
+3383206 <... clone resumed>)            = 3383498
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383498, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y128", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383499
+3383499 chdir("/s/vfs2/out") = 0
+3383499 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383499, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y129", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383500
+3383500 chdir("/s/vfs2/out") = 0
+3383500 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383500, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y130", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383502
+3383502 chdir("/s/vfs2/out") = 0
+3383502 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383502, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y131", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383503
+3383503 chdir("/s/vfs2/out") = 0
+3383503 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383503, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y132", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383505
+3383505 chdir("/s/vfs2/out") = 0
+3383505 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383505, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y133", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383506
+3383506 chdir("/s/vfs2/out") = 0
+3383506 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383506, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y134", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383507
+3383507 chdir("/s/vfs2/out") = 0
+3383507 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383507, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y135", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383508
+3383508 chdir("/s/vfs2/out") = 0
+3383508 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383508, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y136", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383509
+3383509 chdir("/s/vfs2/out") = 0
+3383509 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383509, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y137", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383510
+3383510 chdir("/s/vfs2/out") = 0
+3383510 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383510, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y138", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383511
+3383511 chdir("/s/vfs2/out") = 0
+3383511 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383511, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y139", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383512
+3383512 chdir("/s/vfs2/out") = 0
+3383512 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383512, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y140", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383514
+3383514 chdir("/s/vfs2/out") = 0
+3383514 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383514, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y141", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383515
+3383515 chdir("/s/vfs2/out") = 0
+3383515 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383515, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y142", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383516
+3383516 chdir("/s/vfs2/out") = 0
+3383516 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383516, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y143", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383517
+3383517 chdir("/s/vfs2/out") = 0
+3383517 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383517, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y144", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383518
+3383518 chdir("/s/vfs2/out") = 0
+3383518 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383518, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y145", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383519
+3383519 chdir("/s/vfs2/out") = 0
+3383519 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383519, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y146", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383520
+3383520 chdir("/s/vfs2/out") = 0
+3383520 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383520, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y147", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383521
+3383521 chdir("/s/vfs2/out") = 0
+3383521 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383521, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y148", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383522
+3383522 chdir("/s/vfs2/out") = 0
+3383522 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383522, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y149", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383528
+3383528 chdir("/s/vfs2/out") = 0
+3383528 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383528, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y150", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383529
+3383529 chdir("/s/vfs2/out") = 0
+3383529 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383529, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y151", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383530
+3383530 chdir("/s/vfs2/out") = 0
+3383530 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383530, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y152", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383531
+3383531 chdir("/s/vfs2/out") = 0
+3383531 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383531, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y153", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD <unfinished ...>
+3383536 chdir("/s/vfs2/out") = 0
+3383206 <... clone resumed>)            = 3383536
+3383536 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383536, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y154", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383538
+3383538 chdir("/s/vfs2/out") = 0
+3383538 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383538, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y155", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383539
+3383539 chdir("/s/vfs2/out") = 0
+3383539 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383539, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y156", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383541
+3383541 chdir("/s/vfs2/out") = 0
+3383541 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383541, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y157", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383543
+3383543 chdir("/s/vfs2/out") = 0
+3383543 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383543, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y158", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383547
+3383547 chdir("/s/vfs2/out") = 0
+3383547 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383547, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y159", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383548
+3383548 chdir("/s/vfs2/out") = 0
+3383548 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383548, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y160", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383549
+3383549 chdir("/s/vfs2/out") = 0
+3383549 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383549, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y161", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383550
+3383550 chdir("/s/vfs2/out") = 0
+3383550 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383550, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y162", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383551
+3383551 chdir("/s/vfs2/out") = 0
+3383551 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383551, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y163", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383555
+3383555 chdir("/s/vfs2/out") = 0
+3383555 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383555, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y164", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383557
+3383557 chdir("/s/vfs2/out") = 0
+3383557 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383557, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y165", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383558
+3383558 chdir("/s/vfs2/out") = 0
+3383558 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383558, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y166", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383559
+3383559 chdir("/s/vfs2/out") = 0
+3383559 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383559, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y167", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383560
+3383560 chdir("/s/vfs2/out") = 0
+3383560 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383560, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y168", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383561
+3383561 chdir("/s/vfs2/out") = 0
+3383561 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383561, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y169", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383562
+3383562 chdir("/s/vfs2/out") = 0
+3383562 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383562, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y170", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383563
+3383563 chdir("/s/vfs2/out") = 0
+3383563 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383563, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y171", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383564
+3383564 chdir("/s/vfs2/out") = 0
+3383564 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383564, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y172", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383565
+3383565 chdir("/s/vfs2/out") = 0
+3383565 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383565, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y173", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383566
+3383566 chdir("/s/vfs2/out") = 0
+3383566 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383566, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y174", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383567
+3383567 chdir("/s/vfs2/out") = 0
+3383567 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383567, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y175", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383572
+3383572 chdir("/s/vfs2/out") = 0
+3383572 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383572, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y176", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383574
+3383574 chdir("/s/vfs2/out") = 0
+3383574 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383574, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y177", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383576
+3383576 chdir("/s/vfs2/out") = 0
+3383576 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383576, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y178", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383577
+3383577 chdir("/s/vfs2/out") = 0
+3383577 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383577, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y179", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383578
+3383578 chdir("/s/vfs2/out") = 0
+3383578 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383578, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y180", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383580
+3383580 chdir("/s/vfs2/out") = 0
+3383580 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383580, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y181", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383581
+3383581 chdir("/s/vfs2/out") = 0
+3383581 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383581, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y182", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383586
+3383586 chdir("/s/vfs2/out") = 0
+3383586 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383586, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y183", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383587
+3383587 chdir("/s/vfs2/out") = 0
+3383587 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383587, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y184", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383588
+3383588 chdir("/s/vfs2/out") = 0
+3383588 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383588, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y185", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383589
+3383589 chdir("/s/vfs2/out") = 0
+3383589 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383589, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y186", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383590
+3383590 chdir("/s/vfs2/out") = 0
+3383590 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383590, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y187", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383591
+3383591 chdir("/s/vfs2/out") = 0
+3383591 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383591, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y188", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383592
+3383592 chdir("/s/vfs2/out") = 0
+3383592 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383592, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y189", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383593
+3383593 chdir("/s/vfs2/out") = 0
+3383593 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383593, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y190", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383594
+3383594 chdir("/s/vfs2/out") = 0
+3383594 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383594, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y191", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383595
+3383595 chdir("/s/vfs2/out") = 0
+3383595 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383595, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y192", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383596
+3383596 chdir("/s/vfs2/out") = 0
+3383596 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383596, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y193", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383597
+3383597 chdir("/s/vfs2/out") = 0
+3383597 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383597, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y194", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383598
+3383598 chdir("/s/vfs2/out") = 0
+3383598 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383598, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y195", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383603
+3383603 chdir("/s/vfs2/out") = 0
+3383603 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383603, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y196", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383605
+3383605 chdir("/s/vfs2/out") = 0
+3383605 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383605, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y197", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383607
+3383607 chdir("/s/vfs2/out") = 0
+3383607 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383607, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y198", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383608
+3383608 chdir("/s/vfs2/out") = 0
+3383608 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383608, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y199", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383609
+3383609 chdir("/s/vfs2/out") = 0
+3383609 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383609, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y200", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383610
+3383610 chdir("/s/vfs2/out") = 0
+3383610 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383610, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y201", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383611
+3383611 chdir("/s/vfs2/out") = 0
+3383611 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383611, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y202", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383612
+3383612 chdir("/s/vfs2/out") = 0
+3383612 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383612, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y203", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383613
+3383613 chdir("/s/vfs2/out") = 0
+3383613 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383613, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y204", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383618
+3383618 chdir("/s/vfs2/out") = 0
+3383618 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383618, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y205", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383619
+3383619 chdir("/s/vfs2/out") = 0
+3383619 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383619, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y206", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383620
+3383620 chdir("/s/vfs2/out") = 0
+3383620 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383620, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y207", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383621
+3383621 chdir("/s/vfs2/out") = 0
+3383621 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383621, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y208", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383622
+3383622 chdir("/s/vfs2/out") = 0
+3383622 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383622, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y209", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383623
+3383623 chdir("/s/vfs2/out") = 0
+3383623 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383623, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y210", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383624
+3383624 chdir("/s/vfs2/out") = 0
+3383624 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383624, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y211", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383625
+3383625 chdir("/s/vfs2/out") = 0
+3383625 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383625, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y212", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383626
+3383626 chdir("/s/vfs2/out") = 0
+3383626 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383626, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y213", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383628
+3383628 chdir("/s/vfs2/out") = 0
+3383628 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383628, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y214", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383632
+3383632 chdir("/s/vfs2/out") = 0
+3383632 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383632, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y215", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383633
+3383633 chdir("/s/vfs2/out") = 0
+3383633 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383633, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y216", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383634
+3383634 chdir("/s/vfs2/out") = 0
+3383634 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383634, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y217", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383635
+3383635 chdir("/s/vfs2/out") = 0
+3383635 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383635, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y218", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383636
+3383636 chdir("/s/vfs2/out") = 0
+3383636 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383636, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y219", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383637
+3383637 chdir("/s/vfs2/out") = 0
+3383637 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383637, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y220", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383638
+3383638 chdir("/s/vfs2/out") = 0
+3383638 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383638, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y221", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383639
+3383639 chdir("/s/vfs2/out") = 0
+3383639 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383639, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y222", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383640
+3383640 chdir("/s/vfs2/out") = 0
+3383640 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383640, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y223", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383641
+3383641 chdir("/s/vfs2/out") = 0
+3383641 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383641, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y224", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383643
+3383643 chdir("/s/vfs2/out") = 0
+3383643 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383643, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y225", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383649
+3383649 chdir("/s/vfs2/out") = 0
+3383649 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383649, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y226", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383652
+3383652 chdir("/s/vfs2/out") = 0
+3383652 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383652, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y227", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383653
+3383653 chdir("/s/vfs2/out") = 0
+3383653 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383653, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y228", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383654
+3383654 chdir("/s/vfs2/out") = 0
+3383654 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383654, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y229", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383659
+3383659 chdir("/s/vfs2/out") = 0
+3383659 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383659, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y230", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383660
+3383660 chdir("/s/vfs2/out") = 0
+3383660 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383660, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y231", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383661
+3383661 chdir("/s/vfs2/out") = 0
+3383661 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383661, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y232", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383666
+3383666 chdir("/s/vfs2/out") = 0
+3383666 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383666, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y233", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383667
+3383667 chdir("/s/vfs2/out") = 0
+3383667 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383667, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y234", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383672
+3383672 chdir("/s/vfs2/out") = 0
+3383672 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383672, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y235", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383678
+3383678 chdir("/s/vfs2/out") = 0
+3383678 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383678, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y236", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383679
+3383679 chdir("/s/vfs2/out") = 0
+3383679 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383679, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y237", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383680
+3383680 chdir("/s/vfs2/out") = 0
+3383680 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383680, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y238", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383681
+3383681 chdir("/s/vfs2/out") = 0
+3383681 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383681, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y239", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383682
+3383682 chdir("/s/vfs2/out") = 0
+3383682 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383682, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y240", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383683
+3383683 chdir("/s/vfs2/out") = 0
+3383683 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383683, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y241", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383684
+3383684 chdir("/s/vfs2/out") = 0
+3383684 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383684, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y242", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383685
+3383685 chdir("/s/vfs2/out") = 0
+3383685 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383685, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y243", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383686
+3383686 chdir("/s/vfs2/out") = 0
+3383686 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383686, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y244", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383687
+3383687 chdir("/s/vfs2/out") = 0
+3383687 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383687, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y245", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383693
+3383693 chdir("/s/vfs2/out") = 0
+3383693 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383693, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y246", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383694
+3383694 chdir("/s/vfs2/out") = 0
+3383694 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383694, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y247", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383695
+3383695 chdir("/s/vfs2/out") = 0
+3383695 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383695, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y248", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383696
+3383696 chdir("/s/vfs2/out") = 0
+3383696 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383696, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y249", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383697
+3383697 chdir("/s/vfs2/out") = 0
+3383697 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383697, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y250", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383698
+3383698 chdir("/s/vfs2/out") = 0
+3383698 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383698, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y251", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383699
+3383699 chdir("/s/vfs2/out") = 0
+3383699 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383699, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y252", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383704
+3383704 chdir("/s/vfs2/out") = 0
+3383704 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383704, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y253", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383705
+3383705 chdir("/s/vfs2/out") = 0
+3383705 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383705, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y254", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383706
+3383706 chdir("/s/vfs2/out") = 0
+3383706 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383706, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y255", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383707
+3383707 chdir("/s/vfs2/out") = 0
+3383707 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383707, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y256", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383708
+3383708 chdir("/s/vfs2/out") = 0
+3383708 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383708, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y257", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383709
+3383709 chdir("/s/vfs2/out") = 0
+3383709 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383709, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y258", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383710
+3383710 chdir("/s/vfs2/out") = 0
+3383710 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383710, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y259", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383711
+3383711 chdir("/s/vfs2/out") = 0
+3383711 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383711, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y260", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383713
+3383713 chdir("/s/vfs2/out") = 0
+3383713 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383713, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y261", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383714
+3383714 chdir("/s/vfs2/out") = 0
+3383714 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383714, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y262", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383715
+3383715 chdir("/s/vfs2/out") = 0
+3383715 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383715, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y263", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383716
+3383716 chdir("/s/vfs2/out") = 0
+3383716 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383716, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y264", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383717
+3383717 chdir("/s/vfs2/out") = 0
+3383717 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383717, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y265", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383718
+3383718 chdir("/s/vfs2/out") = 0
+3383718 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383718, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y266", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383719
+3383719 chdir("/s/vfs2/out") = 0
+3383719 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383719, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y267", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383720
+3383720 chdir("/s/vfs2/out") = 0
+3383720 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383720, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y268", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383725
+3383725 chdir("/s/vfs2/out") = 0
+3383725 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383725, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y269", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383726
+3383726 chdir("/s/vfs2/out") = 0
+3383726 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383726, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y270", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383728
+3383728 chdir("/s/vfs2/out") = 0
+3383728 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383728, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y271", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383730
+3383730 chdir("/s/vfs2/out") = 0
+3383730 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383730, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y272", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383731
+3383731 chdir("/s/vfs2/out") = 0
+3383731 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383731, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y273", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383732
+3383732 chdir("/s/vfs2/out") = 0
+3383732 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383732, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y274", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383737
+3383737 chdir("/s/vfs2/out") = 0
+3383737 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383737, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y275", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383738
+3383738 chdir("/s/vfs2/out") = 0
+3383738 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383738, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y276", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383739
+3383739 chdir("/s/vfs2/out") = 0
+3383739 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383739, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y277", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383740
+3383740 chdir("/s/vfs2/out") = 0
+3383740 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383740, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y278", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383741
+3383741 chdir("/s/vfs2/out") = 0
+3383741 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383741, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y279", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383742
+3383742 chdir("/s/vfs2/out") = 0
+3383742 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383742, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y280", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383748
+3383748 chdir("/s/vfs2/out") = 0
+3383748 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383748, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y281", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383749
+3383749 chdir("/s/vfs2/out") = 0
+3383749 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383749, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y282", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383750
+3383750 chdir("/s/vfs2/out") = 0
+3383750 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383750, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y283", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383751
+3383751 chdir("/s/vfs2/out") = 0
+3383751 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383751, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y284", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383753
+3383753 chdir("/s/vfs2/out") = 0
+3383753 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383753, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y285", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383754
+3383754 chdir("/s/vfs2/out") = 0
+3383754 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383754, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y286", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383759
+3383759 chdir("/s/vfs2/out") = 0
+3383759 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383759, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y287", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383760
+3383760 chdir("/s/vfs2/out") = 0
+3383760 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383760, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y288", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383762
+3383762 chdir("/s/vfs2/out") = 0
+3383762 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383762, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y289", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383764
+3383764 chdir("/s/vfs2/out") = 0
+3383764 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383764, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y290", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383768
+3383768 chdir("/s/vfs2/out") = 0
+3383768 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383768, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y291", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383773
+3383773 chdir("/s/vfs2/out") = 0
+3383773 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383773, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y292", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383775
+3383775 chdir("/s/vfs2/out") = 0
+3383775 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383775, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y293", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383779
+3383779 chdir("/s/vfs2/out") = 0
+3383779 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383779, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y294", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383780
+3383780 chdir("/s/vfs2/out") = 0
+3383780 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383780, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y295", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383790
+3383790 chdir("/s/vfs2/out") = 0
+3383790 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383790, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y296", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383795
+3383795 chdir("/s/vfs2/out") = 0
+3383795 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383795, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y297", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383796
+3383796 chdir("/s/vfs2/out") = 0
+3383796 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383796, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y298", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 clone(child_stack=0x563e6b9ba070, flags=CLONE_VM|CLONE_FS|SIGCHLD) = 3383801
+3383801 chdir("/s/vfs2/out") = 0
+3383801 +++ exited with 0 +++
+3383206 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3383801, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3383206 mkdir("y299", 0777)             = 0
+3383206 chdir("/s/vfs2/clone") = 0
+3383206 +++ exited with 0 +++
