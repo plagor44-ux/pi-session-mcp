@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { changedPaths, scoreImplementation, scoreReview } from "../eval/extensions/oracles.js";
-import { taskSpecSchema, type ReviewOracle } from "../eval/extensions/schemas.js";
+import { taskSpecSchema, type ImplementationOracle, type ReviewOracle } from "../eval/extensions/schemas.js";
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -30,6 +30,16 @@ function makeRepo(files: Record<string, string> = { "a.ts": "export const a = 1;
   git(repo, "add", "-A");
   git(repo, "commit", "-m", "base");
   return repo;
+}
+function revParse(repo: string): string {
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: repo } }).trim();
+}
+/** A work clone plus a pristine bare clone of it taken before any worker change, as in production. */
+function makeBase(files?: Record<string, string>): { repo: string; base: { gitDir: string; commit: string } } {
+  const repo = makeRepo(files);
+  const gitDir = join(tmp("oracle-bare-"), "base.git");
+  execFileSync("git", ["clone", "--bare", "--quiet", repo, gitDir], { stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: repo } });
+  return { repo, base: { gitDir, commit: revParse(repo) } };
 }
 const node = (code: string): string[] => ["node", "-e", code];
 
@@ -70,7 +80,11 @@ describe("scoreReview", () => {
     expect(hit("src/a.tsx: race")).toBe(false);
     expect(hit("src/a.tsx: race", "a.ts")).toBe(false);
     expect(hit("xa.ts: race")).toBe(false);
-    expect(hit("xsrc/a.ts: race")).toBe(true); // basename form may follow a slash
+    expect(hit("xsrc/a.ts: race")).toBe(false);
+    expect(hit("lib/a.ts: race")).toBe(false);
+    expect(hit("a.ts: race")).toBe(true);
+    expect(hit("/x/y/src/a.ts: race")).toBe(true);
+    expect(hit("./src/a.ts: race")).toBe(true);
     expect(hit("src/a.ts.bak: race")).toBe(false);
     expect(hit("src/a.ts/b: race")).toBe(false);
     expect(hit("`src/a.ts:12` race")).toBe(true);
@@ -79,7 +93,8 @@ describe("scoreReview", () => {
     expect(hit("src/a.ts#L3-L9 race")).toBe(true);
     expect(hit("race in src/a.ts.")).toBe(true);
     expect(hit("race in lib/a.ts", "a.ts")).toBe(true);
-    expect(hit("race in `a.ts`", "src/a.ts")).toBe(true); // basename form
+    expect(hit("race in `a.ts`", "src/a.ts")).toBe(true); // a bare name agrees with any directory
+    expect(hit("race in lib/a.ts", "src/a.ts")).toBe(false);
     expect(hit("race in a.ts, twice; also data.ts", "a.ts")).toBe(true);
     expect(hit("data.ts and then a.ts: race", "a.ts")).toBe(true);
   });
@@ -89,6 +104,27 @@ describe("scoreReview", () => {
     expect(scoreReview("1. src/a.ts: race\n2. the lock", reviewOracle).criticalHit).toBe(0);
     expect(scoreReview("* src/a.ts: race\n* src/a.ts: lock", reviewOracle).criticalHit).toBe(0);
     expect(scoreReview("src/a.ts: race\r\n\r\nlock", reviewOracle).criticalHit).toBe(0);
+  });
+
+  it("keeps tables, headings, bold lines and nested lists apart as specified", () => {
+    const accepted = (text: string): boolean => scoreReview(text, reviewOracle).criticalHit === 1;
+    expect(accepted("| src/a.ts:10 | possible race |\n| src/b.ts:4 | lock is never released |")).toBe(false);
+    expect(accepted("| src/a.ts:10 | possible race, lock |")).toBe(true);
+    expect(accepted("### src/a.ts\nPossible race.\n### src/b.ts\nThe lock is never released.")).toBe(false);
+    expect(accepted("**src/a.ts**: race.\n**src/b.ts**: lock never released.")).toBe(false);
+    expect(accepted("### src/a.ts:12\n\nRace when the lock is released early.")).toBe(true);
+    expect(accepted("### src/a.ts:12\n\nRace.\n\nThe lock is fine.")).toBe(false);
+    expect(accepted("### src/a.ts race lock")).toBe(true);
+    expect(accepted("- src/a.ts\n  - race when\n  - the lock is released")).toBe(true);
+    expect(accepted("- src/a.ts: race\n- the lock")).toBe(false);
+    expect(accepted("  - src/a.ts: race\n    - the lock")).toBe(true);
+  });
+
+  it("requires terms to start at a word boundary but allows prefix stems", () => {
+    expect(scoreReview("- src/a.ts: trace logging around the block", reviewOracle).accepted).toBe(false);
+    expect(scoreReview("- src/a.ts: races while locking", reviewOracle).criticalHit).toBe(1);
+    expect(scoreReview("- src/a.ts: race, (lock)", reviewOracle).criticalHit).toBe(1);
+    expect(scoreReview("- src/a.ts: sql injection?", { ...reviewOracle, falseFindings: [{ id: "x", anchors: [{ file: "src/a.ts", terms: ["sql injection?"] }] }] }).falseFindings).toEqual(["x"]);
   });
 
   it("lets any anchor of a finding hit and requires every term in its anchor", () => {
@@ -126,9 +162,10 @@ describe("scopeIgnore schema", () => {
 });
 
 describe("changedPaths", () => {
-  it("lists modified, untracked and ignored paths minus scopeIgnore and .codegraph/", async () => {
-    const repo = makeRepo({ "a.ts": "1\n", ".gitignore": "out/\n*.log\n" });
+  it("lists modified, deleted, untracked and ignored paths minus scopeIgnore and .codegraph/", async () => {
+    const { repo, base } = makeBase({ "a.ts": "1\n", "gone.ts": "x\n", ".gitignore": "out/\n*.log\n" });
     writeFileSync(join(repo, "a.ts"), "2\n");
+    rmSync(join(repo, "gone.ts"));
     mkdirSync(join(repo, ".pi-lens"));
     writeFileSync(join(repo, ".pi-lens", "cache.json"), "{}");
     mkdirSync(join(repo, ".codegraph"));
@@ -137,99 +174,192 @@ describe("changedPaths", () => {
     writeFileSync(join(repo, "out", "x.js"), "x");
     writeFileSync(join(repo, "debug.log"), "x");
     writeFileSync(join(repo, "b.ts"), "x");
-    expect(await changedPaths(repo, [".pi-lens/"])).toEqual(["a.ts", "b.ts", "debug.log", "out/"]);
-    expect(await changedPaths(repo, [".pi-lens/", "out/"])).toEqual(["a.ts", "b.ts", "debug.log"]);
+    expect(await changedPaths(repo, base, [".pi-lens/"])).toEqual(["a.ts", "b.ts", "debug.log", "gone.ts", "out/x.js"]);
+    expect(await changedPaths(repo, base, [".pi-lens/", "out/"])).toEqual(["a.ts", "b.ts", "debug.log", "gone.ts"]);
   });
 
-  it("counts both paths of a rename and handles unusual file names", async () => {
-    const repo = makeRepo({ "a.ts": "export const a = 'a long enough body for rename detection';\n", "dir/old name.ts": "unchanged\n" });
+  it("reports both sides of a rename and handles unusual file names", async () => {
+    const { repo, base } = makeBase({ "a.ts": "export const a = 'a long enough body for rename detection';\n", "dir/old name.ts": "unchanged\n" });
     git(repo, "mv", "a.ts", "c.ts");
     git(repo, "mv", "dir/old name.ts", "dir/new\nline.ts");
-    expect(await changedPaths(repo, [])).toEqual(["a.ts", "c.ts", "dir/new\nline.ts", "dir/old name.ts"]);
+    expect(await changedPaths(repo, base, [])).toEqual(["a.ts", "c.ts", "dir/new\nline.ts", "dir/old name.ts"]);
   });
 
   it("matches scopeIgnore only on directory prefixes", async () => {
-    const repo = makeRepo();
+    const { repo, base } = makeBase();
     mkdirSync(join(repo, "dist"));
     writeFileSync(join(repo, "dist", "x.js"), "x");
     writeFileSync(join(repo, "distinct.ts"), "x");
-    expect(await changedPaths(repo, ["dist/"])).toEqual(["distinct.ts"]);
+    expect(await changedPaths(repo, base, ["dist/"])).toEqual(["distinct.ts"]);
   });
 
-  it("returns an empty list for a clean clone", async () => {
-    expect(await changedPaths(makeRepo(), [])).toEqual([]);
+  it("returns an empty list for a clean clone and never reports the clone's own .git", async () => {
+    const { repo, base } = makeBase();
+    expect(await changedPaths(repo, base, [])).toEqual([]);
+  });
+
+  it("reports changes the worker committed", async () => {
+    const { repo, base } = makeBase();
+    writeFileSync(join(repo, "out.ts"), "x");
+    writeFileSync(join(repo, "a.ts"), "export const a = 3;\n");
+    git(repo, "add", "-A");
+    git(repo, "commit", "-m", "worker");
+    expect(await changedPaths(repo, base, [])).toEqual(["a.ts", "out.ts"]);
+  });
+
+  it.each(["--skip-worktree", "--assume-unchanged"])("reports an edit hidden with %s", async (flag) => {
+    const { repo, base } = makeBase();
+    git(repo, "update-index", flag, "a.ts");
+    writeFileSync(join(repo, "a.ts"), "export const a = 4;\n");
+    expect(await changedPaths(repo, base, [])).toEqual(["a.ts"]);
+  });
+
+  it("neither runs nor trusts a core.fsmonitor command from the clone's config", async () => {
+    const { repo, base } = makeBase();
+    const marker = join(tmp("oracle-fsm-"), "marker");
+    const hook = join(tmp("oracle-hook-"), "hook.sh");
+    writeFileSync(hook, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\nexit 0\n`);
+    chmodSync(hook, 0o755);
+    git(repo, "config", "core.fsmonitor", hook);
+    writeFileSync(join(repo, "a.ts"), "export const a = 5;\n");
+    expect(await changedPaths(repo, base, [])).toEqual(["a.ts"]);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("rejects a malformed base commit", async () => {
+    const { repo, base } = makeBase();
+    await expect(changedPaths(repo, { ...base, commit: "--help" }, [])).rejects.toThrow("base_commit_invalid");
   });
 });
 
 describe("scoreImplementation", () => {
+  const task = (over: Partial<{ allowedPaths: string[]; scopeIgnore: string[] }>, base: { commit: string }, oracle: ImplementationOracle) =>
+    ({ allowedPaths: [], scopeIgnore: [] as string[], ...over, baseCommit: base.commit, oracle });
+  const pass = (timeoutMs = 10_000): ImplementationOracle => ({ kind: "implementation", command: node("process.exit(0)"), timeoutMs });
+
   it("computes scope before tests and honours scopeIgnore", async () => {
-    const repo = makeRepo();
+    const { repo, base } = makeBase();
     writeFileSync(join(repo, "a.ts"), "export const a = 2;\n");
     mkdirSync(join(repo, ".pi-lens"));
     writeFileSync(join(repo, ".pi-lens", "cache.json"), "{}");
     writeFileSync(join(repo, "b.ts"), "x");
-    const r = await scoreImplementation(repo, {
-      allowedPaths: ["a.ts"], scopeIgnore: [".pi-lens/"],
-      oracle: { kind: "implementation", command: node("require('fs').writeFileSync('late.ts','x')"), timeoutMs: 10_000 },
-    });
+    const r = await scoreImplementation(repo, task({ allowedPaths: ["a.ts"], scopeIgnore: [".pi-lens/"] }, base,
+      { kind: "implementation", command: node("require('fs').writeFileSync('late.ts','x')"), timeoutMs: 10_000 }), { gitDir: base.gitDir });
     expect(r).toEqual({ accepted: false, testsPassed: true, outOfScope: ["b.ts"] });
   });
 
-  it("accepts an in-scope change with a passing command, including files below an allowed directory", async () => {
-    const repo = makeRepo({ "src/a.ts": "1\n" });
+  it("matches allowedPaths exactly unless an entry ends with a slash", async () => {
+    const { repo, base } = makeBase({ "src/a.ts": "1\n" });
     writeFileSync(join(repo, "src", "a.ts"), "2\n");
     writeFileSync(join(repo, "src", "new.ts"), "x");
-    const oracle = { kind: "implementation" as const, command: node("process.exit(0)"), timeoutMs: 10_000 };
-    expect(await scoreImplementation(repo, { allowedPaths: ["src/a.ts", "src/new.ts"], scopeIgnore: [], oracle }))
-      .toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
-    expect(await scoreImplementation(repo, { allowedPaths: ["src"], scopeIgnore: [], oracle }))
-      .toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
-    expect((await scoreImplementation(repo, { allowedPaths: ["src/a.ts"], scopeIgnore: [], oracle })).outOfScope).toEqual(["src/new.ts"]);
+    const run = (allowedPaths: string[]) => scoreImplementation(repo, task({ allowedPaths }, base, pass()), { gitDir: base.gitDir });
+    expect(await run(["src/a.ts", "src/new.ts"])).toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
+    expect(await run(["src/"])).toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
+    expect((await run(["src/a.ts"])).outOfScope).toEqual(["src/new.ts"]);
+    expect((await run(["src"])).outOfScope).toEqual(["src/a.ts", "src/new.ts"]);
+    expect((await run(["src/a.t", "sr/"])).outOfScope).toEqual(["src/a.ts", "src/new.ts"]);
+  });
+
+  it("scores a worker commit and a hidden edit as out of scope", async () => {
+    const { repo, base } = makeBase({ "a.ts": "1\n", "b.ts": "1\n" });
+    git(repo, "update-index", "--skip-worktree", "b.ts");
+    writeFileSync(join(repo, "b.ts"), "2\n");
+    writeFileSync(join(repo, "out.ts"), "x");
+    git(repo, "add", "out.ts");
+    git(repo, "commit", "-m", "worker");
+    const r = await scoreImplementation(repo, task({ allowedPaths: ["a.ts"] }, base, pass()), { gitDir: base.gitDir });
+    expect(r).toEqual({ accepted: false, testsPassed: true, outOfScope: ["b.ts", "out.ts"] });
   });
 
   it("fails on a non-zero or timed-out test command", async () => {
-    const repo = makeRepo();
-    const base = { allowedPaths: ["a.ts"], scopeIgnore: [] as string[] };
-    const failing = await scoreImplementation(repo, { ...base, oracle: { kind: "implementation", command: node("process.exit(3)"), timeoutMs: 10_000 } });
-    expect(failing).toEqual({ accepted: false, testsPassed: false, outOfScope: [] });
+    const { repo, base } = makeBase();
+    const run = (command: string[], timeoutMs: number) => scoreImplementation(repo, task({ allowedPaths: ["a.ts"] }, base, { kind: "implementation", command, timeoutMs }), { gitDir: base.gitDir });
+    expect(await run(node("process.exit(3)"), 10_000)).toEqual({ accepted: false, testsPassed: false, outOfScope: [] });
     const started = Date.now();
-    const slow = await scoreImplementation(repo, { ...base, oracle: { kind: "implementation", command: node("setTimeout(()=>{}, 60000)"), timeoutMs: 500 } });
-    expect(slow.testsPassed).toBe(false);
+    expect((await run(node("setTimeout(()=>{}, 60000)"), 500)).testsPassed).toBe(false);
     expect(Date.now() - started).toBeLessThan(10_000);
-    const missing = await scoreImplementation(repo, { ...base, oracle: { kind: "implementation", command: ["definitely-not-a-command-xyz"], timeoutMs: 1000 } });
-    expect(missing.testsPassed).toBe(false);
+    expect((await run(["definitely-not-a-command-xyz"], 1000)).testsPassed).toBe(false);
   });
 
   it("kills the whole process group on timeout", async () => {
-    const repo = makeRepo();
+    const { repo, base } = makeBase();
     const marker = join(tmp("oracle-marker-"), "marker");
     const code = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`)}],{stdio:'ignore'});setTimeout(()=>{},60000)`;
-    const r = await scoreImplementation(repo, { allowedPaths: [], scopeIgnore: [], oracle: { kind: "implementation", command: node(code), timeoutMs: 500 } });
+    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code), timeoutMs: 500 }), { gitDir: base.gitDir });
     expect(r.testsPassed).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 2500));
     expect(existsSync(marker)).toBe(false);
   });
 
+  it("kills a background grandchild after a normal exit", async () => {
+    const { repo, base } = makeBase();
+    const marker = join(tmp("oracle-marker-"), "marker");
+    const code = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`)}],{stdio:'ignore'}).unref();`;
+    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code), timeoutMs: 10_000 }), { gitDir: base.gitDir });
+    expect(r.testsPassed).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  it("shares one deadline between setup and the decisive command", async () => {
+    const { repo, base } = makeBase();
+    const sleep = node("setTimeout(()=>{}, 700)");
+    const run = (timeoutMs: number) => scoreImplementation(repo, task({}, base, { kind: "implementation", setup: [sleep], command: sleep, timeoutMs }), { gitDir: base.gitDir });
+    expect((await run(1100)).testsPassed).toBe(false);
+    expect((await run(5000)).testsPassed).toBe(true);
+  });
+
   it("runs setup commands first and skips the test when setup fails", async () => {
-    const repo = makeRepo();
-    const base = { allowedPaths: ["a.ts"], scopeIgnore: ["state/"] };
-    const ok = await scoreImplementation(repo, {
-      ...base, oracle: { kind: "implementation", setup: [node("require('fs').writeFileSync('setup.flag','1')")], command: node("process.exit(require('fs').existsSync('setup.flag')?0:1)"), timeoutMs: 10_000 },
-    });
+    const { repo, base } = makeBase();
+    const ok = await scoreImplementation(repo, task({ allowedPaths: ["setup.flag"] }, base, {
+      kind: "implementation", setup: [node("require('fs').writeFileSync('setup.flag','1')")], command: node("process.exit(require('fs').existsSync('setup.flag')?0:1)"), timeoutMs: 10_000,
+    }), { gitDir: base.gitDir });
     expect(ok).toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
-    const bad = await scoreImplementation(repo, {
-      ...base, oracle: { kind: "implementation", setup: [node("process.exit(1)")], command: node("require('fs').writeFileSync('ran.flag','1')"), timeoutMs: 10_000 },
-    });
+    const bad = await scoreImplementation(repo, task({}, base, {
+      kind: "implementation", setup: [node("process.exit(1)")], command: node("require('fs').writeFileSync('ran.flag','1')"), timeoutMs: 10_000,
+    }), { gitDir: base.gitDir });
     expect(bad.testsPassed).toBe(false);
     expect(existsSync(join(repo, "ran.flag"))).toBe(false);
   });
 
-  it("passes only PATH, HOME and CI=1, with HOME defaulting to the clone", async () => {
-    const repo = makeRepo();
+  it("deletes scopeIgnore directories and .codegraph/ after scoring scope and before setup runs", async () => {
+    const { repo, base } = makeBase();
+    for (const dir of [".pi-lens", ".codegraph"]) { mkdirSync(join(repo, dir)); writeFileSync(join(repo, dir, "state.json"), "{}"); }
+    const gone = node("const fs=require('fs');process.exit(fs.existsSync('.pi-lens')||fs.existsSync('.codegraph')?1:0)");
+    const r = await scoreImplementation(repo, task({ scopeIgnore: [".pi-lens/"] }, base, { kind: "implementation", setup: [gone], command: gone, timeoutMs: 10_000 }), { gitDir: base.gitDir });
+    expect(r).toEqual({ accepted: true, testsPassed: true, outOfScope: [] });
+  });
+
+  it("does not delete through a symlinked parent directory", async () => {
+    const { repo, base } = makeBase();
+    const outside = tmp("oracle-outside-");
+    mkdirSync(join(outside, "keep"));
+    writeFileSync(join(outside, "keep", "file"), "x");
+    symlinkSync(outside, join(repo, "link"));
+    await scoreImplementation(repo, task({ allowedPaths: ["link"], scopeIgnore: ["link/keep/", "../x/"] }, base, pass()), { gitDir: base.gitDir });
+    expect(existsSync(join(outside, "keep", "file"))).toBe(true);
+  });
+
+  it("applies wrap to every setup and test argv", async () => {
+    const { repo, base } = makeBase();
+    const log = join(tmp("oracle-wrap-"), "log");
+    const wrap = (argv: readonly string[]): string[] => node(`require('fs').appendFileSync(${JSON.stringify(log)}, process.argv.slice(1).join(' ')+'\\n')`).concat(argv);
+    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", setup: [["setup-one", "x"]], command: ["the-command", "y"], timeoutMs: 10_000 }), { gitDir: base.gitDir, wrap });
+    expect(r.testsPassed).toBe(true);
+    expect(readFileSync(log, "utf8")).toBe("setup-one x\nthe-command y\n");
+  });
+
+  it("passes only PATH, HOME and CI=1; HOME defaults to a fresh directory outside the clone", async () => {
+    const { repo, base } = makeBase();
     const home = tmp("oracle-home-");
+    const homeLog = join(tmp("oracle-homelog-"), "home");
     const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).sort().join()==='CI,HOME,PATH'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}?0:1)`);
-    const base = { allowedPaths: [], scopeIgnore: [] as string[] };
-    expect((await scoreImplementation(repo, { ...base, oracle: { kind: "implementation", command: check(repo), timeoutMs: 10_000 } })).testsPassed).toBe(true);
-    expect((await scoreImplementation(repo, { ...base, oracle: { kind: "implementation", command: check(home), timeoutMs: 10_000 } }, { home })).testsPassed).toBe(true);
+    const run = (command: string[], options: { home?: string } = {}) => scoreImplementation(repo, task({}, base, { kind: "implementation", command, timeoutMs: 10_000 }), { gitDir: base.gitDir, ...options });
+    expect((await run(check(home), { home })).testsPassed).toBe(true);
+    expect((await run(node(`require('fs').writeFileSync(${JSON.stringify(homeLog)}, process.env.HOME)`))).testsPassed).toBe(true);
+    const used = readFileSync(homeLog, "utf8");
+    expect(used).not.toBe(repo);
+    expect(used.startsWith(repo)).toBe(false);
+    expect(existsSync(used)).toBe(false);
   });
 });
