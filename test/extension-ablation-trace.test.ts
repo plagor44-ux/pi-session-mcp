@@ -27,7 +27,7 @@ describe("STRACE_ARGS", () => {
     expect(STRACE_ARGS[4]).toBe("-y");
     expect(STRACE_ARGS).toHaveLength(5);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
-    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount"]) expect(set).toContain(name);
+    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]) expect(set).toContain(name);
   });
 });
 
@@ -532,6 +532,81 @@ describe("CLONE_FS clone windows", () => {
   });
 });
 
+describe("unfinished cwd changes (N1/N2)", () => {
+  const interleave = `200 openat(AT_FDCWD</x>, "/dev/null", O_RDONLY) = 3</dev/null>`;
+
+  it("applies a lone relative chdir only once on successful resume (N1)", () => {
+    const f = parseStraceLog(lines(
+      `100 chdir("sub" <unfinished ...>`, interleave,
+      `100 <... chdir resumed>) = 0`, `100 chdir("..") = 0`, `100 mkdir("../evil", 0777) = 0`,
+    ), ctx({ allowed: [CWD] }));
+    expect(f).toMatchObject({ outsideWrites: ["/scope/evil"], unresolvedWrites: 0 });
+  });
+
+  it.each([
+    ["chdir", `chdir("/scope/clone/nope"`],
+    ["fchdir", `fchdir(3</scope/clone/nope>`],
+  ])("preserves a lone outside cwd after a failed unfinished %s (N2)", (name, head) => {
+    const f = parseStraceLog(lines(
+      `100 chdir("/home/u") = 0`, `100 ${head} <unfinished ...>`, interleave,
+      `100 <... ${name} resumed>) = -1 ENOENT (No such file or directory)`, `100 mkdir("x", 0777) = 0`,
+    ), ctx({ allowed: [CWD] }));
+    expect(f).toMatchObject({ outsideWrites: ["/home/u/x"], unresolvedWrites: 0 });
+  });
+
+  it.each([
+    ["chdir", `chdir("/scope/clone"`],
+    ["fchdir", `fchdir(3</scope/clone>`],
+  ])("unions a never-resumed %s when its head is flushed", (_name, head) => {
+    const f = parseStraceLog(lines(
+      `100 chdir("/home/u") = 0`, `100 ${head} <unfinished ...>`, interleave, `100 mkdir("x", 0777) = 0`,
+    ), ctx({ allowed: [CWD] }));
+    expect(f.outsideWrites).toContain("/home/u/x");
+  });
+
+  it("adds an unfinished fchdir target to an existing shared cell before a sibling writes", () => {
+    const f = parseStraceLog(lines(
+      `100 clone(flags=CLONE_VM|CLONE_FS) = 101`, `100 fchdir(3</home/u> <unfinished ...>`,
+      `101 mkdir("x", 0777) = 0`, `100 <... fchdir resumed>) = 0`,
+    ), ctx({}));
+    expect(f.outsideWrites).toContain("/home/u/x");
+  });
+});
+
+describe("uncertain pending child ownership (N3/N4)", () => {
+  const setup = [
+    `100 clone(child_stack=0x7f0, flags=CLONE_VM|CLONE_FS|CLONE_THREAD) = 300`,
+    `100 fork() = 200`,
+  ];
+  const foreignHead = `300 clone3({flags=CLONE_VM|CLONE_FS|CLONE_THREAD}, 88 <unfinished ...>`;
+
+  it.each([
+    ["clone", `clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD`],
+    ["clone3", `clone3({flags=CLONE_VM, exit_signal=SIGCHLD}, 88`],
+    ["fork", `fork(`],
+    ["vfork", `vfork(`],
+  ])("keeps a possibly foreign %s child's relative write unresolved without tainting its group (N3)", (name, head) => {
+    const f = parseStraceLog(lines(
+      ...setup, `200 chdir("/home/u") = 0`, foreignHead, `200 ${head} <unfinished ...>`,
+      `201 mkdir("x", 0777) = 0`, `100 mkdir("group", 0777) = 0`,
+      `200 <... ${name} resumed>) = 201`, `201 mkdir("after", 0777) = 0`,
+      `300 <... clone3 resumed>) = 301`, `100 mkdir("group-after", 0777) = 0`,
+    ), ctx({ allowed: [CWD] }));
+    expect(f).toMatchObject({ outsideWrites: ["/home/u/after"], unresolvedWrites: 1 });
+  });
+
+  it("detaches a resolved non-CLONE_FS child before its later chdir (R5/N4)", () => {
+    const f = parseStraceLog(lines(
+      ...setup, foreignHead,
+      `200 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD <unfinished ...>`,
+      `201 openat(AT_FDCWD</scope/clone>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>`,
+      `200 <... clone resumed>) = 201`, `300 <... clone3 resumed>) = 301`,
+      `201 chdir("/usr/share") = 0`, `100 mkdir("y", 0777) = 0`, `201 mkdir("child", 0777) = 0`,
+    ), ctx({ allowed: [CWD] }));
+    expect(f).toMatchObject({ outsideWrites: ["/usr/share/child"], unresolvedWrites: 0 });
+  });
+});
+
 describe("namespace and root changes (R21)", () => {
   it.each([
     ["chroot", `chroot("/scope/clone")`],
@@ -539,12 +614,30 @@ describe("namespace and root changes (R21)", () => {
     ["setns", `setns(3<net:[1]>, CLONE_NEWNS)`],
     ["unshare", `unshare(CLONE_NEWNS)`],
     ["mount", `mount("none", "/scope/clone", "tmpfs", 0, NULL)`],
+    ["open_tree", `open_tree(AT_FDCWD, "/scope/clone", OPEN_TREE_CLONE)`],
+    ["move_mount", `move_mount(3, "", AT_FDCWD, "/scope/clone", MOVE_MOUNT_F_EMPTY_PATH)`],
+    ["fsopen", `fsopen("tmpfs", FSOPEN_CLOEXEC)`],
+    ["fsmount", `fsmount(3, FSMOUNT_CLOEXEC, 0)`],
+    ["fsconfig", `fsconfig(3, FSCONFIG_CMD_CREATE, NULL, NULL, 0)`],
+    ["mount_setattr", `mount_setattr(AT_FDCWD, "/scope/clone", 0, {attr_set=MOUNT_ATTR_RDONLY}, 32)`],
+    ["umount2", `umount2("/scope/clone", MNT_DETACH)`],
   ])("counts successful %s as unresolved but ignores a failed attempt", (_name, call) => {
     expect(parseStraceLog(lines(`100 ${call} = 0`), ctx({})).unresolvedWrites).toBe(1);
     expect(parseStraceLog(lines(`100 ${call} = -1 EPERM (Operation not permitted)`), ctx({})).unresolvedWrites).toBe(0);
     expect(parseStraceLog(lines(`100 ${call} <unfinished ...>`), ctx({})).unresolvedWrites).toBe(1);
     expect(parseStraceLog(lines(`100 <... ${_name} resumed>) = 0`), ctx({})).unresolvedWrites).toBe(1);
     expect(parseStraceLog(lines(`100 <... ${_name} resumed>) = -1 EPERM (Operation not permitted)`), ctx({})).unresolvedWrites).toBe(0);
+  });
+
+  it.each(["CLONE_NEWNS", "CLONE_NEWUSER", "CLONE_NEWPID", "CLONE_NEWNET", "CLONE_NEWUTS", "CLONE_NEWIPC", "CLONE_NEWCGROUP", "CLONE_NEWTIME"])("counts successful clone and clone3 namespace creation with %s (S3)", (flag) => {
+    for (const call of [`clone(child_stack=NULL, flags=${flag}|SIGCHLD)`, `clone3({flags=${flag}, exit_signal=SIGCHLD}, 88)`]) {
+      expect(parseStraceLog(lines(`100 ${call} = 101`), ctx({})).unresolvedWrites).toBe(1);
+      expect(parseStraceLog(lines(`100 ${call} = -1 EPERM (Operation not permitted)`), ctx({})).unresolvedWrites).toBe(0);
+    }
+    expect(parseStraceLog(lines(
+      `100 clone3({flags=${flag}, exit_signal=SIGCHLD}, 88 <unfinished ...>`,
+      `100 <... clone3 resumed>) = 101`,
+    ), ctx({})).unresolvedWrites).toBe(1);
   });
 });
 

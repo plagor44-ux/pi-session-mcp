@@ -8,7 +8,7 @@ export const STRACE_ARGS: readonly string[] = [
   "-f", "-q", "-e",
   "trace=connect,openat,open,creat,rename,renameat,renameat2,unlink,unlinkat,mkdir,mkdirat,symlink,symlinkat,link,linkat,truncate,chdir,fchdir,clone,clone3,fork,vfork"
     + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
-    + ",sendto,sendmsg,sendmmsg,io_uring_setup,chroot,pivot_root,setns,unshare,mount",
+    + ",sendto,sendmsg,sendmmsg,io_uring_setup,chroot,pivot_root,setns,unshare,mount,open_tree,move_mount,fsopen,fsmount,fsconfig,mount_setattr,umount2",
   "-y",
 ];
 
@@ -87,7 +87,7 @@ const SPECS: Record<string, Spec> = {
 };
 const CLONES = new Set(["clone", "clone3", "fork", "vfork"]);
 const SEND_CALLS = new Set(["connect", "sendto", "sendmsg", "sendmmsg"]);
-const ROOT_CHANGES = new Set(["chroot", "pivot_root", "setns", "unshare", "mount"]);
+const ROOT_CHANGES = new Set(["chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]);
 
 type Return = { kind: "ok"; value: number; annotation?: string } | { kind: "failed" } | { kind: "progress" };
 interface Call { name: string; args: string[]; ret: Return }
@@ -253,6 +253,8 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
   /** Every cell ever made for a pid, live or exited, so a clone return can find what a fast child did before it. */
   const records = new Map<number, { cell: Cell; created: number }[]>();
   const pending = new Map<number, { head: string; seq: number }>();
+  /** A speculative group attachment may actually belong to a pending non-CLONE_FS parent. Local to the pid. */
+  const uncertain = new Set<number>();
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
@@ -276,11 +278,13 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const existing = cellOf(pid);
     if (existing) return existing;
     let group: Cell | undefined;
+    let nonSharedParent = false;
     for (const [parentPid, head] of pending) {
       const call = parseCall(head.head);
-      if (!call || (call.name !== "clone" && call.name !== "clone3")) continue;
+      if (!call || !CLONES.has(call.name)) continue;
       const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
-      if (flags !== undefined && !/\bCLONE_FS\b/.test(flags)) continue;
+      if (flags === undefined || !/\bCLONE_FS\b/.test(flags)) nonSharedParent = true;
+      if (call.name === "fork" || call.name === "vfork" || (flags !== undefined && !/\bCLONE_FS\b/.test(flags))) continue;
       const parent = cellOf(parentPid) ?? newCell(parentPid, [null], seq);
       if (!group) group = parent;
       else if (parent !== group) {
@@ -291,6 +295,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
       if (flags === undefined) group.cwds.add(null);
     }
     if (group) {
+      if (nonSharedParent) uncertain.add(pid);
       group.touched = seq;
       live.set(pid, group);
       records.set(pid, [...(records.get(pid) ?? []), { cell: group, created: seq }]);
@@ -298,18 +303,19 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     return group;
   }
 
-  /** A chdir replaces the candidates of a lone process and adds to those of a thread group. */
-  function changeCwd(pid: number, map: (cwd: string | null) => string | null, seq: number): void {
+  /** Only a completed chdir replaces a lone cell; heads affect shared cells, and flushes only add candidates. */
+  function changeCwd(pid: number, map: (cwd: string | null) => string | null, seq: number, mode: "complete" | "head" | "flush" = "complete"): void {
     const cell = cellOf(pid);
     if (!cell) {
       const group = attachPendingGroup(pid, seq);
       // The first relative chdir still has an unknown base; retain that uncertainty in the union.
       if (group) group.cwds.add(map(null));
-      else newCell(pid, [map(null)], seq);
+      else if (mode !== "head") newCell(pid, mode === "flush" ? [null, map(null)] : [map(null)], seq);
       return;
     }
+    if (mode === "head" && !cell.shared) return;
     const next = [...cell.cwds].map(map);
-    if (cell.shared) next.forEach((c) => cell.cwds.add(c));
+    if (cell.shared || mode === "flush") next.forEach((c) => cell.cwds.add(c));
     else cell.cwds = new Set(next);
     cell.touched = seq;
   }
@@ -327,7 +333,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const fromCwd = (): Resolved => {
       const cwds = cellOf(pid)?.cwds;
       const known = [...(cwds ?? [])].filter((c): c is string => c !== null);
-      return { paths: resolveAll(known, path), unresolved: !cwds || cwds.size === 0 || cwds.has(null) };
+      return { paths: resolveAll(known, path), unresolved: uncertain.has(pid) || !cwds || cwds.size === 0 || cwds.has(null) };
     };
     if (t.dir === undefined) return fromCwd();
     const dir = parseFd(args[t.dir]);
@@ -383,13 +389,15 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
    * a record might be newer it is included, because over-approximating only risks a false positive.
    */
   function clone(pid: number, call: Call, seq: number, headSeq: number): void {
+    const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
+    if (call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) unresolvedWrites++;
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
     const child = call.ret.value;
+    uncertain.delete(child);
     const parent = cellOf(pid);
     const own = [...new Set((records.get(child) ?? [])
       .filter((r) => r.created > headSeq || root(r.cell).touched > headSeq)
       .map((r) => root(r.cell)))].filter((c) => c !== parent);
-    const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
     const unreadable = flags === undefined && (call.name === "clone" || call.name === "clone3");
     if (unreadable || (flags !== undefined && /\bCLONE_FS\b/.test(flags))) {
       const group = parent ?? newCell(pid, [null], seq);
@@ -402,26 +410,22 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
       return;
     }
     const base: (string | null)[] = parent ? [...parent.cwds] : [null];
-    const [target, ...rest] = own;
-    if (!target) { newCell(child, base, seq); return; }
-    for (const cell of rest) { cell.cwds.forEach((c) => target.cwds.add(c)); cell.forward = target; }
-    base.forEach((c) => target.cwds.add(c));
-    target.touched = seq;
-    live.set(child, target);
+    // Ownership is now known: snapshot candidates without keeping or forwarding any speculative group pointer.
+    newCell(child, [...base, ...own.flatMap((cell) => [...cell.cwds])], seq);
   }
 
-  function chdir(pid: number, call: Call, seq: number): void {
+  function chdir(pid: number, call: Call, seq: number, mode: "complete" | "head" | "flush" = call.ret.kind === "progress" ? "flush" : "complete"): void {
     if (call.ret.kind !== "ok" && call.ret.kind !== "progress") return;
     if (call.name === "fchdir") {
       const annotation = parseFd(call.args[0])?.annotation;
       const target = annotation?.startsWith("/") ? posix.resolve(annotation) : null;
-      changeCwd(pid, () => target, seq);
+      changeCwd(pid, () => target, seq, mode);
       return;
     }
     const path = unquote(call.args[0]);
-    if (typeof path !== "string") changeCwd(pid, () => null, seq);
-    else if (path.startsWith("/")) changeCwd(pid, () => posix.resolve(path), seq);
-    else changeCwd(pid, (cwd) => (cwd === null ? null : posix.resolve(cwd, path)), seq);
+    if (typeof path !== "string") changeCwd(pid, () => null, seq, mode);
+    else if (path.startsWith("/")) changeCwd(pid, () => posix.resolve(path), seq, mode);
+    else changeCwd(pid, (cwd) => (cwd === null ? null : posix.resolve(cwd, path)), seq, mode);
   }
 
   function handle(pid: number, body: string, seq: number, headSeq: number): void {
@@ -467,11 +471,15 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
         records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
       } else live.delete(pid);
       if (oldTid !== pid) live.delete(oldTid);
+      if (uncertain.has(oldTid)) uncertain.add(pid);
+      else uncertain.delete(pid);
+      if (oldTid !== pid) uncertain.delete(oldTid);
       continue;
     }
     if (EXIT_LINE.test(body)) {
       flush(pid);
       live.delete(pid); // the records stay: a clone return after this line still has to find the cell
+      uncertain.delete(pid);
       continue;
     }
     if (body.startsWith("--- ") || body.startsWith("+++ ")) continue;
@@ -499,7 +507,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
       const head = unfinished[1]!;
       const call = parseCall(head);
       if (call && SPECS[call.name]) attachPendingGroup(pid, seq);
-      else if (call && (call.name === "chdir" || call.name === "fchdir")) chdir(pid, call, seq);
+      else if (call && (call.name === "chdir" || call.name === "fchdir")) chdir(pid, call, seq, "head");
       pending.set(pid, { head, seq });
       continue;
     }
