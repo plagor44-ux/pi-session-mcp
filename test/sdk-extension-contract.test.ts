@@ -23,9 +23,12 @@ const extension = parseExtensionSpec("npm:pi-extension-fixture@1.0.0")!;
 const events = (): string[] => ((globalThis as { __piExtensionFixtureEvents?: string[] }).__piExtensionFixtureEvents ??= []);
 
 afterAll(removeTemporaryRoots);
-beforeEach(() => { events().length = 0; });
+beforeEach(() => {
+  events().length = 0;
+  (globalThis as { __piExtensionFixtureMode?: string }).__piExtensionFixtureMode = "default";
+});
 
-async function harness(permissionProfile: PermissionProfile) {
+async function harness(permissionProfile: PermissionProfile, grantedExtensionTools?: readonly string[]) {
   const root = await temporaryRoot("pi-session-mcp-extension-contract-");
   const agentDir = join(root, "agent");
   const workspace = join(root, "workspace");
@@ -42,6 +45,7 @@ async function harness(permissionProfile: PermissionProfile) {
   const registry = new SessionRegistry(adapter, new Map([["repo", workspace]]));
   const executionProfile: ResolvedExecutionProfile = {
     alias: "fixture", permissionProfile, provider: "fixture-ext", model: "fixture-ext-model", thinkingLevel: "off", extensions: [extension],
+    ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools }),
   };
   return { registry, executionProfile };
 }
@@ -96,13 +100,42 @@ describe("Pi SDK contract for allowlisted extensions", () => {
     }
   }, 30_000);
 
+  it("declares exactly granted extension tools in read-only profiles despite setActiveTools", async () => {
+    const { registry, executionProfile } = await harness("read-only", ["fixture_reader"]);
+    const session = await registry.start("repo", executionProfile);
+    try {
+      const accepted = await registry.prompt(session.id, "list the tools");
+      expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
+      expect(events()).toContain("widen:before_agent_start");
+      expect(events().filter((event) => event.startsWith("tools:"))).toEqual([
+        `tools:${[...PROFILE_TOOLS["read-only"], "fixture_reader"].sort().join(",")}`,
+      ]);
+    } finally {
+      await registry.close(session.id);
+    }
+  }, 30_000);
+
+  it("rejects an unregistered grant before session_start", async () => {
+    const { registry, executionProfile } = await harness("read-only", ["fixture_missing"]);
+    await expect(registry.start("repo", executionProfile)).rejects.toMatchObject({ code: "extension_tool_missing" });
+    expect(events()).not.toContain("session_start");
+  }, 30_000);
+
+  it.each(["deactivate", "hidden"])("rejects a granted tool that is inactive in mode %s", async (mode) => {
+    (globalThis as { __piExtensionFixtureMode?: string }).__piExtensionFixtureMode = mode;
+    const { registry, executionProfile } = await harness("read-only", ["fixture_reader"]);
+    await expect(registry.start("repo", executionProfile)).rejects.toMatchObject({ code: "extension_tool_missing" });
+    expect(events()).toContain("session_start");
+    expect(events()).toContain("session_shutdown");
+  }, 30_000);
+
   it("declares extension tools to the model in coding profiles", async () => {
     const { registry, executionProfile } = await harness("coding");
     const session = await registry.start("repo", executionProfile);
     try {
       const accepted = await registry.prompt(session.id, "list the tools");
       expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
-      expect(events()).toContain(`tools:${[...PROFILE_TOOLS.coding, "fixture_tool"].sort().join(",")}`);
+      expect(events()).toContain(`tools:${[...PROFILE_TOOLS.coding, "fixture_tool", "fixture_reader"].sort().join(",")}`);
     } finally {
       await registry.close(session.id);
     }

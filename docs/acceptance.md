@@ -1856,6 +1856,66 @@ package, passed for their `code` and `review` profiles. No workspace or
 writer clone changed. This is the first provider use on Pi SDK `1.3.0`; it
 says nothing about task quality, Level 3 or the automated container writers.
 
+### v0.10.0 pre-release acceptance
+
+Before its release, `v0.10.0` passed Level 1, the working-tree Level 2, the
+packed-tarball Level 2 and a live check of a granted extension tool on its
+release candidate `1a5cca7` on Linux (`x64`), with Node.js `26.11.1`, npm
+`12.2.1`, Codex CLI `0.162.1` and Claude Code `2.1.303`, on 2026-10-19. The
+release adds granted extension tools for read-only profiles
+([ADR 0010](adr/0010-read-only-extension-tools.md)). A provider-free probe
+first showed that `pi-lens@4.4.3` registers `symbol_search` and
+`project_report` when its extension loads
+([evidence](evaluation/pi-lens-registration-2026-10-19/README.md)).
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor
+  as noted below.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    90 files, 1958 passed and 6 skipped, and no unhandled error, including the
+    real-SDK contract tests for granted, missing, hidden and deactivated
+    extension tools.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 671 files.
+  - Doctor reported `packageVersion` `0.10.0` and exited with `2`, as expected
+    for the example configuration (`workspace_missing` for the placeholder
+    workspace, `workspace_mode_unset` for that alias).
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. The real client registrations were
+  unchanged, no process remained, the built files were unchanged, and the
+  path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball (shasum
+  `9c7b0bfa98e14700dc7ec19b8c4938202b3c0c91`), installed with
+  `npm install -g --prefix` into a fresh prefix without the lockfile, resolved
+  every `@earendil-works` package to `1.3.0` with a single copy each. The
+  install smoke reported `smoke_passed` with version `0.10.0`. Level 2 against
+  the installed package passed 160 of 160 checks, with the same results for
+  registrations, processes, build and path leaks.
+- Live check of a granted tool, with an evaluation-owned Pi agent directory
+  holding `pi-lens@4.4.3` and a disposable clone as the only workspace:
+  - Configuration: one read-only profile with `extensions: ["npm:pi-lens@4.4.3"]`
+    and `grantedExtensionTools: ["symbol_search"]`. `pi_capabilities_get`
+    reported the grant, and `pi_session_start` admitted the session.
+  - The prompt asked the model to call `symbol_search` once and echo the
+    start of the result. The turn completed with a real `pi-lens` search
+    result (a ranked file list headed by `src/session-tools.ts`). The tool
+    therefore ran in a read-only session that pi-session-mcp creates with
+    `projectTrusted: false`.
+  - Provider: `deepseek` / `deepseek-flash` with a copied API key. The
+    planned `xai` route failed with `turn_failed` for every profile, also
+    without any extension, when only the OAuth access token was copied with
+    an emptied refresh token. The rotating refresh token was deliberately not
+    copied. This is an evaluation-setup limit, not a product result.
+  - `strace -f -e trace=connect` on the server recorded only the local DNS
+    resolver and the provider endpoint. The clone had no changed, untracked
+    or ignored file afterwards. The agent directory with the copied key was
+    removed.
+  - Three `deepseek` turns were used (one control without extensions, two grant runs), plus three `xai` attempts that failed before any model output, well below the USD 0.50 limit.
+
+Not established for `0.10.0`: a live grant with OAuth providers in an
+isolated agent directory, Level 3, the automated container writers, and macOS
+on real hardware. CI covers macOS 15 and 26. The published-release
+acceptance follows after publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

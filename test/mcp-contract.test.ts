@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
@@ -116,7 +117,8 @@ describe("MCP contracts", () => {
         workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only"] } } } },
         executionProfiles: {
           items: {
-            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "skills"],
+            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"],
+            properties: { grantedExtensionTools: { type: "array", items: { type: "string" } } },
             additionalProperties: false,
           },
         },
@@ -125,6 +127,22 @@ describe("MCP contracts", () => {
     const turnGet = tools.find((tool) => tool.name === "pi_turn_get"); expect(turnGet?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(tools.find((tool) => tool.name === "pi_session_list")?.annotations?.readOnlyHint).toBe(true);
     for (const name of ["pi_session_prompt", "pi_session_abort", "pi_session_close"]) expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(false);
+  });
+
+  it("requires extension tool grants in the advertised capabilities output schema", async () => {
+    const connected = await client({}, { profiles: new Map([["safe", {
+      alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off",
+      extensions: [{ spec: "npm:ext@1.0.0", name: "ext", version: "1.0.0" }],
+      grantedExtensionTools: ["zeta_lookup", "alpha_lookup"],
+    }]]) });
+    const discovery = (await connected.client.listTools()).tools.find(({ name }) => name === "pi_capabilities_get")!;
+    const schema = z.fromJSONSchema(discovery.outputSchema! as Parameters<typeof z.fromJSONSchema>[0]);
+    const response = await connected.client.callTool({ name: "pi_capabilities_get", arguments: {} });
+    expect(response.structuredContent).toMatchObject({ executionProfiles: [{ grantedExtensionTools: ["zeta_lookup", "alpha_lookup"] }] });
+    expect(schema.safeParse(response.structuredContent).success).toBe(true);
+    const missing = structuredClone(response.structuredContent) as { executionProfiles: Array<Record<string, unknown>> };
+    delete missing.executionProfiles[0]!.grantedExtensionTools;
+    expect(schema.safeParse(missing).success).toBe(false);
   });
 
   it("publishes short behavior hints in the tool descriptions", async () => {
@@ -173,11 +191,11 @@ describe("MCP contracts", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], skills: [],
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], grantedExtensionTools: [], skills: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], skills: [],
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], grantedExtensionTools: [], skills: [],
         },
       ],
     });
