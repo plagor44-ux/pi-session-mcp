@@ -282,14 +282,18 @@ function killProcessGroup(pid: number | undefined, fallback: boolean): void {
 }
 
 /** Runs an argv list without a shell in the clone; true only on exit code 0 within the timeout. The process group is killed afterwards in every case. */
-function runArgv(argv: readonly string[], clone: string, home: string, tmpdir: string, timeoutMs: number): Promise<boolean> {
+function runArgv(argv: readonly string[], clone: string, home: string, tmpdir: string, timeoutMs: number, signal?: AbortSignal): Promise<boolean> {
   const [file, ...args] = argv;
   if (file === undefined || timeoutMs <= 0) return Promise.resolve(false);
   return new Promise((resolvePromise) => {
     let settled = false;
-    const settle = (ok: boolean): void => { if (settled) return; settled = true; clearTimeout(timer); resolvePromise(ok); };
+    const settle = (ok: boolean): void => { if (settled) return; settled = true; clearTimeout(timer); signal?.removeEventListener("abort", onAbort); resolvePromise(ok); };
     const child = spawn(file, args, { cwd: clone, env: minimalEnv(home, tmpdir), stdio: "ignore", detached: true });
     const timer = setTimeout(() => { killProcessGroup(child.pid, true); settle(false); }, timeoutMs);
+    // Ctrl-C does not wait for an oracle: the group is killed and the command counts as failed.
+    const onAbort = (): void => { killProcessGroup(child.pid, true); settle(false); };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
     child.on("error", () => settle(false));
     child.on("exit", (code) => { killProcessGroup(child.pid, false); settle(code === 0); });
   });
@@ -346,7 +350,7 @@ const isAllowed = (path: string, allowed: string): boolean => allowed.endsWith("
 export async function scoreImplementation(
   clone: string,
   task: ImplementationTask,
-  options: { gitDir: string; home?: string; tmpdir?: string; wrap?: (argv: readonly string[]) => string[] },
+  options: { gitDir: string; home?: string; tmpdir?: string; wrap?: (argv: readonly string[]) => string[]; signal?: AbortSignal },
 ): Promise<ImplementationScore> {
   const base = { gitDir: options.gitDir, commit: task.baseCommit };
   const changed = await changedPaths(clone, base, task.scopeIgnore);
@@ -359,7 +363,7 @@ export async function scoreImplementation(
     const tmp = options.tmpdir ?? join(home, "tmp");
     await mkdir(tmp, { recursive: true });
     const deadline = Date.now() + task.oracle.timeoutMs;
-    const run = (argv: readonly string[]): Promise<boolean> => runArgv(options.wrap ? options.wrap(argv) : argv, clone, home, tmp, deadline - Date.now());
+    const run = (argv: readonly string[]): Promise<boolean> => runArgv(options.wrap ? options.wrap(argv) : argv, clone, home, tmp, deadline - Date.now(), options.signal);
     let testsPassed = true;
     for (const setup of task.oracle.setup ?? []) {
       if (!await run(setup)) { testsPassed = false; break; }

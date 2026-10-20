@@ -1,10 +1,10 @@
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { chmod, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { EventEmitter } from "node:events";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { afterAll, describe, expect, it } from "vitest";
 import { matrixDigest, routesOf, tasksDigest, validateApproval, type Approval } from "../eval/extensions/approval.js";
 import { parseArgs, sourceCommit, withAbort } from "../eval/extensions/cli.js";
@@ -15,7 +15,8 @@ import { readVerifiedOutput } from "../eval/extensions/audit.js";
 import { WaveDirGuard, removeTree } from "../eval/extensions/evidence.js";
 import { ABSENT_PATHS, containmentSelfTest } from "../eval/extensions/containment.js";
 import { ETC_ENTRIES, EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type PlanHost, type SandboxPlan } from "../eval/extensions/sandbox.js";
-import { assertWaveDirOutsideSources, resolveTool, resolveTools, type ToolPaths } from "../eval/extensions/tools.js";
+import { dirtyBoundPaths, sourceIsDirty } from "../eval/extensions/bound.js";
+import { assertWaveDirOutsideSources, realHome, resolveTool, resolveTools, type ToolPaths } from "../eval/extensions/tools.js";
 import { encodeKey, macOf, sha256Hex } from "../eval/extensions/output-mac.js";
 import { readRegularFile } from "../eval/extensions/safe-read.js";
 import { BUILD_ROOT, CORE_LIMIT, assertHostSafe, groupIsEmpty, tracedCommand, untracedCommand } from "../eval/extensions/supervise.js";
@@ -23,6 +24,12 @@ import { dnsServers, modelHost } from "../eval/extensions/network.js";
 import { assertPreflightPassed, runPreflight } from "../eval/extensions/preflight.js";
 import { hash } from "../eval/profiles/files.js";
 import type { RunSpec, TaskSpec } from "../eval/extensions/schemas.js";
+import { buildPlan } from "../eval/extensions/cli.js";
+import { MAX_UNEXPECTED_CONNECTS, summarizeTrace } from "../eval/extensions/classify.js";
+import { PersistedLedger } from "../eval/extensions/ledger-file.js";
+import { scoreImplementation } from "../eval/extensions/oracles.js";
+import { writeEvidence } from "../eval/extensions/report.js";
+import { taskSpecSchema } from "../eval/extensions/schemas.js";
 import { runWave, type RunRecord, type WaveDeps, type WaveInput } from "../eval/extensions/wave.js";
 import {
   assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, renderPrompt, runConfig, scopeEnv, scopeRoot, type RunScope, type ScopeInput,
@@ -53,6 +60,8 @@ interface Step {
   tamper?: "cost" | "text" | "nomac";
   /** The fake worker's exit status after writing its (valid) output. */
   exitCode?: number; signal?: "SIGKILL" | "SIGABRT";
+  /** The assistant usage sum the run unit reports (default 0); it matters when the session total is null (`cost: null`). */
+  assistantCost?: number;
   /** A file the fake worker writes into the clone. */
   writeFile?: { name: string; content: string };
 }
@@ -93,7 +102,7 @@ function outputFor(step: Step) {
     terminal: "completed", startErrorCode: null,
     usage: {
       session: cost === null ? null : { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, total: 17, costUsd: cost },
-      assistant: { messages: 1, input: 10, output: 5, cacheRead: 2, cacheWrite: 0, costUsd: cost ?? 0 },
+      assistant: { messages: 1, input: 10, output: 5, cacheRead: 2, cacheWrite: 0, costUsd: cost ?? step.assistantCost ?? 0 },
       providerError: step.providerError ?? null,
     },
     durationMs: 12, sessionsLeft: step.sessionsLeft ?? 0, assistantTextTruncated: false, harnessError: null,
@@ -164,14 +173,25 @@ async function implTask(repoRoot: string, id: string): Promise<TaskSpec> {
 
 interface Setup { input: WaveInput; deps: (steps: Step[], extra?: WaveDeps) => { deps: WaveDeps; captured: ReturnType<typeof fake>["captured"] }; runs: RunSpec[]; waveDir: string; root: string }
 
-function approvalFor(tasks: TaskSpec[], runs: RunSpec[]): Approval {
+function approvalFor(tasks: TaskSpec[], runs: RunSpec[], sourceCommit = "c".repeat(40)): Approval {
   return {
-    approved: true, approvedAt: "2026-10-20T00:00:00Z", budgetUsd: 10, sourceCommit: "c".repeat(40), tasksDigest: tasksDigest(tasks), matrixDigest: matrixDigest(runs),
-    routes: routesOf(productionConfig, runs.map((r) => r.profile)),
+    approved: true, approvedAt: "2026-10-20T00:00:00Z", budgetUsd: 10, sourceCommit, tasksDigest: tasksDigest(tasks), matrixDigest: matrixDigest(runs),
+    ledgerId: LEDGER_ID, runs, routes: routesOf(productionConfig, runs.map((r) => r.profile)),
   };
 }
 
-async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "review" | "implementation"; hostAuth?: unknown } = {}): Promise<Setup> {
+/** The ledger an approval's id names: the evaluation's one ledger exists before any preflight or wave (R55). */
+async function seedLedger(path: string, entries: unknown[] = [], ledgerId: string = LEDGER_ID): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, JSON.stringify({ ledgerId, limitUsd: 10, spentUsd: 0, entries }));
+}
+
+/** The seams that keep a preflight or wave test off the host: no strace, bwrap, codegraph, DNS or provider. */
+const seams = () => ({
+  hostCheck: async () => undefined, containmentCheck: async () => undefined, planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, checkRoute: async () => undefined,
+});
+
+async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "review" | "implementation"; hostAuth?: unknown; sourceCommit?: string } = {}): Promise<Setup> {
   const root = await temporaryRoot("ablation-wave-");
   const waveDir = join(root, "wave");
   // The evaluation repository is a sibling of the wave directory: a wave directory inside it is refused.
@@ -180,12 +200,13 @@ async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "
   const tasks = await Promise.all(["T1", "T2", "T3"].map((id) => make(repo, id)));
   const pairing = PAIRINGS.filter((p) => p.id === (options.kind === "implementation" ? "pl-code" : "pl-review"));
   const runs = buildMatrix(tasks, pairing).slice(0, count);
-  const { kind: _kind, hostAuth, ...rest } = options;
+  const { kind: _kind, hostAuth, sourceCommit, ...rest } = options;
   const input: WaveInput = {
-    approval: approvalFor(tasks, runs), tasks, runs, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig, extensionTemplate: join(root, "template"), repoRoot: repo,
+    approval: approvalFor(tasks, runs, sourceCommit), tasks, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig, extensionTemplate: join(root, "template"), repoRoot: repo,
     hostAuth: hostAuth ?? { openai: { type: "oauth", access: "a", refresh: "r", expires: Date.now() + 3_600_000 }, xai: { type: "api_key", key: "k" } },
     killGraceMs: 0, ...rest,
   };
+  if (!existsSync(input.ledgerPath)) await seedLedger(input.ledgerPath);
   return {
     input, runs, waveDir, root,
     deps: (steps, extra = {}) => {
@@ -507,7 +528,7 @@ describe("approval", () => {
     const tasks = [await reviewTask(root, "A1")];
     const runs = buildMatrix(tasks, PAIRINGS);
     const approval = approvalFor(tasks, runs);
-    const current = { sourceCommit: approval.sourceCommit, tasks, runs, routes: approval.routes };
+    const current = { sourceCommit: approval.sourceCommit, tasks, routes: approval.routes };
     expect(validateApproval(approval, current)).toEqual(approval);
     expect(() => validateApproval({ ...approval, tasksDigest: "sha256:0" }, current)).toThrow("approval_binding_changed");
     expect(() => validateApproval({ ...approval, matrixDigest: "sha256:0" }, current)).toThrow("approval_binding_changed");
@@ -515,12 +536,21 @@ describe("approval", () => {
     expect(() => validateApproval({ ...approval, routes: approval.routes.map((r) => ({ ...r, model: "other" })) }, current)).toThrow("approval_binding_changed");
     expect(() => validateApproval({ ...approval, approved: false }, current)).toThrow("approval_invalid");
     expect(() => validateApproval({ ...approval, budgetUsd: 11 }, current)).toThrow("approval_invalid");
+    // R56: the approval's own run list is the list that runs; it must refer to known tasks, hold no duplicate and match its digest.
+    const [first, ...rest] = approval.runs;
+    expect(() => validateApproval({ ...approval, runs: [{ ...first!, taskId: "unknown" }, ...rest] }, current)).toThrow("approval_binding_changed");
+    expect(() => validateApproval({ ...approval, runs: approval.runs.slice(0, 2) }, current)).toThrow("approval_binding_changed");
+    expect(() => validateApproval({ ...approval, runs: [] }, current)).toThrow("approval_invalid");
+    expect(() => validateApproval({ ...approval, ledgerId: "not-a-uuid" }, current)).toThrow("approval_invalid");
+    const { ledgerId: _dropped, ...withoutLedger } = approval;
+    expect(() => validateApproval(withoutLedger, current)).toThrow("approval_invalid");
   });
 
   it("makes runWave refuse a changed matrix before anything runs", async () => {
     const s = await waveSetup(2);
     const { deps, captured } = s.deps([]);
-    await expect(runWave({ ...s.input, runs: s.runs.slice(0, 1) }, deps)).rejects.toThrow("approval_binding_changed");
+    // The approval's own list is the list that runs: a list that does not match its digest is refused.
+    await expect(runWave({ ...s.input, approval: { ...s.input.approval, runs: s.runs.slice(0, 1) } }, deps)).rejects.toThrow("approval_binding_changed");
     expect(captured).toHaveLength(0);
   });
 });
@@ -676,16 +706,18 @@ describe("preflight", () => {
     const tasks = [await reviewTask(root, "P1")];
     const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review" || p.id === "pl-review-grok"));
     const approval = approvalFor(tasks, runs);
+    await seedLedger(join(root, "ledger.json"));
     const { spawnRun, captured } = fake([{ cost: 0.01, text: "PONG" }, { output: { terminal: "failed" }, providerError: "auth", cost: null }], root);
     const result = await runPreflight({
       approval, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig,
       hostAuth: { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 }, xai: { type: "api_key", key: "k" } },
-    }, { spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true, checkRoute: async () => undefined });
+    }, { ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true });
     expect(captured.map((c) => c.input.promptText)).toEqual(["Reply with exactly: PONG", "Reply with exactly: PONG"]);
     expect(result.routes.map((r) => [r.profile, r.ok, r.failure])).toEqual([["review", true, null], ["review-grok", false, "auth"]]);
     expect(result.spentUsd).toBeCloseTo(0.01);
     const ledger = JSON.parse(await readFile(join(root, "ledger.json"), "utf8")) as { ledgerId: string; entries: { runId: string }[] };
     expect(ledger.entries.map((e) => e.runId)).toEqual(["preflight-review", "preflight-review-grok"]);
+    expect(ledger.entries).toMatchObject([{ kind: "preflight", costUsd: 0.01 }, { kind: "preflight", costUsd: 0 }]);
     expect(JSON.parse(await readFile(join(waveDir, "preflight.json"), "utf8"))).toMatchObject({ ledgerId: ledger.ledgerId, routes: [{ ok: true }, { ok: false }], binding: { matrixDigest: approval.matrixDigest } });
     // No scope is kept, only the verified output; no credentials anywhere under private/.
     expect(existsSync(scopeRoot(waveDir, "preflight-review-grok"))).toBe(false);
@@ -707,7 +739,21 @@ describe("preflight", () => {
 describe("cli arguments", () => {
   it("accepts the live modes and rejects unknown modes and options", () => {
     expect(parseArgs(["--plan", "--tasks", "t.json"])).toMatchObject({ mode: "--plan", options: { "--tasks": "t.json" }, trim: false });
-    expect(parseArgs(["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json", "--trim"])).toMatchObject({ mode: "--wave", trim: true });
+    expect(parseArgs(["--plan", "--tasks", "t.json", "--trim", "--ledger", "l.json"])).toMatchObject({ mode: "--plan", trim: true, options: { "--ledger": "l.json" } });
+    // R56: trimming and pairing selection belong to the plan; wave and preflight run the approval's list.
+    const live = ["--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json"];
+    expect(() => parseArgs(["--wave", ...live, "--trim"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--wave", ...live, "--pairings", "pl-code"])).toThrow("invalid_argument");
+    expect(parseArgs(["--wave", ...live, "--max-runs", "2"])).toMatchObject({ mode: "--wave", maxRuns: 2, resume: false });
+    expect(parseArgs(["--wave", ...live, "--resume"])).toMatchObject({ resume: true });
+    for (const bad of ["0", "-1", "x", "1.5", "10000"]) expect(() => parseArgs(["--wave", ...live, "--max-runs", bad])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--preflight", ...live.filter((a) => a !== "--template" && a !== "x"), "--max-runs", "2"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--preflight", ...live.filter((a) => a !== "--template" && a !== "x"), "--resume"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--plan", "--tasks", "t.json", "--approval", "a.json"])).toThrow("invalid_argument");
+    // `--report` takes --wave more than once.
+    expect(parseArgs(["--report", "--wave", "w1", "--wave", "w2", "--ledger", "l.json", "--evidence", "e"]).waves).toEqual(["w1", "w2"]);
+    expect(() => parseArgs(["--report", "--ledger", "l.json", "--evidence", "e"])).toThrow("wave_required");
+    expect(() => parseArgs(["--report", "--wave", "w1", "--ledger", "l.json", "--ledger", "m.json", "--evidence", "e"])).toThrow("invalid_argument");
     expect(() => parseArgs(["--unknown-mode", "--tasks", "t.json"])).toThrow("mode_required");
     expect(() => parseArgs(["--plan", "--wave", "--tasks", "t.json"])).toThrow("choose_one_mode");
     expect(() => parseArgs(["--plan", "--tasks", "t.json", "--bogus", "x"])).toThrow("invalid_argument");
@@ -794,7 +840,9 @@ describe("shared ledger and output safety (R37)", () => {
       const { deps, captured } = s.deps([text()]);
       await expect(runWave(s.input, deps)).rejects.toThrow("output_exists");
       expect(captured).toHaveLength(0);
-      expect(existsSync(s.input.ledgerPath)).toBe(false);
+      // Nothing was charged and no lock is left behind.
+      expect(JSON.parse(await readFile(s.input.ledgerPath, "utf8")).entries).toEqual([]);
+      expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
     }
   });
 
@@ -804,10 +852,11 @@ describe("shared ledger and output safety (R37)", () => {
     const tasks = [await reviewTask(root, "P1")];
     const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review"));
     const approval = approvalFor(tasks, runs);
+    await seedLedger(ledgerPath);
     const { spawnRun } = fake([{ cost: 9.6, text: "PONG" }], root);
     const hostAuth = { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 } };
     const pre = await runPreflight({ approval, waveDir: join(root, "pre"), ledgerPath, productionConfig, hostAuth }, {
-      spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true, checkRoute: async () => undefined,
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true,
     });
     expect(pre.routes.map((r) => r.ok)).toEqual([true]);
     const s = await waveSetup(1, { ledgerPath });
@@ -824,7 +873,7 @@ describe("shared ledger and output safety (R37)", () => {
     const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
     await mkdir(join(root, "wave"), { recursive: true });
     await writeFile(join(root, "wave", "preflight.json"), "{}");
-    await expect(runPreflight({ approval, waveDir: join(root, "wave"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: {} })).rejects.toThrow("output_exists");
+    await expect(runPreflight({ approval, waveDir: join(root, "wave"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: {} }, seams())).rejects.toThrow("output_exists");
   });
 
   it("lets the wave start only on a passed preflight of the same approval and ledger", async () => {
@@ -853,7 +902,11 @@ describe("shared ledger and output safety (R37)", () => {
     await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
     await writeLedger(LEDGER_ID, ["something-else"]);
     await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
+    // R55: a ledger file that is missing is refused, never silently created; one whose id differs from the approval's is a mismatch.
     await rm(ledgerPath);
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_missing");
+    await write({ binding, ledgerId: "33333333-3333-4333-8333-333333333333", routes: passed(true), spentUsd: 0 });
+    await writeLedger("33333333-3333-4333-8333-333333333333", entries);
     await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
   });
 
@@ -879,7 +932,8 @@ describe("credentials and traces stay out of kept evidence (I2, R35)", () => {
     expect(await findDirs(s.waveDir, "base.git")).toEqual([]);
     expect(await findFiles(s.waveDir, /auth/i)).toEqual([]);
     const files = (await findFiles(s.waveDir, /./)).map((file) => file.slice(s.waveDir.length + 1)).sort();
-    expect(files).toEqual(s.runs.map((run) => `runs/${run.runId}.json`).sort());
+    // The records plus the wave's own bookkeeping (the approval it ran under, the guard baseline and how it ended).
+    expect(files).toEqual([...s.runs.map((run) => `runs/${run.runId}.json`), "approval.json", "guard.json", "status.json"].sort());
     // The text itself is gone; its hash is recorded.
     expect(r.records[1]!.assistantTextSha256).toBe(sha256Hex(GOOD_REVIEW));
     expect(r.records[0]!.assistantTextSha256).toBe(sha256Hex("partial"));
@@ -893,9 +947,10 @@ describe("credentials and traces stay out of kept evidence (I2, R35)", () => {
     const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")).slice(0, 1);
     const hostAuth = { openai: { type: "api_key", key: secret } };
     const input: WaveInput = {
-      approval: approvalFor(tasks, runs), tasks, runs, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig,
+      approval: approvalFor(tasks, runs), tasks, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig,
       extensionTemplate: join(root, "t"), repoRoot: join(root, "repo"), hostAuth, killGraceMs: 0,
     };
+    await seedLedger(input.ledgerPath);
     const { spawnRun } = fake([text({ writeFile: { name: "x.txt", content: secret } })], root);
     const r = await runWave(input, { ...baseDeps(), spawnRun });
     expect(existsSync(scopeRoot(waveDir, r.records[0]!.runId))).toBe(false);
@@ -1022,9 +1077,10 @@ describe("network audit addresses", () => {
     const root = await temporaryRoot("ablation-unresolved-");
     const tasks = [await reviewTask(root, "P1")];
     const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await seedLedger(join(root, "l.json"));
     const { spawnRun, captured } = fake([], root);
     const r = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
-      spawnRun: (scope, input) => spawnRun(scope, input, "x"), checkRoute: async () => { throw new Error("provider_host_unresolvable"); },
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, "x"), checkRoute: async () => { throw new Error("provider_host_unresolvable"); },
     });
     expect(r.routes).toMatchObject([{ ok: false, failure: "provider_host_unresolvable" }]);
     expect(captured).toHaveLength(0);
@@ -1106,7 +1162,8 @@ describe("exit status and host safety (N1, R40)", () => {
     expect(existsSync(s.waveDir)).toBe(false);
   });
 
-  it("sets a hard core limit of 0 with the flag the spawn uses", async () => {
+  // A real-host test: it needs prlimit on the PATH and skips otherwise.
+  it.skipIf(!(process.env.PATH ?? "").split(":").some((dir) => dir.startsWith("/") && existsSync(join(dir, "prlimit"))))("sets a hard core limit of 0 with the flag the spawn uses", async () => {
     const { stdout } = await exec("prlimit", [CORE_LIMIT, "sh", "-c", "ulimit -Hc; ulimit -Sc"]);
     expect(stdout.trim().split("\n")).toEqual(["0", "0"]);
   });
@@ -1200,7 +1257,7 @@ describe("safe reads from the scope (R39)", () => {
     expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true });
     await rm(join(priv, "r1.txt"));
     await writeFile(join(priv, "r1.txt"), text);
-    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: false, text, raw: expect.any(String) });
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: false, text });
   });
 
   it("refuses a strace log that is a symlink or a FIFO (as a missing trace)", async () => {
@@ -1398,20 +1455,22 @@ describe("Unix socket stop and preflight charge", () => {
     const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
     const { spawnRun } = fake([text()], root);
     const ledgerPath = join(root, "ledger.json");
+    await seedLedger(ledgerPath);
     const r = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath, productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
-      spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), checkRoute: async () => undefined, hostCheck: async () => undefined, containmentCheck: async () => undefined,
-      planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, residualCheck: async () => { throw new Error("residual exploded"); },
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => { throw new Error("residual exploded"); },
     });
     expect(r.routes).toMatchObject([{ ok: false, failure: "preflight_step_failed" }]);
     const ledger = JSON.parse(await readFile(ledgerPath, "utf8")) as { entries: { runId: string; costUsd: number; estimated?: boolean }[] };
-    expect(ledger.entries).toMatchObject([{ runId: "preflight-review", costUsd: 1, estimated: true }]);
+    expect(ledger.entries).toMatchObject([{ runId: "preflight-review", costUsd: 1, estimated: true, kind: "preflight" }]);
     expect(existsSync(scopeRoot(join(root, "w"), "preflight-review"))).toBe(false);
   });
 });
 
 describe("bubblewrap containment (R46)", () => {
-  const hasBwrap = existsSync("/usr/bin/bwrap");
-  const codegraphPath = (process.env.PATH ?? "").split(":").map((dir) => join(dir, "codegraph")).find((path) => existsSync(path)) ?? "";
+  // The real-host test below needs bwrap, strace, prlimit and codegraph on the PATH and skips when any is missing.
+  const onPath = (name: string): string => (process.env.PATH ?? "").split(":").filter((dir) => dir.startsWith("/")).map((dir) => join(dir, name)).find((path) => existsSync(path)) ?? "";
+  const hasBwrap = ["bwrap", "strace", "prlimit"].every((name) => onPath(name) !== "");
+  const codegraphPath = onPath("codegraph");
   const hasCodegraph = codegraphPath !== "";
 
   const HOME = "/home/op";
@@ -1692,7 +1751,7 @@ describe("bubblewrap containment (R46)", () => {
   });
 
   it.skipIf(!hasBwrap || !hasCodegraph)("really contains: the real self-test passes through the production shape; $HOME, host sockets, /mnt and the rest of the host root are sealed; /tmp is private; the scope may sit below /tmp or $HOME; the sandbox dies with its leader", async () => {
-    const real = { bwrap: "/usr/bin/bwrap", strace: "/usr/bin/strace", prlimit: "/usr/bin/prlimit", git: "/usr/bin/git", codegraph: codegraphPath };
+    const real = { bwrap: onPath("bwrap"), strace: onPath("strace"), prlimit: onPath("prlimit"), git: onPath("git"), codegraph: codegraphPath };
     const realPlan = await planSandbox({ tools: real, repoRoot: process.cwd(), buildRoot: BUILD_ROOT });
     await containmentSelfTest(real, realPlan);
     const run = (scope: string, script: string) => runHelper(real.bwrap, sandboxed(real, realPlan, scope, ["sh", "-c", script]).slice(1));
@@ -1786,9 +1845,9 @@ describe("preflight cleanup and denied attempts", () => {
       chmodSync(locked, 0o500);
       return spawnRun(scope, input, join(scope.root, "x.log"));
     };
+    await seedLedger(join(root, "l.json"));
     const result = await runPreflight({ approval, waveDir, ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
-      spawnRun: locking, checkRoute: async () => undefined, hostCheck: async () => undefined, containmentCheck: async () => undefined,
-      planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, residualCheck: async () => true,
+      ...seams(), spawnRun: locking, residualCheck: async () => true,
     });
     chmodSync(join(scopeRoot(waveDir, "preflight-review"), "locked"), 0o700);
     expect(result.routes).toMatchObject([{ profile: "review", ok: false, failure: "cleanup_failure" }]);
@@ -1801,5 +1860,444 @@ describe("preflight cleanup and denied attempts", () => {
     const r = await runWave(s.input, s.deps([text({ trace: denied }), text()]).deps);
     expect(r.stopReason).toBeNull();
     expect(r.records[0]).toMatchObject({ outcome: "scored", trace: { deniedWriteAttempts: 1, outsideWrites: 0 } });
+  });
+});
+
+describe("preflight spend and the cost of record (I2, I3)", () => {
+  const entriesOf = async (path: string) => (JSON.parse(await readFile(path, "utf8")) as { entries: { runId: string; costUsd: number | null; estimated?: boolean; kind?: string }[] }).entries;
+
+  it("keeps preflight costs out of the estimate: a later run without trusted output still charges the floor", async () => {
+    const s = await waveSetup(2);
+    const { spawnRun } = fake([{ cost: 0.01, text: "PONG" }], s.root);
+    const pre = await runPreflight({ approval: s.input.approval, waveDir: join(s.root, "pre"), ledgerPath: s.input.ledgerPath, productionConfig, hostAuth: s.input.hostAuth }, {
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true,
+    });
+    expect(pre.routes.map((r) => r.ok)).toEqual([true]);
+    // Before R54 this estimate would have been the PONG's USD 0.01.
+    const r = await runWave(s.input, s.deps([text({ tamper: "cost" })]).deps);
+    expect(r.stopReason).toBe("output_integrity");
+    const entries = await entriesOf(s.input.ledgerPath);
+    expect(entries[0]).toMatchObject({ runId: "preflight-review", costUsd: 0.01, kind: "preflight" });
+    expect(entries[1]).toMatchObject({ runId: s.runs[0]!.runId, estimated: true });
+    expect(entries[1]!.costUsd).toBeGreaterThanOrEqual(1);
+    expect(r.spentUsd).toBeCloseTo(1.01);
+  });
+
+  it("replays a ledger with preflight entries to the same state", async () => {
+    const path = join(await temporaryRoot("ablation-replay-"), "ledger.json");
+    await seedLedger(path);
+    const first = await PersistedLedger.openExisting(path, LEDGER_ID);
+    await first.recordPreflight("preflight-review", "review", 0.4);
+    await first.recordPreflight("preflight-code", "code", null);
+    const second = await PersistedLedger.openExisting(path, LEDGER_ID);
+    expect(second.ledger.spentUsd).toBeCloseTo(first.ledger.spentUsd);
+    expect(second.ledger.estimate("review")).toBe(1);
+    expect(second.ledger.estimate("code")).toBe(1);
+    await second.record("001-t-review-A", "review", 0.2);
+    expect((await PersistedLedger.openExisting(path)).ledger.estimate("review")).toBe(0.2);
+  });
+
+  it("charges the assistant usage sum, at least the estimate, when a trusted output has no session total but billed tokens", async () => {
+    const s = await waveSetup(4);
+    const none = { usage: { session: null, assistant: { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 }, providerError: null } };
+    // A synthesized failure message: assistant messages, but not a single token, so nothing was billed (R11b).
+    const synthesized = { usage: { session: null, assistant: { messages: 1, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 }, providerError: "other" } };
+    const r = await runWave(s.input, s.deps([text({ cost: null, assistantCost: 1.5 }), text({ cost: null, assistantCost: 0.2 }), { text: GOOD_REVIEW, output: none }, { output: { terminal: "failed", ...synthesized } }]).deps);
+    const entries = await entriesOf(s.input.ledgerPath);
+    expect(entries[0]).toMatchObject({ runId: s.runs[0]!.runId, estimated: true, costUsd: 1.5 });
+    expect(entries[1]).toMatchObject({ estimated: true });
+    expect(entries[1]!.costUsd).toBeGreaterThanOrEqual(1);
+    // Nothing billed at all (no session total, no assistant message): no cost of record.
+    expect(entries[2]).toMatchObject({ runId: s.runs[2]!.runId, costUsd: null });
+    expect(entries[2]!.estimated).toBeUndefined();
+    // A zero-token failure message stays null as well and is not charged the estimate.
+    expect(entries[3]).toMatchObject({ runId: s.runs[3]!.runId, costUsd: null });
+    expect(entries[3]!.estimated).toBeUndefined();
+    expect(r.records.map((x) => x.outcome)).toEqual(["scored", "scored", "scored", "scored"]);
+  });
+
+  it("fails a preflight route whose completed PONG has no session total (usage_missing)", async () => {
+    const root = await temporaryRoot("ablation-usage-missing-");
+    const tasks = [await reviewTask(join(root, "repo"), "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await seedLedger(join(root, "l.json"));
+    const { spawnRun } = fake([{ text: "PONG", cost: null, assistantCost: 0.07 }], root);
+    const result = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true,
+    });
+    expect(result.routes).toMatchObject([{ profile: "review", ok: false, terminal: "completed", failure: "usage_missing" }]);
+    // The assistant cost is still spend.
+    expect(await entriesOf(join(root, "l.json"))).toMatchObject([{ kind: "preflight", costUsd: 0.07 }]);
+    await expect(assertPreflightPassed(join(root, "w"), approval, join(root, "l.json"))).rejects.toThrow("preflight_failed");
+  });
+});
+
+describe("one ledger across re-approvals (R55)", () => {
+  it("refuses a missing ledger file and a ledger with another id, in the wave and in the preflight", async () => {
+    const s = await waveSetup(1);
+    await rm(s.input.ledgerPath);
+    const { deps, captured } = s.deps([text()]);
+    await expect(runWave(s.input, deps)).rejects.toThrow("ledger_missing");
+    expect(existsSync(s.input.ledgerPath)).toBe(false);
+    expect(captured).toHaveLength(0);
+    await seedLedger(s.input.ledgerPath, [], "44444444-4444-4444-8444-444444444444");
+    await expect(runWave(s.input, deps)).rejects.toThrow("ledger_mismatch");
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+    await expect(runPreflight({ approval: s.input.approval, waveDir: join(s.root, "pre"), ledgerPath: s.input.ledgerPath, productionConfig, hostAuth: {} }, seams())).rejects.toThrow("ledger_mismatch");
+    await rm(s.input.ledgerPath);
+    await expect(runPreflight({ approval: s.input.approval, waveDir: join(s.root, "pre"), ledgerPath: s.input.ledgerPath, productionConfig, hostAuth: {} }, seams())).rejects.toThrow("ledger_missing");
+    expect(existsSync(s.input.ledgerPath)).toBe(false);
+  });
+
+  it("lets only the plan create the ledger and records its id in the approval template", async () => {
+    const root = await temporaryRoot("ablation-plan-ledger-");
+    const repo = join(root, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => exec("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(repo, "a.txt"), "x");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const head = (await git("rev-parse", "HEAD")).stdout.trim();
+    const tasks = [await reviewTask(join(root, "elsewhere"), "R1"), await implTask(join(root, "elsewhere"), "I1")];
+    await writeFile(join(root, "tasks.json"), JSON.stringify(tasks));
+    await writeFile(join(root, "config.json"), JSON.stringify(productionConfig));
+    const ledgerPath = join(root, "new", "ledger.json");
+    const args = ["--plan", "--tasks", join(root, "tasks.json"), "--config", join(root, "config.json"), "--ledger", ledgerPath];
+    const first = await buildPlan(parseArgs(args), { sourceCwd: repo }) as { approvalTemplate: { ledgerId: string; runs: unknown[]; sourceCommit: string; matrixDigest: string } };
+    expect(first.approvalTemplate.sourceCommit).toBe(head);
+    expect(first.approvalTemplate.ledgerId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(first.approvalTemplate.runs.length).toBeGreaterThan(0);
+    expect(JSON.parse(await readFile(ledgerPath, "utf8")).ledgerId).toBe(first.approvalTemplate.ledgerId);
+    // A second plan against the same file reuses its id; without --ledger the template carries no id and cannot be approved.
+    const again = await buildPlan(parseArgs(args), { sourceCwd: repo }) as typeof first;
+    expect(again.approvalTemplate.ledgerId).toBe(first.approvalTemplate.ledgerId);
+    const bare = await buildPlan(parseArgs(args.slice(0, -2)), { sourceCwd: repo }) as { approvalTemplate: { ledgerId: unknown; approved: boolean } };
+    expect(bare.approvalTemplate).toMatchObject({ ledgerId: null, approved: false });
+    // --trim puts the trimmed list into the template.
+    const trimmed = await buildPlan(parseArgs([...args, "--trim"]), { sourceCwd: repo }) as typeof first;
+    expect(trimmed.approvalTemplate.runs.length).toBeLessThanOrEqual(first.approvalTemplate.runs.length);
+  });
+});
+
+describe("calibration, pause and resume (R56)", () => {
+  it("pauses after --max-runs executed runs without a stop reason or not_run records, and writes status.json", async () => {
+    const s = await waveSetup(4);
+    const { deps, captured } = s.deps([text(), text(), text(), text()]);
+    const r = await runWave({ ...s.input, maxRuns: 2 }, deps);
+    expect(r.paused).toBe(true);
+    expect(r.stopReason).toBeNull();
+    expect(r.records.map((x) => x.outcome)).toEqual(["scored", "scored"]);
+    expect(captured).toHaveLength(2);
+    expect((await readdir(join(s.waveDir, "runs"))).sort()).toEqual(s.runs.slice(0, 2).map((x) => `${x.runId}.json`).sort());
+    expect(JSON.parse(await readFile(join(s.waveDir, "status.json"), "utf8"))).toMatchObject({ state: "paused", stopReason: null, executedRuns: 2, recordedRuns: 2 });
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+  });
+
+  it("does not pause when --max-runs covers every run", async () => {
+    const s = await waveSetup(2);
+    const r = await runWave({ ...s.input, maxRuns: 2 }, s.deps([text(), text()]).deps);
+    expect(r.paused).toBe(false);
+    expect(JSON.parse(await readFile(join(s.waveDir, "status.json"), "utf8"))).toMatchObject({ state: "complete" });
+  });
+
+  it("resumes a paused wave with the runs that have no record yet, under the same approval and ledger", async () => {
+    const s = await waveSetup(4);
+    await runWave({ ...s.input, maxRuns: 2 }, s.deps([text(), text()]).deps);
+    const approvalBefore = await readFile(join(s.waveDir, "approval.json"), "utf8");
+    const resumed = s.deps([text(), text()]);
+    const r = await runWave({ ...s.input, resume: true }, resumed.deps);
+    expect(r.paused).toBe(false);
+    expect(r.stopReason).toBeNull();
+    expect(r.records.map((x) => x.runId)).toEqual(s.runs.slice(2).map((x) => x.runId));
+    expect(resumed.captured).toHaveLength(2);
+    expect((await readdir(join(s.waveDir, "runs"))).sort()).toEqual(s.runs.map((x) => `${x.runId}.json`).sort());
+    expect(await readFile(join(s.waveDir, "approval.json"), "utf8")).toBe(approvalBefore);
+    expect(JSON.parse(await readFile(join(s.waveDir, "status.json"), "utf8"))).toMatchObject({ state: "complete", recordedRuns: 4 });
+    const ledger = await entriesOfLedger(s.input.ledgerPath);
+    expect(ledger.map((e) => e.runId)).toEqual(s.runs.map((x) => x.runId));
+  });
+
+  it("resumes a paused wave repeatedly and honours --max-runs again", async () => {
+    const s = await waveSetup(3);
+    await runWave({ ...s.input, maxRuns: 1 }, s.deps([text()]).deps);
+    const second = await runWave({ ...s.input, resume: true, maxRuns: 1 }, s.deps([text()]).deps);
+    expect(second.paused).toBe(true);
+    const third = await runWave({ ...s.input, resume: true }, s.deps([text()]).deps);
+    expect(third.paused).toBe(false);
+    expect((await readdir(join(s.waveDir, "runs"))).length).toBe(3);
+  });
+
+  it("refuses to resume a stopped wave, a complete one, a missing one and a different approval", async () => {
+    const stopped = await waveSetup(3);
+    const outside = `${benignTrace()}4242 openat(AT_FDCWD</scope>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>\n`;
+    const first = await runWave(stopped.input, stopped.deps([text({ trace: outside })]).deps);
+    expect(first.stopReason).toBe("outside_write");
+    expect(JSON.parse(await readFile(join(stopped.waveDir, "status.json"), "utf8"))).toMatchObject({ state: "stopped", stopReason: "outside_write" });
+    await expect(runWave({ ...stopped.input, resume: true }, stopped.deps([text()]).deps)).rejects.toThrow("wave_stopped");
+
+    const complete = await waveSetup(1);
+    await runWave(complete.input, complete.deps([text()]).deps);
+    await expect(runWave({ ...complete.input, resume: true }, complete.deps([text()]).deps)).rejects.toThrow("wave_complete");
+
+    const missing = await waveSetup(1);
+    await expect(runWave({ ...missing.input, resume: true }, missing.deps([text()]).deps)).rejects.toThrow("resume_invalid");
+
+    const paused = await waveSetup(3);
+    await runWave({ ...paused.input, maxRuns: 1 }, paused.deps([text()]).deps);
+    const other = { ...paused.input.approval, approvedAt: "2026-10-21T00:00:00Z" };
+    const mismatched = paused.deps([text()]);
+    await expect(runWave({ ...paused.input, approval: other, resume: true }, mismatched.deps)).rejects.toThrow("resume_approval_mismatch");
+    expect(mismatched.captured).toHaveLength(0);
+    // Without --resume an existing wave directory is refused, even a paused one.
+    await expect(runWave(paused.input, paused.deps([text()]).deps)).rejects.toThrow("output_exists");
+  });
+
+  it("applies the same guard on resume: a guarded file that changed while the wave was paused stops it before the next run", async () => {
+    const s = await waveSetup(3);
+    let value = "h1";
+    const guard = async () => ({ files: { ".pi/agent/settings.json": value } });
+    await runWave({ ...s.input, maxRuns: 1 }, { ...s.deps([text()]).deps, guard });
+    value = "h2";
+    const resumed = s.deps([text()], { guard });
+    const r = await runWave({ ...s.input, resume: true }, resumed.deps);
+    expect(r.stopReason).toBe("guard_changed");
+    expect(resumed.captured).toHaveLength(0);
+    expect(r.records.map((x) => x.outcome)).toEqual(["not_run", "not_run"]);
+  });
+
+  it("refuses leftovers of a crashed run on resume and still checks the shared ledger", async () => {
+    const s = await waveSetup(3);
+    await runWave({ ...s.input, maxRuns: 1 }, s.deps([text()]).deps);
+    mkdirSync(privateRunDir(s.waveDir, s.runs[1]!.runId), { recursive: true });
+    await expect(runWave({ ...s.input, resume: true }, s.deps([text()]).deps)).rejects.toThrow("output_exists");
+    await rm(privateRunDir(s.waveDir, s.runs[1]!.runId), { recursive: true });
+    await rm(s.input.ledgerPath);
+    await expect(runWave({ ...s.input, resume: true }, s.deps([text()]).deps)).rejects.toThrow("ledger_missing");
+  });
+
+  it("writes the approval the wave ran under", async () => {
+    const s = await waveSetup(1);
+    await runWave(s.input, s.deps([text()]).deps);
+    expect(JSON.parse(await readFile(join(s.waveDir, "approval.json"), "utf8"))).toEqual(JSON.parse(JSON.stringify(s.input.approval)));
+  });
+});
+
+async function entriesOfLedger(path: string) {
+  return (JSON.parse(await readFile(path, "utf8")) as { entries: { runId: string }[] }).entries;
+}
+
+describe("records: auth type and capped connects", () => {
+  it("records the credential type of the run's provider, also for runs that did not run", async () => {
+    const s = await waveSetup(2, { hostAuth: { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 } } });
+    const r = await runWave({ ...s.input, maxRuns: 1 }, s.deps([text()]).deps);
+    expect(r.records[0]!.authType).toBe("oauth");
+    const keyed = await waveSetup(1, { hostAuth: { openai: { type: "api_key", key: "k" } } });
+    expect((await runWave(keyed.input, keyed.deps([text()]).deps)).records[0]!.authType).toBe("api_key");
+    const expiring = await waveSetup(1, { hostAuth: { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 60_000 } } });
+    const notRun = (await runWave(expiring.input, expiring.deps([]).deps)).records[0]!;
+    expect(notRun).toMatchObject({ outcome: "not_run", authType: "oauth" });
+    const unknown = await waveSetup(1, { hostAuth: {} });
+    expect((await runWave(unknown.input, unknown.deps([text()]).deps)).records[0]!.authType).toBeNull();
+  });
+
+  it("caps the unexpected connects in a record and keeps their number", () => {
+    const connects = Array.from({ length: 25 }, (_, i) => ({ family: "inet" as const, address: `203.0.113.${i}`, port: 443 }));
+    const summary = summarizeTrace({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: connects, connects: 25, unresolvedEgress: 0 });
+    expect(summary.unexpectedConnects).toHaveLength(MAX_UNEXPECTED_CONNECTS);
+    expect(MAX_UNEXPECTED_CONNECTS).toBe(20);
+    expect(summary.unexpectedConnectCount).toBe(25);
+    expect(summary.unexpectedConnects[0]).toEqual(connects[0]);
+  });
+});
+
+describe("ledger lock and save order (item 11)", () => {
+  it("takes an exclusive lock, refuses a second holder and a stale lock, and releases", async () => {
+    const root = await temporaryRoot("ablation-ledger-lock-");
+    const path = join(root, "ledger.json");
+    await seedLedger(path);
+    const first = await PersistedLedger.openExisting(path);
+    await first.lock();
+    expect(existsSync(`${path}.lock`)).toBe(true);
+    const second = await PersistedLedger.openExisting(path);
+    await expect(second.lock()).rejects.toThrow("ledger_locked");
+    await first.release();
+    expect(existsSync(`${path}.lock`)).toBe(false);
+    await second.lock();
+    await second.release();
+    await second.release();
+    // A stale lock (a crashed process) stays until the operator removes it; the wave refuses without touching anything.
+    await writeFile(`${path}.lock`, "");
+    const s = await waveSetup(1);
+    await writeFile(`${s.input.ledgerPath}.lock`, "");
+    const { deps, captured } = s.deps([text()]);
+    await expect(runWave(s.input, deps)).rejects.toThrow("ledger_locked");
+    expect(captured).toHaveLength(0);
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(true);
+  });
+
+  it("releases the lock when the wave fails and when the preflight finishes", async () => {
+    const s = await waveSetup(1);
+    const { deps } = s.deps([text()], { resolveAddresses: async () => { throw new Error("provider_host_unresolvable"); } });
+    await expect(runWave(s.input, deps)).rejects.toThrow("provider_host_unresolvable");
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+    const { spawnRun } = fake([{ cost: 0.01, text: "PONG" }], s.root);
+    await runPreflight({ approval: s.input.approval, waveDir: join(s.root, "pre"), ledgerPath: s.input.ledgerPath, productionConfig, hostAuth: s.input.hostAuth }, {
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true,
+    });
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+  });
+
+  it("saves before it updates the in-memory state, so a failed save changes neither", async () => {
+    const root = await temporaryRoot("ablation-ledger-order-");
+    const dir = join(root, "ro");
+    const path = join(dir, "ledger.json");
+    await seedLedger(path);
+    const ledger = await PersistedLedger.openExisting(path);
+    await ledger.record("001-a-review-A", "review", 0.25);
+    chmodSync(dir, 0o500);
+    try {
+      await expect(ledger.record("002-a-review-A", "review", 0.5)).rejects.toThrow();
+      expect(ledger.ledger.spentUsd).toBeCloseTo(0.25);
+      expect(ledger.hasEntry("002-a-review-A")).toBe(false);
+    } finally { chmodSync(dir, 0o700); }
+    await ledger.record("002-a-review-A", "review", 0.5);
+    expect(ledger.ledger.spentUsd).toBeCloseTo(0.75);
+    // A cost the ledger would reject leaves no entry either.
+    await expect(ledger.record("003-a-review-A", "review", -1)).rejects.toThrow("invalid_cost");
+    expect(ledger.hasEntry("003-a-review-A")).toBe(false);
+  });
+});
+
+describe("oracle deadline and abort (item 10)", () => {
+  it("caps the oracle timeout at ten minutes in the task schema", async () => {
+    const root = await temporaryRoot("ablation-oracle-cap-");
+    const task = await implTask(root, "C1");
+    expect(taskSpecSchema.safeParse(task).success).toBe(true);
+    expect(taskSpecSchema.safeParse({ ...task, oracle: { ...task.oracle, timeoutMs: 600_000 } }).success).toBe(true);
+    expect(taskSpecSchema.safeParse({ ...task, oracle: { ...task.oracle, timeoutMs: 600_001 } }).success).toBe(false);
+  });
+
+  it("passes the wave's signal to the oracle and stops as interrupted when it fires during scoring", async () => {
+    const s = await waveSetup(2, { kind: "implementation" });
+    const controller = new AbortController();
+    let seen: AbortSignal | undefined;
+    const aborting: WaveDeps["scoreImplementation"] = async (_clone, _task, options) => {
+      seen = options.signal;
+      controller.abort();
+      return { accepted: false, testsPassed: false, outOfScope: [] };
+    };
+    const { deps } = s.deps([text(), text()], { scoreImplementation: aborting });
+    const r = await runWave({ ...s.input, signal: controller.signal }, deps);
+    expect(seen).toBe(controller.signal);
+    expect(r.stopReason).toBe("interrupted");
+    expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
+  });
+
+  it("kills a running oracle command when the signal fires, without waiting for its deadline", async () => {
+    const root = await temporaryRoot("ablation-oracle-abort-");
+    const source = join(root, "source");
+    mkdirSync(source);
+    const git = (...args: string[]) => exec("git", ["-C", source, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(source, "a.txt"), "base");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
+    const bare = join(root, "base.git");
+    await exec("git", ["clone", "--bare", "--quiet", source, bare]);
+    const clone = join(root, "clone");
+    await exec("git", ["clone", "--quiet", bare, clone]);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 300);
+    const started = Date.now();
+    const result = await scoreImplementation(clone, {
+      allowedPaths: [], scopeIgnore: [], baseCommit: base, oracle: { kind: "implementation", command: ["sleep", "30"], timeoutMs: 120_000 },
+    }, { gitDir: bare, signal: controller.signal });
+    expect(Date.now() - started).toBeLessThan(10_000);
+    expect(result.testsPassed).toBe(false);
+  });
+});
+
+describe("explicit exit of the run unit (item 12)", () => {
+  it("ends run-one and the dry-load entry with an explicit process.exit once the output is written", async () => {
+    for (const file of ["run-one.ts", "dry-load-entry.ts"]) {
+      const source = await readFile(join(process.cwd(), "eval", "extensions", file), "utf8");
+      const tail = source.slice(source.lastIndexOf("isEntryPoint(import.meta.url"));
+      expect(tail).toMatch(/process\.exit\(code\)/);
+      expect(tail).not.toMatch(/process\.exitCode\s*=/);
+    }
+  });
+});
+
+describe("end to end: wave output into the evidence (item 14)", () => {
+  it("feeds real runWave records, ledger and approval into writeEvidence", async () => {
+    const root = await temporaryRoot("ablation-e2e-");
+    const repo = join(root, "bound-repo");
+    mkdirSync(join(repo, "src"), { recursive: true });
+    await writeFile(join(repo, "src", "a.ts"), "export const a = 1;\n");
+    const git = (...args: string[]) => exec("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const head = (await git("rev-parse", "HEAD")).stdout.trim();
+
+    const s = await waveSetup(6, { sourceCommit: head });
+    // Three tasks, both arms: arm B finds the race that arm A misses on the first task.
+    const steps = [text({ cost: 0.05 }), text({ cost: 0.07 }), text({ cost: 0.05 }), text({ cost: 0.06 }), text({ cost: 0.05 }), text({ cost: 0.08 })];
+    const r = await runWave(s.input, s.deps(steps).deps);
+    expect(r.stopReason).toBeNull();
+    expect(r.records.every((x) => x.outcome === "scored")).toBe(true);
+
+    const evidenceDir = join(root, "evidence");
+    const summary = await writeEvidence([s.waveDir], evidenceDir, s.input.ledgerPath, { repoRoot: repo });
+    const copied = (await readdir(join(evidenceDir, "runs"))).sort();
+    expect(copied).toEqual(s.runs.map((x) => `${x.runId}.json`).sort());
+    for (const name of copied) expect(await readFile(join(evidenceDir, "runs", name), "utf8")).toBe(await readFile(join(s.waveDir, "runs", name), "utf8"));
+    expect(await readFile(join(evidenceDir, "approvals", "approval-1.json"), "utf8")).toBe(await readFile(join(s.waveDir, "approval.json"), "utf8"));
+    expect(await readFile(join(evidenceDir, "ledger.json"), "utf8")).toBe(await readFile(s.input.ledgerPath, "utf8"));
+    const integrity = JSON.parse(await readFile(join(evidenceDir, "integrity.json"), "utf8")) as { source_binding: { commit: string }; files: { path: string }[] };
+    expect(integrity.source_binding.commit).toBe(head);
+    expect(integrity.files.map((f) => f.path)).toEqual(expect.arrayContaining(["summary.json", "ledger.json", "approvals/approval-1.json"]));
+    const pairingResult = summary.pairings.find((p) => p.id === "pl-review")!;
+    expect(pairingResult).toMatchObject({ complete: true });
+    expect(pairingResult.tasks).toHaveLength(3);
+    expect(summary.spentUsd).toBeCloseTo(0.36);
+    expect(summary.stopReason).toBeNull();
+    for (const file of await findFiles(evidenceDir, /./)) {
+      const body = await readFile(file, "utf8");
+      expect(body).not.toContain(root);
+      expect(body).not.toContain("sk-");
+    }
+  });
+});
+
+describe("source binding of approvals (I6a) and the real home (item 8)", () => {
+  it("refuses untracked files under a bound path, but not elsewhere", async () => {
+    const root = await temporaryRoot("ablation-source-bound-");
+    const git = (...args: string[]) => exec("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(root, "a.txt"), "1");
+    await git("add", "."); await git("commit", "--quiet", "-m", "one");
+    const head = (await git("rev-parse", "HEAD")).stdout.trim();
+    await mkdir(join(root, "docs"), { recursive: true });
+    await writeFile(join(root, "docs", "note.md"), "x");
+    await writeFile(join(root, "untracked.txt"), "x");
+    expect(await sourceCommit(root)).toBe(head);
+    for (const path of ["eval/extensions/new.ts", "src/new.ts", "test/new.test.ts", "scripts/new.mjs", "package.json", "tsconfig.extra.json"]) {
+      await mkdir(dirname(join(root, path)), { recursive: true });
+      await writeFile(join(root, path), "x");
+      await expect(sourceCommit(root)).rejects.toThrow("source_dirty");
+      await rm(join(root, path));
+    }
+    expect(await sourceCommit(root)).toBe(head);
+    expect(sourceIsDirty("?? docs/x\0")).toBe(false);
+    expect(sourceIsDirty("?? eval/extensions/x.ts\0")).toBe(true);
+    expect(sourceIsDirty(" M docs/x\0")).toBe(true);
+    expect(sourceIsDirty("!! eval/extensions/ignored.ts\0")).toBe(false);
+    expect(dirtyBoundPaths("R  eval/extensions/b.ts\0docs/old.md\0?? docs/y\0")).toEqual(["eval/extensions/b.ts"]);
+  });
+
+  it("takes the guarded home from the account database, not from $HOME", () => {
+    const previous = process.env.HOME;
+    process.env.HOME = "/nonexistent-home-for-test";
+    try { expect(realHome()).toBe(userInfo().homedir); expect(realHome()).not.toBe("/nonexistent-home-for-test"); } finally { process.env.HOME = previous; }
   });
 });

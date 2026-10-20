@@ -15,9 +15,14 @@ export interface TraceSummary {
   unresolvedWrites: number;
   deniedWriteAttempts: number;
   unresolvedEgress: number;
+  /** The first `MAX_UNEXPECTED_CONNECTS` destinations; `unexpectedConnectCount` has the full number. */
   unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
+  unexpectedConnectCount: number;
   connects: number;
 }
+
+/** Worker-controlled destinations are capped in tracked records. */
+export const MAX_UNEXPECTED_CONNECTS = 20;
 
 export interface RunRecord {
   runId: string;
@@ -40,6 +45,8 @@ export interface RunRecord {
   assistantTextTruncated: boolean | null;
   /** SHA-256 of the assistant text, which itself is not kept. */
   assistantTextSha256: string | null;
+  /** The type of the boundary credential the run used: a subscription (oauth) or an API key. Quota use is recorded, not priced. */
+  authType: "oauth" | "api_key" | null;
 }
 
 const usageSession = z.object({
@@ -70,7 +77,8 @@ export function fixedCode(value: string | null | undefined, fallback = "wave_ste
 export function summarizeTrace(trace: TraceFindings): TraceSummary {
   return {
     outsideWrites: trace.outsideWrites.length, unresolvedWrites: trace.unresolvedWrites, deniedWriteAttempts: trace.deniedWriteAttempts,
-    unresolvedEgress: trace.unresolvedEgress, unexpectedConnects: trace.unexpectedConnects.map((d) => ({ ...d })), connects: trace.connects,
+    unresolvedEgress: trace.unresolvedEgress, unexpectedConnects: trace.unexpectedConnects.slice(0, MAX_UNEXPECTED_CONNECTS).map((d) => ({ ...d })),
+    unexpectedConnectCount: trace.unexpectedConnects.length, connects: trace.connects,
   };
 }
 

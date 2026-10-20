@@ -22,7 +22,7 @@ import { assertWaveDirOutsideSources, resolveTools, type ToolPaths } from "./too
 import { countIoUringSetups } from "./trace.js";
 import { prepareRunScope, privateRunDir, scopeRoot, type RunScope, type ScopeInput } from "./workspace.js";
 
-export const DRY_LOAD_TIMEOUT_MS = 3 * 60_000;
+const DRY_LOAD_TIMEOUT_MS = 3 * 60_000;
 /** The fixture runtime's own provider and model, which replace the profile's in the dry-load config. */
 export const DRY_PROVIDER = "dry-load";
 export const DRY_MODEL = "dry-load-model";

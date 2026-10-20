@@ -8,7 +8,7 @@ import { PAIRINGS } from "./matrix.js";
 import type { ToolPaths } from "./tools.js";
 import type { Arm, ExtensionId, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
 
-export const EXTENSION_PINS: Readonly<Record<ExtensionId, string>> = {
+const EXTENSION_PINS: Readonly<Record<ExtensionId, string>> = {
   "pi-lens": "npm:pi-lens@4.4.3",
   "pi-cache-optimizer": "npm:pi-cache-optimizer@2.9.3",
 };

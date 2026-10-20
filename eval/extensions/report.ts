@@ -1,17 +1,19 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
-import { userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { digest, hash } from "../profiles/files.js";
+import { approvalSchema, type Approval } from "./approval.js";
+import { BOUND_PATH, BOUND_PATHSPECS, dirtyBoundPaths } from "./bound.js";
 import type { RunRecord, StopReason } from "./classify.js";
 import { ledgerFileSchema } from "./ledger-file.js";
 import { PAIRINGS } from "./matrix.js";
 import { armSchema, profileIdSchema } from "./schemas.js";
 import { readRegularFile } from "./safe-read.js";
+import { realHome } from "./tools.js";
 
 export type Recommendation = "enable" | "do-not-enable" | "inconclusive";
 
@@ -23,8 +25,6 @@ const MAX_LEDGER_BYTES = 4 * 1024 * 1024;
 const FORBIDDEN_KEYS = new Set(["access", "refresh", "key"]);
 /** A path-like segment anywhere in a string: a slash that starts the string or follows whitespace, a quote or a separator. */
 const PATH_LIKE = /(^|[\s"'=:(,])\/[A-Za-z0-9._-]/;
-/** What the evidence is bound to: the profile evaluation's sources plus the ablation code itself. */
-const BOUND_PATH = /^(src\/|eval\/(profiles|fixtures|extensions)\/|test\/|scripts\/|package(-lock)?\.json$|tsconfig.*\.json$)/;
 const exec = promisify(execFile);
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -40,6 +40,8 @@ export function recommend(
 /** The fields of a run record the report reads; a full `RunRecord` satisfies it. */
 export type SummaryRecord = Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings" | "outcome" | "accepted" | "stopReason"> & {
   usage: { session: { input: number; cacheRead: number; costUsd: number } | null } | null;
+  /** The number of destinations outside the provider and DNS allowlists; the record itself keeps only the first few. */
+  trace?: { unexpectedConnectCount?: number | undefined } | null | undefined;
 };
 
 const STOP_REASONS = [
@@ -56,10 +58,11 @@ const summaryRecordSchema = z.object({
   outcome: z.enum(["scored", "stopped", "not_run"]), accepted: z.boolean().nullable(),
   usage: z.object({ session: z.object({ input: z.number(), cacheRead: z.number(), costUsd: z.number() }).nullable() }).nullable(),
   stopReason: z.enum(STOP_REASONS).nullable(),
+  trace: z.object({ unexpectedConnectCount: z.number().int().min(0).optional() }).nullable().optional(),
 });
 const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchema.parse(value);
 
-export interface ArmTotals { accepted: number; costUsd: number; scored: number }
+export interface ArmTotals { accepted: number; costUsd: number; scored: number; unexpectedConnects: number }
 export interface PairingResult {
   id: string;
   /** The tasks scored in both arms, in task-id order. */
@@ -86,12 +89,13 @@ export interface ReportSummary {
 const costOf = (record: SummaryRecord): number => record.usage?.session?.costUsd ?? 0;
 
 function totals(records: SummaryRecord[]): { arm: ArmTotals; input: number; cacheRead: number } {
-  const arm: ArmTotals = { accepted: 0, costUsd: 0, scored: records.length };
+  const arm: ArmTotals = { accepted: 0, costUsd: 0, scored: records.length, unexpectedConnects: 0 };
   let input = 0;
   let cacheRead = 0;
   for (const record of records) {
     if (record.accepted === true) arm.accepted += 1;
     arm.costUsd += costOf(record);
+    arm.unexpectedConnects += record.trace?.unexpectedConnectCount ?? 0;
     input += record.usage?.session?.input ?? 0;
     cacheRead += record.usage?.session?.cacheRead ?? 0;
   }
@@ -142,11 +146,11 @@ export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend
 }
 
 /** Validates the very bytes that are copied, then splits the entries into observed and estimated, for the budget and for this wave. */
-function ledgerSpend(bytes: Buffer, waveRunIds: ReadonlySet<string>): ReportSpend {
+function ledgerSpend(bytes: Buffer, waveRunIds: ReadonlySet<string>): ReportSpend & { ledgerId: string } {
   let parsed;
   try { parsed = ledgerFileSchema.safeParse(JSON.parse(bytes.toString("utf8"))); } catch { throw new Error("ledger_file_invalid"); }
   if (!parsed.success) throw new Error("ledger_file_invalid");
-  const spend: ReportSpend = { budget: { observedUsd: 0, estimatedUsd: 0 }, wave: { observedUsd: 0, estimatedUsd: 0 } };
+  const spend: ReportSpend & { ledgerId: string } = { budget: { observedUsd: 0, estimatedUsd: 0 }, wave: { observedUsd: 0, estimatedUsd: 0 }, ledgerId: parsed.data.ledgerId };
   for (const entry of parsed.data.entries) {
     const field = entry.estimated === true ? "estimatedUsd" : "observedUsd";
     spend.budget[field] += entry.costUsd ?? 0;
@@ -155,7 +159,7 @@ function ledgerSpend(bytes: Buffer, waveRunIds: ReadonlySet<string>): ReportSpen
   return spend;
 }
 
-async function readLedger(path: string, waveRunIds: ReadonlySet<string>): Promise<{ bytes: Buffer; spend: ReportSpend }> {
+async function readLedger(path: string, waveRunIds: ReadonlySet<string>): Promise<{ bytes: Buffer; spend: ReportSpend & { ledgerId: string } }> {
   let bytes: Buffer;
   try { bytes = await readRegularFile(path, MAX_LEDGER_BYTES); } catch (error) {
     throw new Error((error as NodeJS.ErrnoException).code === "ENOENT" ? "ledger_missing" : "ledger_unreadable");
@@ -177,6 +181,18 @@ async function readRuns(waveDir: string): Promise<{ name: string; bytes: Buffer;
   return runs;
 }
 
+/** The approval a wave ran under (`approval.json`, written by the wave); the evidence carries a copy and binds it to the code (I6b). */
+async function readApproval(waveDir: string): Promise<{ bytes: Buffer; approval: Approval }> {
+  let bytes: Buffer;
+  try { bytes = await readRegularFile(join(waveDir, "approval.json"), MAX_RECORD_BYTES); } catch (error) {
+    throw new Error((error as NodeJS.ErrnoException).code === "ENOENT" ? "approval_missing" : "approval_invalid");
+  }
+  let parsed;
+  try { parsed = approvalSchema.safeParse(JSON.parse(bytes.toString("utf8"))); } catch { throw new Error("approval_invalid"); }
+  if (!parsed.success) throw new Error("approval_invalid");
+  return { bytes, approval: parsed.data };
+}
+
 /** True when a parsed value holds a forbidden key, an over-long string or a path-like segment in any string or key. */
 function leaks(value: unknown): boolean {
   if (typeof value === "string") return value.length > MAX_STRING_CHARS || PATH_LIKE.test(value);
@@ -187,9 +203,11 @@ function leaks(value: unknown): boolean {
   return false;
 }
 
-async function assertNoPrivateData(files: Map<string, Buffer>, waveDir: string): Promise<void> {
-  const needles = new Set([waveDir, userInfo().homedir]);
-  try { needles.add(await realpath(waveDir)); } catch { /* the wave directory was read above, so it exists */ }
+async function assertNoPrivateData(files: Map<string, Buffer>, waveDirs: readonly string[]): Promise<void> {
+  const needles = new Set([...waveDirs, realHome()]);
+  for (const waveDir of waveDirs) {
+    try { needles.add(await realpath(waveDir)); } catch { /* the wave directory was read above, so it exists */ }
+  }
   for (const bytes of files.values()) {
     const text = bytes.toString("utf8");
     let parsed: unknown;
@@ -215,18 +233,21 @@ async function boundSource(root: string): Promise<{ commit: string; digest: `sha
   const git = async (args: string[]): Promise<string> => {
     try { return (await exec("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })).stdout; } catch { throw new Error("source_unavailable"); }
   };
-  const tokens = (await git(["status", "--porcelain", "-z", "--untracked-files=all"])).split("\0").filter((t) => t !== "");
-  for (let i = 0; i < tokens.length; i += 1) {
-    const token = tokens[i]!;
-    const paths = [token.slice(3)];
-    if (/[RC]/.test(token.slice(0, 2))) { i += 1; if (tokens[i] !== undefined) paths.push(tokens[i]!); }
-    if (paths.some((path) => BOUND_PATH.test(path))) throw new Error("source_dirty");
-  }
+  if (dirtyBoundPaths(await git(["status", "--porcelain", "-z", "--untracked-files=all"])).length > 0) throw new Error("source_dirty");
   const commit = (await git(["rev-parse", "HEAD"])).trim();
   const listed = (await git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"])).split("\0").filter((p) => BOUND_PATH.test(p)).sort();
   const records: [string, string][] = [];
   for (const path of listed) records.push([path, hash(await readFile(join(root, path)))]);
   return { commit, digest: digest(records) };
+}
+
+/**
+ * The code the wave ran is the code the evidence claims: nothing under a bound path may differ between the commit the approval named
+ * and HEAD (`git diff --quiet`); an unknown commit counts as a difference (`approval_source_mismatch`).
+ */
+async function assertBoundCodeUnchanged(root: string, commit: string): Promise<void> {
+  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error("approval_source_mismatch");
+  try { await exec("git", ["diff", "--quiet", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root }); } catch { throw new Error("approval_source_mismatch"); }
 }
 
 /** Removes the directories this call created, innermost first, and stops at the first one that is not empty. */
@@ -243,24 +264,39 @@ async function removeCreatedParents(parent: string, firstCreated: string | undef
  * `integrity.json`. Everything is built in memory and checked for private data first; the directory appears only complete.
  * `evidenceDir` must not exist. Returns the summary that was written.
  */
-export async function writeEvidence(waveDir: string, evidenceDir: string, ledgerPath: string, options: { repoRoot?: string } = {}): Promise<ReportSummary> {
-  const wave = resolve(waveDir);
+export async function writeEvidence(waveDirs: string | readonly string[], evidenceDir: string, ledgerPath: string, options: { repoRoot?: string } = {}): Promise<ReportSummary> {
+  const waves = (typeof waveDirs === "string" ? [waveDirs] : [...waveDirs]).map((dir) => resolve(dir));
+  if (waves.length === 0 || new Set(waves).size !== waves.length) throw new Error("wave_required");
   const target = resolve(evidenceDir);
   if (!(await absent(target))) throw new Error("evidence_dir_exists");
-  const runs = await readRuns(wave);
-  const ledger = await readLedger(resolve(ledgerPath), new Set(runs.map((r) => r.record.runId)));
-  const summary = summarize(runs.map((r) => r.record), ledger.spend);
+  // Several wave directories (a stopped wave and its re-approved successor) are merged; a run id in two of them is refused.
+  const runs: Awaited<ReturnType<typeof readRuns>> = [];
+  const approvals: { bytes: Buffer; approval: Approval }[] = [];
+  for (const wave of waves) {
+    runs.push(...await readRuns(wave));
+    approvals.push(await readApproval(wave));
+  }
+  const summarized = runs.map((r) => r.record);
+  assertNoDuplicates(summarized);
+  const ledger = await readLedger(resolve(ledgerPath), new Set(summarized.map((r) => r.runId)));
+  const root = options.repoRoot ?? REPO_ROOT;
+  for (const { approval } of approvals) {
+    if (approval.ledgerId !== ledger.spend.ledgerId) throw new Error("ledger_mismatch");
+    await assertBoundCodeUnchanged(root, approval.sourceCommit);
+  }
+  const summary = summarize(summarized, ledger.spend);
 
   const files = new Map<string, Buffer>();
   for (const run of runs) files.set(`runs/${run.name}`, run.bytes);
+  approvals.forEach(({ bytes }, index) => files.set(`approvals/approval-${index + 1}.json`, bytes));
   files.set("ledger.json", ledger.bytes);
   files.set("summary.json", json(summary));
-  const binding = await boundSource(options.repoRoot ?? REPO_ROOT);
+  const binding = await boundSource(root);
   files.set("integrity.json", json({
     kind: "extension-ablation-evidence-integrity", source_binding: binding,
     files: [...files.entries()].sort(([x], [y]) => (x < y ? -1 : 1)).map(([path, bytes]) => ({ path, hash: hash(bytes) })),
   }));
-  await assertNoPrivateData(files, wave);
+  await assertNoPrivateData(files, waves);
 
   // Only now does anything appear on disk. The target is created without `recursive`, so "must not exist" is decided by the
   // kernel at creation time; the files are staged beside it and renamed in.

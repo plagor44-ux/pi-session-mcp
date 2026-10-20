@@ -16,6 +16,14 @@ export class BudgetLedger {
     this.maxObserved = Math.max(this.maxObserved, costUsd);
     this.observed.add(profile);
   }
+  /**
+   * Spend that is not an observation of a run's cost (the preflight's PONG prompts, R54): it counts toward the total but neither raises
+   * the per-profile estimate nor marks the profile as observed, so it cannot lower the floor charged for a run without trusted output.
+   */
+  recordSpendOnly(costUsd: number): void {
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error("invalid_cost");
+    this.spent += costUsd;
+  }
   estimate(profile: ProfileId): number {
     return this.observed.has(profile) ? this.maxObserved : Math.max(INITIAL_RUN_ESTIMATE_USD, this.maxObserved);
   }

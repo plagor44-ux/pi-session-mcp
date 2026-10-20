@@ -1,8 +1,7 @@
 import { lstat, realpath } from "node:fs/promises";
-import { userInfo } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import { runHelper } from "./helpers.js";
-import { resolveTool, type ToolPaths } from "./tools.js";
+import { realHome, resolveTool, type ToolPaths } from "./tools.js";
 
 /*
  * R46: every traced command (the run unit and the oracle's setup and test commands) runs inside bubblewrap. The strace audit stays as
@@ -122,7 +121,7 @@ export async function planSandbox(input: PlanInput, overrides: Partial<PlanHost>
     const directory = target === null ? null : dirname(target);
     if (directory !== null && within(directory, "/run") && !runReadOnly.some((path) => directory === path || within(directory, path))) runReadOnly.push(directory);
   }
-  const home = await host.real(input.home ?? userInfo().homedir);
+  const home = await host.real(input.home ?? realHome());
   const hidden = home !== null && home !== "/" ? home : null;
   const homeReadOnly: string[] = [];
   const homeLinks: SandboxLink[] = [];

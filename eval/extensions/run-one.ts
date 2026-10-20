@@ -35,16 +35,16 @@ export interface RunOutput {
   harnessError: string | null;
 }
 
-export const RUN_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+const RUN_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
 
 /** The run id names the private text file, so it must not be able to form a path. */
-export function assertRunId(value: unknown): asserts value is string {
+function assertRunId(value: unknown): asserts value is string {
   if (typeof value !== "string" || !RUN_ID_PATTERN.test(value)) {
     throw Object.assign(new Error("invalid_run_id"), { code: "invalid_run_id" });
   }
 }
 
-export const runOneInputSchema = z.object({
+const runOneInputSchema = z.object({
   runId: z.string().regex(RUN_ID_PATTERN),
   configPath: z.string().min(1), workspaceAlias: z.literal("clone"), profile: profileIdSchema,
   promptText: z.string().min(1).max(100_000), turnTimeoutMs: z.number().int().positive(), privateDir: z.string().min(1),
@@ -187,9 +187,11 @@ async function main(): Promise<void> {
 }
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
-  await main().catch((error: unknown) => {
-    const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "run_one_failed";
-    process.stderr.write(JSON.stringify({ event: "run_one_stopped", code }) + "\n");
-    process.exitCode = 1;
+  // Exit explicitly once the output is written: a handle an extension leaves open must not keep the sandbox alive until the outer kill.
+  const code = await main().then(() => 0, (error: unknown) => {
+    const failure = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "run_one_failed";
+    process.stderr.write(JSON.stringify({ event: "run_one_stopped", code: failure }) + "\n");
+    return 1;
   });
+  process.exit(code);
 }

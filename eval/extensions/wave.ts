@@ -1,26 +1,25 @@
 import { randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { z } from "zod";
 import { join } from "node:path";
-import { expiresWithin } from "../../src/writer-credentials.js";
-import { parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
+import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-credentials.js";
+import { approvalSchema, parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
-import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
-import { RUN_KEY_BYTES } from "./output-mac.js";
+import { RUN_KEY_BYTES, canonicalJson } from "./output-mac.js";
 import { containmentSelfTest } from "./containment.js";
 import { planSandbox, sandboxed, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
 import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
-import { resolveTools, assertWaveDirOutsideSources, type ToolPaths } from "./tools.js";
+import { resolveTools, assertWaveDirOutsideSources, realHome, type ToolPaths } from "./tools.js";
 import { STRACE_ARGS, type TraceFindings } from "./trace.js";
 import { pairingOf, prepareRunScope, privateRunDir, renderPrompt, scopeRoot, type RunScope, type ScopeInput } from "./workspace.js";
 
@@ -28,9 +27,9 @@ export type { Approval } from "./approval.js";
 export type { RunRecord, StopReason, TraceSummary } from "./classify.js";
 export type { RunScope } from "./workspace.js";
 
-export const RUN_TIMEOUT_MS = 15 * 60_000;
-export const KILL_GRACE_MS = 30_000;
-export const WAVE_TIMEOUT_MS = 4 * 60 * 60_000;
+const RUN_TIMEOUT_MS = 15 * 60_000;
+const KILL_GRACE_MS = 30_000;
+const WAVE_TIMEOUT_MS = 4 * 60 * 60_000;
 const CREDENTIAL_MARGIN_MINUTES = 20;
 
 export interface WaveInput {
@@ -44,8 +43,10 @@ export interface WaveInput {
   /** The production configuration: `workspaces` (absolute paths by repo alias), `executionProfiles` and `skillCatalog`. */
   productionConfig: unknown;
   extensionTemplate: string;
-  /** The runs to execute; defaults to the full matrix. Its digest must match the approval either way. */
-  runs?: RunSpec[] | undefined;
+  /** End the wave cleanly (`paused`, no stop reason, no `not_run` records) after this many executed runs (calibration). */
+  maxRuns?: number | undefined;
+  /** Continue a paused wave in `waveDir`, which must hold the same approval; a stopped wave cannot be resumed. */
+  resume?: boolean | undefined;
   /** Root of the evaluated repository, against which `promptRef` is resolved. */
   repoRoot?: string | undefined;
   runTimeoutMs?: number | undefined;
@@ -76,22 +77,35 @@ export interface WaveDeps {
 /** Only fixed codes reach the record; an error message may carry command lines and paths. */
 const failureCode = (error: unknown): string => fixedCode(error instanceof Error ? error.message : "") ?? "wave_step_failed";
 
-const baseOf = (run: RunSpec): Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings"> =>
-  ({ runId: run.runId, taskId: run.taskId, profile: run.profile, arm: run.arm, pairings: [...run.pairings] });
+const baseOf = (run: RunSpec, authType: RunRecord["authType"]): Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings" | "authType"> =>
+  ({ runId: run.runId, taskId: run.taskId, profile: run.profile, arm: run.arm, pairings: [...run.pairings], authType });
 
-const notRun = (run: RunSpec, stopReason: StopReason | null): RunRecord => ({
-  ...baseOf(run), outcome: "not_run", terminal: null, accepted: null, usage: null, durationMs: null, trace: null, stopReason,
+const notRun = (run: RunSpec, stopReason: StopReason | null, authType: RunRecord["authType"]): RunRecord => ({
+  ...baseOf(run, authType), outcome: "not_run", terminal: null, accepted: null, usage: null, durationMs: null, trace: null, stopReason,
   harnessError: null, assistantTextTruncated: null, assistantTextSha256: null,
 });
 
-const failedRun = (run: RunSpec, harnessError: string): RunRecord => ({ ...notRun(run, "harness_failure"), outcome: "stopped", harnessError });
+const failedRun = (run: RunSpec, harnessError: string, authType: RunRecord["authType"]): RunRecord => ({ ...notRun(run, "harness_failure", authType), outcome: "stopped", harnessError });
 
-export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ records: RunRecord[]; stopReason: StopReason | null; spentUsd: number }> {
+/** `waveDir/status.json`: how the last invocation ended. Only a `paused` wave can be resumed. */
+const statusSchema = z.object({ state: z.enum(["paused", "stopped", "complete"]), stopReason: z.string().nullable(), executedRuns: z.number().int().min(0), recordedRuns: z.number().int().min(0) }).strict();
+const guardFileSchema = z.object({ files: z.record(z.string(), z.string()) }).strict();
+
+async function readJsonFile(path: string): Promise<unknown> {
+  try { return JSON.parse(await readFile(path, "utf8")) as unknown; } catch (error) {
+    void error;
+    throw new Error("resume_invalid");
+  }
+}
+
+export interface WaveResult { records: RunRecord[]; stopReason: StopReason | null; spentUsd: number; paused: boolean }
+
+export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<WaveResult> {
   const now = deps.now ?? Date.now;
   const config = parseProductionConfig(input.productionConfig);
-  const runs = input.runs ?? buildMatrix(input.tasks, PAIRINGS);
+  const runs = input.approval.runs;
   validateApproval(input.approval, {
-    sourceCommit: input.approval.sourceCommit, tasks: input.tasks, runs, routes: routesOf(config, runs.map((r) => r.profile)),
+    sourceCommit: input.approval.sourceCommit, tasks: input.tasks, routes: routesOf(config, runs.map((r) => r.profile)),
   });
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
@@ -105,8 +119,21 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
     if (!task || config.workspaces[task.repo] === undefined || config.executionProfiles[run.profile] === undefined) throw new Error("run_inputs_missing");
   }
 
-  // Nothing of an earlier attempt may be overwritten or mixed in: refuse before anything starts.
-  for (const run of runs) {
+  // Nothing of an earlier attempt may be overwritten or mixed in: refuse before anything starts. A resumed wave keeps the records it
+  // already has; for the runs that still have to run, nothing may exist, and an unfinished private directory or scope is refused too.
+  const resume = input.resume === true;
+  let done = new Set<string>();
+  if (resume) {
+    const status = statusSchema.safeParse(await readJsonFile(join(input.waveDir, "status.json")));
+    if (!status.success) throw new Error("resume_invalid");
+    if (status.data.state === "stopped") throw new Error("wave_stopped");
+    if (status.data.state === "complete") throw new Error("wave_complete");
+    const stored = approvalSchema.safeParse(await readJsonFile(join(input.waveDir, "approval.json")));
+    if (!stored.success || canonicalJson(stored.data) !== canonicalJson(input.approval)) throw new Error("resume_approval_mismatch");
+    done = new Set((await readdir(join(input.waveDir, "runs"))).filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)));
+  } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
+  const pending = runs.filter((run) => !done.has(run.runId));
+  for (const run of pending) {
     if ([join(input.waveDir, "runs", `${run.runId}.json`), privateRunDir(input.waveDir, run.runId), scopeRoot(input.waveDir, run.runId)].some((path) => existsSync(path))) {
       throw new Error("output_exists");
     }
@@ -116,7 +143,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const turnTimeoutMs = input.turnTimeoutMs ?? Math.max(1_000, runTimeoutMs - 60_000);
   const waveTimeoutMs = input.waveTimeoutMs ?? WAVE_TIMEOUT_MS;
   const repoRoot = input.repoRoot ?? process.cwd();
-  const guard = deps.guard ?? (() => guardSnapshot(homedir()));
+  const guard = deps.guard ?? (() => guardSnapshot(realHome()));
   const residualCheck = deps.residualCheck ?? groupIsEmpty;
   const prepareScope = deps.prepareScope ?? prepareRunScope;
   const spawnRun = deps.spawnRun ?? ((scope: RunScope, runInput: string, log: string) => spawnTracedRunOne(tools, plan, scope, runInput, log));
@@ -127,10 +154,29 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const waveDir = await realpath(input.waveDir);
   const dirGuard = await WaveDirGuard.capture(waveDir);
   await mkdir(join(waveDir, "runs"), { recursive: true, mode: 0o700 });
-  const ledger = await PersistedLedger.open(input.ledgerPath);
+  // The ledger is the evaluation's one budget: it must exist and be the approval's (R55), and this process holds it exclusively.
+  const ledger = await PersistedLedger.openExisting(input.ledgerPath, input.approval.ledgerId);
+  await ledger.lock();
+  try {
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
-  const g0 = await guard();
+  const savedGuard = resume ? guardFileSchema.safeParse(await readJsonFile(join(waveDir, "guard.json"))) : null;
+  if (savedGuard !== null && !savedGuard.success) throw new Error("resume_invalid");
+  const current = await guard();
+  const g0 = savedGuard?.success ? savedGuard.data : current;
+  if (!resume) {
+    await writeFile(join(waveDir, "guard.json"), `${JSON.stringify(current, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    // The approval this wave ran under; the report copies it and checks the code at report time against it (I6b).
+    await writeFile(join(waveDir, "approval.json"), `${JSON.stringify(input.approval, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  }
   const waveStart = now();
+  const authTypes = new Map<string, RunRecord["authType"]>();
+  for (const profile of new Set(runs.map((r) => r.profile))) {
+    const provider = config.executionProfiles[profile]!.provider;
+    const type = typeof provider === "string" ? Object.values(selectBoundaryCredentials(input.hostAuth, [provider]))[0] : undefined;
+    const kind = typeof type === "object" && type !== null ? (type as { type?: unknown }).type : undefined;
+    authTypes.set(profile, kind === "oauth" || kind === "api_key" ? kind : null);
+  }
+  const authOf = (run: RunSpec): RunRecord["authType"] => authTypes.get(run.profile) ?? null;
 
   const writeRecord = (record: RunRecord): Promise<void> =>
     writeFile(join(waveDir, "runs", `${record.runId}.json`), `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -189,16 +235,23 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
 
       if (executed) {
         // No trusted output (missing, forged, killed, bad exit status) or a cost the ledger would reject: the estimate stands in (R41).
-        // A trusted output whose `usage.session` is null means the SDK stats report nothing billed: recorded as null, not charged.
-        const cost = output?.usage.session?.costUsd ?? null;
-        if (output !== null && isValidCost(cost)) await ledger.record(run.runId, run.profile, cost);
+        // A trusted output with a session total is charged as measured. One without a session total whose assistant usage has tokens is a
+        // real billed response whose session stats failed: it charges the assistant cost sum, at least the estimate (I3). One without a
+        // session total and without any token (nothing at all, or a synthesized failure message) billed nothing: the cost is null (R11b).
+        const session = output?.usage.session ?? null;
+        const assistant = output?.usage.assistant;
+        const assistantTokens = assistant === undefined ? 0 : assistant.input + assistant.output + assistant.cacheRead + assistant.cacheWrite;
+        if (output !== null && session !== null && isValidCost(session.costUsd)) await ledger.record(run.runId, run.profile, session.costUsd);
+        else if (output !== null && session === null && !(assistantTokens > 0)) await ledger.record(run.runId, run.profile, null);
         else {
-          if (output !== null) waveFailure ??= "invalid_cost";
-          await ledger.recordEstimate(run.runId, run.profile);
+          if (output !== null && session !== null) waveFailure ??= "invalid_cost";
+          const assistantCost = assistant !== undefined && session === null && isValidCost(assistant.costUsd) ? assistant.costUsd : 0;
+          await ledger.recordEstimate(run.runId, run.profile, assistantCost);
         }
       }
       const facts = { output, timedOut: supervised.timedOut, interrupted: supervised.interrupted, residualClean, trace, guardChanged: false, integrityFailed: tampered, waveFailure };
       let verdict = classifyRun(facts);
+      let interruptedInOracle = false;
       const terminal = output?.terminal ?? (supervised.timedOut ? "timeout" : null);
 
       // Candidate code runs again in the oracle, so its commands are traced and audited like the run itself.
@@ -212,7 +265,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
           implementation = await score(scope.clone, {
             allowedPaths: task.allowedPaths, scopeIgnore: task.scopeIgnore, baseCommit: task.baseCommit, oracle: task.oracle,
           }, {
-            gitDir: scope.baseGitDir, home: oracleHome,
+            gitDir: scope.baseGitDir, home: oracleHome, ...(input.signal === undefined ? {} : { signal: input.signal }),
             wrap: (argv) => {
               // Outside the scope root, so the worker's candidate code cannot touch the log.
               const path = join(privateRun, `oracle-${sequence += 1}.strace`);
@@ -224,6 +277,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
           if (error instanceof Error && error.message === "scope_unreadable") implementation = { accepted: false, testsPassed: false, outOfScope: ["<unreadable>"] };
           else waveFailure = "oracle_failed";
         }
+        interruptedInOracle = input.signal?.aborted === true;
         for (const path of oracleLogs) {
           const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses);
           if (found) trace = trace ? mergeTrace(trace, found) : found;
@@ -232,10 +286,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
       }
       let guardChanged = false;
       try { guardChanged = guardDiff(g0, await guard()).length > 0; } catch { waveFailure ??= "guard_unreadable"; }
-      verdict = classifyRun({ ...facts, trace, guardChanged, waveFailure });
+      verdict = classifyRun({ ...facts, interrupted: facts.interrupted || interruptedInOracle, trace, guardChanged, waveFailure });
 
       const base = {
-        ...baseOf(run), terminal, usage: output?.usage ?? null, durationMs: output?.durationMs ?? null,
+        ...baseOf(run, authOf(run)), terminal, usage: output?.usage ?? null, durationMs: output?.durationMs ?? null,
         trace: trace ? summarizeTrace(trace) : null, harnessError: verdict.harnessError,
         assistantTextTruncated: output?.assistantTextTruncated ?? null, assistantTextSha256: output?.assistantTextSha256 ?? null,
       };
@@ -269,31 +323,44 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
 
   const records: RunRecord[] = [];
   let stopReason: StopReason | null = null;
+  let paused = false;
+  let executedRuns = 0;
   const persist = async (record: RunRecord): Promise<void> => {
     records.push(record);
     try { await writeRecord(record); } catch { stopReason ??= "harness_failure"; }
   };
-  for (const run of runs) {
-    if (stopReason !== null) { await persist(notRun(run, null)); continue; }
+  // A resumed wave whose guarded files changed while it was paused stops before its first run.
+  let startStop: StopReason | null = savedGuard?.success && guardDiff(savedGuard.data, current).length > 0 ? "guard_changed" : null;
+  for (const run of pending) {
+    if (stopReason !== null) { await persist(notRun(run, null, authOf(run))); continue; }
+    if (input.maxRuns !== undefined && executedRuns >= input.maxRuns) { paused = true; break; }
     const task = tasks.get(run.taskId)!;
     const provider = config.executionProfiles[run.profile]!.provider;
-    let before: StopReason | null = null;
-    if (now() - waveStart >= waveTimeoutMs) before = "wave_timeout";
+    let before: StopReason | null = startStop;
+    startStop = null;
+    if (before !== null) { /* decided above */ }
+    else if (now() - waveStart >= waveTimeoutMs) before = "wave_timeout";
     else if (input.signal?.aborted) before = "interrupted";
     else if (!ledger.ledger.allows(run.profile)) before = "budget";
     else if (typeof provider === "string" && expiresWithin(input.hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
     if (before !== null) {
       stopReason = before;
-      await persist(notRun(run, before));
+      await persist(notRun(run, before, authOf(run)));
       continue;
     }
     let record: RunRecord;
     try {
       await dirGuard.assertIntact();
       record = await execute(run, task, config);
-    } catch (error) { record = failedRun(run, failureCode(error)); }
+    } catch (error) { record = failedRun(run, failureCode(error), authOf(run)); }
+    executedRuns += 1;
     stopReason = record.stopReason;
     await persist(record);
   }
-  return { records, stopReason, spentUsd: ledger.ledger.spentUsd };
+  const state = stopReason !== null ? "stopped" : paused ? "paused" : "complete";
+  await writeFile(join(waveDir, "status.json"), `${JSON.stringify({ state, stopReason, executedRuns, recordedRuns: done.size + records.length }, null, 2)}\n`, { mode: 0o600 });
+  return { records, stopReason, spentUsd: ledger.ledger.spentUsd, paused };
+  } finally {
+    await ledger.release();
+  }
 }
