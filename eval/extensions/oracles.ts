@@ -4,47 +4,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { Anchor, ImplementationOracle, ReviewOracle } from "./schemas.js";
+import { pathTokens } from "./path-tokens.js";
 
 const execFileAsync = promisify(execFile);
 const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
 const HEADING = /^\s{0,3}(#{1,6})\s+(\S.*)$/;
 
-const PATH_RUN = /[a-z0-9_.\-/]+/g;
-const SOURCE_EXTENSIONS = new Set([
-  "ts", "tsx", "js", "jsx", "mjs", "cjs", "json", "md", "mdx", "py", "go", "rs", "java", "kt", "kts", "rb", "php", "c", "h", "cc", "cpp", "hpp",
-  "cs", "swift", "sh", "bash", "zsh", "fish", "yaml", "yml", "toml", "ini", "cfg", "sql", "css", "scss", "sass", "less", "html", "htm", "vue",
-  "svelte", "txt", "xml", "gradle", "lock", "env",
-]);
-/** Prose words that look like `name.ext`. */
-const NOT_PATHS = new Set(["node.js", "next.js", "nuxt.js", "vue.js", "react.js", "express.js", "three.js", "d3.js", "e.g", "i.e"]);
-const extensionOf = (segment: string): string | undefined => { const dot = segment.lastIndexOf("."); return dot > 0 ? segment.slice(dot + 1) : undefined; };
-
-/**
- * Path tokens of lower-cased text: maximal path-character runs (trailing dots trimmed), URLs excluded, that are either
- * `dir/.../name.ext` or `dir/` with a source extension or trailing slash, or a bare `name.ext` with a source extension that is not a prose word.
- * Dotted identifiers (`this.lock.release`) and slash words (`read/write`) are not paths.
- */
-function pathTokens(text: string): string[] {
-  const tokens: string[] = [];
-  for (const match of text.replace(/[a-z][a-z0-9+.-]*:\/\/\S*/g, " ").matchAll(PATH_RUN)) {
-    const token = match[0].replace(/\.+$/, "");
-    if (token === "") continue;
-    if (token.includes("/")) {
-      const last = token.split("/").pop() ?? "";
-      const ext = extensionOf(last);
-      if ((ext !== undefined && SOURCE_EXTENSIONS.has(ext)) || (token.endsWith("/") && token.length >= 3)) tokens.push(token);
-    } else if (!NOT_PATHS.has(token)) {
-      const ext = extensionOf(token);
-      if (ext !== undefined && SOURCE_EXTENSIONS.has(ext)) tokens.push(token);
-    }
-  }
-  return tokens;
-}
-
 const FENCE_OPEN = /^\s*(?:(`{3,})[^`]*|(~{3,}).*)$/;
 const FENCE_CLOSE = /^\s*(?:`{3,}|~{3,})\s*$/;
-/** Drops the lines of every terminated fenced code block; an unterminated opener stays an ordinary text line. */
-function withoutFences(lines: string[]): string[] {
+/** Unwraps review fences before dropping terminated code fences; unterminated openers stay ordinary text. */
+function withoutFences(lines: string[], wholeReview = true): string[] {
   const kept: string[] = [];
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
@@ -57,7 +26,14 @@ function withoutFences(lines: string[]): string[] {
         const trimmed = candidate.trim();
         if (FENCE_CLOSE.test(candidate) && trimmed[0] === marker[0] && trimmed.length >= marker.length) { close = j; break; }
       }
-      if (close >= 0) { i = close; continue; }
+      if (close >= 0) {
+        const info = line.trim().slice(marker.length).trim().toLowerCase();
+        const spansReview = wholeReview && lines.slice(0, i).every((part) => part.trim() === "")
+          && lines.slice(close + 1).every((part) => part.trim() === "");
+        if (spansReview || info === "md" || info === "markdown") kept.push(...withoutFences(lines.slice(i + 1, close), false));
+        i = close;
+        continue;
+      }
     }
     kept.push(line);
   }
@@ -77,25 +53,34 @@ function pathOnlyLine(line: string): string | undefined {
   return tokens.length === 1 && tokens[0] === rest ? rest : undefined;
 }
 
-interface HeadingEntry { level: number; tokens: string; text: string }
+/** Heading words are inherited independently of paths, so a located body cannot gain a different file. */
+function wordsOfHeading(title: string): string {
+  const lower = title.toLowerCase();
+  const paths = new Set(pathTokens(lower));
+  return lower.replace(/[a-z0-9_.\-/]+/g, (token) => paths.has(token.replace(/\.+$/, "")) ? " " : token);
+}
+
+interface HeadingEntry { level: number; tokens: string; text: string; words: string }
 
 /**
  * Splits review text into lower-cased blocks.
  * A block ends at a blank line, at a list item that is not nested deeper than the block's first list item, at a heading,
  * at a table row (`|...`, one block per row) and before an unindented `**` line outside a list item that contains a path token
- * (field labels such as `**Why:**` continue the block). Terminated fenced code is dropped; it neither splits a block nor contributes
- * tokens or terms, and an unterminated fence opener is plain text.
- * Headings form a stack by level. The first block of a section that has no path token of its own gets the full heading text,
- * later pathless blocks get only the heading's path tokens (inherited from the nearest enclosing lower-level heading when it has none);
+ * (field labels such as `**Why:**` continue the block). Whole-review and md/markdown fences are unwrapped; other terminated
+ * fenced code is dropped and neither splits a block nor contributes tokens or terms. An unterminated fence opener is plain text.
+ * Headings form a stack by level. The first block of a section always gets the heading's non-path words;
+ * pathless blocks also get its path tokens (inherited from the nearest enclosing lower-level heading when it has none);
  * a heading without a body is a block itself, with the inherited path prepended.
  * A path-only line (`**src/a.ts**`, `src/a.ts:`) acts as a heading one level below the current one until the next heading,
- * the next path-only line, or a blank line followed by a non-list line.
+ * the next path-only line, or a blank line followed by a non-list line. A path-only continuation stays in its current block,
+ * except for a bold path-only line inside a list. A pseudo-heading inherits the words of a pathless parent heading.
  */
 function blocksOf(text: string): string[] {
   const blocks: string[] = [];
   const stack: HeadingEntry[] = [];
   let heading: string | undefined;
   let headingTokens = "";
+  let headingWords = "";
   let sectionHasBody = false;
   let current: string[] = [];
   let listIndent: number | undefined;
@@ -103,29 +88,33 @@ function blocksOf(text: string): string[] {
   let pseudoBlank = false;
   const push = (lines: string[]): void => {
     const body = lines.join("\n").toLowerCase();
-    if (heading !== undefined && pathTokens(body).length === 0) {
-      blocks.push(sectionHasBody ? `${headingTokens}\n${body}` : `${heading.toLowerCase()}\n${headingTokens}\n${body}`);
-    } else blocks.push(body);
+    const words = heading !== undefined && !sectionHasBody ? headingWords : "";
+    const tokens = heading !== undefined && pathTokens(body).length === 0 ? headingTokens : "";
+    blocks.push(`${words}\n${tokens}\n${body}`);
     sectionHasBody = true;
   };
   const flush = (): void => { if (current.length > 0) push(current); current = []; listIndent = undefined; };
   const closeSection = (): void => {
     if (heading === undefined || sectionHasBody) return;
-    const own = pathTokens(heading.toLowerCase()).length > 0;
-    blocks.push(own ? heading.toLowerCase() : `${headingTokens}\n${heading.toLowerCase()}`);
+    blocks.push(`${headingWords}\n${headingTokens}`);
   };
   const endPseudo = (): void => {
     if (!pseudoActive) return;
     stack.pop();
     pseudoActive = false;
     const top = stack[stack.length - 1];
-    heading = top?.text; headingTokens = top?.tokens ?? ""; sectionHasBody = true;
+    heading = top?.text; headingTokens = top?.tokens ?? ""; headingWords = top?.words ?? ""; sectionHasBody = true;
   };
   const startSection = (level: number, title: string, pseudo: boolean): void => {
     while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= level) stack.pop();
+    const parent = stack[stack.length - 1];
     heading = title;
-    headingTokens = pathTokens(title.toLowerCase()).join(" ") || (stack[stack.length - 1]?.tokens ?? "");
-    stack.push({ level, tokens: headingTokens, text: title });
+    headingTokens = pathTokens(title.toLowerCase()).join(" ") || (parent?.tokens ?? "");
+    headingWords = wordsOfHeading(title);
+    if (pseudo && parent !== undefined && pathTokens(parent.text.toLowerCase()).length === 0) {
+      headingWords = `${parent.words}\n${headingWords}`;
+    }
+    stack.push({ level, tokens: headingTokens, text: title, words: headingWords });
     sectionHasBody = false;
     pseudoActive = pseudo; pseudoBlank = false;
   };
@@ -141,7 +130,7 @@ function blocksOf(text: string): string[] {
       startSection((headingMatch[1] ?? "").length, headingMatch[2] ?? "", false);
       continue;
     }
-    if (pathOnlyLine(line) !== undefined) {
+    if ((current.length === 0 || (listIndent !== undefined && line.startsWith("**"))) && pathOnlyLine(line) !== undefined) {
       flush(); closeSection(); endPseudo();
       startSection((stack[stack.length - 1]?.level ?? 0) + 1, line.trim(), true);
       continue;
@@ -219,16 +208,16 @@ const isInsideGitDir = (path: string): boolean => path === ".git" || path.starts
 /**
  * Walks the clone without following symlinks and skipping the top-level `.git`. Any permission error fails closed with
  * `scope_unreadable`, and every non-root entry named `.git` (file or directory) is returned as a changed path because git never lists
- * its content, except at gitlink (submodule) paths of the base tree. Known git limit: empty directories are not reported.
+ * its content. Known git limit: empty directories are not reported.
  */
-async function walkClone(root: string, gitlinks: ReadonlySet<string>, relative = ""): Promise<string[]> {
+async function walkClone(root: string, relative = ""): Promise<string[]> {
   const found: string[] = [];
   let entries;
   try { entries = await readdir(join(root, relative), { withFileTypes: true }); } catch { throw new Error("scope_unreadable"); }
   for (const entry of entries) {
     const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
-    if (entry.name === ".git") { if (relative !== "" && !gitlinks.has(relative)) found.push(path); continue; }
-    if (entry.isDirectory()) found.push(...await walkClone(root, gitlinks, path));
+    if (entry.name === ".git") { if (relative !== "") found.push(path); continue; }
+    if (entry.isDirectory()) found.push(...await walkClone(root, path));
   }
   return found;
 }
@@ -238,6 +227,7 @@ async function walkClone(root: string, gitlinks: ReadonlySet<string>, relative =
  * All git calls use the pristine `base.gitDir` with a fresh temporary index and config, so worker commits, `skip-worktree` and
  * `assume-unchanged` flags and repository configuration in the clone's own `.git` cannot hide or trigger anything.
  * Fails closed: a non-zero git exit, any git stderr output or an unreadable directory throws `scope_unreadable`.
+ * A base tree containing a submodule throws `base_has_submodules` (R31).
  * `options.home` overrides the (otherwise fresh, removed afterwards) HOME of the git calls.
  */
 export async function changedPaths(clone: string, base: ScopeBase, scopeIgnore: string[], options: { home?: string } = {}): Promise<string[]> {
@@ -257,15 +247,13 @@ export async function changedPaths(clone: string, base: ScopeBase, scopeIgnore: 
         return stdout;
       } catch { throw new Error("scope_unreadable"); }
     };
-    const gitlinks = new Set<string>();
     for (const record of (await git("ls-tree", "-r", "-z", base.commit)).split("\0")) {
-      const tab = record.indexOf("\t");
-      if (tab > 0 && record.startsWith("160000 ")) gitlinks.add(record.slice(tab + 1));
+      if (record.startsWith("160000 ")) throw new Error("base_has_submodules");
     }
-    const nestedGit = await walkClone(clone, gitlinks);
+    const nestedGit = await walkClone(clone);
     await git("read-tree", base.commit);
     await git("update-index", "-q", "--refresh");
-    const modified = (await git("diff-files", "--name-only", "-z")).split("\0");
+    const modified = (await git("diff-files", "--ignore-submodules=all", "--name-only", "-z")).split("\0");
     const untracked = (await git("ls-files", "--others", "-z")).split("\0");
     const ignored = [...scopeIgnore, ...IGNORED_ALWAYS];
     const paths = new Set([...modified, ...untracked].filter((path) => path !== "" && !isInsideGitDir(path)));
