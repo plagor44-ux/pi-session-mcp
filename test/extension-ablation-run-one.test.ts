@@ -66,9 +66,11 @@ function fixtureAdapter(): NonNullable<Adapter> {
   };
 }
 
+// Each run needs its own private text file name: the file is created exclusively.
+let runCounter = 0;
 function input(kind: "read-only" | "coding", extra: { extensions?: string[]; fixture?: boolean } = {}): RunOneInput {
   const configPath = extra.fixture ? configs.fixture : extra.extensions ? configs.extension : configs.plain;
-  return { runId: "001-task-A-review", configPath, workspaceAlias: "clone", profile: kind === "coding" ? "code" : "review", promptText: "synthetic prompt", turnTimeoutMs: 20_000, privateDir };
+  return { runId: `00${++runCounter}-task-A-review`, configPath, workspaceAlias: "clone", profile: kind === "coding" ? "code" : "review", promptText: "synthetic prompt", turnTimeoutMs: 20_000, privateDir };
 }
 
 function assistant(step: Step): unknown {
@@ -114,7 +116,8 @@ describe("extension ablation run unit", () => {
     expect(out.usage.assistant.costUsd).toBeCloseTo(0.001);
     expect(out.usage.providerError).toBeNull();
     expect(out.sessionsLeft).toBe(0);
-    expect(out.assistantTextRef).toBe("001-task-A-review.txt");
+    expect(out.assistantTextRef).toBe(`${out.runId}.txt`);
+    expect(out.runId).toMatch(/^00\d+-task-A-review$/);
     expect(await readFile(join(privateDir, out.assistantTextRef!), "utf8")).toBe("ok");
     expect((await stat(join(privateDir, out.assistantTextRef!))).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(out)).not.toContain("synthetic prompt");
@@ -124,7 +127,8 @@ describe("extension ablation run unit", () => {
     const out = await runOne(input("read-only"), { adapterOptions: scripted([{ throws: true }]) });
     expect(out.terminal).toBe("failed");
     expect(out.usage.assistant).toMatchObject({ messages: 1, input: 0, output: 0, costUsd: 0 });
-    expect(out.usage.session).toBeNull();   // a synthesized failure is not an observed cost
+    expect(out.usage.session).toBeNull();   // a synthesized failure bills nothing: stats report zero tokens and zero cost
+    expect(out.harnessError).toBeNull();
     expect(out.usage.providerError).toBe("other");
     expect(out.assistantTextRef).toBeNull();
   });
@@ -174,10 +178,26 @@ describe("extension ablation run unit", () => {
     let out: RunOutput;
     try { out = await runOne(input("read-only", { fixture: true }), { adapterOptions }); } finally { silence.mockRestore(); }
     expect(out.terminal).toBe("completed");
-    expect(out.runId).toBe("001-task-A-review");
     expect(out.usage.assistant.messages).toBeGreaterThan(0);
     expect(out.usage.session).not.toBeNull();
     expect(out.sessionsLeft).toBe(0);
+  });
+
+  it("keeps measured usage and reports private_write_failed when the text file already exists", async () => {
+    const first = await runOne({ ...input("read-only"), runId: "exists-1" }, { adapterOptions: scripted([{ text: "one", usage: { input: 1, cost: { total: 0.5 } } }]) });
+    expect(first).toMatchObject({ terminal: "completed", harnessError: null });
+    const second = await runOne({ ...input("read-only"), runId: "exists-1" }, { adapterOptions: scripted([{ text: "two", usage: { input: 2, cost: { total: 0.25 } } }]) });
+    expect(second).toMatchObject({ terminal: "failed", harnessError: "private_write_failed", assistantTextRef: null, sessionsLeft: 0 });
+    expect(second.usage.session?.costUsd).toBeCloseTo(0.25);
+    expect(await readFile(join(privateDir, "exists-1.txt"), "utf8")).toBe("one");
+  });
+
+  it("flags a text cut at the turn cap", async () => {
+    const out = await runOne({ ...input("read-only"), runId: "long-1" }, { adapterOptions: scripted([{ text: "a".repeat(70_000) }]) });
+    expect(out).toMatchObject({ terminal: "completed", assistantTextTruncated: true, harnessError: null });
+    expect((await readFile(join(privateDir, out.assistantTextRef!), "utf8")).length).toBeLessThan(70_000);
+    const short = await runOne({ ...input("read-only"), runId: "short-1" }, { adapterOptions: scripted([{ text: "ok" }]) });
+    expect(short.assistantTextTruncated).toBe(false);
   });
 
   it("rejects a run id that could form a path", async () => {
@@ -186,13 +206,25 @@ describe("extension ablation run unit", () => {
     }
   });
 
-  it("keeps a session figure when an errored message was billed", () => {
-    let listener: ((event: unknown) => void) | undefined;
-    const session = { subscribe: (fn: (event: unknown) => void) => { listener = fn; return () => undefined; }, getSessionStats: () => ({ tokens: { input: 7, output: 0, cacheRead: 0, cacheWrite: 0, total: 7 }, cost: 0.2 }) } as unknown as AgentSession;
-    const collector = new UsageCollector();
-    collector.attach(session);
-    listener!({ type: "message_end", message: { role: "assistant", usage: { input: 7, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 7, cost: { total: 0.2 } }, stopReason: "error", errorMessage: "boom" } });
-    expect(collector.finish(session).session).toEqual({ input: 7, output: 0, cacheRead: 0, cacheWrite: 0, total: 7, costUsd: 0.2 });
+  // The real SDK offers no way to bill usage outside assistant messages, so these two cases use a session double
+  // whose stats carry usage the assistant events do not.
+  it("keeps a session figure when only side usage was billed", () => {
+    const double = (stats: { total: number; cost: number }) => {
+      let listener: ((event: unknown) => void) | undefined;
+      const session = {
+        subscribe: (fn: (event: unknown) => void) => { listener = fn; return () => undefined; },
+        getSessionStats: () => ({ tokens: { input: stats.total, output: 0, cacheRead: 0, cacheWrite: 0, total: stats.total }, cost: stats.cost }),
+      } as unknown as AgentSession;
+      const collector = new UsageCollector();
+      collector.attach(session);
+      listener!({ type: "message_end", message: { role: "assistant", usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { total: 0 } }, stopReason: "error", errorMessage: "boom" } });
+      return collector.finish(session);
+    };
+    const billed = double({ total: 7, cost: 0.2 });
+    expect(billed.session).toEqual({ input: 7, output: 0, cacheRead: 0, cacheWrite: 0, total: 7, costUsd: 0.2 });
+    expect(billed.assistant).toMatchObject({ messages: 1, input: 0, costUsd: 0 });
+    expect(double({ total: 0, cost: 0 }).session).toBeNull();
+    expect(double({ total: 0, cost: 0.01 }).session).not.toBeNull();
   });
 
   it("does not add reasoning or cacheWrite1h again and keeps the last provider error class", () => {

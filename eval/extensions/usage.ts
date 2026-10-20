@@ -4,8 +4,8 @@ export type ProviderErrorClass = "auth" | "quota" | "rate_limit" | "other";
 
 export interface RunUsage {
   /**
-   * The SDK session totals. Null when no assistant message was observed, or when every observed one
-   * failed with `stopReason === "error"` and zero tokens (nothing was billed): no cost of record.
+   * The SDK session totals, side usage included. Null when there is no captured session or the stats
+   * report zero tokens and zero cost (nothing was billed): no cost of record.
    */
   readonly session: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number; costUsd: number } | null;
   /** Independent sum over observed assistant `message_end` events. */
@@ -26,12 +26,12 @@ export function classifyProviderError(stopReason: string | undefined, errorMessa
 const count = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
 /**
- * Sums assistant usage from the public session event stream. `reasoning` is a subset of `output`
- * and `cacheWrite1h` a subset of `cacheWrite` in the SDK's `Usage`, so neither is added again.
+ * Sums assistant usage from the public session event stream as a cross-check on the SDK session stats.
+ * `reasoning` is a subset of `output` and `cacheWrite1h` a subset of `cacheWrite` in the SDK's `Usage`,
+ * so neither is added again.
  */
 export class UsageCollector {
   private messages = 0;
-  private billable = 0;
   private input = 0;
   private output = 0;
   private cacheRead = 0;
@@ -44,10 +44,8 @@ export class UsageCollector {
     return session.subscribe((event) => {
       if (event.type !== "message_end" || event.message.role !== "assistant") return;
       const message = event.message;
-      const usage = message.usage as Partial<Record<"input" | "output" | "cacheRead" | "cacheWrite" | "totalTokens", number>> & { cost?: { total?: number } } | undefined;
+      const usage = message.usage as Partial<Record<"input" | "output" | "cacheRead" | "cacheWrite", number>> & { cost?: { total?: number } } | undefined;
       this.messages += 1;
-      const tokens = count(usage?.input) + count(usage?.output) + count(usage?.cacheRead) + count(usage?.cacheWrite) + count(usage?.totalTokens);
-      if (message.stopReason !== "error" || tokens > 0) this.billable += 1;
       this.input += count(usage?.input);
       this.output += count(usage?.output);
       this.cacheRead += count(usage?.cacheRead);
@@ -61,9 +59,9 @@ export class UsageCollector {
   finish(session: AgentSession | undefined): RunUsage {
     const assistant = { messages: this.messages, input: this.input, output: this.output, cacheRead: this.cacheRead, cacheWrite: this.cacheWrite, costUsd: this.costUsd };
     let figures: RunUsage["session"] = null;
-    if (session !== undefined && this.billable > 0) {
+    if (session !== undefined) {
       const stats = session.getSessionStats();
-      figures = { ...stats.tokens, costUsd: stats.cost };
+      if (stats.tokens.total !== 0 || stats.cost !== 0) figures = { ...stats.tokens, costUsd: stats.cost };
     }
     return { session: figures, assistant, providerError: classifyProviderError(this.lastStopReason, this.lastErrorMessage) };
   }

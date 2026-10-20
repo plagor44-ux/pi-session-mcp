@@ -19,14 +19,25 @@ export interface RunOutput {
   terminal: "completed" | "failed" | "aborted" | "timeout" | "start_failed";
   startErrorCode: string | null;
   usage: RunUsage;
-  /** Interval from prompt acceptance to the terminal observation; 0 when the session never started. */
+  /** Interval from prompt acceptance to the terminal observation; 0 when no prompt was accepted (session never started or prompt rejected). */
   durationMs: number;
   sessionsLeft: number;
   /** File name of the assistant text inside `privateDir`; the text itself is never part of the output. */
   assistantTextRef: string | null;
+  /** The turn's `truncated` flag: the stored text was cut at the product's turn text cap. */
+  assistantTextTruncated: boolean;
+  /** A harness failure code (never a message or path); the terminal is then `failed`. Null otherwise. */
+  harnessError: string | null;
 }
 
 export const RUN_ID_PATTERN = /^[A-Za-z0-9._-]{1,128}$/;
+
+/** The run id names the private text file, so it must not be able to form a path. */
+export function assertRunId(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !RUN_ID_PATTERN.test(value)) {
+    throw Object.assign(new Error("invalid_run_id"), { code: "invalid_run_id" });
+  }
+}
 
 export const runOneInputSchema = z.object({
   runId: z.string().regex(RUN_ID_PATTERN),
@@ -36,12 +47,19 @@ export const runOneInputSchema = z.object({
 export type RunOneInput = z.infer<typeof runOneInputSchema> & { profile: ProfileId };
 
 interface ToolBody { ok: boolean; error?: { code?: string }; [key: string]: unknown }
+interface TurnBody { state: string; turnId?: string; assistantText?: string; truncated?: boolean }
+const TERMINAL_STATES = new Set(["completed", "failed", "aborted"]);
+
+/** A failure of the harness itself, carrying only a fixed code. */
+class HarnessFailure extends Error {
+  constructor(readonly harnessCode: string) { super(harnessCode); }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const unexpected = (): never => { throw new HarnessFailure("unexpected_tool_result"); };
 
 export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parameters<typeof createCapturingAdapter>[1] } = {}): Promise<RunOutput> {
-  // The run id names the private text file, so it must not be able to form a path.
-  if (!RUN_ID_PATTERN.test(input.runId)) {
-    throw Object.assign(new Error("invalid_run_id"), { code: "invalid_run_id" });
-  }
+  assertRunId(input.runId);
   const runId = input.runId;
   const config = await loadConfig(input.configPath);
   const collector = new UsageCollector();
@@ -53,8 +71,11 @@ export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parame
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "extension-ablation-run-one", version: "1.0.0" }, { capabilities: {} });
   const call = async (name: string, args: Record<string, unknown>): Promise<ToolBody> => {
-    const result = await client.callTool({ name, arguments: args });
-    return (result.structuredContent ?? { ok: false, error: { code: "internal_error" } }) as ToolBody;
+    let structured: unknown;
+    try { structured = (await client.callTool({ name, arguments: args })).structuredContent; }
+    catch { throw new HarnessFailure("tool_call_failed"); }
+    if (!isRecord(structured) || typeof structured.ok !== "boolean") return unexpected();
+    return structured as ToolBody;
   };
 
   let terminal: RunOutput["terminal"] = "start_failed";
@@ -62,58 +83,87 @@ export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parame
   let durationMs = 0;
   let sessionsLeft = 0;
   let assistantTextRef: string | null = null;
+  let assistantTextTruncated = false;
+  let harnessError: string | null = null;
   let sessionId: string | undefined;
   try {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     const started = await call("pi_session_start", { workspace: input.workspaceAlias, executionProfile: input.profile });
     if (!started.ok) {
-      startErrorCode = started.error?.code ?? "internal_error";
+      startErrorCode = typeof started.error?.code === "string" ? started.error.code : "internal_error";
     } else {
-      sessionId = (started.session as { id: string }).id;
+      const startedSession = started.session;
+      if (!isRecord(startedSession) || typeof startedSession.id !== "string") unexpected();
+      sessionId = (startedSession as { id: string }).id;
       const begun = Date.now();
       const accepted = await call("pi_session_prompt", { sessionId, prompt: input.promptText });
       if (!accepted.ok) {
         terminal = "failed";
       } else {
-        const turnId = (accepted.turn as { turnId: string }).turnId;
+        const asTurn = (value: unknown): TurnBody => {
+          if (!isRecord(value) || typeof value.state !== "string") return unexpected();
+          return value as unknown as TurnBody;
+        };
+        let turn = asTurn(accepted.turn);
+        const turnId = turn.turnId;
+        if (typeof turnId !== "string") unexpected();
         const deadline = begun + input.turnTimeoutMs;
-        let turn = accepted.turn as { state: string; assistantText?: string };
         for (;;) {
           const got = await call("pi_turn_get", { sessionId, turnId });
           if (!got.ok) { terminal = "failed"; break; }
-          turn = got.turn as typeof turn;
-          if (turn.state !== "running") { terminal = turn.state as RunOutput["terminal"]; break; }
-          if (Date.now() >= deadline) {
-            await call("pi_session_abort", { sessionId });
-            terminal = "timeout";
-            break;
+          turn = asTurn(got.turn);
+          if (turn.state === "running") {
+            if (Date.now() >= deadline) {
+              await call("pi_session_abort", { sessionId });
+              terminal = "timeout";
+              break;
+            }
+            await sleep(POLL_INTERVAL_MS);
+            continue;
           }
-          await sleep(POLL_INTERVAL_MS);
+          if (!TERMINAL_STATES.has(turn.state)) unexpected();
+          terminal = turn.state as RunOutput["terminal"];
+          break;
         }
         durationMs = Date.now() - begun;
         if (terminal === "completed" && typeof turn.assistantText === "string") {
-          await mkdir(input.privateDir, { recursive: true, mode: 0o700 });
-          assistantTextRef = `${runId}.txt`;
-          await writeFile(join(input.privateDir, assistantTextRef), turn.assistantText, { mode: 0o600 });
+          assistantTextTruncated = turn.truncated === true;
+          try {
+            await mkdir(input.privateDir, { recursive: true, mode: 0o700 });
+            await writeFile(join(input.privateDir, `${runId}.txt`), turn.assistantText, { mode: 0o600, flag: "wx" });
+            assistantTextRef = `${runId}.txt`;
+          } catch {
+            throw new HarnessFailure("private_write_failed");
+          }
         }
       }
     }
+  } catch (error) {
+    harnessError = error instanceof HarnessFailure ? error.harnessCode : "unexpected_tool_result";
   } finally {
     if (sessionId !== undefined) await call("pi_session_close", { sessionId }).catch(() => undefined);
     const listed = await call("pi_session_list", {}).catch(() => undefined);
-    sessionsLeft = listed?.ok === true ? (listed.sessions as unknown[]).length : registry.list().length;
+    sessionsLeft = listed?.ok === true && Array.isArray(listed.sessions) ? listed.sessions.length : registry.list().length;
     await Promise.allSettled([client.close(), server.close(), registry.shutdown()]);
   }
-  const usage = collector.finish(captured);
+  // Measured usage is never dropped: if the SDK stats cannot be read, the assistant sum still stands.
+  let usage: RunUsage;
+  try { usage = collector.finish(captured); } catch {
+    usage = collector.finish(undefined);
+    harnessError ??= "session_stats_failed";
+  }
   for (const detach of detachers) detach();
-  return { runId, terminal, startErrorCode, usage, durationMs, sessionsLeft, assistantTextRef };
+  if (harnessError !== null) terminal = "failed";
+  return { runId, terminal, startErrorCode, usage, durationMs, sessionsLeft, assistantTextRef, assistantTextTruncated, harnessError };
 }
 
 /** `node run-one.js <input.json>` writes `run-output.json` next to the input and exits 0 once an output exists. */
 async function main(): Promise<void> {
   const inputPath = process.argv[2];
   if (!inputPath) throw new Error("input_path_required");
-  const input = runOneInputSchema.parse(JSON.parse(await readFile(inputPath, "utf8")));
+  const raw: unknown = JSON.parse(await readFile(inputPath, "utf8"));
+  assertRunId(isRecord(raw) ? raw.runId : undefined);
+  const input = runOneInputSchema.parse(raw);
   const output = await runOne(input);
   await writeFile(join(dirname(inputPath), "run-output.json"), JSON.stringify(output, null, 2) + "\n");
 }
