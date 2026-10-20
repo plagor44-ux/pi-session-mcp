@@ -155,7 +155,7 @@ async function preflight(parsed: ParsedArgs): Promise<void> {
 
 async function wave(parsed: ParsedArgs): Promise<void> {
   const { tasks, runs, approval, hostAuth, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
-  await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval);
+  await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval, ledgerPath);
   const result = await withAbort((signal) => runWave({
     approval, tasks, runs, waveDir, ledgerPath, hostAuth, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
   }));

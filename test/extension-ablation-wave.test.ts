@@ -1,6 +1,6 @@
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { chmod, mkdir, readdir, readFile, rename, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { EventEmitter } from "node:events";
@@ -10,13 +10,19 @@ import { matrixDigest, routesOf, tasksDigest, validateApproval, type Approval } 
 import { parseArgs, sourceCommit, withAbort } from "../eval/extensions/cli.js";
 import { buildMatrix, PAIRINGS } from "../eval/extensions/matrix.js";
 import type { ImplementationScore } from "../eval/extensions/oracles.js";
+import { runHelper } from "../eval/extensions/helpers.js";
+import { readVerifiedOutput } from "../eval/extensions/audit.js";
+import { REDACTED, boundarySecrets, collectPatch, redactSecrets } from "../eval/extensions/evidence.js";
+import { encodeKey, macOf, sha256Hex } from "../eval/extensions/output-mac.js";
+import { readRegularFile } from "../eval/extensions/safe-read.js";
+import { CORE_LIMIT, assertHostSafe, groupIsEmpty } from "../eval/extensions/supervise.js";
 import { dnsServers, modelHost } from "../eval/extensions/network.js";
 import { assertPreflightPassed, runPreflight } from "../eval/extensions/preflight.js";
 import { hash } from "../eval/profiles/files.js";
 import type { RunSpec, TaskSpec } from "../eval/extensions/schemas.js";
 import { runWave, type RunRecord, type WaveDeps, type WaveInput } from "../eval/extensions/wave.js";
 import {
-  assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, renderPrompt, runConfig, scopeRoot, scrubCredentials, type RunScope, type ScopeInput,
+  assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, renderPrompt, runConfig, scopeRoot, type RunScope, type ScopeInput,
 } from "../eval/extensions/workspace.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -40,6 +46,10 @@ interface Step {
   providerError?: "auth" | "quota" | "rate_limit" | "other"; sessionsLeft?: number;
   /** Breaks the signed output after signing: a forged cost, a replaced text file, or a stripped MAC. */
   tamper?: "cost" | "text" | "nomac";
+  /** The fake worker's exit status after writing its (valid) output. */
+  exitCode?: number; signal?: "SIGKILL" | "SIGABRT";
+  /** A file the fake worker writes into the clone. */
+  writeFile?: { name: string; content: string };
 }
 
 const FAKE_SCRIPT = `
@@ -66,6 +76,9 @@ if (spec.output !== null) {
   if (spec.tamper === "text") writeFileSync(join(input.privateDir, ref), "forged text");
   writeFileSync(join(dirname(inputPath), "run-output.json"), JSON.stringify(out));
 }
+if (spec.writeFile) writeFileSync(join(dirname(inputPath), "clone", spec.writeFile.name), spec.writeFile.content);
+if (spec.exitCode) process.exit(spec.exitCode);
+if (spec.signal) process.kill(process.pid, spec.signal);
 if (spec.hang) setInterval(() => {}, 1000);
 `;
 
@@ -94,7 +107,7 @@ function fake(steps: Step[], dir: string) {
     captured.push({ scope, input: JSON.parse(readFileSync(runInput, "utf8")) as Record<string, unknown> });
     const hangOnly = step.hang === true && step.output === undefined;
     const spec = {
-      output: hangOnly ? null : outputFor(step), text: step.text, hang: step.hang === true, tamper: step.tamper,
+      output: hangOnly ? null : outputFor(step), text: step.text, hang: step.hang === true, tamper: step.tamper, exitCode: step.exitCode, signal: step.signal, writeFile: step.writeFile,
       trace: step.trace === undefined ? benignTrace() : step.trace,
     };
     return spawn(process.execPath, [script, runInput, log, JSON.stringify(spec)], { cwd: scope.root, detached: true, stdio: ["pipe", "ignore", "ignore"] });
@@ -107,6 +120,8 @@ const fakePrepare = async (input: ScopeInput): Promise<RunScope> => {
   await mkdir(join(root, "clone"), { recursive: true });
   await mkdir(join(root, "private"), { recursive: true });
   await mkdir(join(root, "agent", "npm", "node_modules", "pi-lens"), { recursive: true });
+  await mkdir(join(privateRunDir(input.waveDir, input.run.runId), "base.git"), { recursive: true });
+  await writeFile(join(privateRunDir(input.waveDir, input.run.runId), "base.git", "HEAD"), "ref: refs/heads/main");
   await writeFile(join(root, "agent", "auth.json"), "{\"openai\":{\"access\":\"tok\"}}");
   await writeFile(join(root, "agent", ".auth.json.lock"), "");
   await writeFile(join(root, "agent", "npm", "node_modules", "pi-lens", "author.js"), "x");
@@ -168,11 +183,35 @@ async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "
     input, runs, waveDir, root,
     deps: (steps, extra = {}) => {
       const { spawnRun, captured } = fake(steps, root);
-      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, ...extra }, captured };
+      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, collectPatch: async () => "", ...extra }, captured };
     },
   };
 }
 
+const baseDeps = (): WaveDeps => ({ prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, hostCheck: async () => undefined, collectPatch: async () => "" });
+/** Every directory below `dir` with the given name. */
+async function findDirs(dir: string, name: string): Promise<string[]> {
+  const found: string[] = [];
+  if (!existsSync(dir)) return found;
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const path = join(dir, entry.name);
+    if (entry.name === name) found.push(path);
+    found.push(...await findDirs(path, name));
+  }
+  return found;
+}
+async function findFiles(dir: string, pattern: RegExp): Promise<string[]> {
+  const found: string[] = [];
+  if (!existsSync(dir)) return found;
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...await findFiles(path, pattern));
+    else if (pattern.test(entry.name)) found.push(path);
+  }
+  return found;
+}
+const LEDGER_ID = "11111111-1111-4111-8111-111111111111";
 const noAddresses = { providerAddresses: new Set<string>(), dnsAddresses: new Set<string>() };
 const text = (extra: Step = {}): Step => ({ text: GOOD_REVIEW, ...extra });
 const stopReasons = (records: RunRecord[]) => records.map((r) => r.outcome);
@@ -189,7 +228,8 @@ describe("runWave stop rules", () => {
     // Raw findings with paths stay private; the tracked record carries counts only.
     expect(await readFile(join(s.waveDir, "runs", `${s.runs[0]!.runId}.json`), "utf8")).not.toContain("/home/u");
     expect(await readFile(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "trace.json"), "utf8")).toContain("/home/u/secret");
-    expect(existsSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "scope"))).toBe(true);
+    expect(existsSync(scopeRoot(s.waveDir, s.runs[0]!.runId))).toBe(false);
+    expect(existsSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "scope"))).toBe(false);
     expect(existsSync(join(s.waveDir, "runs", `${s.runs[2]!.runId}.json`))).toBe(true);
   });
 
@@ -352,7 +392,7 @@ describe("runWave records and files", () => {
       seen.push(existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { entries: unknown[] }).entries.length : 0);
       return spawnRun(scope, runInput, log);
     };
-    const r = await runWave(s.input, { spawnRun: spy, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses });
+    const r = await runWave(s.input, { ...baseDeps(), spawnRun: spy });
     expect(seen).toEqual([0, 1]);
     expect(captured).toHaveLength(2);
     const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { spentUsd: number; entries: { runId: string; costUsd: number | null }[] };
@@ -363,7 +403,7 @@ describe("runWave records and files", () => {
 
   it("continues from a ledger file an earlier preflight wrote", async () => {
     const s = await waveSetup(1);
-    await writeFile(s.input.ledgerPath, JSON.stringify({ limitUsd: 10, spentUsd: 9.5, entries: [{ runId: "preflight-review", profile: "review", costUsd: 9.5 }] }));
+    await writeFile(s.input.ledgerPath, JSON.stringify({ ledgerId: LEDGER_ID, limitUsd: 10, spentUsd: 9.5, entries: [{ runId: "preflight-review", profile: "review", costUsd: 9.5 }] }));
     const { deps, captured } = s.deps([text()]);
     const r = await runWave(s.input, deps);
     expect(r.stopReason).toBe("budget");
@@ -379,8 +419,11 @@ describe("runWave records and files", () => {
     expect(existsSync(scopeRoot(s.waveDir, ok.runId))).toBe(false);
     expect(existsSync(scopeRoot(s.waveDir, bad.runId))).toBe(false);
     expect(await readFile(join(privateRunDir(s.waveDir, ok.runId), "assistant.txt"), "utf8")).toBe(GOOD_REVIEW);
-    expect(existsSync(join(privateRunDir(s.waveDir, bad.runId), "scope", "clone"))).toBe(true);
+    // R38/R38b: no scope and no copy of the pristine bare clone is ever kept, accepted or not.
+    expect(await findDirs(join(s.waveDir, "private"), "base.git")).toEqual([]);
+    expect(existsSync(join(privateRunDir(s.waveDir, bad.runId), "scope"))).toBe(false);
     expect(existsSync(join(privateRunDir(s.waveDir, ok.runId), "scope"))).toBe(false);
+    expect(await readFile(join(privateRunDir(s.waveDir, bad.runId), "assistant.txt"), "utf8")).toBe("no findings");
   });
 
   it("writes every record exactly once", async () => {
@@ -631,12 +674,13 @@ describe("preflight", () => {
     expect(captured.map((c) => c.input.promptText)).toEqual(["Reply with exactly: PONG", "Reply with exactly: PONG"]);
     expect(result.routes.map((r) => [r.profile, r.ok, r.failure])).toEqual([["review", true, null], ["review-grok", false, "auth"]]);
     expect(result.spentUsd).toBeCloseTo(0.01);
-    const ledger = JSON.parse(await readFile(join(root, "ledger.json"), "utf8")) as { entries: { runId: string }[] };
+    const ledger = JSON.parse(await readFile(join(root, "ledger.json"), "utf8")) as { ledgerId: string; entries: { runId: string }[] };
     expect(ledger.entries.map((e) => e.runId)).toEqual(["preflight-review", "preflight-review-grok"]);
-    expect(JSON.parse(await readFile(join(waveDir, "preflight.json"), "utf8"))).toMatchObject({ routes: [{ ok: true }, { ok: false }], binding: { matrixDigest: approval.matrixDigest } });
-    // The failed route's kept scope carries no credentials.
-    expect(existsSync(join(privateRunDir(waveDir, "preflight-review-grok"), "scope", "agent", "auth.json"))).toBe(false);
-    await expect(assertPreflightPassed(waveDir, approval)).rejects.toThrow("preflight_failed");
+    expect(JSON.parse(await readFile(join(waveDir, "preflight.json"), "utf8"))).toMatchObject({ ledgerId: ledger.ledgerId, routes: [{ ok: true }, { ok: false }], binding: { matrixDigest: approval.matrixDigest } });
+    // No scope is kept, only the verified output; no credentials anywhere under private/.
+    expect(existsSync(scopeRoot(waveDir, "preflight-review-grok"))).toBe(false);
+    expect(await findFiles(join(waveDir, "private"), /auth/i)).toEqual([]);
+    await expect(assertPreflightPassed(waveDir, approval, join(root, "ledger.json"))).rejects.toThrow("preflight_failed");
   });
 
   it("prepares an empty scope with credentials for the route's provider only", async () => {
@@ -674,9 +718,11 @@ describe("output integrity (R35)", () => {
     const r = await runWave(s.input, s.deps([text({ tamper, cost: 0.3 })]).deps);
     expect(r.stopReason).toBe("output_integrity");
     expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
-    // Nothing of a forged output is believed: no terminal, no usage, no score, and the cost stays unobserved.
+    // Nothing of a forged output is believed: no terminal, no usage, no score. Its cost is the profile's estimate, flagged (R41).
     expect(r.records[0]).toMatchObject({ accepted: null, usage: null, harnessError: "output_integrity" });
-    expect(r.spentUsd).toBe(0);
+    expect(r.spentUsd).toBe(1);
+    const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { entries: { costUsd: number; estimated?: boolean }[] };
+    expect(ledger.entries).toMatchObject([{ costUsd: 1, estimated: true }]);
   });
 
   it("accepts a correctly signed output and never puts the key into argv, env or a file", async () => {
@@ -699,7 +745,7 @@ describe("interrupt handling (C1)", () => {
     setTimeout(() => emitter.emit("SIGINT"), 300);
     setTimeout(() => emitter.emit("SIGINT"), 350);
     const r = await withAbort((signal) => runWave({ ...s.input, signal }, {
-      spawnRun: spy, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses,
+      ...baseDeps(), spawnRun: spy,
     }), emitter);
     expect(captured).toHaveLength(1);
     expect(r.stopReason).toBe("interrupted");
@@ -771,41 +817,93 @@ describe("shared ledger and output safety (R37)", () => {
     await expect(runPreflight({ approval, waveDir: join(root, "wave"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: {} })).rejects.toThrow("output_exists");
   });
 
-  it("lets the wave start only on a passed preflight of the same approval", async () => {
+  it("lets the wave start only on a passed preflight of the same approval and ledger", async () => {
     const root = await temporaryRoot("ablation-preflight-gate-");
     const tasks = [await reviewTask(root, "P1")];
     const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
-    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_missing");
+    const ledgerPath = join(root, "ledger.json");
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("preflight_missing");
     const binding = { sourceCommit: approval.sourceCommit, tasksDigest: approval.tasksDigest, matrixDigest: approval.matrixDigest };
+    const passed = (ok: boolean) => approval.routes.map((r) => ({ profile: r.profile, ok, terminal: "completed", costUsd: 0.01, failure: null }));
     const write = (file: unknown) => writeFile(join(root, "preflight.json"), JSON.stringify(file));
-    await write({ binding, routes: approval.routes.map((r) => ({ profile: r.profile, ok: true })) });
-    await expect(assertPreflightPassed(root, approval)).resolves.toBeUndefined();
-    await write({ binding: { ...binding, matrixDigest: "sha256:0" }, routes: approval.routes.map((r) => ({ profile: r.profile, ok: true })) });
-    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_binding_changed");
-    await write({ binding, routes: approval.routes.map((r) => ({ profile: r.profile, ok: false })) });
-    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_failed");
+    const writeLedger = (ledgerId: string, runs: string[]) => writeFile(ledgerPath, JSON.stringify({
+      ledgerId, limitUsd: 10, spentUsd: 0.01 * runs.length, entries: runs.map((runId) => ({ runId, profile: "review", costUsd: 0.01 })),
+    }));
+    const entries = approval.routes.map((r) => `preflight-${r.profile}`);
+    await write({ binding, ledgerId: LEDGER_ID, routes: passed(true), spentUsd: 0.01 });
+    await writeLedger(LEDGER_ID, entries);
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).resolves.toBeUndefined();
+    await write({ binding: { ...binding, matrixDigest: "sha256:0" }, ledgerId: LEDGER_ID, routes: passed(true), spentUsd: 0 });
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("preflight_binding_changed");
+    await write({ binding, ledgerId: LEDGER_ID, routes: passed(false), spentUsd: 0 });
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("preflight_failed");
+    // R37b: a different ledger file, or one without the preflight's entries, is refused.
+    await write({ binding, ledgerId: LEDGER_ID, routes: passed(true), spentUsd: 0 });
+    await writeLedger("22222222-2222-4222-8222-222222222222", entries);
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
+    await writeLedger(LEDGER_ID, ["something-else"]);
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
+    await rm(ledgerPath);
+    await expect(assertPreflightPassed(root, approval, ledgerPath)).rejects.toThrow("ledger_mismatch");
+  });
+
+  it("rejects a malformed preflight file instead of throwing a TypeError", async () => {
+    const root = await temporaryRoot("ablation-preflight-malformed-");
+    const tasks = [await reviewTask(root, "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    for (const content of ["{", "null", "[]", JSON.stringify({ routes: "x" }), JSON.stringify({ binding: {}, ledgerId: "x", routes: [], spentUsd: 0 })]) {
+      await writeFile(join(root, "preflight.json"), content);
+      await expect(assertPreflightPassed(root, approval, join(root, "l.json"))).rejects.toThrow("preflight_invalid");
+    }
   });
 });
 
 describe("credentials and traces stay out of kept evidence (I2, R35)", () => {
-  it("deletes credentials from a kept scope but leaves the extension tree", async () => {
+  it("keeps no scope and no credentials, only the allowlisted evidence", async () => {
     const s = await waveSetup(1);
-    const r = await runWave(s.input, s.deps([{ output: { terminal: "failed" } }]).deps);
+    const r = await runWave(s.input, s.deps([{ output: { terminal: "failed" }, text: "partial" }]).deps);
     expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: false });
-    const agent = join(privateRunDir(s.waveDir, r.records[0]!.runId), "scope", "agent");
-    expect(existsSync(agent)).toBe(true);
-    expect(existsSync(join(agent, "auth.json"))).toBe(false);
-    expect(existsSync(join(agent, ".auth.json.lock"))).toBe(false);
-    expect(existsSync(join(agent, "npm", "node_modules", "pi-lens", "author.js"))).toBe(true);
+    const dir = privateRunDir(s.waveDir, r.records[0]!.runId);
+    expect(existsSync(scopeRoot(s.waveDir, r.records[0]!.runId))).toBe(false);
+    expect((await readdir(dir)).sort()).toEqual(["assistant.txt", "changes.patch", "run-output.json", "strace.log", "trace.json"]);
+    expect(await findFiles(join(s.waveDir, "private"), /auth/i)).toEqual([]);
+    expect(await findDirs(join(s.waveDir, "private"), "base.git")).toEqual([]);
   });
 
-  it("scrubs credentials on its own", async () => {
-    const root = await temporaryRoot("ablation-scrub-");
-    await mkdir(join(root, "sub"), { recursive: true });
-    for (const name of ["auth.json", "auth.json.bak", "OAuth-state", "keep.json", join("sub", "auth-cache")]) await writeFile(join(root, name), "x");
-    await scrubCredentials(root);
-    expect((await readdir(root)).sort()).toEqual(["keep.json", "sub"]);
-    expect(await readdir(join(root, "sub"))).toEqual([]);
+  it("redacts a kept patch that carries the boundary key and still removes the scope", async () => {
+    const secret = "sk-test-boundary-secret-0123456789";
+    const root = await temporaryRoot("ablation-redact-");
+    const waveDir = join(root, "wave");
+    const tasks = [await reviewTask(root, "T1")];
+    const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")).slice(0, 1);
+    const hostAuth = { openai: { type: "api_key", key: secret, note: "short" } };
+    const input: WaveInput = {
+      approval: approvalFor(tasks, runs), tasks, runs, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig,
+      extensionTemplate: join(root, "t"), repoRoot: root, hostAuth, killGraceMs: 0,
+    };
+    const { spawnRun } = fake([text({ writeFile: { name: "x.txt", content: secret } })], root);
+    // A patch generator that reports what the worker wrote, as `git diff` would.
+    const patching: WaveDeps["collectPatch"] = async (clone) => `+++ b/x.txt\n+${readFileSync(join(clone, "x.txt"), "utf8")}\n`;
+    const r = await runWave(input, { ...baseDeps(), spawnRun, collectPatch: patching });
+    const dir = privateRunDir(waveDir, r.records[0]!.runId);
+    expect(await readFile(join(dir, "changes.patch"), "utf8")).toBe("redacted: secret match");
+    expect(existsSync(scopeRoot(waveDir, r.records[0]!.runId))).toBe(false);
+    expect(await findDirs(join(waveDir, "private"), "base.git")).toEqual([]);
+    for (const file of await findFiles(waveDir, /./)) expect(await readFile(file, "utf8").catch(() => "")).not.toContain(secret);
+  });
+
+  it("removes the scope even when a step after the spawn throws", async () => {
+    const s = await waveSetup(2);
+    const r = await runWave(s.input, s.deps([text()], { guard: (() => { let n = 0; return async () => { if (++n > 1) throw new Error("boom"); return { files: {} }; }; })(), collectPatch: async () => { throw new Error("nope"); } }).deps);
+    expect(r.records[0]).toMatchObject({ outcome: "stopped", stopReason: "harness_failure" });
+    expect(existsSync(scopeRoot(s.waveDir, s.runs[0]!.runId))).toBe(false);
+    const thrown = await waveSetup(2);
+    const flaky = fake([text()], thrown.root);
+    const rr = await runWave(thrown.input, { ...baseDeps(), spawnRun: flaky.spawnRun, residualCheck: async () => { throw new Error("residual exploded"); } });
+    expect(rr.records[0]).toMatchObject({ outcome: "stopped", stopReason: "harness_failure" });
+    expect(existsSync(scopeRoot(thrown.waveDir, thrown.runs[0]!.runId))).toBe(false);
+    expect(await findFiles(join(thrown.waveDir, "private"), /auth/i)).toEqual([]);
+    expect(await findDirs(join(thrown.waveDir, "private"), "base.git")).toEqual([]);
   });
 
   it("keeps every strace log outside the scope root and stops on a missing oracle log", async () => {
@@ -830,12 +928,12 @@ describe("record safety (items 7 and 8)", () => {
   it("turns a post-processing failure into a harness_failure record and still writes the rest", async () => {
     const s = await waveSetup(2);
     const { spawnRun } = fake([{ output: { terminal: "failed" } }], s.root);
-    // A non-empty directory where the scope is to be moved makes the rename fail.
+    // A directory where the patch file is to be written makes the evidence write fail.
     const blocking = (scope: RunScope, runInput: string, log: string): ChildProcess => {
-      mkdirSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "scope", "blocker"), { recursive: true });
+      mkdirSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "changes.patch"), { recursive: true });
       return spawnRun(scope, runInput, log);
     };
-    const r = await runWave(s.input, { spawnRun: blocking, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses });
+    const r = await runWave(s.input, { ...baseDeps(), spawnRun: blocking });
     expect(r.stopReason).toBe("harness_failure");
     expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
     expect(r.records[0]).toMatchObject({ stopReason: "harness_failure" });
@@ -924,5 +1022,265 @@ describe("source binding and prompt rewrite (items 10 and 11)", () => {
     const task = { ...(await reviewTask(root, "W2")), promptHash: hash(body) };
     await writeFile(join(root, task.promptRef), body);
     expect(await renderPrompt(root, task, root, clone)).toBe(`see ${clone}/src/a.ts`);
+  });
+});
+
+describe("exit status and host safety (N1, R40)", () => {
+  it.each([
+    ["a signal after a valid output", { signal: "SIGKILL" as const }],
+    ["a core-dump signal after a valid output", { signal: "SIGABRT" as const }],
+    ["a non-zero exit after a valid output", { exitCode: 3 }],
+  ])("does not trust the output of a worker that ends with %s", async (_name, ending) => {
+    const s = await waveSetup(2);
+    const r = await runWave(s.input, s.deps([text({ cost: 0.4, ...ending })]).deps);
+    expect(r.stopReason).toBe("output_integrity");
+    expect(r.records[0]).toMatchObject({ outcome: "stopped", accepted: null, usage: null, terminal: null, stopReason: "output_integrity" });
+    // R41: the untrusted output's cost is not believed; the estimate is charged and flagged.
+    expect(r.spentUsd).toBe(1);
+  });
+
+  it("refuses to start without prlimit or with a Yama ptrace_scope below 1", async () => {
+    const ok = { hasPrlimit: async () => true, readPtraceScope: async () => "1\n" };
+    await expect(assertHostSafe(ok)).resolves.toBeUndefined();
+    await expect(assertHostSafe({ ...ok, readPtraceScope: async () => "3" })).resolves.toBeUndefined();
+    await expect(assertHostSafe({ ...ok, readPtraceScope: async () => "0\n" })).rejects.toThrow("ptrace_scope_unsafe");
+    await expect(assertHostSafe({ ...ok, readPtraceScope: async () => { throw Object.assign(new Error("x"), { code: "ENOENT" }); } })).rejects.toThrow("ptrace_scope_unsafe");
+    await expect(assertHostSafe({ ...ok, readPtraceScope: async () => "garbage" })).rejects.toThrow("ptrace_scope_unsafe");
+    await expect(assertHostSafe({ ...ok, hasPrlimit: async () => false })).rejects.toThrow("prlimit_missing");
+  });
+
+  it("runs the wave's host check before anything is prepared", async () => {
+    const s = await waveSetup(1);
+    const { deps, captured } = s.deps([text()], { hostCheck: async () => { throw new Error("ptrace_scope_unsafe"); } });
+    await expect(runWave(s.input, deps)).rejects.toThrow("ptrace_scope_unsafe");
+    expect(captured).toHaveLength(0);
+    expect(existsSync(s.waveDir)).toBe(false);
+  });
+
+  it("sets a hard core limit of 0 with the flag the spawn uses", async () => {
+    const { stdout } = await exec("prlimit", [CORE_LIMIT, "sh", "-c", "ulimit -Hc; ulimit -Sc"]);
+    expect(stdout.trim().split("\n")).toEqual(["0", "0"]);
+  });
+});
+
+describe("helper processes (N3)", () => {
+  it("retries a ps that was killed by a signal once, and counts a second failure as not clean", async () => {
+    const killed = Object.assign(new Error("helper_failed"), { code: null, signal: "SIGINT", stdout: "", stderr: "" });
+    const calls: string[] = [];
+    const flaky = (failures: number) => async (file: string, args: readonly string[]) => {
+      calls.push(`${file} ${args.join(" ")}`);
+      if (calls.length <= failures) throw killed;
+      return { stdout: "", stderr: "" };
+    };
+    expect(await groupIsEmpty(4242, flaky(1))).toBe(true);
+    expect(calls).toHaveLength(2);
+    calls.length = 0;
+    expect(await groupIsEmpty(4242, flaky(2))).toBe(false);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toBe("ps -o pid=,stat= -g 4242");
+  });
+
+  it("runs helpers in their own process group, so a terminal Ctrl-C does not reach them", async () => {
+    const own = (await runHelper("ps", ["-o", "pgid=", "-p", String(process.pid)])).stdout.trim();
+    const helper = (await runHelper("sh", ["-c", "ps -o pgid= -p $$"])).stdout.trim();
+    expect(helper).not.toBe(own);
+    await expect(runHelper("sh", ["-c", "exit 3"])).rejects.toMatchObject({ code: 3, signal: null });
+    await expect(runHelper("sh", ["-c", "kill -INT $$"])).rejects.toMatchObject({ code: null, signal: "SIGINT" });
+  });
+
+  it("treats exit code 1 as an empty group and ignores zombies", async () => {
+    expect(await groupIsEmpty(1, async () => { throw Object.assign(new Error("helper_failed"), { code: 1, signal: null }); })).toBe(true);
+    expect(await groupIsEmpty(1, async () => ({ stdout: "  77 Z\n  78 Z+\n", stderr: "" }))).toBe(true);
+  });
+});
+
+describe("safe reads from the scope (R39)", () => {
+  const key = Buffer.alloc(32, 9);
+  const signed = (extra: Record<string, unknown> = {}) => {
+    const out: Record<string, unknown> = {
+      runId: "r1", terminal: "completed", startErrorCode: null,
+      usage: { session: null, assistant: { messages: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0 }, providerError: null },
+      durationMs: 1, sessionsLeft: 0, assistantTextRef: null, assistantTextTruncated: false, assistantTextSha256: null, harnessError: null, mac: null, ...extra,
+    };
+    return JSON.stringify({ ...out, mac: macOf(out, key) });
+  };
+
+  it("reads a regular file within the cap and refuses a symlink, a FIFO and an oversize file", async () => {
+    const root = await temporaryRoot("ablation-safe-read-");
+    await writeFile(join(root, "ok"), "fine");
+    expect((await readRegularFile(join(root, "ok"), 1024)).toString()).toBe("fine");
+    await symlink(join(root, "ok"), join(root, "link"));
+    await expect(readRegularFile(join(root, "link"), 1024)).rejects.toThrow("unsafe_read");
+    await exec("mkfifo", [join(root, "fifo")]);
+    await expect(readRegularFile(join(root, "fifo"), 1024)).rejects.toThrow("unsafe_read");
+    await writeFile(join(root, "big"), Buffer.alloc(2 * 1024 * 1024));
+    await expect(readRegularFile(join(root, "big"), 1024 * 1024)).rejects.toThrow("unsafe_read");
+    await expect(readRegularFile(join(root, "missing"), 1024)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("treats a FIFO, a symlink and a 2 MiB file in place of the output or the text as tampering", async () => {
+    const root = await temporaryRoot("ablation-verified-output-");
+    const scope = join(root, "scope");
+    const priv = join(scope, "private");
+    await mkdir(priv, { recursive: true });
+    await writeFile(join(scope, "run-output.json"), signed());
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: false, present: true });
+    expect(await readVerifiedOutput(join(root, "none"), priv, "r1", key)).toMatchObject({ tampered: false, present: false });
+
+    await rm(join(scope, "run-output.json"));
+    await exec("mkfifo", [join(scope, "run-output.json")]);
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true, output: null });
+
+    await rm(join(scope, "run-output.json"));
+    await writeFile(join(root, "elsewhere.json"), signed());
+    await symlink(join(root, "elsewhere.json"), join(scope, "run-output.json"));
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true, output: null });
+
+    await rm(join(scope, "run-output.json"));
+    await writeFile(join(scope, "run-output.json"), Buffer.concat([Buffer.from(signed()), Buffer.alloc(2 * 1024 * 1024, 32)]));
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true });
+
+    // The same guards apply to the assistant text the output points at.
+    const text = "hello";
+    await rm(join(scope, "run-output.json"));
+    await writeFile(join(scope, "run-output.json"), signed({ assistantTextRef: "r1.txt", assistantTextSha256: sha256Hex(text) }));
+    await exec("mkfifo", [join(priv, "r1.txt")]);
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true });
+    await rm(join(priv, "r1.txt"));
+    await symlink(join(root, "elsewhere.json"), join(priv, "r1.txt"));
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: true });
+    await rm(join(priv, "r1.txt"));
+    await writeFile(join(priv, "r1.txt"), text);
+    expect(await readVerifiedOutput(scope, priv, "r1", key)).toMatchObject({ tampered: false, text, raw: expect.any(String) });
+  });
+
+  it("refuses a strace log that is a symlink or a FIFO (as a missing trace)", async () => {
+    const s = await waveSetup(2);
+    const { spawnRun } = fake([text({ trace: null })], s.root);
+    const planting = (scope: RunScope, runInput: string, log: string): ChildProcess => {
+      execFileSync("mkfifo", [log]);
+      return spawnRun(scope, runInput, log);
+    };
+    const r = await runWave(s.input, { ...baseDeps(), spawnRun: planting });
+    expect(r.records[0]).toMatchObject({ stopReason: "harness_failure", harnessError: "trace_missing" });
+  });
+});
+
+describe("evidence collection (R38)", () => {
+  it("collects the worker's changes as a binary patch without touching the pristine git directory", async () => {
+    const root = await temporaryRoot("ablation-patch-");
+    const source = join(root, "source");
+    await mkdir(source);
+    const git = (cwd: string, ...args: string[]) => exec("git", ["-C", cwd, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git(source, "init", "--quiet");
+    await writeFile(join(source, "a.txt"), "base\n");
+    await git(source, "add", "."); await git(source, "commit", "--quiet", "-m", "base");
+    const base = (await git(source, "rev-parse", "HEAD")).stdout.trim();
+    const bare = join(root, "base.git");
+    await exec("git", ["clone", "--bare", "--quiet", source, bare]);
+    const clone = join(root, "clone");
+    await exec("git", ["clone", "--quiet", bare, clone]);
+    await writeFile(join(clone, "a.txt"), "changed\n");
+    await writeFile(join(clone, "new.bin"), Buffer.from([0, 1, 2, 255, 0, 7]));
+    await mkdir(join(clone, "dist"));
+    await writeFile(join(clone, "dist", "ignored.js"), "x");
+    await mkdir(join(clone, ".codegraph"));
+    await writeFile(join(clone, ".codegraph", "db"), "x");
+    await exec("mkfifo", [join(clone, "pipe")]);
+    const before = (await exec("git", ["--git-dir", bare, "count-objects", "-v"])).stdout;
+    const patch = await collectPatch(clone, bare, base, ["dist/"]);
+    expect(patch).toContain("-base");
+    expect(patch).toContain("+changed");
+    expect(patch).toContain("new.bin");
+    expect(patch).not.toContain("ignored.js");
+    expect(patch).not.toContain(".codegraph");
+    expect((await exec("git", ["--git-dir", bare, "count-objects", "-v"])).stdout).toBe(before);
+    expect(await collectPatch(clone, bare, base, ["dist/"])).toBe(patch);
+  });
+
+  it("derives secrets from the selected auth entries only and redacts matching files", async () => {
+    const hostAuth = { openai: { type: "oauth", access: "access-token-123456", refresh: "", expires: 1234567890123, id: "short" }, xai: { type: "api_key", key: "other-provider-key-123" } };
+    expect(boundarySecrets(hostAuth, ["openai"])).toEqual(["access-token-123456"]);
+    expect(boundarySecrets({ openai: { type: "api_key", key: "sk-aaaaaaaaaaaa", extra: "twelve chars" } }, ["openai"]).sort()).toEqual(["sk-aaaaaaaaaaaa", "twelve chars"]);
+    const root = await temporaryRoot("ablation-redact-unit-");
+    await mkdir(join(root, "sub"));
+    await writeFile(join(root, "clean.txt"), "nothing");
+    await writeFile(join(root, "sub", "leak.log"), "prefix access-token-123456 suffix");
+    await symlink(join(root, "clean.txt"), join(root, "link"));
+    await mkdir(join(root, "base.git"));
+    await writeFile(join(root, "base.git", "pack"), "access-token-123456");
+    expect((await redactSecrets(root, ["access-token-123456"])).sort()).toEqual(["link", "sub/leak.log"]);
+    expect(await readFile(join(root, "sub", "leak.log"), "utf8")).toBe(REDACTED);
+    expect(await readFile(join(root, "clean.txt"), "utf8")).toBe("nothing");
+    expect(await readFile(join(root, "base.git", "pack"), "utf8")).toBe("access-token-123456");
+  });
+});
+
+describe("estimates for untrusted runs (R41)", () => {
+  it("charges the current estimate and flags it for a killed run, using the highest observed cost afterwards", async () => {
+    const s = await waveSetup(3, { runTimeoutMs: 300 });
+    const r = await runWave(s.input, s.deps([text({ cost: 0.5 }), { hang: true }, text({ cost: 0.1 })], { residualCheck: undefined }).deps);
+    const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { entries: { runId: string; costUsd: number; estimated?: boolean }[] };
+    expect(ledger.entries[0]).toMatchObject({ costUsd: 0.5 });
+    expect(ledger.entries[0]!.estimated).toBeUndefined();
+    // After a 0.5 observation the estimate for that profile is 0.5.
+    expect(ledger.entries[1]).toMatchObject({ runId: s.runs[1]!.runId, costUsd: 0.5, estimated: true });
+    expect(r.stopReason).toBe("harness_failure");
+    expect(r.spentUsd).toBeCloseTo(1);
+  });
+});
+
+describe("source isolation (N5)", () => {
+  async function gitSource(prefix: string) {
+    const root = await temporaryRoot(prefix);
+    const source = join(root, "source");
+    await mkdir(source);
+    const git = (...args: string[]) => exec("git", ["-C", source, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(source, "a.txt"), "base");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const bin = join(root, "bin");
+    await mkdir(bin);
+    await writeFile(join(bin, "codegraph"), "#!/bin/sh\nmkdir -p \"$3/.codegraph\"\n");
+    await chmod(join(bin, "codegraph"), 0o755);
+    return { root, source, bin, git, base: (await git("rev-parse", "HEAD")).stdout.trim() };
+  }
+  const withPath = async <T>(bin: string, body: () => Promise<T>): Promise<T> => {
+    const previous = process.env.PATH;
+    process.env.PATH = `${bin}:${previous ?? ""}`;
+    try { return await body(); } finally { process.env.PATH = previous; }
+  };
+
+  it("leaves no mention of the source path in the clone's .git or the pristine clone's config", async () => {
+    const { root, source, bin, base } = await gitSource("ablation-isolation-");
+    const task = { ...(await reviewTask(root, "I1")), baseCommit: base };
+    const run = buildMatrix([task], PAIRINGS.filter((p) => p.id === "pl-review"))[0]!;
+    const scope = await withPath(bin, () => prepareRunScope({
+      waveDir: join(root, "wave"), run, task, sourceRepoPath: source, extensionTemplate: join(root, "t"), hostAuth: {}, productionProfile: PROFILE,
+    }));
+    const mentions = async (dir: string): Promise<string[]> => {
+      const hits: string[] = [];
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) hits.push(...await mentions(path));
+        else if (entry.isFile() && (await readFile(path)).includes(source)) hits.push(path);
+      }
+      return hits;
+    };
+    expect(await mentions(join(scope.clone, ".git"))).toEqual([]);
+    expect(await readFile(join(scope.baseGitDir, "config"), "utf8")).not.toContain(source);
+    expect((await exec("git", ["-C", scope.clone, "reflog"])).stdout).toContain(base.slice(0, 7));
+    expect(await readFile(join(scope.clone, "a.txt"), "utf8")).toBe("base");
+  });
+
+  it("refuses a source repository that borrows objects through alternates", async () => {
+    const { root, source, bin, base } = await gitSource("ablation-alternates-");
+    await writeFile(join(source, ".git", "objects", "info", "alternates"), "/nonexistent/objects\n");
+    const task = { ...(await reviewTask(root, "I2")), baseCommit: base };
+    const run = buildMatrix([task], PAIRINGS.filter((p) => p.id === "pl-review"))[0]!;
+    await expect(withPath(bin, () => prepareRunScope({
+      waveDir: join(root, "wave"), run, task, sourceRepoPath: source, extensionTemplate: join(root, "t"), hostAuth: {}, productionProfile: PROFILE,
+    }))).rejects.toThrow("source_alternates");
+    expect(existsSync(scopeRoot(join(root, "wave"), run.runId))).toBe(false);
   });
 });

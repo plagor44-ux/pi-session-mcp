@@ -1,14 +1,11 @@
-import { execFile } from "node:child_process";
-import { appendFile, cp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { access, appendFile, cp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { promisify } from "node:util";
 import { selectBoundaryCredentials, writeBoundaryCredentials } from "../../src/writer-credentials.js";
 import { hash } from "../profiles/files.js";
+import { runHelper } from "./helpers.js";
 import { PAIRINGS } from "./matrix.js";
 import type { Arm, ExtensionId, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
-
-const execFileAsync = promisify(execFile);
 
 export const EXTENSION_PINS: Readonly<Record<ExtensionId, string>> = {
   "pi-lens": "npm:pi-lens@4.4.3",
@@ -95,22 +92,6 @@ export async function assertCloneSymlinks(clone: string): Promise<void> {
 }
 
 /**
- * Deletes credentials from a scope before it is kept: `agent/auth.json` and every file under `agent/` whose name contains `auth`
- * (lock and backup files included). The `npm` extension tree is not walked; its package files are not credentials.
- */
-export async function scrubCredentials(agentDir: string): Promise<void> {
-  const walk = async (dir: string, top: boolean): Promise<void> => {
-    let entries;
-    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
-    for (const entry of entries) {
-      const path = join(dir, entry.name);
-      if (entry.isDirectory()) { if (!(top && entry.name === "npm")) await walk(path, false); } else if (/auth/i.test(entry.name)) await rm(path, { force: true });
-    }
-  };
-  await walk(agentDir, true);
-}
-
-/**
  * Prepares one run: a full clone at the base commit inside the scope root, a pristine bare clone beside it (outside the root),
  * an evaluation-owned agent directory with boundary credentials, and the run configuration. Every path the traced worker can write
  * to is inside `root`.
@@ -131,14 +112,26 @@ export async function prepareRunScope(input: ScopeInput): Promise<RunScope> {
   }
 }
 
+async function refuseAlternates(paths: string[]): Promise<void> {
+  for (const path of paths) if (await access(path).then(() => true, () => false)) throw new Error("source_alternates");
+}
+
 async function buildScope(input: ScopeInput, root: string, baseGitDir: string): Promise<RunScope> {
   const { run, task } = input;
   const dirs = await makeScopeDirs(root);
   const clone = join(root, "clone");
   await mkdir(dirname(baseGitDir), { recursive: true, mode: 0o700 });
-  const git = (args: string[], cwd?: string) => execFileAsync("git", [...NO_HOOKS, ...args], { env: gitEnv(dirs.home), ...(cwd === undefined ? {} : { cwd }) });
+  const git = (args: string[], cwd?: string) => runHelper("git", [...NO_HOOKS, ...args], { env: gitEnv(dirs.home), ...(cwd === undefined ? {} : { cwd }) });
+  // No path leads from the worker's view back to the real repository (N5): objects are never shared, the pristine bare clone is made
+  // first, the worker clone is made from it, and the bare clone forgets where it came from.
+  await refuseAlternates([join(input.sourceRepoPath, ".git", "objects", "info", "alternates"), join(input.sourceRepoPath, "objects", "info", "alternates")]);
   await git(["clone", "--bare", "--no-hardlinks", "--quiet", "--", input.sourceRepoPath, baseGitDir]);
-  await git(["clone", "--no-hardlinks", "--quiet", "--", input.sourceRepoPath, clone]);
+  await refuseAlternates([join(baseGitDir, "objects", "info", "alternates")]);
+  await git(["clone", "--no-hardlinks", "--quiet", "--", baseGitDir, clone]);
+  await refuseAlternates([join(clone, ".git", "objects", "info", "alternates")]);
+  await runHelper("git", ["--git-dir", baseGitDir, "config", "--unset", "remote.origin.url"], { env: gitEnv(dirs.home) }).catch((error: { code?: unknown }) => {
+    if (error.code !== 5) throw error; // 5: the key was not set
+  });
   await git(["-c", "advice.detachedHead=false", "checkout", "--quiet", task.baseCommit], clone);
   await assertCloneSymlinks(clone);
   // The clone must not point at the real repository: a push or fetch goes to the pristine bare clone, outside the scope root.
@@ -146,7 +139,7 @@ async function buildScope(input: ScopeInput, root: string, baseGitDir: string): 
   for (const name of remotes) if (name !== "origin") await git(["remote", "remove", name], clone);
   await git(remotes.includes("origin") ? ["remote", "set-url", "origin", baseGitDir] : ["remote", "add", "origin", baseGitDir], clone);
   await appendFile(join(clone, ".git", "info", "exclude"), "\n.codegraph/\n");
-  await execFileAsync("codegraph", ["init", "-y", clone], { env: dirs.env, cwd: root });
+  await runHelper("codegraph", ["init", "-y", clone], { env: dirs.env, cwd: root });
 
   const provider = input.productionProfile.provider;
   if (typeof provider !== "string") throw new Error("profile_provider_missing");
