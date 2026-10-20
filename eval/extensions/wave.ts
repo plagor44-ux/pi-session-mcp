@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { expiresWithin } from "../../src/writer-credentials.js";
 import { parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
-import { removeTree } from "./evidence.js";
+import { WaveDirGuard, removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
@@ -15,6 +15,7 @@ import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
+import { containmentSelfTest, sandboxed } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
 import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
@@ -64,6 +65,8 @@ export interface WaveDeps {
   resolveAddresses?: ((routes: Approval["routes"]) => Promise<AuditAddresses>) | undefined;
   /** Host safety checks (`prlimit` present, Yama ptrace_scope >= 1); defaults to the real probes. */
   hostCheck?: (() => Promise<void>) | undefined;
+  /** The bubblewrap containment self-test (R46); the default runs the real one through the production command shape. */
+  containmentCheck?: ((tools: ToolPaths) => Promise<void>) | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -89,17 +92,18 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   });
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
-  await assertWaveDirOutsideSources(input.waveDir, Object.values(config.workspaces));
+  // Broad on purpose: no configured workspace, and not the evaluation repository itself, may contain the wave directory or sit inside it.
+  await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), input.repoRoot ?? process.cwd()]);
+  await (deps.containmentCheck ?? ((t: ToolPaths) => containmentSelfTest(t)))(tools);
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   for (const run of runs) {
     const task = tasks.get(run.taskId);
     if (!task || config.workspaces[task.repo] === undefined || config.executionProfiles[run.profile] === undefined) throw new Error("run_inputs_missing");
   }
 
-  const { waveDir } = input;
   // Nothing of an earlier attempt may be overwritten or mixed in: refuse before anything starts.
   for (const run of runs) {
-    if ([join(waveDir, "runs", `${run.runId}.json`), privateRunDir(waveDir, run.runId), scopeRoot(waveDir, run.runId)].some((path) => existsSync(path))) {
+    if ([join(input.waveDir, "runs", `${run.runId}.json`), privateRunDir(input.waveDir, run.runId), scopeRoot(input.waveDir, run.runId)].some((path) => existsSync(path))) {
       throw new Error("output_exists");
     }
   }
@@ -114,6 +118,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const spawnRun = deps.spawnRun ?? ((scope: RunScope, runInput: string, log: string) => spawnTracedRunOne(tools, scope, runInput, log));
   const score = deps.scoreImplementation ?? scoreImplementation;
 
+  // Everything below works on the real path, and the wave directory, `private` and `scopes` are pinned by device and inode.
+  await mkdir(input.waveDir, { recursive: true, mode: 0o700 });
+  const waveDir = await realpath(input.waveDir);
+  const dirGuard = await WaveDirGuard.capture(waveDir);
   await mkdir(join(waveDir, "runs"), { recursive: true, mode: 0o700 });
   const ledger = await PersistedLedger.open(input.ledgerPath);
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
@@ -193,6 +201,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
       let implementation: ImplementationScore | undefined;
       if (scope && verdict.stopReason === null && terminal === "completed" && task.oracle.kind === "implementation") {
         await mkdir(oracleHome, { recursive: true, mode: 0o700 });
+        const sandboxRoot = scope.root;
         let sequence = 0;
         const oracleLogs: string[] = [];
         try {
@@ -204,7 +213,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
               // Outside the scope root, so the worker's candidate code cannot touch the log.
               const path = join(privateRun, `oracle-${sequence += 1}.strace`);
               oracleLogs.push(path);
-              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...argv];
+              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...sandboxed(tools, sandboxRoot, argv, [oracleHome])];
             },
           });
         } catch (error) {
@@ -241,8 +250,12 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
     } finally {
       // R42: nothing derived from the worker is kept. The scope, the private directory (logs, trace, pristine clone, oracle home) and
       // every file in them are removed without following links; the sanitized record written by the caller is the evidence.
-      await removeTree(privateRun).catch((error: unknown) => { finalizeError ??= error; });
-      if (scope) await removeTree(scope.root).catch((error: unknown) => { finalizeError ??= error; });
+      try {
+        // Every ancestor must still be the directory pinned at the start; otherwise nothing is removed.
+        await dirGuard.assertIntact();
+        await removeTree(privateRun);
+        if (scope) await removeTree(scope.root);
+      } catch (error) { finalizeError ??= error; }
     }
     if (finalizeError !== undefined && record !== undefined) {
       record = { ...record, outcome: "stopped", accepted: null, stopReason: "harness_failure", harnessError: failureCode(finalizeError) };
@@ -271,7 +284,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
       continue;
     }
     let record: RunRecord;
-    try { record = await execute(run, task, config); } catch (error) { record = failedRun(run, failureCode(error)); }
+    try {
+      await dirGuard.assertIntact();
+      record = await execute(run, task, config);
+    } catch (error) { record = failedRun(run, failureCode(error)); }
     stopReason = record.stopReason;
     await persist(record);
   }

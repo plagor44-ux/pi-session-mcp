@@ -2,16 +2,17 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expiresWithin } from "../../src/writer-credentials.js";
 import { parseProductionConfig, type Approval } from "./approval.js";
 import { readVerifiedOutput } from "./audit.js";
 import { fixedCode } from "./classify.js";
-import { removeTree } from "./evidence.js";
+import { WaveDirGuard, removeTree } from "./evidence.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
 import { routeAddresses } from "./network.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
+import { containmentSelfTest } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
 import { assertWaveDirOutsideSources, resolveTools, type ToolPaths } from "./tools.js";
@@ -39,6 +40,8 @@ export interface PreflightInput {
   productionConfig: unknown;
   signal?: AbortSignal | undefined;
   timeoutMs?: number | undefined;
+  /** Root of the evaluation repository; a wave directory inside it is refused like one inside a workspace. */
+  repoRoot?: string | undefined;
 }
 
 export interface PreflightDeps {
@@ -48,6 +51,7 @@ export interface PreflightDeps {
   /** Resolves the route's endpoint; a failure fails that route (`provider_host_unresolvable`). */
   checkRoute?: ((route: { provider: string; model: string }) => Promise<unknown>) | undefined;
   hostCheck?: (() => Promise<void>) | undefined;
+  containmentCheck?: ((tools: ToolPaths) => Promise<void>) | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -71,11 +75,15 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   const config = parseProductionConfig(input.productionConfig);
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
-  await assertWaveDirOutsideSources(input.waveDir, Object.values(config.workspaces));
+  await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), input.repoRoot ?? process.cwd()]);
+  await (deps.containmentCheck ?? ((t: ToolPaths) => containmentSelfTest(t)))(tools);
   const names = input.approval.routes.map((route) => `preflight-${route.profile}`);
   if ([join(input.waveDir, "preflight.json"), ...names.flatMap((name) => [scopeRoot(input.waveDir, name), privateRunDir(input.waveDir, name)])].some((path) => existsSync(path))) {
     throw new Error("output_exists");
   }
+  await mkdir(input.waveDir, { recursive: true, mode: 0o700 });
+  const waveDir = await realpath(input.waveDir);
+  const dirGuard = await WaveDirGuard.capture(waveDir);
   const ledger = await PersistedLedger.open(input.ledgerPath);
   const results: PreflightRoute[] = [];
   const timeoutMs = input.timeoutMs ?? PREFLIGHT_TIMEOUT_MS;
@@ -90,13 +98,13 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     if (expiresWithin(input.hostAuth, [route.provider], CREDENTIAL_MARGIN_MINUTES, now())) { fail("credential_expiring"); continue; }
     try { await (deps.checkRoute ?? routeAddresses)(route); } catch (error) { fail(fixedCode(error instanceof Error ? error.message : "") ?? "provider_host_unresolvable"); continue; }
     const name = `preflight-${route.profile}`;
-    const privateRun = privateRunDir(input.waveDir, name);
+    const privateRun = privateRunDir(waveDir, name);
     const key = randomBytes(RUN_KEY_BYTES);
     let scope: RunScope | undefined;
     let executed = false;
     let charged = false;
     try {
-      scope = await prepareEmptyScope({ waveDir: input.waveDir, name, profile: route.profile, hostAuth: input.hostAuth, productionProfile: profile, skillCatalog: config.skillCatalog });
+      scope = await prepareEmptyScope({ waveDir, name, profile: route.profile, hostAuth: input.hostAuth, productionProfile: profile, skillCatalog: config.skillCatalog });
       const runOneInput: RunOneInput = {
         runId: name, configPath: scope.configPath, workspaceAlias: "clone", profile: route.profile, promptText: PONG_PROMPT,
         turnTimeoutMs: Math.max(1_000, timeoutMs - 30_000), privateDir: scope.privateDir,
@@ -135,9 +143,17 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     } finally {
       // A throw after the spawn still charges the estimate (R41) unless the cost was already recorded.
       if (executed && !charged) await ledger.recordEstimate(name, route.profile).catch(() => undefined);
-      // R42: nothing derived from the worker is kept.
-      await removeTree(privateRun).catch(() => undefined);
-      if (scope) await removeTree(scope.root).catch(() => undefined);
+      // R42: nothing derived from the worker is kept. A removal that fails (or an ancestor that was swapped) is not swallowed:
+      // the route fails with `cleanup_failure`, which leaves `preflight.json` failing.
+      try {
+        await dirGuard.assertIntact();
+        await removeTree(privateRun);
+        if (scope) await removeTree(scope.root);
+      } catch (error) {
+        const failure = { profile: route.profile, ok: false, terminal: null, costUsd: null, failure: error instanceof Error && error.message === "wave_dir_tampered" ? "wave_dir_tampered" : "cleanup_failure" };
+        const at = results.findIndex((r) => r.profile === route.profile);
+        if (at >= 0) results[at] = failure; else results.push(failure);
+      }
     }
   }
   await ledger.save();
@@ -146,8 +162,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     binding: { sourceCommit: input.approval.sourceCommit, tasksDigest: input.approval.tasksDigest, matrixDigest: input.approval.matrixDigest },
     routes: results, spentUsd: ledger.ledger.spentUsd,
   };
-  await mkdir(input.waveDir, { recursive: true, mode: 0o700 });
-  await writeFile(join(input.waveDir, "preflight.json"), `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(join(waveDir, "preflight.json"), `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
   return { routes: results, spentUsd: ledger.ledger.spentUsd };
 }
 

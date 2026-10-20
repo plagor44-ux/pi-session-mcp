@@ -1221,4 +1221,57 @@ describe("Unix socket connects (R43)", () => {
   it("without a configured root only the built-in allowlist applies", () => {
     expect(parseStraceLog(lines(unix("\"/scope/clone/.sock\"")), ctx({})).unresolvedEgress).toBe(1);
   });
+
+  const sendto = (path: string, ret = "1") => `100 sendto(3<socket:[2]>, "x", 1, 0, {sa_family=AF_UNIX, sun_path=${path}}, 33) = ${ret}`;
+  const sendmsg = (path: string, ret = "1") =>
+    `100 sendmsg(3<socket:[2]>, {msg_name={sa_family=AF_UNIX, sun_path=${path}}, msg_namelen=29, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = ${ret}`;
+
+  it("judges AF_UNIX datagram destinations of sendto, sendmsg and sendmmsg like connects (R46 consistency)", () => {
+    expect(egress(sendto("\"/run/user/1000/systemd/notify\""))).toBe(1);
+    expect(egress(sendmsg("\"/run/systemd/journal/socket\""))).toBe(1);
+    expect(egress(`100 sendmmsg(3<socket:[2]>, [{msg_hdr={msg_name={sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, msg_namelen=21, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, msg_len=1}], 1, 0) = 1`)).toBe(1);
+    expect(egress(sendto("@\"abstract\""))).toBe(1);
+    expect(egress(sendmsg("@\"abstract\""))).toBe(1);
+  });
+
+  it("allows datagram sends to the allowlist and the scope root, and ignores failed sends", () => {
+    expect(egress(sendto("\"/run/systemd/resolve/io.systemd.Resolve\""))).toBe(0);
+    expect(egress(sendmsg("\"/scope/clone/.sock\""))).toBe(0);
+    expect(egress(sendto("\"/run/user/1000/systemd/notify\"", "-1 ENOENT (No such file or directory)"))).toBe(0);
+    expect(egress(sendmsg("\"/run/user/1000/bus\"", "-1 ECONNREFUSED (Connection refused)"))).toBe(0);
+  });
+});
+
+describe("bubblewrap setup (R46)", () => {
+  // A real capture of `prlimit … strace … bwrap … -- node -e <write a file in the scope>`.
+  const capture = () => readFile(fileURLToPath(new URL("./fixtures/extension-ablation/bwrap-sandboxed.strace", import.meta.url)), "utf8");
+  const context = (extra: Partial<TraceContext> = {}): TraceContext => ({ ...ctx({ initialCwd: "/scope", allowed: ["/scope"] }), rootPid: 0, allowedSocketRoots: ["/scope"], ...extra });
+
+  it("judges only the workload: bwrap's namespace setup, mounts and newroot writes are not findings", async () => {
+    const text = await capture();
+    const rootPid = Number(/^(\d+)/.exec(text)![1]);
+    const plain = parseStraceLog(text, context({ rootPid }));
+    expect(plain.outsideWrites.length).toBeGreaterThan(0);
+    const sandboxed = parseStraceLog(text, context({ rootPid, sandboxed: true }));
+    expect(sandboxed).toMatchObject({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unresolvedEgress: 0 });
+  });
+
+  it("still judges the workload's own writes, sockets and relative paths", async () => {
+    const text = await capture();
+    const rootPid = Number(/^(\d+)/.exec(text)![1]);
+    const workload = Number([...text.matchAll(/^(\d+) clone\(child_stack=NULL, flags=CLONE_CHILD_CLEARTID[^\n]*= \d+$/gm)].at(-1)![0].split(" ")[0]) + 1;
+    const extra = [
+      `${workload} openat(AT_FDCWD</scope>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>`,
+      `${workload} connect(3<socket:[1]>, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 21) = 0`,
+    ].join("\n");
+    const f = parseStraceLog(`${text}${extra}\n`, context({ rootPid, sandboxed: true }));
+    expect(f.outsideWrites).toEqual(["/home/u/x"]);
+    expect(f.unresolvedEgress).toBe(1);
+  });
+
+  it("does not mute anything without the flag, and mutes mounts of the root pid only when sandboxed", () => {
+    const log = lines("100 mount(\"none\", \"/\", NULL, MS_REC|MS_PRIVATE, NULL) = 0", "100 openat(AT_FDCWD</scope>, \"newroot\", O_WRONLY|O_CREAT, 0644) = 3</newroot>");
+    expect(parseStraceLog(log, context({ rootPid: 100 })).unresolvedWrites).toBeGreaterThan(0);
+    expect(parseStraceLog(log, context({ rootPid: 100, sandboxed: true }))).toMatchObject({ unresolvedWrites: 0, outsideWrites: [] });
+  });
 });

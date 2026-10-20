@@ -1,8 +1,8 @@
 import { access, constants, realpath } from "node:fs/promises";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 
-export interface ToolPaths { strace: string; prlimit: string; git: string; codegraph: string }
-export const TOOL_NAMES = ["strace", "prlimit", "git", "codegraph"] as const;
+export interface ToolPaths { strace: string; prlimit: string; git: string; codegraph: string; bwrap: string }
+export const TOOL_NAMES = ["strace", "prlimit", "git", "codegraph", "bwrap"] as const;
 
 /** First executable named `name` on `pathEnv`; the result is absolute. Throws `<name>_missing`. */
 export async function resolveTool(name: string, pathEnv: string, executable: (path: string) => Promise<boolean> = isExecutable): Promise<string> {
@@ -33,7 +33,7 @@ async function canonical(path: string): Promise<string> {
     try { return join(await realpath(current), ...rest.reverse()); } catch {
       const parent = resolve(current, "..");
       if (parent === current) return resolve(path);
-      rest.push(current.slice(parent.length + 1));
+      rest.push(basename(current));
       current = parent;
     }
   }

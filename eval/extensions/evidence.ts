@@ -1,4 +1,5 @@
-import { lstat, rm, unlink } from "node:fs/promises";
+import { lstat, mkdir, rm, unlink } from "node:fs/promises";
+import { join } from "node:path";
 
 /*
  * R42: nothing derived from a worker is kept. The only surviving evidence of an attempt is the sanitized `runs/<runId>.json`
@@ -20,4 +21,33 @@ export async function removeTree(path: string): Promise<void> {
   }
   if (!info.isDirectory()) { await unlink(path); return; }
   await rm(path, { recursive: true, force: true });
+}
+
+/**
+ * `removeTree` only `lstat`s the last component, so a worker that swaps an intermediate directory (`private`, `scopes`) for a symlink
+ * could redirect a later removal. The guard records the device and inode of the wave directory and its `private` and `scopes`
+ * directories at the start and requires all three to be unchanged real directories before every creation or removal below them.
+ */
+export class WaveDirGuard {
+  private constructor(private readonly entries: { path: string; dev: number; ino: number }[]) {}
+
+  static async capture(waveDir: string): Promise<WaveDirGuard> {
+    const entries: { path: string; dev: number; ino: number }[] = [];
+    for (const path of [waveDir, join(waveDir, "private"), join(waveDir, "scopes")]) {
+      await mkdir(path, { recursive: true, mode: 0o700 });
+      const info = await lstat(path);
+      if (!info.isDirectory()) throw new Error("wave_dir_tampered");
+      entries.push({ path, dev: info.dev, ino: info.ino });
+    }
+    return new WaveDirGuard(entries);
+  }
+
+  /** Throws `wave_dir_tampered` unless every recorded path is still the same real directory. */
+  async assertIntact(): Promise<void> {
+    for (const entry of this.entries) {
+      let info;
+      try { info = await lstat(entry.path); } catch { throw new Error("wave_dir_tampered"); }
+      if (!info.isDirectory() || info.dev !== entry.dev || info.ino !== entry.ino) throw new Error("wave_dir_tampered");
+    }
+  }
 }
