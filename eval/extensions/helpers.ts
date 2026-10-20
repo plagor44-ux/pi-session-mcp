@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 
 export interface HelperResult { stdout: string; stderr: string }
-export interface HelperFailure extends Error { code: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
 export type HelperRunner = (file: string, args: readonly string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxBuffer?: number }) => Promise<HelperResult>;
 
 /**

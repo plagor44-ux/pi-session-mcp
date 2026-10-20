@@ -19,7 +19,7 @@ import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGro
 import { assertWaveDirOutsideSources, resolveTools, type ToolPaths } from "./tools.js";
 import { prepareEmptyScope, privateRunDir, scopeRoot, type RunScope } from "./workspace.js";
 
-export const PONG_PROMPT = "Reply with exactly: PONG";
+const PONG_PROMPT = "Reply with exactly: PONG";
 const PREFLIGHT_TIMEOUT_MS = 3 * 60_000;
 const CREDENTIAL_MARGIN_MINUTES = 20;
 
@@ -87,7 +87,10 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   await mkdir(input.waveDir, { recursive: true, mode: 0o700 });
   const waveDir = await realpath(input.waveDir);
   const dirGuard = await WaveDirGuard.capture(waveDir);
-  const ledger = await PersistedLedger.open(input.ledgerPath);
+  // The ledger is the evaluation's one budget: it must exist and be the approval's (R55), and this process holds it exclusively.
+  const ledger = await PersistedLedger.openExisting(input.ledgerPath, input.approval.ledgerId);
+  await ledger.lock();
+  try {
   const results: PreflightRoute[] = [];
   const timeoutMs = input.timeoutMs ?? PREFLIGHT_TIMEOUT_MS;
   for (const route of input.approval.routes) {
@@ -127,16 +130,20 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       if (supervised.timedOut || supervised.interrupted) { /* not believed; the stop is the timeout or the interrupt */ }
       else if (verified.present && !exitedCleanly(supervised)) tampered = true;
       else ({ output, tampered } = verified);
-      const cost = output?.usage.session?.costUsd ?? null;
+      // Preflight costs are spend only (R54): they count toward the budget but never move the per-profile estimate. A real cost is
+      // never lost: without a session total the assistant usage sum stands in, and without a trusted output the estimate is charged.
+      const session = output?.usage.session ?? null;
+      const assistantCost = output !== null && isValidCost(output.usage.assistant.costUsd) ? output.usage.assistant.costUsd : 0;
+      const cost = session !== null && isValidCost(session.costUsd) ? session.costUsd : output !== null ? assistantCost : null;
       charged = true;
-      if (output !== null && isValidCost(cost)) await ledger.record(name, route.profile, cost);
-      else await ledger.recordEstimate(name, route.profile);
-      const ok = output !== null && output.terminal === "completed" && output.harnessError === null && output.sessionsLeft === 0 && clean && !supervised.timedOut && !supervised.interrupted;
-      if (ok) results.push({ profile: route.profile, ok: true, terminal: output?.terminal ?? null, costUsd: cost, failure: null });
+      await ledger.recordPreflight(name, route.profile, cost);
+      const answered = output !== null && output.terminal === "completed" && output.harnessError === null && output.sessionsLeft === 0 && clean && !supervised.timedOut && !supervised.interrupted;
+      // A completed PONG without a session total proves the cost-of-record path does not work for this route (I3).
+      if (answered && session !== null) results.push({ profile: route.profile, ok: true, terminal: output?.terminal ?? null, costUsd: cost, failure: null });
       else {
         fail(
           tampered ? "output_integrity" : supervised.interrupted ? "interrupted" : supervised.timedOut ? "timeout" : !clean ? "cleanup_failure"
-            : output === null ? "run_output_missing"
+            : output === null ? "run_output_missing" : answered ? "usage_missing"
               : fixedCode(output.harnessError ?? output.usage.providerError ?? output.startErrorCode ?? output.terminal, "route_failed")!,
           output?.terminal ?? null, cost,
         );
@@ -145,7 +152,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       if (!results.some((r) => r.profile === route.profile)) fail("preflight_step_failed");
     } finally {
       // A throw after the spawn still charges the estimate (R41) unless the cost was already recorded.
-      if (executed && !charged) await ledger.recordEstimate(name, route.profile).catch(() => undefined);
+      if (executed && !charged) await ledger.recordPreflight(name, route.profile, null).catch(() => undefined);
       // R42: nothing derived from the worker is kept. A removal that fails (or an ancestor that was swapped) is not swallowed:
       // the route fails with `cleanup_failure`, which leaves `preflight.json` failing.
       try {
@@ -167,6 +174,9 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   };
   await writeFile(join(waveDir, "preflight.json"), `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
   return { routes: results, spentUsd: ledger.ledger.spentUsd };
+  } finally {
+    await ledger.release();
+  }
 }
 
 /**
@@ -187,6 +197,6 @@ export async function assertPreflightPassed(preflightDir: string, approval: Appr
   }
   const passed = new Set(file.routes.filter((route) => route.ok).map((route) => route.profile));
   if (approval.routes.some((route) => !passed.has(route.profile))) throw new Error("preflight_failed");
-  const ledger = await PersistedLedger.open(ledgerPath);
+  const ledger = await PersistedLedger.openExisting(ledgerPath, approval.ledgerId);
   if (ledger.id !== file.ledgerId || approval.routes.some((route) => !ledger.hasEntry(`preflight-${route.profile}`))) throw new Error("ledger_mismatch");
 }

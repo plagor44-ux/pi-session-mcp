@@ -4,7 +4,7 @@ import { hashSchema, relativePathSchema } from "../profiles/schemas.js";
 
 export const profileIdSchema = z.enum(["review-grok", "review", "code", "code-deepseek"]);
 export type ProfileId = z.infer<typeof profileIdSchema>;
-export const extensionIdSchema = z.enum(["pi-lens", "pi-cache-optimizer"]);
+const extensionIdSchema = z.enum(["pi-lens", "pi-cache-optimizer"]);
 export type ExtensionId = z.infer<typeof extensionIdSchema>;
 export const armSchema = z.union([z.literal("A"), extensionIdSchema]);
 export type Arm = z.infer<typeof armSchema>;
@@ -26,22 +26,24 @@ const anchorFileSchema = relativePathSchema
   }, { message: "anchor_file_path_token" });
 export const anchorSchema = z.object({ file: anchorFileSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
 export type Anchor = z.infer<typeof anchorSchema>;
-export const reviewOracleSchema = z.object({
+const reviewOracleSchema = z.object({
   kind: z.literal("review"),
   findings: z.array(z.object({ id: z.string().min(1), critical: z.boolean(), anchors: z.array(anchorSchema).min(1) }).strict()),
   falseFindings: z.array(z.object({ id: z.string().min(1), anchors: z.array(anchorSchema).min(1) }).strict()),
 }).strict();
 export type ReviewOracle = z.infer<typeof reviewOracleSchema>;
-export const implementationOracleSchema = z.object({
+/** The decisive command and its setup share this deadline; it is capped so an oracle cannot outlast a run by hours. */
+const MAX_ORACLE_TIMEOUT_MS = 10 * 60_000;
+const implementationOracleSchema = z.object({
   kind: z.literal("implementation"),
-  command: z.array(z.string().min(1)).min(1), timeoutMs: z.number().int().positive(),
+  command: z.array(z.string().min(1)).min(1), timeoutMs: z.number().int().positive().max(MAX_ORACLE_TIMEOUT_MS),
   setup: z.array(z.array(z.string().min(1)).min(1)).optional(),
 }).strict();
 export type ImplementationOracle = z.infer<typeof implementationOracleSchema>;
-export const oracleSchema = z.discriminatedUnion("kind", [reviewOracleSchema, implementationOracleSchema]);
+const oracleSchema = z.discriminatedUnion("kind", [reviewOracleSchema, implementationOracleSchema]);
 
 /** A repo-relative directory prefix such as `dist/`: trailing slash, no leading slash, no `..` segment, no glob characters. */
-export const scopeIgnoreEntrySchema = z.string().min(1).refine((p) =>
+const scopeIgnoreEntrySchema = z.string().min(1).refine((p) =>
   p.endsWith("/") && !p.startsWith("/") && !p.split("/").includes("..") && !/[*?[\]{}]/.test(p), { message: "scope_ignore_prefix_invalid" });
 
 export const taskSpecSchema = z.object({

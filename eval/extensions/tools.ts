@@ -1,4 +1,5 @@
 import { access, constants, realpath } from "node:fs/promises";
+import { userInfo } from "node:os";
 import { basename, delimiter, isAbsolute, join, resolve } from "node:path";
 
 export interface ToolPaths { strace: string; prlimit: string; git: string; codegraph: string; bwrap: string }
@@ -49,3 +50,6 @@ export async function assertWaveDirOutsideSources(waveDir: string, sources: Iter
     if (within(wave, repo) || within(repo, wave)) throw new Error("wave_dir_in_source");
   }
 }
+
+/** The operator's real home from the account database, not from `$HOME`, which a caller's environment could point elsewhere. */
+export const realHome = (): string => userInfo().homedir;

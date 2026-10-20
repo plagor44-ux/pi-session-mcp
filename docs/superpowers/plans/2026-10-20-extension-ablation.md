@@ -387,37 +387,42 @@ it("refuses evidence that leaks private data", async () => { /* a run JSON conta
 
 ### Task 9: Extension template and provider-free dry load (operator gate: network for npm only)
 
+Paths below use `$EVAL` for the evaluation's working directory, which lies **outside the repository and outside every configured workspace** (the CLI refuses a wave directory inside either): `EVAL=~/.cache/pi-session-mcp/extension-ablation/<date>`. Prompts stay under `eval/results/extension-ablation-<date>/prompts/` because task files may only name prompts there; `eval/results/` is ignored by git.
+
 **Files:**
 - Create: `docs/evaluation/extension-ablation-2026-10-20/setup.md`
 
-- [ ] **Step 1: Install the template**, outside the repository, under `eval/results/extension-ablation-<date>/template/npm`: `npm install --prefix <template>/npm --ignore-scripts --no-audit --no-fund --save-exact pi-lens@4.4.3 pi-cache-optimizer@2.9.3`. Record the resolved top-level versions and the lockfile hash in `setup.md`. This is the only network operation outside the wave.
-- [ ] **Step 2: Run** `npm run eval:extensions -- --dry-load --tasks <tasks.json>`. Per arm B profile, this creates a session through `createCapturingAdapter` with a fixture model runtime (as in `docs/evaluation/pi-lens-registration-2026-10-19/probe.mjs`): no prompt and no provider. It records the active tool names, confirms every granted tool is active on the review profiles and lists any files created inside a scratch clone.
+- [ ] **Step 1: Install the template** under `$EVAL/template/npm`: `npm install --prefix $EVAL/template/npm --ignore-scripts --no-audit --no-fund --save-exact pi-lens@4.4.3 pi-cache-optimizer@2.9.3`. Record the resolved top-level versions and the lockfile hash in `setup.md`. This is the only network operation outside the wave.
+- [ ] **Step 2: Run** `npm run eval:extensions -- --dry-load --tasks <tasks.json> --template $EVAL/template --out $EVAL/dry-load`. (`--out` must not exist; the repository must be clean, as for `--plan`.) Per arm B profile, this creates a session in the same bubblewrap and strace shape as a run, with a fixture model runtime: no prompt and no provider. It records the active tool names, confirms every granted tool is active on the review profiles and lists any files created inside a scratch clone. It fails on any outbound connect.
 - [ ] **Step 3: Verify** `extension_tool_missing` did not occur, and record the active tool lists and any clone-local paths in `setup.md`. Every clone-local path the extension created goes into each task's `scopeIgnore` before approval.
 - [ ] **Step 4: Commit** `docs: record the extension ablation setup and dry load`.
 
 ### Task 10: Curate 6–8 tasks with verified oracles
 
 **Files:**
-- Create: `docs/evaluation/extension-ablation-2026-10-20/tasks.json` (tracked: ids, repo alias, base commit, prompt hash, source session id, allowed paths, scope ignore, oracle), `eval/results/extension-ablation-<date>/prompts/*.txt` (untracked)
+- Create: `docs/evaluation/extension-ablation-2026-10-20/tasks.json` (tracked: ids, repo alias, base commit, prompt hash, source session id, allowed paths, scope ignore, oracle; an oracle's `timeoutMs` is at most 10 minutes), `eval/results/extension-ablation-<date>/prompts/*.txt` (untracked)
 
-- [ ] **Step 1: Run** `npm run eval:extensions -- --scan --out eval/results/extension-ablation-<date>/candidates.json`. Pick 3–4 review and 3–4 implementation candidates whose original outcome is unambiguous. Reviews: the known findings come from later rounds in the same transcript. Implementations: decisive tests exist at the original solution commit.
+- [ ] **Step 1: Run** `npm run eval:extensions -- --scan --transcripts <dir of Claude Code JSONL files> --out eval/results/extension-ablation-<date>/candidates.json`. Pick 3–4 review and 3–4 implementation candidates whose original outcome is unambiguous. Reviews: the known findings come from later rounds in the same transcript. Implementations: decisive tests exist at the original solution commit.
 - [ ] **Step 2: Check each implementation oracle against history:** at `baseCommit` the decisive command fails; at the original solution commit it passes and the scope check passes. A task that fails either check is dropped.
 - [ ] **Step 3: Check each review oracle against history:** anchors are written from the later-round findings before any live run. Scoring the original first-round review text must reproduce what the transcript shows (accepted or not). Drop any task where that needs judgment.
 - [ ] **Step 4: Check the replay constraints:** the original first prompt is copied verbatim except for repo path rewrites; the base commit is the commit before the original solution; the repository is one the recorded session already sent to the same provider.
-- [ ] **Step 5: Run** `npm run eval:extensions -- --plan --tasks docs/evaluation/extension-ablation-2026-10-20/tasks.json`. Record the matrix size and the USD projection (initial estimate) in the README draft.
+- [ ] **Step 5: Create the ledger and see the matrix:** `npm run eval:extensions -- --plan --tasks docs/evaluation/extension-ablation-2026-10-20/tasks.json --ledger $EVAL/ledger.json`. The first `--plan --ledger <new path>` creates the evaluation's one budget ledger (this is the only command that may create it); its random id goes into the approval template. Record the matrix size and the USD projection (initial estimate) in the README draft.
 - [ ] **Step 6: Commit** `docs: pre-register the extension ablation tasks and oracles`.
 
 ### Task 11: Approval, preflight, calibration and wave (operator gate: live spend)
 
-**Files:**
-- Create: `docs/evaluation/extension-ablation-2026-10-20/approval.json`, `…/runs/*.json`, `…/summary.json`, `…/integrity.json`
+One ledger (`$EVAL/ledger.json`) carries all spend of the evaluation: preflights, every wave and every re-approval. Preflight costs count toward the budget but never raise the per-run estimate. The CLI needs `--ledger`, `--out` (and `--template` for a wave) in every live step, a clean repository (also: no untracked file under a bound path), `prlimit`, `strace` and `bwrap` on the PATH and Yama `ptrace_scope >= 1`.
 
-- [ ] **Step 1: Write the approval template** from `--plan` and ask the operator to approve it (`approved: true`, `approvedAt`, budget USD 10). Bindings: source commit, tasks digest, matrix digest and routes. Nothing live runs before this.
-- [ ] **Step 2: Run** `npm run eval:extensions -- --preflight --approval … --tasks …`. Expected: one PONG per route. A failing route (for example `xai` with an emptied refresh token, which failed in the v0.10.0 acceptance) is reported. Its pairings are removed, which means a new approval.
-- [ ] **Step 3: Run the wave:** `npm run eval:extensions -- --wave --approval … --tasks … --out eval/results/extension-ablation-<date>/wave-1`. Calibration is the first task pair of `pl-code-deepseek`. After it, `--plan` with the ledger re-projects; if the projection exceeds the remaining budget, `trimMatrix` output becomes the new approval. Only the priority order and the 3-task floor decide what gets cut.
-- [ ] **Step 4: On any stop**, keep every attempt. Do not retry within the approval; report the stop reason.
-- [ ] **Step 5: Run** `npm run eval:extensions -- --report eval/results/extension-ablation-<date>/wave-1` to write the tracked evidence (`writeEvidence`).
-- [ ] **Step 6: Commit** `docs: record the extension ablation wave`.
+**Files:**
+- Create: `docs/evaluation/extension-ablation-2026-10-20/approval.json` (and further approvals if the run list changes), `docs/evaluation/extension-ablation-2026-10-20/evidence/` (written by `--report`)
+
+- [ ] **Step 1: Write the approval** from `--plan --tasks … --ledger $EVAL/ledger.json` (add `--trim` if the projection exceeds the budget; `--pairings a,b` selects pairings). The template carries the explicit, ordered run list, the ledger id, the routes and the bindings (source commit, tasks digest, matrix digest over the run list). Ask the operator to approve it (`approved: true`, `approvedAt`, budget USD 10). Nothing live runs before this. Wave and preflight run exactly the approved list and never recompute it.
+- [ ] **Step 2: Run** `npm run eval:extensions -- --preflight --approval … --tasks … --out $EVAL/wave-1 --ledger $EVAL/ledger.json`. Expected: one PONG per route. A route fails on any terminal other than `completed`, and also when a completed PONG has no session cost (`usage_missing`), which would mean cost accounting does not work for that route. A failing route (for example `xai` with an emptied refresh token, which failed in the v0.10.0 acceptance) is reported. Its pairings are removed from the plan, which means a new approval.
+- [ ] **Step 3: Calibrate:** `npm run eval:extensions -- --wave --approval … --tasks … --template $EVAL/template --out $EVAL/wave-1 --ledger $EVAL/ledger.json --max-runs 2`. The first two runs of the approved list are the first task pair of `pl-code-deepseek`. The wave pauses cleanly after them (`paused: true`, `status.json`, no `not_run` records).
+- [ ] **Step 4: Re-project:** `npm run eval:extensions -- --plan --tasks … --ledger $EVAL/ledger.json --trim` shows the projection from the observed costs. If the run list is unchanged, continue the same wave: `… --wave … --out $EVAL/wave-1 --resume` (same approval, same ledger; the guarded files are checked against the baseline recorded when the wave started). If trimming changes the run list, write a new approval from that plan and start a **fresh** wave in a new `--out` (`$EVAL/wave-2`) with a fresh preflight there; a paused wave cannot be resumed under a different approval. Only the priority order and the 3-task floor decide what gets cut.
+- [ ] **Step 5: On any stop** (`status.json` says `stopped`), keep every attempt. Do not retry within the approval and do not resume (`wave_stopped`); report the stop reason. A new approval and a new `--out` are the only way on.
+- [ ] **Step 6: Write the evidence:** `npm run eval:extensions -- --report --wave $EVAL/wave-1 [--wave $EVAL/wave-2] --ledger $EVAL/ledger.json --evidence docs/evaluation/extension-ablation-2026-10-20/evidence`. `--wave` may be given more than once; their records are merged and a run id in two waves is refused. Each wave directory's `approval.json` is copied, and the evidence is refused (`approval_source_mismatch`) unless the bound code at report time equals the code the wave ran.
+- [ ] **Step 7: Commit** `docs: record the extension ablation wave`.
 
 ### Task 12: Write up and open the PR
 
@@ -425,6 +430,6 @@ it("refuses evidence that leaks private data", async () => { /* a run JSON conta
 - Create: `docs/evaluation/extension-ablation-2026-10-20/README.md`
 - Modify: `docs/evaluation/README.md` (index entry)
 
-- [ ] **Step 1: Write the README.** It covers: method, routes, task list (hashes only), every attempt with its outcome and stop reason, and per pairing the acceptance and catalog cost side by side, the cache-read share per arm, unexpected connections and the recommendation per profile. It states plainly that one run per task and arm is indicative, not significant, and that no saving, ranking or success rate beyond the observed one is claimed.
+- [ ] **Step 1: Write the README.** It covers: method, routes, task list (hashes only), every attempt with its outcome and stop reason, and per pairing the acceptance and catalog cost side by side, the cache-read share per arm, unexpected connections (counts per pairing and arm from `summary.json`) and the recommendation per profile. It states the credential type of each route (`authType` per run: a subscription login or an API key, so quota use is recorded even though it is not priced), that one run per task and arm is indicative, not significant, and that no saving, ranking or success rate beyond the observed one is claimed. It also lists the documented limits: abstract-namespace Unix sockets stay reachable because the network namespace is shared (detected, a stop), the home directory is hidden and the root is read-only, `providerError: "other"` is a scored failure, a preflight is untraced.
 - [ ] **Step 2: Run the gate** (`npm run typecheck`, `npx tsc -p tsconfig.eval.json --noEmit`, `npm test`) and `git diff --check`. Verify `integrity.json` hashes with a one-off `sha256sum` loop.
 - [ ] **Step 3: Commit, push the branch and open one PR** naming the spec, the amendment and the evidence folder. Changing production profiles stays a separate operator decision.

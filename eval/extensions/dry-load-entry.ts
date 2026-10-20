@@ -18,7 +18,7 @@ import { createCapturingAdapter } from "./seams.js";
  * prompt. The profile's real provider and model are replaced in the config the supervisor writes (the one deviation from a run); the
  * runtime registers exactly the provider and model that config names.
  */
-export const dryLoadInputSchema = z.object({
+const dryLoadInputSchema = z.object({
   runId: z.string().regex(/^[A-Za-z0-9._-]{1,128}$/), configPath: z.string().min(1), workspaceAlias: z.literal("clone"), profile: profileIdSchema,
 }).strict();
 export type DryLoadInput = z.infer<typeof dryLoadInputSchema>;
@@ -31,7 +31,7 @@ class HarnessFailure extends Error {
 }
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-export async function dryLoadOne(input: DryLoadInput, deps: { agentDir?: string; macKey?: Uint8Array } = {}): Promise<DryLoadOutput> {
+async function dryLoadOne(input: DryLoadInput, deps: { agentDir?: string; macKey?: Uint8Array } = {}): Promise<DryLoadOutput> {
   const agentDir = deps.agentDir ?? process.env.PI_CODING_AGENT_DIR;
   if (!agentDir) throw Object.assign(new Error("agent_dir_missing"), { code: "agent_dir_missing" });
   const config = await loadConfig(input.configPath);
@@ -113,9 +113,11 @@ async function main(): Promise<void> {
 }
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
-  await main().catch((error: unknown) => {
-    const code = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "dry_load_failed";
-    process.stderr.write(JSON.stringify({ event: "dry_load_stopped", code }) + "\n");
-    process.exitCode = 1;
+  // Exit explicitly once the output is written, so a handle an extension leaves open cannot keep the process alive.
+  const code = await main().then(() => 0, (error: unknown) => {
+    const failure = error instanceof Error && "code" in error && typeof error.code === "string" ? error.code : "dry_load_failed";
+    process.stderr.write(JSON.stringify({ event: "dry_load_stopped", code: failure }) + "\n");
+    return 1;
   });
+  process.exit(code);
 }

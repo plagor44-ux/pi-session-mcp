@@ -1,11 +1,11 @@
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
-import { tmpdir, userInfo } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditLog } from "./audit.js";
 import { runHelper, type HelperRunner } from "./helpers.js";
 import type { SandboxPlan } from "./sandbox.js";
 import { tracedCommand } from "./supervise.js";
-import type { ToolPaths } from "./tools.js";
+import { realHome, type ToolPaths } from "./tools.js";
 
 const exists = (path: string): Promise<boolean> => lstat(path).then(() => true, () => false);
 
@@ -66,7 +66,7 @@ export async function containmentSelfTest(
   deps: { run?: HelperRunner; home?: string; uid?: number } = {},
 ): Promise<void> {
   const run = deps.run ?? runHelper;
-  const home = deps.home ?? userInfo().homedir;
+  const home = deps.home ?? realHome();
   const scratch = await mkdtemp(join(tmpdir(), "ablation-containment-"));
   const scope = join(scratch, "scope");
   const oracleHome = join(scratch, "oracle-home");

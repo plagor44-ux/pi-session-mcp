@@ -16,10 +16,10 @@ const EXIT_WAIT_AFTER_KILL_MS = 5_000;
 /** A hard core limit of 0 for the run unit and everything below it: a core dump of the run unit would expose its MAC key (N1). */
 export const CORE_LIMIT = "--core=0:0";
 
-/** The run unit's own command line: no inspector can open (`--disable-sigusr1`, R44). */
 /** The build the run unit loads from (`<build>/eval/extensions/run-one.js`); it lives under /tmp, which the sandbox replaces, so it is bound back read-only. */
 export const BUILD_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+/** The run unit's own command line: no inspector can open (`--disable-sigusr1`, R44). */
 const runOneArgs = (runInput: string): string[] => ["--disable-sigusr1", fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput];
 
 /**

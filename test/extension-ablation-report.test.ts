@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { classifyRun, summarizeTrace, type RunRecord } from "../eval/extensions/classify.js";
 import type { RunOutput } from "../eval/extensions/run-one.js";
 import type { TraceFindings } from "../eval/extensions/trace.js";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -112,6 +112,17 @@ function makeRepo(root: string): string {
   return repo;
 }
 
+/** The approval a wave ran under (`approval.json`), bound to the repository's current commit and to the ledger's id. */
+function writeApproval(waveDir: string, repo: string, ledgerId: string, records: SummaryRecord[], overrides: Record<string, unknown> = {}): void {
+  const runs = records.map((r, index) => ({ runId: r.runId, taskId: r.taskId, profile: r.profile, arm: r.arm, ordinal: index + 1, pairings: r.pairings }));
+  const approval = {
+    approved: true, approvedAt: "2026-10-20T00:00:00Z", budgetUsd: 10, sourceCommit: git(repo, "rev-parse", "HEAD").trim(),
+    tasksDigest: `sha256:${"a".repeat(64)}`, matrixDigest: `sha256:${"b".repeat(64)}`, ledgerId, runs,
+    routes: [{ profile: "code-deepseek", provider: "deepseek", model: "deepseek-flash", thinkingLevel: "high" }], ...overrides,
+  };
+  writeFileSync(join(waveDir, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
+}
+
 interface Wave { root: string; repo: string; waveDir: string; ledgerPath: string; evidenceDir: string; runIds: string[] }
 async function makeWave(extra: (dir: string) => void = () => undefined): Promise<Wave> {
   const root = await temporaryRoot("ablation-report-");
@@ -130,6 +141,8 @@ async function makeWave(extra: (dir: string) => void = () => undefined): Promise
   await ledger.recordEstimate(records[2]!.runId, "code-deepseek");
   await ledger.record("900-old-wave-t1-code-deepseek-A", "code-deepseek", 0.15);
   await ledger.recordEstimate("901-old-wave-t1-code-deepseek-pi-lens", "code-deepseek");
+  await ledger.save();
+  writeApproval(waveDir, repo, ledger.id, records);
   extra(waveDir);
   return { root, repo, waveDir, ledgerPath, evidenceDir: join(root, "evidence"), runIds: records.map((r) => r.runId) };
 }
@@ -152,7 +165,8 @@ describe("writeEvidence", () => {
     expect(summary.pairings.find((p) => p.id === pairing.id)?.recommendation).toBe("enable");
 
     const files = tree(wave.evidenceDir);
-    expect(files).toHaveLength(RUN_COUNT + 3);
+    expect(files).toHaveLength(RUN_COUNT + 4);
+    expect(files).toContain("approvals/approval-1.json");
     expect(files).toContain("ledger.json");
     expect(files).toContain("summary.json");
     expect(files).toContain("integrity.json");
@@ -199,6 +213,12 @@ describe("writeEvidence", () => {
 
     writeFileSync(join(wave.repo, "eval", "extensions", "x.ts"), "export const x = 2;\n");
     commitAll(wave.repo, "extensions");
+    // I6b: the wave ran the code of its approval's commit; evidence for a tree whose bound code moved on since is refused.
+    await expect(write(wave, join(wave.root, "evidence-ext"))).rejects.toThrow("approval_source_mismatch");
+    expect(existsSync(join(wave.root, "evidence-ext"))).toBe(false);
+    // The same wave under an approval of the new commit (the operator re-ran it) yields evidence bound to the new code.
+    const runs = JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).runs as { runId: string }[];
+    writeApproval(wave.waveDir, wave.repo, JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).ledgerId, runs.map((r) => ({ ...record("t1", "A", true), runId: r.runId })));
     await write(wave, join(wave.root, "evidence-ext"));
     expect(integrityOf(join(wave.root, "evidence-ext")).source_binding.digest).not.toBe(first.digest);
   });
@@ -234,7 +254,7 @@ describe("writeEvidence", () => {
       writeFileSync(join(dir, "runs", "notes.txt"), "not a record");
     });
     await write(wave);
-    expect(tree(wave.evidenceDir).filter((f) => !f.startsWith("runs/"))).toEqual(["integrity.json", "ledger.json", "summary.json"]);
+    expect(tree(wave.evidenceDir).filter((f) => !f.startsWith("runs/"))).toEqual(["approvals/approval-1.json", "integrity.json", "ledger.json", "summary.json"]);
     expect(tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT);
   });
 
@@ -314,7 +334,7 @@ describe("writeEvidence", () => {
     const stopped: RunRecord = {
       runId, taskId: "t9", profile: "code-deepseek", arm: "A", pairings: [pairing.id], outcome: "stopped", terminal: output.terminal, accepted: null,
       usage: output.usage, durationMs: output.durationMs, trace: summarizeTrace(trace), stopReason: verdict.stopReason, harnessError: verdict.harnessError,
-      assistantTextTruncated: false, assistantTextSha256: null,
+      assistantTextTruncated: false, assistantTextSha256: null, authType: null,
     };
     const wave = await makeWave((dir) => writeFileSync(join(dir, "runs", `${runId}.json`), `${JSON.stringify(stopped, null, 2)}\n`));
     const summary = await write(wave);
@@ -351,9 +371,9 @@ describe("writeEvidence", () => {
 describe("--report arguments", () => {
   const base = ["--report", "--wave", "w", "--ledger", "l.json", "--evidence", "e"];
   it("takes --wave as a value option in report mode", () => {
-    expect(parseArgs(base)).toMatchObject({ mode: "--report", options: { "--wave": "w", "--ledger": "l.json", "--evidence": "e" } });
+    expect(parseArgs(base)).toMatchObject({ mode: "--report", waves: ["w"], options: { "--ledger": "l.json", "--evidence": "e" } });
     expect(parseArgs(["--wave", "w", "--ledger", "l.json", "--evidence", "e", "--report"]).mode).toBe("--report");
-    expect(parseArgs(["--wave", "w", "--report", "--ledger", "l.json", "--evidence", "e"])).toMatchObject({ mode: "--report", options: { "--wave": "w" } });
+    expect(parseArgs(["--wave", "w", "--report", "--ledger", "l.json", "--evidence", "e"])).toMatchObject({ mode: "--report", waves: ["w"] });
   });
   it("requires its three options and rejects the others", () => {
     expect(() => parseArgs(["--report", "--ledger", "l.json", "--evidence", "e"])).toThrow("wave_required");
@@ -367,5 +387,73 @@ describe("--report arguments", () => {
   it("keeps --wave a mode elsewhere and rejects --evidence there", () => {
     expect(parseArgs(["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json"]).mode).toBe("--wave");
     expect(() => parseArgs(["--plan", "--tasks", "t.json", "--evidence", "e"])).toThrow("invalid_argument");
+  });
+});
+
+describe("several waves, approvals and unexpected connects", () => {
+  /** A second wave directory next to the first, with its own records and the same approval ledger. */
+  function secondWave(wave: Wave, taskIds: string[], ledgerId?: string): string {
+    const dir = join(wave.root, "wave-2");
+    mkdirSync(join(dir, "runs"), { recursive: true });
+    const records = taskIds.flatMap((id) => pair(id, true, true));
+    for (const r of records) writeFileSync(join(dir, "runs", `${r.runId}.json`), `${JSON.stringify({ ...r, durationMs: 5, harnessError: null })}\n`);
+    writeApproval(dir, wave.repo, ledgerId ?? JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).ledgerId, records);
+    return dir;
+  }
+
+  it("merges the records of several wave directories and copies each approval", async () => {
+    const wave = await makeWave();
+    const second = secondWave(wave, ["t4", "t5"]);
+    const summary = await writeEvidence([wave.waveDir, second], wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo });
+    expect(tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT + 4);
+    expect(tree(wave.evidenceDir).filter((f) => f.startsWith("approvals/"))).toEqual(["approvals/approval-1.json", "approvals/approval-2.json"]);
+    expect(summary.pairings.find((p) => p.id === pairing.id)?.tasks).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+  });
+
+  it("refuses a run id that two waves share, and a wave named twice", async () => {
+    const wave = await makeWave();
+    const second = join(wave.root, "wave-2");
+    mkdirSync(join(second, "runs"), { recursive: true });
+    const file = readdirSync(join(wave.waveDir, "runs"))[0]!;
+    writeFileSync(join(second, "runs", file), readFileSync(join(wave.waveDir, "runs", file)));
+    writeApproval(second, wave.repo, JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).ledgerId, [record("t9", "A", true)]);
+    await expect(writeEvidence([wave.waveDir, second], wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo })).rejects.toThrow("duplicate_run_record");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+    await expect(writeEvidence([wave.waveDir, wave.waveDir], wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo })).rejects.toThrow("wave_required");
+  });
+
+  it("refuses a wave without its approval, with an invalid one, or under another ledger", async () => {
+    const missing = await makeWave((dir) => { /* approval written afterwards */ void dir; });
+    rmSync(join(missing.waveDir, "approval.json"));
+    await expect(write(missing)).rejects.toThrow("approval_missing");
+    writeFileSync(join(missing.waveDir, "approval.json"), "{ not json");
+    await expect(write(missing)).rejects.toThrow("approval_invalid");
+    writeFileSync(join(missing.waveDir, "approval.json"), JSON.stringify({ approved: false }));
+    await expect(write(missing)).rejects.toThrow("approval_invalid");
+    const other = await makeWave();
+    writeApproval(other.waveDir, other.repo, "99999999-9999-4999-8999-999999999999", [record("t1", "A", true)]);
+    await expect(write(other)).rejects.toThrow("ledger_mismatch");
+  });
+
+  it("refuses evidence when the bound code changed since the approval's commit, and for an unknown commit", async () => {
+    const wave = await makeWave();
+    writeFileSync(join(wave.repo, "src", "a.ts"), "export const a = 2;\n");
+    commitAll(wave.repo, "src moved on");
+    await expect(write(wave)).rejects.toThrow("approval_source_mismatch");
+    const unknown = await makeWave();
+    const approval = JSON.parse(readFileSync(join(unknown.waveDir, "approval.json"), "utf8")) as Record<string, unknown>;
+    writeFileSync(join(unknown.waveDir, "approval.json"), JSON.stringify({ ...approval, sourceCommit: "f".repeat(40) }));
+    await expect(write(unknown)).rejects.toThrow("approval_source_mismatch");
+  });
+
+  it("reports the unexpected connects per pairing and arm", async () => {
+    const wave = await makeWave();
+    const first = JSON.parse(readFileSync(join(wave.waveDir, "runs", `${wave.runIds[0]}.json`), "utf8")) as { arm: string };
+    expect(first.arm).toBe("A");
+    tamper(wave, { trace: { unexpectedConnectCount: 3, unexpectedConnects: [] } });
+    const summary = await write(wave);
+    const found = summary.pairings.find((p) => p.id === pairing.id)!;
+    expect(found.a.unexpectedConnects).toBe(3);
+    expect(found.b.unexpectedConnects).toBe(0);
   });
 });
