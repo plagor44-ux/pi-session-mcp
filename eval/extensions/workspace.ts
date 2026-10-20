@@ -5,6 +5,7 @@ import { selectBoundaryCredentials, writeBoundaryCredentials } from "../../src/w
 import { hash } from "../profiles/files.js";
 import { runHelper } from "./helpers.js";
 import { PAIRINGS } from "./matrix.js";
+import type { ToolPaths } from "./tools.js";
 import type { Arm, ExtensionId, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
 
 export const EXTENSION_PINS: Readonly<Record<ExtensionId, string>> = {
@@ -36,6 +37,8 @@ export interface ScopeInput {
   productionProfile: Record<string, unknown>;
   skillCatalog?: Record<string, string> | undefined;
   pairing?: Pairing | undefined;
+  /** Absolute paths of the tools this module starts (R44). */
+  tools: Pick<ToolPaths, "git" | "codegraph">;
 }
 
 export const scopeRoot = (waveDir: string, runId: string): string => join(waveDir, "scopes", runId);
@@ -121,7 +124,7 @@ async function buildScope(input: ScopeInput, root: string, baseGitDir: string): 
   const dirs = await makeScopeDirs(root);
   const clone = join(root, "clone");
   await mkdir(dirname(baseGitDir), { recursive: true, mode: 0o700 });
-  const git = (args: string[], cwd?: string) => runHelper("git", [...NO_HOOKS, ...args], { env: gitEnv(dirs.home), ...(cwd === undefined ? {} : { cwd }) });
+  const git = (args: string[], cwd?: string) => runHelper(input.tools.git, [...NO_HOOKS, ...args], { env: gitEnv(dirs.home), ...(cwd === undefined ? {} : { cwd }) });
   // No path leads from the worker's view back to the real repository (N5): objects are never shared, the pristine bare clone is made
   // first, the worker clone is made from it, and the bare clone forgets where it came from.
   await refuseAlternates([join(input.sourceRepoPath, ".git", "objects", "info", "alternates"), join(input.sourceRepoPath, "objects", "info", "alternates")]);
@@ -129,7 +132,7 @@ async function buildScope(input: ScopeInput, root: string, baseGitDir: string): 
   await refuseAlternates([join(baseGitDir, "objects", "info", "alternates")]);
   await git(["clone", "--no-hardlinks", "--quiet", "--", baseGitDir, clone]);
   await refuseAlternates([join(clone, ".git", "objects", "info", "alternates")]);
-  await runHelper("git", ["--git-dir", baseGitDir, "config", "--unset", "remote.origin.url"], { env: gitEnv(dirs.home) }).catch((error: { code?: unknown }) => {
+  await runHelper(input.tools.git, ["--git-dir", baseGitDir, "config", "--unset", "remote.origin.url"], { env: gitEnv(dirs.home) }).catch((error: { code?: unknown }) => {
     if (error.code !== 5) throw error; // 5: the key was not set
   });
   await git(["-c", "advice.detachedHead=false", "checkout", "--quiet", task.baseCommit], clone);
@@ -139,7 +142,7 @@ async function buildScope(input: ScopeInput, root: string, baseGitDir: string): 
   for (const name of remotes) if (name !== "origin") await git(["remote", "remove", name], clone);
   await git(remotes.includes("origin") ? ["remote", "set-url", "origin", baseGitDir] : ["remote", "add", "origin", baseGitDir], clone);
   await appendFile(join(clone, ".git", "info", "exclude"), "\n.codegraph/\n");
-  await runHelper("codegraph", ["init", "-y", clone], { env: dirs.env, cwd: root });
+  await runHelper(input.tools.codegraph, ["init", "-y", clone], { env: dirs.env, cwd: root });
 
   const provider = input.productionProfile.provider;
   if (typeof provider !== "string") throw new Error("profile_provider_missing");

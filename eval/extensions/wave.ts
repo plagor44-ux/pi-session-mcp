@@ -1,13 +1,13 @@
 import { randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { expiresWithin } from "../../src/writer-credentials.js";
 import { parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
-import { boundarySecrets, collectPatch, writeEvidence } from "./evidence.js";
+import { removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
@@ -18,6 +18,7 @@ import { RUN_KEY_BYTES } from "./output-mac.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
 import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
+import { resolveTools, assertWaveDirOutsideSources, type ToolPaths } from "./tools.js";
 import { STRACE_ARGS, type TraceFindings } from "./trace.js";
 import { pairingOf, prepareRunScope, privateRunDir, renderPrompt, scopeRoot, type RunScope, type ScopeInput } from "./workspace.js";
 
@@ -57,8 +58,8 @@ export interface WaveDeps {
   guard?: (() => Promise<GuardSnapshot>) | undefined;
   residualCheck?: ((pgid: number) => Promise<boolean>) | undefined;
   scoreImplementation?: typeof scoreImplementation | undefined;
-  /** The patch of the worker's changes (R38); defaults to `git diff --binary` through the pristine git directory. */
-  collectPatch?: typeof collectPatch | undefined;
+  /** Absolute paths of strace, prlimit, git and codegraph (R44); the default resolves them once from the supervisor's PATH. */
+  resolveTools?: (() => Promise<ToolPaths>) | undefined;
   /** Provider and DNS addresses for the connect audit; the default resolves the approved routes' endpoints. */
   resolveAddresses?: ((routes: Approval["routes"]) => Promise<AuditAddresses>) | undefined;
   /** Host safety checks (`prlimit` present, Yama ptrace_scope >= 1); defaults to the real probes. */
@@ -74,7 +75,7 @@ const baseOf = (run: RunSpec): Pick<RunRecord, "runId" | "taskId" | "profile" | 
 
 const notRun = (run: RunSpec, stopReason: StopReason | null): RunRecord => ({
   ...baseOf(run), outcome: "not_run", terminal: null, accepted: null, usage: null, durationMs: null, trace: null, stopReason,
-  harnessError: null, assistantTextTruncated: null,
+  harnessError: null, assistantTextTruncated: null, assistantTextSha256: null,
 });
 
 const failedRun = (run: RunSpec, harnessError: string): RunRecord => ({ ...notRun(run, "harness_failure"), outcome: "stopped", harnessError });
@@ -87,6 +88,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
     sourceCommit: input.approval.sourceCommit, tasks: input.tasks, runs, routes: routesOf(config, runs.map((r) => r.profile)),
   });
   await (deps.hostCheck ?? assertHostSafe)();
+  const tools = await (deps.resolveTools ?? resolveTools)();
+  await assertWaveDirOutsideSources(input.waveDir, Object.values(config.workspaces));
   const tasks = new Map(input.tasks.map((t) => [t.id, t]));
   for (const run of runs) {
     const task = tasks.get(run.taskId);
@@ -108,9 +111,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
   const guard = deps.guard ?? (() => guardSnapshot(homedir()));
   const residualCheck = deps.residualCheck ?? groupIsEmpty;
   const prepareScope = deps.prepareScope ?? prepareRunScope;
-  const spawnRun = deps.spawnRun ?? spawnTracedRunOne;
+  const spawnRun = deps.spawnRun ?? ((scope: RunScope, runInput: string, log: string) => spawnTracedRunOne(tools, scope, runInput, log));
   const score = deps.scoreImplementation ?? scoreImplementation;
-  const patchOf = deps.collectPatch ?? collectPatch;
 
   await mkdir(join(waveDir, "runs"), { recursive: true, mode: 0o700 });
   const ledger = await PersistedLedger.open(input.ledgerPath);
@@ -125,12 +127,9 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
     const privateRun = privateRunDir(waveDir, run.runId);
     await mkdir(privateRun, { recursive: true, mode: 0o700 });
     const key = randomBytes(RUN_KEY_BYTES);
-    const secrets = boundarySecrets(input.hostAuth, [String(productionConfig.executionProfiles[run.profile]!.provider)]);
     let scope: RunScope | undefined;
     let output: RunOutput | null = null;
     let text: string | null = null;
-    let rawOutput: string | null = null;
-    let patch: string | null = null;
     let tampered = false;
     let trace: TraceFindings | null = null;
     let waveFailure: string | null = null;
@@ -145,7 +144,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
         const source = productionConfig.workspaces[task.repo]!;
         scope = await prepareScope({
           waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.extensionTemplate, hostAuth: input.hostAuth,
-          productionProfile: productionConfig.executionProfiles[run.profile]!, skillCatalog: productionConfig.skillCatalog, pairing: pairingOf(run),
+          productionProfile: productionConfig.executionProfiles[run.profile]!, skillCatalog: productionConfig.skillCatalog, pairing: pairingOf(run), tools,
         });
         const runOneInput: RunOneInput = {
           runId: run.runId, configPath: scope.configPath, workspaceAlias: "clone", profile: run.profile,
@@ -170,16 +169,15 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
             tampered = true;
           } else {
             ({ output, text, tampered } = verified);
-            if (output !== null) rawOutput = verified.raw;
           }
           trace = await auditLog(log, [scope.root], scope.root, addresses);
-          try { patch = await patchOf(scope.clone, scope.baseGitDir, task.baseCommit, task.scopeIgnore); } catch { waveFailure ??= "patch_failed"; }
         }
       } catch (error) { waveFailure = failureCode(error); }
       if (tampered) waveFailure ??= "output_integrity";
 
       if (executed) {
         // No trusted output (missing, forged, killed, bad exit status) or a cost the ledger would reject: the estimate stands in (R41).
+        // A trusted output whose `usage.session` is null means the SDK stats report nothing billed: recorded as null, not charged.
         const cost = output?.usage.session?.costUsd ?? null;
         if (output !== null && isValidCost(cost)) await ledger.record(run.runId, run.profile, cost);
         else {
@@ -206,7 +204,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
               // Outside the scope root, so the worker's candidate code cannot touch the log.
               const path = join(privateRun, `oracle-${sequence += 1}.strace`);
               oracleLogs.push(path);
-              return ["strace", ...STRACE_ARGS, "-o", path, "--", ...argv];
+              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...argv];
             },
           });
         } catch (error) {
@@ -226,7 +224,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
       const base = {
         ...baseOf(run), terminal, usage: output?.usage ?? null, durationMs: output?.durationMs ?? null,
         trace: trace ? summarizeTrace(trace) : null, harnessError: verdict.harnessError,
-        assistantTextTruncated: output?.assistantTextTruncated ?? null,
+        assistantTextTruncated: output?.assistantTextTruncated ?? null, assistantTextSha256: output?.assistantTextSha256 ?? null,
       };
       if (verdict.stopReason !== null) {
         record = { ...base, outcome: "stopped", accepted: null, stopReason: verdict.stopReason };
@@ -237,26 +235,14 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<{ 
         record = { ...base, outcome: "scored", accepted: review.accepted && text !== null && text !== "", review, stopReason: null };
       } else {
         const result = implementation ?? { accepted: false, testsPassed: false, outOfScope: [] };
-        record = { ...base, outcome: "scored", accepted: result.accepted, implementation: result, stopReason: null };
+        // The out-of-scope paths are worker-controlled strings; only their number reaches the record.
+        record = { ...base, outcome: "scored", accepted: result.accepted, implementation: { accepted: result.accepted, testsPassed: result.testsPassed, outOfScopeCount: result.outOfScope.length }, stopReason: null };
       }
     } finally {
-      // Never keep a whole scope (R38): an allowlist of evidence is collected, scanned for the boundary secrets, and the scope is removed.
-      try {
-        if (executed) {
-          const files: Record<string, string> = {};
-          if (trace) files["trace.json"] = `${JSON.stringify(trace, null, 2)}\n`;
-          if (rawOutput !== null) files["run-output.json"] = rawOutput;
-          if (output !== null && text !== null) files["assistant.txt"] = text;
-          if (patch !== null) files["changes.patch"] = patch;
-          await rm(oracleHome, { recursive: true, force: true });
-          await writeEvidence(privateRun, files, secrets);
-        }
-      } catch (error) { finalizeError = error; }
-      if (scope) {
-        await rm(scope.root, { recursive: true, force: true }).catch((error: unknown) => { finalizeError ??= error; });
-        // R38b: the patch is the evidence; no copy of the pristine clone survives, whatever the outcome.
-        await rm(scope.baseGitDir, { recursive: true, force: true }).catch((error: unknown) => { finalizeError ??= error; });
-      }
+      // R42: nothing derived from the worker is kept. The scope, the private directory (logs, trace, pristine clone, oracle home) and
+      // every file in them are removed without following links; the sanitized record written by the caller is the evidence.
+      await removeTree(privateRun).catch((error: unknown) => { finalizeError ??= error; });
+      if (scope) await removeTree(scope.root).catch((error: unknown) => { finalizeError ??= error; });
     }
     if (finalizeError !== undefined && record !== undefined) {
       record = { ...record, outcome: "stopped", accepted: null, stopReason: "harness_failure", harnessError: failureCode(finalizeError) };

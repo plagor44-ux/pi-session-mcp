@@ -14,7 +14,7 @@ export async function auditLog(path: string, roots: string[], initialCwd: string
   if (!first) return null;
   return parseStraceLog(text, {
     rootPid: Number(first[1] ?? first[2]), initialCwd, allowedWriteRoots: roots,
-    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses,
+    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses, allowedSocketRoots: roots,
   });
 }
 

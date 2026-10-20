@@ -1184,3 +1184,41 @@ describe("window-born taint (R24)", () => {
     )).toBe(0);
   });
 });
+
+describe("Unix socket connects (R43)", () => {
+  const unix = (path: string, ret = "0") => `100 connect(3<socket:[1]>, {sa_family=AF_UNIX, sun_path=${path}}, 21) = ${ret}`;
+  const egress = (line: string, extra: Partial<TraceContext> = {}) =>
+    parseStraceLog(lines(line), { ...ctx({}), allowedSocketRoots: ["/scope"], ...extra }).unresolvedEgress;
+
+  it("flags a connect to the user bus or the systemd manager, outside the scope root", () => {
+    expect(egress(unix("\"/run/user/1000/bus\""))).toBe(1);
+    expect(egress(unix("\"/run/user/1000/systemd/private\""))).toBe(1);
+    expect(egress(unix("\"/run/dbus/system_bus_socket\""))).toBe(1);
+  });
+
+  it("flags every abstract-namespace socket and a relative pathname", () => {
+    expect(egress(unix("@\"/tmp/dbus-abc\""))).toBe(1);
+    expect(egress(unix("@\"name\""))).toBe(1);
+    expect(egress(unix("\"rel/sock\""))).toBe(1);
+  });
+
+  it("allows the name-service allowlist and sockets inside the scope root", () => {
+    expect(egress(unix("\"/run/systemd/userdb/io.systemd.Multiplexer\""))).toBe(0);
+    expect(egress(unix("\"/run/systemd/resolve/io.systemd.Resolve\""))).toBe(0);
+    expect(egress(unix("\"/run/nscd/socket\""))).toBe(0);
+    expect(egress(unix("\"/var/run/nscd/socket\""))).toBe(0);
+    expect(egress(unix("\"/scope/clone/.sock\""))).toBe(0);
+    expect(egress(unix("\"/scope-evil/sock\""))).toBe(1);
+    expect(egress(unix("\"/scope/../run/user/1000/bus\""))).toBe(1);
+  });
+
+  it("ignores a connect that failed, and does not count inet connects as Unix escapes", () => {
+    expect(egress(unix("\"/run/user/1000/bus\"", "-1 ENOENT (No such file or directory)"))).toBe(0);
+    expect(egress(unix("@\"x\"", "-1 ECONNREFUSED (Connection refused)"))).toBe(0);
+    expect(egress("100 connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr(\"203.0.113.9\")}, 16) = 0")).toBe(0);
+  });
+
+  it("without a configured root only the built-in allowlist applies", () => {
+    expect(parseStraceLog(lines(unix("\"/scope/clone/.sock\"")), ctx({})).unresolvedEgress).toBe(1);
+  });
+});

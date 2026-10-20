@@ -22,6 +22,8 @@ export interface TraceContext {
   allowedWriteRoots: string[];
   providerAddresses: ReadonlySet<string>;
   dnsAddresses: ReadonlySet<string>;
+  /** Directories whose Unix sockets a worker may connect to besides the built-in name-service allowlist (R43); the wave passes the scope root. */
+  allowedSocketRoots?: string[];
 }
 
 export interface TraceFindings {
@@ -35,7 +37,7 @@ export interface TraceFindings {
   unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
   /** All inet/inet6 connect attempts, whatever their return value. */
   connects: number;
-  /** Egress that cannot be audited: every `io_uring_setup` that did not fail (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
+  /** Egress that cannot be audited: every `io_uring_setup` that did not fail, every AF_UNIX `connect` outside the allowed socket roots and every abstract socket (R43) (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
   unresolvedEgress: number;
 }
 
@@ -225,6 +227,9 @@ function messageDestinations(token: string | undefined): (Destination | null)[] 
   return names.map(parseSockaddr);
 }
 
+/** Name-service sockets any process may use. Everything else on the filesystem, and every abstract socket, can reach outside the traced tree (`systemd-run --user`, D-Bus). */
+const SOCKET_ALLOWLIST = ["/run/systemd/resolve/", "/run/systemd/userdb/", "/run/nscd/", "/var/run/nscd/"];
+
 const mappedV4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/;
 const normalizeAddress = (address: string): string => {
   const lower = address.toLowerCase();
@@ -259,6 +264,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
 
 function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
+  const socketRoots = [...SOCKET_ALLOWLIST, ...(ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r))];
   const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
   const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
   const live = new Map<number, Cell>();
@@ -466,13 +472,28 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
     // Even absolute paths cannot be audited after a successful root/namespace change.
     if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") unresolvedWrites++; return; }
-    if (call.name === "connect") return sendTarget(call.args[1], true);
+    if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) unresolvedEgress++; return sendTarget(call.args[1], true); }
     if (call.name === "sendto") return sendTarget(call.args[4]);
     if (call.name === "sendmsg" || call.name === "sendmmsg") return messageDestinations(call.args[1]).forEach(judgeDestination);
     // A failed setup (`= -1 E...`) creates no ring and cannot be used for I/O (R23b); a successful or in-progress one counts.
     if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") unresolvedEgress++; return; }
     if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
     if (call.name === "chdir" || call.name === "fchdir") chdir(pid, call, seq);
+  }
+
+  /**
+   * An AF_UNIX connect that did not fail and does not stay inside the allowed roots (R43): a pathname outside the scope root and the
+   * name-service allowlist, a relative pathname, or any abstract-namespace socket (`@name`).
+   */
+  function unixConnectEscapes(token: string | undefined, ret: Return): boolean {
+    if (ret.kind === "failed" || token === undefined || !/sa_family=AF_UNIX\b/.test(token)) return false;
+    const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
+    if (!m) return true; // no readable path: cannot be judged
+    if (m[1] === "@") return true;
+    const path = decodeEscapes(m[2]!);
+    if (!path.startsWith("/")) return true;
+    const resolved = posix.resolve(path);
+    return !socketRoots.some((r) => resolved === r || resolved.startsWith(r.endsWith("/") ? r : `${r}/`));
   }
 
   function sendTarget(token: string | undefined, isConnect = false): void {
