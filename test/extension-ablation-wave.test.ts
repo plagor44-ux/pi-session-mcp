@@ -1,19 +1,22 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { chmod, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmod, mkdir, readdir, readFile, rename, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { EventEmitter } from "node:events";
+import { homedir } from "node:os";
 import { afterAll, describe, expect, it } from "vitest";
 import { matrixDigest, routesOf, tasksDigest, validateApproval, type Approval } from "../eval/extensions/approval.js";
-import { parseArgs } from "../eval/extensions/cli.js";
+import { parseArgs, sourceCommit, withAbort } from "../eval/extensions/cli.js";
 import { buildMatrix, PAIRINGS } from "../eval/extensions/matrix.js";
 import type { ImplementationScore } from "../eval/extensions/oracles.js";
-import { runPreflight } from "../eval/extensions/preflight.js";
+import { dnsServers, modelHost } from "../eval/extensions/network.js";
+import { assertPreflightPassed, runPreflight } from "../eval/extensions/preflight.js";
 import { hash } from "../eval/profiles/files.js";
 import type { RunSpec, TaskSpec } from "../eval/extensions/schemas.js";
 import { runWave, type RunRecord, type WaveDeps, type WaveInput } from "../eval/extensions/wave.js";
 import {
-  assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, runConfig, scopeRoot, type RunScope, type ScopeInput,
+  assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, renderPrompt, runConfig, scopeRoot, scrubCredentials, type RunScope, type ScopeInput,
 } from "../eval/extensions/workspace.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -35,18 +38,33 @@ const benignTrace = (pid = 4242) => `${pid} openat(AT_FDCWD</scope>, "/etc/hosts
 interface Step {
   output?: Record<string, unknown>; text?: string; cost?: number | null; trace?: string | null; hang?: boolean;
   providerError?: "auth" | "quota" | "rate_limit" | "other"; sessionsLeft?: number;
+  /** Breaks the signed output after signing: a forged cost, a replaced text file, or a stripped MAC. */
+  tamper?: "cost" | "text" | "nomac";
 }
 
 const FAKE_SCRIPT = `
+import { createHash, createHmac } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 const [inputPath, log, specJson] = process.argv.slice(2);
+const chunks = [];
+for await (const chunk of process.stdin) chunks.push(chunk);
+const key = Buffer.from(Buffer.concat(chunks).toString("utf8").trim(), "hex");
 const spec = JSON.parse(specJson);
 const input = JSON.parse(readFileSync(inputPath, "utf8"));
+const canon = (v) => Array.isArray(v) ? "[" + v.map(canon).join(",") + "]"
+  : v !== null && typeof v === "object" ? "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}" : JSON.stringify(v);
 if (spec.trace !== null) writeFileSync(log, spec.trace);
 if (spec.output !== null) {
-  if (spec.text !== undefined) writeFileSync(join(input.privateDir, input.runId + ".txt"), spec.text);
-  writeFileSync(join(dirname(inputPath), "run-output.json"), JSON.stringify({ ...spec.output, runId: input.runId, assistantTextRef: spec.text === undefined ? null : input.runId + ".txt" }));
+  const ref = spec.text === undefined ? null : input.runId + ".txt";
+  if (ref) writeFileSync(join(input.privateDir, ref), spec.text);
+  const out = { ...spec.output, runId: input.runId, assistantTextRef: ref, assistantTextSha256: ref ? createHash("sha256").update(spec.text).digest("hex") : null, mac: null };
+  const { mac: _m, ...rest } = out;
+  out.mac = createHmac("sha256", key).update(canon(rest)).digest("hex");
+  if (spec.tamper === "cost") out.usage.session.costUsd = 0;
+  if (spec.tamper === "nomac") delete out.mac;
+  if (spec.tamper === "text") writeFileSync(join(input.privateDir, ref), "forged text");
+  writeFileSync(join(dirname(inputPath), "run-output.json"), JSON.stringify(out));
 }
 if (spec.hang) setInterval(() => {}, 1000);
 `;
@@ -76,10 +94,10 @@ function fake(steps: Step[], dir: string) {
     captured.push({ scope, input: JSON.parse(readFileSync(runInput, "utf8")) as Record<string, unknown> });
     const hangOnly = step.hang === true && step.output === undefined;
     const spec = {
-      output: hangOnly ? null : outputFor(step), text: step.text, hang: step.hang === true,
+      output: hangOnly ? null : outputFor(step), text: step.text, hang: step.hang === true, tamper: step.tamper,
       trace: step.trace === undefined ? benignTrace() : step.trace,
     };
-    return spawn(process.execPath, [script, runInput, log, JSON.stringify(spec)], { cwd: scope.root, detached: true, stdio: "ignore" });
+    return spawn(process.execPath, [script, runInput, log, JSON.stringify(spec)], { cwd: scope.root, detached: true, stdio: ["pipe", "ignore", "ignore"] });
   };
   return { spawnRun, captured };
 }
@@ -88,6 +106,10 @@ const fakePrepare = async (input: ScopeInput): Promise<RunScope> => {
   const root = scopeRoot(input.waveDir, input.run.runId);
   await mkdir(join(root, "clone"), { recursive: true });
   await mkdir(join(root, "private"), { recursive: true });
+  await mkdir(join(root, "agent", "npm", "node_modules", "pi-lens"), { recursive: true });
+  await writeFile(join(root, "agent", "auth.json"), "{\"openai\":{\"access\":\"tok\"}}");
+  await writeFile(join(root, "agent", ".auth.json.lock"), "");
+  await writeFile(join(root, "agent", "npm", "node_modules", "pi-lens", "author.js"), "x");
   return {
     root, clone: join(root, "clone"), home: join(root, "home"), agentDir: join(root, "agent"), configPath: join(root, "config.json"),
     env: {}, privateDir: join(root, "private"), baseGitDir: join(privateRunDir(input.waveDir, input.run.runId), "base.git"),
@@ -138,7 +160,7 @@ async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "
   const runs = buildMatrix(tasks, pairing).slice(0, count);
   const { kind: _kind, hostAuth, ...rest } = options;
   const input: WaveInput = {
-    approval: approvalFor(tasks, runs), tasks, runs, waveDir, productionConfig, extensionTemplate: join(root, "template"), repoRoot: root,
+    approval: approvalFor(tasks, runs), tasks, runs, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig, extensionTemplate: join(root, "template"), repoRoot: root,
     hostAuth: hostAuth ?? { openai: { type: "oauth", access: "a", refresh: "r", expires: Date.now() + 3_600_000 }, xai: { type: "api_key", key: "k" } },
     killGraceMs: 0, ...rest,
   };
@@ -146,11 +168,12 @@ async function waveSetup(count: number, options: Partial<WaveInput> & { kind?: "
     input, runs, waveDir, root,
     deps: (steps, extra = {}) => {
       const { spawnRun, captured } = fake(steps, root);
-      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, ...extra }, captured };
+      return { deps: { spawnRun, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses, ...extra }, captured };
     },
   };
 }
 
+const noAddresses = { providerAddresses: new Set<string>(), dnsAddresses: new Set<string>() };
 const text = (extra: Step = {}): Step => ({ text: GOOD_REVIEW, ...extra });
 const stopReasons = (records: RunRecord[]) => records.map((r) => r.outcome);
 
@@ -325,14 +348,14 @@ describe("runWave records and files", () => {
     const seen: number[] = [];
     const { spawnRun, captured } = fake([text({ cost: 0.25 }), text({ cost: 0.5 })], s.root);
     const spy = (scope: RunScope, runInput: string, log: string): ChildProcess => {
-      const file = join(s.waveDir, "ledger.json");
+      const file = s.input.ledgerPath;
       seen.push(existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as { entries: unknown[] }).entries.length : 0);
       return spawnRun(scope, runInput, log);
     };
-    const r = await runWave(s.input, { spawnRun: spy, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true });
+    const r = await runWave(s.input, { spawnRun: spy, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses });
     expect(seen).toEqual([0, 1]);
     expect(captured).toHaveLength(2);
-    const ledger = JSON.parse(await readFile(join(s.waveDir, "ledger.json"), "utf8")) as { spentUsd: number; entries: { runId: string; costUsd: number | null }[] };
+    const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { spentUsd: number; entries: { runId: string; costUsd: number | null }[] };
     expect(ledger.spentUsd).toBeCloseTo(0.75);
     expect(ledger.entries.map((e) => e.runId)).toEqual(s.runs.map((x) => x.runId));
     expect(r.spentUsd).toBeCloseTo(0.75);
@@ -340,8 +363,7 @@ describe("runWave records and files", () => {
 
   it("continues from a ledger file an earlier preflight wrote", async () => {
     const s = await waveSetup(1);
-    await mkdir(s.waveDir, { recursive: true });
-    await writeFile(join(s.waveDir, "ledger.json"), JSON.stringify({ limitUsd: 10, spentUsd: 9.5, entries: [{ runId: "preflight-review", profile: "review", costUsd: 9.5 }] }));
+    await writeFile(s.input.ledgerPath, JSON.stringify({ limitUsd: 10, spentUsd: 9.5, entries: [{ runId: "preflight-review", profile: "review", costUsd: 9.5 }] }));
     const { deps, captured } = s.deps([text()]);
     const r = await runWave(s.input, deps);
     expect(r.stopReason).toBe("budget");
@@ -529,6 +551,10 @@ describe("run scope", () => {
       });
     } finally { process.env.PATH = previousPath; }
     expect(await readFile(join(scope.clone, "a.txt"), "utf8")).toBe("base");
+    // I3: the clone's remotes point at the pristine bare clone outside the root, never at the real repository.
+    const remotes = (await exec("git", ["-C", scope.clone, "remote", "-v"])).stdout.trim().split("\n");
+    expect(remotes).toHaveLength(2);
+    for (const line of remotes) expect(line).toMatch(new RegExp(`^origin\\t${scope.baseGitDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\((fetch|push)\\)$`));
     expect(await readFile(join(scope.clone, ".git", "info", "exclude"), "utf8")).toContain(".codegraph/");
     expect(scope.baseGitDir.startsWith(scope.root)).toBe(false);
     expect((await exec("git", ["--git-dir", scope.baseGitDir, "cat-file", "-t", base])).stdout.trim()).toBe("commit");
@@ -543,6 +569,34 @@ describe("run scope", () => {
       expect(scope.env[key]!.startsWith(scope.root + "/")).toBe(true);
     }
     expect(scope.env).toMatchObject({ PI_LENS_DISABLE_TOOL_INSTALL: "1", PI_LENS_DISABLE_LSP_INSTALL: "1", PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING: "1", UV_USE_IO_URING: "0" });
+  });
+
+  it("removes a failed scope with its credentials and its bare clone", async () => {
+    const root = await temporaryRoot("ablation-scope-fail-");
+    const source = join(root, "source");
+    await mkdir(source);
+    const git = (...args: string[]) => exec("git", ["-C", source, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(source, "a.txt"), "base");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
+    const bin = join(root, "bin");
+    await mkdir(bin);
+    await writeFile(join(bin, "codegraph"), "#!/bin/sh\nmkdir -p \"$3/.codegraph\"\n");
+    await chmod(join(bin, "codegraph"), 0o755);
+    const task = { ...(await reviewTask(root, "S3")), baseCommit: base };
+    const run = buildMatrix([task], PAIRINGS.filter((p) => p.id === "pl-review")).find((x) => x.arm === "pi-lens")!;
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${bin}:${previousPath ?? ""}`;
+    try {
+      // The extension template is missing, so the failure comes after the credentials were written.
+      await expect(prepareRunScope({
+        waveDir: join(root, "wave"), run, task, sourceRepoPath: source, extensionTemplate: join(root, "no-template"),
+        hostAuth: { openai: { type: "oauth", access: "tok", refresh: "r", expires: 1 } }, productionProfile: PROFILE, pairing: PAIRINGS.find((p) => p.id === "pl-review"),
+      })).rejects.toThrow();
+    } finally { process.env.PATH = previousPath; }
+    expect(existsSync(scopeRoot(join(root, "wave"), run.runId))).toBe(false);
+    expect(existsSync(join(privateRunDir(join(root, "wave"), run.runId), "base.git"))).toBe(false);
   });
 
   it("refuses a repository whose clone holds an escaping symlink", async () => {
@@ -571,15 +625,18 @@ describe("preflight", () => {
     const approval = approvalFor(tasks, runs);
     const { spawnRun, captured } = fake([{ cost: 0.01, text: "PONG" }, { output: { terminal: "failed" }, providerError: "auth", cost: null }], root);
     const result = await runPreflight({
-      approval, waveDir, productionConfig,
+      approval, waveDir, ledgerPath: join(root, "ledger.json"), productionConfig,
       hostAuth: { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 }, xai: { type: "api_key", key: "k" } },
-    }, { spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true });
+    }, { spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true, checkRoute: async () => undefined });
     expect(captured.map((c) => c.input.promptText)).toEqual(["Reply with exactly: PONG", "Reply with exactly: PONG"]);
     expect(result.routes.map((r) => [r.profile, r.ok, r.failure])).toEqual([["review", true, null], ["review-grok", false, "auth"]]);
     expect(result.spentUsd).toBeCloseTo(0.01);
-    const ledger = JSON.parse(await readFile(join(waveDir, "ledger.json"), "utf8")) as { entries: { runId: string }[] };
+    const ledger = JSON.parse(await readFile(join(root, "ledger.json"), "utf8")) as { entries: { runId: string }[] };
     expect(ledger.entries.map((e) => e.runId)).toEqual(["preflight-review", "preflight-review-grok"]);
-    expect(JSON.parse(await readFile(join(waveDir, "preflight.json"), "utf8"))).toMatchObject({ routes: [{ ok: true }, { ok: false }] });
+    expect(JSON.parse(await readFile(join(waveDir, "preflight.json"), "utf8"))).toMatchObject({ routes: [{ ok: true }, { ok: false }], binding: { matrixDigest: approval.matrixDigest } });
+    // The failed route's kept scope carries no credentials.
+    expect(existsSync(join(privateRunDir(waveDir, "preflight-review-grok"), "scope", "agent", "auth.json"))).toBe(false);
+    await expect(assertPreflightPassed(waveDir, approval)).rejects.toThrow("preflight_failed");
   });
 
   it("prepares an empty scope with credentials for the route's provider only", async () => {
@@ -596,12 +653,276 @@ describe("preflight", () => {
 describe("cli arguments", () => {
   it("accepts the live modes and rejects unknown modes and options", () => {
     expect(parseArgs(["--plan", "--tasks", "t.json"])).toMatchObject({ mode: "--plan", options: { "--tasks": "t.json" }, trim: false });
-    expect(parseArgs(["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--trim"])).toMatchObject({ mode: "--wave", trim: true });
+    expect(parseArgs(["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json", "--trim"])).toMatchObject({ mode: "--wave", trim: true });
     expect(() => parseArgs(["--scan", "--tasks", "t.json"])).toThrow("mode_required");
     expect(() => parseArgs(["--plan", "--wave", "--tasks", "t.json"])).toThrow("choose_one_mode");
     expect(() => parseArgs(["--plan", "--tasks", "t.json", "--bogus", "x"])).toThrow("invalid_argument");
     expect(() => parseArgs(["--wave", "--tasks", "t.json"])).toThrow("approval_required");
-    expect(() => parseArgs(["--wave", "--tasks", "t.json", "--approval", "a.json"])).toThrow("template_required");
+    expect(() => parseArgs(["--wave", "--tasks", "t.json", "--approval", "a.json"])).toThrow("out_required");
+    expect(() => parseArgs(["--wave", "--tasks", "t.json", "--approval", "a.json", "--out", "w"])).toThrow("ledger_required");
+    expect(() => parseArgs(["--preflight", "--tasks", "t.json", "--approval", "a.json", "--ledger", "l.json"])).toThrow("out_required");
+    expect(() => parseArgs(["--wave", "--tasks", "t.json", "--approval", "a.json", "--out", "w", "--ledger", "l.json"])).toThrow("template_required");
+    expect(parseArgs(["--wave", "--tasks", "t.json", "--approval", "a.json", "--out", "w", "--ledger", "l.json", "--template", "x", "--preflight-dir", "p"]).options["--preflight-dir"]).toBe("p");
+    expect(() => parseArgs(["--preflight", "--tasks", "t.json", "--approval", "a.json", "--out", "w", "--ledger", "l.json", "--preflight-dir", "p"])).toThrow("invalid_argument");
     expect(() => parseArgs(["--plan"])).toThrow("tasks_required");
+  });
+});
+
+describe("output integrity (R35)", () => {
+  it.each([["cost", "a forged cost"], ["text", "a replaced text file"], ["nomac", "a missing MAC"]] as const)("stops on %s: %s", async (tamper, _why) => {
+    const s = await waveSetup(2);
+    const r = await runWave(s.input, s.deps([text({ tamper, cost: 0.3 })]).deps);
+    expect(r.stopReason).toBe("output_integrity");
+    expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
+    // Nothing of a forged output is believed: no terminal, no usage, no score, and the cost stays unobserved.
+    expect(r.records[0]).toMatchObject({ accepted: null, usage: null, harnessError: "output_integrity" });
+    expect(r.spentUsd).toBe(0);
+  });
+
+  it("accepts a correctly signed output and never puts the key into argv, env or a file", async () => {
+    const s = await waveSetup(1);
+    const { deps, captured } = s.deps([text()]);
+    const r = await runWave(s.input, deps);
+    expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: true });
+    expect(JSON.stringify(captured[0]!.scope.env)).toBe("{}");
+    expect(captured[0]!.input).not.toHaveProperty("key");
+  });
+});
+
+describe("interrupt handling (C1)", () => {
+  it("survives two SIGINTs, kills the group, records the run as interrupted and the rest as not_run", async () => {
+    const s = await waveSetup(3, { runTimeoutMs: 60_000 });
+    const { spawnRun, captured } = fake([{ hang: true }], s.root);
+    let pid: number | undefined;
+    const spy = (scope: RunScope, runInput: string, log: string): ChildProcess => { const child = spawnRun(scope, runInput, log); pid = child.pid; return child; };
+    const emitter = new EventEmitter();
+    setTimeout(() => emitter.emit("SIGINT"), 300);
+    setTimeout(() => emitter.emit("SIGINT"), 350);
+    const r = await withAbort((signal) => runWave({ ...s.input, signal }, {
+      spawnRun: spy, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses,
+    }), emitter);
+    expect(captured).toHaveLength(1);
+    expect(r.stopReason).toBe("interrupted");
+    expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run", "not_run"]);
+    expect(r.records[0]).toMatchObject({ stopReason: "interrupted" });
+    expect(() => process.kill(-pid!, 0)).toThrow();
+    expect(emitter.listenerCount("SIGINT")).toBe(0);
+    const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { entries: { runId: string }[] };
+    expect(ledger.entries.map((e) => e.runId)).toEqual([s.runs[0]!.runId]);
+    for (const run of s.runs) expect(existsSync(join(s.waveDir, "runs", `${run.runId}.json`))).toBe(true);
+  });
+
+  it("does not spawn when the abort arrives between scope preparation and spawn", async () => {
+    const s = await waveSetup(2);
+    const controller = new AbortController();
+    const { deps, captured } = s.deps([text()], { prepareScope: async (input) => { const scope = await fakePrepare(input); controller.abort(); return scope; } });
+    const r = await runWave({ ...s.input, signal: controller.signal }, deps);
+    expect(captured).toHaveLength(0);
+    expect(r.stopReason).toBe("interrupted");
+    expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
+    // No run started, so no scope is kept.
+    expect(existsSync(scopeRoot(s.waveDir, s.runs[0]!.runId))).toBe(false);
+    expect(existsSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "scope"))).toBe(false);
+  });
+});
+
+describe("shared ledger and output safety (R37)", () => {
+  it("refuses before any spawn when an output of a planned run already exists", async () => {
+    for (const make of [
+      (s: Setup) => mkdir(join(s.waveDir, "runs"), { recursive: true }).then(() => writeFile(join(s.waveDir, "runs", `${s.runs[1]!.runId}.json`), "{}")),
+      (s: Setup) => mkdir(privateRunDir(s.waveDir, s.runs[1]!.runId), { recursive: true }),
+      (s: Setup) => mkdir(scopeRoot(s.waveDir, s.runs[1]!.runId), { recursive: true }),
+    ]) {
+      const s = await waveSetup(2);
+      await make(s);
+      const { deps, captured } = s.deps([text()]);
+      await expect(runWave(s.input, deps)).rejects.toThrow("output_exists");
+      expect(captured).toHaveLength(0);
+      expect(existsSync(s.input.ledgerPath)).toBe(false);
+    }
+  });
+
+  it("counts a preflight's spend in the wave through the shared ledger file", async () => {
+    const root = await temporaryRoot("ablation-shared-ledger-");
+    const ledgerPath = join(root, "evaluation-ledger.json");
+    const tasks = [await reviewTask(root, "P1")];
+    const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review"));
+    const approval = approvalFor(tasks, runs);
+    const { spawnRun } = fake([{ cost: 9.6, text: "PONG" }], root);
+    const hostAuth = { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 } };
+    const pre = await runPreflight({ approval, waveDir: join(root, "pre"), ledgerPath, productionConfig, hostAuth }, {
+      spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true, checkRoute: async () => undefined,
+    });
+    expect(pre.routes.map((r) => r.ok)).toEqual([true]);
+    const s = await waveSetup(1, { ledgerPath });
+    const { deps, captured } = s.deps([text()]);
+    const r = await runWave(s.input, deps);
+    expect(r.stopReason).toBe("budget");
+    expect(r.spentUsd).toBeCloseTo(9.6);
+    expect(captured).toHaveLength(0);
+  });
+
+  it("refuses to preflight into an output directory that already holds a preflight", async () => {
+    const root = await temporaryRoot("ablation-preflight-exists-");
+    const tasks = [await reviewTask(root, "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await mkdir(join(root, "wave"), { recursive: true });
+    await writeFile(join(root, "wave", "preflight.json"), "{}");
+    await expect(runPreflight({ approval, waveDir: join(root, "wave"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: {} })).rejects.toThrow("output_exists");
+  });
+
+  it("lets the wave start only on a passed preflight of the same approval", async () => {
+    const root = await temporaryRoot("ablation-preflight-gate-");
+    const tasks = [await reviewTask(root, "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_missing");
+    const binding = { sourceCommit: approval.sourceCommit, tasksDigest: approval.tasksDigest, matrixDigest: approval.matrixDigest };
+    const write = (file: unknown) => writeFile(join(root, "preflight.json"), JSON.stringify(file));
+    await write({ binding, routes: approval.routes.map((r) => ({ profile: r.profile, ok: true })) });
+    await expect(assertPreflightPassed(root, approval)).resolves.toBeUndefined();
+    await write({ binding: { ...binding, matrixDigest: "sha256:0" }, routes: approval.routes.map((r) => ({ profile: r.profile, ok: true })) });
+    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_binding_changed");
+    await write({ binding, routes: approval.routes.map((r) => ({ profile: r.profile, ok: false })) });
+    await expect(assertPreflightPassed(root, approval)).rejects.toThrow("preflight_failed");
+  });
+});
+
+describe("credentials and traces stay out of kept evidence (I2, R35)", () => {
+  it("deletes credentials from a kept scope but leaves the extension tree", async () => {
+    const s = await waveSetup(1);
+    const r = await runWave(s.input, s.deps([{ output: { terminal: "failed" } }]).deps);
+    expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: false });
+    const agent = join(privateRunDir(s.waveDir, r.records[0]!.runId), "scope", "agent");
+    expect(existsSync(agent)).toBe(true);
+    expect(existsSync(join(agent, "auth.json"))).toBe(false);
+    expect(existsSync(join(agent, ".auth.json.lock"))).toBe(false);
+    expect(existsSync(join(agent, "npm", "node_modules", "pi-lens", "author.js"))).toBe(true);
+  });
+
+  it("scrubs credentials on its own", async () => {
+    const root = await temporaryRoot("ablation-scrub-");
+    await mkdir(join(root, "sub"), { recursive: true });
+    for (const name of ["auth.json", "auth.json.bak", "OAuth-state", "keep.json", join("sub", "auth-cache")]) await writeFile(join(root, name), "x");
+    await scrubCredentials(root);
+    expect((await readdir(root)).sort()).toEqual(["keep.json", "sub"]);
+    expect(await readdir(join(root, "sub"))).toEqual([]);
+  });
+
+  it("keeps every strace log outside the scope root and stops on a missing oracle log", async () => {
+    const s = await waveSetup(1, { kind: "implementation" });
+    const logs: string[] = [];
+    const missing: WaveDeps["scoreImplementation"] = async (_clone, _task, options) => {
+      logs.push(options.wrap!(["npm", "test"]).at(options.wrap!(["x"]).indexOf("-o") + 1)!);
+      return { accepted: true, testsPassed: true, outOfScope: [] };
+    };
+    const { deps, captured } = s.deps([text()], { scoreImplementation: missing });
+    const r = await runWave(s.input, deps);
+    expect(r.stopReason).toBe("harness_failure");
+    expect(r.records[0]).toMatchObject({ outcome: "stopped", harnessError: "trace_missing" });
+    const root = captured[0]!.scope.root;
+    expect(existsSync(join(privateRunDir(s.waveDir, r.records[0]!.runId), "strace.log"))).toBe(true);
+    expect(root.startsWith(join(s.waveDir, "private"))).toBe(false);
+    expect(logs.every((path) => path.startsWith(privateRunDir(s.waveDir, r.records[0]!.runId)) && !path.startsWith(root))).toBe(true);
+  });
+});
+
+describe("record safety (items 7 and 8)", () => {
+  it("turns a post-processing failure into a harness_failure record and still writes the rest", async () => {
+    const s = await waveSetup(2);
+    const { spawnRun } = fake([{ output: { terminal: "failed" } }], s.root);
+    // A non-empty directory where the scope is to be moved makes the rename fail.
+    const blocking = (scope: RunScope, runInput: string, log: string): ChildProcess => {
+      mkdirSync(join(privateRunDir(s.waveDir, s.runs[0]!.runId), "scope", "blocker"), { recursive: true });
+      return spawnRun(scope, runInput, log);
+    };
+    const r = await runWave(s.input, { spawnRun: blocking, prepareScope: fakePrepare, guard: async () => ({ files: {} }), residualCheck: async () => true, resolveAddresses: async () => noAddresses });
+    expect(r.stopReason).toBe("harness_failure");
+    expect(r.records.map((x) => x.outcome)).toEqual(["stopped", "not_run"]);
+    expect(r.records[0]).toMatchObject({ stopReason: "harness_failure" });
+    for (const run of s.runs) expect(existsSync(join(s.waveDir, "runs", `${run.runId}.json`))).toBe(true);
+    const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { entries: unknown[] };
+    expect(ledger.entries).toHaveLength(1);
+  });
+
+  it("replaces a harness error string that is not a fixed code", async () => {
+    const s = await waveSetup(1);
+    const r = await runWave(s.input, s.deps([{ output: { terminal: "failed", harnessError: "ENOENT /home/u/secret failed" } }]).deps);
+    expect(r.records[0]).toMatchObject({ stopReason: "harness_failure", harnessError: "invalid_harness_error" });
+    expect(await readFile(join(s.waveDir, "runs", `${s.runs[0]!.runId}.json`), "utf8")).not.toContain("/home/u");
+  });
+});
+
+describe("network audit addresses", () => {
+  it("passes provider and DNS addresses to the connect audit", async () => {
+    const s = await waveSetup(2);
+    const connect = (ip: string, port: number) => `4242 connect(3, {sa_family=AF_INET, sin_port=htons(${port}), sin_addr=inet_addr("${ip}")}, 16) = 0\n`;
+    const trace = benignTrace() + connect("203.0.113.9", 443) + connect("203.0.113.53", 53) + connect("198.51.100.7", 443);
+    const addresses = { providerAddresses: new Set(["203.0.113.9"]), dnsAddresses: new Set(["203.0.113.53"]) };
+    const r = await runWave(s.input, s.deps([text({ trace })], { resolveAddresses: async () => addresses }).deps);
+    expect(r.records[0]!.trace).toMatchObject({ connects: 3, unexpectedConnects: [{ family: "inet", address: "198.51.100.7", port: 443 }] });
+  });
+
+  it("reads the model endpoint host from the pinned SDK catalog offline and the nameservers from resolv.conf", async () => {
+    expect(await modelHost({ provider: "openai", model: "gpt-6.1-sol" })).toBe("api.openai.com");
+    await expect(modelHost({ provider: "openai", model: "no-such-model" })).rejects.toThrow("provider_model_unknown");
+    const root = await temporaryRoot("ablation-resolv-");
+    await writeFile(join(root, "resolv.conf"), "# c\nnameserver 192.0.2.1\nnameserver fe80::1%eth0\nsearch x\n");
+    expect([...await dnsServers(join(root, "resolv.conf"))].sort()).toEqual(["127.0.0.53", "192.0.2.1", "fe80::1"]);
+    expect([...await dnsServers(join(root, "missing"))]).toEqual(["127.0.0.53"]);
+  });
+
+  it("fails a preflight route whose endpoint cannot be resolved", async () => {
+    const root = await temporaryRoot("ablation-unresolved-");
+    const tasks = [await reviewTask(root, "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    const { spawnRun, captured } = fake([], root);
+    const r = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
+      spawnRun: (scope, input) => spawnRun(scope, input, "x"), checkRoute: async () => { throw new Error("provider_host_unresolvable"); },
+    });
+    expect(r.routes).toMatchObject([{ ok: false, failure: "provider_host_unresolvable" }]);
+    expect(captured).toHaveLength(0);
+  });
+});
+
+describe("source binding and prompt rewrite (items 10 and 11)", () => {
+  it("refuses a dirty tracked tree and a missing repository, and ignores untracked files", async () => {
+    const root = await temporaryRoot("ablation-source-");
+    const git = (...args: string[]) => exec("git", ["-C", root, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(root, "a.txt"), "1");
+    await git("add", "."); await git("commit", "--quiet", "-m", "one");
+    const head = (await git("rev-parse", "HEAD")).stdout.trim();
+    await writeFile(join(root, "untracked.txt"), "x");
+    expect(await sourceCommit(root)).toBe(head);
+    await writeFile(join(root, "a.txt"), "2");
+    await expect(sourceCommit(root)).rejects.toThrow("source_dirty");
+    await expect(sourceCommit(await temporaryRoot("ablation-nogit-"))).rejects.toThrow("source_unavailable");
+  });
+
+  it("rewrites the configured, real and home-relative forms on path boundaries only", async () => {
+    const root = await temporaryRoot("ablation-prompt-");
+    const real = join(root, "repo");
+    await mkdir(real);
+    await symlink(real, join(root, "link"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = root;
+    try {
+      expect(homedir()).toBe(root);
+      const clone = join(root, "wave", "scopes", "r1", "clone");
+      const body = `A ${join(root, "link")}/a.ts, B ${real}/b.ts, C ~/repo/c.ts, D ${real}-other/d.ts, E x${real}/e.ts, F ${real}.`;
+      const task = { ...(await reviewTask(root, "W1")), promptRef: "eval/results/ablation-test/W1.txt", promptHash: hash(body) };
+      await writeFile(join(root, task.promptRef), body);
+      const out = await renderPrompt(root, task, join(root, "link"), clone);
+      expect(out).toBe(`A ${clone}/a.ts, B ${clone}/b.ts, C ${clone}/c.ts, D ${real}-other/d.ts, E x${real}/e.ts, F ${clone}.`);
+    } finally { process.env.HOME = previousHome; }
+  });
+
+  it("does not report a leak when the clone itself lives below the source path", async () => {
+    const root = await temporaryRoot("ablation-prompt-below-");
+    const clone = join(root, "eval", "results", "wave", "scopes", "r1", "clone");
+    const body = `see ${root}/src/a.ts`;
+    const task = { ...(await reviewTask(root, "W2")), promptHash: hash(body) };
+    await writeFile(join(root, task.promptRef), body);
+    expect(await renderPrompt(root, task, root, clone)).toBe(`see ${clone}/src/a.ts`);
   });
 });

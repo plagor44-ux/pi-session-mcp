@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
-import { appendFile, cp, mkdir, readdir, readFile, readlink, realpath, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { appendFile, cp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import { selectBoundaryCredentials, writeBoundaryCredentials } from "../../src/writer-credentials.js";
 import { hash } from "../profiles/files.js";
@@ -94,24 +95,56 @@ export async function assertCloneSymlinks(clone: string): Promise<void> {
 }
 
 /**
+ * Deletes credentials from a scope before it is kept: `agent/auth.json` and every file under `agent/` whose name contains `auth`
+ * (lock and backup files included). The `npm` extension tree is not walked; its package files are not credentials.
+ */
+export async function scrubCredentials(agentDir: string): Promise<void> {
+  const walk = async (dir: string, top: boolean): Promise<void> => {
+    let entries;
+    try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) { if (!(top && entry.name === "npm")) await walk(path, false); } else if (/auth/i.test(entry.name)) await rm(path, { force: true });
+    }
+  };
+  await walk(agentDir, true);
+}
+
+/**
  * Prepares one run: a full clone at the base commit inside the scope root, a pristine bare clone beside it (outside the root),
  * an evaluation-owned agent directory with boundary credentials, and the run configuration. Every path the traced worker can write
  * to is inside `root`.
  */
 export async function prepareRunScope(input: ScopeInput): Promise<RunScope> {
-  const { waveDir, run, task } = input;
+  const { waveDir, run } = input;
   const root = scopeRoot(waveDir, run.runId);
+  const baseGitDir = join(privateRunDir(waveDir, run.runId), "base.git");
   await mkdir(dirname(root), { recursive: true });
   await mkdir(root, { mode: 0o700 });
+  try {
+    return await buildScope(input, root, baseGitDir);
+  } catch (error) {
+    // No run has started: nothing of a failed scope is kept, credentials included.
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+    await rm(baseGitDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function buildScope(input: ScopeInput, root: string, baseGitDir: string): Promise<RunScope> {
+  const { run, task } = input;
   const dirs = await makeScopeDirs(root);
   const clone = join(root, "clone");
-  const baseGitDir = join(privateRunDir(waveDir, run.runId), "base.git");
   await mkdir(dirname(baseGitDir), { recursive: true, mode: 0o700 });
   const git = (args: string[], cwd?: string) => execFileAsync("git", [...NO_HOOKS, ...args], { env: gitEnv(dirs.home), ...(cwd === undefined ? {} : { cwd }) });
   await git(["clone", "--bare", "--no-hardlinks", "--quiet", "--", input.sourceRepoPath, baseGitDir]);
   await git(["clone", "--no-hardlinks", "--quiet", "--", input.sourceRepoPath, clone]);
   await git(["-c", "advice.detachedHead=false", "checkout", "--quiet", task.baseCommit], clone);
   await assertCloneSymlinks(clone);
+  // The clone must not point at the real repository: a push or fetch goes to the pristine bare clone, outside the scope root.
+  const remotes = (await git(["remote"], clone)).stdout.split("\n").filter((name) => name !== "");
+  for (const name of remotes) if (name !== "origin") await git(["remote", "remove", name], clone);
+  await git(remotes.includes("origin") ? ["remote", "set-url", "origin", baseGitDir] : ["remote", "add", "origin", baseGitDir], clone);
   await appendFile(join(clone, ".git", "info", "exclude"), "\n.codegraph/\n");
   await execFileAsync("codegraph", ["init", "-y", clone], { env: dirs.env, cwd: root });
 
@@ -157,6 +190,15 @@ export async function prepareEmptyScope(input: {
   const root = scopeRoot(input.waveDir, input.name);
   await mkdir(dirname(root), { recursive: true });
   await mkdir(root, { mode: 0o700 });
+  try {
+    return await buildEmptyScope(input, root);
+  } catch (error) {
+    await rm(root, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function buildEmptyScope(input: Parameters<typeof prepareEmptyScope>[0], root: string): Promise<RunScope> {
   const dirs = await makeScopeDirs(root);
   const clone = join(root, "clone");
   await mkdir(clone, { mode: 0o700 });
@@ -168,9 +210,33 @@ export async function prepareEmptyScope(input: {
   return { root, clone, home: dirs.home, agentDir: dirs.agentDir, configPath, env: dirs.env, privateDir: dirs.privateDir, baseGitDir: join(root, "no-base.git") };
 }
 
-/** The recorded prompt with the source repository path rewritten to the clone; the bytes must match the task's hash. */
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The forms in which a prompt may name the source repository: as configured, its real path and its `~/` form. */
+async function sourceForms(sourceRepoPath: string): Promise<string[]> {
+  const real = await realpath(sourceRepoPath).catch(() => sourceRepoPath);
+  const forms = new Set([sourceRepoPath, real]);
+  for (const path of [sourceRepoPath, real]) {
+    const fromHome = relative(homedir(), path);
+    if (fromHome !== "" && !fromHome.startsWith("..") && !fromHome.startsWith("/")) forms.add(`~/${fromHome}`);
+  }
+  return [...forms].sort((a, b) => b.length - a.length);
+}
+
+/** A form on a path boundary: not the tail of a longer path, not the head of a sibling such as `repo-other`. */
+const boundaryPattern = (forms: string[]): RegExp =>
+  new RegExp(`(?<![A-Za-z0-9_.~/-])(?:${forms.map(escapeRegExp).join("|")})(?![A-Za-z0-9_-])(?!\\.[A-Za-z0-9])`, "g");
+
+/**
+ * The recorded prompt with the source repository (as configured, as real path and as `~/` path, on path boundaries only) rewritten
+ * to the clone; the bytes must match the task's hash. Fails with `source_path_leak` if a form is left once the clone path is ignored.
+ */
 export async function renderPrompt(repoRoot: string, task: TaskSpec, sourceRepoPath: string, clone: string): Promise<string> {
   const bytes = await readFile(resolve(repoRoot, task.promptRef));
   if (hash(bytes) !== task.promptHash) throw new Error("prompt_hash_mismatch");
-  return bytes.toString("utf8").split(sourceRepoPath).join(clone);
+  const forms = await sourceForms(sourceRepoPath);
+  const rewritten = bytes.toString("utf8").replace(boundaryPattern(forms), () => clone);
+  // The clone may itself live below the source path (a wave directory under the repository): only a form outside the clone counts.
+  if (boundaryPattern(forms).test(rewritten.split(clone).join(""))) throw new Error("source_path_leak");
+  return rewritten;
 }

@@ -1,0 +1,40 @@
+2999512 openat(AT_FDCWD</scope/clone>, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3</etc/ld.so.cache>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/lib/libabsl_spinlock_wait.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_spinlock_wait.so.2608.0.0>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/lib/libbrotlicommon.so.1", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libbrotlicommon.so.1.2.0>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/lib/libicudata.so.78", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libicudata.so.78.3>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/lib/libabsl_debugging_internal.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_debugging_internal.so.2608.0.0>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/lib/libabsl_time_zone.so.2608.0.0", O_RDONLY|O_CLOEXEC) = 3</usr/lib/libabsl_time_zone.so.2608.0.0>
+2999512 openat(AT_FDCWD</scope/clone>, "/etc/ssl/openssl.cnf", O_RDONLY) = 3</etc/ssl/openssl.cnf>
+2999512 openat(AT_FDCWD</scope/clone>, "/proc/version_signature", O_RDONLY|O_CLOEXEC) = -1 ENOENT (Datei oder Verzeichnis nicht gefunden)
+2999512 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Die angeforderte Funktion ist nicht implementiert) (INJECTED)
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a6afffce8, parent_tid=0x7f5a6afff990, exit_signal=0, stack=0x7f5a6a7ff000, stack_size=0x7ffd00, tls=0x7f5a6afff6c0} => {parent_tid=[2999513]}, 88) = 2999513
+2999513 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Die angeforderte Funktion ist nicht implementiert) (INJECTED)
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a6a7fece8, parent_tid=0x7f5a6a7fe990, exit_signal=0, stack=0x7f5a69ffe000, stack_size=0x7ffd00, tls=0x7f5a6a7fe6c0} => {parent_tid=[2999514]}, 88) = 2999514
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a69ffdce8, parent_tid=0x7f5a69ffd990, exit_signal=0, stack=0x7f5a697fd000, stack_size=0x7ffd00, tls=0x7f5a69ffd6c0} => {parent_tid=[2999515]}, 88) = 2999515
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a697fcce8, parent_tid=0x7f5a697fc990, exit_signal=0, stack=0x7f5a68ffc000, stack_size=0x7ffd00, tls=0x7f5a697fc6c0} => {parent_tid=[2999516]}, 88) = 2999516
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a68ffbce8, parent_tid=0x7f5a68ffb990, exit_signal=0, stack=0x7f5a687fb000, stack_size=0x7ffd00, tls=0x7f5a68ffb6c0} => {parent_tid=[2999517]}, 88) = 2999517
+2999512 io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0}) = -1 ENOSYS (Die angeforderte Funktion ist nicht implementiert) (INJECTED)
+2999512 openat(AT_FDCWD</scope/clone>, "/proc/self/maps", O_RDONLY|O_CLOEXEC) = 17</proc/2999512/maps>
+2999512 openat(AT_FDCWD</scope/clone>, "/proc/self/cgroup", O_RDONLY|O_CLOEXEC) = 17</proc/2999512/cgroup>
+2999512 openat(AT_FDCWD</scope/clone>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.max", O_RDONLY|O_CLOEXEC) = 17</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.max>
+2999512 openat(AT_FDCWD</scope/clone>, "/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.high", O_RDONLY|O_CLOEXEC) = 17</sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/app-code-oss-4024.scope/memory.high>
+2999512 openat(AT_FDCWD</scope/clone>, "/proc/meminfo", O_RDONLY|O_CLOEXEC) = 17</proc/meminfo>
+2999512 openat(AT_FDCWD</scope/clone>, "/proc/self/maps", O_RDONLY) = 17</proc/2999512/maps>
+2999512 openat(AT_FDCWD</scope/clone>, "/usr/bin/node", O_RDONLY) = 17</usr/bin/node>
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a6dad3ce8, parent_tid=0x7f5a6dad3990, exit_signal=0, stack=0x7f5a6dacb000, stack_size=0x7d00, tls=0x7f5a6dad36c0} => {parent_tid=[2999518]}, 88) = 2999518
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a23fffce8, parent_tid=0x7f5a23fff990, exit_signal=0, stack=0x7f5a237ff000, stack_size=0x7ffd00, tls=0x7f5a23fff6c0} => {parent_tid=[2999519]}, 88) = 2999519
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a237fece8, parent_tid=0x7f5a237fe990, exit_signal=0, stack=0x7f5a22ffe000, stack_size=0x7ffd00, tls=0x7f5a237fe6c0} => {parent_tid=[2999520]}, 88) = 2999520
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a22ffdce8, parent_tid=0x7f5a22ffd990, exit_signal=0, stack=0x7f5a227fd000, stack_size=0x7ffd00, tls=0x7f5a22ffd6c0} => {parent_tid=[2999521]}, 88) = 2999521
+2999512 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f5a227fcce8, parent_tid=0x7f5a227fc990, exit_signal=0, stack=0x7f5a21ffc000, stack_size=0x7ffd00, tls=0x7f5a227fc6c0} => {parent_tid=[2999522]}, 88) = 2999522
+2999519 openat(AT_FDCWD</scope/clone>, "/etc/hostname", O_RDONLY|O_CLOEXEC) = 17</etc/hostname>
+2999517 +++ exited with 0 +++
+2999515 +++ exited with 0 +++
+2999514 +++ exited with 0 +++
+2999516 +++ exited with 0 +++
+2999513 +++ exited with 0 +++
+2999520 +++ exited with 0 +++
+2999521 +++ exited with 0 +++
+2999522 +++ exited with 0 +++
+2999519 +++ exited with 0 +++
+2999518 +++ exited with 0 +++
+2999512 +++ exited with 0 +++

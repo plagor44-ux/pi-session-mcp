@@ -8,6 +8,7 @@ import { loadConfig } from "../../src/config.js";
 import { isEntryPoint } from "../../src/entry-point.js";
 import { createServer } from "../../src/server.js";
 import { SessionRegistry } from "../../src/session-registry.js";
+import { decodeKey, macOf, sha256Hex } from "./output-mac.js";
 import { profileIdSchema, type ProfileId } from "./schemas.js";
 import { createCapturingAdapter } from "./seams.js";
 import { UsageCollector, type RunUsage } from "./usage.js";
@@ -26,6 +27,10 @@ export interface RunOutput {
   assistantTextRef: string | null;
   /** The turn's `truncated` flag: the stored text was cut at the product's turn text cap. */
   assistantTextTruncated: boolean;
+  /** SHA-256 (hex) of the stored assistant text; null when no text was stored. */
+  assistantTextSha256: string | null;
+  /** HMAC-SHA256 (hex) over the canonical JSON of this output without `mac`, keyed by the supervisor's per-run key; null without a key (unit tests). */
+  mac: string | null;
   /** A harness failure code (never a message or path); the terminal is then `failed`. Null otherwise. */
   harnessError: string | null;
 }
@@ -58,7 +63,7 @@ class HarnessFailure extends Error {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const unexpected = (): never => { throw new HarnessFailure("unexpected_tool_result"); };
 
-export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parameters<typeof createCapturingAdapter>[1] } = {}): Promise<RunOutput> {
+export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parameters<typeof createCapturingAdapter>[1]; macKey?: Uint8Array } = {}): Promise<RunOutput> {
   assertRunId(input.runId);
   const runId = input.runId;
   const config = await loadConfig(input.configPath);
@@ -83,6 +88,7 @@ export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parame
   let durationMs = 0;
   let sessionsLeft = 0;
   let assistantTextRef: string | null = null;
+  let assistantTextSha256: string | null = null;
   let assistantTextTruncated = false;
   let harnessError: string | null = null;
   let sessionId: string | undefined;
@@ -132,6 +138,7 @@ export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parame
             await mkdir(input.privateDir, { recursive: true, mode: 0o700 });
             await writeFile(join(input.privateDir, `${runId}.txt`), turn.assistantText, { mode: 0o600, flag: "wx" });
             assistantTextRef = `${runId}.txt`;
+            assistantTextSha256 = sha256Hex(turn.assistantText);
           } catch {
             throw new HarnessFailure("private_write_failed");
           }
@@ -154,17 +161,28 @@ export async function runOne(input: RunOneInput, deps: { adapterOptions?: Parame
   }
   for (const detach of detachers) detach();
   if (harnessError !== null) terminal = "failed";
-  return { runId, terminal, startErrorCode, usage, durationMs, sessionsLeft, assistantTextRef, assistantTextTruncated, harnessError };
+  const output: RunOutput = { runId, terminal, startErrorCode, usage, durationMs, sessionsLeft, assistantTextRef, assistantTextTruncated, assistantTextSha256, mac: null, harnessError };
+  return deps.macKey === undefined ? output : { ...output, mac: macOf({ ...output }, deps.macKey) };
 }
 
-/** `node run-one.js <input.json>` writes `run-output.json` next to the input and exits 0 once an output exists. */
+async function readStdin(): Promise<string> {
+  let text = "";
+  for await (const chunk of process.stdin) text += chunk.toString("utf8");
+  return text;
+}
+
+/**
+ * `node run-one.js <input.json>` reads the supervisor's per-run key from stdin before anything else (R35), writes a MAC'd
+ * `run-output.json` next to the input and exits 0 once an output exists. The key never appears in argv, env or a file.
+ */
 async function main(): Promise<void> {
   const inputPath = process.argv[2];
   if (!inputPath) throw new Error("input_path_required");
+  const macKey = decodeKey(await readStdin());
   const raw: unknown = JSON.parse(await readFile(inputPath, "utf8"));
   assertRunId(isRecord(raw) ? raw.runId : undefined);
   const input = runOneInputSchema.parse(raw);
-  const output = await runOne(input);
+  const output = await runOne(input, { macKey });
   await writeFile(join(dirname(inputPath), "run-output.json"), JSON.stringify(output, null, 2) + "\n");
 }
 
