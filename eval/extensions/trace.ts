@@ -8,7 +8,7 @@ export const STRACE_ARGS: readonly string[] = [
   "-f", "-q", "-e",
   "trace=connect,openat,open,creat,rename,renameat,renameat2,unlink,unlinkat,mkdir,mkdirat,symlink,symlinkat,link,linkat,truncate,chdir,fchdir,clone,clone3,fork,vfork"
     + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
-    + ",sendto,sendmsg,sendmmsg,io_uring_setup",
+    + ",sendto,sendmsg,sendmmsg,io_uring_setup,chroot,pivot_root,setns,unshare,mount",
   "-y",
 ];
 
@@ -87,6 +87,7 @@ const SPECS: Record<string, Spec> = {
 };
 const CLONES = new Set(["clone", "clone3", "fork", "vfork"]);
 const SEND_CALLS = new Set(["connect", "sendto", "sendmsg", "sendmmsg"]);
+const ROOT_CHANGES = new Set(["chroot", "pivot_root", "setns", "unshare", "mount"]);
 
 type Return = { kind: "ok"; value: number; annotation?: string } | { kind: "failed" } | { kind: "progress" };
 interface Call { name: string; args: string[]; ret: Return }
@@ -270,10 +271,43 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
   const cellOf = (pid: number): Cell | undefined => { const c = live.get(pid); return c && root(c); };
 
+  /** Before clone return reveals the child pid, an untracked pid may already share any pending parent's fs_struct. */
+  function attachPendingGroup(pid: number, seq: number): Cell | undefined {
+    const existing = cellOf(pid);
+    if (existing) return existing;
+    let group: Cell | undefined;
+    for (const [parentPid, head] of pending) {
+      const call = parseCall(head.head);
+      if (!call || (call.name !== "clone" && call.name !== "clone3")) continue;
+      const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
+      if (flags !== undefined && !/\bCLONE_FS\b/.test(flags)) continue;
+      const parent = cellOf(parentPid) ?? newCell(parentPid, [null], seq);
+      if (!group) group = parent;
+      else if (parent !== group) {
+        parent.cwds.forEach((cwd) => group!.cwds.add(cwd));
+        parent.forward = group;
+      }
+      group.shared = true;
+      if (flags === undefined) group.cwds.add(null);
+    }
+    if (group) {
+      group.touched = seq;
+      live.set(pid, group);
+      records.set(pid, [...(records.get(pid) ?? []), { cell: group, created: seq }]);
+    }
+    return group;
+  }
+
   /** A chdir replaces the candidates of a lone process and adds to those of a thread group. */
   function changeCwd(pid: number, map: (cwd: string | null) => string | null, seq: number): void {
     const cell = cellOf(pid);
-    if (!cell) { newCell(pid, [map(null)], seq); return; }
+    if (!cell) {
+      const group = attachPendingGroup(pid, seq);
+      // The first relative chdir still has an unknown base; retain that uncertainty in the union.
+      if (group) group.cwds.add(map(null));
+      else newCell(pid, [map(null)], seq);
+      return;
+    }
     const next = [...cell.cwds].map(map);
     if (cell.shared) next.forEach((c) => cell.cwds.add(c));
     else cell.cwds = new Set(next);
@@ -394,7 +428,9 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const call = parseCall(body);
     if (!call) return;
     const spec = SPECS[call.name];
-    if (spec) return write(pid, call, spec);
+    if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
+    // Even absolute paths cannot be audited after a successful root/namespace change.
+    if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") unresolvedWrites++; return; }
     if (call.name === "connect") return sendTarget(call.args[1], true);
     if (call.name === "sendto") return sendTarget(call.args[4]);
     if (call.name === "sendmsg" || call.name === "sendmmsg") return messageDestinations(call.args[1]).forEach(judgeDestination);
@@ -421,6 +457,18 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
+    const superseded = /^\+\+\+ superseded by execve in pid (\d+) \+\+\+$/.exec(body);
+    if (superseded) {
+      flush(pid);
+      const oldTid = Number(superseded[1]);
+      const cell = cellOf(oldTid);
+      if (cell) {
+        live.set(pid, cell);
+        records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
+      } else live.delete(pid);
+      if (oldTid !== pid) live.delete(oldTid);
+      continue;
+    }
     if (EXIT_LINE.test(body)) {
       flush(pid);
       live.delete(pid); // the records stay: a clone return after this line still has to find the cell
@@ -433,18 +481,28 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
       if (head === undefined) {
         // The arguments are lost, so the call cannot be judged: fail closed.
         const name = resumed[1]!;
-        if (SPECS[name]) unresolvedWrites++;
+        if (SPECS[name]) { attachPendingGroup(pid, seq); unresolvedWrites++; }
+        else if (ROOT_CHANGES.has(name)) {
+          if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedWrites++;
+        }
         else if (SEND_CALLS.has(name) || name === "io_uring_setup") unresolvedEgress++;
         else if (name === "chdir" || name === "fchdir") changeCwd(pid, () => null, seq);
         continue;
       }
       pending.delete(pid);
-      handle(pid, head.head + resumed[2]!.replace(/\s*<unfinished \.\.\.>/, ""), seq, head.seq);
+      handle(pid, head.head + resumed[2]!.replace(/^\s*<unfinished \.\.\.>/, ""), seq, head.seq);
       continue;
     }
     flush(pid);
     const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
-    if (unfinished) { pending.set(pid, { head: unfinished[1]!, seq }); continue; }
+    if (unfinished) {
+      const head = unfinished[1]!;
+      const call = parseCall(head);
+      if (call && SPECS[call.name]) attachPendingGroup(pid, seq);
+      else if (call && (call.name === "chdir" || call.name === "fchdir")) chdir(pid, call, seq);
+      pending.set(pid, { head, seq });
+      continue;
+    }
     handle(pid, body, seq, seq);
   }
   for (const pid of [...pending.keys()]) flush(pid);
