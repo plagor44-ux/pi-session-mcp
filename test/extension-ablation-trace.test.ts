@@ -1311,17 +1311,18 @@ describe("PID namespace decoding and sandbox-private mounts (R49b, M2)", () => {
     expect(parseStraceLog(outside, ctx({ initialCwd: "/scope", allowed: ["/scope"] })).outsideWrites).toEqual(["/etc/x"]);
   });
 
-  it("counts /tmp, /dev/shm and /run as private only in a sandboxed parse", () => {
+  it("counts /tmp, /var/tmp, /dev/shm and /run as private only in a sandboxed parse", () => {
     const log = lines(
       "100 openat(AT_FDCWD</scope>, \"/dev/shm/x\", O_WRONLY|O_CREAT, 0600) = 3</dev/shm/x>",
       "100 openat(AT_FDCWD</scope>, \"/tmp/y\", O_WRONLY|O_CREAT, 0600) = 4</tmp/y>",
       "100 mkdir(\"/run/z\", 0755) = 0",
       "100 openat(AT_FDCWD</scope>, \"/var/tmp/w\", O_WRONLY|O_CREAT, 0600) = 5</var/tmp/w>",
+      "100 openat(AT_FDCWD</scope>, \"/var/lib/w\", O_WRONLY|O_CREAT, 0600) = 6</var/lib/w>",
     );
     const plain = parseStraceLog(log, ctx({ initialCwd: "/scope", allowed: ["/scope"] }));
-    expect(plain.outsideWrites).toEqual(["/dev/shm/x", "/tmp/y", "/run/z", "/var/tmp/w"]);
+    expect(plain.outsideWrites).toEqual(["/dev/shm/x", "/tmp/y", "/run/z", "/var/tmp/w", "/var/lib/w"]);
     // The root pid is bwrap itself (muted); pid 100 stands for the workload.
     const sandboxed = parseStraceLog(log, { ...ctx({ initialCwd: "/scope", allowed: ["/scope"] }), rootPid: 99, sandboxed: true });
-    expect(sandboxed.outsideWrites).toEqual(["/var/tmp/w"]);
+    expect(sandboxed.outsideWrites).toEqual(["/var/lib/w"]);
   });
 });
