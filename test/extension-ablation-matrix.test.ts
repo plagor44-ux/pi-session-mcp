@@ -8,7 +8,7 @@ const HASH = `sha256:${"a".repeat(64)}` as const;
 function base(id: string) {
   return {
     id, repo: "pi-session-mcp", baseCommit: "b".repeat(40), promptRef: `eval/results/extensions/prompts/${id}.txt`,
-    promptHash: HASH, sourceSession: `session-${id}`, allowedPaths: ["src/config.ts"], scopeIgnore: ["dist/**"],
+    promptHash: HASH, sourceSession: `session-${id}`, allowedPaths: ["src/config.ts"], scopeIgnore: ["dist/"],
   };
 }
 function review(id: string): TaskSpec {
@@ -55,6 +55,47 @@ describe("extension ablation matrix", () => {
     expect(pos("code", "A")).toBeLessThan(pos("code", "pi-cache-optimizer"));
     expect(pos("code", "pi-lens")).toBeLessThan(pos("code", "pi-cache-optimizer"));
     expect(runs[pos("code", "A")]!.pairings.sort()).toEqual(["co-code", "pl-code"]);
+  });
+  it("alternates arm A per task index within its kind on an interleaved list", () => {
+    const runs = buildMatrix([review("R1"), impl("I1"), review("R2"), impl("I2")], PAIRINGS);
+    const arms = (profile: string) => runs.filter(r => r.profile === profile && r.arm !== "pi-cache-optimizer").map(r => r.arm);
+    expect(arms("review-grok")).toEqual(["A", "pi-lens", "pi-lens", "A"]);
+    expect(arms("code-deepseek")).toEqual(["A", "pi-lens", "pi-lens", "A"]);
+  });
+  it("gives a shared arm-A run the most urgent priority of the pairings it serves", () => {
+    const at = (runs: ReturnType<typeof buildMatrix>, arm: string, task: string) => runs.findIndex(r => r.profile === "code" && r.arm === arm && r.taskId === task);
+    const one = buildMatrix([impl("I1")], PAIRINGS);
+    expect(at(one, "A", "I1")).toBeLessThan(at(one, "pi-lens", "I1"));
+    expect(at(one, "A", "I1")).toBeLessThan(at(one, "pi-cache-optimizer", "I1"));
+    const two = buildMatrix([impl("I1"), impl("I2")], PAIRINGS);
+    expect(at(two, "A", "I2")).toBeLessThan(at(two, "pi-cache-optimizer", "I1"));
+  });
+  it("runs review-grok before review at the same priority", () => {
+    const runs = buildMatrix([review("R1")], PAIRINGS);
+    const grok = runs.flatMap((r, i) => r.profile === "review-grok" ? [i] : []);
+    const plain = runs.flatMap((r, i) => r.profile === "review" ? [i] : []);
+    expect(Math.max(...grok)).toBeLessThan(Math.min(...plain));
+  });
+  it("rejects duplicate task ids", () => {
+    expect(() => buildMatrix([impl("I1"), impl("I1")], PAIRINGS)).toThrow("duplicate_task_id");
+    expect(() => trimMatrix([impl("I1"), impl("I1")], PAIRINGS, () => 0, 10)).toThrow("duplicate_task_id");
+  });
+  it("trims co-review first, then co-code, then pl-review, until the budget fits", () => {
+    const tasks = ["I1","I2","I3","I4","R1","R2","R3","R4"].map(id => id[0] === "I" ? impl(id) : review(id));
+    const cost = (runs: unknown[]) => runs.length * 0.5;
+    const four = (p: string) => (p[0] === "I" ? ["I1","I2","I3","I4"] : ["R1","R2","R3","R4"]);
+    const a = trimMatrix(tasks, PAIRINGS, cost, 19.5);
+    expect(a.tasksPerPairing).toEqual({
+      "pl-code-deepseek": four("I"), "pl-code": four("I"), "pl-review-grok": four("R"), "pl-review": four("R"),
+      "co-code": four("I"), "co-review": ["R1","R2","R3"],
+    });
+    expect(a.runs).toHaveLength(39);
+    const b = trimMatrix(tasks, PAIRINGS, cost, 18.5);
+    expect(b.tasksPerPairing).toEqual({
+      "pl-code-deepseek": four("I"), "pl-code": four("I"), "pl-review-grok": four("R"), "pl-review": ["R1","R2","R3"],
+      "co-code": ["I1","I2","I3"], "co-review": ["R1","R2","R3"],
+    });
+    expect(b.runs).toHaveLength(36);
   });
   it("trims tasks from the lowest priority first, never below 3, then drops whole pairings", () => {
     const tasks = ["I1","I2","I3","I4","R1","R2","R3","R4"].map(id => id[0] === "I" ? impl(id) : review(id));
@@ -115,6 +156,18 @@ describe("extension ablation budget ledger", () => {
     expect(l.spentUsd).toBeCloseTo(0.42);
     l.record("code", 9.3);
     expect(l.allows("review")).toBe(false);   // 9.72 + max(1, 9.3) > 10
+  });
+  it("rejects invalid costs and allows spending exactly up to the limit", () => {
+    const l = new BudgetLedger(10);
+    for (const bad of [-0.01, Number.NaN, Infinity, -Infinity]) expect(() => l.record("code", bad)).toThrow("invalid_cost");
+    expect(l.spentUsd).toBe(0);
+    l.record("code", 0);
+    l.record("code", 9);
+    expect(l.estimate("code")).toBe(9);
+    expect(l.allows("code")).toBe(false);   // 9 + 9 > 10
+    const exact = new BudgetLedger(10);
+    exact.record("code", 5);
+    expect(exact.allows("code")).toBe(true);   // 5 + 5 == 10
   });
   it("a profile with only null costs stays unobserved", () => {
     const l = new BudgetLedger(10);
