@@ -31,7 +31,7 @@ export interface TraceFindings {
   unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
   /** All inet/inet6 connect attempts, whatever their return value. */
   connects: number;
-  /** Egress that cannot be audited: every `io_uring_setup` (io_uring can connect and write without further syscalls), and resumed halves whose head is missing. */
+  /** Egress that cannot be audited: every `io_uring_setup` that did not fail (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
   unresolvedEgress: number;
 }
 
@@ -245,7 +245,15 @@ interface Cell {
 }
 const root = (cell: Cell): Cell => (cell.forward ? root(cell.forward) : cell);
 
+/**
+ * Window-born taint (R24) is only known when a clone return line arrives, which can be after the tainted pid (or a pid it cloned
+ * earlier) already wrote. The first pass therefore collects the taint closure and the second pass judges every line with it.
+ */
 export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
+  return analyze(text, ctx, analyze(text, ctx, new Set()).tainted).findings;
+}
+
+function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
   const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
@@ -255,6 +263,20 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
   const pending = new Map<number, { head: string; seq: number }>();
   /** A speculative group attachment may actually belong to a pending non-CLONE_FS parent. Local to the pid. */
   const uncertain = new Set<number>();
+  /**
+   * Window-born pids (R24): a pid that emitted any traced line before its parent's clone return line, and every pid they clone.
+   * Such a pid may have been attached to the wrong parent, so its cwd-relative writes always count as unresolved. Never cleared.
+   */
+  const tainted = new Set<number>(seed);
+  const children = new Map<number, number[]>();
+  const taint = (pid: number): void => {
+    if (tainted.has(pid)) return;
+    tainted.add(pid);
+    for (const child of children.get(pid) ?? []) taint(child);
+  };
+  /** Pids whose clone return line has been seen (or the root); a pid that emits lines before that is unclaimed. */
+  const claimed = new Set<number>([ctx.rootPid]);
+  const unclaimed = new Map<number, { exited: boolean }>();
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
@@ -333,7 +355,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const fromCwd = (): Resolved => {
       const cwds = cellOf(pid)?.cwds;
       const known = [...(cwds ?? [])].filter((c): c is string => c !== null);
-      return { paths: resolveAll(known, path), unresolved: uncertain.has(pid) || !cwds || cwds.size === 0 || cwds.has(null) };
+      return { paths: resolveAll(known, path), unresolved: uncertain.has(pid) || tainted.has(pid) || !cwds || cwds.size === 0 || cwds.has(null) };
     };
     if (t.dir === undefined) return fromCwd();
     const dir = parseFd(args[t.dir]);
@@ -394,6 +416,11 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
     const child = call.ret.value;
     uncertain.delete(child);
+    const born = unclaimed.get(child);
+    children.set(pid, [...(children.get(pid) ?? []), child]);
+    if (born !== undefined || tainted.has(pid)) taint(child);
+    unclaimed.delete(child);
+    if (born === undefined || !born.exited) claimed.add(child);
     const parent = cellOf(pid);
     const own = [...new Set((records.get(child) ?? [])
       .filter((r) => r.created > headSeq || root(r.cell).touched > headSeq)
@@ -438,7 +465,8 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     if (call.name === "connect") return sendTarget(call.args[1], true);
     if (call.name === "sendto") return sendTarget(call.args[4]);
     if (call.name === "sendmsg" || call.name === "sendmmsg") return messageDestinations(call.args[1]).forEach(judgeDestination);
-    if (call.name === "io_uring_setup") { unresolvedEgress++; return; }
+    // A failed setup (`= -1 E...`) creates no ring and cannot be used for I/O (R23b); a successful or in-progress one counts.
+    if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") unresolvedEgress++; return; }
     if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
     if (call.name === "chdir" || call.name === "fchdir") chdir(pid, call, seq);
   }
@@ -461,6 +489,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
+    if (!claimed.has(pid)) unclaimed.set(pid, unclaimed.get(pid) ?? { exited: false });
     const superseded = /^\+\+\+ superseded by execve in pid (\d+) \+\+\+$/.exec(body);
     if (superseded) {
       flush(pid);
@@ -471,6 +500,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
         records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
       } else live.delete(pid);
       if (oldTid !== pid) live.delete(oldTid);
+      if (tainted.has(oldTid)) taint(pid);
       if (uncertain.has(oldTid)) uncertain.add(pid);
       else uncertain.delete(pid);
       if (oldTid !== pid) uncertain.delete(oldTid);
@@ -478,6 +508,9 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
     }
     if (EXIT_LINE.test(body)) {
       flush(pid);
+      claimed.delete(pid);
+      const lone = unclaimed.get(pid);
+      if (lone) lone.exited = true;
       live.delete(pid); // the records stay: a clone return after this line still has to find the cell
       uncertain.delete(pid);
       continue;
@@ -493,7 +526,8 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
         else if (ROOT_CHANGES.has(name)) {
           if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedWrites++;
         }
-        else if (SEND_CALLS.has(name) || name === "io_uring_setup") unresolvedEgress++;
+        else if (name === "io_uring_setup") { if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedEgress++; }
+        else if (SEND_CALLS.has(name)) unresolvedEgress++;
         else if (name === "chdir" || name === "fchdir") changeCwd(pid, () => null, seq);
         continue;
       }
@@ -516,11 +550,14 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
   for (const pid of [...pending.keys()]) flush(pid);
 
   return {
-    outsideWrites: [...outside],
-    unresolvedWrites,
-    deniedWriteAttempts,
-    unexpectedConnects: [...unexpected.values()],
-    connects,
-    unresolvedEgress,
+    findings: {
+      outsideWrites: [...outside],
+      unresolvedWrites,
+      deniedWriteAttempts,
+      unexpectedConnects: [...unexpected.values()],
+      connects,
+      unresolvedEgress,
+    },
+    tainted,
   };
 }

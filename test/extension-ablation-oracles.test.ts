@@ -547,6 +547,21 @@ describe("scoreImplementation", () => {
     expect(existsSync(marker)).toBe(false);
   });
 
+  it("gives oracle commands a TMPDIR inside the oracle HOME, or the one passed in (R33)", async () => {
+    const { repo, base } = makeBase();
+    const home = tmp("oracle-home-");
+    const probe = (expected: string) => node(`const p=process.env.TMPDIR;process.exit(p===${JSON.stringify(expected)}&&require('fs').statSync(p).isDirectory()?0:1)`);
+    const own = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: probe(join(home, "tmp")), timeoutMs: 10_000 }), { gitDir: base.gitDir, home });
+    expect(own.testsPassed).toBe(true);
+    const custom = join(home, "custom-tmp");
+    const passed = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: probe(custom), timeoutMs: 10_000 }), { gitDir: base.gitDir, home, tmpdir: custom });
+    expect(passed.testsPassed).toBe(true);
+    const fresh = await scoreImplementation(repo, task({}, base, {
+      kind: "implementation", command: node("const p=process.env.TMPDIR;process.exit(p&&p.startsWith(process.env.HOME+'/')&&require('fs').statSync(p).isDirectory()?0:1)"), timeoutMs: 10_000,
+    }), { gitDir: base.gitDir });
+    expect(fresh.testsPassed).toBe(true);
+  });
+
   it("shares one deadline between setup and the decisive command", async () => {
     const { repo, base } = makeBase();
     const sleep = node("setTimeout(()=>{}, 700)");
@@ -618,11 +633,11 @@ describe("scoreImplementation", () => {
     expect(readFileSync(join(repo, "a.ts"), "utf8")).toBe("export const a = 6;\n");
   });
 
-  it("passes only PATH, HOME and CI=1; HOME defaults to a fresh directory outside the clone", async () => {
+  it("passes only PATH, HOME, TMPDIR (inside HOME, R33) and CI=1; HOME defaults to a fresh directory outside the clone", async () => {
     const { repo, base } = makeBase();
     const home = tmp("oracle-home-");
     const homeLog = join(tmp("oracle-homelog-"), "home");
-    const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).sort().join()==='CI,HOME,PATH'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}?0:1)`);
+    const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).sort().join()==='CI,HOME,PATH,TMPDIR'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}&&e.TMPDIR===${JSON.stringify(expectedHome)}+'/tmp'?0:1)`);
     const run = (command: string[], options: { home?: string } = {}) => scoreImplementation(repo, task({}, base, { kind: "implementation", command, timeoutMs: 10_000 }), { gitDir: base.gitDir, ...options });
     expect((await run(check(home), { home })).testsPassed).toBe(true);
     expect((await run(node(`require('fs').writeFileSync(${JSON.stringify(homeLog)}, process.env.HOME)`))).testsPassed).toBe(true);
