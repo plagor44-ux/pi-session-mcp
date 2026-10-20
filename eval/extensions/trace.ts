@@ -271,6 +271,29 @@ interface Cell {
 const root = (cell: Cell): Cell => (cell.forward ? root(cell.forward) : cell);
 
 /**
+ * The number of `io_uring_setup` calls in a strace log that did not fail, which is what `parseStraceLog` counts as unresolved egress
+ * for this call (R36): with the injected `ENOSYS` the number must be 0 on a host the evaluation can run on. A call cut off before its
+ * return value counts. Same line and return parsing as the audit; the audit itself is unchanged.
+ */
+export function countIoUringSetups(text: string): number {
+  let count = 0;
+  const pending = new Set<number>();
+  for (const line of text.split("\n")) {
+    const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
+    if (!m) continue;
+    const pid = Number(m[1] ?? m[2]), body = m[3]!;
+    const resumed = /^<\.\.\. io_uring_setup resumed>([^]*)$/.exec(body);
+    if (resumed) {
+      if (pending.delete(pid) && parseReturn(resumed[1]!.replace(/^\s*\)/, ""))?.kind !== "failed") count++;
+    } else if (/^io_uring_setup\(/.test(body)) {
+      if (/<unfinished \.\.\.>\s*$/.test(body)) pending.add(pid);
+      else if (parseCall(body)?.ret.kind !== "failed") count++;
+    }
+  }
+  return count + pending.size;
+}
+
+/**
  * Window-born taint (R24) is only known when a clone return line arrives, which can be after the tainted pid (or a pid it cloned
  * earlier) already wrote. The first pass therefore collects the taint closure and the second pass judges every line with it.
  */

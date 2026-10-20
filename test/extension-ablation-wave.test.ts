@@ -708,7 +708,7 @@ describe("cli arguments", () => {
   it("accepts the live modes and rejects unknown modes and options", () => {
     expect(parseArgs(["--plan", "--tasks", "t.json"])).toMatchObject({ mode: "--plan", options: { "--tasks": "t.json" }, trim: false });
     expect(parseArgs(["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json", "--trim"])).toMatchObject({ mode: "--wave", trim: true });
-    expect(() => parseArgs(["--scan", "--tasks", "t.json"])).toThrow("mode_required");
+    expect(() => parseArgs(["--unknown-mode", "--tasks", "t.json"])).toThrow("mode_required");
     expect(() => parseArgs(["--plan", "--wave", "--tasks", "t.json"])).toThrow("choose_one_mode");
     expect(() => parseArgs(["--plan", "--tasks", "t.json", "--bogus", "x"])).toThrow("invalid_argument");
     expect(() => parseArgs(["--wave", "--tasks", "t.json"])).toThrow("approval_required");
