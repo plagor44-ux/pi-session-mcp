@@ -318,8 +318,8 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   newCell(ctx.rootPid, [posix.resolve("/", ctx.initialCwd)], -1);
 
   // Magic links such as /proc/self/root and /proc/self/fd/N are deliberately not exempt.
-  // Inside bubblewrap /tmp, /dev/shm and /run are fresh tmpfs mounts private to the sandbox (M2); a write there is not a host write.
-  const privateRoots = ctx.sandboxed === true ? ["/tmp", "/dev/shm", "/run"] : [];
+  // Inside bubblewrap /tmp, /var/tmp, /dev/shm and /run are fresh tmpfs mounts private to the sandbox (M2, R51); a write there is not a host write.
+  const privateRoots = ctx.sandboxed === true ? ["/tmp", "/var/tmp", "/dev/shm", "/run"] : [];
   const allowed = (p: string): boolean =>
     privateRoots.some((r) => p === r || p.startsWith(`${r}/`)) || p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));

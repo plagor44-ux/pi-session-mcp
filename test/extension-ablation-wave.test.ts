@@ -13,8 +13,8 @@ import type { ImplementationScore } from "../eval/extensions/oracles.js";
 import { runHelper } from "../eval/extensions/helpers.js";
 import { readVerifiedOutput } from "../eval/extensions/audit.js";
 import { WaveDirGuard, removeTree } from "../eval/extensions/evidence.js";
-import { containmentSelfTest } from "../eval/extensions/containment.js";
-import { EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type SandboxPlan } from "../eval/extensions/sandbox.js";
+import { ABSENT_PATHS, containmentSelfTest } from "../eval/extensions/containment.js";
+import { ETC_ENTRIES, EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type PlanHost, type SandboxPlan } from "../eval/extensions/sandbox.js";
 import { assertWaveDirOutsideSources, resolveTool, resolveTools, type ToolPaths } from "../eval/extensions/tools.js";
 import { encodeKey, macOf, sha256Hex } from "../eval/extensions/output-mac.js";
 import { readRegularFile } from "../eval/extensions/safe-read.js";
@@ -1400,7 +1400,7 @@ describe("Unix socket stop and preflight charge", () => {
     const ledgerPath = join(root, "ledger.json");
     const r = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath, productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
       spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), checkRoute: async () => undefined, hostCheck: async () => undefined, containmentCheck: async () => undefined,
-      resolveTools: async () => TOOLS, residualCheck: async () => { throw new Error("residual exploded"); },
+      planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, residualCheck: async () => { throw new Error("residual exploded"); },
     });
     expect(r.routes).toMatchObject([{ ok: false, failure: "preflight_step_failed" }]);
     const ledger = JSON.parse(await readFile(ledgerPath, "utf8")) as { entries: { runId: string; costUsd: number; estimated?: boolean }[] };
@@ -1411,34 +1411,55 @@ describe("Unix socket stop and preflight charge", () => {
 
 describe("bubblewrap containment (R46)", () => {
   const hasBwrap = existsSync("/usr/bin/bwrap");
+  const codegraphPath = (process.env.PATH ?? "").split(":").map((dir) => join(dir, "codegraph")).find((path) => existsSync(path)) ?? "";
+  const hasCodegraph = codegraphPath !== "";
 
   const HOME = "/home/op";
   const plan: SandboxPlan = {
-    runReadOnly: ["/run/systemd/resolve"], varRunDirectory: false, home: HOME,
-    homeReadOnly: [`${HOME}/repo/node_modules`, `${HOME}/.local/bin`], extraReadOnly: ["/tmp/build"],
+    rootLinks: [{ path: "/bin", target: "usr/bin" }, { path: "/lib", target: "usr/lib" }], rootReadOnly: ["/opt"],
+    etcReadOnly: ["/etc/hosts", "/etc/ssl"], runReadOnly: ["/run/systemd/resolve"], home: HOME,
+    homeReadOnly: [`${HOME}/repo/node_modules`, `${HOME}/.codegraph/v1/bin`], homeLinks: [{ path: `${HOME}/.local/bin/codegraph`, target: `${HOME}/.codegraph/v1/bin/codegraph` }],
+    extraReadOnly: ["/tmp/build"],
   };
 
-  it("builds the sandbox: /run and the home hidden, name resolution and needs bound back read-only, scope bind after the tmpfs mounts", () => {
+  it("builds the sandbox from an allowlist root: no bind of /, /run and the home hidden, needs bound back read-only, scope bind after the tmpfs mounts", () => {
     const args = bwrapArgs("/tmp/x/scope", plan, ["/tmp/x/oracle-home"]);
-    expect(args.slice(0, 3)).toEqual(["--ro-bind", "/", "/"]);
     const at = (flag: string, value: string) => args.findIndex((arg, i) => arg === flag && args[i + 1] === value);
     const bind = (flag: string, path: string) => args.findIndex((arg, i) => arg === flag && args[i + 1] === path && args[i + 2] === path);
-    const bindScope = bind("--bind", "/tmp/x/scope");
+    const link = (target: string, path: string) => args.findIndex((arg, i) => arg === "--symlink" && args[i + 1] === target && args[i + 2] === path);
+    // R51: the host's root is never bound; the allowlist comes first, in order.
+    expect(bind("--ro-bind", "/")).toBe(-1);
+    expect(args.slice(0, 3)).toEqual(["--ro-bind", "/usr", "/usr"]);
+    expect(link("usr/bin", "/bin")).toBeGreaterThan(bind("--ro-bind", "/usr"));
+    expect(link("usr/lib", "/lib")).toBeGreaterThan(-1);
+    expect(bind("--ro-bind", "/opt")).toBeGreaterThan(-1);
+    const etc = at("--dir", "/etc");
+    expect(etc).toBeGreaterThan(-1);
+    expect(bind("--ro-bind", "/etc/hosts")).toBeGreaterThan(etc);
+    expect(bind("--ro-bind", "/etc/ssl")).toBeGreaterThan(etc);
+    expect(bind("--ro-bind", "/etc/hosts")).toBeLessThan(at("--tmpfs", "/tmp"));
     expect(at("--tmpfs", "/tmp")).toBeGreaterThan(-1);
+    // /var holds nothing but an empty tmpfs /var/tmp, made inside a plain /var.
+    expect(at("--dir", "/var")).toBeGreaterThan(-1);
+    expect(at("--tmpfs", "/var/tmp")).toBeGreaterThan(at("--dir", "/var"));
+    expect(args.some((arg, i) => arg === "--tmpfs" && args[i + 1] === "/var")).toBe(false);
+    const bindScope = bind("--bind", "/tmp/x/scope");
     expect(bindScope).toBeGreaterThan(at("--tmpfs", "/tmp"));
     expect(bind("--bind", "/tmp/x/oracle-home")).toBeGreaterThan(bindScope);
     // R48: all of /run is a tmpfs; no dedicated /run/user or /run/dbus entry is left to forget a sibling socket.
     expect(at("--tmpfs", "/run")).toBeGreaterThan(-1);
     expect(args.some((arg, i) => arg === "--tmpfs" && (args[i + 1] === "/run/user" || args[i + 1] === "/run/dbus"))).toBe(false);
     expect(bind("--ro-bind", "/run/systemd/resolve")).toBeGreaterThan(at("--tmpfs", "/run"));
-    // R49: the home is a tmpfs, the needs are bound back read-only after it, the writable binds come last, then the home is remounted read-only.
+    // R49: the home is a tmpfs, the needs are bound back after it, the writable binds come next, then the home and the root are remounted read-only.
     const home = at("--tmpfs", HOME);
     expect(home).toBeGreaterThan(at("--tmpfs", "/run"));
     expect(bind("--ro-bind", `${HOME}/repo/node_modules`)).toBeGreaterThan(home);
-    expect(bind("--ro-bind", `${HOME}/.local/bin`)).toBeGreaterThan(home);
-    expect(bindScope).toBeGreaterThan(bind("--ro-bind", `${HOME}/.local/bin`));
+    expect(bind("--ro-bind", `${HOME}/.codegraph/v1/bin`)).toBeGreaterThan(home);
+    expect(link(`${HOME}/.codegraph/v1/bin/codegraph`, `${HOME}/.local/bin/codegraph`)).toBeGreaterThan(home);
+    expect(bindScope).toBeGreaterThan(link(`${HOME}/.codegraph/v1/bin/codegraph`, `${HOME}/.local/bin/codegraph`));
     expect(bind("--ro-bind", "/tmp/build")).toBeGreaterThan(at("--tmpfs", "/tmp"));
     expect(at("--remount-ro", HOME)).toBeGreaterThan(bind("--bind", "/tmp/x/oracle-home"));
+    expect(at("--remount-ro", "/")).toBeGreaterThan(at("--remount-ro", HOME));
     expect(args.filter((arg) => arg === "--bind")).toHaveLength(2);
     for (const flag of ["--dev", "--proc", "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid"]) expect(args).toContain(flag);
     expect(args).not.toContain("--share-net");
@@ -1446,42 +1467,144 @@ describe("bubblewrap containment (R46)", () => {
     expect(args.at(-1)).toBe("--");
     expect(sandboxed(TOOLS, plan, "/s", ["echo", "x"]).slice(0, 1)).toEqual([TOOLS.bwrap]);
     expect(sandboxed(TOOLS, plan, "/s", ["echo", "x"]).slice(-2)).toEqual(["echo", "x"]);
-    expect(bwrapArgs("/s", { ...plan, varRunDirectory: true })).toContain("/var/run");
-    expect(bwrapArgs("/s", { ...EMPTY_PLAN })).not.toContain("--remount-ro");
+    // Without a home there is no home tmpfs and no home remount, but the root is still read-only; /var/run does not exist at all.
+    const bare = bwrapArgs("/s", { ...EMPTY_PLAN });
+    expect(bare).not.toContain("/var/run");
+    expect(bare.filter((arg) => arg === "--remount-ro")).toHaveLength(1);
+    expect(bare.slice(0, 3)).toEqual(["--ro-bind", "/usr", "/usr"]);
   });
 
-  it("plans the host-dependent part: name resolution, the home with its needs, and a bundle's root", async () => {
+  /** A host with a merged-usr root, a resolv.conf that is a plain file, and a user bundle of codegraph below the home. */
+  const fakeHost = (over: Partial<PlanHost> & { present?: readonly string[]; realMap?: Record<string, string>; kinds?: Record<string, "link" | "dir" | "file"> } = {}): Partial<PlanHost> => {
+    const present = new Set(over.present ?? ["/opt", ...ETC_ENTRIES.map((entry) => `/etc/${entry}`)]);
+    const kinds = { "/bin": "link", "/lib": "link", "/lib64": "link", "/sbin": "link", "/etc/resolv.conf": "file", ...over.kinds };
+    return {
+      exists: async (path) => present.has(path),
+      lstat: async (path) => {
+        const kind = (kinds as Record<string, string | undefined>)[path];
+        return kind === undefined ? null : { isSymbolicLink: () => kind === "link", isDirectory: () => kind === "dir" };
+      },
+      real: async (path) => over.realMap?.[path] ?? path,
+      trackedSkills: async () => ["skills/a/SKILL.md", "skills/a/references/r.md", "skills/b/SKILL.md", "skills/loose.md"],
+      ...(over.exists === undefined ? {} : { exists: over.exists }),
+      ...(over.trackedSkills === undefined ? {} : { trackedSkills: over.trackedSkills }),
+    };
+  };
+  const planOf = (input: Partial<Parameters<typeof planSandbox>[0]>, host: Partial<PlanHost>) =>
+    planSandbox({ tools: { codegraph: "/usr/bin/codegraph" }, repoRoot: `${HOME}/repo`, buildRoot: "/tmp/build", home: HOME, nodePath: "/usr/bin/node", ...input }, host);
+
+  it("plans the allowlist root: merged-usr links by lstat, /opt only when present, and the /etc entries that exist", async () => {
+    const full = await planOf({}, fakeHost());
+    expect(full.rootLinks).toEqual([{ path: "/bin", target: "usr/bin" }, { path: "/lib", target: "usr/lib" }, { path: "/lib64", target: "usr/lib" }, { path: "/sbin", target: "usr/bin" }]);
+    expect(full.rootReadOnly).toEqual(["/opt"]);
+    expect(full.etcReadOnly).toEqual(ETC_ENTRIES.map((entry) => `/etc/${entry}`));
+    // The brief's list, once, in one place.
+    expect([...ETC_ENTRIES]).toEqual([
+      "resolv.conf", "hosts", "nsswitch.conf", "passwd", "group", "localtime", "ld.so.cache", "ld.so.conf", "ld.so.conf.d",
+      "ssl", "ca-certificates", "pki", "os-release", "gitconfig", "mime.types", "protocols", "services",
+    ]);
+    // No /opt, no gitconfig/pki, a missing /lib64, and a real directory at /sbin (bound instead of linked).
+    const sparse = await planOf({}, fakeHost({
+      present: ["/etc/hosts", "/etc/resolv.conf", "/etc/ssl"], kinds: { "/lib64": undefined as never, "/sbin": "dir" },
+    }));
+    expect(sparse.etcReadOnly).toEqual(["/etc/resolv.conf", "/etc/hosts", "/etc/ssl"]);
+    expect(sparse.rootReadOnly).toEqual(["/sbin"]);
+    expect(sparse.rootLinks.map((link) => link.path)).toEqual(["/bin", "/lib"]);
+  });
+
+  it("brings a resolv.conf link's directory back only below /run, without repeating the systemd one", async () => {
+    const link = { kinds: { "/etc/resolv.conf": "link" as const } };
+    const nm = await planOf({}, fakeHost({ ...link, present: ["/run/systemd/resolve"], realMap: { "/etc/resolv.conf": "/run/NetworkManager/resolv.conf" } }));
+    expect(nm.runReadOnly).toEqual(["/run/systemd/resolve", "/run/NetworkManager"]);
+    const systemd = await planOf({}, fakeHost({ ...link, present: ["/run/systemd/resolve"], realMap: { "/etc/resolv.conf": "/run/systemd/resolve/stub-resolv.conf" } }));
+    expect(systemd.runReadOnly).toEqual(["/run/systemd/resolve"]);
+    const elsewhere = await planOf({}, fakeHost({ ...link, present: [], realMap: { "/etc/resolv.conf": "/var/lib/dns/resolv.conf" } }));
+    expect(elsewhere.runReadOnly).toEqual([]);
+  });
+
+  it("binds back only what a run needs below the home: node_modules, tracked skills, codegraph's file and a bundle's bin, node and lib", async () => {
+    const bundle = `${HOME}/.codegraph/versions/v1`;
+    const planned = await planOf(
+      { tools: { codegraph: `${HOME}/.local/bin/codegraph` } },
+      fakeHost({ present: [`${bundle}/bin`, `${bundle}/node`, `${bundle}/lib`], realMap: { [`${HOME}/.local/bin/codegraph`]: `${bundle}/bin/codegraph` } }),
+    );
+    expect(planned.homeReadOnly).toEqual([
+      `${HOME}/repo/node_modules`, `${HOME}/repo/skills/a`, `${HOME}/repo/skills/b`, `${HOME}/repo/skills/loose.md`, `${bundle}/bin`, `${bundle}/node`, `${bundle}/lib`,
+    ]);
+    // The link is recreated, so the launcher finds its bundle through it; neither ~/.local/bin nor the bundle root nor ~/.codegraph is bound.
+    expect(planned.homeLinks).toEqual([{ path: `${HOME}/.local/bin/codegraph`, target: `${bundle}/bin/codegraph` }]);
+    for (const wide of [`${HOME}/.local`, `${HOME}/.local/bin`, bundle, `${HOME}/.codegraph`, `${HOME}/repo`, `${HOME}/repo/skills`, HOME]) expect(planned.homeReadOnly).not.toContain(wide);
+    expect(planned.extraReadOnly).toEqual(["/tmp/build"]);
+    // A plain binary file directly below the home is bound as that file alone, never its directory.
+    const plain = await planOf({ tools: { codegraph: `${HOME}/bin/codegraph` } }, fakeHost());
+    expect(plain.homeReadOnly).toEqual([`${HOME}/repo/node_modules`, `${HOME}/repo/skills/a`, `${HOME}/repo/skills/b`, `${HOME}/repo/skills/loose.md`, `${HOME}/bin/codegraph`]);
+    expect(plain.homeLinks).toEqual([]);
+    // codegraph below /usr needs nothing.
+    expect((await planOf({}, fakeHost())).homeReadOnly.some((path) => path.includes("codegraph"))).toBe(false);
+  });
+
+  it("binds the node binary's directory only when it is outside /usr and /opt", async () => {
+    expect((await planOf({ nodePath: "/usr/bin/node" }, fakeHost())).extraReadOnly).toEqual(["/tmp/build"]);
+    expect((await planOf({ nodePath: "/opt/node/bin/node" }, fakeHost())).extraReadOnly).toEqual(["/tmp/build"]);
+    expect((await planOf({ nodePath: "/data/node/bin/node" }, fakeHost())).extraReadOnly).toEqual(["/tmp/build", "/data/node/bin"]);
+    const inHome = await planOf({ nodePath: `${HOME}/.local/bin/node` }, fakeHost());
+    expect(inHome.homeReadOnly).toContain(`${HOME}/.local/bin`);
+    expect(inHome.extraReadOnly).toEqual(["/tmp/build"]);
+  });
+
+  it("lists the tracked skill directories through git, so an untracked session buffer stays hidden", async () => {
+    const repo = await temporaryRoot("ablation-skills-");
+    const git = (...args: string[]) => execFileSync("git", ["-C", repo, ...args], { stdio: "ignore" });
+    git("init", "-q");
+    await mkdir(join(repo, "skills", "tracked", "references"), { recursive: true });
+    await mkdir(join(repo, "skills", ".remember"), { recursive: true });
+    await mkdir(join(repo, "node_modules"));
+    await writeFile(join(repo, "skills", "tracked", "SKILL.md"), "x");
+    await writeFile(join(repo, "skills", "tracked", "references", "r.md"), "x");
+    await writeFile(join(repo, "skills", ".remember", "buffer.md"), "secret");
+    git("add", "skills/tracked");
+    const planned = await planSandbox({ tools: { codegraph: "/usr/bin/codegraph" }, repoRoot: repo, buildRoot: "/tmp/build", home: repo, nodePath: "/usr/bin/node" });
+    const real = await (await import("node:fs/promises")).realpath(repo);
+    expect(planned.homeReadOnly).toEqual([join(real, "node_modules"), join(real, "skills", "tracked")]);
+    await expect(planSandbox({ tools: { codegraph: "/usr/bin/codegraph" }, repoRoot: join(repo, "missing"), buildRoot: "/tmp/build", home: repo })).rejects.toThrow("skills_listing_failed");
+  });
+
+  it("plans the real file system: the home with its needs, a bundle's bin and a link to the codegraph file", async () => {
     const root = await temporaryRoot("ablation-plan-");
     const home = join(root, "home");
     const repo = join(home, "repo");
     await mkdir(join(repo, "node_modules"), { recursive: true });
-    await mkdir(join(repo, "skills"));
+    await mkdir(join(repo, "skills", "a"), { recursive: true });
     const bundle = join(home, ".tools", "cg", "v1");
     await mkdir(join(bundle, "bin"), { recursive: true });
     await writeFile(join(bundle, "bin", "codegraph"), "#!/bin/sh\n");
     await mkdir(join(home, ".local", "bin"), { recursive: true });
     symlinkSync(join(bundle, "bin", "codegraph"), join(home, ".local", "bin", "codegraph"));
     await writeFile(join(home, ".local", "bin", "node"), "x");
-    const planned = await planSandbox({ tools: { codegraph: join(home, ".local", "bin", "codegraph") }, repoRoot: repo, buildRoot: "/tmp/build", home, nodePath: join(home, ".local", "bin", "node") });
-    expect(planned.home).toBe(await (await import("node:fs/promises")).realpath(home));
-    expect(planned.homeReadOnly.sort()).toEqual([
-      join(repo, "node_modules"), join(repo, "skills"), join(home, ".local", "bin"), join(bundle, "bin"), bundle,
-    ].map((path) => path).sort());
-    // A root directly below the home (`~/.local`) is never bound, however deep the binary sits.
+    const planned = await planSandbox(
+      { tools: { codegraph: join(home, ".local", "bin", "codegraph") }, repoRoot: repo, buildRoot: "/tmp/build", home, nodePath: join(home, ".local", "bin", "node") },
+      { trackedSkills: async () => ["skills/a/SKILL.md"] },
+    );
+    const fsReal = (await import("node:fs/promises")).realpath;
+    expect(planned.home).toBe(await fsReal(home));
+    expect([...planned.homeReadOnly].sort()).toEqual([join(repo, "node_modules"), join(repo, "skills", "a"), join(home, ".local", "bin"), join(bundle, "bin")].sort());
+    expect(planned.homeLinks).toEqual([{ path: join(home, ".local", "bin", "codegraph"), target: join(bundle, "bin", "codegraph") }]);
     expect(planned.homeReadOnly).not.toContain(join(home, ".local"));
     expect(planned.extraReadOnly).toEqual(["/tmp/build"]);
-    expect(planned.varRunDirectory).toBe(false);
   });
 
   const SOCKETS = ["/run/user/1000/bus", "/run/dbus/system_bus_socket", "/run/systemd/private", "/run/systemd/journal/socket", "/run/docker.sock"];
-  const good = { home: "EROFS", ssh: "ENOENT", scope: true, oracleHome: true, tmp: true, sockets: Object.fromEntries(SOCKETS.map((p) => [p, "ENOENT"])) };
+  const good = {
+    home: "EROFS", ssh: "ENOENT", entry: null, absent: Object.fromEntries(ABSENT_PATHS.map((p) => [p, "ENOENT"])), scope: true, oracleHome: true, tmp: true, dns: true, codegraph: true,
+    sockets: Object.fromEntries(SOCKETS.map((p) => [p, "ENOENT"])),
+  };
   /** A fake sandbox run: writes the strace log of a clean probe where `-o` says, then prints `result`. */
   const probe = (result: unknown, logText: (root: number) => string = () => `${benignTrace()}`) => async (_file: string, args: readonly string[]) => {
     const log = args[args.indexOf("-o") + 1]!;
     await writeFile(log, logText(4240));
     return { stdout: `noise\n${JSON.stringify(result)}\n`, stderr: "" };
   };
-  const mutate = (patch: Record<string, unknown>) => ({ ...good, ...patch });
+  const mutate = (patch: Record<string, unknown>): Record<string, unknown> => ({ ...good, ...patch });
 
   it.each([
     ["a real home that could be written", mutate({ home: "created" })],
@@ -1496,6 +1619,13 @@ describe("bubblewrap containment (R46)", () => {
     ["a reachable docker socket", mutate({ sockets: { ...good.sockets, "/run/docker.sock": "connected" } })],
     ["a socket failing differently", mutate({ sockets: { ...good.sockets, "/run/systemd/private": "ECONNREFUSED" } })],
     ["a missing socket result", mutate({ sockets: {} })],
+    ["a provider host that does not resolve", mutate({ dns: false })],
+    ["a missing DNS result", mutate({ dns: undefined })],
+    ["a codegraph that does not run", mutate({ codegraph: "ENOENT" })],
+    ["a codegraph that exits non-zero", mutate({ codegraph: "ERR_UNHANDLED" })],
+    ["a missing absent-path result", mutate({ absent: {} })],
+    ...ABSENT_PATHS.map((path): [string, Record<string, unknown>] => [`a visible ${path}`, mutate({ absent: { ...good.absent, [path]: true } })]),
+    ["a host-home entry that is expected absent but reported present", mutate({ entry: true })],
   ])("refuses with containment_failed for %s", async (_name, result) => {
     await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: probe(result), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
   });
@@ -1504,6 +1634,28 @@ describe("bubblewrap containment (R46)", () => {
     const outside = (root: number) => `${benignTrace()}${root + 2} openat(AT_FDCWD</scope>, "/home/x/leak", O_WRONLY|O_CREAT, 0644) = 3</home/x/leak>\n`;
     await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: probe(good, outside), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
     await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: async () => ({ stdout: JSON.stringify(good), stderr: "" }), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+  });
+
+  it("picks a real host-home entry that the plan does not bind back and requires it absent inside", async () => {
+    const home = await temporaryRoot("ablation-home-");
+    for (const name of [".hidden", "Projekte", "Documents", "Music"]) await mkdir(join(home, name));
+    const seen: string[][] = [];
+    const run = async (file: string, args: readonly string[]) => { seen.push([file, ...args]); return probe({ ...good, entry: "ENOENT" })(file, args); };
+    // "Documents" sorts first but holds a bind (the repository below it), and hidden entries are never picked.
+    const bound = { ...EMPTY_PLAN, homeReadOnly: [join(home, "Documents", "repo", "node_modules")] };
+    await containmentSelfTest(TOOLS, bound, { run, home, uid: 1000 });
+    expect(seen[0]!.at(-2)).toBe("Music");
+    // The entry being visible inside is a failure.
+    await expect(containmentSelfTest(TOOLS, bound, { run: probe({ ...good, entry: true }), home, uid: 1000 })).rejects.toThrow("containment_failed");
+    // Without a non-hidden free entry, .ssh is used when it exists; with none at all, nothing is expected.
+    const sshHome = await temporaryRoot("ablation-home-ssh-");
+    await mkdir(join(sshHome, ".ssh")); await mkdir(join(sshHome, ".config"));
+    seen.length = 0;
+    await containmentSelfTest(TOOLS, EMPTY_PLAN, { run, home: sshHome, uid: 1000 });
+    expect(seen[0]!.at(-2)).toBe(".ssh");
+    seen.length = 0;
+    await containmentSelfTest(TOOLS, EMPTY_PLAN, { run: async (file, args) => { seen.push([file, ...args]); return probe(good)(file, args); }, home: "/home/x", uid: 1000 });
+    expect(seen[0]!.at(-2)).toBe("");
   });
 
   it("refuses when a marker created in the sandbox's /tmp exists on the host afterwards", async () => {
@@ -1539,8 +1691,8 @@ describe("bubblewrap containment (R46)", () => {
     expect(existsSync(s.waveDir)).toBe(false);
   });
 
-  it.skipIf(!hasBwrap)("really contains: the real self-test passes through the production shape; $HOME, host sockets and /tmp are sealed; the scope may sit below /tmp or $HOME; the sandbox dies with its leader", async () => {
-    const real = { bwrap: "/usr/bin/bwrap", strace: "/usr/bin/strace", prlimit: "/usr/bin/prlimit", codegraph: "/nonexistent/codegraph" };
+  it.skipIf(!hasBwrap || !hasCodegraph)("really contains: the real self-test passes through the production shape; $HOME, host sockets, /mnt and the rest of the host root are sealed; /tmp is private; the scope may sit below /tmp or $HOME; the sandbox dies with its leader", async () => {
+    const real = { bwrap: "/usr/bin/bwrap", strace: "/usr/bin/strace", prlimit: "/usr/bin/prlimit", git: "/usr/bin/git", codegraph: codegraphPath };
     const realPlan = await planSandbox({ tools: real, repoRoot: process.cwd(), buildRoot: BUILD_ROOT });
     await containmentSelfTest(real, realPlan);
     const run = (scope: string, script: string) => runHelper(real.bwrap, sandboxed(real, realPlan, scope, ["sh", "-c", script]).slice(1));
@@ -1550,6 +1702,8 @@ describe("bubblewrap containment (R46)", () => {
     await expect(run(scope, `echo x > "${homedir()}/${marker}"`)).rejects.toThrow();
     expect(existsSync(join(homedir(), marker))).toBe(false);
     await run(scope, `echo ok > "${scope}/inside" && test -d /run && test ! -e /run/docker.sock && test ! -e /run/dbus && test ! -e "${homedir()}/.ssh"`);
+    // R51: nothing of the host root outside the allowlist exists, the root itself cannot be written, and the etc entries are the allowlisted ones.
+    await run(scope, `${ABSENT_PATHS.map((path) => `test ! -e ${path}`).join(" && ")} && test ! -e /var/run && test ! -e /var/lib && ! (touch /root-probe) 2>/dev/null && test -e /etc/hosts && test ! -e /etc/shadow`);
     expect(await readFile(join(scope, "inside"), "utf8")).toBe("ok\n");
     // Below the (hidden, read-only) home: the writable bind still works and is the only writable thing there.
     const homeScope = join(homedir(), `.ablation-scope-test-${process.pid}`);
@@ -1634,7 +1788,7 @@ describe("preflight cleanup and denied attempts", () => {
     };
     const result = await runPreflight({ approval, waveDir, ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
       spawnRun: locking, checkRoute: async () => undefined, hostCheck: async () => undefined, containmentCheck: async () => undefined,
-      resolveTools: async () => TOOLS, residualCheck: async () => true,
+      planSandbox: async () => EMPTY_PLAN, resolveTools: async () => TOOLS, residualCheck: async () => true,
     });
     chmodSync(join(scopeRoot(waveDir, "preflight-review"), "locked"), 0o700);
     expect(result.routes).toMatchObject([{ profile: "review", ok: false, failure: "cleanup_failure" }]);
