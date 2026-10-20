@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { RunOutput } from "./run-one.js";
-import type { ImplementationScore, ReviewScore } from "./oracles.js";
+import type { ReviewScore } from "./oracles.js";
 import type { Arm, ProfileId } from "./schemas.js";
 import type { TraceFindings } from "./trace.js";
 import type { RunUsage } from "./usage.js";
@@ -29,7 +29,8 @@ export interface RunRecord {
   terminal: RunOutput["terminal"] | null;
   accepted: boolean | null;
   review?: ReviewScore;
-  implementation?: ImplementationScore;
+  /** The out-of-scope paths are worker-controlled strings and never leave the wave: only their count is recorded (R42). */
+  implementation?: { accepted: boolean; testsPassed: boolean; outOfScopeCount: number };
   usage: RunUsage | null;
   durationMs: number | null;
   trace: TraceSummary | null;
@@ -37,6 +38,8 @@ export interface RunRecord {
   /** A fixed failure code from the run unit or the wave, never a message or a path. */
   harnessError: string | null;
   assistantTextTruncated: boolean | null;
+  /** SHA-256 of the assistant text, which itself is not kept. */
+  assistantTextSha256: string | null;
 }
 
 const usageSession = z.object({

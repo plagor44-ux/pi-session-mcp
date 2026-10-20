@@ -7,30 +7,42 @@ import { fileURLToPath } from "node:url";
 import { runHelper, type HelperRunner } from "./helpers.js";
 import { encodeKey } from "./output-mac.js";
 import { STRACE_ARGS } from "./trace.js";
+import { resolveTool, type ToolPaths } from "./tools.js";
 import type { RunScope } from "./workspace.js";
 
 const EXIT_WAIT_AFTER_KILL_MS = 5_000;
 /** A hard core limit of 0 for the run unit and everything below it: a core dump of the run unit would expose its MAC key (N1). */
 export const CORE_LIMIT = "--core=0:0";
 
+/** The run unit's own command line: no inspector can open (`--disable-sigusr1`, R44). */
+const runOneArgs = (runInput: string): string[] => ["--disable-sigusr1", fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput];
+
+/** `prlimit` (hard core limit 0), then `strace` as the process group leader, then the run unit; every executable is an absolute path (R44). */
+export function tracedCommand(tools: Pick<ToolPaths, "strace" | "prlimit">, log: string, runInput: string): { file: string; args: string[] } {
+  return { file: tools.prlimit, args: [CORE_LIMIT, tools.strace, ...STRACE_ARGS, "-o", log, "--", process.execPath, ...runOneArgs(runInput)] };
+}
+
+/** The untraced preflight command. */
+export function untracedCommand(tools: Pick<ToolPaths, "prlimit">, runInput: string): { file: string; args: string[] } {
+  return { file: tools.prlimit, args: [CORE_LIMIT, process.execPath, ...runOneArgs(runInput)] };
+}
+
 /**
- * The traced worker: `strace` as the process group leader, the run unit below it, cwd = the scope root. stdin is a pipe so the
- * supervisor can hand over the per-run key (R35); stderr goes to a file in the scope.
+ * The traced worker: cwd = the scope root. stdin is a pipe so the supervisor can hand over the per-run key (R35); stderr goes to a file
+ * in the scope.
  */
-export function spawnTracedRunOne(scope: RunScope, runInput: string, log: string): ChildProcess {
+export function spawnTracedRunOne(tools: Pick<ToolPaths, "strace" | "prlimit">, scope: RunScope, runInput: string, log: string): ChildProcess {
   const stderr = openSync(join(scope.root, "run-one.stderr"), "a", 0o600);
   try {
-    return spawn("prlimit", [CORE_LIMIT, "strace", ...STRACE_ARGS, "-o", log, "--", process.execPath, fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput], {
-      cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", stderr],
-    });
+    const { file, args } = tracedCommand(tools, log, runInput);
+    return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", stderr] });
   } finally { closeSync(stderr); }
 }
 
 /** The run unit without `strace` (the preflight PONG touches no repository). */
-export function spawnRunOne(scope: RunScope, runInput: string): ChildProcess {
-  return spawn("prlimit", [CORE_LIMIT, process.execPath, fileURLToPath(new URL("./run-one.js", import.meta.url)), runInput], {
-    cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", "ignore"],
-  });
+export function spawnRunOne(tools: Pick<ToolPaths, "prlimit">, scope: RunScope, runInput: string): ChildProcess {
+  const { file, args } = untracedCommand(tools, runInput);
+  return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", "ignore"] });
 }
 
 /** Writes the key to the child's stdin and closes it. The key never goes into env, argv or a file. */
@@ -78,7 +90,7 @@ export interface HostProbes {
 }
 const defaultProbes: HostProbes = {
   readPtraceScope: () => readFile("/proc/sys/kernel/yama/ptrace_scope", "utf8"),
-  hasPrlimit: async () => { try { await runHelper("prlimit", ["--version"]); return true; } catch { return false; } },
+  hasPrlimit: async () => resolveTool("prlimit", process.env.PATH ?? "").then(() => true, () => false),
 };
 
 export async function assertHostSafe(probes: HostProbes = defaultProbes): Promise<void> {

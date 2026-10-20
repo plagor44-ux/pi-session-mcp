@@ -2,18 +2,19 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expiresWithin } from "../../src/writer-credentials.js";
 import { parseProductionConfig, type Approval } from "./approval.js";
 import { readVerifiedOutput } from "./audit.js";
 import { fixedCode } from "./classify.js";
-import { boundarySecrets, writeEvidence } from "./evidence.js";
+import { removeTree } from "./evidence.js";
 import { PersistedLedger, isValidCost } from "./ledger-file.js";
 import { routeAddresses } from "./network.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import { assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
+import { assertWaveDirOutsideSources, resolveTools, type ToolPaths } from "./tools.js";
 import { prepareEmptyScope, privateRunDir, scopeRoot, type RunScope } from "./workspace.js";
 
 export const PONG_PROMPT = "Reply with exactly: PONG";
@@ -42,6 +43,7 @@ export interface PreflightInput {
 
 export interface PreflightDeps {
   spawnRun?: ((scope: RunScope, runInput: string) => ChildProcess) | undefined;
+  resolveTools?: (() => Promise<ToolPaths>) | undefined;
   residualCheck?: ((pgid: number) => Promise<boolean>) | undefined;
   /** Resolves the route's endpoint; a failure fails that route (`provider_host_unresolvable`). */
   checkRoute?: ((route: { provider: string; model: string }) => Promise<unknown>) | undefined;
@@ -68,6 +70,8 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   const now = deps.now ?? Date.now;
   const config = parseProductionConfig(input.productionConfig);
   await (deps.hostCheck ?? assertHostSafe)();
+  const tools = await (deps.resolveTools ?? resolveTools)();
+  await assertWaveDirOutsideSources(input.waveDir, Object.values(config.workspaces));
   const names = input.approval.routes.map((route) => `preflight-${route.profile}`);
   if ([join(input.waveDir, "preflight.json"), ...names.flatMap((name) => [scopeRoot(input.waveDir, name), privateRunDir(input.waveDir, name)])].some((path) => existsSync(path))) {
     throw new Error("output_exists");
@@ -88,10 +92,9 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     const name = `preflight-${route.profile}`;
     const privateRun = privateRunDir(input.waveDir, name);
     const key = randomBytes(RUN_KEY_BYTES);
-    const secrets = boundarySecrets(input.hostAuth, [route.provider]);
     let scope: RunScope | undefined;
     let executed = false;
-    let rawOutput: string | null = null;
+    let charged = false;
     try {
       scope = await prepareEmptyScope({ waveDir: input.waveDir, name, profile: route.profile, hostAuth: input.hostAuth, productionProfile: profile, skillCatalog: config.skillCatalog });
       const runOneInput: RunOneInput = {
@@ -101,7 +104,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       const inputPath = join(scope.root, "run-input.json");
       await writeFile(inputPath, JSON.stringify(runOneInput), { mode: 0o600 });
       if (input.signal?.aborted) { fail("interrupted"); continue; }
-      const child = (deps.spawnRun ?? spawnRunOne)(scope, inputPath);
+      const child = (deps.spawnRun ?? ((sc: RunScope, ri: string) => spawnRunOne(tools, sc, ri)))(scope, inputPath);
       executed = true;
       startWithKey(child, key);
       const supervised: Supervised = await supervise(child, timeoutMs, input.signal);
@@ -112,8 +115,9 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       let tampered = false;
       if (supervised.timedOut || supervised.interrupted) { /* not believed; the stop is the timeout or the interrupt */ }
       else if (verified.present && !exitedCleanly(supervised)) tampered = true;
-      else { ({ output, tampered } = verified); if (output !== null) rawOutput = verified.raw; }
+      else ({ output, tampered } = verified);
       const cost = output?.usage.session?.costUsd ?? null;
+      charged = true;
       if (output !== null && isValidCost(cost)) await ledger.record(name, route.profile, cost);
       else await ledger.recordEstimate(name, route.profile);
       const ok = output !== null && output.terminal === "completed" && output.harnessError === null && output.sessionsLeft === 0 && clean && !supervised.timedOut && !supervised.interrupted;
@@ -129,9 +133,11 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     } catch {
       if (!results.some((r) => r.profile === route.profile)) fail("preflight_step_failed");
     } finally {
-      // Never keep a whole scope (R38): only the verified output stays, scanned for the boundary secrets.
-      try { if (executed) await writeEvidence(privateRun, rawOutput === null ? {} : { "run-output.json": rawOutput }, secrets); } catch { /* the scope is removed regardless */ }
-      if (scope) await rm(scope.root, { recursive: true, force: true }).catch(() => undefined);
+      // A throw after the spawn still charges the estimate (R41) unless the cost was already recorded.
+      if (executed && !charged) await ledger.recordEstimate(name, route.profile).catch(() => undefined);
+      // R42: nothing derived from the worker is kept.
+      await removeTree(privateRun).catch(() => undefined);
+      if (scope) await removeTree(scope.root).catch(() => undefined);
     }
   }
   await ledger.save();
