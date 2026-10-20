@@ -1,9 +1,9 @@
-import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
-import { dirname, join, resolve, sep } from "node:path";
+import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { hash } from "../profiles/files.js";
 
 export interface Candidate {
-  /** File name of the transcript, never a path. */
+  /** The transcript's path relative to the scanned directory (a bare file name for a top-level file), never an absolute path. */
   transcript: string;
   /** The MCP server the session ran on (always starts with `pi-`). */
   server: string;
@@ -105,13 +105,24 @@ function candidatesOf(transcript: string, uses: Map<string, Use>, results: Map<s
   return found;
 }
 
+/** Relative paths (with `/`) of the regular `.jsonl` files below `dir`, sorted. Symbolic links, files and directories alike, are never followed. */
+async function transcriptFiles(dir: string, relative = ""): Promise<string[]> {
+  const found: string[] = [];
+  for (const entry of await readdir(join(dir, relative), { withFileTypes: true })) {
+    const path = relative === "" ? entry.name : `${relative}/${entry.name}`;
+    if (entry.isDirectory()) found.push(...await transcriptFiles(dir, path));
+    else if (entry.isFile() && entry.name.endsWith(".jsonl")) found.push(path);
+  }
+  return found.sort();
+}
+
 /**
- * Reads the Claude Code JSONL transcripts directly in `dir` (not recursively) and pairs the `tool_use` blocks of
+ * Reads the Claude Code JSONL transcripts in `dir` and below it (subagent transcripts live in subdirectories; links are not followed) and pairs the `tool_use` blocks of
  * `mcp__pi-*__pi_session_start`, `…pi_session_prompt` and `…pi_turn_get` with their `tool_result` by `tool_use_id`. Lines that do not
  * parse are skipped and counted. A session is a candidate once it was started and prompted; the prompt text is hashed and dropped.
  */
 export async function scanTranscripts(dir: string): Promise<ScanResult> {
-  const names = (await readdir(dir)).filter((name) => name.endsWith(".jsonl")).sort();
+  const names = await transcriptFiles(dir);
   const candidates: Candidate[] = [];
   let skippedLines = 0;
   for (const name of names) {
@@ -148,13 +159,32 @@ export async function writeScan(result: ScanResult, out: string, resultsRoot: st
   const target = resolve(out);
   const root = resolve(resultsRoot);
   if (!target.startsWith(root + sep)) throw new Error("scan_out_outside_results");
+  // Judge where the target will really be before anything is created: the nearest existing ancestor, resolved, must lie in the results root.
+  const realRoot = await canonical(root);
+  const realTarget = await canonical(target);
+  if (!realTarget.startsWith(realRoot + sep)) throw new Error("scan_out_outside_results");
   await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-  const realRoot = await realpath(root);
   const realParent = await realpath(dirname(target));
   if (realParent !== realRoot && !realParent.startsWith(realRoot + sep)) throw new Error("scan_out_outside_results");
   try {
     await writeFile(target, `${JSON.stringify(result, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   } catch (error) {
     throw (error as NodeJS.ErrnoException).code === "EEXIST" ? new Error("output_exists") : error;
+  }
+}
+
+/** The real path of `path`, where the part that does not exist yet is appended to its nearest existing ancestor; a dangling link is refused. */
+async function canonical(path: string): Promise<string> {
+  let current = resolve(path);
+  const rest: string[] = [];
+  for (;;) {
+    try { return join(await realpath(current), ...rest.reverse()); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new Error("scan_out_outside_results");
+      if (await lstat(current).then(() => true, () => false)) throw new Error("scan_out_outside_results");
+      const parent = dirname(current);
+      if (parent === current) throw new Error("scan_out_outside_results");
+      rest.push(basename(current));
+      current = parent;
+    }
   }
 }

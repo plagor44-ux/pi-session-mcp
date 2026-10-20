@@ -1,11 +1,11 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { cp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { afterAll, describe, expect, it } from "vitest";
-import { parseArgs } from "../eval/extensions/cli.js";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { dryLoadCommand, parseArgs } from "../eval/extensions/cli.js";
 import { DRY_MODEL, DRY_PROVIDER, dryLoad, dryLoadOutputSchema, type DryLoadDeps, type DryLoadInput, type DryLoadOutput } from "../eval/extensions/dry-load.js";
 import { PAIRINGS } from "../eval/extensions/matrix.js";
 import { macOf } from "../eval/extensions/output-mac.js";
@@ -46,7 +46,7 @@ describe("io_uring_setup counting (R36)", () => {
 
 describe("dry load report assembly (provider-free, injected scope and process)", () => {
   const tasks = JSON.parse(readFileSync(join(FIXTURES, "tasks.json"), "utf8")) as TaskSpec[];
-  interface Behavior { output?: Partial<DryLoadOutput> | "missing" | "forged"; trace?: string | null; exitCode?: number }
+  interface Behavior { output?: Partial<DryLoadOutput> | "missing" | "forged"; trace?: string | null; exitCode?: number; after?: (scope: RunScope) => void }
   const REVIEW_TOOLS = PAIRINGS.find((p) => p.id === "pl-review")!.grantedExtensionTools!;
 
   async function setup(behavior: (profile: string, extension: string) => Behavior = () => ({})) {
@@ -92,6 +92,7 @@ describe("dry load report assembly (provider-free, injected scope and process)",
           writeFileSync(join(scope.root, "dry-load-output.json"), JSON.stringify(shown));
         }
         if (how.trace !== null) writeFileSync(log, how.trace ?? benignTrace());
+        how.after?.(scope);
         return spawn(process.execPath, ["-e", `process.stdin.resume(); process.stdin.on("end", () => process.exit(${how.exitCode ?? 0}))`], { stdio: ["pipe", "ignore", "ignore"], detached: true });
       },
     };
@@ -133,12 +134,56 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     ["a forged output", { output: "forged" }, { failure: "output_integrity", activeTools: [] }],
     ["no output", { output: "missing" }, { failure: "output_missing" }],
     ["a bad exit status", { exitCode: 3 }, { failure: "bad_exit" }],
+    ["a refused write outside the scope", { trace: `${benignTrace()}4242 openat(AT_FDCWD</scope>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = -1 EACCES (Permission denied)\n` }, { failure: "trace_not_clean", trace: { outsideWrites: 0, deniedWriteAttempts: 1 } }],
+    ["unresolved egress other than io_uring (an AF_UNIX connect outside the scope)", { trace: `${benignTrace()}4242 connect(3, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 110) = 0\n` }, { failure: "trace_not_clean", trace: { unresolvedEgress: 1, ioUringSetupsSucceeded: 0 } }],
+    ["a connection to an address that is not name resolution (R53)", { trace: `${benignTrace()}4242 connect(3, {sa_family=AF_INET, sin_port=htons(443), sin_addr=inet_addr("93.184.216.34")}, 16) = 0\n` },
+      { failure: "unexpected_connect", unexpectedConnects: [{ family: "inet", address: "93.184.216.34", port: 443 }], trace: { connects: 1, outsideWrites: 0, unresolvedEgress: 0 } }],
   ];
   it.each(failing)("is not ok on %s", async (_name, behavior, expected) => {
     const s = await setup((profile, extension) => (profile === "code-deepseek" && extension === "pi-lens" ? behavior : {}));
     const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
     expect(report.pairs).toHaveLength(1);
     expect(report.pairs[0]).toMatchObject({ ok: false, ...expected });
+  });
+
+  it("keeps a connection to a nameserver on port 53 out of the unexpected ones", async () => {
+    const dns = (await import("../eval/extensions/network.js")).dnsServers;
+    const address = [...await dns()].find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? "127.0.0.53";
+    const s = await setup(() => ({ trace: `${benignTrace()}4242 connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("${address}")}, 16) = 0\n` }));
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
+    expect(report.pairs[0]).toMatchObject({ ok: true, unexpectedConnects: [], trace: { connects: 1 } });
+  });
+
+  it("does not remove through a swapped scopes directory and fails the pair (R42)", async () => {
+    const victim = await temporaryRoot("ablation-dry-load-victim-");
+    let survivor = "";
+    const s = await setup(() => ({
+      after: (scope) => {
+        const runId = scope.root.split("/").at(-1)!;
+        // The worker replaces `scopes` by a link to a directory that holds a look-alike run directory.
+        renameSync(join(s.waveDir, "scopes"), join(s.waveDir, "scopes-moved"));
+        mkdirSync(join(victim, runId), { recursive: true });
+        survivor = join(victim, runId, "precious.txt");
+        writeFileSync(survivor, "keep");
+        symlinkSync(victim, join(s.waveDir, "scopes"));
+      },
+    }));
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
+    expect(report.pairs[0]).toMatchObject({ ok: false, failure: "cleanup_failed" });
+    expect(readFileSync(survivor, "utf8")).toBe("keep");
+  });
+
+  it("fails the pair, and does not hide it, when a removal fails or a directory is swapped before the next pair", async () => {
+    const s = await setup();
+    const calls: string[] = [];
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek"), removeTree: async (path) => { calls.push(path); throw new Error("EBUSY"); } });
+    expect(report.pairs[0]).toMatchObject({ ok: false, failure: "cleanup_failed" });
+    expect(calls).toHaveLength(1);
+    // The guard also stands in front of the next pair's directories.
+    const t = await setup(() => ({ after: () => { renameSync(join(t.waveDir, "private"), join(t.waveDir, "private-moved")); mkdirSync(join(t.waveDir, "private")); } }));
+    const second = await dryLoad(t.input, { ...t.deps, pairings: PAIRINGS.filter((p) => p.profile === "code-deepseek" || p.id === "pl-code") });
+    expect(second.pairs.map((p) => [p.pairing, p.failure])).toEqual([["pl-code-deepseek", "cleanup_failed"], ["pl-code", "cleanup_failed"]]);
+    expect(t.prepared).toHaveLength(1);
   });
 
   it("is not ok when a granted tool is not active, and says which check failed", async () => {
@@ -167,6 +212,75 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     await expect(dryLoad(s.input, { ...s.deps, hostCheck: async () => { throw new Error("ptrace_scope_unsafe"); } })).rejects.toThrow("ptrace_scope_unsafe");
     await expect(dryLoad(s.input, { ...s.deps, containmentCheck: async () => { throw new Error("containment_failed"); } })).rejects.toThrow("containment_failed");
     expect(s.prepared).toHaveLength(0);
+  });
+
+  describe("--dry-load command", () => {
+    async function files(s: Awaited<ReturnType<typeof setup>>) {
+      const tasksFile = join(s.root, "tasks.json");
+      const configFile = join(s.root, "production.json");
+      writeFileSync(tasksFile, JSON.stringify(tasks));
+      writeFileSync(configFile, JSON.stringify(s.input.productionConfig));
+      return { tasksFile, configFile };
+    }
+    async function repository(clean: boolean): Promise<string> {
+      const repo = await temporaryRoot("ablation-dry-load-git-");
+      const git = (...args: string[]) => execFileAsync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args], { cwd: repo });
+      await git("init", "-q");
+      writeFileSync(join(repo, "a.txt"), "1\n");
+      await git("add", "a.txt");
+      await git("commit", "-q", "-m", "base");
+      if (!clean) writeFileSync(join(repo, "a.txt"), "2\n");
+      return repo;
+    }
+    const args = (f: { tasksFile: string; configFile: string }, out: string) => parseArgs(["--dry-load", "--tasks", f.tasksFile, "--template", "/template", "--out", out, "--config", f.configFile]);
+    async function shown(body: () => Promise<void>): Promise<string> {
+      let text = "";
+      const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => { text += String(chunk); return true; }) as typeof process.stdout.write);
+      try { await body(); } finally { spy.mockRestore(); }
+      return text;
+    }
+
+    it("refuses a dirty tree before anything starts", async () => {
+      const s = await setup();
+      const f = await files(s);
+      await expect(dryLoadCommand(args(f, s.waveDir), { sourceCwd: await repository(false), deps: s.deps })).rejects.toThrow("source_dirty");
+      expect(existsSync(s.waveDir)).toBe(false);
+      expect(s.prepared).toHaveLength(0);
+    });
+
+    it("refuses an existing output directory", async () => {
+      const s = await setup();
+      const f = await files(s);
+      await mkdir(s.waveDir);
+      await expect(dryLoadCommand(args(f, s.waveDir), { sourceCwd: await repository(true), deps: s.deps })).rejects.toThrow("output_exists");
+      expect(s.prepared).toHaveLength(0);
+    });
+
+    it("writes dry-load.json into the fresh directory and prints counts without paths", async () => {
+      const s = await setup();
+      const f = await files(s);
+      const text = await shown(async () => dryLoadCommand(args(f, s.waveDir), { sourceCwd: await repository(true), deps: s.deps }));
+      const summary = JSON.parse(text) as { ok: boolean; pairs: { pairing: string; ok: boolean; cloneWrites: number; unexpectedConnects: number }[] };
+      expect(summary.ok).toBe(true);
+      expect(summary.pairs.map((p) => p.pairing)).toEqual(PAIRINGS.map((p) => p.id));
+      expect(summary.pairs[0]).toMatchObject({ cloneWrites: 1, unexpectedConnects: 0 });
+      expect(text).not.toContain(s.root);
+      expect(text).not.toContain("dist/generated.js");
+      const report = JSON.parse(readFileSync(join(s.waveDir, "dry-load.json"), "utf8")) as { pairs: { cloneWrites: string[] }[] };
+      expect(report.pairs).toHaveLength(PAIRINGS.length);
+      expect(report.pairs[0]!.cloneWrites).toEqual(["dist/generated.js"]);
+    });
+
+    it("exits non-zero when a pair is not ok", async () => {
+      const s = await setup((profile, extension) => (profile === "code" && extension === "pi-cache-optimizer" ? { output: { providerCalls: 1 } } : {}));
+      const f = await files(s);
+      const before = process.exitCode;
+      try {
+        const text = await shown(async () => dryLoadCommand(args(f, s.waveDir), { sourceCwd: await repository(true), deps: s.deps }));
+        expect(JSON.parse(text)).toMatchObject({ ok: false });
+        expect(process.exitCode).toBe(1);
+      } finally { process.exitCode = before; }
+    });
   });
 
   it("validates the output schema strictly", () => {
