@@ -20,6 +20,14 @@ does not itself prove a live rollout or acceptance on your machine.
   Doctor warns if a coding profile exists. This is a migration state, not a
   selectable mode or an acknowledged host-write choice.
 
+Read-only profiles may individually grant extension tools through
+`grantedExtensionTools` ([ADR 0010](adr/0010-read-only-extension-tools.md)).
+A grant is the operator's trust decision: these tools are third-party code and
+may write. Workspace modes `container` and `read-only` do not restrict them;
+read-only profiles remain allowed in every mode. Extension hooks already run
+with the server user's rights. Do not treat the profile or workspace label as
+an OS sandbox for extensions.
+
 **Residual risks:** the boundary holds provider credentials: an OAuth access
 token (with refresh token emptied), or the API key for API-key providers.
 A malicious worker can use or exfiltrate them. Network `pasta` is **not limited**;

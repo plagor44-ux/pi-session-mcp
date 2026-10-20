@@ -24,7 +24,7 @@ export function projectCapabilities(
       .map((alias) => ({ alias, mode: workspaceModes.get(alias)?.mode ?? "unset" })),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
-      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, skills }) => ({
+      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, skills }) => ({
         alias,
         default: isDefault,
         permissionProfile,
@@ -32,6 +32,7 @@ export function projectCapabilities(
         model,
         thinkingLevel,
         extensions: (extensions ?? []).map((extension) => extension.spec),
+        grantedExtensionTools: [...(grantedExtensionTools ?? [])],
         skills: (skills ?? []).map((skill) => skill.alias),
       })),
   };

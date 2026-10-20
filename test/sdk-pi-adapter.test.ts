@@ -725,6 +725,27 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     expect(h.createServices).not.toHaveBeenCalled();
   });
 
+  it.each(["extension_not_installed", "extension_version_mismatch"] as const)("keeps %s resolution failure ahead of missing grants", async (code) => {
+    const h = extensionHarness();
+    h.resolveExtension.mockRejectedValueOnce(new PiExtensionError(code));
+    await expect(h.create({ ...extensionProfile, grantedExtensionTools: ["fixture_missing"] })).rejects.toMatchObject({ code });
+    expect(h.createServices).not.toHaveBeenCalled();
+  });
+
+  it.each(["extension_load", "postcheck"] as const)("sanitizes missing-grant diagnostics at %s", async (stage) => {
+    const h = extensionHarness({ withMcp: true });
+    const grant = stage === "extension_load" ? "fixture_missing" : "fixture_tool";
+    await expect(h.create({ ...extensionProfile, grantedExtensionTools: [grant] })).rejects.toMatchObject({
+      code: "extension_tool_missing", message: "Granted Pi extension tool is not available",
+    });
+    expect(h.diagnostics).toEqual([{
+      level: "error", event: "pi_session_creation_failed", stage, code: "extension_tool_missing",
+      executionProfile: extensionProfile.alias, provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel,
+    }]);
+    expect(JSON.stringify(h.diagnostics)).not.toMatch(/hidden|fixture_tool|fixture_missing|path|prompt/);
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(stage === "postcheck" ? 1 : 0);
+  });
+
   it("classifies a foreign resolver failure as a load failure", async () => {
     const h = extensionHarness();
     h.resolveExtension.mockRejectedValueOnce(new Error("/hidden/path"));

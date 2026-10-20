@@ -14,6 +14,7 @@ import {
 } from "./execution-profile.js";
 import { builtinSkillPath, skillOverrideDirectory } from "./skill-library.js";
 import { loadExecutionModes, type WorkspaceModeEntry } from "./execution-modes.js";
+import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS, PROFILE_TOOLS } from "./session-tools.js";
 
 const alias = z.string().regex(ALIAS_PATTERN);
 const permissionProfile = z.enum(["read-only", "coding"] satisfies [PermissionProfile, PermissionProfile]);
@@ -25,6 +26,7 @@ const profileSchema = z.object({
   model: z.string().trim().min(1).max(256), thinkingLevel,
   mcpServers: z.custom<McpServers>((value) => isMcpServers(value)).optional(),
   extensions: z.array(extensionSpec).max(MAX_PROFILE_EXTENSIONS).optional(),
+  grantedExtensionTools: z.array(z.string().refine(isAcceptableExtensionToolName)).max(MAX_GRANTED_EXTENSION_TOOLS).optional(),
   skills: z.array(alias).max(MAX_PROFILE_SKILLS).optional(),
 }).strict().superRefine((profile, context) => {
   if (profile.mcpServers !== undefined && !isMcpServers(profile.mcpServers, profile.permissionProfile)) {
@@ -34,6 +36,21 @@ const profileSchema = z.object({
     const names = profile.extensions.flatMap((spec) => parseExtensionSpec(spec)?.name ?? []);
     if (new Set(names).size !== names.length) {
       context.addIssue({ code: "custom", path: ["extensions"], message: "An extension package may appear only once per profile" });
+    }
+  }
+  if (profile.grantedExtensionTools !== undefined) {
+    if (profile.permissionProfile !== "read-only") {
+      context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "Extension tool grants require a read-only profile" });
+    }
+    if (!profile.extensions?.length) {
+      context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "Extension tool grants require extensions" });
+    }
+    if (new Set(profile.grantedExtensionTools).size !== profile.grantedExtensionTools.length) {
+      context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "An extension tool may be granted only once per profile" });
+    }
+    const builtins = new Set([...PROFILE_TOOLS.coding, ...PROFILE_TOOLS["read-only"]]);
+    if (profile.grantedExtensionTools.some((name) => builtins.has(name))) {
+      context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "Extension tool grants must not name built-in tools" });
     }
   }
   if (profile.skills !== undefined && new Set(profile.skills).size !== profile.skills.length) {
@@ -150,12 +167,13 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const overrideDirectory = skillOverrideDirectory(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
   const catalog = parsed.skillCatalog ?? {};
-  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, skills, ...value }]) => {
+  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, skills, ...value }]) => {
     const selection = resolveSkillSelection(skills, catalog, base, overrideDirectory);
     return [key, Object.freeze({
       alias: key, ...value,
       ...(mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(mcpServers) }),
       ...(extensions === undefined ? {} : { extensions: Object.freeze(extensions.map((spec) => parseExtensionSpec(spec)!)) }),
+      ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...grantedExtensionTools]) }),
       ...(selection === undefined ? {} : { skills: selection }),
     })] as const;
   }));
