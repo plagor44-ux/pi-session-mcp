@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "outDir": ".profile-eval", "rootDir": ".", "declaration": false },
-  "include": ["src/**/*.ts", "eval/profiles/**/*.ts"]
+  "include": ["src/**/*.ts", "eval/profiles/**/*.ts", "eval/extensions/**/*.ts"]
 }
