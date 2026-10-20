@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -7,20 +8,22 @@ import { z } from "zod";
 import { isEntryPoint } from "../../src/entry-point.js";
 import { matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApproval, type ProductionConfig } from "./approval.js";
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
+import { dryLoad } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
 import { assertPreflightPassed, runPreflight } from "./preflight.js";
 import { writeEvidence } from "./report.js";
+import { scanTranscripts, writeScan } from "./scan.js";
 import { taskSpecSchema, type Pairing, type RunSpec, type TaskSpec } from "./schemas.js";
 import { runWave } from "./wave.js";
 
 const execFileAsync = promisify(execFile);
 
-const MODES = ["--plan", "--preflight", "--wave", "--report"] as const;
+const MODES = ["--plan", "--preflight", "--wave", "--report", "--scan", "--dry-load"] as const;
 type Mode = typeof MODES[number];
 /** `--report` reads a finished wave, so `--wave` is its value option there and not a mode. */
 const REPORT_MODES: readonly string[] = ["--plan", "--preflight", "--report"];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence"] as const;
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts"] as const;
 const FLAG_OPTIONS = ["--trim"] as const;
 
 export interface ParsedArgs { mode: Mode; options: Partial<Record<typeof VALUE_OPTIONS[number], string>>; trim: boolean }
@@ -51,7 +54,20 @@ export function parseArgs(args: string[]): ParsedArgs {
     return { mode, options, trim };
   }
   if (options["--evidence"]) throw new Error("invalid_argument");
+  if (mode === "--scan") {
+    if (!options["--transcripts"]) throw new Error("transcripts_required");
+    if (!options["--out"]) throw new Error("out_required");
+    if (Object.keys(options).length !== 2 || trim) throw new Error("invalid_argument");
+    return { mode, options, trim };
+  }
+  if (options["--transcripts"]) throw new Error("invalid_argument");
   if (!options["--tasks"]) throw new Error("tasks_required");
+  if (mode === "--dry-load") {
+    if (!options["--template"]) throw new Error("template_required");
+    if (!options["--out"]) throw new Error("out_required");
+    if (Object.keys(options).some((key) => !["--tasks", "--template", "--out", "--config"].includes(key)) || trim) throw new Error("invalid_argument");
+    return { mode, options, trim };
+  }
   if (mode !== "--plan" && !options["--approval"]) throw new Error("approval_required");
   if (mode !== "--plan" && !options["--out"]) throw new Error("out_required");
   if (mode !== "--plan" && !options["--ledger"]) throw new Error("ledger_required");
@@ -186,9 +202,37 @@ async function report(parsed: ParsedArgs): Promise<void> {
   })}\n`);
 }
 
+/** Candidates are private: they go to the ignored `eval/results/` only, and the console gets counts. */
+async function scan(parsed: ParsedArgs): Promise<void> {
+  const result = await scanTranscripts(resolve(parsed.options["--transcripts"]!));
+  await writeScan(result, parsed.options["--out"]!, resolve("eval", "results"));
+  write({ candidates: result.candidates.length, skippedLines: result.skippedLines });
+}
+
+/**
+ * Provider-free load of every arm-B extension from the template (R5). The report is private (paths in `cloneWrites`): it goes into the
+ * fresh `--out` directory, and the console gets counts and codes only. Like `--plan`, it refuses a dirty tracked tree.
+ */
+async function dryLoadCommand(parsed: ParsedArgs): Promise<void> {
+  const tasks = await loadTasks(parsed.options["--tasks"]!);
+  await sourceCommit();
+  const productionConfig = await loadProductionConfig(parsed.options["--config"]);
+  const waveDir = resolve(parsed.options["--out"]!);
+  if (existsSync(waveDir)) throw new Error("output_exists");
+  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir }, { signal }));
+  await writeFile(join(waveDir, "dry-load.json"), `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  write({
+    ok: report.pairs.every((p) => p.ok),
+    pairs: report.pairs.map((p) => ({ pairing: p.pairing, ok: p.ok, failure: p.failure, activeTools: p.activeTools.length, grantedOk: p.grantedOk, cloneWrites: p.cloneWrites.length, trace: p.trace })),
+  });
+  if (!report.pairs.every((p) => p.ok)) process.exitCode = 1;
+}
+
 async function main(): Promise<void> {
   const parsed = parseArgs(process.argv.slice(2));
-  if (parsed.mode === "--plan") await plan(parsed);
+  if (parsed.mode === "--dry-load") await dryLoadCommand(parsed);
+  else if (parsed.mode === "--scan") await scan(parsed);
+  else if (parsed.mode === "--plan") await plan(parsed);
   else if (parsed.mode === "--preflight") await preflight(parsed);
   else if (parsed.mode === "--report") await report(parsed);
   else await wave(parsed);
