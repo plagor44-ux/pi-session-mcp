@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { digest } from "../profiles/files.js";
 import { BUDGET_USD } from "./budget.js";
+import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { profileIdSchema, runSpecSchema, type ProfileId, type RunSpec, type TaskSpec } from "./schemas.js";
 
 const routeSchema = z.object({
@@ -46,11 +47,27 @@ export function routesOf(config: ProductionConfig, profiles: Iterable<ProfileId>
   });
 }
 
+/**
+ * Every approved run is a slot of the canonical matrix (R58) with its own run id, ordinal and slot, the runs follow in canonical order,
+ * and each one's pairings are a non-empty, unique subset of that slot's pairings (R62b).
+ */
+function runsAreCanonical(runs: readonly RunSpec[], tasks: TaskSpec[]): boolean {
+  const slots = new Map(buildMatrix(tasks, PAIRINGS).map((slot) => [slot.runId, slot]));
+  let last = 0;
+  return runs.every((run) => {
+    const slot = slots.get(run.runId);
+    const ordered = run.ordinal > last;
+    last = run.ordinal;
+    return ordered && slot !== undefined && slot.ordinal === run.ordinal && slot.taskId === run.taskId && slot.profile === run.profile && slot.arm === run.arm
+      && run.pairings.length > 0 && new Set(run.pairings).size === run.pairings.length && run.pairings.every((id) => slot.pairings.includes(id));
+  });
+}
+
 const sortedRoutes = (routes: Route[]): string => JSON.stringify([...routes].sort((a, b) => a.profile.localeCompare(b.profile)));
 
 /**
- * Checks the approval against what would run now: the source commit, the tasks, the digest of its own run list (which must refer to
- * known tasks) and, when given, the routes of the production configuration. The run list comes from the approval and is never
+ * Checks the approval against what would run now: the source commit, the tasks, the digest of its own run list (which must be canonical slots of
+ * known tasks, R62b) and, when given, the routes of the production configuration. The run list comes from the approval and is never
  * recomputed from the ledger at wave time (R56). `routes` is optional so the digests can be checked where the production configuration
  * is not at hand; the wave and the preflight always pass it.
  */
@@ -67,6 +84,7 @@ export function validateApproval(
     || approval.matrixDigest !== matrixDigest(approval.runs)
     || approval.runs.some((run) => !known.has(run.taskId))
     || new Set(approval.runs.map((run) => run.runId)).size !== approval.runs.length
+    || !runsAreCanonical(approval.runs, current.tasks)
     || (current.routes !== undefined && sortedRoutes(approval.routes) !== sortedRoutes(current.routes));
   if (changed) throw new Error("approval_binding_changed");
   return approval;

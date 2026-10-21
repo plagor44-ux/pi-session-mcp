@@ -167,10 +167,13 @@ async function readLedger(path: string, waveRunIds: ReadonlySet<string>): Promis
   return { bytes, spend: ledgerSpend(bytes, waveRunIds) };
 }
 
-async function readRuns(waveDir: string): Promise<{ name: string; bytes: Buffer; record: SummaryRecord }[]> {
+interface WaveRun { name: string; bytes: Buffer; record: SummaryRecord }
+
+/** The sanitized records of a wave directory, read as regular files within the size cap and checked against the schema. */
+export async function readRuns(waveDir: string): Promise<WaveRun[]> {
   let names: string[];
   try { names = (await readdir(join(waveDir, "runs"))).filter((name) => name.endsWith(".json")).sort(); } catch { throw new Error("runs_missing"); }
-  const runs = [];
+  const runs: WaveRun[] = [];
   for (const name of names) {
     const bytes = await readRegularFile(join(waveDir, "runs", name), MAX_RECORD_BYTES);
     let record: SummaryRecord;
@@ -182,7 +185,7 @@ async function readRuns(waveDir: string): Promise<{ name: string; bytes: Buffer;
 }
 
 /** The approval a wave ran under (`approval.json`, written by the wave); the evidence carries a copy and binds it to the code (I6b). */
-async function readApproval(waveDir: string): Promise<{ bytes: Buffer; approval: Approval }> {
+export async function readApproval(waveDir: string): Promise<{ bytes: Buffer; approval: Approval }> {
   let bytes: Buffer;
   try { bytes = await readRegularFile(join(waveDir, "approval.json"), MAX_RECORD_BYTES); } catch (error) {
     throw new Error((error as NodeJS.ErrnoException).code === "ENOENT" ? "approval_missing" : "approval_invalid");
@@ -191,6 +194,28 @@ async function readApproval(waveDir: string): Promise<{ bytes: Buffer; approval:
   try { parsed = approvalSchema.safeParse(JSON.parse(bytes.toString("utf8"))); } catch { throw new Error("approval_invalid"); }
   if (!parsed.success) throw new Error("approval_invalid");
   return { bytes, approval: parsed.data };
+}
+
+/**
+ * Merges the records of several waves per run id (R60). A run id keeps its task, profile and arm across waves; at most one wave holds an
+ * executed record for it, and that one replaces the `not_run` records other waves wrote for the slot. A run id appears once per wave.
+ */
+function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
+  const merged = new Map<string, WaveRun>();
+  for (const runs of waves) {
+    const inWave = new Set<string>();
+    for (const run of runs) {
+      const { runId } = run.record;
+      if (inWave.has(runId)) throw new Error("duplicate_run_record");
+      inWave.add(runId);
+      const prior = merged.get(runId)?.record;
+      if (prior === undefined) { merged.set(runId, run); continue; }
+      const same = prior.taskId === run.record.taskId && prior.profile === run.record.profile && prior.arm === run.record.arm;
+      if (!same || (prior.outcome !== "not_run" && run.record.outcome !== "not_run")) throw new Error("duplicate_run_record");
+      if (run.record.outcome !== "not_run") merged.set(runId, run);
+    }
+  }
+  return [...merged.values()];
 }
 
 /** True when a parsed value holds a forbidden key, an over-long string or a path-like segment in any string or key. */
@@ -269,13 +294,14 @@ export async function writeEvidence(waveDirs: string | readonly string[], eviden
   if (waves.length === 0 || new Set(waves).size !== waves.length) throw new Error("wave_required");
   const target = resolve(evidenceDir);
   if (!(await absent(target))) throw new Error("evidence_dir_exists");
-  // Several wave directories (a stopped wave and its re-approved successor) are merged; a run id in two of them is refused.
-  const runs: Awaited<ReturnType<typeof readRuns>> = [];
+  // Several wave directories (an earlier wave and its re-approved successor) are merged per run id (R60).
+  const perWave: WaveRun[][] = [];
   const approvals: { bytes: Buffer; approval: Approval }[] = [];
   for (const wave of waves) {
-    runs.push(...await readRuns(wave));
+    perWave.push(await readRuns(wave));
     approvals.push(await readApproval(wave));
   }
+  const runs = mergeRuns(perWave);
   const summarized = runs.map((r) => r.record);
   assertNoDuplicates(summarized);
   const ledger = await readLedger(resolve(ledgerPath), new Set(summarized.map((r) => r.runId)));

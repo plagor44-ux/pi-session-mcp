@@ -16,6 +16,9 @@ const entrySchema = z.object({
 export const ledgerFileSchema = z.object({ ledgerId: z.string().uuid(), limitUsd: z.literal(BUDGET_USD), spentUsd: z.number().min(0), entries: z.array(entrySchema) }).strict();
 /** A cost the ledger would reject; callers record null for it instead of recording twice. */
 export const isValidCost = (cost: number | null): boolean => cost === null || (Number.isFinite(cost) && cost >= 0);
+/** The measured session cost of a trusted output, or null when there is none or it is invalid; callers then treat the session as missing (R62c). */
+export const validSessionCost = (session: { costUsd: number } | null | undefined): number | null =>
+  session != null && Number.isFinite(session.costUsd) && session.costUsd >= 0 ? session.costUsd : null;
 type LedgerEntry = z.infer<typeof entrySchema>;
 
 /** A ledger together with the entries that built it, so the file can be rewritten and replayed. */
@@ -54,6 +57,19 @@ export class PersistedLedger {
     const persisted = await PersistedLedger.open(path);
     if (expectedId !== undefined && persisted.id !== expectedId) throw new Error("ledger_mismatch");
     return persisted;
+  }
+
+  /**
+   * `openExisting` under the exclusive lock: the lock is taken first and the file is read and checked while holding it, so no entry another
+   * holder commits in between can be missed. The lock is released again when reading or checking fails.
+   */
+  static async openLocked(path: string, expectedId: string): Promise<PersistedLedger> {
+    const probe = new PersistedLedger(path);
+    await probe.lock();
+    try { const persisted = await PersistedLedger.openExisting(path, expectedId); persisted.locked = true; return persisted; } catch (error) {
+      await probe.release();
+      throw error;
+    }
   }
 
   /**
@@ -106,6 +122,9 @@ export class PersistedLedger {
   }
 
   hasEntry(runId: string): boolean { return this.entries.some((entry) => entry.runId === runId); }
+
+  /** True when a run (not a preflight PONG) was charged under this id, whether or not it left a record. */
+  hasRunEntry(runId: string): boolean { return this.entries.some((entry) => entry.runId === runId && entry.kind !== "preflight"); }
 
   async save(): Promise<void> { await this.write(this.entries); }
 

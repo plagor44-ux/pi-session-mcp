@@ -6,17 +6,18 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { isEntryPoint } from "../../src/entry-point.js";
-import { approvalSchema, matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApproval, type ProductionConfig } from "./approval.js";
+import { approvalSchema, matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { sourceIsDirty } from "./bound.js";
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
 import { dryLoad, type DryLoadDeps } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
 import { assertPreflightPassed, runPreflight } from "./preflight.js";
-import { writeEvidence } from "./report.js";
+import { readApproval, readRuns, writeEvidence } from "./report.js";
+import { readRegularFile } from "./safe-read.js";
 import { scanTranscripts, writeScan } from "./scan.js";
 import { taskSpecSchema, type Pairing, type RunSpec, type TaskSpec } from "./schemas.js";
-import { runWave } from "./wave.js";
+import { runWave, statusSchema } from "./wave.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,7 +25,7 @@ const MODES = ["--plan", "--preflight", "--wave", "--report", "--scan", "--dry-l
 type Mode = typeof MODES[number];
 /** `--report` reads a finished wave, so `--wave` is its value option there and not a mode. */
 const REPORT_MODES: readonly string[] = ["--plan", "--preflight", "--report"];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs"] as const;
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs", "--exclude-wave"] as const;
 
 export interface ParsedArgs {
   mode: Mode;
@@ -32,6 +33,8 @@ export interface ParsedArgs {
   trim: boolean;
   /** Every `--wave` of a `--report`, in the order given; their records are merged. */
   waves: string[];
+  /** Every `--exclude-wave` of a `--plan`: wave directories whose executed runs the plan leaves out (R59). */
+  excludeWaves: string[];
   maxRuns?: number;
   resume: boolean;
 }
@@ -43,6 +46,7 @@ export function parseArgs(args: string[]): ParsedArgs {
   const mode = modes[0] as Mode;
   const options: ParsedArgs["options"] = {};
   const waves: string[] = [];
+  const excludeWaves: string[] = [];
   let trim = false;
   let resume = false;
   for (let i = 0; i < args.length; i += 1) {
@@ -53,6 +57,10 @@ export function parseArgs(args: string[]): ParsedArgs {
     const next = args[i + 1];
     if (!(VALUE_OPTIONS as readonly string[]).includes(arg) || next === undefined || next.startsWith("--")) throw new Error("invalid_argument");
     if (arg === "--wave" && mode === "--report") { waves.push(next); i += 1; continue; }
+    if (arg === "--exclude-wave") {
+      if (mode !== "--plan") throw new Error("invalid_argument");
+      excludeWaves.push(next); i += 1; continue;
+    }
     if (options[arg as typeof VALUE_OPTIONS[number]] !== undefined) throw new Error("invalid_argument");
     options[arg as typeof VALUE_OPTIONS[number]] = next;
     i += 1;
@@ -62,7 +70,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     if (!/^[1-9][0-9]{0,3}$/.test(options["--max-runs"])) throw new Error("invalid_argument");
     maxRuns = Number(options["--max-runs"]);
   }
-  const result = (): ParsedArgs => ({ mode, options, trim, waves, resume, ...(maxRuns === undefined ? {} : { maxRuns }) });
+  const result = (): ParsedArgs => ({ mode, options, trim, waves, excludeWaves, resume, ...(maxRuns === undefined ? {} : { maxRuns }) });
   if (mode === "--report") {
     if (waves.length === 0) throw new Error("wave_required");
     if (!options["--ledger"]) throw new Error("ledger_required");
@@ -93,6 +101,8 @@ export function parseArgs(args: string[]): ParsedArgs {
   if (mode !== "--plan" && !options["--out"]) throw new Error("out_required");
   if (mode !== "--plan" && !options["--ledger"]) throw new Error("ledger_required");
   if (mode === "--plan" && options["--approval"]) throw new Error("invalid_argument");
+  if (excludeWaves.length > 0 && !options["--ledger"]) throw new Error("ledger_required");
+  if (new Set(excludeWaves.map((dir) => resolve(dir))).size !== excludeWaves.length) throw new Error("invalid_argument");
   if (mode === "--wave" && !options["--template"]) throw new Error("template_required");
   if (mode !== "--wave" && options["--preflight-dir"]) throw new Error("invalid_argument");
   return result();
@@ -139,13 +149,39 @@ function projectionOf(persisted: PersistedLedger | undefined): Projection {
   return { projectedUsd: (runs) => runs.reduce((sum, run) => sum + ledger.estimate(run.profile), 0), remainingUsd: BUDGET_USD - ledger.spentUsd };
 }
 
-/** The run list `--plan` puts into the approval: the full matrix of the selected pairings, or its budget-trimmed version with `--trim`. */
-async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: PersistedLedger | undefined): Promise<{ full: RunSpec[]; trimmed: ReturnType<typeof trimMatrix>; runs: RunSpec[]; projection: Projection }> {
+/** An earlier wave a `--plan` leaves out: its approval, the run ids it has a record for, and those among them that executed. */
+interface ExcludedWave { label: string; dir: string; approval: Approval; recorded: Set<string>; executed: Set<string> }
+
+/** Reads each wave with the report's safe readers; its approval must name the ledger (`ledger_mismatch`). */
+async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger): Promise<ExcludedWave[]> {
+  const waves: ExcludedWave[] = [];
+  for (const label of dirs) {
+    const dir = resolve(label);
+    const { approval } = await readApproval(dir);
+    if (approval.ledgerId !== ledger.id) throw new Error("ledger_mismatch");
+    const records = (await readRuns(dir)).map((run) => run.record);
+    waves.push({ label, dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)) });
+  }
+  return waves;
+}
+
+async function waveIsPaused(dir: string): Promise<boolean> {
+  try { return statusSchema.parse(JSON.parse((await readRegularFile(join(dir, "status.json"), 64 * 1024)).toString("utf8"))).state === "paused"; } catch { return false; }
+}
+
+/**
+ * The run list `--plan` puts into the approval: a subsequence of the canonical matrix (R58), the full matrix of the selected pairings or its
+ * budget-trimmed version with `--trim`. Slots that already ran (a record that is not `not_run` in an excluded wave, or a run charge in the
+ * ledger) are left out before trimming, so the projection covers what remains (R59).
+ */
+async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: PersistedLedger | undefined, excluded: ExcludedWave[]) {
   const pairings = selectedPairings(parsed.options["--pairings"]);
   const projection = projectionOf(ledger);
-  const full = buildMatrix(tasks, pairings);
-  const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd);
-  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection };
+  const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings).map((r) => r.runId)
+    .filter((id) => excluded.some((wave) => wave.executed.has(id)) || ledger!.hasRunEntry(id)));
+  const full = buildMatrix(tasks, pairings, skip);
+  const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd, skip);
+  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip };
 }
 
 const write = (value: unknown): void => { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); };
@@ -160,15 +196,28 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     ledger = await PersistedLedger.open(path);
     if (!existsSync(path)) await ledger.save();
   }
-  const { trimmed, runs, projection } = await plannedRuns(tasks, parsed, ledger);
+  const excluded = ledger === undefined ? [] : await loadExcludedWaves(parsed.excludeWaves, ledger);
+  const { trimmed, runs, projection, skip } = await plannedRuns(tasks, parsed, ledger, excluded);
   const { projectedUsd, remainingUsd } = projection;
   let routes: unknown = [];
   let routesNote: string | undefined;
   try { routes = routesOf(await loadProductionConfig(parsed.options["--config"]), runs.map((r) => r.profile)); } catch { routesNote = "production_config_unavailable"; }
+  let exclusion: Record<string, unknown> | undefined;
+  if (excluded.length > 0) {
+    // The last wave given is the resume candidate: only when the list left is exactly its runs without a record, and it is paused.
+    const last = excluded[excluded.length - 1]!;
+    const unrecorded = last.approval.runs.filter((run) => !last.recorded.has(run.runId));
+    const resumable = unrecorded.length > 0 && matrixDigest(unrecorded) === matrixDigest(runs) && await waveIsPaused(last.dir) ? last.label : null;
+    exclusion = {
+      waves: excluded.map((wave) => ({ wave: wave.label, executed: wave.executed.size })),
+      ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable,
+    };
+  }
   return {
     approved: false,
     tasks: tasks.length,
-    matrix: { count: runs.length, projectedUsd: projectedUsd(runs), runs: runs.map(({ runId, taskId, profile, arm, pairings: ids }) => ({ runId, taskId, profile, arm, pairings: ids })) },
+    ...(exclusion === undefined ? {} : { exclusion }),
+    matrix: { count: runs.length, projectedUsd: projectedUsd(runs), runs: runs.map(({ runId, ordinal, taskId, profile, arm, pairings: ids }) => ({ runId, ordinal, taskId, profile, arm, pairings: ids })) },
     trimmed: {
       remainingUsd, pairings: trimmed.pairings.map((p) => p.id), tasksPerPairing: trimmed.tasksPerPairing,
       count: trimmed.runs.length, projectedUsd: projectedUsd(trimmed.runs), matrixDigest: matrixDigest(trimmed.runs),
