@@ -19,6 +19,9 @@ import { realHome, resolveTool, type ToolPaths } from "./tools.js";
  *   evaluation repository's node_modules and tracked skill directories (the build's symlinks point into them), the codegraph binary
  *   (and, for a bundle, only its bin, node and lib entries), the node binary's directory when it is outside /usr, and the disposable
  *   build. The scope root and the oracle home are bound writable after the tmpfs.
+ * - A task's dependencies (R68) are the only host directories besides the above that are bound for a run: each installed mount read-only at
+ *   its place in the clone and the runtime read-only at its own path (`SandboxBind`). The rest of the operator's deps directory (the
+ *   lock copies, other tasks) is not visible.
  * - The network namespace is shared, because the providers are reached over it. Abstract-namespace Unix sockets (and so an X11
  *   server's abstract socket, which still needs a valid cookie that $HOME no longer holds) therefore remain reachable. They are
  *   detected, not prevented: any abstract connect is unresolved egress and stops the wave (R43). This is a residual risk (R50).
@@ -34,6 +37,9 @@ export const ETC_ENTRIES = [
 export const MERGED_USR_LINKS = [["/bin", "usr/bin"], ["/lib", "usr/lib"], ["/lib64", "usr/lib"], ["/sbin", "usr/bin"]] as const;
 
 export interface SandboxLink { path: string; target: string }
+
+/** A read-only bind of `source` at `target`, which may differ: a task dependency (R68) at its place in the clone, or its runtime at its own path. */
+export interface SandboxBind { source: string; target: string }
 
 /** What depends on the host: computed once at the start of a wave or preflight (`planSandbox`) and passed to every command builder. */
 export interface SandboxPlan {
@@ -164,12 +170,13 @@ export async function planSandbox(input: PlanInput, overrides: Partial<PlanHost>
 /**
  * The bwrap arguments up to and including `--`. The order matters: the allowlist root comes first, the scope bind comes after the
  * tmpfs mounts (a scope below /tmp or $HOME stays writable) and the home directory and then the root are remounted read-only last, which affects only those
- * tmpfs mounts themselves, not the mounts above them. There is no bind of the host's `/`.
+ * tmpfs mounts themselves, not the mounts above them. There is no bind of the host's `/`. The task's dependency `binds` (R68) come after
+ * the scope bind, so a mount wins over the (empty) mount point inside the clone; they are read-only and nothing else of their directory is visible.
  * `--unshare-pid` is added to the verified shape: `--new-session` moves the command into its own session, where a kill of the
  * supervisor's process group (strace is the leader) would miss it; in a PID namespace the death of bwrap, which `--die-with-parent`
  * ties to strace, ends every process of the sandbox.
  */
-export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, extraWritable: readonly string[] = []): string[] {
+export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, extraWritable: readonly string[] = [], binds: readonly SandboxBind[] = []): string[] {
   const readOnly = (paths: readonly string[]): string[] => paths.flatMap((path) => ["--ro-bind", path, path]);
   const links = (list: readonly SandboxLink[]): string[] => list.flatMap(({ path, target }) => ["--symlink", target, path]);
   return [
@@ -181,6 +188,7 @@ export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, ext
     ...readOnly(plan.homeReadOnly), ...links(plan.homeLinks),
     "--bind", scopeRoot, scopeRoot, ...extraWritable.flatMap((path) => ["--bind", path, path]),
     ...readOnly(plan.extraReadOnly),
+    ...binds.flatMap(({ source, target }) => ["--ro-bind", source, target]),
     ...(plan.home === null ? [] : ["--remount-ro", plan.home]),
     "--remount-ro", "/",
     "--die-with-parent", "--new-session", "--unshare-ipc", "--unshare-pid", "--",
@@ -188,6 +196,8 @@ export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, ext
 }
 
 /** `bwrap … -- <command>` with an absolute bwrap path. */
-export function sandboxed(tools: Pick<ToolPaths, "bwrap">, plan: SandboxPlan, scopeRoot: string, command: readonly string[], extraWritable: readonly string[] = []): string[] {
-  return [tools.bwrap, ...bwrapArgs(scopeRoot, plan, extraWritable), ...command];
+export function sandboxed(
+  tools: Pick<ToolPaths, "bwrap">, plan: SandboxPlan, scopeRoot: string, command: readonly string[], extraWritable: readonly string[] = [], binds: readonly SandboxBind[] = [],
+): string[] {
+  return [tools.bwrap, ...bwrapArgs(scopeRoot, plan, extraWritable, binds), ...command];
 }

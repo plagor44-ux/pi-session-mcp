@@ -1,7 +1,7 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { cp, mkdir, symlink, writeFile } from "node:fs/promises";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -222,6 +222,55 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     expect(s.prepared).toHaveLength(0);
   });
 
+  describe("task dependencies (R68)", () => {
+    const dependent = (): TaskSpec[] => tasks.map((task) => ({ ...task, dependencies: [{ path: "backend/.venv", lockfile: "backend/uv.lock" }] }));
+    const BINDS = [{ source: "/deps/t/mounts/backend/.venv", target: "/scope/clone/backend/.venv" }, { source: "/deps/t/runtime", target: "/deps/t/runtime" }];
+
+    it("requires --deps when a task that is loaded declares dependencies, before anything is prepared", async () => {
+      const s = await setup();
+      await expect(dryLoad({ ...s.input, tasks: dependent() }, s.deps)).rejects.toThrow("deps_missing");
+      expect(s.prepared).toHaveLength(0);
+      expect(existsSync(s.waveDir)).toBe(false);
+      // Only tasks that are loaded count: the first task of each kind is used, and a second review task is not.
+      const [review] = tasks.filter((t) => t.kind === "review");
+      const extra = { ...review!, id: "unused-review", dependencies: [{ path: "x", lockfile: "y" }] };
+      await expect(dryLoad({ ...s.input, tasks: [...tasks, extra] }, s.deps)).resolves.toBeDefined();
+    });
+
+    it("refuses a deps directory inside a source, the evaluation repository or the wave directory", async () => {
+      const s = await setup();
+      for (const dir of [join(s.root, "source", "deps"), join(s.root, "repo", "deps"), join(s.waveDir, "deps"), s.root]) {
+        await expect(dryLoad({ ...s.input, tasks: dependent(), depsDir: dir }, s.deps)).rejects.toThrow("deps_dir_in_source");
+      }
+      expect(s.prepared).toHaveLength(0);
+    });
+
+    it("hands the deps directory to every scope", async () => {
+      const s = await setup();
+      const depsDir = join(s.root, "deps");
+      await dryLoad({ ...s.input, tasks: dependent(), depsDir }, s.deps);
+      expect(s.prepared.map((input) => input.depsDir)).toEqual(PAIRINGS.map(() => depsDir));
+    });
+
+    it("starts the entry in a sandbox that carries the scope's binds after the scope bind", async () => {
+      const s = await setup();
+      const root = await temporaryRoot("ablation-dry-load-argv-");
+      const prlimit = join(root, "prlimit");
+      writeFileSync(prlimit, `#!/bin/sh\nprintf '%s\\n' "$@" > "${join(root, "argv")}"\n`, { mode: 0o755 });
+      const { spawn: _spawn, ...rest } = s.deps;
+      await dryLoad({ ...s.input, tasks: dependent(), depsDir: join(root, "deps") }, {
+        ...rest, pairings: PAIRINGS.slice(0, 1), resolveTools: async () => ({ ...TOOLS, prlimit }),
+        prepareScope: async (scopeInput) => ({ ...await s.deps.prepareScope!(scopeInput), dependencyBinds: BINDS }),
+      });
+      const argv = readFileSync(join(root, "argv"), "utf8").split("\n");
+      const at = (flag: string, source: string, target: string) => argv.findIndex((arg, i) => arg === flag && argv[i + 1] === source && argv[i + 2] === target);
+      const scopeBind = argv.findIndex((arg, i) => arg === "--bind" && argv[i + 1] === argv[i + 2] && argv[i + 1]!.includes("/scopes/"));
+      expect(scopeBind).toBeGreaterThan(-1);
+      expect(at("--ro-bind", BINDS[0]!.source, BINDS[0]!.target)).toBeGreaterThan(scopeBind);
+      expect(at("--ro-bind", BINDS[1]!.source, BINDS[1]!.target)).toBeGreaterThan(at("--ro-bind", BINDS[0]!.source, BINDS[0]!.target));
+    });
+  });
+
   describe("--dry-load command", () => {
     async function files(s: Awaited<ReturnType<typeof setup>>) {
       const tasksFile = join(s.root, "tasks.json");
@@ -277,6 +326,14 @@ describe("dry load report assembly (provider-free, injected scope and process)",
       const report = JSON.parse(readFileSync(join(s.waveDir, "dry-load.json"), "utf8")) as { pairs: { cloneWrites: string[] }[] };
       expect(report.pairs).toHaveLength(PAIRINGS.length);
       expect(report.pairs[0]!.cloneWrites).toEqual(["dist/generated.js"]);
+    });
+
+    it("passes --deps on as an absolute path", async () => {
+      const s = await setup();
+      const f = await files(s);
+      const parsed = parseArgs(["--dry-load", "--tasks", f.tasksFile, "--template", "/template", "--out", s.waveDir, "--config", f.configFile, "--deps", "relative-deps"]);
+      await shown(async () => dryLoadCommand(parsed, { sourceCwd: await repository(true), deps: { ...s.deps, pairings: PAIRINGS.slice(0, 1) } }));
+      expect(s.prepared.map((input) => input.depsDir)).toEqual([resolve("relative-deps")]);
     });
 
     it("exits non-zero when a pair is not ok", async () => {

@@ -8,6 +8,7 @@ import { z } from "zod";
 import { parseProductionConfig } from "./approval.js";
 import { auditLog } from "./audit.js";
 import { containmentSelfTest } from "./containment.js";
+import { assertDependencyDir } from "./dependencies.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { fixedCode } from "./classify.js";
 import { PAIRINGS, buildMatrix } from "./matrix.js";
@@ -71,6 +72,8 @@ export interface DryLoadInput {
   tasks: TaskSpec[];
   productionConfig: unknown;
   waveDir: string;
+  /** The operator's dependency directory (R68); required when a task that is loaded declares dependencies. */
+  depsDir?: string | undefined;
 }
 
 export interface DryLoadDeps {
@@ -133,6 +136,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
   await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), repoRoot]);
+  await assertDependencyDir(input.depsDir, jobs.map((job) => job.task), [...Object.values(config.workspaces), repoRoot, input.waveDir]);
   const plan = await (deps.planSandbox ?? ((t: ToolPaths) => planSandbox({ tools: t, repoRoot, buildRoot: deps.buildRoot ?? BUILD_ROOT })))(tools);
   await (deps.containmentCheck ?? containmentSelfTest)(tools, plan);
   // The wave directory, `private` and `scopes` are pinned by device and inode; nothing is created or removed below them unless all three are intact.
@@ -145,7 +149,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   const spawnEntry = deps.spawn ?? ((scope: RunScope, inputPath: string, log: string): ChildProcess => {
     const stderr = openSync(join(scope.root, "dry-load.stderr"), "a", 0o600);
     try {
-      const { file, args } = tracedCommand(tools, plan, scope.root, log, inputPath, { workload: [process.execPath, "--disable-sigusr1", entry, inputPath] });
+      const { file, args } = tracedCommand(tools, plan, scope.root, log, inputPath, { workload: [process.execPath, "--disable-sigusr1", entry, inputPath], binds: scope.dependencyBinds ?? [] });
       return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", stderr] });
     } finally { closeSync(stderr); }
   });
@@ -175,6 +179,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
       scope = await prepareScope({
         waveDir: input.waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.templateDir, hostAuth: {},
         productionProfile: { ...profile, provider: DRY_PROVIDER, model: DRY_MODEL }, skillCatalog: config.skillCatalog, pairing, tools,
+        ...(input.depsDir === undefined ? {} : { depsDir: input.depsDir }),
       });
       const inputPath = join(scope.root, "dry-load-input.json");
       await writeFile(inputPath, JSON.stringify({ runId: run.runId, configPath: scope.configPath, workspaceAlias: "clone", profile: pairing.profile }), { mode: 0o600 });
