@@ -23,8 +23,8 @@ npm install --prefix $EVAL/template/npm --ignore-scripts --no-audit --no-fund --
 | Entries in `package-lock.json` `packages` | 145 |
 | `package-lock.json` SHA-256 | `01457bdb42de901522818ae2150edb7e172dd637b7f88b097cbc728b00036d07` |
 
-The top-level versions equal those of the 2026-10-21 wave, but the lock hash
-differs from that wave's `12493eaf…`: npm re-resolved transitive packages
+The top-level versions equal those of the first wave (2026-10-21), but the lock hash
+differs from the first wave's `12493eaf…`: npm re-resolved transitive packages
 within their declared ranges. Only arm B of `pl-code` loads the template, so
 the repeat measures `pi-lens` 4.4.3 with this transitive set.
 
@@ -44,13 +44,13 @@ the respective base commits that were removed afterwards:
 | `i-pyng-authz` | `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca` | `66e4439f6a5ee8d4adc09eafae26478b730740da` |
 | `i-pyng-pdf` | `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca` | `66e4439f6a5ee8d4adc09eafae26478b730740da` |
 
-Both equal the base commits' lockfile and the 2026-10-21 wave's lock copies.
+Both equal the base commits' lockfile and the first wave's (2026-10-21) lock copies.
 `runtime/` holds the copy of uv's CPython that the venv's interpreter link
 points to.
 
 ## Dry load
 
-Commit 75a0136 (replicates), with the tasks file of the 2026-10-21 wave
+Commit 75a0136 (replicates), with the tasks file of the first wave (2026-10-21)
 (`docs/evaluation/extension-ablation-2026-10-20/tasks.json`); `--dry-load` has
 no `--pairings` filter, so it loads all six pairings, `pl-code` among them.
 
@@ -58,7 +58,7 @@ no `--pairings` filter, so it loads all six pairings, `pl-code` among them.
 - Connects 0, unexpected connects 0, outside writes 0, unresolved writes 0,
   denied write attempts 0, unresolved egress 0, `io_uring` setups 0.
 - No file was created in any scratch clone.
-- `pl-code` arm B has the 16 tools of the 2026-10-21 wave: `bash`, `edit`,
+- `pl-code` arm B has the 16 tools of the first wave (2026-10-21): `bash`, `edit`,
   `effective_config`, `find`, `grep`, `lens_diagnostics`, `ls`,
   `mcp_codegraph_explore`, `module_report`, `pi_lens_activate_tools`,
   `project_report`, `read`, `read_enclosing`, `read_symbol`, `symbol_search`,
