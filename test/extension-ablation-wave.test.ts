@@ -306,9 +306,11 @@ describe("runWave stop rules", () => {
     const r = await runWave(s.input, s.deps([text({ text: `${GOOD_REVIEW}\nVerdict: ready` }), text()]).deps);
     expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: true, review: { verdictMatched: true, criticalHit: 1 } });
     expect(r.records[1]).toMatchObject({ outcome: "scored", accepted: false, review: { verdictMatched: false, criticalHit: 1 } });
-    // The record keeps the pattern's outcome only, never the pattern or the text.
-    const record = await readFile(join(s.waveDir, "runs", `${r.records[1]!.runId}.json`), "utf8");
-    expect(record).not.toContain("verdict: ready");
+    // The record keeps the pattern's outcome only, never the pattern or the review text (record 0 holds the text with the verdict).
+    for (const record of r.records) {
+      const body = await readFile(join(s.waveDir, "runs", `${record.runId}.json`), "utf8");
+      for (const leaked of ["Verdict: ready", "verdict: ready", "race in the cache refresh"]) expect(body).not.toContain(leaked);
+    }
   });
 
   it("stops on a provider auth error instead of scoring it", async () => {
