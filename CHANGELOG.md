@@ -6,17 +6,24 @@ Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
 #108); `package.json` is bumped by the release step.
 
 - Added: opt-in turn events for a Claude Code controller wake. The optional
-  top-level server configuration field `events: { "delivery": "spool" }` (default
-  off; any other shape fails startup with `invalid_event_delivery`) makes the
-  registry's terminal transition write one content-free event file per turn
-  (identifiers, state, time) into a private spool below
-  `$XDG_RUNTIME_DIR/pi-session-mcp/events/`, removed at shutdown. An unusable
+  top-level server configuration field `events: { "delivery": "spool" | "off" }`
+  (`off` is the default; any other shape fails startup with
+  `invalid_event_delivery`). With `spool`, the registry's terminal transition
+  writes one content-free event file per turn (identifiers, state, time) into a
+  private spool below `$XDG_RUNTIME_DIR/pi-session-mcp/events/`, removed at
+  shutdown. An unusable
   spool root stops startup with `event_spool_unavailable`; a later write failure
   is one sanitized `event_spool_write_failed` diagnostic on stderr.
 - Added: the `pi-session-mcp-wake` executable, a Claude Code `PostToolUse`
   `asyncRewake` hook. It waits for the event of a running turn, claims it exactly
   once and wakes the controller with one line; after its wait budget (30 minutes)
-  it wakes so that the controller reads once and re-arms.
+  it wakes so that the controller reads once and re-arms. At most one waiter runs
+  per turn: a re-arming read of a still running turn does not start a second
+  wait. A turn ended by `close` (the session is gone) does not wake. A waiter
+  whose namespace shows no spool directory within a short grace period (2 s)
+  exits quietly. If the runtime directory is full (`ENOSPC`, `EDQUOT`), claims
+  and waiter locks cannot be written and the waiter falls back to the budget
+  wake.
 - Added: `setup --apply` installs, `--verify` checks and `--remove` /
   `--rollback` remove the hook entry in the settings file of the Claude Code
   target's scope, under the existing dry-run, ownership and divergence rules
@@ -24,10 +31,17 @@ Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
   [client setup reference](docs/client-setup.md#wake-hook)). Codex targets report
   `hook_not_applicable` and keep polling.
 - Added: container writers with delivery enabled get one dedicated spool mount
-  at `/pi/events`, created and checked at every launch (`events_directory_unavailable`
-  refuses the launch); acceptance binds delivery when enabled, and changing
+  at `/pi/events`. The spool lives on disk in the writer's own state directory
+  (`~/.local/state/pi-session-mcp/writers/<name>/events/`), not on the runtime
+  tmpfs. Each launch creates and checks it, resets a mode the worker changed and
+  prunes it (everything that is not an instance directory, and entries older than
+  24 hours inside instance directories); `events_directory_unavailable` refuses
+  the launch. A crashed instance directory can survive until a later launch prunes
+  it, after 24 hours at the earliest. Acceptance binds delivery when enabled, and changing
   delivery on an existing writer reports `writer_settings_changed` (remove and
   add the writer). Amends ADR 0008.
+- Added: a server keeps only the newest 256 event files of its spool instance
+  and recreates its instance directory once if a launch pruned it.
 - Added: Doctor check `event_spool_root` (only when delivery is enabled) and a
   section "Event delivery" in the controller skill `pi-session-orchestration`:
   with `events.delivery` `spool`, wait for the wake instead of polling.
@@ -38,7 +52,8 @@ Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
 - Security: events are wake triggers only and carry no prompt, answer, path or
   error text. A worker can write to its own writer's spool mount, so it can
   forge, delete or flood events there; the effect is a spurious or missing wake
-  inside that namespace (the hook's budget then wakes once), never a changed
+  inside that namespace (a missing wake is replaced by the budget wake after up
+  to 30 minutes, on which the controller reads once), never a changed
   result, since the controller always reads `pi_turn_get`. The hook validates
   events strictly, bounds its scans and follows no link, and its claims live
   outside every writer mount. The mount gives the worker no other host access.

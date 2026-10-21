@@ -96,9 +96,14 @@ expected but unmeasured.
 ## Boundary amendment (ADR 0003)
 
 Pi Session MCP still keeps no session or turn state beyond process memory. The
-event spool is a transient, content-free notification channel. It lives on a
-runtime directory (tmpfs on systemd hosts), is removed at shutdown and is never
-read back by the server. Persistence and resume stay rejected.
+event spool is a transient, content-free notification channel and is never read
+back by the server. A host server's spool lives on the runtime directory (tmpfs
+on systemd hosts) and is removed at shutdown. A container writer's spool lives on
+disk in the writer's own state directory (see item 3), because its worker must
+not be able to fill the runtime tmpfs. The server removes its instance directory
+at shutdown there too. A crashed instance directory can survive until a later
+launch of that writer prunes it, after 24 hours at the earliest. Persistence and
+resume stay rejected.
 
 ## Limits and consequences
 
