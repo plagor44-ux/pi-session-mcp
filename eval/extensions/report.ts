@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { digest, hash } from "../profiles/files.js";
 import { approvalSchema, type Approval } from "./approval.js";
@@ -26,7 +25,6 @@ const FORBIDDEN_KEYS = new Set(["access", "refresh", "key"]);
 /** A path-like segment anywhere in a string: a slash that starts the string or follows whitespace, a quote or a separator. */
 const PATH_LIKE = /(^|[\s"'=:(,])\/[A-Za-z0-9._-]/;
 const exec = promisify(execFile);
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /** The pre-registered rule: enable only when B loses nothing, wins at least one task A lost, and costs at most 1.25 times A. */
 export function recommend(
@@ -343,7 +341,7 @@ async function boundSource(root: string): Promise<{ commit: string; digest: `sha
  */
 async function assertBoundCodeUnchanged(root: string, commit: string): Promise<void> {
   if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error("approval_source_mismatch");
-  try { await exec("git", ["diff", "--quiet", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root }); } catch { throw new Error("approval_source_mismatch"); }
+  try { await exec("git", ["diff", "--quiet", "--end-of-options", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root }); } catch { throw new Error("approval_source_mismatch"); }
 }
 
 /**
@@ -354,11 +352,11 @@ async function assertBoundCodeUnchanged(root: string, commit: string): Promise<v
 async function boundPathsChangedSince(root: string, commit: string): Promise<string[]> {
   if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error("approval_source_unknown");
   try {
-    await exec("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd: root });
-    await exec("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { cwd: root });
+    await exec("git", ["cat-file", "-e", "--end-of-options", `${commit}^{commit}`], { cwd: root });
+    await exec("git", ["merge-base", "--is-ancestor", "--end-of-options", commit, "HEAD"], { cwd: root });
   } catch { throw new Error("approval_source_unknown"); }
   try {
-    const { stdout } = await exec("git", ["diff", "--name-only", "-z", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    const { stdout } = await exec("git", ["diff", "--name-only", "-z", "--end-of-options", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     return stdout.split("\0").filter((path) => path !== "").sort();
   } catch { throw new Error("source_unavailable"); }
 }
@@ -378,7 +376,7 @@ async function removeCreatedParents(parent: string, firstCreated: string | undef
  * `evidenceDir` must not exist. Returns the summary that was written.
  */
 export async function writeEvidence(
-  waveDirs: string | readonly string[], evidenceDir: string, ledgerPath: string, options: { repoRoot?: string; allowSourceDrift?: boolean } = {},
+  waveDirs: string | readonly string[], evidenceDir: string, ledgerPath: string, options: { repoRoot: string; allowSourceDrift?: boolean },
 ): Promise<ReportSummary> {
   const waves = (typeof waveDirs === "string" ? [waveDirs] : [...waveDirs]).map((dir) => resolve(dir));
   if (waves.length === 0 || new Set(waves).size !== waves.length) throw new Error("wave_required");
@@ -397,7 +395,8 @@ export async function writeEvidence(
   const summarized = runs.map((r) => r.record);
   assertNoDuplicates(summarized);
   const ledger = await readLedger(resolve(ledgerPath), new Set(summarized.map((r) => r.runId)));
-  const root = options.repoRoot ?? REPO_ROOT;
+  // The repository the evidence is bound to: the caller names it. The module itself lives in a disposable build, which is not a repository.
+  const root = options.repoRoot;
   const sourceDrift: SourceDrift[] = [];
   for (const [index, { approval }] of approvals.entries()) {
     if (approval.ledgerId !== ledger.spend.ledgerId) throw new Error("ledger_mismatch");
