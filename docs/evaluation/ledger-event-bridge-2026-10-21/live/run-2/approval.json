@@ -1,0 +1,16 @@
+{
+  "approved": true,
+  "approved_by": "operator, in the Claude Code session of 2026-10-21: repeat pair with the M1 worker route after pair 1's explore-fast worker failed the T1 oracle; API key; Claude Code 2.1.306; order C then A to counterbalance pair 1",
+  "approved_at": "2026-10-21",
+  "issue": 104,
+  "pair": 2,
+  "case": "L1",
+  "arms": ["A", "C"],
+  "order": ["C", "A"],
+  "max_controller_runs": 2,
+  "source_commit": "222dde5a0439b2ae2fe2e811e240647c844ef27f",
+  "controller": { "client_version": "2.1.306 (Claude Code)", "model": "claude-sonnet-5-5", "auth": "api-key" },
+  "worker": { "profile_alias": "review", "provider": "openai", "model": "gpt-6.1-sol", "thinkingLevel": "high", "skills": [] },
+  "budget_usd_advisory": 2,
+  "stop_rules": "stop on any lifecycle check failure, leak, leftover process, version mismatch, or when reported controller cost after run 1 exceeds the advisory budget; an oracle failure is recorded and reported to the operator before the second run"
+}

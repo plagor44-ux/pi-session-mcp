@@ -1,0 +1,256 @@
+{
+  "schema_version": "bridge-live-1",
+  "dry_run": false,
+  "case": "L1",
+  "arm": "C",
+  "seq": 1,
+  "started_at": "2026-10-21T18:51:18.745Z",
+  "ended_at": "2026-10-21T18:51:51.401Z",
+  "wall_ms": 32623,
+  "tooling": {
+    "client_version": "2.1.306 (Claude Code)",
+    "client_version_matches_required": true,
+    "node": "26.11.1",
+    "server_mode": "sdk",
+    "build_digest": "sha256:74674d0dae69448640a9dd9dbb20579be9f79a43b7d15ca2352dd38462f2618a"
+  },
+  "approval": {
+    "digest": "sha256:ef1564e596992879364f88e5f08b93dbbb25d40d2214731717724798a5605ebc",
+    "source_commit": "222dde5a0439b2ae2fe2e811e240647c844ef27f",
+    "max_controller_runs": 2,
+    "budget_usd_advisory": 2,
+    "controller": {
+      "client_version": "2.1.306 (Claude Code)",
+      "model": "claude-sonnet-5-5",
+      "auth": "api-key"
+    },
+    "worker": {
+      "profile_alias": "review",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "thinkingLevel": "high"
+    }
+  },
+  "prompts": {
+    "system_prompt_sha256": "sha256:9250aba615260832929cd8b6225ba150f6c2fd92e450b005f49f4d305ee2dd8a",
+    "system_prompt_bytes": 13221,
+    "user_prompt_sha256": "sha256:e1b65681c10ece035f12098fc3855261157f5b2e65d0a026734ad725e704e148",
+    "controller_skill_fingerprint": "v2:53467ccbda1f9ffbfb2e7ad68d56678c5b27d1e2cc39fa624181003fae926a12"
+  },
+  "run": {
+    "exit_code": 0,
+    "exit_signal": null,
+    "exit_at_ms": 32623,
+    "stdin_ended_at_ms": 32559,
+    "timed_out": false,
+    "end_reason": "all_sessions_closed",
+    "stderr_bytes": 0,
+    "spawn_error": false
+  },
+  "stream": {
+    "lines": 22,
+    "json_errors": 0,
+    "types": {
+      "system": 6,
+      "assistant": 8,
+      "user": 6,
+      "result": 2
+    },
+    "system_subtypes": {
+      "init": 2,
+      "hook_started": 2,
+      "hook_response": 2
+    },
+    "mcp_statuses": [
+      "connected"
+    ],
+    "results": [
+      {
+        "t_ms": 7685,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 4,
+        "duration_ms": 6657,
+        "usage": {
+          "input_tokens": 8,
+          "cache_read_input_tokens": 31212,
+          "cache_creation_input_tokens": 11368,
+          "output_tokens": 527
+        },
+        "total_cost_usd": 0.0368272
+      },
+      {
+        "t_ms": 32559,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 4,
+        "duration_ms": 7475,
+        "usage": {
+          "input_tokens": 10,
+          "cache_read_input_tokens": 48329,
+          "cache_creation_input_tokens": 1463,
+          "output_tokens": 641
+        },
+        "total_cost_usd": 0.051747600000000005
+      }
+    ],
+    "result_count": 2,
+    "sums": {
+      "num_turns": 8,
+      "duration_ms": 14132,
+      "usage": {
+        "input_tokens": 18,
+        "cache_read_input_tokens": 79541,
+        "cache_creation_input_tokens": 12831,
+        "output_tokens": 1168
+      },
+      "uncached_input_tokens": 12849,
+      "total_cost_usd_sum": 0.08857480000000001,
+      "total_cost_usd_last": 0.051747600000000005
+    },
+    "model_requests": 8,
+    "tool_uses": {
+      "mcp__pi-session-mcp__pi_capabilities_get": 1,
+      "mcp__pi-session-mcp__pi_session_start": 1,
+      "mcp__pi-session-mcp__pi_session_prompt": 1,
+      "mcp__pi-session-mcp__pi_turn_get": 1,
+      "mcp__pi-session-mcp__pi_session_close": 1,
+      "mcp__pi-session-mcp__pi_session_list": 1
+    },
+    "hooks": [
+      {
+        "t_ms": 6619,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 25077,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "outcome": "error",
+        "exit_code": 2
+      },
+      {
+        "t_ms": 27321,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 27343,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "outcome": "success",
+        "exit_code": 0
+      }
+    ],
+    "wakes": {
+      "waiter_exit_2": 1,
+      "started": 1,
+      "with_tool_result": 0,
+      "unanswered": 0,
+      "rows": [
+        {
+          "exit_at_ms": 25077,
+          "request_at_ms": 27314,
+          "delay_ms": 2237,
+          "delivery": "own_request"
+        }
+      ]
+    }
+  },
+  "server": {
+    "tools": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 1,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "pi_turn_get": {
+      "running": 0,
+      "terminal": 1,
+      "error": 0
+    },
+    "open_sessions_at_end": 0,
+    "closes": 1,
+    "spool_failures": 0,
+    "polls_running": 0,
+    "terminal_reads": 1,
+    "bash_calls": 0
+  },
+  "bridge": {
+    "events": [
+      {
+        "seq": 1,
+        "at_ms": 25074,
+        "kind": "turn_terminal",
+        "state": "completed",
+        "via": "bridge",
+        "reason": null
+      },
+      {
+        "seq": 2,
+        "at_ms": 32562,
+        "kind": "instance_ended",
+        "state": null,
+        "via": null,
+        "reason": "server_exit"
+      }
+    ],
+    "claims": 1,
+    "terminal_to_next_assistant_ms": [
+      2240
+    ],
+    "waiters": {
+      "started": 2,
+      "by_reason": {
+        "wake_terminal": 1,
+        "no_turn": 1
+      },
+      "exit_codes": {
+        "0": 1,
+        "2": 1
+      }
+    }
+  },
+  "oracle": {
+    "receipt_files": 1,
+    "receipt_json_found": true,
+    "status": "PASS",
+    "checks": [
+      {
+        "id": "api-data-flow",
+        "status": "PASS"
+      },
+      {
+        "id": "stale-doc-contradiction",
+        "status": "PASS"
+      }
+    ],
+    "workspace_unchanged": true
+  },
+  "cleanup": {
+    "leftover_at_exit": 0,
+    "leftover_after_grace": 0,
+    "leftover_kinds": {},
+    "process_group_alive_after_exit": false,
+    "temp_removed": true
+  },
+  "checks": {
+    "exited_cleanly": true,
+    "no_harness_failure": true,
+    "sessions_closed": true,
+    "no_leftover_process": true,
+    "temp_removed": true,
+    "oracle_pass": true,
+    "workspace_unchanged": true,
+    "no_json_errors": true,
+    "spool_failures_zero": true
+  },
+  "outcome": "completed"
+}

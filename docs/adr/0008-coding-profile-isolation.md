@@ -250,3 +250,32 @@ Linux only. The setup is accepted when all of these pass:
 - macOS keeps the interim rules until a VM-based setup is accepted there.
 - If option 4 becomes necessary later, it needs its own decision and amends
   ADR 0002.
+
+## Amendment (2026-10-21): event spool mount
+
+[ADR 0011](0011-turn-events-and-controller-wake.md) adds an opt-in, content-free
+event spool so that a Claude Code hook on the host can wake the controller when
+a turn ends. For a wrapped registration the server writes from inside the
+boundary, so each writer gets **one additional bind mount**:
+
+- A dedicated host directory under the operator's runtime root
+  (`$XDG_RUNTIME_DIR/pi-session-mcp/writer-<name>/`), mode 0700, mounted
+  read-write at one fixed path inside the boundary.
+- It is never shared between writers and never holds a ledger, credentials,
+  configuration or results. Setup creates it, checks its ownership and mode,
+  and removes it with the registration.
+- It is mounted only when the registration enables event delivery.
+
+Threat note: the worker inside the boundary can write to this directory. It can
+therefore forge, delete or flood events. The consequences are bounded by design:
+
+- an event is only a wake trigger and carries no state the controller trusts,
+  since the controller always reads `pi_turn_get`;
+- the host hook validates the event schema strictly, caps the size and number
+  of files it reads and never follows links;
+- the worst outcome is a spurious or missing wake. A missing wake falls back to
+  the hook's budget and one running read.
+
+The mount gives the worker no new read access to host data and no write access
+outside this directory. The acceptance of a wrapped writer with event delivery
+must show both, in addition to the existing checks.

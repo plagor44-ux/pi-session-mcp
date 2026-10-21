@@ -1,0 +1,31 @@
+{
+  "approved": true,
+  "approved_by": "operator, in the Claude Code session of 2026-10-21 (answers: smallest test first; API key instead of subscription OAuth; bind to Claude Code 2.1.306); amended the same day: max_controller_runs 3 after attempt 01-L1-A failed with an unscoped API key (no cost); new workspace-scoped key; after 02-L1-A completed with an oracle FAIL (worker answer), the operator decided to run arm C anyway under the same cap; the pair is recorded as not meeting the quality criterion",
+  "approved_at": "2026-10-21",
+  "issue": 104,
+  "case": "L1",
+  "arms": [
+    "A",
+    "C"
+  ],
+  "order": [
+    "A",
+    "C"
+  ],
+  "max_controller_runs": 3,
+  "source_commit": "8d355cc5ee85a01710df7fec692c036394feac2d",
+  "controller": {
+    "client_version": "2.1.306 (Claude Code)",
+    "model": "claude-sonnet-5-5",
+    "auth": "api-key"
+  },
+  "worker": {
+    "profile_alias": "explore-fast",
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "thinkingLevel": "low",
+    "skills": []
+  },
+  "budget_usd_advisory": 2,
+  "stop_rules": "stop on any check failure, leak, leftover process, version mismatch, or when reported controller cost after run 1 exceeds the advisory budget"
+}
