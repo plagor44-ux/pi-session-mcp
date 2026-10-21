@@ -53,7 +53,16 @@ export interface TraceFindings {
   connects: number;
   /** Egress that cannot be audited: every `io_uring_setup` that did not fail, every AF_UNIX `connect` outside the allowed socket roots and every abstract socket (R43) (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
   unresolvedEgress: number;
+  /**
+   * The raw log line that caused each outside write, unresolved write and unresolved egress (both lines of a joined unfinished/resumed
+   * call, separated by a newline), first-seen order, at most `MAX_EVIDENCE_LINES`. Private diagnostics only (R84): it holds paths and
+   * addresses, and neither the run record nor the summary copies it.
+   */
+  evidenceLines: string[];
 }
+
+/** The most evidence entries one log keeps. */
+export const MAX_EVIDENCE_LINES = 50;
 
 /** A write target: a path relative to `dir` (or the cwd when `dir` is absent), or an fd (`fd`). */
 type Target = { dir?: number; path: number; nullIsDir?: boolean } | { fd: number };
@@ -314,7 +323,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   const live = new Map<number, Cell>();
   /** Every cell ever made for a pid, live or exited, so a clone return can find what a fast child did before it. */
   const records = new Map<number, { cell: Cell; created: number }[]>();
-  const pending = new Map<number, { head: string; seq: number }>();
+  const pending = new Map<number, { head: string; seq: number; line: string }>();
   /** A speculative group attachment may actually belong to a pending non-CLONE_FS parent. Local to the pid. */
   const uncertain = new Set<number>();
   /**
@@ -336,6 +345,10 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   const outside = new Set<string>();
   const unexpected = new Map<string, Destination>();
   let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
+  const evidence: string[] = [];
+  /** The raw line(s) of the call being judged: the line itself, or the head line and the resumed line of a joined call. */
+  let currentLines: string[] = [];
+  const noteEvidence = (): void => { if (evidence.length < MAX_EVIDENCE_LINES) evidence.push(currentLines.join("\n")); };
 
   function newCell(pid: number, cwds: Iterable<string | null>, seq: number): Cell {
     const cell: Cell = { cwds: new Set(cwds), shared: false, touched: seq };
@@ -428,14 +441,14 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       if (flags !== undefined && !FLAGS_WRITE.test(flags)) return;
     }
     const failed = call.ret.kind === "failed";
-    let unresolved = false, denied = false;
+    let unresolved = false, denied = false, outsideHit = false;
     const judge = (r: Resolved): void => {
       if ("ignore" in r) return;
       if (r.unresolved) unresolved = true;
       for (const path of r.paths) {
         if (allowed(path)) continue;
         if (failed) denied = true;
-        else outside.add(path);
+        else { outside.add(path); outsideHit = true; }
       }
     };
     const resolved = spec.targets.map((target) => resolveTarget(pid, call.args, target));
@@ -454,6 +467,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       else judge(UNRESOLVED);
     }
     if (failed) { if (denied) deniedWriteAttempts++; } else if (unresolved) unresolvedWrites++;
+    if (!failed && (unresolved || outsideHit)) noteEvidence();
   }
 
   function judgeDestination(dest: Destination | null): void {
@@ -471,7 +485,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   function clone(pid: number, call: Call, seq: number, headSeq: number): void {
     const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
     const mutedParent = muted.has(pid);
-    if (!mutedParent && call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) unresolvedWrites++;
+    if (!mutedParent && call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) { unresolvedWrites++; noteEvidence(); }
     if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
     const child = call.ret.value;
     if (mutedParent && flags !== undefined && /\bCLONE_NEWPID\b/.test(flags)) muted.add(child);
@@ -522,18 +536,20 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     const spec = SPECS[call.name];
     if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
     // Even absolute paths cannot be audited after a successful root/namespace change.
-    if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") unresolvedWrites++; return; }
-    if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) unresolvedEgress++; return sendTarget(call.args[1], true); }
-    if (call.name === "sendto") { if (unixConnectEscapes(call.args[4], call.ret)) unresolvedEgress++; return sendTarget(call.args[4]); }
+    if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") { unresolvedWrites++; noteEvidence(); } return; }
+    if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[1], true); }
+    if (call.name === "sendto") { if (unixConnectEscapes(call.args[4], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[4]); }
     if (call.name === "sendmsg" || call.name === "sendmmsg") {
       // Every msg_name of family AF_UNIX is judged like a connect (datagram sockets need no connect); a failed send is ignored.
       if (call.ret.kind !== "failed") {
+        const before = unresolvedEgress;
         for (const name of (call.args[1] ?? "").matchAll(/msg_name=(\{[^}]*\})/g)) if (/sa_family=AF_UNIX\b/.test(name[1]!) && unixPathEscapes(name[1]!)) unresolvedEgress++;
+        if (unresolvedEgress > before) noteEvidence();
       }
       return messageDestinations(call.args[1]).forEach(judgeDestination);
     }
     // A failed setup (`= -1 E...`) creates no ring and cannot be used for I/O (R23b); a successful or in-progress one counts.
-    if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") unresolvedEgress++; return; }
+    if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") { unresolvedEgress++; noteEvidence(); } return; }
     if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
     if (call.name === "chdir" || call.name === "fchdir") chdir(pid, call, seq);
   }
@@ -569,10 +585,14 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     const head = pending.get(pid);
     if (!head) return;
     pending.delete(pid);
+    const saved = currentLines;
+    currentLines = [head.line];
     handle(pid, head.head, head.seq, head.seq);
+    currentLines = saved;
   }
 
   for (const [seq, line] of text.split("\n").entries()) {
+    currentLines = [line];
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
@@ -610,16 +630,17 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
         // The arguments are lost, so the call cannot be judged: fail closed.
         const name = resumed[1]!;
         if (muted.has(pid) && !CLONES.has(name) && name !== "chdir" && name !== "fchdir") continue;
-        if (SPECS[name]) { attachPendingGroup(pid, seq); unresolvedWrites++; }
+        if (SPECS[name]) { attachPendingGroup(pid, seq); unresolvedWrites++; noteEvidence(); }
         else if (ROOT_CHANGES.has(name)) {
-          if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedWrites++;
+          if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") { unresolvedWrites++; noteEvidence(); }
         }
-        else if (name === "io_uring_setup") { if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") unresolvedEgress++; }
-        else if (SEND_CALLS.has(name)) unresolvedEgress++;
+        else if (name === "io_uring_setup") { if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") { unresolvedEgress++; noteEvidence(); } }
+        else if (SEND_CALLS.has(name)) { unresolvedEgress++; noteEvidence(); }
         else if (name === "chdir" || name === "fchdir") changeCwd(pid, () => null, seq);
         continue;
       }
       pending.delete(pid);
+      currentLines = [head.line, line];
       handle(pid, head.head + resumed[2]!.replace(/^\s*<unfinished \.\.\.>/, ""), seq, head.seq);
       continue;
     }
@@ -630,7 +651,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       const call = parseCall(head);
       if (call && SPECS[call.name]) attachPendingGroup(pid, seq);
       else if (call && (call.name === "chdir" || call.name === "fchdir")) chdir(pid, call, seq, "head");
-      pending.set(pid, { head, seq });
+      pending.set(pid, { head, seq, line });
       continue;
     }
     handle(pid, body, seq, seq);
@@ -645,6 +666,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       unexpectedConnects: [...unexpected.values()],
       connects,
       unresolvedEgress,
+      evidenceLines: evidence,
     },
     tainted,
   };

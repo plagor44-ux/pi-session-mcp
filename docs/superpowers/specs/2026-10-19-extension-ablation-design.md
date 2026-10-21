@@ -512,3 +512,32 @@ the text above, they win.
   that an oracle needing judgment is dropped applies to acceptance. Cost: no
   recommendation for `review-grok`, `review` and `co-review` in this wave; cost,
   cache, network and the descriptive oracle numbers are still reported.
+- **Audit stops keep their evidence privately (R84).** A run stopped by the
+  trace audit (`outside_write`, `unresolved_write`, `unresolved_egress`) used
+  to leave nothing to attribute the event to, because the strace log is removed
+  with the private run directory. `parseStraceLog` now remembers, up to 50
+  entries, the raw log line behind every outside write, unresolved write and
+  unresolved egress (both lines of a joined unfinished/resumed call) in
+  `evidenceLines`; run records and summaries never copy them. On such a stop
+  (including the oracle traces of that run) the wave writes them, each line cut
+  at 1000 characters, to `<waveDir>/diagnostics/<runId>.txt` (`wx`, mode 0600)
+  before the private directory is removed; the dry load does the same for an
+  unclean load. Nothing else is kept, and the report never reads or copies
+  `diagnostics/`. Cost: worker-controlled paths and addresses exist on disk in
+  that one private file, and an audit stop is the only trigger.
+- **Audit-stopped slots are planned again (R85).** A trace-audit stop says
+  nothing about the extension's result, but the slot stays charged in the
+  ledger, which used to exclude it for good. `--plan --exclude-wave` now plans a
+  slot again when every executed record of it in the excluded waves is a stop
+  with an audit reason (`exclusion.replannedStopped`); a ledger charge without
+  any record still excludes it, and a slot with any other executed record stays
+  excluded. The earlier charge stays in the ledger and in `remainingUsd`.
+  The approval carries `replannedStopped` (run ids of its own list, unique,
+  written by the plan, covered by the approval the operator signs and compared
+  exactly on resume); the wave's guard against running a charged run id
+  (`run_already_charged`) skips exactly those ids. Alternatives considered: a
+  guard that reads the earlier waves' records (the wave does not have them) or
+  one that drops the charge check (it protects against double spending). In the
+  report a record stopped by the audit is not final: a later executed record of
+  the same run id replaces it, two final records still refuse
+  (`duplicate_run_record`), and `waveStops` keeps the earlier stop.

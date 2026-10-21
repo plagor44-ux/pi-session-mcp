@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { RunOutput } from "./run-one.js";
 import type { ReviewScore } from "./oracles.js";
 import type { Arm, ProfileId } from "./schemas.js";
-import type { TraceFindings } from "./trace.js";
+import { MAX_EVIDENCE_LINES, type TraceFindings } from "./trace.js";
 import type { RunUsage } from "./usage.js";
 
 export type StopReason =
@@ -68,6 +68,13 @@ export const runOutputSchema = z.object({
   assistantTextTruncated: z.boolean(), assistantTextSha256: z.string().nullable(), mac: z.string().nullable(), harnessError: z.string().nullable(),
 });
 
+/**
+ * The stop reasons of the trace audit: the run's own containment audit found a write or a connection it could not clear. A slot stopped by
+ * one of them may be planned again under a new approval (R85), because the stop says nothing about the extension's result.
+ */
+export const AUDIT_STOPS: readonly StopReason[] = ["outside_write", "unresolved_write", "unresolved_egress"];
+export const isAuditStop = (reason: string | null | undefined): boolean => AUDIT_STOPS.includes(reason as StopReason);
+
 /** Only fixed codes reach a record; any other string (a message, a path) is replaced. */
 export function fixedCode(value: string | null | undefined, fallback = "wave_step_failed"): string | null {
   if (value === null || value === undefined) return null;
@@ -93,6 +100,7 @@ export function mergeTrace(a: TraceFindings, b: TraceFindings): TraceFindings {
     unresolvedWrites: a.unresolvedWrites + b.unresolvedWrites,
     deniedWriteAttempts: a.deniedWriteAttempts + b.deniedWriteAttempts,
     unexpectedConnects, connects: a.connects + b.connects, unresolvedEgress: a.unresolvedEgress + b.unresolvedEgress,
+    evidenceLines: [...a.evidenceLines, ...b.evidenceLines].slice(0, MAX_EVIDENCE_LINES),
   };
 }
 

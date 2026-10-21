@@ -8,7 +8,7 @@ import { z } from "zod";
 import { digest, hash } from "../profiles/files.js";
 import { approvalSchema, type Approval } from "./approval.js";
 import { BOUND_PATH, BOUND_PATHSPECS, dirtyBoundPaths } from "./bound.js";
-import type { RunRecord, StopReason } from "./classify.js";
+import { isAuditStop, type RunRecord, type StopReason } from "./classify.js";
 import { ledgerFileSchema } from "./ledger-file.js";
 import { PAIRINGS, taskKind } from "./matrix.js";
 import { armSchema, profileIdSchema } from "./schemas.js";
@@ -258,8 +258,10 @@ export async function readApproval(waveDir: string): Promise<{ bytes: Buffer; ap
 }
 
 /**
- * Merges the records of several waves per run id (R60). A run id keeps its task, profile and arm across waves; at most one wave holds an
- * executed record for it, and that one replaces the `not_run` records other waves wrote for the slot. A run id appears once per wave.
+ * Merges the records of several waves per run id (R60). A run id keeps its task, profile and arm across waves; at most one wave holds a
+ * final record for it (scored, or stopped for a reason other than the trace audit), and that one replaces the `not_run` records other
+ * waves wrote for the slot. A record stopped by the trace audit is not final (R85): the slot may be planned again, and a later executed
+ * record of the same run id replaces it (the stop itself stays in `waveStops`). A run id appears once per wave.
  */
 function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
   const merged = new Map<string, WaveRun>();
@@ -272,7 +274,9 @@ function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
       const prior = merged.get(runId)?.record;
       if (prior === undefined) { merged.set(runId, run); continue; }
       const same = prior.taskId === run.record.taskId && prior.profile === run.record.profile && prior.arm === run.record.arm;
-      if (!same || (prior.outcome !== "not_run" && run.record.outcome !== "not_run")) throw new Error("duplicate_run_record");
+      const auditStopped = (record: SummaryRecord): boolean => record.outcome === "stopped" && isAuditStop(record.stopReason);
+      const priorFinal = prior.outcome !== "not_run" && !auditStopped(prior);
+      if (!same || (priorFinal && run.record.outcome !== "not_run")) throw new Error("duplicate_run_record");
       if (run.record.outcome !== "not_run") merged.set(runId, run);
     }
   }
