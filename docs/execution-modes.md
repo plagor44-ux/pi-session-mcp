@@ -242,6 +242,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_registered` | Registration added or already equivalent |
 | `writer_reconcile_failed` | Unexpected reconciliation failure |
 | `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
+| `hook_install_failed` | The wake hook step of a writer failed unexpectedly; other `hook_*` and `settings_*` codes are in [Client setup](client-setup.md#wake-hook) |
 | `container_profile_unsupported` | Profile or selected skills cannot be rendered safely in boundary |
 | `base_ref_invalid` | Base is not a supported safe named branch |
 | `writer_base_unavailable` | Host Git could not resolve/read/export base |

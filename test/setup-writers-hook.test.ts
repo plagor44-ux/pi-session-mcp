@@ -131,16 +131,23 @@ describe("writer registrations and the wake hook", () => {
     expect(await readFile(f.settings("x"), "utf8")).toBe("{}\n");
     expect(JSON.parse(await readFile(f.settings("y"), "utf8")).hooks.PostToolUse).toEqual([f.entry]);
   });
-  it("fails the removal, keeping the writer files, when the settings cannot be edited", async () => {
+  it("reports a hook that cannot be edited but still removes the writer", async () => {
     const f = await fixture({ delivery: true });
     await changeWriterMode(f.configPath, f.request("x", 1), f.deps);
     await writeFile(f.settings(), "{broken");
     const output = await f.remove("x-w1");
     expect(output.exitCode).toBe(1);
-    expect(output.findings[0]).toMatchObject({ status: "failed", code: "settings_unparseable" });
-    expect(f.life.removeWriter).not.toHaveBeenCalled();
-    await writeFile(f.settings(), JSON.stringify({ hooks: { PostToolUse: [f.entry] } }));
-    expect((await f.remove("x-w1")).exitCode).toBe(0);
+    expect(output.findings.map((finding) => [finding.status, finding.code])).toEqual([["ok", "writer_removed"], ["failed", "settings_unparseable"]]);
+    expect(f.life.removeWriter).toHaveBeenCalledTimes(1);
+    expect(await readFile(f.settings(), "utf8")).toBe("{broken");
+    // A divergent entry is reported the same way.
+    const g = await fixture({ delivery: true });
+    await changeWriterMode(g.configPath, g.request("x", 1), g.deps);
+    const edited = { ...g.entry, hooks: [{ ...g.entry.hooks[0], timeout: 5 }] };
+    await writeFile(g.settings(), JSON.stringify({ hooks: { PostToolUse: [edited] } }));
+    const divergent = await g.remove("x-w1");
+    expect(divergent.findings.map((finding) => [finding.status, finding.code])).toEqual([["ok", "writer_removed"], ["divergent", "hook_divergent"]]);
+    expect(g.life.removeWriter).toHaveBeenCalledTimes(1);
   });
   it("verifies the hook with the registration", async () => {
     const f = await fixture({ delivery: true });

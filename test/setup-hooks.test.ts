@@ -367,6 +367,47 @@ describe("wake hook and the configured delivery", () => {
   });
 });
 
+describe("wake hook with delivery off and nothing owned", () => {
+  it("does not look at settings that are unparseable, misshapen or linked", async () => {
+    const f = await fixture();
+    const elsewhere = join(f.root, "elsewhere"); await mkdir(elsewhere);
+    for (const content of ["{not json", f.format({ hooks: [] }), f.format({ hooks: { PostToolUse: {} } })]) {
+      const file = await f.seed("user", content);
+      const before = await stat(file);
+      for (const operation of ["dry-run", "apply", "verify"] as const) {
+        expect(await f.run(operation, { enabled: false })).toEqual({ status: "unchanged", code: "hook_not_enabled" });
+      }
+      expect(await readFile(file, "utf8")).toBe(content);
+      expect((await stat(file)).mtimeMs).toBe(before.mtimeMs);
+    }
+    // A linked project settings directory is neither followed nor complained about.
+    await symlink(elsewhere, join(f.cwd, ".claude"));
+    for (const scope of ["project", "local"] as const) {
+      for (const operation of ["dry-run", "apply", "verify"] as const) {
+        expect(await f.run(operation, { scope, enabled: false })).toEqual({ status: "unchanged", code: "hook_not_enabled" });
+      }
+    }
+    expect(await readdir(elsewhere)).toEqual([]);
+  });
+  it("still maintains an owned hook when delivery is off, even where settings are unreadable", async () => {
+    const f = await fixture();
+    await f.run("apply");
+    await f.seed("user", "{oops");
+    expect(await f.run("apply", { enabled: false })).toEqual({ status: "failed", code: "settings_unparseable" });
+    expect(await f.run("verify", { enabled: false })).toEqual({ status: "failed", code: "settings_unparseable" });
+  });
+  it("keeps a setup run green and its exit code zero in every operation", async () => {
+    const { f, orchestrator } = await orchestratedOff();
+    await f.seed("user", "{not json");
+    for (const operation of ["dry-run", "apply", "verify", "apply"] as const) {
+      const output = await orchestrator.run({ operation, targets: [{ client: "codex", scope: "user", alias: "pi-session-mcp" }, { client: "claude-code", scope: "user", alias: "pi-session-mcp" }] });
+      expect(output.exitCode).toBe(0);
+      expect(output.findings.filter((finding) => finding.target.alias === WAKE_HOOK_ALIAS).map((finding) => finding.code)).toEqual(["hook_not_applicable", "hook_not_enabled"]);
+    }
+    expect(await readFile(f.settings("user"), "utf8")).toBe("{not json");
+  });
+});
+
 describe("wake hook verify", () => {
   it("passes only for the canonical owned entry with its program present", async () => {
     const f = await fixture();
@@ -559,3 +600,17 @@ describe("wake hook in the setup orchestrator", () => {
     await expect(stat(join(f.home, ".claude"))).rejects.toThrow();
   });
 });
+
+async function orchestratedOff() {
+  const f = await fixture();
+  const registered = new Set<string>();
+  const adapters: SetupClientAdapter[] = ["codex", "claude-code"].map((name) => ({
+    name, supportedScopes: name === "codex" ? ["user"] : ["user", "local", "project"],
+    async inspect(target) { return registered.has(`${target.client}:${target.scope}`) ? { state: "equivalent", fingerprint: "a".repeat(64) } : { state: "absent" }; },
+    async apply(target) { registered.add(`${target.client}:${target.scope}`); },
+    async remove(target) { registered.delete(`${target.client}:${target.scope}`); },
+    async verify() { return { ok: true, code: "mcp_verified" }; },
+  }));
+  const orchestrator = new SetupOrchestrator({ adapters, ownership: f.ownership, intendedFingerprint: "a".repeat(64), hooks: new FileSetupHookInstaller({ ...f.roots, delivery: async () => false }) });
+  return { f, orchestrator };
+}

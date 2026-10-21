@@ -112,9 +112,9 @@ async function remove(ctx: lifecycle.WriterContext, name: string, discard: boole
     if (owned) await unregisterWriter(ownership, adapter, expected);
     else if (["equivalent", "divergent"].includes(await adapter.inspect(expected))) throw new Error("ownership_unavailable");
   }
-  // After the registration is gone and before the wrapper goes; a rerun finds the hook by its own record.
-  const hook = await writerHook(ctx, name, deps, "remove", false);
-  if (hook?.status === "failed" || hook?.status === "divergent") throw new Error(hook.code);
+  // After the registration is gone. A hook that cannot be edited is reported, not a reason to keep the
+  // writer: the operator's settings are not the writer's to hold hostage, and the record keeps the entry owned.
+  const hook = await writerHook(ctx, name, deps, "remove", false).catch((): WakeHookOutcome => ({ status: "failed", code: "hook_install_failed" }));
   if (hook) extras.push(hook);
   return life.removeWriter(ctx, name, { discard });
 }

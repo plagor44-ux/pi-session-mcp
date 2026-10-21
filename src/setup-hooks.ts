@@ -130,6 +130,12 @@ interface Location {
  * example into a dotfiles checkout) is followed and written through. Project and local records
  * are bound to an opaque identity of the project, so another project never shares them.
  */
+/** The ownership key of a scope's hook. It looks at no settings file: only the project's canonical directory. */
+async function recordTargetOf(scope: HookScope, roots: Pick<WakeHookRoots, "cwd">): Promise<SetupTarget> {
+  if (scope === "user") return { client: "claude-code", scope, alias: WAKE_HOOK_ALIAS };
+  return { client: "claude-code", scope, alias: `${WAKE_HOOK_ALIAS}@${sha256(await realpath(roots.cwd)).slice(0, 16)}` };
+}
+
 async function locate(scope: HookScope, roots: WakeHookRoots): Promise<Location> {
   if (scope === "user") {
     const file = wakeSettingsPath("user", roots);
@@ -299,6 +305,11 @@ export async function runWakeHook(request: WakeHookRequest): Promise<WakeHookOut
 }
 
 async function reconcile(request: WakeHookRequest): Promise<WakeHookOutcome> {
+  // Delivery off and no record of ours: nothing to maintain, so the client's settings are not even looked at
+  // (an unparseable or linked file there is not setup's business). Removal follows the record and checks it itself.
+  if (!request.enabled && request.operation !== "remove" && request.operation !== "rollback" && !await ownsWakeHook(request.scope, request.roots, request.ownership)) {
+    return { status: "unchanged", code: "hook_not_enabled" };
+  }
   const location = await locate(request.scope, request.roots);
   const dependencies = request.dependencies ?? {};
   // A changed file is re-read once from the start; the second change fails.
@@ -419,7 +430,7 @@ export async function installWakeHook(options: InstallWakeHookOptions): Promise<
 
 /** Whether setup holds a record for the hook of this scope (and, for project and local, this project). */
 export async function ownsWakeHook(scope: HookScope, roots: Pick<WakeHookRoots, "home" | "cwd" | "env">, ownership: OwnershipAccess): Promise<boolean> {
-  try { return (await ownership.get((await locate(scope, roots as WakeHookRoots)).recordTarget)) !== undefined; }
+  try { return (await ownership.get(await recordTargetOf(scope, roots))) !== undefined; }
   catch { return false; }
 }
 
