@@ -133,7 +133,9 @@ export const taskSpecSchema = z.object({
 export type TaskSpec = z.infer<typeof taskSpecSchema>;
 
 export const runSpecSchema = z.object({
-  runId: z.string().regex(/^\d{3,}-[a-zA-Z0-9_-]+-[a-z-]+-[a-zA-Z-]+$/), taskId: z.string().min(1),
+  runId: z.string().regex(/^\d{3,}-[a-zA-Z0-9_-]+-[a-z-]+-[a-zA-Z-]+(?:-r[1-9])?$/), taskId: z.string().min(1),
   profile: profileIdSchema, arm: armSchema, ordinal: z.number().int().min(1), pairings: z.array(z.string().min(1)).min(1),
+  /** The 1-based replicate (R90); absent in a plan without replicates, where it reads as 1 and the run id has no `-r<k>` suffix. */
+  replicate: z.number().int().min(1).max(9).optional(),
 }).strict();
 export type RunSpec = z.infer<typeof runSpecSchema>;

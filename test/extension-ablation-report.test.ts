@@ -8,10 +8,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { parseArgs } from "../eval/extensions/cli.js";
 import { PersistedLedger } from "../eval/extensions/ledger-file.js";
 import { PAIRINGS } from "../eval/extensions/matrix.js";
-import { recommend, summarize, writeEvidence, type SummaryRecord } from "../eval/extensions/report.js";
+import { approvalSchema, validateApproval } from "../eval/extensions/approval.js";
+import { readRuns, recommend, summarize, writeEvidence, type SummaryRecord } from "../eval/extensions/report.js";
+import { taskSpecSchema } from "../eval/extensions/schemas.js";
 import { hash } from "../eval/profiles/files.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -700,4 +703,123 @@ describe("--report through the compiled CLI (module outside a git repository)", 
     // A cwd that is not a repository is refused with a fixed code, not by an accident in the build directory.
     await expect(cli(wave.root, "--report", "--wave", wave.waveDir, "--ledger", wave.ledgerPath, "--evidence", join(wave.root, "evidence-nowhere"))).rejects.toMatchObject({ stderr: expect.stringContaining("source_unavailable") });
   }, 180_000);
+});
+
+describe("replicates in the report (R90)", () => {
+  /** One run of arm `arm` of `taskId` in replicate `replicate`; `accepted` null is a stopped run. */
+  const run = (taskId: string, arm: "A" | "pi-lens", replicate: number, accepted: boolean | null, cost = 0.1): SummaryRecord =>
+    record(taskId, arm, accepted, { runId: `${String(++counter).padStart(3, "0")}-${taskId}-code-deepseek-${arm}-r${replicate}`, replicate }, cost);
+  /** Per task, the accepted flags of arm A and of arm B over the replicates. */
+  const records = (spec: Record<string, { a: (boolean | null)[]; b: (boolean | null)[] }>): SummaryRecord[] =>
+    Object.entries(spec).flatMap(([taskId, { a, b }]) => a.flatMap((_, k) => [run(taskId, "A", k + 1, a[k]!), run(taskId, "pi-lens", k + 1, b[k]!)]));
+  const found = (all: SummaryRecord[], replicates = 3) => summarize(all, undefined, replicates).pairings.find((p) => p.id === pairing.id)!;
+
+  it("pairs arm A and arm B per (task, replicate) unit and gives the accepted count per task and arm", () => {
+    const result = found(records({
+      t1: { a: [true, false, true], b: [false, true, true] },
+      t2: { a: [true, true, true], b: [true, true, null] },
+      t3: { a: [false, false, false], b: [false, false, false] },
+    }));
+    expect(result.tasks).toEqual(["t1", "t2", "t3"]);
+    expect(result.replicated).toMatchObject({ replicates: 3 });
+    // The stopped arm-B run of t2 in replicate 3 leaves that unit unpaired.
+    expect(result.replicated!.units).toHaveLength(8);
+    expect(result.replicated!.units).not.toContainEqual({ taskId: "t2", replicate: 3 });
+    expect(result.replicated!.perTask).toEqual([
+      { taskId: "t1", paired: 3, acceptedA: 2, acceptedB: 2 }, { taskId: "t2", paired: 2, acceptedA: 2, acceptedB: 2 }, { taskId: "t3", paired: 3, acceptedA: 0, acceptedB: 0 },
+    ]);
+    expect(result.a).toMatchObject({ accepted: 4, scored: 8 });
+    expect(result.b).toMatchObject({ accepted: 4, scored: 8 });
+    expect(result.complete).toBe(true);
+  });
+
+  it("applies the pre-registered rule to the units: equal totals with a won unit enable, fewer accepted units do not", () => {
+    // B accepts where A did not in t1 (replicate 2) and loses nowhere in total; cost is equal.
+    expect(found(records({ t1: { a: [true, false, true], b: [false, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [false, false, false] } })).recommendation).toBe("enable");
+    expect(found(records({ t1: { a: [true, true, true], b: [true, true, false] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [true, true, true] } })).recommendation).toBe("enable");
+    expect(found(records({ t1: { a: [true, true, true], b: [true, false, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, true, false], b: [false, false, false] } })).recommendation).toBe("do-not-enable");
+    expect(found(records({ t1: { a: [true, true, true], b: [true, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [true, true, true], b: [true, true, true] } })).recommendation).toBe("inconclusive");
+    // The cost clause applies to the totals over the units.
+    const dear = records({ t1: { a: [true, false, true], b: [false, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [false, false, false] } });
+    expect(found(dear.map((r) => (r.arm === "pi-lens" ? { ...r, usage: { session: { input: 100, cacheRead: 50, costUsd: 0.2 } } } : r))).recommendation).toBe("inconclusive");
+  });
+
+  it("still asks for three distinct tasks before a pairing is complete", () => {
+    const two = found(records({ t1: { a: [true, true, true], b: [true, true, true] }, t2: { a: [false, false, false], b: [true, true, true] } }));
+    expect(two.replicated!.units).toHaveLength(6);
+    expect(two).toMatchObject({ complete: false, recommendation: "inconclusive", tasks: ["t1", "t2"] });
+    expect(found([]).recommendation).toBe("not-run");
+  });
+
+  it("leaves a plan without replicates exactly as it was", () => {
+    const plain = [...pair("t1", false, true), ...pair("t2", true, true), ...pair("t3", true, true)];
+    expect(summarize(plain, undefined, 1)).toEqual(summarize(plain));
+    expect(JSON.stringify(summarize(plain, undefined, 1))).not.toContain("replicated");
+    expect(JSON.stringify(summarize(plain))).toBe(JSON.stringify(summarize(plain, undefined, 1)));
+  });
+
+  it("keeps review pairings descriptive over the units", () => {
+    const reviewPairing = PAIRINGS.find((p) => p.id === "pl-review")!;
+    const review = (taskId: string, arm: "A" | "pi-lens", replicate: number): SummaryRecord =>
+      ({ ...run(taskId, arm, replicate, true), profile: "review", pairings: [reviewPairing.id], runId: `${String(++counter).padStart(3, "0")}-${taskId}-review-${arm}-r${replicate}`, review: { falseFindings: [] } });
+    const all = ["t1", "t2", "t3"].flatMap((id) => [1, 2].flatMap((k) => [review(id, "A", k), review(id, "pi-lens", k)]));
+    const result = summarize(all, undefined, 2).pairings.find((p) => p.id === reviewPairing.id)!;
+    expect(result).toMatchObject({ kind: "review", recommendation: "descriptive", complete: true, tasks: ["t1", "t2", "t3"] });
+    expect(result.replicated).toMatchObject({ replicates: 2 });
+    expect(result.replicated!.units).toHaveLength(6);
+    expect(result.replicated!.perTask).toBeUndefined();
+  });
+
+  it("keys duplicates on the replicate: one slot twice is refused, the same slot in another replicate is not", () => {
+    const first = run("t1", "A", 1, true);
+    expect(() => summarize([first, run("t1", "A", 2, true)])).not.toThrow();
+    expect(() => summarize([first, run("t1", "A", 1, true)])).toThrow("duplicate_run_record");
+  });
+});
+
+describe("replicates in the evidence files (R90)", () => {
+  it("refuses a record whose replicate and run id suffix disagree", async () => {
+    const wave = await makeWave();
+    tamper(wave, { replicate: 2 });
+    await expect(write(wave)).rejects.toThrow("run_record_invalid");
+    const other = await makeWave();
+    const file = join(other.waveDir, "runs", `${other.runIds[0]}.json`);
+    const moved = `${other.runIds[0]}-r2`;
+    writeFileSync(join(other.waveDir, "runs", `${moved}.json`), readFileSync(file));
+    rmSync(file);
+    await expect(write(other)).rejects.toThrow("run_record_invalid");
+    expect(existsSync(other.evidenceDir)).toBe(false);
+  });
+
+  describe("the committed 2026-10-20 evidence", () => {
+    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "evaluation", "extension-ablation-2026-10-20");
+    const evidence = join(dir, "evidence");
+
+    it("still parses: run records and approvals carry no replicate and keep their run ids", async () => {
+      const runs = await readRuns(evidence);
+      expect(runs.length).toBeGreaterThan(0);
+      for (const { record: found } of runs) {
+        expect(found.replicate).toBeUndefined();
+        expect(found.runId).not.toMatch(/-r\d$/);
+      }
+      const approvals = readdirSync(join(evidence, "approvals")).filter((name) => name.endsWith(".json"));
+      expect(approvals.length).toBeGreaterThan(0);
+      for (const name of approvals) {
+        const approval = approvalSchema.parse(JSON.parse(readFileSync(join(evidence, "approvals", name), "utf8")));
+        expect(approval.replicates).toBeUndefined();
+        expect(approval.runs.every((r) => r.replicate === undefined)).toBe(true);
+      }
+    });
+
+    it("still binds to its tasks and reports the same pairings", async () => {
+      const tasks = z.array(taskSpecSchema).parse(JSON.parse(readFileSync(join(dir, "tasks.json"), "utf8")));
+      for (const name of readdirSync(join(evidence, "approvals")).filter((n) => n.endsWith(".json"))) {
+        const raw = JSON.parse(readFileSync(join(evidence, "approvals", name), "utf8"));
+        expect(() => validateApproval(raw, { sourceCommit: raw.sourceCommit, tasks })).not.toThrow();
+      }
+      const stored = JSON.parse(readFileSync(join(evidence, "summary.json"), "utf8")) as { pairings: unknown };
+      const records = (await readRuns(evidence)).map((r) => r.record);
+      expect(JSON.parse(JSON.stringify(summarize(records).pairings))).toEqual(stored.pairings);
+    });
+  });
 });
