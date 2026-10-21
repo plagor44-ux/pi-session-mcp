@@ -144,7 +144,7 @@ describe("stream measures", () => {
     expect(tracker.modelRequests).toBe(3);
     expect(tracker.toolUses).toEqual({ Bash: 1, "mcp__pi-session-mcp__pi_turn_get": 1 });
     expect(sumUsage(tracker.results)).toEqual(usage(17, 5, 2, 8));
-    expect(uncachedInput(sumUsage(tracker.results))).toBe(10);
+    expect(uncachedInput(sumUsage(tracker.results))).toBe(19);
     const summary = summarizeStream(tracker) as any;
     expect(summary.sums.num_turns).toBe(3);
     expect(summary.sums.duration_ms).toBe(150);

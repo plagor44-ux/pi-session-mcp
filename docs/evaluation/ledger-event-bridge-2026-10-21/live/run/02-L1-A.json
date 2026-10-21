@@ -1,0 +1,202 @@
+{
+  "schema_version": "bridge-live-1",
+  "dry_run": false,
+  "case": "L1",
+  "arm": "A",
+  "seq": 2,
+  "started_at": "2026-10-21T18:17:57.695Z",
+  "ended_at": "2026-10-21T18:19:07.978Z",
+  "wall_ms": 70254,
+  "tooling": {
+    "client_version": "2.1.306 (Claude Code)",
+    "client_version_matches_required": true,
+    "node": "26.11.1",
+    "server_mode": "sdk",
+    "build_digest": "sha256:75abed4232de34bae61c4279aa223d9b8d3998792a38c3a7caef973c98e2ce9e"
+  },
+  "approval": {
+    "digest": "sha256:18111974436c5c3823505b82d8bb582cda2270487926fe039366b9b892ebf5f9",
+    "source_commit": "8d355cc5ee85a01710df7fec692c036394feac2d",
+    "max_controller_runs": 3,
+    "budget_usd_advisory": 2,
+    "controller": {
+      "client_version": "2.1.306 (Claude Code)",
+      "model": "claude-sonnet-5-5",
+      "auth": "api-key"
+    },
+    "worker": {
+      "profile_alias": "explore-fast",
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "thinkingLevel": "low"
+    }
+  },
+  "prompts": {
+    "system_prompt_sha256": "sha256:c20c5e1592e29dee92c0846817915a7a0fbd3fe7b90c395ceac806abd31092fe",
+    "system_prompt_bytes": 12886,
+    "user_prompt_sha256": "sha256:48e9be91bc934410ec12cc6d59999a47f122eec522770d1a9dfde44050656a6d",
+    "controller_skill_fingerprint": "v2:53467ccbda1f9ffbfb2e7ad68d56678c5b27d1e2cc39fa624181003fae926a12"
+  },
+  "run": {
+    "exit_code": 0,
+    "exit_signal": null,
+    "exit_at_ms": 70254,
+    "stdin_ended_at_ms": 70190,
+    "timed_out": false,
+    "end_reason": "all_sessions_closed",
+    "stderr_bytes": 0,
+    "spawn_error": false
+  },
+  "stream": {
+    "lines": 35,
+    "json_errors": 0,
+    "types": {
+      "system": 9,
+      "assistant": 14,
+      "user": 11,
+      "result": 1
+    },
+    "system_subtypes": {
+      "init": 1,
+      "task_started": 3,
+      "task_notification": 3,
+      "thinking_tokens": 2
+    },
+    "mcp_statuses": [
+      "connected"
+    ],
+    "results": [
+      {
+        "t_ms": 70190,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 12,
+        "duration_ms": 69276,
+        "usage": {
+          "input_tokens": 16,
+          "cache_read_input_tokens": 78937,
+          "cache_creation_input_tokens": 13440,
+          "output_tokens": 1888
+        },
+        "total_cost_usd": 0.06040570000000001
+      }
+    ],
+    "result_count": 1,
+    "sums": {
+      "num_turns": 12,
+      "duration_ms": 69276,
+      "usage": {
+        "input_tokens": 16,
+        "cache_read_input_tokens": 78937,
+        "cache_creation_input_tokens": 13440,
+        "output_tokens": 1888
+      },
+      "uncached_input_tokens": -92361,
+      "total_cost_usd_sum": 0.06040570000000001,
+      "total_cost_usd_last": 0.06040570000000001
+    },
+    "model_requests": 8,
+    "tool_uses": {
+      "mcp__pi-session-mcp__pi_capabilities_get": 1,
+      "mcp__pi-session-mcp__pi_session_start": 1,
+      "mcp__pi-session-mcp__pi_session_prompt": 1,
+      "Bash": 3,
+      "mcp__pi-session-mcp__pi_turn_get": 3,
+      "mcp__pi-session-mcp__pi_session_close": 1,
+      "mcp__pi-session-mcp__pi_session_list": 1
+    },
+    "hooks": [],
+    "wakes": {
+      "waiter_exit_2": 0,
+      "started": 0,
+      "with_tool_result": 0,
+      "unanswered": 0,
+      "rows": []
+    }
+  },
+  "server": {
+    "tools": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 3,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "pi_turn_get": {
+      "running": 2,
+      "terminal": 1,
+      "error": 0
+    },
+    "open_sessions_at_end": 0,
+    "closes": 1,
+    "spool_failures": 0,
+    "polls_running": 2,
+    "terminal_reads": 1,
+    "bash_calls": 3
+  },
+  "bridge": {
+    "events": [
+      {
+        "seq": 1,
+        "at_ms": 32340,
+        "kind": "turn_terminal",
+        "state": "completed",
+        "via": "bridge",
+        "reason": null
+      },
+      {
+        "seq": 2,
+        "at_ms": 70193,
+        "kind": "instance_ended",
+        "state": null,
+        "via": null,
+        "reason": "server_exit"
+      }
+    ],
+    "claims": 0,
+    "terminal_to_next_assistant_ms": [
+      10386
+    ],
+    "waiters": {
+      "started": 0,
+      "by_reason": {},
+      "exit_codes": {}
+    }
+  },
+  "oracle": {
+    "receipt_files": 1,
+    "receipt_json_found": true,
+    "status": "FAIL",
+    "checks": [
+      {
+        "id": "api-data-flow",
+        "status": "FAIL"
+      },
+      {
+        "id": "stale-doc-contradiction",
+        "status": "PASS"
+      }
+    ],
+    "workspace_unchanged": true
+  },
+  "cleanup": {
+    "leftover_at_exit": 0,
+    "leftover_after_grace": 0,
+    "leftover_kinds": {},
+    "process_group_alive_after_exit": false,
+    "temp_removed": true
+  },
+  "checks": {
+    "exited_cleanly": true,
+    "no_harness_failure": true,
+    "sessions_closed": true,
+    "no_leftover_process": true,
+    "temp_removed": true,
+    "oracle_pass": false,
+    "workspace_unchanged": true,
+    "no_json_errors": true,
+    "spool_failures_zero": true
+  },
+  "outcome": "completed"
+}
