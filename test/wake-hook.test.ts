@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile, spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { claimsRoot, eventsRoot, serializeTurnEvent, turnEventFileName, TURN_EVENT_MAX_BYTES, type TurnEvent } from "../src/turn-events.js";
 import {
   CLAIM_MAX_AGE_MS, DEFAULT_BUDGET_MS, cleanupOldClaims, formatBudgetWake, formatTerminalWake, newSpoolCache, parseBudgetArgs, parseHookInput,
-  payloadCandidates, releaseClaim, scanTurnEvents, tryClaim, waitForTurn, claimKey, CACHE_MAX_ENTRIES, SCAN_MAX_INSTANCE_DIRECTORIES, type WaitResult, type WakeNamespace,
+  payloadCandidates, releaseClaim, scanTurnEvents, tryClaim, waitForTurn, claimKey, CACHE_MAX_ENTRIES, SCAN_MAX_INSTANCE_DIRECTORIES, acquireWaiterLock, releaseWaiterLock, waiterLockName, NO_SPOOL_GRACE_MS, CAPPED_SCAN_GAP_MS, SCAN_MAX_ENTRIES_PER_SCAN, type WaitResult, type WakeNamespace,
 } from "../src/wake-hook.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -265,18 +265,58 @@ describe("scanTurnEvents", () => {
     expect(cache.files.size).toBe(4);
     expect(CACHE_MAX_ENTRIES).toBe(4096);
   });
-  it("answers from the cache while path, size and mtime are unchanged, and rereads a changed file", async () => {
+  it("answers from the cache while the file is unchanged, and rereads a replaced or rewritten one", async () => {
     const f = await fixture();
     const path = f.put(terminal({ seq: 1 }));
     const cache = newSpoolCache();
     expect(states(scanTurnEvents(f.events, HOST, cache).events)).toEqual(["completed"]);
-    if (process.getuid?.() !== 0) {
-      chmodSync(path, 0); // an unreadable file still answers from the cache
-      expect(states(scanTurnEvents(f.events, HOST, cache).events)).toEqual(["completed"]);
-      chmodSync(path, 0o600);
-    }
+    expect(cache.reads).toBe(1);
+    for (let i = 0; i < 3; i += 1) expect(states(scanTurnEvents(f.events, HOST, cache).events)).toEqual(["completed"]);
+    expect(cache.reads).toBe(1);
     writeFileSync(path, serializeTurnEvent(terminal({ seq: 1, state: "aborted", via: "close" })));
     expect(states(scanTurnEvents(f.events, HOST, cache).events)).toEqual(["aborted"]);
+    expect(cache.reads).toBe(2);
+    // replaced by another file of the same name (new inode)
+    const replacement = `${path}.new`;
+    writeFileSync(replacement, serializeTurnEvent(terminal({ seq: 1, state: "failed", via: "close" })));
+    renameSync(replacement, path);
+    expect(states(scanTurnEvents(f.events, HOST, cache).events)).toEqual(["failed"]);
+    expect(cache.reads).toBe(3);
+  });
+  it("caches negative results too, so unparseable, oversized and non-regular entries are not read again", async () => {
+    const f = await fixture();
+    f.put(terminal({ seq: 1 }));
+    const dir = join(f.events, INSTANCE);
+    writeFileSync(join(dir, "00000002-turn_terminal.json"), "{not json");
+    writeFileSync(join(dir, "00000003-turn_terminal.json"), JSON.stringify({ pad: "x".repeat(TURN_EVENT_MAX_BYTES) }));
+    mkdirSync(join(dir, "00000004-turn_terminal.json"));
+    symlinkSync(join(dir, "00000001-turn_terminal.json"), join(dir, "00000005-turn_terminal.json"));
+    const cache = newSpoolCache();
+    expect(scanTurnEvents(f.events, HOST, cache).events).toHaveLength(1);
+    expect(cache.reads).toBe(2); // the valid and the unparseable file; the others are never opened
+    expect(cache.files.size).toBe(5);
+    for (let i = 0; i < 3; i += 1) scanTurnEvents(f.events, HOST, cache);
+    expect(cache.reads).toBe(2);
+  });
+  it("bounds the work of one scan: names listed and lstat'ed over all directories, and reports that a cap was hit", async () => {
+    const f = await fixture();
+    for (const instance of [INSTANCE, INSTANCE_B, "inst-cccccccccccccccc"]) for (let seq = 1; seq <= 4; seq += 1) f.put(terminal({ seq, instance }));
+    const full = scanTurnEvents(f.events, HOST);
+    expect(full).toMatchObject({ capped: false, namespaceFound: true, instanceDirectoryCount: 3 });
+    expect(full.events).toHaveLength(12);
+    const limited = scanTurnEvents(f.events, HOST, newSpoolCache(), { entriesPerScan: 10 });
+    expect(limited.capped).toBe(true);
+    expect(limited.events.length).toBeLessThan(12);
+    expect(SCAN_MAX_ENTRIES_PER_SCAN).toBe(2048);
+    expect(scanTurnEvents(f.events, HOST, newSpoolCache(), { entriesPerDirectory: 2 }).capped).toBe(true);
+    expect(scanTurnEvents(f.events, HOST, newSpoolCache(), { instanceDirectories: 2 }).capped).toBe(true);
+  });
+  it("reports whether the namespace and an instance directory exist", async () => {
+    const f = await fixture();
+    expect(scanTurnEvents(f.events, W1)).toMatchObject({ namespaceFound: false, instanceDirectoryCount: 0 });
+    mkdirSync(join(f.events, "writer-code-w1"));
+    expect(scanTurnEvents(f.events, W1)).toMatchObject({ namespaceFound: true, instanceDirectoryCount: 0 });
+    expect(scanTurnEvents(f.events, HOST)).toMatchObject({ namespaceFound: true, instanceDirectoryCount: 0 });
   });
 });
 
@@ -373,6 +413,15 @@ describe("waitForTurn (in process)", () => {
     const result = await wait(f, { namespace: W1 });
     expect(result).toMatchObject({ action: "wake", reason: "terminal", claimPath: join(f.claims, "writer-code-w1-inst-cccccccccccccccc-1") });
   });
+  it("ends silently, without a claim, for a terminal event produced by close", async () => {
+    const f = await fixture();
+    f.put(terminal({ state: "aborted", via: "close" }));
+    expect(await wait(f)).toEqual({ action: "silent", reason: "closed" });
+    expect(existsSync(f.claims) ? readdirSync(f.claims) : []).toEqual([]);
+    const [later_] = await Promise.all([wait(f, { namespace: W1 }), later(100, () => f.put(terminal({ state: "failed", via: "close" }), join(f.events, "writer-code-w1", INSTANCE)))]);
+    expect(later_).toEqual({ action: "silent", reason: "closed" });
+    expect(existsSync(f.claims) ? readdirSync(f.claims) : []).toEqual([]);
+  });
   it("does not let a host waiter take an event that only a writer namespace holds", async () => {
     const f = await fixture();
     f.put(terminal(), join(f.events, "writer-code-w1", INSTANCE));
@@ -438,10 +487,101 @@ describe("waitForTurn (in process)", () => {
     const [result] = await Promise.all([wait(f, { signal: controller.signal, budgetMs: 10_000 }), later(100, () => controller.abort())]);
     expect(result).toEqual({ action: "silent", reason: "aborted" });
   });
+  it("ends silently with no_spool when the armed namespace has no instance directory after the grace period", async () => {
+    const f = await fixture();
+    const started = Date.now();
+    expect(await wait(f, { graceMs: 300, budgetMs: 10_000 })).toEqual({ action: "silent", reason: "no_spool" });
+    expect(Date.now() - started).toBeLessThan(3000);
+    expect(await wait(f, { namespace: W1, graceMs: 200, budgetMs: 10_000 })).toEqual({ action: "silent", reason: "no_spool" }); // writer-code-w1 missing
+    mkdirSync(join(f.events, "writer-code-w1")); // the directory alone is no spool
+    expect(await wait(f, { namespace: W1, graceMs: 200, budgetMs: 10_000 })).toEqual({ action: "silent", reason: "no_spool" });
+    f.put(terminal({ instance: INSTANCE_B }), join(f.events, "writer-code-w2", INSTANCE_B)); // another namespace does not count
+    expect(await wait(f, { namespace: W1, graceMs: 200, budgetMs: 10_000 })).toEqual({ action: "silent", reason: "no_spool" });
+    expect(NO_SPOOL_GRACE_MS).toBe(2000);
+  });
+  it("keeps waiting when the spool shows up within the grace period, and never gives up once it has seen one", async () => {
+    const f = await fixture();
+    const [woke] = await Promise.all([wait(f, { graceMs: 1500, budgetMs: 10_000 }), later(200, () => f.put(terminal()))]);
+    expect(woke).toMatchObject({ action: "wake", reason: "terminal" });
+    const g = await fixture();
+    g.put(terminal({ turn: OTHER_TURN })); // a spool exists, but not for this turn
+    expect(await wait(g, { graceMs: 100, budgetMs: 500 })).toMatchObject({ action: "wake", reason: "budget" });
+  });
+  it("slows its scans to one per second once a cap was hit", async () => {
+    const f = await fixture();
+    for (let seq = 1; seq <= 5; seq += 1) f.put(terminal({ seq, turn: OTHER_TURN }));
+    const started = Date.now();
+    const [result] = await Promise.all([wait(f, { limits: { entriesPerDirectory: 2 }, graceMs: 100, budgetMs: 10_000 }), later(300, () => f.put(terminal({ seq: 99 }), join(f.events, INSTANCE)))]);
+    // The wanted event sits beyond the capped listing or is found by a later scan; either way no scan ran before the slow gap passed.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(CAPPED_SCAN_GAP_MS - 100);
+    expect(["wake", "silent"]).toContain(result.action);
+  });
   it("finds an event that appears in a directory created after the wait started", async () => {
     const f = await fixture();
     const [result] = await Promise.all([wait(f, { namespace: { kind: "writer", name: "code-w4" }, budgetMs: 10_000 }), later(150, () => f.put(terminal({ instance: INSTANCE_B }), join(f.events, "writer-code-w4", INSTANCE_B)))]);
     expect(result).toMatchObject({ action: "wake", reason: "terminal" });
+  });
+});
+
+describe("per-turn waiter lock", () => {
+  const dead = () => false, alive = () => true;
+  it("names the lock by namespace, session and turn with validated parts", () => {
+    expect(waiterLockName(HOST, SESSION, TURN)).toBe(`wait-host-${SESSION}-${TURN}`);
+    expect(waiterLockName(W1, SESSION, TURN)).toBe(`wait-writer-code-w1-${SESSION}-${TURN}`);
+    expect(() => waiterLockName({ kind: "writer", name: "../x" }, SESSION, TURN)).toThrow();
+    expect(() => waiterLockName(HOST, "../x", TURN)).toThrow();
+  });
+  it("takes the lock with the pid in it and refuses a second waiter of the same turn while the first is alive", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 4242, isAlive: alive });
+    expect(path).toBe(join(f.claims, `wait-host-${SESSION}-${TURN}`));
+    expect(readFileSync(path!, "utf8")).toBe("4242");
+    expect(statSync(path!).mode & 0o777).toBe(0o600);
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 4243, isAlive: alive })).toBeUndefined();
+    expect(readFileSync(path!, "utf8")).toBe("4242");
+  });
+  it("gives other turns, sessions and namespaces their own lock", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const options = { isAlive: alive };
+    const locks = [acquireWaiterLock(f.claims, HOST, SESSION, TURN, options), acquireWaiterLock(f.claims, HOST, SESSION, OTHER_TURN, options), acquireWaiterLock(f.claims, W1, SESSION, TURN, options), acquireWaiterLock(f.claims, HOST, OTHER_TURN, TURN, options)];
+    expect(locks.every((l) => l !== undefined) && new Set(locks).size === 4).toBe(true);
+  });
+  it("replaces a stale lock: owner dead, owner too old, or content unusable", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    writeFileSync(path, "4242");
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 7, isAlive: dead })).toBe(path);
+    expect(readFileSync(path, "utf8")).toBe("7");
+    const past = new Date(Date.now() - 10_000);
+    utimesSync(path, past, past);
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 8, isAlive: alive, maxAgeMs: 5000 })).toBe(path); // alive pid, but older than the longest wait: a reused pid
+    expect(readFileSync(path, "utf8")).toBe("8");
+    writeFileSync(path, "not a pid"); utimesSync(path, past, past);
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 9, isAlive: alive })).toBe(path);
+    writeFileSync(path, ""); // a lock still being written is young and counts as held
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 10, isAlive: alive })).toBeUndefined();
+  });
+  it("sees a really dead and a really live process correctly", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const child = spawn(process.execPath, ["-e", "process.exit(0)"]);
+    await new Promise((resolve) => child.once("close", resolve));
+    writeFileSync(join(f.claims, waiterLockName(HOST, SESSION, TURN)), String(child.pid));
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN)).toBeDefined();
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN)).toBeUndefined(); // now held by this very process
+  });
+  it("releases only a lock that still names its own pid", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 11 })!;
+    releaseWaiterLock(path, 12);
+    expect(existsSync(path)).toBe(true);
+    releaseWaiterLock(path, 11);
+    expect(existsSync(path)).toBe(false);
+    releaseWaiterLock(path, 11); releaseWaiterLock(undefined);
   });
 });
 
@@ -472,6 +612,7 @@ function runWaiter(xdg: string | undefined, stdin: string, args: string[] = [], 
   child.stdin.end(stdin);
   return { child, done: new Promise<Exit>((resolve) => child.once("close", (code, signal) => resolve({ code, signal, stderr, stdout }))) };
 }
+const armFor = (turnId: string) => hookInput("pi_session_prompt", { ...promptPayload, turn: { ...promptPayload.turn, turnId } });
 const armInput = hookInput("pi_session_prompt", [{ type: "text", text: JSON.stringify(promptPayload) }]);
 
 describe("compiled pi-session-mcp-wake process", () => {
@@ -497,7 +638,7 @@ describe("compiled pi-session-mcp-wake process", () => {
   it("wakes at once for a pi_turn_get that shows the turn running when the event is already there", async () => {
     needBuild();
     const f = await fixture();
-    f.put(terminal({ state: "aborted", via: "close" }), join(f.events, "writer-review-w2", INSTANCE));
+    f.put(terminal({ state: "aborted", via: "registry" }), join(f.events, "writer-review-w2", INSTANCE));
     const exit = await runWaiter(f.xdg, hookInput("pi_turn_get", { content: [{ type: "text", text: "x" }], structuredContent: running }, "pi-coding-review-w2")).done;
     expect(exit).toMatchObject({ code: 2, stderr: `pi-session-mcp: turn ${TURN} of session ${SESSION} is aborted. Read it once with pi_turn_get.\n` });
   });
@@ -538,7 +679,9 @@ describe("compiled pi-session-mcp-wake process", () => {
   it("treats an invalid budget as the default instead of waking or exiting at once", async () => {
     needBuild();
     const f = await fixture();
-    const runs = ["abc", "0", "-3"].map((raw) => runWaiter(f.xdg, armInput, ["--budget-ms", raw]));
+    f.put(terminal({ turn: OTHER_TURN })); // a spool exists, so no_spool does not apply
+    const turns = ["aaaaaaaa-0000-4000-8000-000000000001", "aaaaaaaa-0000-4000-8000-000000000002", "aaaaaaaa-0000-4000-8000-000000000003"];
+    const runs = ["abc", "0", "-3"].map((raw, i) => runWaiter(f.xdg, armFor(turns[i]!), ["--budget-ms", raw]));
     let early = 0;
     for (const run of runs) void run.done.then(() => { early += 1; });
     await later(900, () => undefined);
@@ -579,6 +722,7 @@ describe("compiled pi-session-mcp-wake process", () => {
   it("exits 0 within about three seconds after its parent process is gone", async () => {
     needBuild();
     const f = await fixture();
+    f.put(terminal({ turn: OTHER_TURN })); // a spool exists, so the exit below is the parent check and not no_spool
     const input = join(f.xdg, "input.json"), pidFile = join(f.xdg, "pid");
     await writeFile(input, armInput);
     // The shell starts the waiter in the background, stays one second so the waiter records its parent, then exits and orphans it.
@@ -595,5 +739,86 @@ describe("compiled pi-session-mcp-wake process", () => {
     if (!gone) process.kill(pid, "SIGKILL");
     expect(gone).toBe(true);
     expect(await stat(f.events).then(() => true)).toBe(true);
+    expect(readdirSync(f.claims).filter((n) => n.startsWith("wait-"))).toEqual([]);
+  });
+  it("exits 0 silently, leaving no lock, when the armed namespace has no spool after the grace period", async () => {
+    needBuild();
+    const f = await fixture();
+    const started = Date.now();
+    const host = await runWaiter(f.xdg, armInput, ["--budget-ms", "60000"]).done;
+    expect(host).toMatchObject({ code: 0, stderr: "", stdout: "" });
+    expect(Date.now() - started).toBeLessThan(6000);
+    f.put(terminal()); // the host has a spool, but the armed writer does not
+    const writer = await runWaiter(f.xdg, hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w2"), ["--budget-ms", "60000"]).done;
+    expect(writer).toMatchObject({ code: 0, stderr: "", stdout: "" });
+    expect(readdirSync(f.claims).filter((n) => !n.startsWith("wait-"))).toEqual([]);
+    expect(readdirSync(f.claims)).toEqual([]);
+  });
+  it("lets only one process wait for a turn: a second arm for the same turn exits 0 at once, and the lock is gone after the wake", async () => {
+    needBuild();
+    const f = await fixture();
+    f.put(terminal({ turn: OTHER_TURN }));
+    const first = runWaiter(f.xdg, armInput, ["--budget-ms", "20000"]);
+    const lock = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    const end = Date.now() + 5000;
+    while (Date.now() < end && !existsSync(lock)) await later(30, () => undefined);
+    expect(readFileSync(lock, "utf8")).toBe(String(first.child.pid));
+    const started = Date.now();
+    const second = await runWaiter(f.xdg, armInput, ["--budget-ms", "20000"]).done;
+    expect(second).toMatchObject({ code: 0, stderr: "", stdout: "" });
+    expect(Date.now() - started).toBeLessThan(1500);
+    expect(first.child.exitCode).toBeNull();
+    // The same turn in another namespace is not blocked.
+    f.put(terminal({ instance: INSTANCE_B }), join(f.events, "writer-review-w2", INSTANCE_B));
+    const writer = await runWaiter(f.xdg, hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w2"), []).done;
+    expect(writer.code).toBe(2);
+    f.put(terminal());
+    const exit = await first.done;
+    expect(exit.code).toBe(2);
+    expect(existsSync(lock)).toBe(false);
+    // after the wake a re-arm is possible again
+    expect(existsSync(join(f.claims, `host-${INSTANCE}-1`))).toBe(true);
+  });
+  it("removes the waiter lock on a budget wake, on SIGTERM and replaces a lock whose owner died", async () => {
+    needBuild();
+    const f = await fixture();
+    f.put(terminal({ turn: OTHER_TURN }));
+    const budget = await runWaiter(f.xdg, armInput, ["--budget-ms", "300"]).done;
+    expect(budget.code).toBe(2);
+    expect(readdirSync(f.claims)).toEqual([]);
+    const child = spawn(process.execPath, ["-e", "process.exit(0)"]);
+    await new Promise((resolve) => child.once("close", resolve));
+    writeFileSync(join(f.claims, waiterLockName(HOST, SESSION, TURN)), String(child.pid)); // stale lock of a dead process
+    const waiter = runWaiter(f.xdg, armInput, ["--budget-ms", "20000"]);
+    const lock = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    const end = Date.now() + 5000;
+    while (Date.now() < end && readFileSync(lock, "utf8") !== String(waiter.child.pid)) await later(30, () => undefined);
+    expect(readFileSync(lock, "utf8")).toBe(String(waiter.child.pid));
+    waiter.child.kill("SIGTERM");
+    expect((await waiter.done).code).toBe(143);
+    expect(existsSync(lock)).toBe(false);
+  });
+  it("exits 0 silently, leaving neither claim nor lock, on an event produced by close", async () => {
+    needBuild();
+    const f = await fixture();
+    f.put(terminal({ state: "aborted", via: "close" }));
+    expect(await runWaiter(f.xdg, armInput, ["--budget-ms", "20000"]).done).toMatchObject({ code: 0, stderr: "", stdout: "" });
+    expect(readdirSync(f.claims)).toEqual([]);
+    // a registry event of the same turn would wake; the close one must not have consumed anything
+    const g = await fixture();
+    const waiter = runWaiter(g.xdg, armInput, ["--budget-ms", "20000"]);
+    await later(400, () => g.put(terminal({ state: "failed", via: "close" })));
+    expect(await waiter.done).toMatchObject({ code: 0, stderr: "" });
+    expect(readdirSync(g.claims)).toEqual([]);
+  });
+  it("lets an in-process waiter and a process race for one event: exactly one wakes", async () => {
+    needBuild();
+    const f = await fixture();
+    f.put(terminal({ turn: OTHER_TURN }));
+    const proc = runWaiter(f.xdg, armInput, ["--budget-ms", "20000"]);
+    const inProcess = wait(f, { budgetMs: 20_000 });
+    await later(600, () => f.put(terminal()));
+    const [exit, result] = await Promise.all([proc.done, inProcess]);
+    expect([exit.code === 2, result.action === "wake"].filter(Boolean)).toHaveLength(1);
   });
 });

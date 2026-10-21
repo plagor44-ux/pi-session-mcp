@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, unlinkSync, watch, type FSWatcher } from "node:fs";
+import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, unlinkSync, watch, writeSync, type FSWatcher } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import { TURN_EVENT_FILE_PATTERN, TURN_EVENT_MAX_BYTES, parseTurnEvent, type TurnEvent } from "./turn-events.js";
 import { WRITER_NAME_PATTERN } from "./writer-state.js";
@@ -26,7 +26,7 @@ import { WRITER_NAME_PATTERN } from "./writer-state.js";
 export type WakeNamespace = { readonly kind: "host" } | { readonly kind: "writer"; readonly name: string };
 export interface HookTarget { readonly sessionId: string; readonly turnId: string; readonly namespace: WakeNamespace }
 export type TerminalEvent = Extract<TurnEvent, { kind: "turn_terminal" }>;
-export type SilentReason = "budget_silent" | "parent_gone" | "lost_claim" | "claim_error" | "claims_unsafe" | "aborted";
+export type SilentReason = "budget_silent" | "parent_gone" | "lost_claim" | "claim_error" | "claims_unsafe" | "aborted" | "no_spool" | "closed";
 export type WaitResult =
   | { readonly action: "wake"; readonly reason: "terminal" | "budget"; readonly message: string; readonly claimPath?: string }
   | { readonly action: "silent"; readonly reason: SilentReason; readonly code?: string };
@@ -35,7 +35,12 @@ export const DEFAULT_BUDGET_MS = 1_800_000;
 export const SCAN_MAX_ENTRIES_PER_DIRECTORY = 4096;
 export const SCAN_MAX_INSTANCE_DIRECTORIES = 64;
 export const CACHE_MAX_ENTRIES = 4096;
+export const SCAN_MAX_ENTRIES_PER_SCAN = 2048;
 export const MIN_SCAN_GAP_MS = 25;
+/** The scan gap once any cap was hit: a flooded namespace is read at a slow, steady rate. */
+export const CAPPED_SCAN_GAP_MS = 1000;
+/** How long an armed namespace may show no instance directory at all before the waiter gives up. */
+export const NO_SPOOL_GRACE_MS = 2000;
 export const CLAIM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const CLAIM_CLEANUP_MAX_ENTRIES = 4096;
 
@@ -125,16 +130,28 @@ export const formatBudgetWake = (turnId: string): string =>
 
 // ---- spool scan
 
-export interface SpoolCache { files: Map<string, TurnEvent | null> }
-export const newSpoolCache = (): SpoolCache => ({ files: new Map() });
+/** `files` holds parsed results, negative ones included (`null`); `reads` counts file opens, for tests and diagnostics. */
+export interface SpoolCache { files: Map<string, TurnEvent | null>; reads: number }
+export const newSpoolCache = (): SpoolCache => ({ files: new Map(), reads: 0 });
 export interface ScanLimits {
   readonly entriesPerDirectory?: number;
   readonly instanceDirectories?: number;
   readonly cacheEntries?: number;
+  /** Names listed and `lstat`ed across all directories of one scan. */
+  readonly entriesPerScan?: number;
   /** Test seam: `false` forces the `realpath` fallback used where `/proc/self/fd` does not exist. */
   readonly useProcFd?: boolean;
 }
-export interface ScanResult { readonly events: TurnEvent[]; readonly directories: string[] }
+export interface ScanResult {
+  readonly events: TurnEvent[];
+  readonly directories: string[];
+  /** The namespace directory exists (the root for the host, `writer-<name>` for a writer). */
+  readonly namespaceFound: boolean;
+  /** Real `inst-*` directories seen in the namespace, before the newest-N cap. */
+  readonly instanceDirectoryCount: number;
+  /** Any entry, instance-directory, cache or per-scan cap was hit. */
+  readonly capped: boolean;
+}
 
 const PROC_FD_AVAILABLE = ((): boolean => { try { return existsSync("/proc/self/fd"); } catch { return false; } })();
 
@@ -174,19 +191,21 @@ function openDir(parent: Dir | undefined, nameOrRoot: string, useProc: boolean):
   }
 }
 
-/** Entry names of a directory, at most `cap`. */
-function listNames(path: string, cap: number): string[] {
+/** Entry names of a directory, at most `cap`; `truncated` tells that more entries exist. */
+function listNames(path: string, cap: number): { names: string[]; truncated: boolean } {
   const names: string[] = [];
   let handle;
-  try { handle = opendirSync(path); } catch { return names; }
+  try { handle = opendirSync(path); } catch { return { names, truncated: false }; }
+  let truncated = false;
   try {
     while (names.length < cap) {
       const entry = handle.readSync();
       if (entry === null) break;
       names.push(entry.name);
     }
+    if (names.length >= cap && handle.readSync() !== null) truncated = true;
   } catch { /* partial listing */ } finally { try { handle.closeSync(); } catch { /* closed */ } }
-  return names;
+  return { names, truncated };
 }
 
 /** Reads one regular file of at most `TURN_EVENT_MAX_BYTES` without following a link; `undefined` for anything else. */
@@ -208,62 +227,87 @@ function readEventText(path: string): string | undefined {
   } catch { return undefined; } finally { if (fd !== undefined) try { closeSync(fd); } catch { /* closed */ } }
 }
 
+/** What one scan may still spend, and whether it ran into a cap. */
+interface ScanBudget { left: number; capped: boolean; readonly entriesCap: number }
+
+/** Lists a directory within the per-directory and per-scan caps; marks the scan as capped when either bites. */
+function listWithin(path: string, budget: ScanBudget): string[] {
+  const cap = Math.min(budget.entriesCap, budget.left);
+  if (cap <= 0) { budget.capped = true; return []; }
+  const { names, truncated } = listNames(path, cap);
+  budget.left -= names.length;
+  if (truncated) budget.capped = true;
+  return names;
+}
+
 /** The `inst-*` children of a directory, newest first, at most `cap`; only real directories count. */
-function newestInstanceDirectories(dir: Dir, entriesCap: number, cap: number): string[] {
+function newestInstanceDirectories(dir: Dir, budget: ScanBudget, cap: number): { names: string[]; count: number } {
   const found: Array<{ name: string; mtimeMs: number }> = [];
-  for (const name of listNames(base(dir), entriesCap)) {
+  for (const name of listWithin(base(dir), budget)) {
     if (!INSTANCE_DIR_PATTERN.test(name)) continue;
+    if (budget.left <= 0) { budget.capped = true; break; }
+    budget.left -= 1;
     try { const stat = lstatSync(entryPath(dir, name)); if (stat.isDirectory()) found.push({ name, mtimeMs: stat.mtimeMs }); } catch { /* vanished */ }
   }
   found.sort((a, b) => b.mtimeMs - a.mtimeMs || (a.name < b.name ? -1 : 1));
-  return found.slice(0, cap).map((entry) => entry.name);
+  if (found.length > cap) budget.capped = true;
+  return { names: found.slice(0, cap).map((entry) => entry.name), count: found.length };
 }
 
 /**
  * The valid events of one namespace below an events root, ordered by time then sequence: the top-level `inst-*`
  * directories for the host, exactly `writer-<name>/inst-*` for a writer. Nothing outside that namespace is listed.
  * Every directory is opened `O_NOFOLLOW`, checked on its handle and read through it; no link is followed. An event
- * file must also sit in the directory of its own instance. `cache` is rebuilt per scan from the files seen in it
- * (keyed by path, size and mtime) and never holds more than `cacheEntries`.
+ * file must also sit in the directory of its own instance. `cache` is rebuilt per scan from the files seen in it, results
+ * that are not events included, keyed by path, inode, size, mtime and ctime; it never holds more than `cacheEntries`.
+ * One scan lists and `lstat`s at most `entriesPerScan` names over all directories.
  */
 export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAMESPACE, cache: SpoolCache = newSpoolCache(), limits: ScanLimits = {}): ScanResult {
   const useProc = limits.useProcFd ?? PROC_FD_AVAILABLE;
-  const entriesCap = limits.entriesPerDirectory ?? SCAN_MAX_ENTRIES_PER_DIRECTORY, instanceCap = limits.instanceDirectories ?? SCAN_MAX_INSTANCE_DIRECTORIES;
-  const cacheCap = limits.cacheEntries ?? CACHE_MAX_ENTRIES;
+  const instanceCap = limits.instanceDirectories ?? SCAN_MAX_INSTANCE_DIRECTORIES, cacheCap = limits.cacheEntries ?? CACHE_MAX_ENTRIES;
+  const budget: ScanBudget = { left: limits.entriesPerScan ?? SCAN_MAX_ENTRIES_PER_SCAN, capped: false, entriesCap: limits.entriesPerDirectory ?? SCAN_MAX_ENTRIES_PER_DIRECTORY };
   const events: TurnEvent[] = [], directories: string[] = [], opened: Dir[] = [];
   const seen = new Map<string, TurnEvent | null>();
+  let namespaceFound = false, instanceDirectoryCount = 0;
   try {
     const rootDir = openDir(undefined, root, useProc);
-    if (rootDir === undefined) return { events, directories };
+    if (rootDir === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
     opened.push(rootDir);
     let space: Dir | undefined = rootDir;
     if (namespace.kind === "writer") {
-      if (!WRITER_NAME_PATTERN.test(namespace.name)) return { events, directories };
+      if (!WRITER_NAME_PATTERN.test(namespace.name)) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
       space = openDir(rootDir, `writer-${namespace.name}`, useProc);
-      if (space === undefined) return { events, directories };
+      if (space === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
       opened.push(space);
     }
+    namespaceFound = true;
     directories.push(space.path);
-    for (const name of newestInstanceDirectories(space, entriesCap, instanceCap)) {
+    const instances = newestInstanceDirectories(space, budget, instanceCap);
+    instanceDirectoryCount = instances.count;
+    for (const name of instances.names) {
       const dir = openDir(space, name, useProc);
       if (dir === undefined) continue;
       opened.push(dir);
       directories.push(dir.path);
       const found: TurnEvent[] = [];
-      for (const file of listNames(base(dir), entriesCap)) {
+      for (const file of listWithin(base(dir), budget)) {
         if (!TURN_EVENT_FILE_PATTERN.test(file)) continue;
+        if (budget.left <= 0) { budget.capped = true; break; }
+        budget.left -= 1;
         const path = entryPath(dir, file);
         let stat;
         try { stat = lstatSync(path); } catch { continue; }
-        if (!stat.isFile() || stat.size > TURN_EVENT_MAX_BYTES) continue;
-        const key = `${dir.path}/${file}\0${stat.size}\0${stat.mtimeMs}`;
+        const key = `${dir.path}/${file}\0${stat.ino}\0${stat.size}\0${stat.mtimeMs}\0${stat.ctimeMs}`;
         let event = seen.get(key) ?? cache.files.get(key);
         if (event === undefined) {
-          const text = readEventText(path);
-          if (text === undefined) continue; // mid-rename or replaced: not cached, read again next scan
-          event = parseTurnEvent(text) ?? null;
+          if (!stat.isFile() || stat.size > TURN_EVENT_MAX_BYTES) event = null; // never opened
+          else {
+            cache.reads += 1;
+            const text = readEventText(path);
+            event = text === undefined ? null : parseTurnEvent(text) ?? null;
+          }
         }
-        if (seen.size < cacheCap) seen.set(key, event);
+        if (seen.size < cacheCap) seen.set(key, event); else budget.capped = true;
         if (event !== null && event.instance === name) found.push(event);
       }
       if (stillThere(dir) && stillThere(space)) events.push(...found);
@@ -273,7 +317,7 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
     cache.files = seen; // only what this scan saw: a replaced or removed file leaves the cache
   }
   events.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.seq - b.seq);
-  return { events, directories };
+  return { events, directories, namespaceFound, instanceDirectoryCount, capped: budget.capped };
 }
 
 // ---- claims
@@ -313,7 +357,7 @@ export function releaseClaim(path: string | undefined): void {
 /** Best effort: removes regular claim files older than `maxAgeMs`, looking at a bounded number of entries. Returns the removed count. */
 export function cleanupOldClaims(claims: string, now: number = Date.now(), maxAgeMs: number = CLAIM_MAX_AGE_MS, cap: number = CLAIM_CLEANUP_MAX_ENTRIES): number {
   let removed = 0;
-  for (const name of listNames(claims, cap)) {
+  for (const name of listNames(claims, cap).names) {
     const path = join(claims, name);
     try {
       const stat = lstatSync(path);
@@ -322,6 +366,69 @@ export function cleanupOldClaims(claims: string, now: number = Date.now(), maxAg
     } catch { /* best effort */ }
   }
   return removed;
+}
+
+// ---- per-turn waiter lock
+
+/** `wait-host-<session>-<turn>` or `wait-writer-<name>-<session>-<turn>`; every part is validated. */
+export function waiterLockName(namespace: WakeNamespace, sessionId: string, turnId: string): string {
+  if (!UUID_PATTERN.test(sessionId) || !UUID_PATTERN.test(turnId) || (namespace.kind === "writer" && !WRITER_NAME_PATTERN.test(namespace.name))) throw Object.assign(new Error("lock name invalid"), { code: "EKEY" });
+  return namespace.kind === "host" ? `wait-host-${sessionId}-${turnId}` : `wait-writer-${namespace.name}-${sessionId}-${turnId}`;
+}
+
+export const WAITER_LOCK_GRACE_MS = 60_000;
+const processAlive = (pid: number): boolean => {
+  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
+};
+
+function readLockPid(path: string): { pid: number | undefined; ageMs: number } | undefined {
+  let fd: number | undefined;
+  try {
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return { pid: undefined, ageMs: Number.POSITIVE_INFINITY };
+    const buffer = Buffer.alloc(32);
+    const length = readSync(fd, buffer, 0, buffer.length, null);
+    const text = buffer.toString("utf8", 0, length).trim();
+    const pid = /^[0-9]{1,10}$/.test(text) ? Number(text) : undefined;
+    return { pid: pid !== undefined && pid > 0 ? pid : undefined, ageMs: Date.now() - stat.mtimeMs };
+  } catch { return undefined; } finally { if (fd !== undefined) try { closeSync(fd); } catch { /* closed */ } }
+}
+
+export interface WaiterLockOptions { readonly pid?: number; readonly isAlive?: (pid: number) => boolean; readonly maxAgeMs?: number }
+
+/**
+ * At most one waiter per turn: `<claims>/wait-…` is created exclusively and holds the owner's pid. A lock whose owner
+ * is alive (and younger than `maxAgeMs`, which guards against a reused pid) means another waiter already covers this
+ * turn: returns `undefined`. A stale lock (dead pid, too old, unreadable content) is replaced. Returns the lock path.
+ */
+export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sessionId: string, turnId: string, options: WaiterLockOptions = {}): string | undefined {
+  const path = join(claims, waiterLockName(namespace, sessionId, turnId));
+  const pid = options.pid ?? process.pid, isAlive = options.isAlive ?? processAlive, maxAgeMs = options.maxAgeMs ?? DEFAULT_BUDGET_MS + WAITER_LOCK_GRACE_MS;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const fd = openSync(path, "wx", 0o600);
+      try { writeSync(fd, String(pid)); } finally { closeSync(fd); }
+      return path;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const held = readLockPid(path);
+    if (held === undefined) continue; // vanished meanwhile: try to create it again
+    // A lock that is still being written (no pid yet) is young; it is stale only once it has been unreadable for a while.
+    const live = held.pid !== undefined ? isAlive(held.pid) && held.ageMs <= maxAgeMs : held.ageMs < 2000;
+    if (live) return undefined;
+    try { unlinkSync(path); } catch { /* replaced by someone else: the next attempt decides */ }
+  }
+  return undefined;
+}
+
+/** Removes the lock only if it still names `pid`, so a replacement lock of another waiter is never deleted. */
+export function releaseWaiterLock(path: string | undefined, pid: number = process.pid): void {
+  if (path === undefined) return;
+  const held = readLockPid(path);
+  if (held === undefined || held.pid !== pid) return;
+  try { unlinkSync(path); } catch { /* already gone */ }
 }
 
 /** Claims must never live where a container writer can write. */
@@ -345,6 +452,8 @@ export interface WaitOptions {
   readonly now?: () => number;
   readonly signal?: AbortSignal;
   readonly limits?: ScanLimits;
+  /** How long the namespace may show no instance directory before the wait ends with `no_spool` (default 2 s). */
+  readonly graceMs?: number;
   /** Called right after a claim was won and before the wake is returned, so the caller can release it on SIGTERM. */
   readonly onClaim?: (path: string) => void;
 }
@@ -368,18 +477,24 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
     try { const watcher = watch(dir, nudge); watcher.on("error", () => undefined); watchers.set(dir, watcher); } catch { /* polling is the fallback */ }
   };
   let nextParentCheck = now() + parentCheckMs;
-  let lastScan = 0;
+  const graceDeadline = now() + (options.graceMs ?? NO_SPOOL_GRACE_MS);
+  let lastScan = 0, scanGapMs = MIN_SCAN_GAP_MS, spoolSeen = false;
   try {
     for (;;) {
       if (options.signal?.aborted) return { action: "silent", reason: "aborted" };
       // A worker that churns its own directory must not make this loop spin: scans are at least a short gap apart.
-      const gap = MIN_SCAN_GAP_MS - (Date.now() - lastScan);
+      const gap = scanGapMs - (Date.now() - lastScan);
       if (gap > 0) await new Promise<void>((resolve) => setTimeout(resolve, gap));
       lastScan = Date.now();
       watchDir(options.eventsRoot);
-      const { events, directories } = scanTurnEvents(options.eventsRoot, options.namespace, cache, options.limits);
+      const { events, directories, namespaceFound, instanceDirectoryCount, capped } = scanTurnEvents(options.eventsRoot, options.namespace, cache, options.limits);
+      if (capped) scanGapMs = CAPPED_SCAN_GAP_MS; // a flooded namespace is read slowly for the rest of the run
+      if (namespaceFound && instanceDirectoryCount > 0) spoolSeen = true;
       for (const dir of directories) watchDir(dir);
       const hit = events.find((event): event is TerminalEvent => event.kind === "turn_terminal" && event.session === options.sessionId && event.turn === options.turnId);
+      // `close` ends the turn because the controller closed its session (or the server shut down): the session is gone, so
+      // a woken controller could only read unknown_session. Nothing to report, nothing to claim.
+      if (hit !== undefined && hit.via === "close") return { action: "silent", reason: "closed" };
       if (hit !== undefined) {
         let claim: string | undefined;
         try { claim = tryClaim(options.claimsDir, hit, options.namespace); } catch (error) { return { action: "silent", reason: "claim_error", ...errorCode(error) }; }
@@ -392,6 +507,8 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
         nextParentCheck = t + parentCheckMs;
         if (options.isParentAlive && !options.isParentAlive()) return { action: "silent", reason: "parent_gone" };
       }
+      // No server writes events here (delivery off, writer without a spool, server gone): nothing can ever arrive.
+      if (!spoolSeen && t >= graceDeadline && t < deadline) return { action: "silent", reason: "no_spool" };
       if (t >= deadline) return { action: "wake", reason: "budget", message: formatBudgetWake(options.turnId) };
       await new Promise<void>((resolve) => {
         const timer = setTimeout(done, Math.max(1, Math.min(pollMs, deadline - t, nextParentCheck - t)));
