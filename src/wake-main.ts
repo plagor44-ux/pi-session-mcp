@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { isEntryPoint } from "./entry-point.js";
 import { claimsRoot, eventsRoot } from "./turn-events.js";
-import { cleanupOldClaims, parentAliveCheck, parseBudgetArgs, parseHookInput, prepareClaimsDir, releaseClaim, waitForTurn } from "./wake-hook.js";
+import { acquireWaiterLock, cleanupOldClaims, parentAliveCheck, parseBudgetArgs, parseHookInput, prepareClaimsDir, releaseClaim, releaseWaiterLock, waitForTurn, WAITER_LOCK_GRACE_MS } from "./wake-hook.js";
 
 /**
  * `pi-session-mcp-wake [--budget-ms <n>]`: a Claude Code PostToolUse asyncRewake command hook. It reads the hook
@@ -31,18 +31,23 @@ async function readStdin(): Promise<string | undefined> {
 }
 
 let heldClaim: string | undefined;
+let heldLock: string | undefined;
+
+/** The waiter lock goes on every exit path; a claim only when its wake was not delivered. */
+function releaseLock(): void { releaseWaiterLock(heldLock); heldLock = undefined; }
 
 function finish(code: number, line?: string): void {
-  if (line === undefined) { process.exit(code); }
+  if (line === undefined) { releaseLock(); process.exit(code); }
   process.stderr.write(`${line}\n`, (error) => {
     // A wake that could not be written was not delivered: give the claim back for a later waiter.
+    releaseLock();
     if (error) { releaseClaim(heldClaim); process.exit(0); }
     process.exit(code);
   });
 }
 
 export async function main(argv: readonly string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  process.once("SIGTERM", () => { releaseClaim(heldClaim); heldClaim = undefined; process.exit(143); });
+  process.once("SIGTERM", () => { releaseClaim(heldClaim); heldClaim = undefined; releaseLock(); process.exit(143); });
   const parentAlive = parentAliveCheck(); // records the original parent before anything else
   try {
     const budgetMs = parseBudgetArgs(argv);
@@ -52,6 +57,9 @@ export async function main(argv: readonly string[] = process.argv.slice(2), env:
     if (target === undefined || root === undefined || claims === undefined) return finish(0);
     prepareClaimsDir(claims);
     cleanupOldClaims(claims);
+    // One waiter per turn: a poll of a still running turn re-arms the hook, and each of those must not start another long wait.
+    heldLock = acquireWaiterLock(claims, target.namespace, target.sessionId, target.turnId, { maxAgeMs: budgetMs + WAITER_LOCK_GRACE_MS });
+    if (heldLock === undefined) return finish(0);
     const result = await waitForTurn({
       eventsRoot: root, namespace: target.namespace, claimsDir: claims, sessionId: target.sessionId, turnId: target.turnId, budgetMs, isParentAlive: parentAlive,
       onClaim: (path) => { heldClaim = path; },
