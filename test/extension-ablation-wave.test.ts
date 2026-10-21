@@ -785,6 +785,9 @@ describe("run scope", () => {
       expect(scope.env[key]!.startsWith(scope.root + "/")).toBe(true);
     }
     expect(scope.env).toMatchObject({ PI_LENS_DISABLE_TOOL_INSTALL: "1", PI_LENS_DISABLE_LSP_INSTALL: "1", PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING: "1", UV_USE_IO_URING: "0" });
+    // R73: package managers fail fast offline, the same in every run and arm.
+    expect(scope.env).toMatchObject({ GOPROXY: "off", GOTOOLCHAIN: "local", GOFLAGS: "-mod=mod", UV_OFFLINE: "1", UV_NO_SYNC: "1", UV_PYTHON_DOWNLOADS: "never", npm_config_offline: "true" });
+    expect(scopeEnv("/r", { home: "/r/home", agentDir: "/r/agent" })).toMatchObject({ GOPROXY: "off", npm_config_offline: "true" });
     expect(scope.env).toMatchObject({ DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" });
   });
 
