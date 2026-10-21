@@ -42,6 +42,14 @@ describe("io_uring_setup counting (R36)", () => {
     expect(countIoUringSetups(line(7, "io_uring_setup(8, <unfinished ...>"))).toBe(1);
     expect(countIoUringSetups("not a strace line\n")).toBe(0);
   });
+  it("joins a call split by the tracer with its resumed line before judging the return value (R67)", () => {
+    const head = "io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0 <unfinished ...>";
+    expect(countIoUringSetups(`${line(1074925, head)}${line(1074925, "<... io_uring_setup resumed>})  = -1 ENOSYS (Function not implemented) (INJECTED)")}`)).toBe(0);
+    expect(countIoUringSetups(`${line(1074925, head)}${line(1074925, "<... io_uring_setup resumed>})  = 7")}`)).toBe(1);
+    expect(countIoUringSetups(line(1, "io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0})  = 7"))).toBe(1);
+    expect(countIoUringSetups(line(1, "io_uring_setup(256, {flags=IORING_SETUP_NO_SQARRAY, sq_thread_cpu=0, sq_thread_idle=0})  = -1 ENOSYS (Function not implemented) (INJECTED)"))).toBe(0);
+    expect(countIoUringSetups(`[pid 5] ${head}\n[pid 5] <... io_uring_setup resumed>})  = -1 ENOSYS (x)\n`)).toBe(0);
+  });
 });
 
 describe("dry load report assembly (provider-free, injected scope and process)", () => {
