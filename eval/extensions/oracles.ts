@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 import type { Anchor, ImplementationOracle, ReviewOracle } from "./schemas.js";
-import { pathTokens } from "./path-tokens.js";
+import { pathTokens, withoutTrailingDots, withoutUrls } from "./path-tokens.js";
 
 const execFileAsync = promisify(execFile);
 const LIST_ITEM = /^(\s*)(?:[-*+]|\d+[.)])\s+/;
@@ -15,16 +15,22 @@ const FENCE_CLOSE = /^\s*(?:`{3,}|~{3,})\s*$/;
 /** Unwraps review fences before dropping terminated code fences; unterminated openers stay ordinary text. */
 function withoutFences(lines: string[], wholeReview = true): string[] {
   const kept: string[] = [];
+  // Per fence character, the shortest marker for which a search for a closing line already failed: a later opener of that character and at
+  // least that length searches a suffix of the same lines with a stricter test, so it fails too (keeps the work linear).
+  const unclosed = new Map<string, number>();
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
     const open = FENCE_OPEN.exec(line);
     if (open) {
       const marker = open[1] ?? open[2] ?? "";
       let close = -1;
-      for (let j = i + 1; j < lines.length; j += 1) {
-        const candidate = lines[j] ?? "";
-        const trimmed = candidate.trim();
-        if (FENCE_CLOSE.test(candidate) && trimmed[0] === marker[0] && trimmed.length >= marker.length) { close = j; break; }
+      if (marker.length < (unclosed.get(marker[0]!) ?? Infinity)) {
+        for (let j = i + 1; j < lines.length; j += 1) {
+          const candidate = lines[j] ?? "";
+          const trimmed = candidate.trim();
+          if (FENCE_CLOSE.test(candidate) && trimmed[0] === marker[0] && trimmed.length >= marker.length) { close = j; break; }
+        }
+        if (close < 0) unclosed.set(marker[0]!, marker.length);
       }
       if (close >= 0) {
         const info = line.trim().slice(marker.length).trim().toLowerCase();
@@ -41,23 +47,86 @@ function withoutFences(lines: string[], wholeReview = true): string[] {
 }
 
 /** A line holding only one path token, optionally in `**`/backticks, with optional `:line` and trailing `:`; returns the token. */
-function pathOnlyLine(line: string): string | undefined {
+export function pathOnlyLine(line: string): string | undefined {
   if (!/^\S/.test(line)) return undefined;
-  let rest = line.trim().toLowerCase();
+  const text = line.trim().toLowerCase();
+  const isDigit = (c: string | undefined): boolean => c !== undefined && c >= "0" && c <= "9";
+  // The same stripping as repeatedly applying /^(\*\*|`)/, /(\*\*|`|:)$/ and /:\d+(?:-\d+)?$/ until nothing changes, on indices instead of
+  // new strings, so a long line of `**` or backticks is linear. `runs` remembers the digit runs before an end position.
+  let lo = 0, hi = text.length;
+  const runs = new Map<number, [number, number]>();
+  const digitsBefore = (end: number): [number, number] => {
+    let cached = runs.get(end);
+    if (cached === undefined) {
+      let a = end;
+      while (a > 0 && isDigit(text[a - 1])) a -= 1;
+      let b = a;
+      if (a < end && text[a - 1] === "-") { b = a - 1; while (b > 0 && isDigit(text[b - 1])) b -= 1; }
+      cached = [a, b];
+      runs.set(end, cached);
+    }
+    return cached;
+  };
   for (let changed = true; changed;) {
-    const before = rest;
-    rest = rest.replace(/^(\*\*|`)/, "").replace(/(\*\*|`|:)$/, "").replace(/:\d+(?:-\d+)?$/, "");
-    changed = rest !== before;
+    changed = false;
+    if (lo + 2 <= hi && text[lo] === "*" && text[lo + 1] === "*") { lo += 2; changed = true; } else if (lo < hi && text[lo] === "`") { lo += 1; changed = true; }
+    if (hi - lo >= 2 && text[hi - 1] === "*" && text[hi - 2] === "*") { hi -= 2; changed = true; } else if (hi > lo && (text[hi - 1] === "`" || text[hi - 1] === ":")) { hi -= 1; changed = true; }
+    const [a, b] = digitsBefore(hi);
+    if (a < hi && a > lo && text[a - 1] === ":") { hi = a - 1; changed = true; }
+    else if (a < hi && a > lo && text[a - 1] === "-" && b < a - 1 && b > lo && text[b - 1] === ":") { hi = b - 1; changed = true; }
   }
+  const rest = text.slice(lo, hi);
   const tokens = pathTokens(rest);
   return tokens.length === 1 && tokens[0] === rest ? rest : undefined;
 }
 
 /** Heading words are inherited independently of paths, so a located body cannot gain a different file. */
 function wordsOfHeading(title: string): string {
-  const lower = title.toLowerCase().replace(/[a-z][a-z0-9+.-]*:\/\/\S*/g, " ");
+  const lower = withoutUrls(title.toLowerCase());
   const paths = new Set(pathTokens(lower));
-  return lower.replace(/[a-z0-9_.\-/]+/g, (token) => paths.has(token.replace(/\.+$/, "")) ? " " : token);
+  return lower.replace(/[a-z0-9_.\-/]+/g, (token) => paths.has(withoutTrailingDots(token)) ? " " : token);
+}
+
+/** Longest run of heading path tokens that pathless blocks below the heading inherit; far above any real heading, it bounds the size of every block. */
+const MAX_INHERITED_TOKENS_LENGTH = 4096;
+function inheritedTokens(tokens: string[]): string {
+  let joined = "";
+  for (const token of tokens) {
+    const next = joined === "" ? token : `${joined} ${token}`;
+    if (next.length > MAX_INHERITED_TOKENS_LENGTH) break;
+    joined = next;
+  }
+  return joined;
+}
+
+/** A trie over the reversed segments of path tokens: a body path agrees with them when one is a segment suffix of the other, in linear time. */
+interface SuffixTrie { children: Map<string, SuffixTrie>; end: boolean }
+function suffixTrie(paths: string[]): SuffixTrie {
+  const root: SuffixTrie = { children: new Map(), end: false };
+  for (const path of paths) {
+    const segments = segmentsOf(path);
+    if (segments.length === 0) continue;
+    let node = root;
+    for (let i = segments.length - 1; i >= 0; i -= 1) {
+      let child = node.children.get(segments[i]!);
+      if (child === undefined) { child = { children: new Map(), end: false }; node.children.set(segments[i]!, child); }
+      node = child;
+    }
+    node.end = true;
+  }
+  return root;
+}
+function agreesWithTrie(path: string, trie: SuffixTrie): boolean {
+  const segments = segmentsOf(path);
+  if (segments.length === 0) return false;
+  let node = trie;
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const child = node.children.get(segments[i]!);
+    if (child === undefined) return false;
+    if (child.end) return true; // a heading path is a segment suffix of the path
+    node = child;
+  }
+  return true; // the path is a segment suffix of a longer heading path
 }
 
 interface HeadingEntry { level: number; tokens: string; text: string; words: string }
@@ -79,6 +148,13 @@ interface HeadingEntry { level: number; tokens: string; text: string; words: str
  */
 function blocksOf(text: string): string[] {
   const blocks: string[] = [];
+  // Heading path tokens and the trie over them, computed once per heading text however many blocks sit below it.
+  const headingPaths = new Map<string, { tokens: string[]; trie: SuffixTrie }>();
+  const pathsOfHeading = (title: string): { tokens: string[]; trie: SuffixTrie } => {
+    let found = headingPaths.get(title);
+    if (found === undefined) { const tokens = pathTokens(title.toLowerCase()); found = { tokens, trie: suffixTrie(tokens) }; headingPaths.set(title, found); }
+    return found;
+  };
   const stack: HeadingEntry[] = [];
   let heading: string | undefined;
   let headingTokens = "";
@@ -90,10 +166,9 @@ function blocksOf(text: string): string[] {
   let pseudoBlank = false;
   const push = (lines: string[]): void => {
     const body = lines.join("\n").toLowerCase();
-    const ownPaths = heading !== undefined ? pathTokens(heading.toLowerCase()) : [];
+    const own = heading !== undefined ? pathsOfHeading(heading) : undefined;
     const bodyPaths = pathTokens(body);
-    const agrees = ownPaths.length === 0 || bodyPaths.every((path) => ownPaths.some((own) =>
-      isSegmentSuffix(segmentsOf(path), segmentsOf(own)) || isSegmentSuffix(segmentsOf(own), segmentsOf(path))));
+    const agrees = own === undefined || own.tokens.length === 0 || bodyPaths.every((path) => agreesWithTrie(path, own.trie));
     const words = heading !== undefined && !sectionHasBody && agrees ? headingWords : "";
     const tokens = heading !== undefined && bodyPaths.length === 0 ? headingTokens : "";
     blocks.push(`${words}\n${tokens}\n${body}`);
@@ -116,9 +191,9 @@ function blocksOf(text: string): string[] {
     while (stack.length > 0 && (stack[stack.length - 1]?.level ?? 0) >= level) stack.pop();
     const parent = stack[stack.length - 1];
     heading = title;
-    headingTokens = pathTokens(title.toLowerCase()).join(" ") || (parent?.tokens ?? "");
+    headingTokens = inheritedTokens(pathsOfHeading(title).tokens) || (parent?.tokens ?? "");
     headingWords = wordsOfHeading(title);
-    if (pseudo && firstInSection && parent !== undefined && pathTokens(parent.text.toLowerCase()).length === 0) {
+    if (pseudo && firstInSection && parent !== undefined && pathsOfHeading(parent.text).tokens.length === 0) {
       headingWords = `${parent.words}\n${headingWords}`;
     }
     stack.push({ level, tokens: headingTokens, text: title, words: headingWords });
@@ -158,26 +233,51 @@ function blocksOf(text: string): string[] {
 
 const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A term matches from a word start (prefix stems match: `lock` hits `locking`, but not `block`). */
-const termHits = (block: string, term: string): boolean => new RegExp(`(?<![a-z0-9_])${escapeRegExp(term)}`, "i").test(block);
+const termPatterns = new Map<string, RegExp>();
+const termHits = (block: string, term: string): boolean => {
+  let pattern = termPatterns.get(term);
+  if (pattern === undefined) {
+    if (termPatterns.size >= 1024) termPatterns.clear();
+    pattern = new RegExp(`(?<![a-z0-9_])${escapeRegExp(term)}`, "i");
+    termPatterns.set(term, pattern);
+  }
+  return pattern.test(block);
+};
 
 const segmentsOf = (path: string): string[] => path.split("/").filter((segment) => segment !== "" && segment !== ".");
 const isSegmentSuffix = (suffix: string[], whole: string[]): boolean =>
   suffix.length > 0 && suffix.length <= whole.length && suffix.every((segment, i) => segment === whole[whole.length - suffix.length + i]);
 
-/** True when a maximal path token in the block names the anchor's file: the token's segments are a suffix of the anchor path or vice versa. */
-function namesFile(block: string, file: string): boolean {
-  const anchorSegments = segmentsOf(file.toLowerCase());
-  for (const match of block.matchAll(/[a-z0-9_.\-/]+/g)) {
-    const tokenSegments = segmentsOf(match[0].replace(/\.+$/, ""));
-    if (isSegmentSuffix(tokenSegments, anchorSegments) || isSegmentSuffix(anchorSegments, tokenSegments)) return true;
+/** The segments of every maximal path-character run of a block, computed once per block text for all anchors of a score. */
+type SegmentCache = Map<string, string[][]>;
+function runSegments(block: string, cache: SegmentCache): string[][] {
+  let runs = cache.get(block);
+  if (runs === undefined) {
+    runs = [...block.matchAll(/[a-z0-9_.\-/]+/g)].map((match) => segmentsOf(withoutTrailingDots(match[0])));
+    cache.set(block, runs);
   }
-  return false;
+  return runs;
 }
 
-function anchorHits(block: string, anchor: Anchor): boolean {
-  return namesFile(block, anchor.file) && anchor.terms.every((term) => termHits(block, term));
+/** True when a maximal path token in the block names the anchor's file: the token's segments are a suffix of the anchor path or vice versa. */
+function namesFile(block: string, file: string, cache: SegmentCache): boolean {
+  const anchorSegments = segmentsOf(file.toLowerCase());
+  return runSegments(block, cache).some((tokenSegments) => isSegmentSuffix(tokenSegments, anchorSegments) || isSegmentSuffix(anchorSegments, tokenSegments));
 }
-const anyAnchorHits = (blocks: string[], anchors: Anchor[]): boolean => anchors.some((anchor) => blocks.some((block) => anchorHits(block, anchor)));
+
+/** The blocks of one score and, per anchor file, the blocks that name it (found once, however many anchors share the file). */
+interface ScoreContext { blocks: string[]; segments: SegmentCache; naming: Map<string, string[]> }
+function blocksNaming(file: string, context: ScoreContext): string[] {
+  let named = context.naming.get(file);
+  if (named === undefined) {
+    named = context.blocks.filter((block) => namesFile(block, file, context.segments));
+    context.naming.set(file, named);
+  }
+  return named;
+}
+
+const anyAnchorHits = (anchors: Anchor[], context: ScoreContext): boolean =>
+  anchors.some((anchor) => blocksNaming(anchor.file, context).some((block) => anchor.terms.every((term) => termHits(block, term))));
 
 /*
  * Known limits (task curation validates each review oracle against real review text, so they are caught per task):
@@ -203,11 +303,13 @@ export interface ReviewScore {
  */
 export function scoreReview(text: string, oracle: ReviewOracle): ReviewScore {
   const blocks = blocksOf(text);
+  // Equal blocks hit or miss alike, and every anchor is tested against every block that names its file: each distinct block once.
+  const context: ScoreContext = { blocks: [...new Set(blocks)], segments: new Map(), naming: new Map() };
   const verdictMatched = new RegExp(oracle.verdict.pattern, "im").test(text);
-  const hit = oracle.findings.map((finding) => ({ finding, hit: anyAnchorHits(blocks, finding.anchors) }));
+  const hit = oracle.findings.map((finding) => ({ finding, hit: anyAnchorHits(finding.anchors, context) }));
   const critical = hit.filter((entry) => entry.finding.critical);
   const criticalHit = critical.filter((entry) => entry.hit).length;
-  const falseFindings = oracle.falseFindings.filter((finding) => anyAnchorHits(blocks, finding.anchors)).map((finding) => finding.id);
+  const falseFindings = oracle.falseFindings.filter((finding) => anyAnchorHits(finding.anchors, context)).map((finding) => finding.id);
   return {
     accepted: verdictMatched && criticalHit === critical.length,
     criticalHit, criticalTotal: critical.length, verdictMatched,
