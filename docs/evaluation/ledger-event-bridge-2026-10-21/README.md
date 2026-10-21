@@ -31,12 +31,13 @@ the woken controller read each turn once, without polling or sleeping. It does
 - the pre-registered product rule is **not met**.
 
 What it does improve consistently is latency: the controller acted on a
-finished turn after about 2 s instead of 10–21 s with polling. The
-recommendation is therefore **not to build it now**
-([ADR 0011](../../adr/0011-turn-events-and-controller-wake.md) stays Proposed,
-with a recommendation to defer). Revisit if long worker turns, worker
-questions or reaction time become the bottleneck. The request saving that the
-model predicts for long turns is still unmeasured.
+finished turn after about 2 s instead of 10–21 s with polling. The evaluation
+therefore recommended **not to build it now**. On 2026-10-21 the maintainer
+decided otherwise, for reaction time:
+[ADR 0011](../../adr/0011-turn-events-and-controller-wake.md) is accepted for
+items 1–3 (implementation in
+[#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108)). The request
+saving that the model predicts for long turns is still unmeasured.
 
 - **File ledger:** not recommended as a product feature. It helps a human
   overview and context continuity after compaction. It does nothing for tokens

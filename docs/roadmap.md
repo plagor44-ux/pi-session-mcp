@@ -111,19 +111,27 @@ contract.
   tests; a client-level probe on Claude Code 2.1.303 with a scripted model
   (idle stream-json session woken once per event, question round trip,
   controls; four attempts kept); two independent reviews, findings fixed.
-- Verdict: the current procedure stays. A lean completion bridge with Claude
-  Code rewake is technically viable and is proposed in
-  [ADR 0011](adr/0011-turn-events-and-controller-wake.md) (Proposed). A file
-  ledger and a polling supervisor are not recommended as product features.
+- Verdict: a lean completion bridge with Claude Code rewake is technically
+  viable. A file ledger and a polling supervisor are not recommended as product
+  features.
 - Done on 2026-10-21 with operator approval: two real-model pairs (L4, case L1)
   ([live results](evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
   - The woken controller read once, without polls or sleeps, and acted on a
     finished turn after about 2 s instead of 10–21 s.
   - The decision rule was not met: requests 7/8 and 8/8, mixed uncached input
-    and cost. The evaluation recommends deferring ADR 0011.
-- Open, with gates: a maintainer decision on ADR 0011; a revisit only with a
-  long-turn pair under its own approval. A question channel needs its own
-  decision and a minor release.
+    and cost. The evaluation recommended deferring ADR 0011.
+- Decided on 2026-10-21: the maintainer accepted
+  [ADR 0011](adr/0011-turn-events-and-controller-wake.md) items 1–3 for
+  controller reaction time, knowingly against that recommendation. It covers
+  opt-in spool delivery, one spool mount per container writer (ADR 0008
+  amendment), a setup-installed Claude Code hook, a capabilities field and a
+  skill section, shipped as minor release 0.11.0.
+- Next, with gates:
+  [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108) implements it
+  after the maintainer approves the
+  [plan](superpowers/plans/2026-10-21-turn-events-and-controller-wake.md). The
+  release follows the plan's acceptance. The question channel is still
+  undecided. The #79 isolation review point of 2026-11-15 stays.
 - Deferred: Codex wake (no documented path), interactive and VS Code wake
   checks, a supervisor-only detection arm.
 
@@ -222,7 +230,7 @@ in-memory state and one trusted local peer.
 | --- | --- |
 | OS isolation | Trigger fired on 2026-10-15 (coding profiles wrote on non-disposable repositories); decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and ADR 0008, interim rules in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules); profiles/skills are not an OS sandbox |
 | pi_turn_wait | Measured high polling cost per turn with pauses or tool/approval cost; 5–7 polls per invocation is insufficient evidence |
-| Turn events and controller wake (ADR 0011, Proposed) | Approved L4 measurement keeps quality and needs fewer controller model requests without higher uncached input; question channel separately, with demonstrated demand |
+| Question channel for worker questions (ADR 0011 item 4, undecided) | Demonstrated demand, its own decision, contract tests and a minor release |
 | Persistence/resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |
