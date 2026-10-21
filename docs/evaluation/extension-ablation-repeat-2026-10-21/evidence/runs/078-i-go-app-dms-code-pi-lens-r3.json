@@ -1,0 +1,52 @@
+{
+  "runId": "078-i-go-app-dms-code-pi-lens-r3",
+  "taskId": "i-go-app-dms",
+  "profile": "code",
+  "arm": "pi-lens",
+  "replicate": 3,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 204868,
+      "output": 23024,
+      "cacheRead": 3459840,
+      "cacheWrite": 0,
+      "total": 3687732,
+      "costUsd": 0.9859600000000001
+    },
+    "assistant": {
+      "messages": 34,
+      "input": 204868,
+      "output": 23024,
+      "cacheRead": 3459840,
+      "cacheWrite": 0,
+      "costUsd": 0.9859600000000001
+    },
+    "providerError": null
+  },
+  "durationMs": 664656,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 15
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "f6f5f194bb01cf9204b4b6448209cf7f6b2ce5424134b8471fa0b79697c83454",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}
