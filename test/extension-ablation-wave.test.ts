@@ -892,6 +892,35 @@ describe("run scope", () => {
     expect(scope.env).toMatchObject({ DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" });
   });
 
+  it("never gives a run or the oracle the variables that point at a display server, a bus, an agent or the runtime directory (R88)", async () => {
+    const names = ["DISPLAY", "WAYLAND_DISPLAY", "DBUS_SESSION_BUS_ADDRESS", "SSH_AUTH_SOCK", "XDG_RUNTIME_DIR"];
+    const previous = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+    for (const name of names) process.env[name] = `host-${name}`;
+    const root = await temporaryRoot("ablation-no-session-env-");
+    const clone = join(root, "clone");
+    await mkdir(clone);
+    const git = (...args: string[]) => exec("git", ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(clone, "a.txt"), "base\n");
+    await git("add", "a.txt"); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
+    try {
+      const env = scopeEnv("/scope", { home: "/scope/home", agentDir: "/scope/agent" });
+      for (const name of names) expect(env, name).not.toHaveProperty(name);
+      expect(JSON.stringify(env)).not.toContain("host-");
+      const score = await scoreImplementation(clone, {
+        allowedPaths: ["env.txt"], scopeIgnore: [], baseCommit: base,
+        oracle: { kind: "implementation", command: ["sh", "-c", "env > env.txt"], timeoutMs: 30_000 },
+      }, { gitDir: join(clone, ".git"), home: join(root, "oracle-home") });
+      expect(score.testsPassed).toBe(true);
+    } finally {
+      for (const [name, value] of Object.entries(previous)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+    }
+    const seen = await readFile(join(clone, "env.txt"), "utf8");
+    for (const name of names) expect(seen).not.toContain(`${name}=`);
+    expect(seen).not.toContain("host-");
+  });
+
   it("keeps the offline package-manager variables out of the oracle's own minimal environment (R73)", async () => {
     const root = await temporaryRoot("ablation-oracle-env-");
     const clone = join(root, "clone");
