@@ -4,7 +4,7 @@ Status: final. This report covers the extension ablation of 2026-10-21 and
 keeps the pre-registration text (marked below) next to the results. Every number
 in the results comes from `evidence/` (`summary.json`, `runs/*.json`,
 `ledger.json`, `integrity.json`, `approvals/`). The evidence was written at
-commit `8cec42c`; later commits change documentation and code comments only.
+commit `8cec42c`; later commits change documentation, code comments and test guards only (no behaviour change; listed in integrity.json's source drift only for later reports).
 
 Scope: one run per task and arm, so the results are indicative, not
 significant. No saving, ranking or success rate beyond the observed one is
