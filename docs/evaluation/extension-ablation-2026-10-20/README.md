@@ -3,6 +3,14 @@
 Status: draft written at Task 10 and updated after the oracle rework. Task 12
 completes it with results.
 
+Scope of the recommendations (ruling R83, owner decision 2026-10-21): only the
+three implementation tasks decide recommendations, for `pl-code-deepseek`,
+`pl-code` and `co-code`. The four review tasks run and are scored, but the review
+pairings (`pl-review-grok`, `pl-review`, `co-review`) are reported descriptively
+and get no recommendation. The description covers critical hits, verdict
+matches, recall, runs with a false finding and oracle acceptance as information,
+plus cost, cache-read share and network.
+
 ## Tasks
 
 Pre-registered before any measured run. Values come from `tasks.json` in this
@@ -41,10 +49,11 @@ product repository, and `r-spng-authz` and `i-spng-authz` touch the same code.
 
 ## Review oracle
 
-A review is accepted only if it states the non-approving verdict its prompt asks
-for (a pre-registered regular expression per task, linear patterns only) and it
-hits every critical finding. False findings are reported, not decisive (ruling
-R78).
+The review oracle is descriptive only (ruling R83). Its design: a review counts
+as accepted by the oracle only if it states the non-approving verdict its prompt
+asks for (a pre-registered regular expression per task, linear patterns only) and
+it hits every critical finding. False findings are reported, not decisive (ruling
+R78). Acceptance is recorded as information and never decides a recommendation.
 
 Calibration: for each review task the recorded first review is accepted. Empty,
 generic and checklist-walking approval reviews (including approvals written by
@@ -53,7 +62,15 @@ are accepted. Non-approving reviews that argue a wrong defect are rejected.
 There were 124 controls in total, all as expected. In addition, 39 held-out real
 reviews from the operator's transcripts all gave the correct verdict match; the
 patterns accept the real non-approving formats the models write (for example
-"Verdict: blockers exist.").
+"Verdict: blockers exist."). These figures are in-sample for the curator, who
+tuned the oracle against them.
+
+Behaviour on fresh text: after four curation rounds, the oracle accepted 11 of
+18 fresh correct reviews written by an independent reviewer. The anchor set in
+`tasks.json` was chosen because it scored best on that fresh set; a later
+variant accepted 8. Fresh wrong-defect reviews were rejected. This
+non-convergence is why acceptance cannot decide: the spec drops an oracle that
+needs judgment.
 
 Timing: verdict patterns are linear and were timed on 89 adversarial 64 KiB
 inputs per pattern (worst case 2.9 ms). The full review scoring was quadratic on
