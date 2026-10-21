@@ -1,9 +1,10 @@
 # ADR 0011: Turn events and controller wake
 
-**Status:** Proposed (2026-10-21). Not accepted. Nothing in the product
-changes until a maintainer decision. **Evaluation recommendation: defer.**
-Two real-model pairs met the critical assumption but not the decision gate
-below. Evidence:
+**Status:** Accepted (2026-10-21, maintainer decision), items 1–3, for
+release 0.11.0. Item 4 (question channel) is not decided. Amends
+[ADR 0003](0003-post-mvp-maintenance.md) (in-memory-only boundary, see below)
+and [ADR 0008](0008-coding-profile-isolation.md) (an event spool mount per
+writer). Evidence:
 [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.md),
 [#104](https://github.com/plagor44-ux/pi-session-mcp/issues/104).
 
@@ -12,83 +13,116 @@ below. Evidence:
 Today a controller learns that a Pi turn ended only by polling `pi_turn_get`.
 The registry has exactly one terminal transition per turn. That transition is
 the settled end of the SDK run, including retries, compaction and queued
-follow-ups. Nothing outside the registry is told about it. A worker cannot ask
-the controller a question that waits for an answer. #91 rejected a bounded wait
-on cost evidence (1–3 running polls per turn on a Codex route).
+follow-ups. Nothing outside the registry is told about it. #91 rejected a
+bounded wait on cost evidence (1–3 running polls per turn on a Codex route).
 
-A provider-free evaluation reached the following, at its stated levels:
+The evaluation reached the following, at its stated levels:
 
 - A content-free event can be emitted once per turn from that transition (L1).
-- Claude Code 2.1.303 starts a new model request in an idle stream-json session
-  when an `asyncRewake` hook exits 2 after the event (L3: 16–34 ms, exactly one
-  wake per event, correct correlation with two turns, no wake with plain
-  `async`).
-- An explicit worker tool can carry a structured question to the controller and
-  its answer back to the waiting call (L1 on a real `AgentSession`, L3 round
-  trip).
-
+- Claude Code (2.1.303 and 2.1.306) starts a new model request in an idle
+  stream-json session when an `asyncRewake` hook exits 2 after the event. This
+  is L3: 16–34 ms, exactly one wake per event, correct correlation with two
+  turns, and no wake with plain `async`.
 - In two approved real-model pairs (L4, Claude Code 2.1.306,
   `claude-sonnet-5-5`, short case L1), the woken controller read each turn
-  once with no poll and no sleep. It reacted to a finished turn after 1.8 and
-  2.2 s, against 10.4 and 20.7 s with polling. But the gate was not met:
+  once with no poll and no sleep. It acted on a finished turn after 1.8 and
+  2.2 s, against 10.4 and 20.7 s with polling.
+- The pre-registered gate was **not met**:
   - controller requests were 7 against 8 and 8 against 8;
   - uncached input and cost were mixed;
   - pair 1's polling arm failed the quality oracle on the worker side.
 
-Not shown: a request or token saving, which the model expects only for long
-worker turns; a question round trip with a real model; interactive and VS Code
-behavior; any Codex wake path (none is documented).
+  The evaluation therefore recommended deferring.
 
-## Proposal (for decision)
+## Decision
 
-1. **Internal completion observer.** Add a registry-internal listener at the
-   existing terminal transition. It emits `{instance, session, turn, state,
-   via}` once and changes no public tool, field or state. Patch-level if it
-   stays internal.
-2. **Local event spool per server process** (or an equivalent local channel),
-   content-free, mode 0600 in a 0700 directory, removed at shutdown. It is a new
-   local operator surface and a departure from "process memory only", so it
-   needs this ADR and a threat note. It must not be mounted into worker
-   containers.
-3. **Client adapter shipped by setup, Claude Code only:** a `PostToolUse`
-   `asyncRewake` hook on `pi_session_prompt`, with claim files for exactly one
-   wake per event, a budget equal to the task budget, and exit on parent loss.
-   One-shot `-p` runs hold the next model request until the hook ends (observed
-   in S5), so the adapter applies to stream-json and interactive sessions only.
-4. **Optional, separate decision:** a question channel, meaning a worker tool
-   `ask_controller` and public answer tools. That is a public contract change:
-   minor release, contract tests, deadlines, limits, and unchanged rights.
+The maintainer accepts items 1–3 **for controller reaction time**, knowingly
+against the evaluation's gate and recommendation. No token or cost saving is
+claimed. On short tasks there was none. A saving on long worker turns is
+expected but unmeasured.
 
-## Revisit triggers
+1. **Internal completion observer.** A registry-internal listener at the
+   existing terminal transition emits one content-free event per turn:
+   instance, session, turn, state and `via`. The registry read model stays the
+   only source of truth. A turn that `close` removes before its state can be
+   read is reported as unobserved, never with a guessed state.
+2. **Local event spool, opt-in.** It is enabled by a new optional server
+   configuration field and off by default. Without it, behavior is unchanged
+   for every client, including Codex. Host servers write under
+   `$XDG_RUNTIME_DIR/pi-session-mcp/<instance>/`:
+   - one file per event, written atomically;
+   - mode 0600, in directories of mode 0700;
+   - removed when the server stops.
 
-Long worker turns, where polling needs many polls; demand for worker questions
-to the controller; or controller reaction time to finished turns becoming a
-bottleneck.
+   Events carry only IDs, states, timestamps and codes. They are wake triggers,
+   never state: the controller always reads the turn through `pi_turn_get`.
+3. **Container writers get one dedicated spool mount each**, as an amendment to
+   ADR 0008. It is a per-writer host directory under the same runtime root,
+   mounted read-write at one fixed path. It is never shared between writers and
+   never holds a ledger, credentials or any other state. Because the worker
+   inside the boundary can write to it (coding profiles have a shell there), the
+   following hold:
+   - forged events can at most cause spurious wakes;
+   - the hook validates the event schema strictly and caps file size and count;
+   - the controller never trusts an event's state.
+4. **Client adapter, Claude Code only, installed by setup.** It is a
+   `PostToolUse` `asyncRewake` hook on `pi_session_prompt` and on running
+   `pi_turn_get` results, placed in the same scope as the MCP registration and
+   under the same ownership, dry-run, verify and remove rules as today. The
+   hook:
+   - claims each event exactly once;
+   - releases an undelivered claim when it is killed;
+   - exits when its parent goes away;
+   - runs under a budget that the hook timeout must cover.
+5. **Capabilities.** `pi_capabilities_get` gains a field that states whether
+   event delivery is active (for example `events: { delivery: "spool" | "off" }`),
+   so that the controller skill knows whether it has to poll. This is a public
+   field change.
+6. **Controller skill.** `pi-session-orchestration` gains a section. When
+   delivery is active, the controller does not poll a running turn after
+   `pi_session_prompt`. It waits for the `pi-bridge` wake, reads once, and
+   re-arms by one running read after a budget wake. Otherwise the current
+   cadence applies.
+7. **Release.** A minor release, 0.11.0, under the versioning rule of
+   ADR 0003. The eight MCP tools and their fields stay unchanged except for the
+   new capabilities field.
 
-## Decision gate
+## Boundary amendment (ADR 0003)
 
-Accept items 1–3 only if the approved L4 measurement in the
-[live plan](../evaluation/ledger-event-bridge-2026-10-21/live-plan.md) keeps
-quality in every pair and shows fewer controller model requests than the
-current skill, without higher uncached controller input. Otherwise reject or
-defer, and keep the skill cadence. Item 4 needs its own evidence of demand.
+Pi Session MCP still keeps no session or turn state beyond process memory. The
+event spool is a transient, content-free notification channel. It lives on a
+runtime directory (tmpfs on systemd hosts), is removed at shutdown and is never
+read back by the server. Persistence and resume stay rejected.
 
-## Consequences if accepted
+## Limits and consequences
 
-- Running polls for Claude Code controllers in stream-json or interactive mode
-  are no longer needed for delivery. Whether real models stop polling is what
-  L4 measures. Terminal reads stay once per turn. The hook timeout must cover
-  the task budget, and every path that leaves a turn running must re-arm a
-  waiter.
-- Codex controllers keep polling.
-- New maintenance: hook installation and verification in setup, spool cleanup,
-  and a client-version contract for `asyncRewake`.
+- Codex controllers keep polling; Codex documents no external wake.
+- One-shot `claude -p` runs hold the next model request until the hook ends.
+  The adapter is meant for interactive and stream-json sessions. The setup
+  documentation says so.
+- Interactive TUI and VS Code wake were not tested in the evaluation. They need
+  an acceptance check before the release.
+- New maintenance:
+  - hook installation, verification and removal in setup;
+  - spool lifecycle and cleanup;
+  - the per-writer mount in the wrapped registration;
+  - a client contract check for `asyncRewake` behavior (ADR 0004: contract,
+    not version).
+- Worker questions to the controller (item 4 of the proposal: an
+  `ask_controller` worker tool and public answer tools) are **not decided**.
+  They need their own decision and evidence of demand.
 
 ## Alternatives considered
 
-Bounded wait (rejected in #91); deterministic supervisor (adds a trigger, no
-delivery); MCP notifications, subscriptions and tasks (Claude Code does not
-start a turn on them; tasks unsupported); channels (gated research preview,
-not with `-p`); MCP elicitation for questions (human only, and only inside a
-pending call under protocol 2026-07-28); a file ledger (overview only, no
-notification).
+- **Defer or reject:** the evaluation's recommendation; not chosen, because the
+  maintainer values reaction time.
+- **Bounded wait:** rejected in #91.
+- **Deterministic supervisor:** adds a trigger but no delivery.
+- **MCP notifications, subscriptions and tasks:** Claude Code does not start a
+  turn on them, and tasks are unsupported.
+- **Channels:** a gated research preview, not available with `-p`.
+- **MCP elicitation for questions:** human only, and under protocol 2026-07-28
+  only inside a pending call.
+- **A unix socket instead of a file spool:** untested, and needs a new listener
+  with its own lifetime logic.
+- **A file ledger:** gives an overview only, no notification.

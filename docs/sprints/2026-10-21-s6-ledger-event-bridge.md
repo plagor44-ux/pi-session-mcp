@@ -83,3 +83,7 @@ See the [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.
   minor release.
 - Two approved L4 pairs ran on 2026-10-21 ([results](../evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
   Any further live run needs a new, explicit operator approval.
+- ADR 0011 was accepted by the maintainer on 2026-10-21, items 1–3. The
+  implementation is
+  [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108), gated by
+  approval of its plan.
