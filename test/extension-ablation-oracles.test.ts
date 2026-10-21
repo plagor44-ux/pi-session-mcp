@@ -665,7 +665,8 @@ describe("scoreImplementation", () => {
     const { repo, base } = makeBase();
     const home = tmp("oracle-home-");
     const homeLog = join(tmp("oracle-homelog-"), "home");
-    const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).sort().join()==='CI,HOME,PATH,TMPDIR'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}&&e.TMPDIR===${JSON.stringify(expectedHome)}+'/tmp'?0:1)`);
+    // macOS (CoreFoundation) adds __CF_USER_TEXT_ENCODING to every process environment by itself; it is the only key ignored.
+    const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).filter((k)=>k!=='__CF_USER_TEXT_ENCODING').sort().join()==='CI,HOME,PATH,TMPDIR'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}&&e.TMPDIR===${JSON.stringify(expectedHome)}+'/tmp'?0:1)`);
     const run = (command: string[], options: { home?: string } = {}) => scoreImplementation(repo, task({}, base, { kind: "implementation", command, timeoutMs: 10_000 }), { gitDir: base.gitDir, ...options });
     expect((await run(check(home), { home })).testsPassed).toBe(true);
     expect((await run(node(`require('fs').writeFileSync(${JSON.stringify(homeLog)}, process.env.HOME)`))).testsPassed).toBe(true);
