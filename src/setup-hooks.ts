@@ -349,7 +349,11 @@ function edited(document: Record<string, unknown>, change: (entries: unknown[]) 
 /** Install, update, verify or remove the wake hook of one Claude Code scope. Never throws. */
 export async function runWakeHook(request: WakeHookRequest): Promise<WakeHookOutcome> {
   try { return await reconcile(request); }
-  catch (error) { return { status: "failed", code: error instanceof HookError ? error.code : "hook_install_failed" }; }
+  catch (error) {
+    // A ledger failure keeps its own stable code (`ownership_unreadable`, `operation_aborted`, ...).
+    const message = error instanceof Error ? error.message : "";
+    return { status: "failed", code: error instanceof HookError ? error.code : /^(ownership_[a-z_]+|operation_aborted)$/.test(message) ? message : "hook_install_failed" };
+  }
 }
 
 async function reconcile(request: WakeHookRequest): Promise<WakeHookOutcome> {
@@ -374,10 +378,11 @@ async function step(request: WakeHookRequest, location: Location, dependencies: 
   const apply = operation === "apply";
   const removing = operation === "remove" || operation === "rollback";
   const mutating = apply || removing;
-  const snapshot = await readSnapshot(file);
-  const { entries } = postToolUse(snapshot.document);
+  // The ledger first: when it cannot be read, nothing of the settings matters.
   healthy(ownership);
   const stored = await ownership.get(recordTarget);
+  const snapshot = await readSnapshot(file);
+  const { entries } = postToolUse(snapshot.document);
   const record = settle(stored, entries);
   // `recovered` is true when settling changed what the ledger says.
   const recovered = stored !== undefined && (record === undefined || record.fingerprint !== stored.fingerprint || record.phase !== stored.phase);
@@ -476,10 +481,17 @@ export async function installWakeHook(options: InstallWakeHookOptions): Promise<
   return { target: { client: "claude-code", scope: options.scope, alias: WAKE_HOOK_ALIAS }, ...outcome };
 }
 
-/** Whether setup holds a record for the hook of this scope (and, for project and local, this project). */
+/**
+ * Whether setup holds a record for the hook of this scope (and, for project and local, this
+ * project). Fails closed: a ledger that cannot be read answers `true`, so callers take the full
+ * path and fail with the ledger's own code instead of skipping an owned entry. A project that
+ * does not exist cannot have a record and answers `false`.
+ */
 export async function ownsWakeHook(scope: HookScope, roots: Pick<WakeHookRoots, "home" | "cwd" | "env">, ownership: OwnershipAccess): Promise<boolean> {
-  try { return (await ownership.get(await recordTargetOf(scope, roots))) !== undefined; }
-  catch { return false; }
+  let target: SetupTarget;
+  try { target = await recordTargetOf(scope, roots); } catch { return false; }
+  try { return (await ownership.get(target)) !== undefined; }
+  catch { return true; }
 }
 
 /** Companion of a registration, like the skill installer: runs after the registration succeeded. */
