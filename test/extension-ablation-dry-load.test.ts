@@ -172,6 +172,13 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     expect(report.pairs[0]).toMatchObject({ ok: true, trace: { unresolvedEgress: 0 } });
   });
 
+  it("does not count an abstract socket that the session itself bound as unresolved egress (R88)", async () => {
+    const own = `4242 bind(3<socket:[1]>, {sa_family=AF_UNIX, sun_path=@"svc"}, 44) = 0\n4242 connect(4<socket:[2]>, {sa_family=AF_UNIX, sun_path=@"svc"}, 44) = 0\n`;
+    const s = await setup(() => ({ trace: `${benignTrace()}${own}` }));
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
+    expect(report.pairs[0]).toMatchObject({ ok: true, trace: { unresolvedEgress: 0 } });
+  });
+
   it("keeps a connection to a nameserver on port 53 out of the unexpected ones", async () => {
     const dns = (await import("../eval/extensions/network.js")).dnsServers;
     const address = [...await dns()].find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? "127.0.0.53";

@@ -286,6 +286,46 @@ describe("runWave stop rules", () => {
     expect(r.stopReason).toBe("unresolved_egress");
   });
 
+  describe("abstract sockets bound inside the trace (R88)", () => {
+    const line = (call: string, name: string, ret = "0") => `4242 ${call}(4<socket:[32553896]>, {sa_family=AF_UNIX, sun_path=@"${name}"}, 44) = ${ret}\n`;
+
+    it("does not stop a run whose own processes bind and connect an abstract name, and stops for a name nobody bound", async () => {
+      const s = await waveSetup(2);
+      const own = `${benignTrace()}${line("bind", "mail-pdf-73342cfaea134cc4be84610388df1d0d")}${line("connect", "mail-pdf-73342cfaea134cc4be84610388df1d0d")}`;
+      const ok = await runWave(s.input, s.deps([text({ trace: own }), text()]).deps);
+      expect(ok.stopReason).toBeNull();
+      expect(ok.records[0]).toMatchObject({ outcome: "scored", trace: { unresolvedEgress: 0 } });
+      expect(existsSync(join(s.waveDir, "diagnostics"))).toBe(false);
+      const t = await waveSetup(2);
+      const foreign = `${benignTrace()}${line("bind", "mine")}${line("connect", "docker_cli_bda8b079f8fdef11b684b7c481c7a6ce")}`;
+      const stopped = await runWave(t.input, t.deps([text({ trace: foreign })]).deps);
+      expect(stopped.stopReason).toBe("unresolved_egress");
+      expect(await readFile(join(t.waveDir, "diagnostics", `${stopped.records[0]!.runId}.txt`), "utf8")).toContain("docker_cli_bda8b079f8fdef11b684b7c481c7a6ce");
+    });
+
+    it("stops for a connect before the bind and for a name whose bind failed with EADDRINUSE", async () => {
+      for (const trace of [
+        `${benignTrace()}${line("connect", "svc")}${line("bind", "svc")}`,
+        `${benignTrace()}${line("bind", "svc", "-1 EADDRINUSE (Address already in use)")}${line("connect", "svc")}`,
+      ]) {
+        const s = await waveSetup(2);
+        expect((await runWave(s.input, s.deps([text({ trace })]).deps)).stopReason).toBe("unresolved_egress");
+      }
+    });
+
+    it("judges the oracle's trace the same way", async () => {
+      const s = await waveSetup(1, { kind: "implementation" });
+      const scoring: WaveDeps["scoreImplementation"] = async (_clone, _task, options) => {
+        const argv = options.wrap!(["npm", "test"]);
+        await writeFile(argv[argv.indexOf("-o") + 1]!, prelude(9000) + (line("bind", "t") + line("connect", "t") + line("connect", "u")).replaceAll("4242", "9000"));
+        return { accepted: true, testsPassed: true, outOfScope: [] };
+      };
+      const r = await runWave(s.input, s.deps([text()], { scoreImplementation: scoring }).deps);
+      expect(r.stopReason).toBe("unresolved_egress");
+      expect(r.records[0]!.trace).toMatchObject({ unresolvedEgress: 1 });
+    });
+  });
+
   describe("sockets in the sandbox's private /tmp (R87)", () => {
     const connect = (path: string) => `4242 connect(19<socket:[1234567]>, {sa_family=AF_UNIX, sun_path="${path}"}, 110) = 0\n`;
     const bound = { ...EMPTY_PLAN, extraReadOnly: ["/tmp/ablation-build-x"] };
