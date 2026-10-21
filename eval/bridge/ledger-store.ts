@@ -67,7 +67,9 @@ export class LedgerStore {
     for (;;) {
       try {
         const handle = await open(this.#lock, "wx", 0o600);
-        try { await handle.writeFile(String(process.pid)); } finally { await handle.close(); }
+        // The exclusive create succeeded, so this file is ours: a failed pid write must not leave it behind as a stale lock.
+        try { await handle.writeFile(String(process.pid)); } catch (writeError) { await handle.close().catch(() => undefined); await rm(this.#lock, { force: true }); throw writeError; }
+        await handle.close();
         break;
       } catch (e) {
         if (errno(e) === "ENOENT") throw new LedgerError("ledger_missing");

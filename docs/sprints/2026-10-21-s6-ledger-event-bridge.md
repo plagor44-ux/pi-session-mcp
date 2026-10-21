@@ -52,13 +52,22 @@ synthetic local state into temporary directories.
 | C0 Boulder | Claude researcher | oh-my-openagent `dev` | delivered (summarized reads, marked) |
 | C1 ledger, store, CLI | Claude implementer | `eval/bridge/ledger*.ts`, `test/bridge-ledger.test.ts` | implemented; integrator fix for unconsumed results on connection loss |
 | C2 bridge, broker, scripted adapter, faux test | Claude implementer | `eval/bridge/{bridge,questions,ask-tool,scripted-adapter}.ts`, two tests | implemented |
-| C3 host adapter and client probe | Claude implementer | `eval/bridge/{server-main,hook-waiter,hook-ledger,claude-probe,cli}.ts`, hook tests | see the report |
+| C3 host adapter and client probe | Claude implementer | `eval/bridge/{server-main,hook-waiter,hook-ledger,claude-probe,cli}.ts`, hook tests | implemented; probe attempts 1–3 by the implementer and integrator, attempt 4 by the integrator after the review fixes |
+| A3 abort during a tool | Claude general-purpose, scratch test not committed | real `SdkPiSessionAdapter` | `aborted` in 60 of 60 runs per variant; order-dependent |
 | D pre-registration and live plan | integrator | `docs/evaluation/ledger-event-bridge-2026-10-21/` | fixed before comparative runs (commit `569c89f`) |
-| E independent review | see the report | | |
+| E1 independent review | Pi worker, `review-grok` (read-only), alias `pi-session-mcp` reading only this worktree | frozen head `1289137` | 5 findings; session closed |
+| E2 independent review | Claude reviewer (Opus 5.5) | frozen head `1289137` | 7 findings; two reproduced |
+| F review fixes | Claude implementer, then integrator | `eval/bridge`, tests, docs | fixed; 91 tests |
 
 No Pi worker wrote code: the only workspace alias for this repository points at
 the operator's main checkout, which the parallel session uses. Writers never
 shared files. Controller-side session and turn IDs were kept only transiently.
+One Pi session was started (E1) and closed; none is left open.
+
+The first worktree lived under the main checkout (`.claude/worktrees/`). The
+parallel session reported that its vitest run then collected this worktree's
+tests and one sub-run failed. The worktree was moved outside the repository
+once the reviewers had finished.
 
 ## Results
 

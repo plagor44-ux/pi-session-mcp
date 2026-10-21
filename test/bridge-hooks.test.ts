@@ -1,12 +1,12 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventBridge, SpoolSink, type BridgeEvent } from "../eval/bridge/bridge.js";
-import { formatWake, parseHookInput, payloadsOf, tryClaim, waitForEvent, type WaitResult } from "../eval/bridge/hook-waiter.js";
-import { projectHook, runLedgerHook } from "../eval/bridge/hook-ledger.js";
+import { formatWake, parseBudget, parseHookInput, payloadsOf, releaseHeldClaim, tryClaim, waitForEvent, type WaitResult } from "../eval/bridge/hook-waiter.js";
+import { HOOK_LOCK_TIMEOUT_MS, projectHook, runLedgerHook } from "../eval/bridge/hook-ledger.js";
 import { LedgerStore } from "../eval/bridge/ledger-store.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -37,9 +37,27 @@ describe("hook input parsing", () => {
       expect(parseHookInput(hookInput("eval_question_answer", response, { requestId: REQUEST, value: "beta" })).target).toEqual(target);
     }
   });
+  it("re-arms on a pi_turn_get that still shows the turn running, in every response shape", () => {
+    const running = { ok: true, turn: { turnId: TURN, sessionId: SESSION, state: "running" } };
+    for (const response of [running, JSON.stringify(running), [{ type: "text", text: JSON.stringify(running) }], { content: [{ type: "text", text: "x" }], structuredContent: running }]) {
+      expect(parseHookInput(hookInput("pi_turn_get", response, { sessionId: SESSION, turnId: TURN })).target).toEqual(target);
+    }
+  });
+  it("targets the turn of a rejected answer when the response names it", () => {
+    for (const result of ["expired", "already_resolved"]) {
+      expect(parseHookInput(hookInput("eval_question_answer", { ok: false, result, sessionId: SESSION, turnId: TURN }, { requestId: REQUEST, value: "beta" })).target).toEqual(target);
+    }
+  });
+  it("arms the asyncRewake hook on prompt, turn read and answer", () => {
+    const source = readFileSync(fileURLToPath(new URL("../eval/bridge/claude-probe.ts", import.meta.url)), "utf8");
+    const matcher = /matcher: `([^`]*pi_session_prompt[^`]*)`/.exec(source)?.[1] ?? "";
+    expect(matcher).toContain("pi_session_prompt"); expect(matcher).toContain("pi_turn_get"); expect(matcher).toContain("eval_question_answer");
+  });
   it("returns no target for failures, other tools, bad input and unsafe identifiers", () => {
     expect(parseHookInput(hookInput("pi_session_prompt", { ok: false, error: { code: "session_running", message: "x" } })).target).toBeUndefined();
-    expect(parseHookInput(hookInput("pi_turn_get", promptPayload)).target).toBeUndefined();
+    expect(parseHookInput(hookInput("pi_turn_get", { ok: true, turn: { ...promptPayload.turn, state: "completed" } })).target).toBeUndefined();
+    expect(parseHookInput(hookInput("pi_turn_get", { ok: false, error: { code: "unknown_turn" } })).target).toBeUndefined();
+    expect(parseHookInput(hookInput("pi_session_start", promptPayload)).target).toBeUndefined();
     expect(parseHookInput(hookInput("eval_question_answer", { ok: false, result: "unknown_request" })).target).toBeUndefined();
     expect(parseHookInput("not json").target).toBeUndefined();
     expect(parseHookInput("[]").target).toBeUndefined();
@@ -110,6 +128,35 @@ describe("waitForEvent (in process)", () => {
     const event = terminal();
     expect([tryClaim(base, event), tryClaim(base, event)]).toEqual([true, false]);
   });
+  it("releases an undelivered claim so a later waiter can still report the event", async () => {
+    const { base, terminal } = await spoolFixture();
+    const event = terminal();
+    expect(tryClaim(base, event)).toBe(true);
+    releaseHeldClaim();
+    expect(tryClaim(base, event)).toBe(true);
+  });
+  it("ends silently without a wake for a turn that close removed unread", async () => {
+    const { base, bridge } = await spoolFixture();
+    bridge.emit({ kind: "turn_unobserved", sessionId: SESSION, turnId: TURN, via: "close" });
+    expect(await wait(base)).toEqual({ action: "silent", reason: "turn_unobserved" });
+    expect(existsSync(join(base, "claims"))).toBe(false);
+  });
+  it("skips a question that was resolved between reading the spool and claiming it", async () => {
+    const { base, bridge, question } = await spoolFixture();
+    question();
+    const result = await wait(base, { budgetMs: 200, onBudget: "silent", beforeClaim: () => { bridge.emit({ kind: "question_resolved", requestId: REQUEST, sessionId: SESSION, turnId: TURN, state: "answered" }); } });
+    expect(result).toEqual({ action: "silent", reason: "budget_silent" });
+    expect(existsSync(join(base, "claims")) ? readdirSync(join(base, "claims")) : []).toEqual([]);
+  });
+  it("ends silently with a reason code, and does not throw, when the claim cannot be written", async () => {
+    const { base, terminal } = await spoolFixture();
+    terminal(); writeFileSync(join(base, "claims"), "not a directory");
+    expect(await wait(base)).toMatchObject({ action: "silent", reason: "claim_error" });
+  });
+  it("parses the wait budget: empty, non-numeric, zero and negative mean the default", () => {
+    expect([undefined, "", "  ", "abc", "0", "-5", "NaN", "Infinity"].map(parseBudget)).toEqual(Array(8).fill(120_000));
+    expect([parseBudget("300"), parseBudget(" 2500 ")]).toEqual([300, 2500]);
+  });
   it("wakes with the budget line when the budget ends (wake policy) and stays silent for the silent policy", async () => {
     const { base } = await spoolFixture();
     const woke = await wait(base, { budgetMs: 150, onBudget: "wake" });
@@ -171,6 +218,25 @@ compiled("compiled hook-waiter process", () => {
     expect(woke.code).toBe(2);
     expect(woke.stderr).toBe(`pi-bridge: no event for turn ${TURN} within the wait budget; it may still be running.\n`);
     expect(await runWaiter(base, input, { BRIDGE_WAIT_BUDGET_MS: "300", BRIDGE_ON_BUDGET: "silent" }).done).toEqual({ code: 0, stderr: "" });
+  });
+  it("exits 0 silently, with a logged reason and no stack trace, when the claim cannot be written", async () => {
+    const { base, terminal } = await spoolFixture();
+    terminal(); writeFileSync(join(base, "claims"), "not a directory");
+    const root = await temporaryRoot("bridge-hooks-claim-"), log = join(root, "waiter.log");
+    const exit = await runWaiter(base, hookInput("pi_session_prompt", promptPayload), { BRIDGE_WAIT_BUDGET_MS: "10000", BRIDGE_WAITER_LOG: log }).done;
+    expect(exit).toEqual({ code: 0, stderr: "" });
+    expect(JSON.parse(readFileSync(log, "utf8").trim().split("\n")[0]!)).toMatchObject({ reason: expect.stringMatching(/^claim_error/), exit: 0 });
+  });
+  it("treats an empty or non-numeric wait budget as the default instead of waking or exiting at once", async () => {
+    const { base, terminal } = await spoolFixture();
+    const input = hookInput("pi_session_prompt", promptPayload);
+    const runs = ["", "abc", "0"].map((budget) => runWaiter(base, input, { BRIDGE_WAIT_BUDGET_MS: budget }));
+    let early = 0; for (const run of runs) void run.done.then(() => { early += 1; });
+    await later(700, () => undefined); expect(early).toBe(0);
+    terminal();
+    const exits = await Promise.all(runs.map((run) => run.done));
+    expect(exits.filter((exit) => exit.code === 2).map((exit) => exit.stderr)).toEqual([`pi-bridge: turn ${TURN} of session ${SESSION} is completed. Read it once with pi_turn_get.\n`]);
+    expect(exits.map((exit) => exit.code).sort()).toEqual([0, 0, 2]);
   });
   it("exits 0 within about two seconds after its parent process is gone", async () => {
     const { base } = await spoolFixture();
@@ -260,6 +326,18 @@ describe("hook-ledger projection", () => {
     const other = await runLedgerHook(JSON.stringify({ tool_name: "Bash", tool_input: { command: CANARY_PROMPT }, tool_response: CANARY_TEXT, tool_use_id: "toolu_x" }), env);
     expect(other.events).toBe(1); // only the instance connection
     expect(await dirBytes(dir)).not.toContain(CANARY_PROMPT);
+  });
+  it("skips a synchronous hook within about a second when a stale lock is left, counts it, and never breaks the lock", async () => {
+    const dir = await temporaryRoot("bridge-hooks-ledger-");
+    const env = { dir, instance: "ctl-unit", runId: "run-unit", now: clock };
+    expect((await runLedgerHook(sequence[0]!, env)).error).toBeUndefined();
+    writeFileSync(join(dir, "run.json.lock"), "999999");
+    const started = Date.now();
+    const run = await runLedgerHook(sequence[1]!, env);
+    expect(Date.now() - started).toBeLessThan(HOOK_LOCK_TIMEOUT_MS + 1500);
+    expect(run).toMatchObject({ error: "ledger_locked", events: 0 });
+    expect(readFileSync(join(dir, "hook-errors.jsonl"), "utf8")).toContain("ledger_locked");
+    expect(existsSync(join(dir, "run.json.lock"))).toBe(true);
   });
   it("loses no update when at least six hook invocations run in parallel, including the first one", async () => {
     const dir = await temporaryRoot("bridge-hooks-ledger-");

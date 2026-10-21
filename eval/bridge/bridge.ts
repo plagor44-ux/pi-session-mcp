@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PiSessionAdapter, PiSessionHandle, PiAppliedSelection, PiTurnOutcome } from "../../src/pi-adapter.js";
 import type { ResolvedExecutionProfile } from "../../src/execution-profile.js";
@@ -15,6 +15,7 @@ export interface TurnRef { sessionId: string; turnId: string; }
 interface BridgeBase { seq: number; at: string; instanceId: string; }
 export type BridgeEvent = BridgeBase & (
   | { kind: "turn_terminal"; sessionId: string; turnId: string; state: TurnTerminalState; via: "bridge" | "close" }
+  | { kind: "turn_unobserved"; sessionId: string; turnId: string; via: "close" } // close removed the turn before its terminal state could be read
   | { kind: "question_opened"; requestId: string; sessionId: string; turnId: string; recipient: QuestionRecipient; questionKind: QuestionKind; deadlineAt: string }
   | { kind: "question_resolved"; requestId: string; sessionId: string; turnId: string; state: QuestionResolvedState }
   | { kind: "instance_ended"; reason: InstanceEndReason }
@@ -24,6 +25,7 @@ export type BridgeEventInput = DistributiveOmit<BridgeEvent, keyof BridgeBase>;
 export type BridgeListener = (event: BridgeEvent) => void;
 export const BRIDGE_EVENT_KEYS: Readonly<Record<BridgeEvent["kind"], readonly string[]>> = {
   turn_terminal: ["seq", "at", "instanceId", "kind", "sessionId", "turnId", "state", "via"],
+  turn_unobserved: ["seq", "at", "instanceId", "kind", "sessionId", "turnId", "via"],
   question_opened: ["seq", "at", "instanceId", "kind", "requestId", "sessionId", "turnId", "recipient", "questionKind", "deadlineAt"],
   question_resolved: ["seq", "at", "instanceId", "kind", "requestId", "sessionId", "turnId", "state"],
   instance_ended: ["seq", "at", "instanceId", "kind", "reason"],
@@ -48,12 +50,16 @@ export class EventBridge {
 const spoolName = (event: BridgeEvent): string => `${String(event.seq).padStart(8, "0")}-${event.kind}.json`;
 /** One file per event: temp file plus rename, so a reader never sees a partial event. Mode 0600, directory 0700. */
 export class SpoolSink {
+  /** Events that could not be written. A sink failure never reaches the emitter, so this is the only trace. */
+  failures = 0;
   constructor(readonly dir: string) { const fresh = !existsSync(dir); mkdirSync(dir, { recursive: true, mode: 0o700 }); if (fresh) chmodSync(dir, 0o700); }
   write(event: BridgeEvent): void {
     const name = spoolName(event), temp = join(this.dir, `.${name}.tmp`);
-    writeFileSync(temp, `${JSON.stringify(event)}\n`, { mode: 0o600, flag: "w" });
-    chmodSync(temp, 0o600);
-    renameSync(temp, join(this.dir, name));
+    try {
+      writeFileSync(temp, `${JSON.stringify(event)}\n`, { mode: 0o600, flag: "w" });
+      chmodSync(temp, 0o600);
+      renameSync(temp, join(this.dir, name));
+    } catch { this.failures += 1; try { rmSync(temp, { force: true }); } catch { /* best effort */ } }
   }
   attach(bridge: EventBridge): () => void { return bridge.subscribe((event) => this.write(event)); }
 }
@@ -70,21 +76,21 @@ const MAX_EMITTED_KEYS = 10_000;
 /** Wraps one adapter handle: every prompt/abort settlement pokes the registry, and the prompt learns its public ids. */
 class TapHandle implements PiSessionHandle {
   prompts = 0; sessionId: string | undefined; current: Deferred<TurnRef> | undefined;
-  /** Mapped adapter outcome of the latest prompt. Used only when close removed the turn before the read model could be read. */
-  lastOutcome: TurnTerminalState | undefined;
+  /** True once the latest prompt or an abort on this handle settled. Never a state source; it only tells whether any terminal path other than close was seen. */
+  settled = false;
   constructor(readonly inner: PiSessionHandle, private readonly hooks: { settled(): void; aborting(): void }) {}
   get sdkSessionId(): string { return this.inner.sdkSessionId; }
   get appliedSelection(): PiAppliedSelection { return this.inner.appliedSelection; }
   prompt(text: string, preflight: (accepted: boolean) => void, onActivity?: () => void): Promise<PiTurnOutcome> {
-    this.prompts += 1; this.current = deferred<TurnRef>(); this.lastOutcome = undefined;
+    this.prompts += 1; this.current = deferred<TurnRef>(); this.settled = false;
     let operation: Promise<PiTurnOutcome>;
-    try { operation = Promise.resolve(this.inner.prompt(text, preflight, onActivity)); } catch (error) { this.lastOutcome = "failed"; this.hooks.settled(); throw error; }
+    try { operation = Promise.resolve(this.inner.prompt(text, preflight, onActivity)); } catch (error) { this.settled = true; this.hooks.settled(); throw error; }
     return operation.then(
-      (outcome) => { this.lastOutcome = outcome.status; this.hooks.settled(); return outcome; },
-      (error: unknown) => { this.lastOutcome = "failed"; this.hooks.settled(); throw error; },
+      (outcome) => { this.settled = true; this.hooks.settled(); return outcome; },
+      (error: unknown) => { this.settled = true; this.hooks.settled(); throw error; },
     );
   }
-  async abort(): Promise<void> { this.hooks.aborting(); try { await this.inner.abort(); } finally { this.hooks.settled(); } }
+  async abort(): Promise<void> { this.hooks.aborting(); try { await this.inner.abort(); } finally { this.settled = true; this.hooks.settled(); } }
   dispose(): void | Promise<void> { return this.inner.dispose(); }
 }
 class TapAdapter implements PiSessionAdapter {
@@ -148,17 +154,31 @@ export class BridgedRegistry extends SessionRegistry {
     const open = [...this.tracked.values()].filter((ref) => ref.sessionId === id);
     this.closing.set(id, (this.closing.get(id) ?? 0) + 1);
     let view: SessionView;
-    try { view = await super.close(id); } finally { const n = (this.closing.get(id) ?? 1) - 1; if (n > 0) this.closing.set(id, n); else this.closing.delete(id); }
-    const fallback = this.taps.get(id)?.lastOutcome ?? "aborted";
-    for (const ref of open) this.emitTerminal(ref, fallback, "close");
+    try {
+      const closed = super.close(id);
+      // Runs during close's abort-cleanup wait, while the registry has already marked the turn aborted but not yet removed it.
+      // The synchronous `aborting` reconcile covers a fresh abort; this one covers an abort that was already pending.
+      setImmediate(() => this.reconcile());
+      view = await closed;
+    } finally { const n = (this.closing.get(id) ?? 1) - 1; if (n > 0) this.closing.set(id, n); else this.closing.delete(id); }
+    // The turn data is gone. Never invent a state: with no other terminal path observed, close itself was the only one left.
+    const tap = this.taps.get(id);
+    for (const ref of open) {
+      if (this.emitted.has(refKey(ref))) continue;
+      if (tap && !tap.settled) this.emitTerminal(ref, "aborted", "close"); else this.emitUnobserved(ref);
+    }
     this.taps.delete(id);
     return view;
   }
-  override async shutdown(): Promise<void> {
-    try { await super.shutdown(); } finally { this.endInstance("server_exit"); }
+  /** Emits `instance_ended` once, after every close that shutdown triggered, so it is the last event of the instance. */
+  override async shutdown(reason: InstanceEndReason = "server_exit"): Promise<void> {
+    try { await super.shutdown(); } finally { this.endInstance(reason); }
   }
-  /** Marks the end of this instance's lifetime once, e.g. `eof` when the controller connection ended. */
-  endInstance(reason: "closed" | "eof" | "server_exit"): void { if (this.ended) return; this.ended = true; this.bridge.emit({ kind: "instance_ended", reason }); }
+  /** Marks the end of this instance's lifetime once, e.g. `eof`. Readable terminal states go out first; later turn events are dropped. */
+  endInstance(reason: InstanceEndReason): void {
+    if (this.ended) return;
+    this.reconcile(); this.ended = true; this.bridge.emit({ kind: "instance_ended", reason });
+  }
   /** Public entry for a periodic supervisor (evaluation only): runs one reconciliation pass now. */
   reconcileNow(): void { this.reconcile(); }
   private schedule(): void {
@@ -174,10 +194,17 @@ export class BridgedRegistry extends SessionRegistry {
     }
   }
   private emitTerminal(ref: TurnRef, state: TurnTerminalState, via: "bridge" | "close"): void {
+    if (this.markEmitted(ref)) this.bridge.emit({ kind: "turn_terminal", sessionId: ref.sessionId, turnId: ref.turnId, state, via });
+  }
+  private emitUnobserved(ref: TurnRef): void {
+    if (this.markEmitted(ref)) this.bridge.emit({ kind: "turn_unobserved", sessionId: ref.sessionId, turnId: ref.turnId, via: "close" });
+  }
+  /** True if this turn may be reported now: not reported before and the instance has not ended. */
+  private markEmitted(ref: TurnRef): boolean {
     const key = refKey(ref);
-    if (this.emitted.has(key)) return;
+    if (this.emitted.has(key) || this.ended) return false;
     this.emitted.add(key); this.tracked.delete(key);
     while (this.emitted.size > MAX_EMITTED_KEYS) this.emitted.delete(this.emitted.values().next().value!);
-    this.bridge.emit({ kind: "turn_terminal", sessionId: ref.sessionId, turnId: ref.turnId, state, via });
+    return true;
   }
 }

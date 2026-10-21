@@ -251,7 +251,7 @@ async function runClaudeScenario(sc: Scenario, version: string): Promise<{ row: 
     const tools = ["pi_session_start", "pi_session_prompt", "pi_turn_get", "pi_session_close", "pi_session_get", "pi_session_list", "pi_session_abort", "pi_capabilities_get", "eval_question_get", "eval_question_answer"].map((t) => `${PFX}${t}`);
     const waiterHook: Record<string, unknown> = { type: "command", command: `${process.execPath} ${join(buildDir, "hook-waiter.js")}`, timeout: sc.hookTimeoutS, ...(sc.hook === "asyncRewake" ? { asyncRewake: true } : { async: true }) };
     await writeFile(settingsFile, JSON.stringify({ hooks: { PostToolUse: [
-      { matcher: `${PFX}pi_session_prompt|${PFX}eval_question_answer`, hooks: [waiterHook] },
+      { matcher: `${PFX}pi_session_prompt|${PFX}pi_turn_get|${PFX}eval_question_answer`, hooks: [waiterHook] },
       { matcher: `${PFX}pi_.*`, hooks: [{ type: "command", command: `${process.execPath} ${join(buildDir, "hook-ledger.js")}`, timeout: 20 }] },
     ] } }), { mode: 0o600 });
 

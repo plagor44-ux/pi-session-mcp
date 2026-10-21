@@ -18,18 +18,21 @@ reached.**
 
 ## Verdict
 
-**A lean event bridge from the existing SDK completion, with a targeted Claude
-Code integration, is technically viable (L3) and justified for long worker
-turns and for worker questions. It is not yet justified as product work.** It
+**The current procedure stays.** That means the controller skill's internal
+ledger with consume-once and the #86 cadence. **A lean event bridge from the
+existing SDK completion, with a targeted Claude Code integration, is
+technically viable at the client level (L3).** Whether it is justified as
+product work stays conditional, as the pre-registration requires without L4. It
 needs an approved L4 measurement and its own decision record (proposed as
-[ADR 0011](../../adr/0011-turn-events-and-controller-wake.md)). Until then **the
-current procedure stays**: the controller skill's internal ledger with
-consume-once and the #86 cadence.
+[ADR 0011](../../adr/0011-turn-events-and-controller-wake.md)). The expected
+benefit grows with worker turn length and with worker questions. That is a
+model-based expectation, not a measurement.
 
 - **File ledger:** not recommended as a product feature. It helps a human
   overview and context continuity after compaction. It does nothing for tokens
-  or notification. A hook can keep it current without the model (L3); that is a
-  development aid, not a monitor.
+  or notification. A hook can keep it current without the model (L2: a
+  host-side write during real client runs); that is a development aid, not a
+  monitor.
 - **Deterministic supervisor:** not recommended. The registry already has
   exactly one terminal transition. Periodic reading adds latency and a second
   trigger, and still needs the same delivery path to reach the controller.
@@ -53,8 +56,9 @@ and L1, order observed on the faux provider:
 `agent_end(willRetry=true) > auto_retry_start > … > agent_end(willRetry=false) > agent_settled > prompt resolved`).
 Extension UI dialogs return their no-op defaults. A worker cannot ask a
 question that waits for an answer. Separate client processes have separate
-registries (L1 in process; L3-adjacent X6 with two real stdio server processes:
-the second returns `unknown_session` and an empty list).
+registries (L1 in process, and X6 with two real stdio server processes
+driven by the MCP SDK client: the second returns `unknown_session` and an empty
+list).
 
 ## Answers
 
@@ -103,24 +107,33 @@ runtime state; only `controller` events may accept or reject (L1).
 
 A second stdio client gets its own empty registry (L1, X6). A supervisor
 therefore has to live in the owning server. There it is a timer around the same
-registry, which the bridge already covers without polling.
+registry. The bridge covers the same ground without polling the registry.
 
-### 4.4 Controller resume without polling (Claude Code 2.1.303, L2/L3)
+Polling does not disappear entirely; it moves out of the model. The
+host-side waiter is a model-free local poller: one sleeping process per armed
+turn, with `fs.watch` on the spool directories plus a full directory scan every
+200 ms. In the probe the watch path delivered (16–34 ms). The 200 ms scan alone
+was not measured. The cost is one process and a few inotify watches per waiting
+turn, and no model request.
+
+### 4.4 Controller resume without model polling (Claude Code 2.1.303, L2/L3)
 
 Probe on a loopback fake Messages API with a dummy key, inside a fresh user and
-network namespace, three attempts preserved ([`probe/`](probe/)). Attempt 1 had
+network namespace, four attempts preserved ([`probe/`](probe/)). Attempt 1 had
 harness defects (wake parsing, missing waiter signal log). Attempts 2 and 3
-produced the same results.
+produced the same results on the frozen review head. Attempt 4 ran after the
+review fixes: same outcomes, and in S8 the close-generated `turn_terminal` now
+comes before `instance_ended`.
 
 | Scenario (attempt 3) | Result |
 | --- | --- |
-| S1 completion, idle stream-json session | one wake (own model request) **16 ms** after the bridge event; one terminal read; **0 running polls** |
+| S1 completion, idle stream-json session | one wake (own model request) **16 ms** after the bridge event; one terminal read; 0 running polls (by construction: the scripted model never polls) |
 | S2 two concurrent turns | two wakes in completion order, each matched to its turn (16, 17 ms); no missing or duplicate wake |
-| S3 controller question round trip | question wake (17 ms) → `eval_question_get` → `eval_question_answer` → worker continued → terminal wake (34 ms) → one read; the answer digest reached the worker's final text |
+| S3 controller question round trip | question wake (17 ms) → `eval_question_get` → `eval_question_answer` → the scripted worker's waiting ask continued → terminal wake (34 ms) → one read; the answer digest reached the worker's final text. The worker is the scripted adapter; continuation of a real Pi tool call is L1 (faux provider) only |
 | S4 control with plain `async: true` | hook exited 2, **no wake** |
-| S5 one-shot `-p "<prompt>"` | **the client held the next model request until the hook ended (8.4 s)** and delivered the wake text with the tool result; then exited; no leftover |
-| S6 hook timeout 4 s, worker 15 s | client killed the waiter at 4 s (exit 143); no wake; no leftover |
-| S8 stream-json, stdin closed after one message | client exited after about 0.4 s; the hook was dropped; the server closed the running turn as aborted; no wake |
+| S5 one-shot `-p "<prompt>"` | **pre-registered expectation not met** (attempts 2 and 3): the client held the next model request until the hook ended (8.4 s) and delivered the wake text with the tool result, then exited; no leftover |
+| S6 hook timeout 4 s, worker 15 s | client killed the waiter at 4 s (exit 143); the completion 11 s later woke nobody; no leftover |
+| S8 stream-json, stdin closed after one message | client exited after about 0.4 s; the server closed the running turn as aborted; the waiter claimed that close-generated event and exited 2 before the client exited, but no model request followed (no wake at L3); no leftover |
 | X6 two server processes, same aliases | no shared registry |
 
 Every run: no leftover hook or server process, temporary root removed, no path
@@ -139,8 +152,10 @@ Codex has no documented wake path (L0).
 
 #91 stands: 1–3 running polls per turn on the Codex route, no consistent uncached
 difference. That A/B did not compare push, rewake, a supervisor or a ledger.
-The rewake removes running polls entirely (L3: 0 in S1–S3) and adds one wake
-request per event. A model-based expectation from the skill cadence (not a
+The rewake makes running polls unnecessary for delivery: in S1–S3 the turn
+end and the question reached an idle client without any poll. Those runs show
+0 polls only because the scripted model never polls. Whether a real model stops
+polling is the L4 question. Each event costs one wake request. A model-based expectation from the skill cadence (not a
 measurement): for a turn of `T` seconds the skill gives `ceil((T − 10) / c)`
 running polls for `T > 10 s`, with `c` = 15–30 s. That is 1–3 for the M1 cases
 (about 50–100 s), so C saves at most about two model requests per turn there. A
@@ -154,8 +169,11 @@ This expectation is the reason L4 is needed before any product decision.
 the registry read model (L1, 22 bridge tests: concurrent turns, follow-ups,
 duplicates, late settlements, `abort_timeout` with a later outcome, close,
 shutdown, many activity callbacks with no early event). `agent_settled` is not
-used as a second source. One narrow exception is documented in the design: a
-terminal transition that races a queued `close`. A side check against the real
+used as a second source. The independent review found that the first version
+filled a `close` race from the adapter outcome and could report `completed`
+for a turn the registry had aborted after `abort_timeout`. The bridge now
+reports only read-model states, or `turn_unobserved` when close removed the
+turn first (see *Independent review*). A side check against the real
 `SdkPiSessionAdapter` (scratch test, not committed) found that an abort during a
 running tool ends the SDK run with `stopReason: "error"`, yet the public turn is
 `aborted` in 60 of 60 runs per variant. The abort path completes first by
@@ -183,13 +201,21 @@ claims the event exactly once → exit 2 → client starts a new model request
 (L3) → `eval_question_answer` → broker → waiting tool call continues → final
 wake → one terminal read (S3). The real-model edge is untested.
 
+A waiter exists only while a hook armed it. It is armed after
+`pi_session_prompt`, after `eval_question_answer`, and (after the review) after
+a `pi_turn_get` that shows a running turn. These gaps remain. The client kills
+the waiter at its hook `timeout` (S6), so the timeout must cover the task
+budget. A failed MCP call is likely routed to `PostToolUseFailure`, which is not
+armed or tested. A controller that ends its turn without an armed waiter is
+never woken.
+
 ## Comparison matrix
 
 | | A current | B hook ledger | C bridge + rewake | D supervisor |
 | --- | --- | --- | --- | --- |
 | Overview and context continuity | context only | `run.json`/`task.md` survive compaction | same as A, plus B if wanted | none |
 | LLM in status checks | every poll | every poll | none for running turns | none |
-| Real notification and resume | none | none | L3 yes (stream-json); `-p` blocks | needs C's delivery |
+| Real notification and resume | none | none | client wake L3 (stream-json; `-p` blocks); real model L4 open | needs C's delivery |
 | State and connection owner | server | server; ledger by hook | server; spool per instance | must be the same server |
 | Restart and cleanup | IDs become history | ledger marks unresolved | `instance_ended`; waiter ends at budget, parent loss or claim loss | as C |
 | Client dependency | none | Claude Code hooks (Codex has hooks too) | Claude Code `asyncRewake`; not Codex | as C |
@@ -199,7 +225,7 @@ wake → one terminal read (S3). The real-model edge is untested.
 
 ## Prototype
 
-`eval/bridge/` (about 2,050 lines) with 75 provider-free tests in four files.
+`eval/bridge/` (about 2,130 lines) with 91 provider-free tests in five files.
 Not in the runtime path or the npm package. No `src/` change.
 
 - `ledger.ts`, `ledger-store.ts`, `ledger-cli.ts`: reducer, locked store,
@@ -215,8 +241,57 @@ Not in the runtime path or the npm package. No `src/` change.
 - `hook-ledger.ts`: PostToolUse ledger projection, storing result hashes only.
 - `claude-probe.ts`, `cli.ts`: the L3 probe.
 
-Tests: `bridge-ledger` 25, `bridge-events` 22, `bridge-sdk-faux` 3,
-`bridge-hooks` 25.
+Tests after the review fixes: 91 in `bridge-ledger`, `bridge-ledger-lock`,
+`bridge-events`, `bridge-sdk-faux` and `bridge-hooks`.
+
+Ledger limits that are deliberate:
+
+- `abort_unconfirmed` is not sticky. After `abort_timeout` the turn may still
+  finish normally, so a later `completed` from the read model is recorded.
+- `decision` after `instance_ended` is allowed only for a result that was
+  consumed (hash recorded) while connected.
+- A lock left by a killed writer is never broken automatically. The ledger hook
+  waits at most 1 s for it and skips. `run.json` and `task.md` are separate
+  renames, so a crash between them leaves a stale view until the next write.
+
+## Independent review
+
+Two independent reviews of the frozen head `1289137`:
+
+- a Claude reviewer (Opus 5.5) with test runs and reproductions;
+- a read-only Pi worker on `review-grok` (xAI Grok 4.7, another model family).
+  It ran 15 minutes; the controller needed 6 running polls and one terminal
+  read for that one turn. That is an anecdote for arm A, not a measurement.
+
+Both found the same defect: after `abort_timeout`, `close` could report
+`completed` for a turn the registry had aborted, a hidden second status source.
+It is fixed by `turn_unobserved` and has a regression test. Confirmed and
+fixed:
+
+- `instance_ended` was emitted before the close terminals at shutdown.
+- Re-arm gaps: an answer error carried no IDs, and nothing re-armed after a
+  running `pi_turn_get`.
+- A claimed but undelivered wake stayed claimed when the client killed the
+  hook.
+- A lock was left behind when the pid write failed.
+- Spool write failures were uncounted.
+- A non-`EEXIST` claim error was unhandled.
+- An empty budget was read as zero.
+- A question was not re-checked before its wake.
+
+Documentation was corrected in these places:
+
+- the S5 expectation is stated as not met;
+- S8 is described correctly;
+- the 200 ms local scan is disclosed;
+- "0 polls" is stated as true by construction;
+- the verdict is made conditional per the pre-registration;
+- the evidence levels of S3 and the ledger hook are fixed.
+
+Open and accepted as limits: overlapping waiters of one turn can both send a
+budget wake; a hook killed between claim and exit can still lose a terminal
+wake that a sibling waiter already gave up on; `PostToolUseFailure` routing is
+untested.
 
 ## Not measured, not tested, unknown
 

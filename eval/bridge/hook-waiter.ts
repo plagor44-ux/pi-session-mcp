@@ -1,4 +1,4 @@
-import { appendFileSync, closeSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, watch, type FSWatcher } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BridgeEvent } from "./bridge.js";
@@ -9,11 +9,13 @@ export type BudgetPolicy = "wake" | "silent";
 export interface HookTarget { sessionId: string; turnId: string }
 export interface ParsedHook { toolName: string; target: HookTarget | undefined }
 export type WakeReason = "terminal" | "question" | "budget";
-export type SilentReason = "budget_silent" | "parent_gone" | "turn_done" | "no_turn";
-export type WaitResult = { action: "wake"; reason: WakeReason; message: string; event?: BridgeEvent } | { action: "silent"; reason: SilentReason };
+export type SilentReason = "budget_silent" | "parent_gone" | "turn_done" | "no_turn" | "turn_unobserved" | "claim_error";
+export type WaitResult = { action: "wake"; reason: WakeReason; message: string; event?: BridgeEvent } | { action: "silent"; reason: SilentReason; code?: string };
 export interface WaitOptions {
   spoolBase: string; sessionId: string; turnId: string; budgetMs: number; onBudget: BudgetPolicy;
   pollMs?: number; parentCheckMs?: number; isParentAlive?: () => boolean; now?: () => number; signal?: AbortSignal;
+  /** Test seam: runs right before a question claim, after the spool was read. */
+  beforeClaim?: () => void;
 }
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/;
@@ -37,7 +39,7 @@ export function payloadsOf(response: unknown): Record<string, unknown>[] {
   return out;
 }
 
-/** Pure: finds the (session, turn) a hook input refers to. `pi_session_prompt`: session.id + turn.turnId; `eval_question_answer`: sessionId + turnId. */
+/** Pure: finds the (session, turn) a hook input refers to. `pi_session_prompt`: session.id + turn.turnId; `pi_turn_get`: a turn that is still `running`; `eval_question_answer`: sessionId + turnId. */
 export function parseHookInput(text: string): ParsedHook {
   let input: unknown;
   try { input = JSON.parse(text); } catch { return { toolName: "", target: undefined }; }
@@ -50,6 +52,12 @@ export function parseHookInput(text: string): ParsedHook {
       const turn = isObject(payload.turn) ? payload.turn : undefined, session = isObject(payload.session) ? payload.session : undefined;
       const turnId = safeId(turn?.turnId), sessionId = safeId(session?.id) ?? safeId(turn?.sessionId);
       if (turnId && sessionId) { target = { sessionId, turnId }; break; }
+    }
+  } else if (toolName.endsWith("pi_turn_get")) {
+    for (const payload of payloads) {
+      const turn = isObject(payload.turn) ? payload.turn : undefined;
+      const turnId = safeId(turn?.turnId), sessionId = safeId(turn?.sessionId);
+      if (turn?.state === "running" && turnId && sessionId) { target = { sessionId, turnId }; break; }
     }
   } else if (toolName.endsWith("eval_question_answer")) {
     for (const payload of payloads) {
@@ -92,14 +100,28 @@ export function readSpoolEvents(base: string, cache: Map<string, BridgeEvent | n
 export function claimCount(base: string): number {
   try { return readdirSync(join(base, "claims")).length; } catch { return 0; }
 }
+/** The claim this process holds until its wake is delivered by exit 2; released if the client kills the hook first. */
+let heldClaim: string | undefined;
+export function releaseHeldClaim(): void {
+  if (heldClaim === undefined) return;
+  try { unlinkSync(heldClaim); } catch { /* already gone */ }
+  heldClaim = undefined;
+}
 /** Exactly one waiter wins an event: exclusive create of the claim file. */
 export function tryClaim(base: string, event: BridgeEvent): boolean {
-  const dir = join(base, "claims");
+  const dir = join(base, "claims"), path = join(dir, `${event.instanceId}-${event.seq}`);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
-  try { closeSync(openSync(join(dir, `${event.instanceId}-${event.seq}`), "wx", 0o600)); return true; } catch (error) {
+  try { closeSync(openSync(path, "wx", 0o600)); heldClaim = path; return true; } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
     throw error;
   }
+}
+
+/** BRIDGE_WAIT_BUDGET_MS: anything but a positive finite number (empty, text, zero, negative) means the default. */
+export const DEFAULT_BUDGET_MS = 120_000;
+export function parseBudget(raw: string | undefined): number {
+  const value = raw === undefined || raw.trim() === "" ? Number.NaN : Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_BUDGET_MS;
 }
 
 const ofTurn = (event: BridgeEvent, sessionId: string, turnId: string): boolean => "turnId" in event && event.turnId === turnId && event.sessionId === sessionId;
@@ -117,6 +139,14 @@ export async function waitForEvent(options: WaitOptions): Promise<WaitResult> {
     try { const watcher = watch(dir, nudge); watcher.on("error", () => undefined); watchers.set(dir, watcher); } catch { /* polling is the fallback */ }
   };
   let nextParentCheck = now() + parentCheckMs;
+  let claimError: WaitResult = { action: "silent", reason: "claim_error" };
+  const claim = (event: BridgeEvent): boolean | "error" => {
+    try { return tryClaim(options.spoolBase, event); } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      claimError = { action: "silent", reason: "claim_error", ...(typeof code === "string" && /^[A-Z0-9_]{1,20}$/.test(code) ? { code } : {}) };
+      return "error";
+    }
+  };
   try {
     for (;;) {
       if (options.signal?.aborted) return { action: "silent", reason: "parent_gone" };
@@ -125,11 +155,19 @@ export async function waitForEvent(options: WaitOptions): Promise<WaitResult> {
       const resolved = new Set(events.flatMap((event) => (event.kind === "question_resolved" ? [event.requestId] : [])));
       for (const event of events) {
         if (event.kind === "turn_terminal") {
-          if (tryClaim(options.spoolBase, event)) return { action: "wake", reason: "terminal", message: formatWake(event), event };
+          const claimed = claim(event);
+          if (claimed === "error") return claimError;
+          if (claimed) return { action: "wake", reason: "terminal", message: formatWake(event), event };
           return { action: "silent", reason: "turn_done" }; // another waiter reported the final event of this turn
         }
+        if (event.kind === "turn_unobserved") return { action: "silent", reason: "turn_unobserved" }; // close removed the turn unread: nothing to wake for
         if (event.kind === "question_opened" && event.recipient === "controller" && !resolved.has(event.requestId)) {
-          if (tryClaim(options.spoolBase, event)) return { action: "wake", reason: "question", message: formatWake(event), event };
+          options.beforeClaim?.();
+          // The question may have been resolved since the spool was read; a wake for it would send the controller to a dead request.
+          if (readSpoolEvents(options.spoolBase, cache).some((e) => e.kind === "question_resolved" && e.requestId === event.requestId)) continue;
+          const claimed = claim(event);
+          if (claimed === "error") return claimError;
+          if (claimed) return { action: "wake", reason: "question", message: formatWake(event), event };
         }
       }
       const t = now();
@@ -176,18 +214,21 @@ function finish(code: number, reason: string, line?: string): void {
 }
 export async function main(): Promise<void> {
   // The client sends SIGTERM when the hook timeout expires; record that instead of vanishing silently.
-  process.once("SIGTERM", () => { logReason("sigterm", 143); process.exit(143); });
+  // A wake that was claimed but not yet delivered is released, so a later waiter of the same turn can still report it.
+  process.once("SIGTERM", () => { releaseHeldClaim(); logReason("sigterm", 143); process.exit(143); });
   const parentAlive = parentAliveCheck(); // records the original parent before anything else
-  const base = process.env.BRIDGE_SPOOL_BASE;
-  const budgetMs = Number(process.env.BRIDGE_WAIT_BUDGET_MS ?? 120_000), onBudget: BudgetPolicy = process.env.BRIDGE_ON_BUDGET === "silent" ? "silent" : "wake";
-  const parsed = parseHookInput(await readStdin());
-  if (!base || !parsed.target || !Number.isFinite(budgetMs)) return finish(0, "no_turn");
-  const result = await waitForEvent({ spoolBase: base, sessionId: parsed.target.sessionId, turnId: parsed.target.turnId, budgetMs, onBudget, isParentAlive: parentAlive });
-  if (result.action === "wake") return finish(2, `wake_${result.reason}`, result.message);
-  return finish(0, result.reason);
+  try {
+    const base = process.env.BRIDGE_SPOOL_BASE;
+    const budgetMs = parseBudget(process.env.BRIDGE_WAIT_BUDGET_MS), onBudget: BudgetPolicy = process.env.BRIDGE_ON_BUDGET === "silent" ? "silent" : "wake";
+    const parsed = parseHookInput(await readStdin());
+    if (!base || !parsed.target) return finish(0, "no_turn");
+    const result = await waitForEvent({ spoolBase: base, sessionId: parsed.target.sessionId, turnId: parsed.target.turnId, budgetMs, onBudget, isParentAlive: parentAlive });
+    if (result.action === "wake") return finish(2, `wake_${result.reason}`, result.message);
+    return finish(0, result.code ? `${result.reason}:${result.code}` : result.reason);
+  } catch { return finish(0, "internal_error"); } // a hook must never print a stack trace or fail the host
 }
 
 function isEntryPoint(argvPath: string): boolean {
   try { return realpathSync(argvPath) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
 }
-if (process.argv[1] && isEntryPoint(process.argv[1])) await main();
+if (process.argv[1] && isEntryPoint(process.argv[1])) await main().catch(() => process.exit(0));

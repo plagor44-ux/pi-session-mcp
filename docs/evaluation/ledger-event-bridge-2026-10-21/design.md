@@ -109,12 +109,13 @@ once per `(instanceId, sessionId, turnId)` when the read model is terminal.
 `close` captures the running turn first and emits it as `aborted` via `close`,
 because close removes turn data. `shutdown` emits `instance_ended`.
 
-One narrow exception to "read model only": when a turn became terminal while
-`close` was already queued, `close` can delete the turn data before the
-scheduled reconciliation reads it. The bridge then reports the outcome of the
-same adapter promise the registry consumed for that transition (recorded by
-the adapter wrapper). A turn that close itself aborts is reported from the read
-model during close, before the data is deleted.
+`close` can delete turn data before a scheduled reconciliation reads it. The
+bridge never fills that gap from adapter outcomes. If no settlement at all was
+seen for the prompt, close was the only remaining terminal path, so the turn is
+reported as `aborted` via `close`. Otherwise the bridge emits `turn_unobserved`:
+close removed the turn before its terminal state could be read. (Amended after
+the independent review: the first version reported the adapter outcome here and
+could contradict the registry after an `abort_timeout`.)
 
 Bridge events contain only IDs, states, timestamps and codes. Sinks: an in-memory
 subscriber and a spool directory writer (one file per event, written atomically,

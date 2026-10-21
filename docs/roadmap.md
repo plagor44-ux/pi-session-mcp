@@ -107,9 +107,10 @@ contract.
 
 - Done: inventory of controller ledger, SDK completion semantics, client wake
   paths and OMO Boulder; a provider-free prototype under `eval/bridge/` (ledger,
-  completion bridge, question broker, Claude Code `asyncRewake` adapter) with 75
-  tests; a client-level probe on Claude Code 2.1.303 (idle stream-json session
-  woken once per event, question round trip, controls; three attempts kept).
+  completion bridge, question broker, Claude Code `asyncRewake` adapter) with 91
+  tests; a client-level probe on Claude Code 2.1.303 with a scripted model
+  (idle stream-json session woken once per event, question round trip,
+  controls; four attempts kept); two independent reviews, findings fixed.
 - Verdict: the current procedure stays. A lean completion bridge with Claude
   Code rewake is technically viable and is proposed in
   [ADR 0011](adr/0011-turn-events-and-controller-wake.md) (Proposed). A file
