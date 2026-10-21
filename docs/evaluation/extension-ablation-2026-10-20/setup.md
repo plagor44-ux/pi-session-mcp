@@ -1,7 +1,8 @@
 # Extension ablation setup and dry load — 2026-10-21
 
 This record covers plan Task 9 Step 3: it records the results of Steps 1 and 2,
-the extension template install and the provider-free dry load. No model turn, provider call or spend took place.
+the extension template install and the provider-free dry load. No model turn,
+provider call or spend took place.
 `$EVAL` stands for `~/.cache/pi-session-mcp/extension-ablation/2026-10-21`; the
 template and the dry-load output live there and are not tracked.
 
