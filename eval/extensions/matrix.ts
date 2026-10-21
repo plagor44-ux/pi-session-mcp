@@ -15,7 +15,8 @@ export const PAIRINGS: readonly Pairing[] = [
 
 const MIN_TASKS_PER_PAIRING = 3;
 
-function taskKind(profile: ProfileId): TaskSpec["kind"] {
+/** The kind of task a profile is paired with: review profiles take review tasks, the others implementation tasks. */
+export function taskKind(profile: ProfileId): TaskSpec["kind"] {
   return profile === "review" || profile === "review-grok" ? "review" : "implementation";
 }
 

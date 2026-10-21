@@ -2435,9 +2435,12 @@ describe("end to end: wave output into the evidence (item 14)", () => {
     const pairingResult = summary.pairings.find((p) => p.id === "pl-review")!;
     expect(pairingResult).toMatchObject({ complete: true });
     expect(pairingResult.tasks).toHaveLength(3);
-    // R78: the review scores of the real records reach the summary (the counts are zero here: every review matched and hit no false finding).
-    expect(pairingResult.a).toMatchObject({ scored: 3, falseFindingRuns: 0, verdictMissed: 0 });
-    expect(pairingResult.b).toMatchObject({ scored: 3, falseFindingRuns: 0, verdictMissed: 0 });
+    // R78/R83: the review scores of the real records reach the summary as description; a review pairing has no recommendation.
+    expect(pairingResult).toMatchObject({ kind: "review", recommendation: "descriptive" });
+    for (const arm of [pairingResult.a, pairingResult.b]) {
+      expect(arm).toMatchObject({ scored: 3, reviewScored: 3, verdictMatched: 3, criticalHitSum: 3, criticalTotalSum: 3, falseFindingRuns: 0, oracleAccepted: 3 });
+      expect(arm).not.toHaveProperty("accepted");
+    }
     expect(summary.spentUsd).toBeCloseTo(0.36);
     expect(summary.stopReason).toBeNull();
     for (const file of await findFiles(evidenceDir, /./)) {
@@ -2583,7 +2586,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     expect((await readdir(join(f.root, "evidence", "approvals"))).sort()).toEqual(["approval-1.json", "approval-2.json"]);
     expect(summary.pairings.find((p) => p.id === "pl-review-grok")).toMatchObject({ complete: true, tasks: ["R1", "R2", "R3"] });
     expect(summary.pairings.find((p) => p.id === "pl-review")).toMatchObject({ complete: true, tasks: ["R1", "R2", "R3"] });
-    expect(summary.pairings.find((p) => p.id === "co-review")).toMatchObject({ recommendation: "not-run" });
+    expect(summary.pairings.find((p) => p.id === "co-review")).toMatchObject({ kind: "review", recommendation: "descriptive", tasks: [] });
     // Wave 1 alone is reported with only its own spend.
     expect(summary.waveSpend.observedUsd).toBeCloseTo(1 + 10 * 0.05);
     expect(summary.budgetSpend.observedUsd).toBeCloseTo(1 + 10 * 0.05);

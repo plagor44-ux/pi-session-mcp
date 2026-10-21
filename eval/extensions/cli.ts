@@ -284,7 +284,8 @@ async function wave(parsed: ParsedArgs): Promise<void> {
   }));
   write({
     stopReason: result.stopReason, paused: result.paused, spentUsd: result.spentUsd, runs: result.records.length,
-    scored: result.records.filter((r) => r.outcome === "scored").length, accepted: result.records.filter((r) => r.accepted === true).length,
+    // Review acceptance is descriptive only (R83): only implementation runs are counted as accepted here.
+    scored: result.records.filter((r) => r.outcome === "scored").length, implementationAccepted: result.records.filter((r) => r.implementation?.accepted === true).length,
   });
   if (result.stopReason !== null) process.exitCode = 1;
 }

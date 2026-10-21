@@ -69,6 +69,54 @@ describe("summarize", () => {
     expect(result([...pair("t1", true, true), ...pair("t2", true, true), ...pair("t3", true, true)]).a).toMatchObject({ falseFindingRuns: 0, verdictMissed: 0 });
   });
 
+  describe("review pairings are descriptive (R83)", () => {
+    const reviewPairing = PAIRINGS.find((p) => p.id === "pl-review")!;
+    const score = (criticalHit: number, criticalTotal: number, recall: number, verdictMatched: boolean, falseFindings: string[] = [], accepted = verdictMatched && criticalHit === criticalTotal) =>
+      ({ falseFindings, verdictMatched, criticalHit, criticalTotal, recall, accepted });
+    const reviewRun = (taskId: string, arm: "A" | "pi-lens", review: SummaryRecord["review"] | undefined, cost = 0.1): SummaryRecord =>
+      ({ ...record(taskId, arm, review?.accepted ?? false, { review }, cost), profile: "review", pairings: [reviewPairing.id], runId: `${String(counter).padStart(3, "0")}-${taskId}-review-${arm}` });
+    const reviewResult = (records: SummaryRecord[]) => summarize(records).pairings.find((p) => p.id === reviewPairing.id)!;
+
+    it("never yields a recommendation, whatever the oracle accepted, and reports the numbers per arm", () => {
+      const records = [
+        reviewRun("r1", "A", score(1, 2, 0.5, true)), reviewRun("r1", "pi-lens", score(2, 2, 1, true, ["x1"])),
+        reviewRun("r2", "A", score(2, 2, 1, false)), reviewRun("r2", "pi-lens", score(2, 2, 1, true)),
+        reviewRun("r3", "A", undefined), reviewRun("r3", "pi-lens", score(0, 1, 0, false, ["x1", "x2"])),
+      ];
+      const found = reviewResult(records);
+      expect(found).toMatchObject({ kind: "review", recommendation: "descriptive", complete: true, tasks: ["r1", "r2", "r3"] });
+      expect(found.a).toEqual({
+        costUsd: expect.closeTo(0.3), scored: 3, unexpectedConnects: 0, reviewScored: 2, criticalHitSum: 3, criticalTotalSum: 4, criticalHitMean: expect.closeTo(0.75),
+        verdictMatched: 1, recallMean: expect.closeTo(0.75), falseFindingRuns: 0, oracleAccepted: 0,
+      });
+      expect(found.b).toEqual({
+        costUsd: expect.closeTo(0.3), scored: 3, unexpectedConnects: 0, reviewScored: 3, criticalHitSum: 4, criticalTotalSum: 5, criticalHitMean: expect.closeTo(2 / 3),
+        verdictMatched: 2, recallMean: expect.closeTo(2 / 3), falseFindingRuns: 2, oracleAccepted: 2,
+      });
+      // The acceptance of the oracle is a number in the description, not an `accepted` total.
+      expect(found.a).not.toHaveProperty("accepted");
+      expect(found.b).not.toHaveProperty("accepted");
+    });
+
+    it("is descriptive when arm B wins, loses or ties, and with no or few paired tasks", () => {
+      const win = [...["r1", "r2", "r3"].flatMap((id) => [reviewRun(id, "A", score(0, 1, 0, false)), reviewRun(id, "pi-lens", score(1, 1, 1, true))])];
+      const loss = [...["r1", "r2", "r3"].flatMap((id) => [reviewRun(id, "A", score(1, 1, 1, true)), reviewRun(id, "pi-lens", score(0, 1, 0, false))])];
+      expect(reviewResult(win)).toMatchObject({ recommendation: "descriptive", complete: true });
+      expect(reviewResult(loss)).toMatchObject({ recommendation: "descriptive", complete: true });
+      expect(reviewResult([reviewRun("r1", "A", score(1, 1, 1, true)), reviewRun("r1", "pi-lens", score(1, 1, 1, true))])).toMatchObject({ recommendation: "descriptive", complete: false });
+      expect(reviewResult([])).toMatchObject({ recommendation: "descriptive", complete: false, tasks: [] });
+      expect(reviewResult([]).a).toMatchObject({ reviewScored: 0, criticalHitMean: 0, recallMean: 0 });
+    });
+
+    it("leaves implementation pairings with their recommendation and totals", () => {
+      const found = result([...pair("t1", false, true), ...pair("t2", true, true), ...pair("t3", true, true)]);
+      expect(found).toMatchObject({ kind: "implementation", recommendation: "enable", complete: true });
+      expect(found.a).toHaveProperty("accepted", 2);
+      const everyReview = summarize([]).pairings.filter((p) => p.kind === "review").map((p) => p.id);
+      expect(everyReview).toEqual(["pl-review-grok", "pl-review", "co-review"]);
+    });
+  });
+
   it("marks a pairing with fewer than three paired tasks inconclusive", () => {
     const found = result([...pair("t1", false, true), ...pair("t2", true, true)]);
     expect(found).toMatchObject({ tasks: ["t1", "t2"], complete: false, recommendation: "inconclusive" });
