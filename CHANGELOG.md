@@ -58,7 +58,8 @@ Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
   events strictly, bounds its scans and follows no link, and its claims live
   outside every writer mount. The mount gives the worker no other host access.
   See the [threat model](docs/threat-model.md).
-- Limits: Claude Code only, in interactive or stream-json sessions (one-shot
+- Limits: Linux only (on other platforms the hook exits without a wake and the
+  controller polls); Claude Code only, in interactive or stream-json sessions (one-shot
   `claude -p` blocks until the hook ends); Codex keeps polling. Claude Code may
   need a restart or a `/hooks` review to load a new hook, and managed settings
   can disable hooks. The setup hook path must be free of shell metacharacters

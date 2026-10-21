@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { claimsRoot, eventsRoot, serializeTurnEvent, turnEventFileName, writerEventsDir, TURN_EVENT_MAX_BYTES, type TurnEvent } from "../src/turn-events.js";
 import {
   CLAIM_MAX_AGE_MS, DEFAULT_BUDGET_MS, cleanupOldClaims, formatBudgetWake, formatTerminalWake, newSpoolCache, parseBudgetArgs, parseHookInput,
-  payloadCandidates, releaseClaim, scanTurnEvents, tryClaim, waitForTurn, claimKey, CACHE_MAX_ENTRIES, SCAN_MAX_INSTANCE_DIRECTORIES, acquireWaiterLock, releaseWaiterLock, waiterLockName, NO_SPOOL_GRACE_MS, CAPPED_SCAN_GAP_MS, SCAN_MAX_ENTRIES_PER_SCAN, SCAN_MAX_BYTES_PER_SCAN, isNoSpace, type WaitResult, type WakeNamespace,
+  payloadCandidates, releaseClaim, scanTurnEvents, tryClaim, waitForTurn, claimKey, CACHE_MAX_ENTRIES, SCAN_MAX_INSTANCE_DIRECTORIES, acquireWaiterLock, releaseWaiterLock, waiterLockName, NO_SPOOL_GRACE_MS, CAPPED_SCAN_GAP_MS, MIN_SCAN_GAP_MS, isSupportedPlatform, SCAN_MAX_ENTRIES_PER_SCAN, SCAN_MAX_BYTES_PER_SCAN, isNoSpace, type WaitResult, type WakeNamespace,
 } from "../src/wake-hook.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -103,6 +103,29 @@ describe("arguments and messages", () => {
   });
 });
 
+describe("unsupported platforms", () => {
+  it("judges the platform and the proc handle directory", () => {
+    expect(isSupportedPlatform("darwin")).toBe(false);
+    expect(isSupportedPlatform("win32")).toBe(false);
+    expect(isSupportedPlatform("linux", "/nonexistent/proc/self/fd")).toBe(false);
+    if (process.platform === "linux") expect(isSupportedPlatform("linux")).toBe(true);
+  });
+  it("makes the program exit 0 at once, silently, without reading anything", async () => {
+    const { main } = await import("../src/wake-main.js");
+    const writes: string[] = [];
+    const stderr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: unknown) => { writes.push(String(chunk)); return true; }) as typeof process.stderr.write;
+    try {
+      for (const dependencies of [{ platform: "darwin" }, { platform: "win32" }, { platform: "linux", procFd: "/nonexistent/proc/self/fd" }]) {
+        const codes: number[] = [];
+        await main(["--budget-ms", "100"], { XDG_RUNTIME_DIR: "/nonexistent" }, { ...dependencies, exit: (code) => { codes.push(code); } });
+        expect(codes, JSON.stringify(dependencies)).toEqual([0]);
+      }
+    } finally { process.stderr.write = stderr; }
+    expect(writes).toEqual([]);
+  });
+});
+
 // ---- spool fixtures
 
 let counter = 0;
@@ -131,11 +154,13 @@ const wait = (f: { events: string; claims: string; home: string }, extra: Partia
   waitForTurn({ eventsRoot: f.events, claimsDir: f.claims, home: f.home, ...target, budgetMs: 5000, pollMs: 20, ...extra });
 const later = (ms: number, fn: () => void) => new Promise<void>((resolve) => setTimeout(() => { fn(); resolve(); }, ms));
 
+// Event delivery is Linux-first (ADR 0011): everything that reads a spool or runs the program is Linux-only.
+const linuxOnly = describe.runIf(process.platform === "linux");
 const HOST: WakeNamespace = { kind: "host" };
 const W1: WakeNamespace = { kind: "writer", name: "code-w1" };
 const states = (events: TurnEvent[]) => events.map((e) => (e as { state?: string }).state);
 
-describe("scanTurnEvents", () => {
+linuxOnly("scanTurnEvents", () => {
   it("reads only the requested namespace, ordered by time and sequence", async () => {
     const f = await fixture();
     const a = terminal({ seq: 2, at: "2026-10-21T10:00:02.000Z" }), b = terminal({ seq: 1, at: "2026-10-21T10:00:01.000Z", instance: INSTANCE_B });
@@ -168,8 +193,8 @@ describe("scanTurnEvents", () => {
     expect(scanTurnEvents(link, HOST).events).toEqual([]);
     expect(scan(f, W1).events).toEqual([]);
   });
-  describe.each([["handle (/proc/self/fd)", true], ["realpath fallback", false]])("through the %s", (_label, useProcFd) => {
-    const limits = { useProcFd };
+  describe("reads through directory handles", () => {
+    const limits = {};
     it("never follows links: not for event files, instance directories, writer directories or a link as the root", async () => {
       const f = await fixture();
       const outside = join(f.xdg, "outside");
@@ -371,7 +396,7 @@ describe("scanTurnEvents", () => {
   });
 });
 
-describe("claims", () => {
+linuxOnly("claims", () => {
   it("creates the claims directory with mode 0700 and claims exclusively with mode 0600", async () => {
     const f = await fixture();
     const event = terminal();
@@ -440,7 +465,7 @@ describe("claims", () => {
   });
 });
 
-describe("waitForTurn (in process)", () => {
+linuxOnly("waitForTurn (in process)", () => {
   it("wakes on a terminal event written after the wait started and records the claim outside the events root", async () => {
     const f = await fixture();
     let held: string | undefined;
@@ -600,14 +625,23 @@ describe("waitForTurn (in process)", () => {
     g.put(terminal({ turn: OTHER_TURN })); // a spool exists, but not for this turn
     expect(await wait(g, { graceMs: 100, budgetMs: 500 })).toMatchObject({ action: "wake", reason: "budget" });
   });
-  it("slows its scans to one per second once a cap was hit", async () => {
+  it("slows its scans to one per second once a cap was hit (injected clock and delay, no wall time)", async () => {
     const f = await fixture();
     for (let seq = 1; seq <= 5; seq += 1) f.put(terminal({ seq, turn: OTHER_TURN }));
-    const started = Date.now();
-    const [result] = await Promise.all([wait(f, { limits: { entriesPerDirectory: 2 }, graceMs: 100, budgetMs: 10_000 }), later(300, () => f.put(terminal({ seq: 99 }), join(f.events, INSTANCE)))]);
-    // The wanted event sits beyond the capped listing or is found by a later scan; either way no scan ran before the slow gap passed.
-    expect(Date.now() - started).toBeGreaterThanOrEqual(CAPPED_SCAN_GAP_MS - 100);
-    expect(["wake", "silent"]).toContain(result.action);
+    const run = async (limits: NonNullable<Parameters<typeof scanTurnEvents>[3]>, budgetMs: number) => {
+      let t = 1_000_000;
+      const sleeps: number[] = [];
+      const result = await wait(f, { limits, graceMs: 1_000_000, budgetMs, now: () => t, sleep: async (ms) => { sleeps.push(ms); t += ms; } });
+      return { result, sleeps };
+    };
+    const capped = await run({ entriesPerDirectory: 2 }, 3500); // 5 files, 2 listed: the listing is capped
+    expect(capped.result).toMatchObject({ action: "wake", reason: "budget" });
+    expect(capped.sleeps.length).toBeGreaterThan(0);
+    expect(capped.sleeps.every((ms) => ms === CAPPED_SCAN_GAP_MS)).toBe(true);
+    const free = await run({}, 100);
+    expect(free.result).toMatchObject({ action: "wake", reason: "budget" });
+    expect(free.sleeps.length).toBeGreaterThan(0);
+    expect(free.sleeps.every((ms) => ms === MIN_SCAN_GAP_MS)).toBe(true);
   });
   it("finds an event that appears in a directory created after the wait started", async () => {
     const f = await fixture();
@@ -616,7 +650,7 @@ describe("waitForTurn (in process)", () => {
   });
 });
 
-describe("per-turn waiter lock", () => {
+linuxOnly("per-turn waiter lock", () => {
   const dead = () => false, alive = () => true;
   it("names the lock by namespace, session and turn with validated parts", () => {
     expect(waiterLockName(HOST, SESSION, TURN)).toBe(`wait-host-${SESSION}-${TURN}`);
@@ -686,6 +720,7 @@ const exec = promisify(execFile);
 let compiledReady = false;
 
 beforeAll(async () => {
+  if (process.platform !== "linux") return;
   // dist is a build artifact: rebuild when it is absent or older than the sources it is built from.
   const sources = ["src/wake-main.ts", "src/wake-hook.ts", "src/turn-events.ts", "src/entry-point.ts"].map((p) => join(REPOSITORY, p));
   const fresh = existsSync(COMPILED) && sources.every((p) => statSync(p).mtimeMs <= statSync(COMPILED).mtimeMs);
@@ -708,7 +743,7 @@ function runWaiter(xdg: string | undefined, stdin: string, args: string[] = [], 
 const armFor = (turnId: string) => hookInput("pi_session_prompt", { ...promptPayload, turn: { ...promptPayload.turn, turnId } });
 const armInput = hookInput("pi_session_prompt", [{ type: "text", text: JSON.stringify(promptPayload) }]);
 
-describe("compiled pi-session-mcp-wake process", () => {
+linuxOnly("compiled pi-session-mcp-wake process", () => {
   const needBuild = (): void => { if (!compiledReady) throw new Error("dist/wake-main.js could not be built"); };
 
   it("has a node shebang and is registered as a package bin", () => {

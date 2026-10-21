@@ -185,15 +185,16 @@ async function sweepWriterDirectory(directory: FileHandle, logical: string, walk
  * refused. Before it is mounted, everything that is not an `inst-<16 hex>` directory is removed, and inside
  * instance directories only entries older than 24 hours (an instance directory only when then empty and
  * itself that old), so a launch never breaks a live server of the same writer. The work is bounded, runs
- * through open directory descriptors (a swapped link is never followed), and needs `/proc/self/fd`.
+ * through open directory descriptors (a swapped link is never followed), and needs `/proc/self/fd`
+ * (`procDirectory` lets a test stand in for a system without it; writers are Linux-only).
  */
 export async function ensureWriterEventsDirectory(
-  home: string, name: string, uid: number, now: number = Date.now(), seam?: EventsCleanupSeam,
+  home: string, name: string, uid: number, now: number = Date.now(), seam?: EventsCleanupSeam, procDirectory: string = PROC_FD,
 ): Promise<string> {
   const target = writerEventsDir(home, name);
   if (target === undefined) throw new EventsDirectoryError();
   try {
-    if (!(await lstat(PROC_FD)).isDirectory()) throw new EventsDirectoryError();
+    if (!(await lstat(procDirectory)).isDirectory()) throw new EventsDirectoryError();
     const root = await lstat(dirname(target));
     if (!root.isDirectory() || root.uid !== uid || (root.mode & 0o077) !== 0) throw new EventsDirectoryError();
     try { await mkdir(target, { mode: 0o700 }); } catch (error) {

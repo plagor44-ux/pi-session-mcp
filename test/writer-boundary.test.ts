@@ -1,6 +1,6 @@
 import { chmod, lstat, mkdir, readdir, readFile, rm, symlink, utimes, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { afterAll, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "../src/client-adapters/command.js";
 import { BOUNDARY_GIT, BoundaryError, EVENTS_CLEANUP_MAX_ENTRIES, EventsDirectoryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, ensureWriterEventsDirectory, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
@@ -8,6 +8,15 @@ import { writerPaths, type WriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
+/** Homes of the spool tests; a test may leave a mode-0000 directory behind when it fails, which would break the cleanup. */
+const homes: string[] = [];
+async function restoreModes(path: string): Promise<void> {
+  const stat = await lstat(path).catch(() => undefined);
+  if (!stat?.isDirectory()) return;
+  await chmod(path, 0o700).catch(() => {});
+  for (const name of await readdir(path).catch(() => [])) await restoreModes(join(path, name));
+}
+afterEach(async () => { await Promise.all(homes.splice(0).map(restoreModes)); });
 const paths = writerPaths("/home/example", "repo-w1");
 const imageId = "a".repeat(64);
 const state: WriterState = {
@@ -79,6 +88,7 @@ const uid = process.getuid!();
 /** A fake home whose writer state directory exists (as setup creates it); `own` is the writer's spool directory. */
 async function fixture(mode = 0o700) {
   const home = await temporaryRoot("pi-writer-home-");
+  homes.push(home);
   const writer = writerPaths(home, "repo-w1");
   await mkdir(writer.root, { recursive: true });
   await chmod(writer.root, mode);
@@ -86,19 +96,13 @@ async function fixture(mode = 0o700) {
 }
 const ensure = ensureWriterEventsDirectory;
 
-it("creates the private spool directory inside the writer state directory and accepts it again", async () => {
-  const { home, writer, own } = await fixture();
-  expect(own).toBe(join(writer.root, "events"));
-  expect(await ensure(home, "repo-w1", uid)).toBe(own);
-  expect((await lstat(own)).mode & 0o777).toBe(0o700);
-  expect(await ensure(home, "repo-w1", uid)).toBe(own);
-  expect(await readdir(writer.root)).toEqual(["events"]);
-});
-it("does not need a runtime directory", async () => {
-  const saved = process.env.XDG_RUNTIME_DIR;
-  delete process.env.XDG_RUNTIME_DIR;
-  try { const { home, own } = await fixture(); expect(await ensure(home, "repo-w1", uid)).toBe(own); }
-  finally { if (saved !== undefined) process.env.XDG_RUNTIME_DIR = saved; }
+it("refuses with the stable code on a system without /proc/self/fd", async () => {
+  const { home, own } = await fixture();
+  const missing = join(home, "no-proc-fd");
+  const failure = await ensure(home, "repo-w1", uid, Date.now(), undefined, missing).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(EventsDirectoryError);
+  expect(failure).toMatchObject({ code: "events_directory_unavailable", message: "events_directory_unavailable" });
+  await expect(lstat(own)).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("refuses a malformed writer name", async () => {
   const { home } = await fixture();
@@ -106,197 +110,215 @@ it("refuses a malformed writer name", async () => {
   expect(failure).toBeInstanceOf(EventsDirectoryError);
   expect(failure).toMatchObject({ code: "events_directory_unavailable", message: "events_directory_unavailable" });
 });
-it("refuses a missing writer state directory without creating it", async () => {
-  const home = await temporaryRoot("pi-writer-home-");
-  await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
-  await expect(lstat(writerPaths(home, "repo-w1").root)).rejects.toMatchObject({ code: "ENOENT" });
-});
-it("refuses a writer state directory owned by someone else", async () => {
-  const { home, own } = await fixture();
-  await expect(ensure(home, "repo-w1", uid + 1)).rejects.toBeInstanceOf(EventsDirectoryError);
-  await expect(lstat(own)).rejects.toMatchObject({ code: "ENOENT" });
-});
-it.each([0o750, 0o705, 0o770])("refuses a writer state directory with mode %o", async (mode) => {
-  const { home } = await fixture(mode);
-  await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
-});
-it("refuses a writer state directory that is a symlink, and a symlinked spool directory, without following them", async () => {
-  const home = await temporaryRoot("pi-writer-home-"), outside = await temporaryRoot("pi-writer-outside-");
-  await chmod(outside, 0o700);
-  const writer = writerPaths(home, "repo-w1");
-  await mkdir(dirname(writer.root), { recursive: true });
-  await symlink(outside, writer.root);
-  await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
-  expect(await readdir(outside)).toEqual([]);
-  const other = await fixture();
-  await symlink(outside, other.own);
-  await expect(ensure(other.home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
-  expect(await readdir(outside)).toEqual([]);
-});
-it.each([0o777, 0o770, 0o000, 0o500])("resets a spool directory the worker changed to mode %o instead of refusing", async (mode) => {
-  const { home, own } = await fixture();
-  await mkdir(own, { mode: 0o700 });
-  await chmod(own, mode);
-  expect(await ensure(home, "repo-w1", uid)).toBe(own);
-  expect((await lstat(own)).mode & 0o777).toBe(0o700);
-});
-const HOUR = 3_600_000;
-const INSTANCE = "inst-0123456789abcdef", OTHER_INSTANCE = "inst-fedcba9876543210";
-async function age(path: string, hours: number): Promise<void> {
-  const when = new Date(Date.now() - hours * HOUR);
-  await utimes(path, when, when);
-}
-it("removes everything in the writer's own directory that is not an instance directory, without following links", async () => {
-  const { home, own } = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
-  await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
-  const sibling = join(writerPaths(home, "repo-w1").root, "events-sibling");
-  await mkdir(own, { mode: 0o700 }); await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
-  await writeFile(join(own, "stray"), "x"); await writeFile(join(own, "00000001-turn_terminal.json"), "{}");
-  await mkdir(join(own, "inst-short")); await mkdir(join(own, "INST-0123456789abcdef")); await mkdir(join(own, "inst-0123456789abcdeg"));
-  await symlink(outside, join(own, "link-dir")); await symlink(join(outside, "keep"), join(own, "link-file"));
-  // A link named like an instance directory is junk too and is not followed.
-  await symlink(outside, join(own, OTHER_INSTANCE));
-  await symlink(outside, join(own, "junk", "deep", "link-dir"));
-  await mkdir(join(own, "locked", "inner"), { recursive: true }); await writeFile(join(own, "locked", "inner", "f"), "x");
-  await chmod(join(own, "locked", "inner"), 0o000); await chmod(join(own, "locked"), 0o000);
-  await mkdir(sibling, { mode: 0o700 }); await writeFile(join(sibling, "keep"), "keep");
-  expect(await ensureWriterEventsDirectory(home, "repo-w1", uid)).toBe(own);
-  expect(await readdir(own)).toEqual([]);
-  expect(await readdir(outside)).toEqual(["keep"]);
-  expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
-  expect(await readdir(sibling)).toEqual(["keep"]);
-});
-it("keeps an instance directory with fresh files, since its server may be live", async () => {
-  const { home, own } = await fixture();
-  await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
-  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
-  for (const name of ["00000001-turn_terminal.json", "00000002-instance_ended.json", ".tmp-3-abcd1234"]) await writeFile(join(own, INSTANCE, name), "{}");
-  // An old but empty-looking instance directory that still holds a fresh file must stay, and so must its file.
-  await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}");
-  await age(join(own, OTHER_INSTANCE), 48);
-  await chmod(join(own, INSTANCE), 0o000);
-  await ensureWriterEventsDirectory(home, "repo-w1", uid);
-  expect((await readdir(own)).sort()).toEqual([INSTANCE, OTHER_INSTANCE].sort());
-  expect((await readdir(join(own, INSTANCE))).sort()).toEqual([".tmp-3-abcd1234", "00000001-turn_terminal.json", "00000002-instance_ended.json"]);
-  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
-  expect((await lstat(join(own, INSTANCE))).mode & 0o777).toBe(0o700);
-});
-it("removes event files older than 24 hours and then an instance directory that is empty and old", async () => {
-  const { home, own } = await fixture();
-  await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
-  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
-  for (const name of ["00000001-turn_terminal.json", ".tmp-2-abcd1234"]) { await writeFile(join(own, INSTANCE, name), "{}"); await age(join(own, INSTANCE, name), 25); }
-  await age(join(own, INSTANCE), 25);
-  // An instance directory with one old and one fresh file keeps the fresh one and the directory.
-  await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), 30);
-  await writeFile(join(own, OTHER_INSTANCE, "00000002-turn_terminal.json"), "{}");
-  await age(join(own, OTHER_INSTANCE), 30);
-  await ensureWriterEventsDirectory(home, "repo-w1", uid);
-  expect(await readdir(own)).toEqual([OTHER_INSTANCE]);
-  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000002-turn_terminal.json"]);
-});
-it("keeps an emptied instance directory that changed within 24 hours, and removes old junk inside one without following links", async () => {
-  const { home, own } = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
-  await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
-  await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
-  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
-  await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, INSTANCE, "00000001-turn_terminal.json"), 25);
-  // The directory itself is fresh: it stays although it is now empty.
-  await symlink(outside, join(own, OTHER_INSTANCE, "link")); await mkdir(join(own, OTHER_INSTANCE, "dir")); await writeFile(join(own, OTHER_INSTANCE, "dir", "f"), "x");
-  await age(join(own, OTHER_INSTANCE, "dir", "f"), 30); await age(join(own, OTHER_INSTANCE, "dir"), 30);
-  await ensureWriterEventsDirectory(home, "repo-w1", uid);
-  expect(await readdir(own)).toEqual([INSTANCE, OTHER_INSTANCE].sort());
-  expect(await readdir(join(own, INSTANCE))).toEqual([]);
-  // The old directory with junk goes; the fresh link stays and is never followed.
-  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["link"]);
-  expect(await readdir(outside)).toEqual(["keep"]);
-});
-it("uses the injected clock for the 24 hour boundary", async () => {
-  const { home, own } = await fixture();
-  await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
-  await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}");
-  await ensureWriterEventsDirectory(home, "repo-w1", uid, Date.now() + 23 * HOUR);
-  expect(await readdir(join(own, INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
-  await ensureWriterEventsDirectory(home, "repo-w1", uid, Date.now() + 25 * HOUR);
-  expect(await readdir(own)).toEqual([]);
-});
-it("refuses a spool directory with more stale entries than the cleanup bound", async () => {
-  const { home, own } = await fixture();
-  await mkdir(own, { mode: 0o700 });
-  await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES + 1 }, (_, i) => writeFile(join(own, `f${i}`), "")));
-  await expect(ensureWriterEventsDirectory(home, "repo-w1", uid)).rejects.toMatchObject({ code: "events_directory_unavailable" });
-  // At the bound exactly, the directory is cleaned.
-  const at = await fixture(), ownAt = at.own;
-  await mkdir(ownAt, { mode: 0o700 });
-  await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES }, (_, i) => writeFile(join(ownAt, `f${i}`), "")));
-  await ensureWriterEventsDirectory(at.home, "repo-w1", uid);
-  expect(await readdir(ownAt)).toEqual([]);
+// The cleanup walks open directory descriptors through /proc/self/fd; writers are Linux-only in the product.
+describe.runIf(process.platform === "linux")("writer spool directory (Linux)", () => {
+  it("creates the private spool directory inside the writer state directory and accepts it again", async () => {
+    const { home, writer, own } = await fixture();
+    expect(own).toBe(join(writer.root, "events"));
+    expect(await ensure(home, "repo-w1", uid)).toBe(own);
+    expect((await lstat(own)).mode & 0o777).toBe(0o700);
+    expect(await ensure(home, "repo-w1", uid)).toBe(own);
+    expect(await readdir(writer.root)).toEqual(["events"]);
+  });
+  it("does not need a runtime directory", async () => {
+    const saved = process.env.XDG_RUNTIME_DIR;
+    delete process.env.XDG_RUNTIME_DIR;
+    try { const { home, own } = await fixture(); expect(await ensure(home, "repo-w1", uid)).toBe(own); }
+    finally { if (saved !== undefined) process.env.XDG_RUNTIME_DIR = saved; }
+  });
+  it("refuses a missing writer state directory without creating it", async () => {
+    const home = await temporaryRoot("pi-writer-home-");
+    await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+    await expect(lstat(writerPaths(home, "repo-w1").root)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("refuses a writer state directory owned by someone else", async () => {
+    const { home, own } = await fixture();
+    await expect(ensure(home, "repo-w1", uid + 1)).rejects.toBeInstanceOf(EventsDirectoryError);
+    await expect(lstat(own)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it.each([0o750, 0o705, 0o770])("refuses a writer state directory with mode %o", async (mode) => {
+    const { home } = await fixture(mode);
+    await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+  });
+  it("refuses a writer state directory that is a symlink, and a symlinked spool directory, without following them", async () => {
+    const home = await temporaryRoot("pi-writer-home-"), outside = await temporaryRoot("pi-writer-outside-");
+    await chmod(outside, 0o700);
+    const writer = writerPaths(home, "repo-w1");
+    await mkdir(dirname(writer.root), { recursive: true });
+    await symlink(outside, writer.root);
+    await expect(ensure(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+    expect(await readdir(outside)).toEqual([]);
+    const other = await fixture();
+    await symlink(outside, other.own);
+    await expect(ensure(other.home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+    expect(await readdir(outside)).toEqual([]);
+  });
+  it.each([0o777, 0o770, 0o000, 0o500])("resets a spool directory the worker changed to mode %o instead of refusing", async (mode) => {
+    const { home, own } = await fixture();
+    await mkdir(own, { mode: 0o700 });
+    await chmod(own, mode);
+    expect(await ensure(home, "repo-w1", uid)).toBe(own);
+    expect((await lstat(own)).mode & 0o777).toBe(0o700);
+  });
+  const HOUR = 3_600_000;
+  const INSTANCE = "inst-0123456789abcdef", OTHER_INSTANCE = "inst-fedcba9876543210";
+  async function age(path: string, hours: number): Promise<void> {
+    const when = new Date(Date.now() - hours * HOUR);
+    await utimes(path, when, when);
+  }
+  it("removes everything in the writer's own directory that is not an instance directory, without following links", async () => {
+    const { home, own } = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
+    await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
+    const sibling = join(writerPaths(home, "repo-w1").root, "events-sibling");
+    await mkdir(own, { mode: 0o700 }); await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
+    await writeFile(join(own, "stray"), "x"); await writeFile(join(own, "00000001-turn_terminal.json"), "{}");
+    await mkdir(join(own, "inst-short")); await mkdir(join(own, "INST-0123456789abcdef")); await mkdir(join(own, "inst-0123456789abcdeg"));
+    await symlink(outside, join(own, "link-dir")); await symlink(join(outside, "keep"), join(own, "link-file"));
+    // A link named like an instance directory is junk too and is not followed.
+    await symlink(outside, join(own, OTHER_INSTANCE));
+    await symlink(outside, join(own, "junk", "deep", "link-dir"));
+    await mkdir(join(own, "locked", "inner"), { recursive: true }); await writeFile(join(own, "locked", "inner", "f"), "x");
+    await chmod(join(own, "locked", "inner"), 0o000); await chmod(join(own, "locked"), 0o000);
+    await mkdir(sibling, { mode: 0o700 }); await writeFile(join(sibling, "keep"), "keep");
+    expect(await ensureWriterEventsDirectory(home, "repo-w1", uid)).toBe(own);
+    expect(await readdir(own)).toEqual([]);
+    expect(await readdir(outside)).toEqual(["keep"]);
+    expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
+    expect(await readdir(sibling)).toEqual(["keep"]);
+  });
+  it("keeps an instance directory with fresh files, since its server may be live", async () => {
+    const { home, own } = await fixture();
+    await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
+    await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+    for (const name of ["00000001-turn_terminal.json", "00000002-instance_ended.json", ".tmp-3-abcd1234"]) await writeFile(join(own, INSTANCE, name), "{}");
+    // An old but empty-looking instance directory that still holds a fresh file must stay, and so must its file.
+    await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}");
+    await age(join(own, OTHER_INSTANCE), 48);
+    await chmod(join(own, INSTANCE), 0o000);
+    await ensureWriterEventsDirectory(home, "repo-w1", uid);
+    expect((await readdir(own)).sort()).toEqual([INSTANCE, OTHER_INSTANCE].sort());
+    expect((await readdir(join(own, INSTANCE))).sort()).toEqual([".tmp-3-abcd1234", "00000001-turn_terminal.json", "00000002-instance_ended.json"]);
+    expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
+    expect((await lstat(join(own, INSTANCE))).mode & 0o777).toBe(0o700);
+  });
+  it("removes event files older than 24 hours and then an instance directory that is empty and old", async () => {
+    const { home, own } = await fixture();
+    await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
+    await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+    for (const name of ["00000001-turn_terminal.json", ".tmp-2-abcd1234"]) { await writeFile(join(own, INSTANCE, name), "{}"); await age(join(own, INSTANCE, name), 25); }
+    await age(join(own, INSTANCE), 25);
+    // An instance directory with one old and one fresh file keeps the fresh one and the directory.
+    await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), 30);
+    await writeFile(join(own, OTHER_INSTANCE, "00000002-turn_terminal.json"), "{}");
+    await age(join(own, OTHER_INSTANCE), 30);
+    await ensureWriterEventsDirectory(home, "repo-w1", uid);
+    expect(await readdir(own)).toEqual([OTHER_INSTANCE]);
+    expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000002-turn_terminal.json"]);
+  });
+  it("keeps an emptied instance directory that changed within 24 hours, and removes old junk inside one without following links", async () => {
+    const { home, own } = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
+    await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
+    await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
+    await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+    await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, INSTANCE, "00000001-turn_terminal.json"), 25);
+    // The directory itself is fresh: it stays although it is now empty.
+    await symlink(outside, join(own, OTHER_INSTANCE, "link")); await mkdir(join(own, OTHER_INSTANCE, "dir")); await writeFile(join(own, OTHER_INSTANCE, "dir", "f"), "x");
+    await age(join(own, OTHER_INSTANCE, "dir", "f"), 30); await age(join(own, OTHER_INSTANCE, "dir"), 30);
+    await ensureWriterEventsDirectory(home, "repo-w1", uid);
+    expect(await readdir(own)).toEqual([INSTANCE, OTHER_INSTANCE].sort());
+    expect(await readdir(join(own, INSTANCE))).toEqual([]);
+    // The old directory with junk goes; the fresh link stays and is never followed.
+    expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["link"]);
+    expect(await readdir(outside)).toEqual(["keep"]);
+  });
+  it("uses the injected clock for the 24 hour boundary", async () => {
+    const { home, own } = await fixture();
+    await mkdir(own, { mode: 0o700 }); await mkdir(join(own, INSTANCE), { mode: 0o700 });
+    await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}");
+    await ensureWriterEventsDirectory(home, "repo-w1", uid, Date.now() + 23 * HOUR);
+    expect(await readdir(join(own, INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
+    await ensureWriterEventsDirectory(home, "repo-w1", uid, Date.now() + 25 * HOUR);
+    expect(await readdir(own)).toEqual([]);
+  });
+  it("refuses a spool directory with more stale entries than the cleanup bound", async () => {
+    const { home, own } = await fixture();
+    await mkdir(own, { mode: 0o700 });
+    await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES + 1 }, (_, i) => writeFile(join(own, `f${i}`), "")));
+    await expect(ensureWriterEventsDirectory(home, "repo-w1", uid)).rejects.toMatchObject({ code: "events_directory_unavailable" });
+    // At the bound exactly, the directory is cleaned.
+    const at = await fixture(), ownAt = at.own;
+    await mkdir(ownAt, { mode: 0o700 });
+    await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES }, (_, i) => writeFile(join(ownAt, `f${i}`), "")));
+    await ensureWriterEventsDirectory(at.home, "repo-w1", uid);
+    expect(await readdir(ownAt)).toEqual([]);
+  });
+
+  /** A directory outside the spool that a swapped link points at; it must come out of every race untouched. */
+  async function victim(): Promise<{ dir: string; snapshot: () => Promise<string> }> {
+    const dir = await temporaryRoot("pi-writer-victim-");
+    await chmod(dir, 0o755);
+    await mkdir(join(dir, "sub"), { mode: 0o755 });
+    await writeFile(join(dir, "keep"), "keep"); await writeFile(join(dir, "sub", "keep"), "keep");
+    for (const path of [join(dir, "keep"), join(dir, "sub", "keep")]) await age(path, 48);
+    await age(join(dir, "sub"), 48); await age(dir, 48);
+    const snapshot = async (): Promise<string> => JSON.stringify(await Promise.all([dir, join(dir, "sub"), join(dir, "keep"), join(dir, "sub", "keep")]
+      .map(async (path) => { const stat = await lstat(path); return [path, stat.mode & 0o777, stat.ino]; })));
+    return { dir, snapshot };
+  }
+  async function swapForLink(path: string, target: string): Promise<void> {
+    // The worker owns the directory: it can lift a stripped mode itself before it replaces the directory.
+    if ((await lstat(path)).isDirectory()) await chmod(path, 0o700);
+    await rm(path, { recursive: true, force: true });
+    await symlink(target, path);
+  }
+  it.each([
+    ["a junk directory", ["junk"], "inspected", "junk"],
+    ["a nested junk directory", ["junk", "deep"], "inspected", "junk/deep"],
+    ["an instance directory", [INSTANCE], "inspected", INSTANCE],
+    ["a junk directory after it was emptied", ["junk"], "emptied", "junk"],
+    ["an emptied old instance directory", [INSTANCE], "emptied", INSTANCE],
+  ] as const)("never follows %s swapped for a link during the cleanup (%s)", async (_label, parts, stage, swapped) => {
+    const { home, own } = await fixture(), out = await victim();
+    await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
+    await writeFile(join(own, "junk", "deep", "f"), "x");
+    await mkdir(join(own, INSTANCE), { mode: 0o700 });
+    await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}");
+    await age(join(own, INSTANCE, "00000001-turn_terminal.json"), 48); await age(join(own, INSTANCE), 48);
+    // A mode the cleanup would have to repair makes a followed link visible as a chmod of the victim.
+    await chmod(join(own, "junk"), 0o000);
+    const before = await out.snapshot();
+    const target = join(own, swapped);
+    let swaps = 0;
+    const seam = async (at: string, logical: string): Promise<void> => {
+      if (at !== stage || logical !== target) return;
+      swaps++;
+      await swapForLink(target, out.dir);
+    };
+    try { await ensure(home, "repo-w1", uid, Date.now(), seam).catch((error: unknown) => { expect(error).toBeInstanceOf(EventsDirectoryError); }); }
+    finally {
+      // Leave nothing the test runner cannot remove: restore a mode the aborted cleanup did not get to repair.
+      for (const path of [join(own, "junk"), join(own, "junk", "deep")]) if ((await lstat(path).catch(() => undefined))?.isDirectory()) await chmod(path, 0o700);
+    }
+    expect(parts.length).toBeGreaterThan(0);
+    expect(swaps).toBe(1);
+    expect(await out.snapshot()).toBe(before);
+    expect(await readFile(join(out.dir, "sub", "keep"), "utf8")).toBe("keep");
+  });
+  it("still cleans up when no swap happens through the same seam", async () => {
+    const { home, own } = await fixture();
+    await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
+    const seen: string[] = [];
+    await ensure(home, "repo-w1", uid, Date.now(), (stage, logical) => { seen.push(`${stage}:${logical.slice(own.length)}`); });
+    expect(await readdir(own)).toEqual([]);
+    expect(seen).toEqual(["inspected:/junk", "inspected:/junk/deep", "emptied:/junk/deep", "emptied:/junk"]);
+  });
+  it("refuses a spool directory nested deeper than the cleanup bound", async () => {
+    const { home, own } = await fixture();
+    await mkdir(join(own, ...Array.from({ length: 12 }, () => "d")), { recursive: true, mode: 0o700 });
+    await expect(ensureWriterEventsDirectory(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+  });
 });
 
-/** A directory outside the spool that a swapped link points at; it must come out of every race untouched. */
-async function victim(): Promise<{ dir: string; snapshot: () => Promise<string> }> {
-  const dir = await temporaryRoot("pi-writer-victim-");
-  await chmod(dir, 0o755);
-  await mkdir(join(dir, "sub"), { mode: 0o755 });
-  await writeFile(join(dir, "keep"), "keep"); await writeFile(join(dir, "sub", "keep"), "keep");
-  for (const path of [join(dir, "keep"), join(dir, "sub", "keep")]) await age(path, 48);
-  await age(join(dir, "sub"), 48); await age(dir, 48);
-  const snapshot = async (): Promise<string> => JSON.stringify(await Promise.all([dir, join(dir, "sub"), join(dir, "keep"), join(dir, "sub", "keep")]
-    .map(async (path) => { const stat = await lstat(path); return [path, stat.mode & 0o777, stat.ino]; })));
-  return { dir, snapshot };
-}
-async function swapForLink(path: string, target: string): Promise<void> {
-  // The worker owns the directory: it can lift a stripped mode itself before it replaces the directory.
-  if ((await lstat(path)).isDirectory()) await chmod(path, 0o700);
-  await rm(path, { recursive: true, force: true });
-  await symlink(target, path);
-}
-it.each([
-  ["a junk directory", ["junk"], "inspected", "junk"],
-  ["a nested junk directory", ["junk", "deep"], "inspected", "junk/deep"],
-  ["an instance directory", [INSTANCE], "inspected", INSTANCE],
-  ["a junk directory after it was emptied", ["junk"], "emptied", "junk"],
-  ["an emptied old instance directory", [INSTANCE], "emptied", INSTANCE],
-] as const)("never follows %s swapped for a link during the cleanup (%s)", async (_label, parts, stage, swapped) => {
-  const { home, own } = await fixture(), out = await victim();
-  await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
-  await writeFile(join(own, "junk", "deep", "f"), "x");
-  await mkdir(join(own, INSTANCE), { mode: 0o700 });
-  await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}");
-  await age(join(own, INSTANCE, "00000001-turn_terminal.json"), 48); await age(join(own, INSTANCE), 48);
-  // A mode the cleanup would have to repair makes a followed link visible as a chmod of the victim.
-  await chmod(join(own, "junk"), 0o000);
-  const before = await out.snapshot();
-  const target = join(own, swapped);
-  let swaps = 0;
-  const seam = async (at: string, logical: string): Promise<void> => {
-    if (at !== stage || logical !== target) return;
-    swaps++;
-    await swapForLink(target, out.dir);
-  };
-  try { await ensure(home, "repo-w1", uid, Date.now(), seam).catch((error: unknown) => { expect(error).toBeInstanceOf(EventsDirectoryError); }); }
-  finally {
-    // Leave nothing the test runner cannot remove: restore a mode the aborted cleanup did not get to repair.
-    for (const path of [join(own, "junk"), join(own, "junk", "deep")]) if ((await lstat(path).catch(() => undefined))?.isDirectory()) await chmod(path, 0o700);
-  }
-  expect(parts.length).toBeGreaterThan(0);
-  expect(swaps).toBe(1);
-  expect(await out.snapshot()).toBe(before);
-  expect(await readFile(join(out.dir, "sub", "keep"), "utf8")).toBe("keep");
-});
-it("still cleans up when no swap happens through the same seam", async () => {
-  const { home, own } = await fixture();
-  await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
-  const seen: string[] = [];
-  await ensure(home, "repo-w1", uid, Date.now(), (stage, logical) => { seen.push(`${stage}:${logical.slice(own.length)}`); });
-  expect(await readdir(own)).toEqual([]);
-  expect(seen).toEqual(["inspected:/junk", "inspected:/junk/deep", "emptied:/junk/deep", "emptied:/junk"]);
-});
-it("refuses a spool directory nested deeper than the cleanup bound", async () => {
-  const { home, own } = await fixture();
-  await mkdir(join(own, ...Array.from({ length: 12 }, () => "d")), { recursive: true, mode: 0o700 });
-  await expect(ensureWriterEventsDirectory(home, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
-});
 it("keeps hostile values positional and mounts only requested throwaway data", () => {
   const args = throwawayArgs(paths, imageId, { clone: "ro", bundles: true }, "x", ["--upload-pack=evil"]);
   expect(args.slice(-6)).toEqual([imageId, "sh", "-c", "x", "sh", "--upload-pack=evil"]);

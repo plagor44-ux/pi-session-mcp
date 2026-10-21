@@ -135,9 +135,11 @@ async function enableDelivery(config: unknown = { events: { delivery: "spool" } 
   await chmod(paths.root, 0o700); // setup creates the writer state directory private
   await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(config));
 }
+// The spool cleanup needs /proc/self/fd; writers are Linux-only in the product.
+const itLinux = it.runIf(process.platform === "linux");
 const eventsFailure = JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n";
 const eventsDir = () => writerPaths(home, "x-w1").events;
-it("mounts a freshly created private spool directory of the writer when its configuration enables delivery", async () => {
+itLinux("mounts a freshly created private spool directory of the writer when its configuration enables delivery", async () => {
   await enableDelivery(); await save(true);
   const dir = eventsDir();
   expect(dir).toBe(join(writerPaths(home, "x-w1").root, "events"));
@@ -148,7 +150,7 @@ it("mounts a freshly created private spool directory of the writer when its conf
   expect((await lstat(dir)).mode & 0o777).toBe(0o700);
   expect(serveRefusal).not.toHaveBeenCalled();
 });
-it("needs no runtime directory for writer delivery", async () => {
+itLinux("needs no runtime directory for writer delivery", async () => {
   await enableDelivery(); await save(true);
   for (const env of [{}, { XDG_RUNTIME_DIR: "relative" }, { XDG_RUNTIME_DIR: join(home, "absent") }]) {
     deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...env };
@@ -165,7 +167,7 @@ it("refuses a writer accepted without delivery once its configuration enables de
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
   await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
+itLinux("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
   await enableDelivery(); await save();
   const dir = eventsDir();
   await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
@@ -215,7 +217,7 @@ it("does not refresh credentials when the spool directory fails", async () => {
   await launch(["x-w1"], deps);
   expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
 });
-it("repairs a changed mode and removes junk but leaves a possibly live instance directory alone", async () => {
+itLinux("repairs a changed mode and removes junk but leaves a possibly live instance directory alone", async () => {
   await enableDelivery(); await save(true);
   const dir = eventsDir(), live = join(dir, "inst-0123456789abcdef");
   await mkdir(live, { recursive: true, mode: 0o700 });
