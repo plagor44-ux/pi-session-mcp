@@ -3,7 +3,8 @@
 Status: final. This report covers the extension ablation of 2026-10-21 and
 keeps the pre-registration text (marked below) next to the results. Every number
 in the results comes from `evidence/` (`summary.json`, `runs/*.json`,
-`ledger.json`, `integrity.json`, `approvals/`).
+`ledger.json`, `integrity.json`, `approvals/`). The evidence was written at
+commit `8cec42c`; later commits change documentation and code comments only.
 
 Scope: one run per task and arm, so the results are indicative, not
 significant. No saving, ranking or success rate beyond the observed one is
@@ -14,7 +15,7 @@ scored, so some pairings have no data.
 
 - Observed spend was USD 8.34 of the USD 10 hard budget (ledger `spentUsd`
   8.33870414). The 15 scored runs cost USD 7.93, the stopped attempts USD 0.33
-  and the 23 preflight checks USD 0.07.
+  and the 23 preflight checks (six rounds, see "Every attempt") USD 0.07.
 - Recommendations apply to the implementation pairings only (ruling R83):
   `pl-code-deepseek` is **do-not-enable** (A 3/3 accepted, B 2/3), `pl-code` is
   **enable** by the pre-registered rule (A 2/3, B 2/3, B cheaper). Both verdicts
@@ -52,17 +53,33 @@ Routes and credential types (`authType` from the run records):
 | --- | --- | --- | --- |
 | `code`, `review` | openai `gpt-6.1-sol` | medium (code), high (review) | OAuth subscription, refreshed on the host before each run (R86) |
 | `code-deepseek` | deepseek `deepseek-flash` | high | API key |
-| `review-grok` | xai `grok-4.7` | high | OAuth |
+| `review-grok` | xai `grok-4.7` | high | OAuth, refreshed on the host (R86) |
 
 ## Every attempt
 
-The top-level `approval*.json` files next to this README are the signed
+The top-level `approval*.json` files next to this README are the owner-approved
 originals; `evidence/approvals/` holds the integrity-bound copies.
 
 Four approvals (waves) were given on 2026-10-21, at 12:39, 13:22, 13:46 and
 14:39 UTC, each bound to its own source commit; the tasks digest is the same in
-all four. Run ids below are abbreviated to their ordinal; the arm column shows A
-(without the extension) or B (with it; pi-lens in all scored runs).
+all four. Six approvals were drawn up in total; two were superseded before their
+wave started and are not kept in `evidence/approvals/`:
+
+- The wave 2 approval at commit `3b7b845`: its preflight charged three routes,
+  and `review-grok` failed with `credential_expiring` (no charge). That failure
+  was the trigger for the host-side OAuth refresh (R86). The approval was redone
+  after the fix (the kept approval 2 is bound to `56579b4`).
+- The approval 4 first drawn up at commit `c9cfbb3`: it was preflighted and then
+  redone at `a72dfea`, which is the kept approval 4.
+
+The ledger therefore holds six preflight rounds, 23 charged checks in total
+(4 + 3 + 4 + 4 + 4 + 4 across the four routes `code`, `code-deepseek`, `review`
+and `review-grok`; the second round is the failed one) with a combined cost of
+USD 0.071. Preflight cost is part of the USD 8.34 spend and is not part of any
+run.
+
+Run ids below are abbreviated to their ordinal; the arm column shows A (without
+the extension) or B (with it; pi-lens in all scored runs).
 
 ### Scored runs (15)
 
@@ -105,6 +122,9 @@ run: 0.105 + 0.177 + 0.152 = 0.434) and run 005 twice (the audit-stopped attempt
 and the scored run: 0.053 + 0.074 = 0.127). Audit-stopped slots were planned
 again at the next approval (R85; `replannedStopped` in approvals 2, 3 and 4).
 The budget stop at run 016 followed the USD 2.66 charge of run 015.
+`stopReason` in `summary.json` is `null` because the merged `not_run` records
+come from the earliest wave; the budget stop is recorded in `waveStops` (wave 4,
+run 016).
 
 ### Runs that never ran (20)
 
@@ -172,7 +192,19 @@ have no scored runs.
 Not run. Runs 029 to 035 were cut off by the budget stop, so there is no data on
 pi-cache-optimizer acceptance, cost or cache behavior from this wave.
 
-### Cost against the pre-registered estimate
+### Deviation from the pre-registered trim and run order
+
+The pre-registration said that `--trim` within USD 10 keeps only
+`pl-code-deepseek`. The owner instead approved the full priority-ordered list
+with the wave's USD 10 budget stop as the only limit (in-session decision,
+2026-10-21). The run order follows the pre-registered priority and was not
+changed after the review tasks became descriptive (R83). Eight `review-grok`
+slots (runs 13 to 20) therefore sat before the decisive `co-code` arm-B slots
+(runs 29 to 31). Three `review-grok` runs cost USD 4.79 (2.661 + 1.089 + 1.043),
+and the budget stop came before `co-code` ran. A repeat should reorder the runs
+or use `--pairings`.
+
+## Cost against the pre-registered estimate
 
 The estimate was USD 1.00 per run. Observed cost per scored run was USD 0.05 to
 0.15 on `code-deepseek`, USD 0.06 to 0.91 on `code` and USD 1.04 to 2.66 on
@@ -201,10 +233,12 @@ Both occur in both arms. No destination is specific to an extension. Outside
 writes, unresolved writes and unresolved egress are 0 in every scored run. Denied
 write attempts are 0 except in three `i-spng-pdf` runs: 1,722 in run 005, 2,097
 in run 006 and 1,050 in run 011. These are writes the kernel refused (`EROFS`,
-read-only mounts). The most likely source is Python trying to write bytecode
-caches into the read-only dependency venv mount (likely, not proven). They are
-not out-of-scope writes and are not attributed to an extension; they occur in
-both arms.
+read-only mounts). The dependency venv mount lies under the scope root, so
+refused writes there are not counted as denied; the counted attempts are at
+paths outside the allowed roots. The most likely source is the read-only Python
+runtime bound at its own path under the evaluation directory, where Python
+tried to write bytecode caches (likely, not proven). They are not out-of-scope
+writes and are not attributed to an extension; they occur in both arms.
 
 ## What happened during the wave
 
@@ -222,14 +256,16 @@ from the kept `strace` line and fixed before the next wave:
    socket (`@docker_cli_<hex>`), all created by the task's own code. Fixed by
    R88: abstract sockets that the trace itself bound are internal.
 
-Wave 4 ended on the budget stop at run 016. Fixes needed to keep going: audit stops keep their evidence
+Wave 4 ended on the budget stop at run 016.
+
+Fixes needed to keep going: audit stops keep their evidence
 privately (R84), audit-stopped slots are planned again (R85), OAuth credentials
 are refreshed on the host before each route and run (R86), and the report works
 across waves run at different commits (R89). Because the harness was fixed
 between waves, the evidence aggregates runs scored at four source commits; the
 bound files that changed since each wave's source commit are listed per wave in
 `evidence/integrity.json` (`source_drift`; 18, 12, 7 and 3 bound paths for waves
-1 to 4). The final wave ended on the budget stop.
+1 to 4).
 
 ## Documented limits
 
@@ -237,8 +273,10 @@ bound files that changed since each wave's source commit are listed per wave in
   They count as internal only when bound inside the same trace (R88).
 - Loopback services are reachable and are only reported.
 - The home directory is hidden and the root is read-only in the sandbox.
-- Package managers fail fast offline in the sandbox (R73); a worker that tries
-  to install packages most likely produces the Fastly connects listed above.
+- R73 makes `go`, `uv` and `npm` fail fast offline in the sandbox; it sets
+  nothing for `pip`. Workers reached the PyPI CDN (Fastly, port 443) from the
+  sandbox in both arms, in runs 003, 004, 005, 006 and 009. This is real
+  internet egress, reported but not a stop, by design.
 - The turn timeout is the 15-minute run timeout minus 60 s, which leaves time
   for an orderly shutdown; this is why timed-out runs (006, 007) record about
   14:00.
@@ -247,6 +285,10 @@ bound files that changed since each wave's source commit are listed per wave in
 - Review oracles are keyword-based and descriptive only (ruling R83).
 - The evidence aggregates runs scored at four commits; the source drift is
   listed in `evidence/integrity.json`.
+- The ledger is identified by its id, not by its path, so exactly one ledger
+  file must exist. Record writes need hard links on `$EVAL`.
+- The 4-hour wave limit applies per invocation; the waves were resumed in chunks
+  of 12 runs.
 - One run per task and arm: a single timeout or early stop decides an
   implementation pairing's verdict.
 
@@ -265,7 +307,8 @@ the wave.
 ## Tasks (pre-registered)
 
 Pre-registered before any measured run. Values come from `tasks.json` in this
-folder. Prompts are not tracked; they live under the ignored `eval/results/`.
+folder. Prompts are not tracked; they live under the ignored `eval/results/`, and
+`tasks.json` carries each prompt's hash.
 
 | id | kind | repo alias | base commit | source session | verdict gate | oracle summary |
 | --- | --- | --- | --- | --- | --- | --- |
