@@ -222,3 +222,22 @@ it("does not refresh credentials when the spool directory fails", async () => {
   await launch(["x-w1"], deps);
   expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
 });
+it("repairs a changed mode and removes junk but leaves a possibly live instance directory alone", async () => {
+  await enableDelivery(); await save(true);
+  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1"), live = join(dir, "inst-0123456789abcdef");
+  for (const path of [join(runtime, "pi-session-mcp"), join(runtime, "pi-session-mcp", "events"), dir, live]) await mkdir(path, { mode: 0o700 });
+  await writeFile(join(live, "00000001-turn_terminal.json"), "{}");
+  await writeFile(join(dir, "stray"), "x"); await mkdir(join(dir, "junk")); await chmod(dir, 0o777);
+  let seen: string[] | undefined, mode: number | undefined;
+  const { readdir } = await import("node:fs/promises");
+  vi.mocked(deps.spawnPodman).mockImplementation(() => {
+    void Promise.all([readdir(dir), lstat(dir)]).then(([names, stat]) => { seen = names; mode = stat.mode & 0o777; });
+    setImmediate(() => child.emit("close", 7)); return child;
+  });
+  expect(await launch(["x-w1"], deps)).toBe(7);
+  await vi.waitFor(() => expect(seen).toEqual(["inst-0123456789abcdef"]));
+  expect(mode).toBe(0o700);
+  expect(await readdir(live)).toEqual(["00000001-turn_terminal.json"]);
+  expect(serveRefusal).not.toHaveBeenCalled();
+});
