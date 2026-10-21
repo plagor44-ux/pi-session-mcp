@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from "node:fs";
 import { cp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -152,6 +152,17 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
     expect(report.pairs).toHaveLength(1);
     expect(report.pairs[0]).toMatchObject({ ok: false, ...expected });
+  });
+
+  it("keeps the log lines behind an unclean load privately, and nothing for a clean one (R84)", async () => {
+    const abstract = `4242 connect(3<socket:[9]>, {sa_family=AF_UNIX, sun_path=@"x"}, 20) = 0`;
+    const s = await setup((profile, extension) => (profile === "code-deepseek" && extension === "pi-lens" ? { trace: `${benignTrace()}${abstract}\n` } : {}));
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => ["pl-code-deepseek", "pl-code"].includes(p.id)) });
+    expect(report.pairs.map((p) => [p.pairing, p.ok])).toEqual([["pl-code-deepseek", false], ["pl-code", true]]);
+    const kept = readdirSync(join(s.waveDir, "diagnostics"));
+    expect(kept).toHaveLength(1);
+    expect(readFileSync(join(s.waveDir, "diagnostics", kept[0]!), "utf8")).toContain(abstract);
+    expect(JSON.stringify(report)).not.toContain("sun_path");
   });
 
   it("keeps a connection to a nameserver on port 53 out of the unexpected ones", async () => {

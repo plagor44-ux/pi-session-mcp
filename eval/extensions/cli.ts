@@ -8,6 +8,7 @@ import { z } from "zod";
 import { isEntryPoint } from "../../src/entry-point.js";
 import { approvalSchema, matrixDigest, parseProductionConfig, routesOf, tasksDigest, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { sourceIsDirty } from "./bound.js";
+import { isAuditStop } from "./classify.js";
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
 import { dryLoad, type DryLoadDeps } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
@@ -151,8 +152,11 @@ function projectionOf(persisted: PersistedLedger | undefined): Projection {
   return { projectedUsd: (runs) => runs.reduce((sum, run) => sum + ledger.estimate(run.profile), 0), remainingUsd: BUDGET_USD - ledger.spentUsd };
 }
 
-/** An earlier wave a `--plan` leaves out: its approval, the run ids it has a record for, and those among them that executed. */
-interface ExcludedWave { dir: string; approval: Approval; recorded: Set<string>; executed: Set<string> }
+/**
+ * An earlier wave a `--plan` leaves out: its approval, the run ids it has a record for, those among them that executed, and those among
+ * the executed that were stopped by the trace audit (R85).
+ */
+interface ExcludedWave { dir: string; approval: Approval; recorded: Set<string>; executed: Set<string>; auditStopped: Set<string> }
 
 /** Reads each wave with the report's safe readers; its approval must name the ledger (`ledger_mismatch`) and the current tasks (`tasks_changed`). */
 async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger, tasks: TaskSpec[]): Promise<ExcludedWave[]> {
@@ -164,7 +168,10 @@ async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger, tasks:
     // Run ids name tasks by id; waves planned over other task content do not describe these runs.
     if (approval.tasksDigest !== tasksDigest(tasks)) throw new Error("tasks_changed");
     const records = (await readRuns(dir)).map((run) => run.record);
-    waves.push({ dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)) });
+    waves.push({
+      dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)),
+      auditStopped: new Set(records.filter((r) => r.outcome === "stopped" && isAuditStop(r.stopReason)).map((r) => r.runId)),
+    });
   }
   return waves;
 }
@@ -176,16 +183,22 @@ async function waveIsPaused(dir: string): Promise<boolean> {
 /**
  * The run list `--plan` puts into the approval: a subsequence of the canonical matrix (R58), the full matrix of the selected pairings or its
  * budget-trimmed version with `--trim`. Slots that already ran (a record that is not `not_run` in an excluded wave, or a run charge in the
- * ledger) are left out before trimming, so the projection covers what remains (R59).
+ * ledger) are left out before trimming, so the projection covers what remains (R59). The exception (R85): a slot whose every executed record
+ * in the excluded waves was stopped by the trace audit is planned again; its earlier charge stays in the ledger and in the remaining budget,
+ * and the approval names the slot in `replannedStopped` so the wave may run it despite the charge.
  */
 async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: PersistedLedger | undefined, excluded: ExcludedWave[]) {
   const pairings = selectedPairings(parsed.options["--pairings"]);
   const projection = projectionOf(ledger);
-  const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings).map((r) => r.runId)
-    .filter((id) => excluded.some((wave) => wave.executed.has(id)) || ledger!.hasRunEntry(id)));
+  const replanned = new Set<string>();
+  const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings).map((r) => r.runId).filter((id) => {
+    const ran = excluded.filter((wave) => wave.executed.has(id));
+    if (ran.length > 0 && ran.every((wave) => wave.auditStopped.has(id))) { replanned.add(id); return false; }
+    return ran.length > 0 || ledger!.hasRunEntry(id);
+  }));
   const full = buildMatrix(tasks, pairings, skip);
   const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd, skip);
-  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip };
+  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip, replanned };
 }
 
 const write = (value: unknown): void => { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); };
@@ -205,7 +218,8 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     }
   }
   const excluded = ledger === undefined ? [] : await loadExcludedWaves(parsed.excludeWaves, ledger, tasks);
-  const { trimmed, runs, projection, skip } = await plannedRuns(tasks, parsed, ledger, excluded);
+  const { trimmed, runs, projection, skip, replanned } = await plannedRuns(tasks, parsed, ledger, excluded);
+  const replannedStopped = runs.filter((run) => replanned.has(run.runId)).map((run) => run.runId);
   const { projectedUsd, remainingUsd } = projection;
   let routes: unknown = [];
   let routesNote: string | undefined;
@@ -218,7 +232,7 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     const resumable = unrecorded.length > 0 && matrixDigest(unrecorded) === matrixDigest(runs) && await waveIsPaused(last.dir) ? basename(last.dir) : null;
     exclusion = {
       waves: excluded.map((wave) => ({ wave: basename(wave.dir), executed: wave.executed.size })),
-      ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable,
+      ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable, replannedStopped,
     };
   }
   return {
@@ -233,6 +247,7 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     approvalTemplate: {
       approved: false, approvedAt: null, budgetUsd: BUDGET_USD, sourceCommit: await sourceCommit(options.sourceCwd),
       tasksDigest: tasksDigest(tasks), matrixDigest: matrixDigest(runs), ledgerId: ledger?.id ?? null, runs, routes, ...(routesNote === undefined ? {} : { routesNote }),
+      ...(replannedStopped.length === 0 ? {} : { replannedStopped }),
     },
   };
 }

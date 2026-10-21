@@ -212,7 +212,7 @@ describe("failed and in-progress calls", () => {
       ``,
       `garbage`,
     ), ctx({}));
-    expect(f).toEqual({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0 });
+    expect(f).toEqual({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0, evidenceLines: [] });
   });
 });
 
@@ -963,7 +963,7 @@ describe("real strace sample", () => {
 
   it("classifies the whole log against the scratch root", () => {
     expect(parseStraceLog(sample, ctx({ initialCwd: S, allowed: [S] }))).toEqual({
-      outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0,
+      outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0, evidenceLines: [],
     });
     expect(parseStraceLog(sample, ctx({ initialCwd: S, allowed: [`${S}/w2dir`] })).outsideWrites).toEqual([`${S}/zz1`]);
   });
@@ -1324,5 +1324,48 @@ describe("PID namespace decoding and sandbox-private mounts (R49b, M2)", () => {
     // The root pid is bwrap itself (muted); pid 100 stands for the workload.
     const sandboxed = parseStraceLog(log, { ...ctx({ initialCwd: "/scope", allowed: ["/scope"] }), rootPid: 99, sandboxed: true });
     expect(sandboxed.outsideWrites).toEqual(["/var/lib/w"]);
+  });
+});
+
+describe("evidence lines (R84)", () => {
+  const find = (text: string, o: Parameters<typeof ctx>[0] = {}) => parseStraceLog(text, ctx(o));
+  const abstractConnect = `100 connect(3<socket:[9]>, {sa_family=AF_UNIX, sun_path=@"/tmp/.X11-unix/X0"}, 20) = 0`;
+  const outsideWrite = `100 openat(AT_FDCWD</scope/clone>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>`;
+  const benign = `100 openat(AT_FDCWD</scope/clone>, "/scope/clone/a", O_WRONLY|O_CREAT, 0644) = 3</scope/clone/a>`;
+
+  it("keeps the raw line of an abstract-socket connect, an outside write and a successful io_uring_setup", () => {
+    const ring = `100 io_uring_setup(4, {flags=0, sq_thread_cpu=0, sq_thread_idle=0}) = 5<anon_inode:[io_uring]>`;
+    const found = find(lines(benign, abstractConnect, outsideWrite, ring));
+    expect(found.unresolvedEgress).toBe(2);
+    expect(found.outsideWrites).toEqual(["/home/u/x"]);
+    expect(found.evidenceLines).toEqual([abstractConnect, outsideWrite, ring]);
+  });
+
+  it("keeps both lines of a joined unfinished and resumed call, and the head of a call that never resumed", () => {
+    const head = `100 sendmsg(3<socket:[9]>, {msg_name={sa_family=AF_UNIX, sun_path=@"x"}, msg_namelen=4}, 0 <unfinished ...>`;
+    const resumed = `100 <... sendmsg resumed>) = 5`;
+    expect(find(lines(head, `101 openat(AT_FDCWD</scope/clone>, "/scope/clone/a", O_WRONLY) = 3</scope/clone/a>`, resumed)).evidenceLines).toEqual([`${head}\n${resumed}`]);
+    expect(find(lines(head)).evidenceLines).toEqual([head]);
+  });
+
+  it("keeps the resumed line of a call whose head is missing (a headless resumed sendmsg)", () => {
+    const headless = `100 <... sendmsg resumed>) = 5`;
+    const found = find(lines(headless));
+    expect(found.unresolvedEgress).toBe(1);
+    expect(found.evidenceLines).toEqual([headless]);
+  });
+
+  it("keeps the line of an unresolved write", () => {
+    const relative = `100 openat(AT_FDCWD</scope/clone>, "y", O_RDWR) = 3`;
+    const found = find(lines(`100 chdir(1) = 0`, `200 <... openat resumed>) = 3`, relative));
+    expect(found.unresolvedWrites).toBeGreaterThan(0);
+    expect(found.evidenceLines.length).toBe(found.unresolvedWrites);
+  });
+
+  it("keeps nothing for a clean log and for a refused write, and at most 50 entries", () => {
+    expect(find(lines(benign, `100 openat(AT_FDCWD</scope/clone>, "/home/u/x", O_WRONLY) = -1 EACCES (Permission denied)`)).evidenceLines).toEqual([]);
+    const many = find(lines(...Array.from({ length: 80 }, (_, i) => `100 openat(AT_FDCWD</scope/clone>, "/home/u/${i}", O_WRONLY|O_CREAT, 0644) = 3</home/u/${i}>`)));
+    expect(many.outsideWrites).toHaveLength(80);
+    expect(many.evidenceLines).toHaveLength(50);
   });
 });

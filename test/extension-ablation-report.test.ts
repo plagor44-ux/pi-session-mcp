@@ -389,7 +389,7 @@ describe("writeEvidence", () => {
       durationMs: 5, sessionsLeft: 0, assistantTextRef: null, assistantTextTruncated: false, assistantTextSha256: null, mac: null, harnessError: hostile,
     };
     const trace: TraceFindings = {
-      outsideWrites: [hostile], unresolvedWrites: 0, deniedWriteAttempts: 0, connects: 1, unresolvedEgress: 0,
+      outsideWrites: [hostile], unresolvedWrites: 0, deniedWriteAttempts: 0, connects: 1, unresolvedEgress: 0, evidenceLines: [],
       unexpectedConnects: [{ family: "inet6", address: "2001:db8::1", port: 443 }],
     };
     const verdict = classifyRun({ output, timedOut: false, interrupted: false, residualClean: true, trace, guardChanged: false, waveFailure: null });

@@ -8,8 +8,8 @@ import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-crede
 import { approvalSchema, parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
 import { assertDependencyDir, checkTaskDependencies } from "./dependencies.js";
-import { WaveDirGuard, removeTree } from "./evidence.js";
-import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
+import { WaveDirGuard, removeTree, writeDiagnostics } from "./evidence.js";
+import { classifyRun, fixedCode, isAuditStop, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
 import { PersistedLedger, validSessionCost } from "./ledger-file.js";
 import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
@@ -178,7 +178,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   const ledger = await PersistedLedger.openLocked(input.ledgerPath, input.approval.ledgerId);
   try {
   // No run is executed twice: a pending run the ledger already charged (another wave ran it, or a crash left a charge) refuses the invocation (G1).
-  if (pending.some((run) => ledger.hasRunEntry(run.runId))) throw new Error("run_already_charged");
+  // A run stopped by the trace audit may run again under a new approval that names it (R85); its earlier charge stays in the ledger.
+  const replanned = new Set(input.approval.replannedStopped ?? []);
+  const charged = (runId: string): boolean => !replanned.has(runId) && ledger.hasRunEntry(runId);
+  if (pending.some((run) => charged(run.runId))) throw new Error("run_already_charged");
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
   const savedGuard = resume ? guardFileSchema.safeParse(await readJsonFile(join(waveDir, "guard.json"))) : null;
   if (savedGuard !== null && !savedGuard.success) throw new Error("resume_invalid");
@@ -313,6 +316,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       let guardChanged = false;
       try { guardChanged = guardDiff(g0, await guard()).length > 0; } catch { waveFailure ??= "guard_unreadable"; }
       verdict = classifyRun({ ...facts, interrupted: facts.interrupted || interruptedInOracle, trace, guardChanged, waveFailure });
+      // R84: an audit stop keeps the log lines that caused it, privately, before the private run directory goes; the stop stands if this fails.
+      if (isAuditStop(verdict.stopReason) && trace) {
+        try { await dirGuard.assertIntact(); await writeDiagnostics(waveDir, run.runId, trace.evidenceLines); } catch { /* best effort */ }
+      }
 
       const base = {
         ...baseOf(run, authOf(run)), terminal, usage: output?.usage ?? null, durationMs: output?.durationMs ?? null,
@@ -378,7 +385,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       await persist(notRun(run, before, authOf(run)));
       continue;
     }
-    if (ledger.hasRunEntry(run.runId)) throw new Error("run_already_charged");
+    if (charged(run.runId)) throw new Error("run_already_charged");
     let record: RunRecord;
     try {
       await dirGuard.assertIntact();

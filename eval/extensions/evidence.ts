@@ -1,4 +1,4 @@
-import { lstat, mkdir, rm, unlink } from "node:fs/promises";
+import { lstat, mkdir, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 /*
@@ -7,6 +7,23 @@ import { join } from "node:path";
  * (binary or attribute-encoded content defeats any redaction) and worker-controlled strings (paths, names), so `private/<runId>/` is
  * deleted entirely once the verdict is computed, for every run.
  */
+
+/** One kept diagnostic line is cut at this length. */
+export const MAX_DIAGNOSTIC_LINE_CHARS = 1000;
+
+/**
+ * R84: the one exception to the rule above. When a run is stopped by the trace audit, the raw log lines that caused the stop (the
+ * evidence of `parseStraceLog`) are kept in `<waveDir>/diagnostics/<runId>.txt` (`wx`, mode 0600), each line cut at 1000 characters, so
+ * the event can be attributed. They hold paths and addresses and stay in the private wave directory: the report never reads or copies
+ * `diagnostics/`, and no record carries them. Nothing else of a run is kept.
+ */
+export async function writeDiagnostics(waveDir: string, runId: string, evidenceLines: readonly string[]): Promise<void> {
+  if (evidenceLines.length === 0) return;
+  const directory = join(waveDir, "diagnostics");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const entries = evidenceLines.map((entry) => entry.split("\n").map((line) => line.slice(0, MAX_DIAGNOSTIC_LINE_CHARS)).join("\n"));
+  await writeFile(join(directory, `${runId}.txt`), `${entries.join("\n--\n")}\n`, { flag: "wx", mode: 0o600 });
+}
 
 /**
  * Removes a directory tree without ever following a link: the path itself is `lstat`ed and unlinked when it is not a real directory
