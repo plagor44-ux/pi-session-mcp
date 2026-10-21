@@ -92,8 +92,8 @@ pass, and their only connects were the five of the provider session. The worker
 ended its turn before implementing anything. The records keep only a hash of
 the assistant text, so the reason is not recorded. The first wave had the same
 pattern once (run 012 there, `i-spng-pdf` arm B, 45 seconds). These early stops
-hit both arms and are a property of the `code` route on these tasks, not of
-pi-lens. They decide the per-run counts: without them both arms would have
+hit both arms, which is consistent with a property of the `code` route on these
+tasks rather than of pi-lens. They decide the per-run counts: without them both arms would have
 accepted every run.
 
 ## Network activity outside the task
@@ -111,8 +111,13 @@ have them:
   tried to reach PyPI from the shared network namespace. The offline variables
   (R73) cover uv but not `pip`.
 
-The trace audit recorded no outside write, unresolved write, denied write or
-unresolved egress in any run.
+The trace audit recorded no outside write, unresolved write or unresolved
+egress in any run. Denied write attempts are 0 except in four `i-spng-pdf`
+runs, in both arms: 1,050 in run 011 (A), 1,386 in run 012 (B), 1,050 in run
+081 (A) and 1,050 in run 082 (B). As in the first wave, these are writes the
+kernel refused (`EROFS`, read-only mounts), most likely bytecode caches on the
+read-only Python runtime (likely, not proven). They are not out-of-scope
+writes and are not attributed to pi-lens.
 
 ## What the repeat changes
 
@@ -120,8 +125,10 @@ unresolved egress in any run.
   `i-thoth-dms`) and one early stop (arm B on `i-spng-pdf`). In the repeat,
   arm A solves `i-thoth-dms` in all three runs, and early stops hit both arms.
 - On these tasks pi-lens neither raises the task-level success of `code` nor
-  saves cost. Arm B costs more on every task, mostly through longer sessions
-  (`i-thoth-dms`, `i-spng-authz` run 079).
+  saves cost. Arm B costs more on every task: on `i-thoth-dms` through longer
+  sessions (34 to 44 messages against 26 to 33 in arm A), on `i-spng-authz`
+  mostly through run 079, whose uncached input (262,311 tokens against 70,748
+  in run 045, with the same output) doubled its cost.
 - Three replicates on three tasks are still a small sample. The result settles
   the indicative "enable" as not supported, but gives no estimate of a small
   effect either way.
