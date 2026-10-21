@@ -195,6 +195,14 @@ export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, ext
   ];
 }
 
+/**
+ * The host paths a sandbox binds in besides the scope: the plan's read-only binds and links and the task's dependency binds. The trace audit
+ * does not count a socket below one of them as internal to the sandbox's private /tmp (R87).
+ */
+export function boundTargets(plan: SandboxPlan, binds: readonly SandboxBind[] = []): string[] {
+  return [...plan.rootReadOnly, ...plan.etcReadOnly, ...plan.runReadOnly, ...plan.homeReadOnly, ...plan.extraReadOnly, ...plan.homeLinks.map((link) => link.path), ...binds.map((bind) => bind.target)];
+}
+
 /** `bwrap … -- <command>` with an absolute bwrap path. */
 export function sandboxed(
   tools: Pick<ToolPaths, "bwrap">, plan: SandboxPlan, scopeRoot: string, command: readonly string[], extraWritable: readonly string[] = [], binds: readonly SandboxBind[] = [],

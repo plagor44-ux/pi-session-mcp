@@ -7,14 +7,16 @@ import { MAX_LOG_BYTES, MAX_OUTPUT_BYTES, readRegularFile } from "./safe-read.js
 import { parseStraceLog, type TraceFindings } from "./trace.js";
 
 /** Parses a strace log; null when it is missing or has no line, which means nothing can be audited. */
-export async function auditLog(path: string, roots: string[], initialCwd: string, addresses: AuditAddresses): Promise<TraceFindings | null> {
+export async function auditLog(
+  path: string, roots: string[], initialCwd: string, addresses: AuditAddresses, boundPaths: readonly string[] = [],
+): Promise<TraceFindings | null> {
   let text: string;
   try { text = (await readRegularFile(path, MAX_LOG_BYTES)).toString("utf8"); } catch { return null; }
   const first = /^(?:\[pid\s+(\d+)\]|(\d+))\s/m.exec(text);
   if (!first) return null;
   return parseStraceLog(text, {
     rootPid: Number(first[1] ?? first[2]), initialCwd, allowedWriteRoots: roots,
-    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses, allowedSocketRoots: roots, sandboxed: true,
+    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses, allowedSocketRoots: roots, sandboxed: true, boundPaths: [...boundPaths],
   });
 }
 

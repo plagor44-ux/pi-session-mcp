@@ -1212,6 +1212,65 @@ describe("Unix socket connects (R43)", () => {
     expect(egress(unix("\"/scope/../run/user/1000/bus\""))).toBe(1);
   });
 
+  describe("the sandbox's private /tmp (R87)", () => {
+    const daemon = '"/tmp/codegraph-9ae10b5c0e7502a8.sock"';
+    /** The line of the stopped run's private diagnostics (the codegraph MCP server's daemon socket); it holds no secret. */
+    const evidence = `100 connect(19<socket:[1234567]>, {sa_family=AF_UNIX, sun_path=${daemon}}, 110) = 0`;
+    const sandboxed = { sandboxed: true, boundPaths: ["/tmp/build-x", "/opt/tools"] };
+    /** bubblewrap's setup processes (muted: the root pid and its CLONE_NEWPID child), then the workload pid 102 whose lines are judged. */
+    const prelude = [
+      "100 clone(child_stack=NULL, flags=CLONE_NEWNS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|SIGCHLD) = 101",
+      "101 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f0) = 102",
+    ];
+    const judged = (line: string, extra: Partial<TraceContext>) => parseStraceLog(lines(...prelude, line.replace(/^100 /, "102 ")), { ...ctx({}), allowedSocketRoots: ["/scope"], ...extra });
+    const egress = (line: string, extra: Partial<TraceContext> = {}) => judged(line, extra).unresolvedEgress;
+    const sendto = (path: string) => `100 sendto(3<socket:[2]>, "x", 1, 0, {sa_family=AF_UNIX, sun_path=${path}}, 33) = 1`;
+    const sendmsg = (path: string) =>
+      `100 sendmsg(3<socket:[2]>, {msg_name={sa_family=AF_UNIX, sun_path=${path}}, msg_namelen=29, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = 1`;
+
+    it("allows the daemon socket of the evidence line in a sandboxed trace, and nothing of it is unresolved egress", () => {
+      const found = judged(evidence, sandboxed);
+      expect(found.unresolvedEgress).toBe(0);
+      expect(found.evidenceLines).toEqual([]);
+      expect(found.connects).toBe(0);
+    });
+
+    it("keeps the same path an escape in a trace that is not from a sandboxed command", () => {
+      expect(egress(evidence)).toBe(1);
+      expect(egress(evidence, { sandboxed: false })).toBe(1);
+      // The same line from the muted root pid is not judged at all, so the checks above are about the workload pid.
+      expect(parseStraceLog(lines(...prelude, evidence), { ...ctx({}), ...sandboxed }).unresolvedEgress).toBe(0);
+    });
+
+    it("allows /var/tmp and sendto/sendmsg destinations there, as for connect", () => {
+      expect(egress(unix('"/var/tmp/x.sock"'), sandboxed)).toBe(0);
+      expect(egress(sendto('"/tmp/x.sock"'), sandboxed)).toBe(0);
+      expect(egress(sendmsg('"/var/tmp/y.sock"'), sandboxed)).toBe(0);
+      expect(egress(sendto('"/tmp/x.sock"'))).toBe(1);
+    });
+
+    it("counts a socket below a host path bound into the sandbox as an escape, whatever the directory", () => {
+      expect(egress(unix('"/tmp/build-x/run/x.sock"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/tmp/build-x"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/tmp/build-xy/x.sock"'), sandboxed)).toBe(0);
+      expect(egress(unix('"/opt/tools/x.sock"'), sandboxed)).toBe(1);
+      // A dependency mount inside the scope root is a host directory too, although the scope root itself is allowed.
+      const dependency = { ...sandboxed, boundPaths: ["/scope/clone/backend/.venv"] };
+      expect(egress(unix('"/scope/clone/backend/.venv/x.sock"'), dependency)).toBe(1);
+      expect(egress(unix('"/scope/clone/x.sock"'), dependency)).toBe(0);
+    });
+
+    it("keeps abstract, relative, other and resolved-outside paths as escapes", () => {
+      expect(egress(unix('@"/tmp/codegraph-9ae10b5c0e7502a8.sock"'), sandboxed)).toBe(1);
+      expect(egress(unix('"tmp/x.sock"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/tmpx/x.sock"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/tmp/../home/x.sock"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/var/tmp/../../run/user/1000/bus"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/run/user/1000/bus"'), sandboxed)).toBe(1);
+      expect(egress(unix('"/tmp"'), sandboxed)).toBe(1);
+    });
+  });
+
   it("ignores a connect that failed, and does not count inet connects as Unix escapes", () => {
     expect(egress(unix("\"/run/user/1000/bus\"", "-1 ENOENT (No such file or directory)"))).toBe(0);
     expect(egress(unix("@\"x\"", "-1 ECONNREFUSED (Connection refused)"))).toBe(0);

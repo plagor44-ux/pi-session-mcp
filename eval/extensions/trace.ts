@@ -38,6 +38,11 @@ export interface TraceContext {
    * clones with CLONE_NEWPID are muted for everything except process and cwd tracking; the first child of that process is the workload.
    */
   sandboxed?: boolean;
+  /**
+   * Host paths bound into the sandbox (read-only binds, dependency mounts and their runtime; `boundTargets` in sandbox.ts). A socket below
+   * one of them belongs to the host, wherever it lies, and is never internal (R87).
+   */
+  boundPaths?: string[];
 }
 
 export interface TraceFindings {
@@ -318,6 +323,9 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
 function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const socketRoots = [...SOCKET_ALLOWLIST, ...(ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r))];
+  const bound = (ctx.boundPaths ?? []).map((r) => posix.resolve("/", r));
+  /** Inside bubblewrap /tmp and /var/tmp are fresh tmpfs mounts (R51): a socket there can only reach a process of the same sandbox (R87). */
+  const privateTmp = ctx.sandboxed === true ? ["/tmp/", "/var/tmp/"] : [];
   const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
   const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
   const live = new Map<number, Cell>();
@@ -563,7 +571,10 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     return unixPathEscapes(token);
   }
 
-  /** The AF_UNIX destination judged by name: abstract, relative or outside the allowed roots. */
+  /**
+   * The AF_UNIX destination judged by name: abstract, relative, below a host path bound into the sandbox, or outside the allowed roots. In a
+   * sandboxed trace a path that resolves below /tmp or /var/tmp (and not below a bound host path) is the sandbox's own tmpfs (R87).
+   */
   function unixPathEscapes(token: string): boolean {
     const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
     if (!m) return true; // no readable path: cannot be judged
@@ -571,7 +582,9 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     const path = decodeEscapes(m[2]!);
     if (!path.startsWith("/")) return true;
     const resolved = posix.resolve(path);
-    return !socketRoots.some((r) => resolved === r || resolved.startsWith(r.endsWith("/") ? r : `${r}/`));
+    const below = (root: string): boolean => resolved === root || resolved.startsWith(root.endsWith("/") ? root : `${root}/`);
+    if (bound.some(below)) return true;
+    return !(privateTmp.some((root) => resolved.startsWith(root)) || socketRoots.some(below));
   }
 
   function sendTarget(token: string | undefined, isConnect = false): void {

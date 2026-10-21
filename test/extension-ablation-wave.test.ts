@@ -286,6 +286,40 @@ describe("runWave stop rules", () => {
     expect(r.stopReason).toBe("unresolved_egress");
   });
 
+  describe("sockets in the sandbox's private /tmp (R87)", () => {
+    const connect = (path: string) => `4242 connect(19<socket:[1234567]>, {sa_family=AF_UNIX, sun_path="${path}"}, 110) = 0\n`;
+    const bound = { ...EMPTY_PLAN, extraReadOnly: ["/tmp/ablation-build-x"] };
+
+    it("does not stop a run whose codegraph MCP server connects to its daemon socket in /tmp, and keeps no diagnostics", async () => {
+      const s = await waveSetup(2);
+      const r = await runWave(s.input, s.deps([text({ trace: `${benignTrace()}${connect("/tmp/codegraph-9ae10b5c0e7502a8.sock")}` }), text()]).deps);
+      expect(r.stopReason).toBeNull();
+      expect(r.records[0]).toMatchObject({ outcome: "scored", trace: { unresolvedEgress: 0 } });
+      expect(existsSync(join(s.waveDir, "diagnostics"))).toBe(false);
+    });
+
+    it("still stops for a socket below a host path the plan binds in, and for one outside /tmp", async () => {
+      for (const path of ["/tmp/ablation-build-x/run/x.sock", "/run/user/1000/bus"]) {
+        const s = await waveSetup(2);
+        const r = await runWave(s.input, s.deps([text({ trace: `${benignTrace()}${connect(path)}` })], { planSandbox: async () => bound }).deps);
+        expect(r.stopReason, path).toBe("unresolved_egress");
+        expect(await readFile(join(s.waveDir, "diagnostics", `${r.records[0]!.runId}.txt`), "utf8")).toContain(path);
+      }
+    });
+
+    it("judges the oracle's trace with the bound dependency mounts as host paths", async () => {
+      const s = await waveSetup(1, { kind: "implementation" });
+      const scoring: WaveDeps["scoreImplementation"] = async (_clone, _task, options) => {
+        const argv = options.wrap!(["npm", "test"]);
+        await writeFile(argv[argv.indexOf("-o") + 1]!, prelude(9000) + connect("/tmp/codegraph-1.sock").replace("4242", "9000") + connect("/tmp/ablation-build-x/x.sock").replace("4242", "9000"));
+        return { accepted: true, testsPassed: true, outOfScope: [] };
+      };
+      const r = await runWave(s.input, s.deps([text()], { scoreImplementation: scoring, planSandbox: async () => bound }).deps);
+      expect(r.stopReason).toBe("unresolved_egress");
+      expect(r.records[0]!.trace).toMatchObject({ unresolvedEgress: 1 });
+    });
+  });
+
   it("stops when the run leaves no strace log to audit", async () => {
     const s = await waveSetup(2);
     const r = await runWave(s.input, s.deps([text({ trace: null })]).deps);

@@ -15,7 +15,7 @@ import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { dnsServers } from "./network.js";
 import { changedPaths } from "./oracles.js";
 import { RUN_KEY_BYTES, macMatches } from "./output-mac.js";
-import { planSandbox, type SandboxPlan } from "./sandbox.js";
+import { boundTargets, planSandbox, type SandboxPlan } from "./sandbox.js";
 import { MAX_LOG_BYTES, MAX_OUTPUT_BYTES, readRegularFile } from "./safe-read.js";
 import type { ExtensionId, Pairing, ProfileId, TaskSpec } from "./schemas.js";
 import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, startWithKey, supervise, tracedCommand } from "./supervise.js";
@@ -196,7 +196,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
       killProcessGroup(child.pid);
       interrupted = supervised.interrupted;
       const verified = await readVerifiedDryLoad(scope.root, run.runId, key);
-      findings = await auditLog(log, [scope.root], scope.root, addresses);
+      findings = await auditLog(log, [scope.root], scope.root, addresses, boundTargets(plan, scope.dependencyBinds));
       if (findings && (findings.outsideWrites.length > 0 || findings.unresolvedWrites > 0 || findings.unresolvedEgress > 0)) {
         // R84: the lines behind an unclean load are kept privately, as for a wave; the report stays as it is.
         try { await guard.assertIntact(); await writeDiagnostics(input.waveDir, run.runId, findings.evidenceLines); } catch (error) { reportDiagnosticsFailure(run.runId, error); }
