@@ -38,6 +38,7 @@ const capabilitiesSchema = z.object({
     fingerprint: z.string().regex(CONFIGURATION_FINGERPRINT_PATTERN),
     reloadPolicy: z.literal(RELOAD_POLICY),
   }).strict(),
+  events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
   workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only"]) }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,
@@ -70,6 +71,7 @@ export function createServer(
   defaultExecutionProfile: string,
   configuration: ConfigurationMetadata,
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
+  eventDelivery: "spool" | "off" = "off",
 ): McpServer {
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
@@ -77,7 +79,7 @@ export function createServer(
     inputSchema: z.object({}).strict(),
     outputSchema: capabilitiesSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes)));
+  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery)));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
     inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),

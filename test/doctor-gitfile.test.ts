@@ -21,6 +21,7 @@ function configFor(workspaces: Record<string, string>, permissionProfiles: reado
     executionProfiles: new Map(permissionProfiles.map((permission, index) => [`p${index}`, profile(`p${index}`, permission, index === 0)])),
     defaultExecutionProfile: "p0",
     configuration: CONFIGURATION,
+    eventDelivery: "off",
     skillOverrideDirectory: "/hidden/skills",
   });
 }

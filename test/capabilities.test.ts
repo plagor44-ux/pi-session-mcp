@@ -36,6 +36,7 @@ describe("configuration capability projection", () => {
       ok: true,
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" },
+      events: { delivery: "off" },
       workspaces: [{ alias: "alpha-workspace", mode: "unset" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
@@ -59,6 +60,11 @@ describe("configuration capability projection", () => {
     expect(capabilities.workspaces).toEqual([{ alias: "a", mode: "container" }, { alias: "b", mode: "unset" }]);
   });
 
+  it("reports the event delivery it is given", () => {
+    expect(projectCapabilities(new Map(), new Map(), configuration, new Map(), "spool").events).toEqual({ delivery: "spool" });
+    expect(projectCapabilities(new Map(), new Map(), configuration).events).toEqual({ delivery: "off" });
+  });
+
   it("projects only captured memory with an exact key set on every call", () => {
     const workspaces = new Map([["repo", "/private/CAPTURED_SNAPSHOT_SENTINEL"]]);
     const executionProfiles = new Map<string, ConfiguredExecutionProfile>([
@@ -69,7 +75,7 @@ describe("configuration capability projection", () => {
     const second = projectCapabilities(workspaces, executionProfiles, configuration);
 
     expect(second).toEqual(first);
-    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "workspaces", "executionProfiles"]);
+    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "workspaces", "executionProfiles"]);
     expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"]);
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");

@@ -58,13 +58,14 @@ const profileSchema = z.object({
   }
 });
 
-export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level" | "invalid_execution_modes";
+export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level" | "invalid_execution_modes" | "invalid_event_delivery";
 
 const CONFIG_ERROR_MESSAGES: Record<ConfigErrorCode, string> = {
   config_path_required: "Configuration path is required",
   invalid_execution_profile_config: "Execution profile configuration is invalid",
   invalid_thinking_level: "Execution profile thinking level is invalid",
   invalid_execution_modes: "Execution modes file is invalid",
+  invalid_event_delivery: "Event delivery configuration is invalid",
 };
 
 export class ConfigError extends Error {
@@ -76,7 +77,10 @@ export class ConfigError extends Error {
   }
 }
 
+const eventsSchema = z.object({ delivery: z.literal("spool") }).strict();
+
 export const configSchema = z.object({
+  events: eventsSchema.optional(),
   workspaces: z.record(alias, z.string().min(1)),
   skillCatalog: z.record(alias, skillCatalogPath).refine((catalog) => Object.keys(catalog).length <= MAX_SKILL_CATALOG_ENTRIES).optional(),
   executionProfiles: z.record(alias, profileSchema).superRefine((profiles, context) => {
@@ -113,6 +117,8 @@ export interface AppConfig {
   readonly executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>;
   readonly defaultExecutionProfile: string;
   readonly configuration: ConfigurationMetadata;
+  /** Turn-event delivery: `spool` writes content-free event files, `off` (the default) writes nothing. */
+  readonly eventDelivery: "spool" | "off";
   /** Absolute skill override directory next to the configuration file. Internal; never projected. */
   readonly skillOverrideDirectory: string;
 }
@@ -159,7 +165,9 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   } catch (error) {
     if (error instanceof z.ZodError) {
       const thinkingLevelIssue = error.issues.some((issue) => issue.path.at(-1) === "thinkingLevel");
-      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : "invalid_execution_profile_config");
+      // Only the events field's own issues map to the delivery code; an unknown top-level key stays a profile-config error.
+      const eventsIssue = error.issues.some((issue) => issue.path[0] === "events");
+      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config");
     }
     throw error;
   }
@@ -180,5 +188,5 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const workspaceModes = await loadExecutionModes(absoluteConfig, new Set(workspaces.keys()), executionProfiles);
   const defaultEntry = [...executionProfiles].find(([, profile]) => profile.default);
   if (!defaultEntry) throw new Error("Execution profile configuration is invalid");
-  return { workspaces, workspaceModes, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, skillOverrideDirectory: overrideDirectory };
+  return { workspaces, workspaceModes, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, eventDelivery: parsed.events?.delivery ?? "off", skillOverrideDirectory: overrideDirectory };
 }

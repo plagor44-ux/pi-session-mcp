@@ -29,6 +29,7 @@ describe("MCP contracts", () => {
     defaultExecutionProfile?: string;
     configuration?: ConfigurationMetadata;
     workspaceModes?: ReadonlyMap<string, WorkspaceModeEntry>;
+    eventDelivery?: "spool" | "off";
   } = {}) {
     const workspaces = fixtures.workspaces ?? new Map([["repo", "/safe/repo"]]);
     const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, workspaces, registryOptions);
@@ -36,7 +37,7 @@ describe("MCP contracts", () => {
       ["safe", { alias: "safe", default: true, permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const }],
       ["coding", { alias: "coding", default: false, permissionProfile: "coding" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "high" as const }],
     ]);
-    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes);
+    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: "contract-test", version: "1.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); closers.push(async () => { await client.close(); await server.close(); await registry.shutdown(); }); return { client, adapter, registry };
   }
@@ -101,7 +102,7 @@ describe("MCP contracts", () => {
     expect(inputSchemaOf("pi_turn_get")).toMatchObject({ type: "object", required: ["sessionId", "turnId"], additionalProperties: false, properties: { sessionId: { type: "string" }, turnId: { type: "string" } } });
     expect(discovery?.outputSchema).toMatchObject({
       type: "object",
-      required: ["ok", "server", "configuration", "workspaces", "executionProfiles"],
+      required: ["ok", "server", "configuration", "events", "workspaces", "executionProfiles"],
       additionalProperties: false,
       properties: {
         server: { additionalProperties: false },
@@ -114,6 +115,7 @@ describe("MCP contracts", () => {
             reloadPolicy: { type: "string", const: "restart-required" },
           },
         },
+        events: { type: "object", required: ["delivery"], additionalProperties: false, properties: { delivery: { enum: ["spool", "off"] } } },
         workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only"] } } } },
         executionProfiles: {
           items: {
@@ -187,6 +189,7 @@ describe("MCP contracts", () => {
       ok: true,
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: TEST_CONFIGURATION.fingerprint, reloadPolicy: "restart-required" },
+      events: { delivery: "off" },
       workspaces: [{ alias: "alpha-workspace", mode: "container" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
@@ -208,6 +211,12 @@ describe("MCP contracts", () => {
     expect(connected.adapter.createInputs).toHaveLength(0);
     expect(connected.adapter.handles).toHaveLength(0);
     expect(registryList).not.toHaveBeenCalled();
+  });
+
+  it("reports the configured event delivery", async () => {
+    const connected = await client({}, { eventDelivery: "spool" });
+    const discovered = await connected.client.callTool({ name: "pi_capabilities_get", arguments: {} });
+    expect(discovered.structuredContent).toMatchObject({ events: { delivery: "spool" } });
   });
 
   it("strictly rejects capability discovery input without invoking runtime code", async () => {

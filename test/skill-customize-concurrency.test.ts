@@ -135,6 +135,7 @@ describe.skipIf(!linux)("skill customization across processes", () => {
     const config = async () => ({
       workspaces: new Map(), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "none",
       configuration: { fingerprint: `sha256:${"0".repeat(64)}` as `sha256:${string}`, reloadPolicy: "restart-required" as const },
+      eventDelivery: "off" as const,
       skillOverrideDirectory: fx.override,
     });
     const outdated = async () => (await runDoctor({ packageRoot: fx.packageRoot, loadConfig: config })).checks.filter((check) => check.id === "skill_override_outdated");
