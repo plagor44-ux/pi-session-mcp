@@ -114,3 +114,23 @@ Result: no extension writes into a clone, so no task gets a `scopeIgnore` entry
 from the dry load. `i-pyng-authz` carries 29 `scopeIgnore` prefixes for the
 worker's own test caches (pytest and ruff caches, `__pycache__` directories
 present at the base commit), ruling R72.
+
+## Final tasks (after the oracle rework)
+
+- Dependencies now also exist for `i-pyng-pdf`, with the same layout as
+  `i-pyng-authz` and built offline the same way. The lockfile SHA-256 is
+  `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca`; the two
+  base commits share the lockfile.
+- Dry loads at commit a054cf3 with `--deps`: the full tasks file and a subset
+  (`r-pyng-chat`, `i-pyng-pdf`). Every pairing ok, no clone writes, no connects.
+  The later commits changed only oracle fields and validation, which the dry
+  load does not exercise.
+- Oracle checks inside the real sandbox (bwrap with the dependency binds, the
+  production oracle code, no strace): `i-pyng-authz` and `i-pyng-pdf` are not
+  accepted at the base commit and accepted with the solution, with nothing out
+  of scope.
+- Sandbox environment additions (ruling R73): six offline variables for Go, uv
+  and npm (`GOPROXY=off`, `GOTOOLCHAIN=local`, `UV_OFFLINE=1`, `UV_NO_SYNC=1`,
+  `UV_PYTHON_DOWNLOADS=never`, `npm_config_offline=true`).
+- Verdict patterns were timed against 64 KiB adversarial texts: worst case under
+  3 ms (ruling R80 requires linear patterns).
