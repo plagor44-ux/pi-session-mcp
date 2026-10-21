@@ -418,6 +418,9 @@ package path. The settings-file codes are in the
 
 **Limits.**
 
+- Linux only. The server spool needs `XDG_RUNTIME_DIR`, and the hook reads
+  through `/proc/self/fd`; on any other platform `pi-session-mcp-wake` exits
+  without a wake, so the controller polls.
 - Claude Code only. Codex has no external wake, so Codex controllers keep
   polling; `setup` reports `hook_not_applicable` for a Codex target.
 - Use interactive or stream-json sessions. A one-shot `claude -p` run holds its

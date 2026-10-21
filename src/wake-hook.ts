@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, unlinkSync, watch, writeSync, type FSWatcher } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, statSync, unlinkSync, watch, writeSync, type FSWatcher } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import { TURN_EVENT_FILE_PATTERN, TURN_EVENT_MAX_BYTES, parseTurnEvent, writerEventsDir, type TurnEvent } from "./turn-events.js";
@@ -19,8 +19,8 @@ import { WRITER_NAME_PATTERN } from "./writer-state.js";
  *   directory is listed, and the claim key carries the namespace, so a forged event in
  *   one namespace can neither take nor block a claim of another.
  * - Every directory is opened with `O_NOFOLLOW|O_DIRECTORY`, checked on the handle (a directory of this user)
- *   and read through that handle (`/proc/self/fd/<fd>/<name>` on Linux; elsewhere with `realpath` checks before and
- *   after the read). Event files are opened with `O_NOFOLLOW`, must be regular and small.
+ *   and read through that handle (`/proc/self/fd/<fd>/<name>`). Event delivery is Linux-only (ADR 0011): without
+ *   `/proc/self/fd` the program does nothing (see `isSupportedPlatform`). Event files are opened with `O_NOFOLLOW`, must be regular and small.
  * - A scan retains only events of the armed session and turn, reads at most a fixed number of bytes and lists at most a
  *   fixed number of names; entries, instance directories and cached files are capped; a flooding worker can at most delay or suppress
  *   wakes within its own namespace (the budget wake still fires).
@@ -149,8 +149,6 @@ export interface ScanLimits {
   readonly retain?: { readonly sessionId: string; readonly turnId: string };
   /** The home directory a writer's spool lives under; defaults to `os.homedir()`. */
   readonly home?: string;
-  /** Test seam: `false` forces the `realpath` fallback used where `/proc/self/fd` does not exist. */
-  readonly useProcFd?: boolean;
 }
 export interface ScanResult {
   readonly events: TurnEvent[];
@@ -163,38 +161,38 @@ export interface ScanResult {
   readonly capped: boolean;
 }
 
-const PROC_FD_AVAILABLE = ((): boolean => { try { return existsSync("/proc/self/fd"); } catch { return false; } })();
+const PROC_FD_DIRECTORY = "/proc/self/fd";
 
-/** An opened directory: the handle is what was checked; `path` is the logical location, `expected` its real location. */
-interface Dir { readonly fd: number; readonly path: string; readonly expected: string; readonly useProc: boolean }
-
-/** The path through which entries of `dir` are read: its handle on Linux, its location elsewhere. */
-const base = (dir: Dir): string => (dir.useProc ? `/proc/self/fd/${dir.fd}` : dir.path);
-const entryPath = (dir: Dir, name: string): string => join(base(dir), name);
-
-/** Where a directory that was opened is still the same place; only the fallback can drift, a handle cannot. */
-function stillThere(dir: Dir): boolean {
-  if (dir.useProc) return true;
-  try { return realpathSync(dir.path) === dir.expected; } catch { return false; }
+/**
+ * Event delivery is Linux-first (ADR 0011): directories are read only through their `/proc/self/fd` handles, and
+ * there is no fallback for other platforms. Pure apart from one `stat`.
+ */
+export function isSupportedPlatform(platform: string = process.platform, procFd: string = PROC_FD_DIRECTORY): boolean {
+  if (platform !== "linux") return false;
+  try { return statSync(procFd).isDirectory(); } catch { return false; }
 }
+
+/** An opened directory: the handle is what was checked; `path` is its logical location. */
+interface Dir { readonly fd: number; readonly path: string }
+
+/** The path through which entries of `dir` are read: its handle. */
+const base = (dir: Dir): string => `${PROC_FD_DIRECTORY}/${dir.fd}`;
+const entryPath = (dir: Dir, name: string): string => join(base(dir), name);
 
 /**
  * Opens one directory without following a link at its last component and checks, on the handle, that it is a
- * directory of this user. Below a parent it is opened through the parent's handle where `/proc/self/fd` exists.
+ * directory of this user. Below a parent it is opened through the parent's handle.
  */
-function openDir(parent: Dir | undefined, nameOrRoot: string, useProc: boolean): Dir | undefined {
+function openDir(parent: Dir | undefined, nameOrRoot: string): Dir | undefined {
   let fd: number | undefined;
   try {
     const path = parent === undefined ? nameOrRoot : join(parent.path, nameOrRoot);
-    const target = parent !== undefined && useProc ? entryPath(parent, nameOrRoot) : path;
+    const target = parent === undefined ? path : entryPath(parent, nameOrRoot);
     fd = openSync(target, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     const stat = fstatSync(fd);
     const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
     if (!stat.isDirectory() || (uid !== undefined && stat.uid !== uid)) { closeSync(fd); return undefined; }
-    const expected = parent === undefined ? (useProc ? path : realpathSync(path)) : join(parent.expected, nameOrRoot);
-    const dir: Dir = { fd, path, expected, useProc };
-    if (!stillThere(dir)) { closeSync(fd); return undefined; }
-    return dir;
+    return { fd, path };
   } catch {
     if (fd !== undefined) try { closeSync(fd); } catch { /* closed */ }
     return undefined;
@@ -281,7 +279,6 @@ function newestInstanceDirectories(dir: Dir, budget: ScanBudget, cap: number): {
  * bytes over all directories. With `retain`, only events of that session and turn are kept, in the result and the cache.
  */
 export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAMESPACE, cache: SpoolCache = newSpoolCache(), limits: ScanLimits = {}): ScanResult {
-  const useProc = limits.useProcFd ?? PROC_FD_AVAILABLE;
   const instanceCap = limits.instanceDirectories ?? SCAN_MAX_INSTANCE_DIRECTORIES, cacheCap = limits.cacheEntries ?? CACHE_MAX_ENTRIES;
   const budget: ScanBudget = {
     left: limits.entriesPerScan ?? SCAN_MAX_ENTRIES_PER_SCAN, bytesLeft: limits.bytesPerScan ?? SCAN_MAX_BYTES_PER_SCAN, capped: false,
@@ -293,10 +290,11 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
   const retain = limits.retain;
   const wanted = (event: TurnEvent): boolean => retain === undefined || (event.kind === "turn_terminal" && event.session === retain.sessionId && event.turn === retain.turnId);
   try {
+    if (!isSupportedPlatform()) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
     const home = limits.home ?? homedir();
     const spool = namespace.kind === "host" ? root : (isAbsolute(home) && !home.includes("\0") ? writerEventsDir(home, namespace.name) : undefined);
     if (spool === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
-    const space = openDir(undefined, spool, useProc);
+    const space = openDir(undefined, spool);
     if (space === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
     opened.push(space);
     namespaceFound = true;
@@ -304,7 +302,7 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
     const instances = newestInstanceDirectories(space, budget, instanceCap);
     instanceDirectoryCount = instances.count;
     for (const name of instances.names) {
-      const dir = openDir(space, name, useProc);
+      const dir = openDir(space, name);
       if (dir === undefined) continue;
       opened.push(dir);
       directories.push(dir.path);
@@ -332,7 +330,7 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
         if (seen.size < cacheCap) seen.set(key, event); else budget.capped = true;
         if (event !== null && event.instance === name) found.push(event);
       }
-      if (stillThere(dir) && stillThere(space)) events.push(...found);
+      events.push(...found);
     }
   } finally {
     for (const dir of opened) try { closeSync(dir.fd); } catch { /* closed */ }
@@ -476,6 +474,8 @@ export interface WaitOptions {
   readonly limits?: ScanLimits;
   /** How long the namespace may show no instance directory before the wait ends with `no_spool` (default 2 s). */
   readonly graceMs?: number;
+  /** Test seam: replaces the real delay between scans. */
+  readonly sleep?: (ms: number) => Promise<void>;
   /** The home directory a writer's spool lives under; defaults to `os.homedir()`. */
   readonly home?: string;
   /** Called right after a claim was won and before the wake is returned, so the caller can release it on SIGTERM. */
@@ -509,14 +509,14 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
   };
   let nextParentCheck = now() + parentCheckMs;
   const graceDeadline = now() + (options.graceMs ?? NO_SPOOL_GRACE_MS);
-  let lastScan = 0, scanGapMs = MIN_SCAN_GAP_MS, spoolSeen = false;
+  let lastScan = Number.NEGATIVE_INFINITY, scanGapMs = MIN_SCAN_GAP_MS, spoolSeen = false;
   try {
     for (;;) {
       if (options.signal?.aborted) return { action: "silent", reason: "aborted" };
       // A worker that churns its own directory must not make this loop spin: scans are at least a short gap apart.
-      const gap = scanGapMs - (Date.now() - lastScan);
-      if (gap > 0) await new Promise<void>((resolve) => setTimeout(resolve, gap));
-      lastScan = Date.now();
+      const gap = scanGapMs - (now() - lastScan);
+      if (gap > 0) await (options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(gap);
+      lastScan = now();
       if (options.namespace.kind === "host") watchDir(options.eventsRoot);
       const { events, directories, namespaceFound, instanceDirectoryCount, capped } = scanTurnEvents(options.eventsRoot, options.namespace, cache, { ...options.limits, retain: { sessionId: options.sessionId, turnId: options.turnId }, ...(options.home === undefined ? {} : { home: options.home }) });
       if (capped) scanGapMs = CAPPED_SCAN_GAP_MS; // a flooded namespace is read slowly for the rest of the run
