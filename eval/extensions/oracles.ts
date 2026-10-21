@@ -188,18 +188,29 @@ const anyAnchorHits = (blocks: string[], anchors: Anchor[]): boolean => anchors.
  *   lends all its words to the first block;
  * - anchors cannot name dotfiles or extensionless files (`.env`, `Dockerfile`, `go.mod`).
  */
-export interface ReviewScore { accepted: boolean; criticalHit: number; criticalTotal: number; recall: number; falseFindings: string[] }
+export interface ReviewScore {
+  accepted: boolean; criticalHit: number; criticalTotal: number; recall: number;
+  /** Ids of the false findings the review hit; reported, but not decisive (R78). */
+  falseFindings: string[];
+  /** The task's verdict pattern matched the review text (R78). */
+  verdictMatched: boolean;
+}
 
-/** Deterministic review oracle: an anchor hits when one block names its file (path-agreeing token) and contains every term from a word start. */
+/**
+ * Deterministic review oracle: an anchor hits when one block names its file (path-agreeing token) and contains every term from a word start.
+ * A review is accepted when the task's verdict pattern matches (flags `im`) and every critical finding is hit (R78); keyword anchors cannot see
+ * negation, so false findings are returned for the report but do not decide.
+ */
 export function scoreReview(text: string, oracle: ReviewOracle): ReviewScore {
   const blocks = blocksOf(text);
+  const verdictMatched = new RegExp(oracle.verdict.pattern, "im").test(text);
   const hit = oracle.findings.map((finding) => ({ finding, hit: anyAnchorHits(blocks, finding.anchors) }));
   const critical = hit.filter((entry) => entry.finding.critical);
   const criticalHit = critical.filter((entry) => entry.hit).length;
   const falseFindings = oracle.falseFindings.filter((finding) => anyAnchorHits(blocks, finding.anchors)).map((finding) => finding.id);
   return {
-    accepted: criticalHit === critical.length && falseFindings.length === 0,
-    criticalHit, criticalTotal: critical.length,
+    accepted: verdictMatched && criticalHit === critical.length,
+    criticalHit, criticalTotal: critical.length, verdictMatched,
     recall: hit.length === 0 ? 1 : hit.filter((entry) => entry.hit).length / hit.length,
     falseFindings,
   };

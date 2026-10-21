@@ -54,6 +54,21 @@ describe("summarize", () => {
     expect(found.recommendation).toBe("enable");
   });
 
+  it("counts, per arm, the scored runs with a false finding and those without the verdict, without letting either decide (R78)", () => {
+    const review = (falseFindings: string[], verdictMatched = true): Partial<SummaryRecord> => ({ review: { falseFindings, verdictMatched } });
+    const records = [
+      record("t1", "A", true, review([])), record("t1", "pi-lens", true, review(["x1"])),
+      record("t2", "A", true, review(["x1", "x2"])), record("t2", "pi-lens", false, review([], false)),
+      record("t3", "A", true), record("t3", "pi-lens", true, review(["x2"])),
+    ];
+    const found = result(records);
+    expect(found.a).toMatchObject({ accepted: 3, scored: 3, falseFindingRuns: 1, verdictMissed: 0 });
+    expect(found.b).toMatchObject({ accepted: 2, scored: 3, falseFindingRuns: 2, verdictMissed: 1 });
+    // Only the acceptance feeds the recommendation: B lost a task here.
+    expect(found.recommendation).toBe("do-not-enable");
+    expect(result([...pair("t1", true, true), ...pair("t2", true, true), ...pair("t3", true, true)]).a).toMatchObject({ falseFindingRuns: 0, verdictMissed: 0 });
+  });
+
   it("marks a pairing with fewer than three paired tasks inconclusive", () => {
     const found = result([...pair("t1", false, true), ...pair("t2", true, true)]);
     expect(found).toMatchObject({ tasks: ["t1", "t2"], complete: false, recommendation: "inconclusive" });

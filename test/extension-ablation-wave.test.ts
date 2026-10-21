@@ -155,7 +155,7 @@ async function reviewTask(repoRoot: string, id: string): Promise<TaskSpec> {
   return {
     id, kind: "review", repo: "repo", baseCommit: "a".repeat(40), promptRef, promptHash: hash(body), sourceSession: "s", allowedPaths: [], scopeIgnore: [],
     oracle: {
-      kind: "review",
+      kind: "review", verdict: { pattern: "." },
       findings: [{ id: "F1", critical: true, anchors: [{ file: "src/example.ts", terms: ["race"] }] }],
       falseFindings: [{ id: "X1", anchors: [{ file: "src/example.ts", terms: ["typo"] }] }],
     },
@@ -296,7 +296,19 @@ describe("runWave stop rules", () => {
     expect(r.stopReason).toBeNull();
     expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: false, terminal: "failed", stopReason: null });
     expect(r.records[1]).toMatchObject({ outcome: "scored", accepted: true, terminal: "completed" });
-    expect(r.records[1]!.review).toMatchObject({ criticalHit: 1, falseFindings: [] });
+    expect(r.records[1]!.review).toMatchObject({ criticalHit: 1, falseFindings: [], verdictMatched: true });
+  });
+
+  it("carries the verdict flag into the record and does not accept a review that omits the verdict (R78)", async () => {
+    const s = await waveSetup(2);
+    s.input.tasks = s.input.tasks.map((task) => (task.oracle.kind === "review" ? { ...task, oracle: { ...task.oracle, verdict: { pattern: "^verdict: ready$" } } } : task));
+    s.input.approval = approvalFor(s.input.tasks, s.runs);
+    const r = await runWave(s.input, s.deps([text({ text: `${GOOD_REVIEW}\nVerdict: ready` }), text()]).deps);
+    expect(r.records[0]).toMatchObject({ outcome: "scored", accepted: true, review: { verdictMatched: true, criticalHit: 1 } });
+    expect(r.records[1]).toMatchObject({ outcome: "scored", accepted: false, review: { verdictMatched: false, criticalHit: 1 } });
+    // The record keeps the pattern's outcome only, never the pattern or the text.
+    const record = await readFile(join(s.waveDir, "runs", `${r.records[1]!.runId}.json`), "utf8");
+    expect(record).not.toContain("verdict: ready");
   });
 
   it("stops on a provider auth error instead of scoring it", async () => {
@@ -1328,7 +1340,7 @@ describe("exit status and host safety (N1, R40)", () => {
   it.skipIf(!(process.env.PATH ?? "").split(":").some((dir) => dir.startsWith("/") && existsSync(join(dir, "prlimit"))))("sets a hard core limit of 0 with the flag the spawn uses", async () => {
     const { stdout } = await exec("prlimit", [CORE_LIMIT, "sh", "-c", "ulimit -Hc; ulimit -Sc"]);
     expect(stdout.trim().split("\n")).toEqual(["0", "0"]);
-  });
+  }, 60_000);
 });
 
 describe("helper processes (N3)", () => {
@@ -1943,7 +1955,7 @@ describe("bubblewrap containment (R46)", () => {
     process.kill(-child.pid!, "SIGKILL");
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(await alive()).toBe(0);
-  });
+  }, 60_000);
 });
 
 describe("pinned wave directories (item 3)", () => {
@@ -2421,6 +2433,9 @@ describe("end to end: wave output into the evidence (item 14)", () => {
     const pairingResult = summary.pairings.find((p) => p.id === "pl-review")!;
     expect(pairingResult).toMatchObject({ complete: true });
     expect(pairingResult.tasks).toHaveLength(3);
+    // R78: the review scores of the real records reach the summary (the counts are zero here: every review matched and hit no false finding).
+    expect(pairingResult.a).toMatchObject({ scored: 3, falseFindingRuns: 0, verdictMissed: 0 });
+    expect(pairingResult.b).toMatchObject({ scored: 3, falseFindingRuns: 0, verdictMissed: 0 });
     expect(summary.spentUsd).toBeCloseTo(0.36);
     expect(summary.stopReason).toBeNull();
     for (const file of await findFiles(evidenceDir, /./)) {

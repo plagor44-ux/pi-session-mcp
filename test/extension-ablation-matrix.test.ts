@@ -15,7 +15,7 @@ function review(id: string): TaskSpec {
   return {
     ...base(id), kind: "review",
     oracle: {
-      kind: "review",
+      kind: "review", verdict: { pattern: "approved|looks good" },
       findings: [{ id: "F1", critical: true, anchors: [{ file: "src/config.ts", terms: ["alias"] }] }],
       falseFindings: [{ id: "X1", anchors: [{ file: "src/config.ts", terms: ["cwd"] }] }],
     },
@@ -165,6 +165,23 @@ describe("extension ablation matrix", () => {
       ["pl-code-deepseek", 1], ["pl-code", 2], ["pl-review-grok", 3], ["pl-review", 3], ["co-code", 4], ["co-review", 4],
     ]);
     for (const p of PAIRINGS) expect(pairingSchema.parse(p)).toEqual(p);
+  });
+});
+
+describe("the review verdict pattern (R78)", () => {
+  const withVerdict = (verdict: unknown): unknown => { const task = review("R1"); return { ...task, oracle: { ...task.oracle, verdict } }; };
+
+  it("is required and must be a pattern that compiles, is not empty and has at most 500 characters", () => {
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "^verdict:\\s*ready" })).success).toBe(true);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "a".repeat(500) })).success).toBe(true);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "a".repeat(501) })).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "" })).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "(unclosed" })).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "[z-a]" })).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict({ pattern: "x", flags: "g" })).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict({})).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict("verdict")).success).toBe(false);
+    expect(taskSpecSchema.safeParse(withVerdict(undefined)).success).toBe(false);
   });
 });
 

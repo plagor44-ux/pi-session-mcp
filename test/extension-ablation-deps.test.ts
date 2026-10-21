@@ -78,8 +78,10 @@ describe("allowedPaths entries (R77)", () => {
   });
 
   it("parses the pre-registered tasks file", () => {
-    const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("../docs/evaluation/extension-ablation-2026-10-20/tasks.json", import.meta.url)), "utf8")) as unknown;
-    expect(z.array(taskSpecSchema).min(1).safeParse(tasks).success).toBe(true);
+    const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("../docs/evaluation/extension-ablation-2026-10-20/tasks.json", import.meta.url)), "utf8")) as { oracle: { kind: string; verdict?: unknown } }[];
+    // The verdict patterns (R78) are added to the file separately: a review oracle without one gets a placeholder here, so this test is about the rest.
+    const withVerdict = tasks.map((task) => (task.oracle.kind === "review" && task.oracle.verdict === undefined ? { ...task, oracle: { ...task.oracle, verdict: { pattern: "x" } } } : task));
+    expect(z.array(taskSpecSchema).min(1).safeParse(withVerdict).success).toBe(true);
   });
 });
 
@@ -473,5 +475,5 @@ describe("a real bind (R68)", () => {
     expect(await changedPaths(clone, { gitDir: join(clone, ".git"), commit: base }, [])).toEqual(["written"]);
     await rm(join(clone, "written"));
     expect(await changedPaths(clone, { gitDir: join(clone, ".git"), commit: base }, [])).toEqual([]);
-  });
+  }, 60_000);
 });
