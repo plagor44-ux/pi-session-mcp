@@ -30,7 +30,7 @@ const adapter = new ScriptedAdapter();
 const workspaces = new Map([["fixture", config.workspaceDir]]);
 const registry = new BridgedRegistry(adapter, workspaces, {}, bridge);
 const broker = new QuestionBroker({ instanceId, bridge }); broker.attach();
-new SpoolSink(join(config.spoolBase, instanceId)).attach(bridge);
+const spool = new SpoolSink(join(config.spoolBase, instanceId)); spool.attach(bridge);
 adapter.asker = async ({ handle, spec, deadlineMs, signal }) => {
   const ref = await registry.correlation(handle);
   return broker.ask({ ...ref, attemptId: `att-${ref.sessionId.slice(0, 8)}` }, spec, { deadlineMs, signal });
@@ -64,16 +64,17 @@ server.registerTool("eval_question_answer", {
   inputSchema: z.object({ requestId: z.string().min(1).max(100), value: z.union([z.string().max(2000), z.boolean()]) }).strict(),
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
 }, ({ requestId, value }) => {
-  const before = broker.get(requestId, instanceId);
+  const ref = broker.turnOf(requestId); // also for a rejected answer (expired, already resolved), so the controller's waiter can target the turn
   const outcome = broker.answer(requestId, instanceId, value);
-  return json({ ok: outcome === "accepted", result: outcome, ...("error" in before ? {} : { sessionId: before.sessionId, turnId: before.turnId }) }, outcome !== "accepted");
+  return json({ ok: outcome === "accepted", result: outcome, ...(ref ?? {}) }, outcome !== "accepted");
 });
 
 // Counters: every tools/call by tool name; pi_turn_get split by running vs terminal result.
-const counters = { instanceId, tools: {} as Record<string, number>, pi_turn_get: { running: 0, terminal: 0, error: 0 } };
+const counters = { instanceId, tools: {} as Record<string, number>, pi_turn_get: { running: 0, terminal: 0, error: 0 }, spool_failures: 0 };
 const pendingCalls = new Map<string | number, string>();
 function flushCounters(): void {
   if (!config.counterFile) return;
+  counters.spool_failures = spool.failures;
   const temp = `${config.counterFile}.tmp-${process.pid}`;
   try { writeFileSync(temp, JSON.stringify(counters), { mode: 0o600 }); renameSync(temp, config.counterFile); } catch { /* counters are best effort */ }
 }
@@ -118,8 +119,8 @@ async function shutdown(reason: "eof" | "server_exit"): Promise<void> {
   if (closing) return;
   closing = true;
   if (supervisor) clearInterval(supervisor);
-  registry.endInstance(reason);
-  try { await registry.shutdown(); } catch { /* exit anyway */ }
+  // shutdown emits instance_ended after the closes it triggers
+  try { await registry.shutdown(reason); } catch { /* exit anyway */ }
   try { await server.close(); } catch { /* exit anyway */ }
   flushCounters();
   process.exit(0);

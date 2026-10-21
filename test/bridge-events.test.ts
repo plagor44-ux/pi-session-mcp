@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, readdirSync, statSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { BRIDGE_EVENT_KEYS, BridgedRegistry, EventBridge, SpoolSink, readSpool, type BridgeEvent } from "../eval/bridge/bridge.js";
 import { QuestionBroker } from "../eval/bridge/questions.js";
@@ -125,13 +125,39 @@ describe("turn_terminal from the read model", () => {
     await registry.close(done); await flush(); expect(terminals(events)).toHaveLength(2);
   });
 
-  it("keeps completed when close follows the completion, flushed or not", async () => {
+  it("keeps completed when close follows a flushed completion, and reports turn_unobserved instead of guessing when close wins the race", async () => {
     const { registry, events, start, handle } = setup();
     const flushed = await start(), racing = await start();
-    await registry.prompt(flushed, "x"); await registry.prompt(racing, "x");
+    await registry.prompt(flushed, "x"); const raced = await registry.prompt(racing, "x");
     handle(0).release(completedBy("CANARY_TEXT_c0de")); await flush(); await registry.close(flushed);
     handle(1).release(completedBy("CANARY_TEXT_c0de")); await registry.close(racing); await flush();
-    expect(terminals(events).map((e) => [e.sessionId, e.state])).toEqual([[flushed, "completed"], [racing, "completed"]]);
+    expect(terminals(events).map((e) => [e.sessionId, e.state])).toEqual([[flushed, "completed"]]);
+    const unobserved = events.filter((e) => e.kind === "turn_unobserved");
+    expect(unobserved).toMatchObject([{ sessionId: racing, turnId: raced.turn.turnId, via: "close" }]);
+    expect(Object.keys(unobserved[0]!).sort()).toEqual([...BRIDGE_EVENT_KEYS.turn_unobserved].sort());
+    await flush(); expect(events).toHaveLength(2);
+  });
+
+  it("never reports a state the registry did not apply when the adapter completes during close (abort_timeout, then close)", async () => {
+    const { registry, events, start, handle } = setup({ abortDeadlineMs: 20, closeCleanupDeadlineMs: 2000 });
+    const id = await start({ prompts: [[{ hang: true }]], abortHangs: true }); const { turn } = await registry.prompt(id, "x");
+    await expect(registry.abort(id)).rejects.toMatchObject({ code: "abort_timeout" }); await flush(); expect(events).toEqual([]);
+    const closing = registry.close(id); await flush(); // the registry marked the turn aborted; no new adapter abort happens for the pending one
+    handle(0).release(completedBy("CANARY_TEXT_c0de")); // the adapter prompt settles `completed` after the registry applied `aborted`
+    await closing; await flush();
+    expect(events.map((e) => [e.kind, e.kind === "turn_terminal" ? e.state : null, e.kind === "turn_terminal" ? e.via : null])).toEqual([["turn_terminal", "aborted", "close"]]);
+    expect(terminals(events)[0]!.turnId).toBe(turn.turnId);
+  });
+
+  it("emits instance_ended with the given reason after the closes of shutdown, and drops turn events after an early endInstance", async () => {
+    const first = setup(), second = setup();
+    const a = await first.start(), b = await second.start();
+    const { turn } = await first.registry.prompt(a, "x"); await second.registry.prompt(b, "x");
+    await first.registry.shutdown("eof");
+    expect(first.events.map((e) => e.kind)).toEqual(["turn_terminal", "instance_ended"]);
+    expect(first.events[0]).toMatchObject({ turnId: turn.turnId, state: "aborted", via: "close" }); expect(first.events[1]).toMatchObject({ reason: "eof" });
+    second.registry.endInstance("closed"); await second.registry.shutdown("eof"); await flush();
+    expect(second.events.map((e) => e.kind)).toEqual(["instance_ended"]); expect(second.events[0]).toMatchObject({ reason: "closed" });
   });
 
   it("does not turn activity, including many agent_end analogs, into an early event (scripted and fake adapter)", async () => {
@@ -259,6 +285,18 @@ describe("structured questions during a running turn", () => {
     expect(terminals(events).map((e) => [e.state, e.via])).toEqual([["aborted", "close"]]); expect(broker.openCount()).toBe(0);
   });
 
+  it("names the turn of a request that is no longer open, and nothing for an unknown request", async () => {
+    const { registry, events, broker, start } = setup();
+    const id = await start({ prompts: [[{ ask: select, deadlineMs: 5000 }, { hang: true }]] }); const { turn } = await registry.prompt(id, "x");
+    await until(() => opened(events).length === 1, "question_opened");
+    const requestId = opened(events)[0]!.requestId;
+    expect(broker.turnOf(requestId)).toEqual({ sessionId: id, turnId: turn.turnId });
+    expect(broker.answer(requestId, "inst-A", "a")).toBe("accepted");
+    expect(broker.answer(requestId, "inst-A", "a")).toBe("already_resolved");
+    expect(broker.turnOf(requestId)).toEqual({ sessionId: id, turnId: turn.turnId });
+    expect(broker.turnOf("00000000-0000-4000-8000-000000000000")).toBeUndefined();
+  });
+
   it("refuses beyond the per-session and per-instance limits and leaks no timers", async () => {
     vi.useFakeTimers();
     const bridge = new EventBridge("inst-A"), events: BridgeEvent[] = []; bridge.subscribe((e) => events.push(e));
@@ -303,6 +341,16 @@ describe("content-free events and spool", () => {
     expect(statSync(dir).mode & 0o777).toBe(0o700);
     for (const file of files) { expect(statSync(join(dir, file)).mode & 0o777).toBe(0o600); for (const canary of CANARIES) expect(readFileSync(join(dir, file), "utf8")).not.toContain(canary); }
     expect(readSpool(dir)).toEqual(events);
+  });
+
+  it("counts spool write failures without throwing and keeps writing later events", async () => {
+    const root = await temporaryRoot("bridge-spool-"), dir = join(root, "spool");
+    const sink = new SpoolSink(dir), bridge = new EventBridge("inst-S"); sink.attach(bridge);
+    bridge.emit({ kind: "instance_ended", reason: "eof" }); expect(sink.failures).toBe(0);
+    rmSync(dir, { recursive: true });
+    expect(() => bridge.emit({ kind: "instance_ended", reason: "closed" })).not.toThrow(); expect(sink.failures).toBe(1);
+    mkdirSync(dir, { mode: 0o700 }); bridge.emit({ kind: "instance_ended", reason: "server_exit" });
+    expect(sink.failures).toBe(1); expect(readSpool(dir).map((e) => e.seq)).toEqual([3]);
   });
 
   it("creates a nested spool directory with mode 0700", async () => {

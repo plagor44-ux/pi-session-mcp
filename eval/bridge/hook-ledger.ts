@@ -85,8 +85,9 @@ export function projectHook(hook: unknown, ledger: RunLedger | undefined, option
 
 export interface HookRun { events: number; outcomes: Array<{ type: string; outcome: string; code?: string }>; error?: string }
 /** Applies one hook invocation under the store's lock. Never throws. */
-export async function runLedgerHook(text: string, env: { dir: string; instance: string; runId?: string; now?: () => Date; baseCommit?: string }): Promise<HookRun> {
-  const store = new LedgerStore(env.dir, { lockTimeoutMs: 8000 });
+export const HOOK_LOCK_TIMEOUT_MS = 1000; // a stale lock costs a synchronous hook at most about this long, then it is skipped and counted
+export async function runLedgerHook(text: string, env: { dir: string; instance: string; runId?: string; now?: () => Date; baseCommit?: string; lockTimeoutMs?: number }): Promise<HookRun> {
+  const store = new LedgerStore(env.dir, { lockTimeoutMs: env.lockTimeoutMs ?? HOOK_LOCK_TIMEOUT_MS });
   const record = (file: string, value: unknown): void => { try { appendFileSync(join(env.dir, file), `${JSON.stringify(value)}\n`); } catch { /* counting is best effort */ } };
   try {
     let hook: unknown;
@@ -107,7 +108,7 @@ export async function runLedgerHook(text: string, env: { dir: string; instance: 
     return { events: events.length, outcomes };
   } catch (error) {
     const code = error instanceof LedgerError ? error.code : "internal_error";
-    record("hook-errors.jsonl", { code });
+    record("hook-errors.jsonl", { code, ...(code === "ledger_locked" ? { skipped: true } : {}) });
     return { events: 0, outcomes: [], error: code };
   }
 }

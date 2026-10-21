@@ -16,7 +16,7 @@ const MAX_TIMER_MS = 2_147_483_647;
 interface Pending { question: OpenQuestion; deadlineMs: number; timer: ReturnType<typeof setTimeout> | undefined; settle(outcome: AskOutcome, state: QuestionResolvedState): void; }
 
 export class QuestionBroker {
-  private readonly open = new Map<string, Pending>(); private readonly resolved = new Map<string, QuestionResolvedState>();
+  private readonly open = new Map<string, Pending>(); private readonly resolved = new Map<string, { state: QuestionResolvedState; sessionId: string; turnId: string }>();
   private readonly instanceId: string; private readonly bridge: EventBridge; private readonly maxPerSession: number; private readonly maxPerInstance: number; private readonly now: () => number;
   constructor(options: QuestionBrokerOptions) {
     this.instanceId = options.instanceId; this.bridge = options.bridge; this.maxPerSession = options.maxOpenPerSession ?? 1; this.maxPerInstance = options.maxOpenPerInstance ?? 4; this.now = options.now ?? Date.now;
@@ -24,7 +24,7 @@ export class QuestionBroker {
   /** Cancels waiting questions of a turn when it ends, and all of them when the instance ends. */
   attach(): () => void {
     return this.bridge.subscribe((event) => {
-      if (event.kind === "turn_terminal") this.cancelTurn(event.sessionId, event.turnId, "turn_terminal");
+      if (event.kind === "turn_terminal" || event.kind === "turn_unobserved") this.cancelTurn(event.sessionId, event.turnId, event.kind);
       else if (event.kind === "instance_ended") this.cancelAll("instance_ended");
     });
   }
@@ -46,7 +46,7 @@ export class QuestionBroker {
           if (pending.timer !== undefined) clearTimeout(pending.timer);
           opts.signal?.removeEventListener("abort", onAbort);
           this.open.delete(requestId);
-          this.remember(requestId, state);
+          this.remember(requestId, state, question.sessionId, question.turnId);
           this.bridge.emit({ kind: "question_resolved", requestId, sessionId: question.sessionId, turnId: question.turnId, state });
           resolve(outcome);
         },
@@ -64,13 +64,18 @@ export class QuestionBroker {
   }
   get(requestId: string, instanceId: string): OpenQuestion | { error: "unknown_request" | "wrong_instance" | "already_resolved" | "expired" } {
     const pending = this.open.get(requestId);
-    if (!pending) { const state = this.resolved.get(requestId); return { error: state === undefined ? "unknown_request" : state === "expired" ? "expired" : "already_resolved" }; }
+    if (!pending) { const state = this.resolved.get(requestId)?.state; return { error: state === undefined ? "unknown_request" : state === "expired" ? "expired" : "already_resolved" }; }
     if (instanceId !== this.instanceId) return { error: "wrong_instance" };
     return { ...pending.question, ...(pending.question.options ? { options: [...pending.question.options] } : {}) };
   }
+  /** Session and turn of a request this broker knows, open or resolved, so a rejected answer can still name its turn. */
+  turnOf(requestId: string): { sessionId: string; turnId: string } | undefined {
+    const known = this.open.get(requestId)?.question ?? this.resolved.get(requestId);
+    return known ? { sessionId: known.sessionId, turnId: known.turnId } : undefined;
+  }
   answer(requestId: string, instanceId: string, value: unknown): AnswerResult {
     const pending = this.open.get(requestId);
-    if (!pending) { const state = this.resolved.get(requestId); return state === undefined ? "unknown_request" : instanceId !== this.instanceId ? "wrong_instance" : state === "expired" ? "expired" : "already_resolved"; }
+    if (!pending) { const state = this.resolved.get(requestId)?.state; return state === undefined ? "unknown_request" : instanceId !== this.instanceId ? "wrong_instance" : state === "expired" ? "expired" : "already_resolved"; }
     if (instanceId !== this.instanceId) return "wrong_instance";
     if (this.now() >= Date.parse(pending.question.deadlineAt)) { pending.settle({ status: "expired", code: "deadline" }, "expired"); return "expired"; }
     if (!this.valid(pending.question, value)) return "invalid_answer";
@@ -102,8 +107,8 @@ export class QuestionBroker {
     if (question.kind === "select") return question.options?.includes(value) ?? false;
     return Buffer.byteLength(value, "utf8") <= question.maxBytes;
   }
-  private remember(requestId: string, state: QuestionResolvedState): void {
-    this.resolved.set(requestId, state);
+  private remember(requestId: string, state: QuestionResolvedState, sessionId: string, turnId: string): void {
+    this.resolved.set(requestId, { state, sessionId, turnId });
     while (this.resolved.size > MAX_REMEMBERED) this.resolved.delete(this.resolved.keys().next().value!);
   }
 }

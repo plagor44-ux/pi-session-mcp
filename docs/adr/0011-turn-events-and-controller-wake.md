@@ -59,7 +59,10 @@ defer, and keep the skill cadence. Item 4 needs its own evidence of demand.
 ## Consequences if accepted
 
 - Running polls for Claude Code controllers in stream-json or interactive mode
-  drop to zero; terminal reads stay once per turn.
+  are no longer needed for delivery. Whether real models stop polling is what
+  L4 measures. Terminal reads stay once per turn. The hook timeout must cover
+  the task budget, and every path that leaves a turn running must re-arm a
+  waiter.
 - Codex controllers keep polling.
 - New maintenance: hook installation and verification in setup, spool cleanup,
   and a client-version contract for `asyncRewake`.
