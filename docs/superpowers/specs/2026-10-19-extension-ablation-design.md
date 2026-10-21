@@ -127,7 +127,10 @@ Out of scope:
 - Review oracle (designer's call): for each known finding, pre-registered
   deterministic anchors (file, symbol or line range plus a key term) are fixed
   before the live wave. A review is accepted when it hits every finding marked
-  as critical and reports no finding from the fixed false-finding list.
+  as critical and reports no finding from the fixed false-finding list
+  (the false-finding condition is superseded, see Amendments 2026-10-21, R78:
+  a review is accepted when its verdict pattern matches and it hits every
+  critical finding; false findings are report-only).
   Recall and false findings are reported as numbers too. No model or human
   judges matches.
 - OpenWiki (designer's call): the clone uses the wiki as committed at the
@@ -426,3 +429,21 @@ the text above, they win.
   repo-relative file or a directory prefix ending in `/` (no leading `/`, no
   `..` segment, no glob characters), as `scoreImplementation` already
   supported; the task schema had refused the prefix form.
+- **Review acceptance needs a verdict; false findings are report-only (R78).**
+  Each review oracle carries a required `verdict: { pattern }`, a JavaScript
+  regular expression source (non-empty, at most 500 characters, compiled with
+  flags `im` at parse time) fixed before the live wave. A review is accepted
+  when the pattern matches its text and every critical finding is hit
+  (`verdictMatched && criticalHit === criticalTotal`). False findings are still
+  computed and recorded, and the summary counts the scored runs with any false
+  finding and those without the verdict per pairing and arm (`falseFindingRuns`,
+  `verdictMissed`), but they no longer decide. This replaces the sentence
+  "reports no finding from the fixed false-finding list" in the Tasks section's
+  review oracle bullet. Evidence: in two reviews the keyword anchors cannot see
+  negation. A review that approves while walking the prompt's checklist hit
+  critical anchors, and correct reviews containing "never X" or "nothing Y"
+  lines hit false-finding anchors; tuning the anchors did not converge. Cost: a
+  complete review that omits the requested verdict is not accepted, and a review
+  that does hit a false finding can be accepted (the number is reported, not
+  decisive). `verdictMatched` is carried in the run record's `review` score; the
+  record keeps no pattern and no text.

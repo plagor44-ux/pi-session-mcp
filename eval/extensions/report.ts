@@ -42,6 +42,8 @@ export type SummaryRecord = Pick<RunRecord, "runId" | "taskId" | "profile" | "ar
   usage: { session: { input: number; cacheRead: number; costUsd: number } | null } | null;
   /** The number of destinations outside the provider and DNS allowlists; the record itself keeps only the first few. */
   trace?: { unexpectedConnectCount?: number | undefined } | null | undefined;
+  /** What the report reads of a review score (R78): the false findings it hit and whether the verdict matched. */
+  review?: { falseFindings: string[]; verdictMatched?: boolean | undefined } | undefined;
 };
 
 const STOP_REASONS = [
@@ -59,10 +61,17 @@ const summaryRecordSchema = z.object({
   usage: z.object({ session: z.object({ input: z.number(), cacheRead: z.number(), costUsd: z.number() }).nullable() }).nullable(),
   stopReason: z.enum(STOP_REASONS).nullable(),
   trace: z.object({ unexpectedConnectCount: z.number().int().min(0).optional() }).nullable().optional(),
+  review: z.object({ falseFindings: z.array(z.string()), verdictMatched: z.boolean().optional() }).optional(),
 });
 const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchema.parse(value);
 
-export interface ArmTotals { accepted: number; costUsd: number; scored: number; unexpectedConnects: number }
+export interface ArmTotals {
+  accepted: number; costUsd: number; scored: number; unexpectedConnects: number;
+  /** Scored review runs that hit any false finding (R78); report-only, not part of the acceptance. */
+  falseFindingRuns: number;
+  /** Scored review runs whose text did not match the task's verdict pattern (R78). */
+  verdictMissed: number;
+}
 export interface PairingResult {
   id: string;
   /** The tasks scored in both arms, in task-id order. */
@@ -91,11 +100,13 @@ export interface ReportSummary {
 const costOf = (record: SummaryRecord): number => record.usage?.session?.costUsd ?? 0;
 
 function totals(records: SummaryRecord[]): { arm: ArmTotals; input: number; cacheRead: number } {
-  const arm: ArmTotals = { accepted: 0, costUsd: 0, scored: records.length, unexpectedConnects: 0 };
+  const arm: ArmTotals = { accepted: 0, costUsd: 0, scored: records.length, unexpectedConnects: 0, falseFindingRuns: 0, verdictMissed: 0 };
   let input = 0;
   let cacheRead = 0;
   for (const record of records) {
     if (record.accepted === true) arm.accepted += 1;
+    if ((record.review?.falseFindings.length ?? 0) > 0) arm.falseFindingRuns += 1;
+    if (record.review?.verdictMatched === false) arm.verdictMissed += 1;
     arm.costUsd += costOf(record);
     arm.unexpectedConnects += record.trace?.unexpectedConnectCount ?? 0;
     input += record.usage?.session?.input ?? 0;

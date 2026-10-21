@@ -26,8 +26,14 @@ const anchorFileSchema = relativePathSchema
   }, { message: "anchor_file_path_token" });
 export const anchorSchema = z.object({ file: anchorFileSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
 export type Anchor = z.infer<typeof anchorSchema>;
+/** The review's required verdict (R78): a JavaScript regular expression source, compiled with flags `im`; at most 500 characters. */
+const VERDICT_FLAGS = "im";
+const verdictPatternSchema = z.string().min(1).max(500).refine((pattern) => {
+  try { new RegExp(pattern, VERDICT_FLAGS); return true; } catch { return false; }
+}, { message: "verdict_pattern_invalid" });
 const reviewOracleSchema = z.object({
   kind: z.literal("review"),
+  verdict: z.object({ pattern: verdictPatternSchema }).strict(),
   findings: z.array(z.object({ id: z.string().min(1), critical: z.boolean(), anchors: z.array(anchorSchema).min(1) }).strict()),
   falseFindings: z.array(z.object({ id: z.string().min(1), anchors: z.array(anchorSchema).min(1) }).strict()),
 }).strict();

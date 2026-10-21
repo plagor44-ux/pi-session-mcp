@@ -11,6 +11,7 @@
     "scopeIgnore": [],
     "oracle": {
       "kind": "review",
+      "verdict": { "pattern": "race" },
       "findings": [{ "id": "F1", "critical": true, "anchors": [{ "file": "src/example.ts", "terms": ["race"] }] }],
       "falseFindings": [{ "id": "X1", "anchors": [{ "file": "src/example.ts", "terms": ["typo"] }] }]
     }

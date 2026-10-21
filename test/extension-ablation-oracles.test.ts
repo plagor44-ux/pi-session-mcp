@@ -43,8 +43,10 @@ function makeBase(files?: Record<string, string>): { repo: string; base: { gitDi
 }
 const node = (code: string): string[] => ["node", "-e", code];
 
+/** Matches every text, so the anchor tests below are about the anchors alone; the verdict has its own tests. */
+const ANY_VERDICT = { pattern: "[\\s\\S]*" };
 const reviewOracle: ReviewOracle = {
-  kind: "review",
+  kind: "review", verdict: ANY_VERDICT,
   findings: [
     { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
     { id: "f2", critical: false, anchors: [{ file: "b.md", terms: ["typo"] }] },
@@ -72,9 +74,35 @@ describe("scoreReview", () => {
     expect(scoreReview("- src/a.ts: race, lock\n- src/a.ts: SQL injection", reviewOracle).falseFindings).toEqual(["x1"]);
   });
 
-  it("rejects an otherwise complete review that hits a false finding", () => {
+  it("reports a false finding without letting it decide (R78)", () => {
     const r = scoreReview("- src/a.ts: race, lock\n- b.md: typo\n- src/a.ts: SQL Injection", reviewOracle);
-    expect(r).toMatchObject({ accepted: false, criticalHit: 1, recall: 1, falseFindings: ["x1"] });
+    expect(r).toMatchObject({ accepted: true, criticalHit: 1, recall: 1, falseFindings: ["x1"], verdictMatched: true });
+  });
+
+  describe("the verdict (R78)", () => {
+    const withVerdict: ReviewOracle = { ...reviewOracle, verdict: { pattern: "^verdict:\\s*(not ready|reject)" } };
+    const findings = "- src/a.ts: race, lock\n";
+
+    it("matches the pattern with flags i and m anywhere in the text", () => {
+      expect(scoreReview(`${findings}\nVERDICT: Not Ready`, withVerdict).verdictMatched).toBe(true);
+      expect(scoreReview(`Verdict: reject\n${findings}`, withVerdict).verdictMatched).toBe(true);
+      expect(scoreReview(`${findings}the verdict: reject`, withVerdict).verdictMatched).toBe(false);
+      expect(scoreReview(`${findings}Verdict: ready`, withVerdict).verdictMatched).toBe(false);
+      expect(scoreReview("", withVerdict).verdictMatched).toBe(false);
+    });
+
+    it("does not accept a review that hits every critical finding but omits the verdict", () => {
+      expect(scoreReview(`${findings}Verdict: ready`, withVerdict)).toMatchObject({ accepted: false, criticalHit: 1, criticalTotal: 1, verdictMatched: false });
+    });
+
+    it("does not accept a review with the verdict but a missed critical finding", () => {
+      expect(scoreReview("Verdict: reject\n- b.md: typo", withVerdict)).toMatchObject({ accepted: false, criticalHit: 0, verdictMatched: true });
+    });
+
+    it("accepts the verdict with every critical finding, and a false-finding hit is only reported", () => {
+      expect(scoreReview(`Verdict: reject\n${findings}- src/a.ts: SQL injection`, withVerdict))
+        .toMatchObject({ accepted: true, criticalHit: 1, falseFindings: ["x1"], verdictMatched: true, recall: 0.5 });
+    });
   });
 
   it("matches the basename or the repo-relative path, case-insensitively", () => {
@@ -86,7 +114,7 @@ describe("scoreReview", () => {
 
   it("requires path boundaries around the file name", () => {
     const hit = (text: string, file = "src/a.ts"): boolean => scoreReview(text, {
-      kind: "review", findings: [{ id: "f", critical: true, anchors: [{ file, terms: ["race"] }] }], falseFindings: [],
+      kind: "review", verdict: ANY_VERDICT, findings: [{ id: "f", critical: true, anchors: [{ file, terms: ["race"] }] }], falseFindings: [],
     }).criticalHit === 1;
     expect(hit("data.ts: race", "a.ts")).toBe(false);
     expect(hit("src/a.tsx: race")).toBe(false);
@@ -175,7 +203,7 @@ describe("scoreReview", () => {
   });
 
   it("gives the first pathless block of a section the full heading text (R27f)", () => {
-    const two: ReviewOracle = { kind: "review", falseFindings: [], findings: [
+    const two: ReviewOracle = { kind: "review", verdict: ANY_VERDICT, falseFindings: [], findings: [
       { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
       { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
     ] };
@@ -244,7 +272,7 @@ describe("scoreReview", () => {
   });
 
   it("carries the inherited path into a bodyless heading", () => {
-    const two: ReviewOracle = { kind: "review", falseFindings: [], findings: [
+    const two: ReviewOracle = { kind: "review", verdict: ANY_VERDICT, falseFindings: [], findings: [
       { id: "f1", critical: true, anchors: [{ file: "src/a.ts", terms: ["race", "lock"] }] },
       { id: "f2", critical: true, anchors: [{ file: "src/db/query.ts", terms: ["injection"] }] },
     ] };
@@ -309,7 +337,7 @@ describe("scoreReview", () => {
   });
 
   it("lets any anchor of a finding hit and requires every term in its anchor", () => {
-    const o: ReviewOracle = { kind: "review", findings: [{ id: "f", critical: true, anchors: [{ file: "a.ts", terms: ["one", "two"] }, { file: "b.ts", terms: ["three"] }] }], falseFindings: [] };
+    const o: ReviewOracle = { kind: "review", verdict: ANY_VERDICT, findings: [{ id: "f", critical: true, anchors: [{ file: "a.ts", terms: ["one", "two"] }, { file: "b.ts", terms: ["three"] }] }], falseFindings: [] };
     expect(scoreReview("b.ts: three", o).accepted).toBe(true);
     expect(scoreReview("a.ts: one", o).accepted).toBe(false);
     expect(scoreReview("a.ts: one and two", o).accepted).toBe(true);
@@ -345,7 +373,7 @@ describe("scopeIgnore schema", () => {
 describe("anchor file schema", () => {
   it.each(["mts", "cts", "proto", "graphql", "gql"])("accepts .%s anchors and inherits their heading path", (extension) => {
     const anchor = anchorSchema.parse({ file: `src/x.${extension}`, terms: ["race", "lock"] });
-    const oracle: ReviewOracle = { kind: "review", findings: [{ id: "f", critical: true, anchors: [anchor] }], falseFindings: [] };
+    const oracle: ReviewOracle = { kind: "review", verdict: ANY_VERDICT, findings: [{ id: "f", critical: true, anchors: [anchor] }], falseFindings: [] };
     // Use the second block, which receives only path tokens, never the title itself.
     expect(scoreReview(`### ${anchor.file}\n- context\n- race and lock`, oracle)).toMatchObject({ accepted: true, criticalHit: 1 });
   });
