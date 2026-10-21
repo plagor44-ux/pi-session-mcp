@@ -235,13 +235,34 @@ The finding has the alias `hook:pi-session-mcp-wake`. Codes per operation:
 - `--rollback` and `--remove`: `hook_removed`, `hook_absent`, `hook_not_owned`
   (unchanged) and `hook_divergent` (more than one candidate, or an entry that
   is not exactly the one setup wrote; nothing is deleted).
+- Removal of a shared entry (`--apply` with delivery off, `--remove`,
+  `--rollback`, or removing a writer): `hook_kept_shared` (unchanged; another
+  owned registration in the same local settings still needs the entry, see
+  below).
 - Any operation: `hook_not_applicable` (unchanged; a Codex target),
   `hook_config_unreadable` (failed), `hook_path_unsafe` (failed; the Node or
   package path contains a character that the unquoted command cannot carry),
+  `hook_budget_invalid` (failed; the wait budget is not a positive integer),
   `settings_location_invalid`, `settings_unreadable`, `settings_unparseable`,
   `settings_shape_invalid` (`hooks` or `hooks.PostToolUse` has another shape),
   `settings_changed` (the file changed twice during the edit) and
   `hook_install_failed` (failed).
+
+With delivery off and no entry that setup owns, setup does not read the
+settings file at all, so an unparseable or linked file there changes nothing
+and fails nothing; the finding is `hook_not_enabled` (unchanged).
+
+Writer registrations (`pi-coding-<name>`, Claude Code local scope) get the entry
+in `<project>/.claude/settings.local.json` of the operator's project when the
+writer's own configuration enables delivery. One entry and one record serve the
+project, so it is removed only when no other owned registration needs it: a
+writer of the same project whose configuration enables delivery, or the owned
+host registration `claude-code:local:pi-session-mcp` while the host
+configuration enables delivery (its project is not recorded, so it counts for
+every project). When in doubt the entry stays. A hook problem while removing a
+writer is reported (`settings_*`, `hook_divergent`) but does not keep the
+writer: its registration and files are removed, and the record keeps the entry
+owned for the next removal. Codex writer registrations get no hook.
 
 Setup never replaces or deletes an entry that it did not write or that was
 edited, and it keeps all other settings. The entry is not part of the MCP
