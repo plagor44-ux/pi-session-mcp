@@ -1,0 +1,20 @@
+{
+  "runId": "016-r-go-app-gates-review-grok-A",
+  "taskId": "r-go-app-gates",
+  "profile": "review-grok",
+  "arm": "A",
+  "pairings": [
+    "pl-review-grok"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}

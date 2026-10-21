@@ -1,0 +1,21 @@
+{
+  "runId": "024-r-go-app-gates-review-A",
+  "taskId": "r-go-app-gates",
+  "profile": "review",
+  "arm": "A",
+  "pairings": [
+    "pl-review",
+    "co-review"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}

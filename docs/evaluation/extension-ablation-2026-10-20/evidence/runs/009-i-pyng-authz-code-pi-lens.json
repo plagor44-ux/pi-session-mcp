@@ -1,0 +1,97 @@
+{
+  "runId": "009-i-pyng-authz-code-pi-lens",
+  "taskId": "i-pyng-authz",
+  "profile": "code",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 65356,
+      "output": 6503,
+      "cacheRead": 1117312,
+      "cacheWrite": 0,
+      "total": 1189171,
+      "costUsd": 0.3074732
+    },
+    "assistant": {
+      "messages": 26,
+      "input": 65356,
+      "output": 6503,
+      "cacheRead": 1117312,
+      "cacheWrite": 0,
+      "costUsd": 0.3074732
+    },
+    "providerError": null
+  },
+  "durationMs": 358936,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [
+      {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "port": 5544
+      },
+      {
+        "family": "inet",
+        "address": "151.101.64.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.192.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.0.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.128.223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:600::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:200::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:400::223",
+        "port": 443
+      }
+    ],
+    "unexpectedConnectCount": 9,
+    "connects": 67
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "5772fb868d0a163e52366e8171d85722e5c54ce3503f78c6b2d0b83317d84ba8",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}

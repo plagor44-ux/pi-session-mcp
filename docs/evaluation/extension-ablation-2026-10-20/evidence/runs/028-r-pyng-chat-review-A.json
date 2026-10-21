@@ -1,0 +1,21 @@
+{
+  "runId": "028-r-pyng-chat-review-A",
+  "taskId": "r-pyng-chat",
+  "profile": "review",
+  "arm": "A",
+  "pairings": [
+    "pl-review",
+    "co-review"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}

@@ -1,0 +1,235 @@
+{
+  "ledgerId": "dce52c6f-76ab-4043-a8b6-f88d320b2180",
+  "limitUsd": 10,
+  "spentUsd": 8.33870414,
+  "entries": [
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004244,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0007911359999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.003192,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review-grok",
+      "profile": "review-grok",
+      "costUsd": 0.004462,
+      "kind": "preflight"
+    },
+    {
+      "runId": "001-i-go-app-dms-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.10533217199999999
+    },
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004242,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0006782399999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.00319,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004242,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0006785399999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.00319,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review-grok",
+      "profile": "review-grok",
+      "costUsd": 0.0044919999999999995,
+      "kind": "preflight"
+    },
+    {
+      "runId": "001-i-go-app-dms-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.17673717600000005
+    },
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.00424,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0006779399999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.003188,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review-grok",
+      "profile": "review-grok",
+      "costUsd": 0.0044919999999999995,
+      "kind": "preflight"
+    },
+    {
+      "runId": "001-i-go-app-dms-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.15180066
+    },
+    {
+      "runId": "002-i-go-app-dms-code-deepseek-pi-lens",
+      "profile": "code-deepseek",
+      "costUsd": 0.13464504
+    },
+    {
+      "runId": "003-i-pyng-authz-code-deepseek-pi-lens",
+      "profile": "code-deepseek",
+      "costUsd": 0.06447482399999999
+    },
+    {
+      "runId": "004-i-pyng-authz-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.05188099200000002
+    },
+    {
+      "runId": "005-i-pyng-pdf-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.05286914400000001
+    },
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004242,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0006782399999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.00319,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review-grok",
+      "profile": "review-grok",
+      "costUsd": 0.00446,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004242,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-code-deepseek",
+      "profile": "code-deepseek",
+      "costUsd": 0.0006782399999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review",
+      "profile": "review",
+      "costUsd": 0.00319,
+      "kind": "preflight"
+    },
+    {
+      "runId": "preflight-review-grok",
+      "profile": "review-grok",
+      "costUsd": 0.004515999999999999,
+      "kind": "preflight"
+    },
+    {
+      "runId": "005-i-pyng-pdf-code-deepseek-A",
+      "profile": "code-deepseek",
+      "costUsd": 0.073667388
+    },
+    {
+      "runId": "006-i-pyng-pdf-code-deepseek-pi-lens",
+      "profile": "code-deepseek",
+      "costUsd": 0.07567240800000001
+    },
+    {
+      "runId": "007-i-go-app-dms-code-A",
+      "profile": "code",
+      "costUsd": 0.9080832
+    },
+    {
+      "runId": "008-i-go-app-dms-code-pi-lens",
+      "profile": "code",
+      "costUsd": 0.8674076000000002
+    },
+    {
+      "runId": "009-i-pyng-authz-code-pi-lens",
+      "profile": "code",
+      "costUsd": 0.3074732
+    },
+    {
+      "runId": "010-i-pyng-authz-code-A",
+      "profile": "code",
+      "costUsd": 0.26349199999999995
+    },
+    {
+      "runId": "011-i-pyng-pdf-code-A",
+      "profile": "code",
+      "costUsd": 0.18292880000000003
+    },
+    {
+      "runId": "012-i-pyng-pdf-code-pi-lens",
+      "profile": "code",
+      "costUsd": 0.05822719999999999
+    },
+    {
+      "runId": "013-r-psm-smoke-review-grok-A",
+      "profile": "review-grok",
+      "costUsd": 1.088852
+    },
+    {
+      "runId": "014-r-psm-smoke-review-grok-pi-lens",
+      "profile": "review-grok",
+      "costUsd": 1.0433860000000001
+    },
+    {
+      "runId": "015-r-go-app-gates-review-grok-pi-lens",
+      "profile": "review-grok",
+      "costUsd": 2.660577999999999
+    }
+  ]
+}
