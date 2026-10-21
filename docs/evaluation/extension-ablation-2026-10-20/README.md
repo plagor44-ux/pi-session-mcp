@@ -68,9 +68,10 @@ tuned the oracle against them.
 Behaviour on fresh text: after four curation rounds, the oracle accepted 11 of
 18 fresh correct reviews written by an independent reviewer. The anchor set in
 `tasks.json` was chosen because it scored best on that fresh set; a later
-variant accepted 8. Fresh wrong-defect reviews were rejected. This
-non-convergence is why acceptance cannot decide: the spec drops an oracle that
-needs judgment.
+variant accepted 8. Fresh wrong-defect reviews that do not deny the real defect
+were rejected; reviews that also deny the real defect in the oracle's own
+wording can be accepted (see Limits). This non-convergence is why acceptance
+cannot decide: the spec drops an oracle that needs judgment.
 
 Timing: verdict patterns are linear and were timed on 89 adversarial 64 KiB
 inputs per pattern (worst case 2.9 ms). The full review scoring was quadratic on
@@ -83,9 +84,9 @@ differential fuzz against the old code).
 - The matcher is keyword-based and blind to negation.
 - A non-approving review that denies a critical finding in the oracle's own
   positive claim wording can still be accepted; this was seen in probes for
-  `r-psm-smoke`, `r-pyng-authz` and `r-go-app-gates`. `r-go-app-gates` has a single
-  critical finding and its prompt asks for a "checks with no finding" section,
-  which makes this more likely there.
+  `r-psm-smoke`, `r-pyng-authz`, `r-pyng-chat` and `r-go-app-gates`.
+  `r-go-app-gates` has a single critical finding and its prompt asks for a
+  "checks with no finding" section, which makes this more likely there.
 - `r-go-app-gates` counts "APPROVE WITH CHANGES" and "Approved with corrections"
   as non-approving, and plain "APPROVE" and "APPROVE WITH NITS" as approving.
 - False findings fire on natural denials, which is why they are report-only.

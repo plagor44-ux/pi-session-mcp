@@ -56,7 +56,8 @@ costs more is acceptable only if it saves more correction work than it costs.
    - worker usage and catalog cost;
    - runtime;
    - any network or file activity outside the task.
-2. Make a recommendation per profile: enable, do not enable, or inconclusive.
+2. Make a recommendation per profile: enable, do not enable, or inconclusive
+   (for implementation pairings only, see Amendments R83).
 3. Keep every attempt, including failed and stopped ones, as evidence in
    `docs/evaluation/extension-ablation-<date>/`.
 
@@ -130,7 +131,8 @@ Out of scope:
   as critical and reports no finding from the fixed false-finding list
   (the false-finding condition is superseded, see Amendments 2026-10-21, R78:
   a review is accepted when its verdict pattern matches and it hits every
-  critical finding; false findings are report-only).
+  critical finding; false findings are report-only; review acceptance is
+  descriptive only since R83).
   Recall and false findings are reported as numbers too. No model or human
   judges matches.
 - OpenWiki (designer's call): the clone uses the wiki as committed at the
