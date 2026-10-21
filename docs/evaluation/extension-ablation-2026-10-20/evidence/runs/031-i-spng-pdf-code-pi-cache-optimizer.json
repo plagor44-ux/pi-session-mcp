@@ -1,0 +1,20 @@
+{
+  "runId": "031-i-spng-pdf-code-pi-cache-optimizer",
+  "taskId": "i-spng-pdf",
+  "profile": "code",
+  "arm": "pi-cache-optimizer",
+  "pairings": [
+    "co-code"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}
