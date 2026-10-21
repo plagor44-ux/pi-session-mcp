@@ -98,7 +98,7 @@ const failedRun = (run: RunSpec, harnessError: string, authType: RunRecord["auth
 /** `waveDir/status.json`: how the last invocation ended, or `running` while it is still going (or crashed). Only a `paused` wave can be resumed. */
 export const statusSchema = z.object({ state: z.enum(["running", "paused", "stopped", "complete"]), stopReason: z.string().nullable(), executedRuns: z.number().int().min(0), recordedRuns: z.number().int().min(0) }).strict();
 const storedRecordSchema = z.object({
-  stopReason: z.string().nullable(), taskId: z.string().optional(), profile: z.string().optional(), arm: z.string().optional(), replicate: z.number().optional(),
+  stopReason: z.string().nullable(), taskId: z.string(), profile: z.string(), arm: z.string(), replicate: z.number().optional(),
 }).passthrough();
 const guardFileSchema = z.object({ files: z.record(z.string(), z.string()) }).strict();
 
@@ -153,7 +153,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       // A record belongs to the slot its run id names: task, profile, arm and replicate must be the approval's (R90).
       const run = runs.find((candidate) => `${candidate.runId}.json` === name);
       const slot = record.data;
-      if (run !== undefined && slot.taskId !== undefined && (slot.taskId !== run.taskId || slot.profile !== run.profile || slot.arm !== run.arm || slot.replicate !== run.replicate)) throw new Error("resume_invalid");
+      if (run !== undefined && (slot.taskId !== run.taskId || slot.profile !== run.profile || slot.arm !== run.arm || slot.replicate !== run.replicate)) throw new Error("resume_invalid");
     }
   } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
   const pending = runs.filter((run) => !done.has(run.runId));

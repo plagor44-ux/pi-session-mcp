@@ -647,21 +647,38 @@ the text above, they win.
   run over the whole list, and the arm-A/arm-B order per task flips between
   consecutive replicates (so every task sees both orders). With N > 1 every run
   id ends in `-r<k>` (also `-r1`) and the run and its record carry `replicate`;
-  the approval records `replicates`, which is part of the binding
-  (`validateApproval` checks the run list against the canonical matrix of that
-  replicate count; `matrixDigest` covers the runs). `--exclude-wave`, `--resume`
-  and the charge guard (G1) key on the run id, which names one slot, and refuse
-  a record of the same id for another task, profile, arm or replicate. The
-  report merges per run id with that consistency check. For an implementation
-  pairing it pairs arm A and arm B per (task, replicate) unit, applies the
-  pre-registered rule (`recommend()`, unchanged) to those units, and still asks
-  for three distinct tasks before it calls a pairing complete; the summary adds
-  per task the units paired and the accepted ones per arm (read as `k of N`)
-  and the per-arm totals over the units. Review pairings stay descriptive.
-  With N = 1 nothing changes: run ids, ordinals, order, digests, records and
-  every output are byte-identical, and the approvals and evidence of
-  2026-10-20 still parse and report the same. Cost: the budget scales with N
-  (the repeat plan projects 18 runs for `pl-code`), and a rule written for
-  three tasks now runs over up to 3 N units, so its "strictly better on one
-  task" clause is met more easily by noise; the write-up reads the per-task
-  counts beside the verdict.
+  the approval records `replicates` (written only when greater than 1; an
+  explicit 1 is refused), which is part of the binding (`validateApproval`
+  checks the run list against the canonical matrix of that replicate count and
+  requires the highest replicate of the list to equal it; `matrixDigest` covers
+  the runs). `--exclude-wave`, `--resume` and the charge guard (G1) key on the
+  run id, which names one slot; exclusion and resume refuse a record of the same
+  id for another task, profile, arm or replicate, and the report merges per run
+  id with the same consistency check. How the report reads the replicates is
+  R92. With N = 1 nothing changes: run ids, ordinals, order, digests, records
+  and every output are byte-identical, and the approvals and evidence of
+  2026-10-20 still parse and report the same. A ledger must not mix waves of
+  different replicate counts: the run ids of replicates 1 and 2 coincide
+  between plans of 2 and 3 replicates, so a replicated wave gets a new ledger;
+  the report refuses waves whose approvals disagree on the count
+  (`replicates_mixed`).
+  Cost: the budget scales with N (the repeat plan projects 18 runs for
+  `pl-code`).
+- **A task is solved by a majority of its replicates (R92, owner decision
+  2026-10-21; replaces the first draft that paired per (task, replicate)
+  unit).** For N > 1, an arm solves a task when more than N/2 of its N runs are
+  accepted (2 of 3). A task counts only when both arms have all N runs scored
+  for it; any other task of the pairing is listed as incomplete in the summary.
+  The pre-registered rule (`recommend()`, unchanged) is applied to the per-task
+  outcomes of the counted tasks: B solves at least as many tasks as A, strictly
+  more on at least one, and the cost of B over the counted tasks' runs is at
+  most 1.25 times that of A. The pairing is complete only when every task of the
+  pairing counted and at least three did, and inconclusive otherwise. The
+  summary gives per task and arm the runs scored, the runs accepted, whether the
+  task is solved and whether it counted, also for runs that are not paired. The
+  `replicated` block appears only on pairings that have runs in the evidence.
+  With N = 1 nothing changes. Review pairings stay descriptive, over the
+  (task, replicate) units scored in both arms. Cost: a task with a stopped or
+  missing run in either arm makes the whole pairing inconclusive instead of
+  shrinking the sample, so a lost run can only be answered by planning that
+  slot again (R59, R85).

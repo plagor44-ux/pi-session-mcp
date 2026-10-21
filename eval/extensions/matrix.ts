@@ -1,5 +1,6 @@
-import type { Arm, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
+import { MAX_REPLICATES, type Arm, type Pairing, type ProfileId, type RunSpec, type TaskSpec } from "./schemas.js";
 
+export { MAX_REPLICATES };
 export type { Arm, ExtensionId, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
 
 const PI_LENS_REVIEW_TOOLS = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report"];
@@ -34,9 +35,6 @@ function select(tasks: TaskSpec[], pairings: readonly Pairing[], limits: Readonl
 function assertUniqueTaskIds(tasks: TaskSpec[]): void {
   if (new Set(tasks.map((t) => t.id)).size !== tasks.length) throw new Error("duplicate_task_id");
 }
-
-/** The most replicates a plan may ask for (R90). */
-export const MAX_REPLICATES = 9;
 
 /** A run without a `replicate` field is the one run of a plan without replicates (R90). */
 export const replicateOf = (run: { replicate?: number | undefined }): number => run.replicate ?? 1;
