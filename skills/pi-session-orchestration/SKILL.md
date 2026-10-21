@@ -57,7 +57,7 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 `pi_capabilities_get` reports `events.delivery`. Use the wake only when it is `spool` **and** you are Claude Code in an interactive or stream-json session with the `pi-session-mcp-wake` hook installed by setup. Otherwise poll as described below. Codex and one-shot `claude -p` runs always poll.
 
 - After `pi_session_prompt` returns a running turn, do not poll it and do not sleep. Start other tasks or end your turn.
-- A system reminder `pi-session-mcp: turn <turnId> of session <sessionId> is <state>.` means that turn is terminal. Read it once with `pi_turn_get` and continue as in section 7. With several running turns, each wake names one turn; read only that one.
+- A system reminder `pi-session-mcp: turn <turnId> of session <sessionId> is <state>.` means that turn should be terminal. Read it once with `pi_turn_get` and continue as in section 7. If that read still shows `running`, the read itself re-arms the wake; wait again. With several running turns, each wake names one turn; read only that one.
 - A reminder `pi-session-mcp: no event for turn <turnId> within the wait budget` means no event arrived in time. Read that turn once. If it is still running, that read re-arms the wake; apply your time budget as usual.
 - A wake is only a trigger. The state you act on is always the one `pi_turn_get` returns.
 

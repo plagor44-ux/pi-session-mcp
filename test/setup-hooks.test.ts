@@ -1,4 +1,4 @@
-import { chmod, lstat, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -235,6 +235,59 @@ describe("wake hook compare and swap", () => {
     const dependencies: WakeHookDependencies = { beforeCommit: async () => { calls += 1; if (calls === 1) await writeFile(file, f.format({ model: "late" })); } };
     expect(await f.run("apply", { dependencies })).toEqual({ status: "ok", code: "hook_added" });
     expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ model: "late", hooks: { PostToolUse: [f.entry] } });
+  });
+});
+
+describe("wake hook location guard at commit", () => {
+  it("writes nothing when .claude becomes a link between read and commit", async () => {
+    const f = await fixture();
+    await f.seed("project", { model: "opus" });
+    const real = join(f.cwd, ".claude-moved");
+    const dependencies: WakeHookDependencies = { beforeCommit: async () => { await rename(join(f.cwd, ".claude"), real); await symlink(real, join(f.cwd, ".claude")); } };
+    expect(await f.run("apply", { scope: "project", dependencies })).toEqual({ status: "failed", code: "settings_location_invalid" });
+    expect(await readFile(join(real, "settings.json"), "utf8")).toBe(f.format({ model: "opus" }));
+    expect(await readdir(real)).toEqual(["settings.json"]);
+  });
+  it("writes nothing when .claude is replaced by another directory", async () => {
+    const f = await fixture();
+    await f.seed("local", { model: "opus" });
+    const dependencies: WakeHookDependencies = { beforeCommit: async () => { await rename(join(f.cwd, ".claude"), join(f.cwd, ".claude-old")); await mkdir(join(f.cwd, ".claude")); } };
+    expect(await f.run("apply", { scope: "local", dependencies })).toEqual({ status: "failed", code: "settings_changed" });
+    expect(await readdir(join(f.cwd, ".claude"))).toEqual([]);
+    expect(await readFile(join(f.cwd, ".claude-old", "settings.local.json"), "utf8")).toBe(f.format({ model: "opus" }));
+  });
+  it("writes nothing when a project settings file becomes a link to an identical copy", async () => {
+    const f = await fixture();
+    const file = await f.seed("local", { model: "opus" });
+    const copy = join(f.root, "copy.json"); await writeFile(copy, f.format({ model: "opus" }));
+    const dependencies: WakeHookDependencies = { beforeCommit: async () => { await rm(file); await symlink(copy, file); } };
+    expect(await f.run("apply", { scope: "local", dependencies })).toEqual({ status: "failed", code: "settings_location_invalid" });
+    expect(await readFile(copy, "utf8")).toBe(f.format({ model: "opus" }));
+  });
+  it("rejects a .claude that became a link during a retried attempt", async () => {
+    const f = await fixture();
+    await f.seed("project", { model: "opus" });
+    const elsewhere = join(f.root, "elsewhere"); await mkdir(elsewhere);
+    // The first attempt loses a compare-and-swap; the link appears during the retry.
+    let calls = 0;
+    const dependencies: WakeHookDependencies = { beforeCommit: async () => {
+      calls += 1;
+      if (calls === 1) { await writeFile(f.settings("project"), f.format({ model: "other" })); }
+      if (calls === 2) { await rm(join(f.cwd, ".claude"), { recursive: true }); await symlink(elsewhere, join(f.cwd, ".claude")); }
+    } };
+    expect(await f.run("apply", { scope: "project", dependencies })).toEqual({ status: "failed", code: "settings_location_invalid" });
+    expect(await readdir(elsewhere)).toEqual([]);
+  });
+  it("keeps following the operator's own linked user directory and detects its replacement", async () => {
+    const f = await fixture();
+    const dotfiles = join(f.root, "dotfiles"); await mkdir(dotfiles);
+    await symlink(dotfiles, join(f.home, ".claude"));
+    expect(await f.run("apply")).toEqual({ status: "ok", code: "hook_added" });
+    expect(JSON.parse(await readFile(join(dotfiles, "settings.json"), "utf8")).hooks.PostToolUse).toEqual([f.entry]);
+    const other = join(f.root, "other-dotfiles"); await mkdir(other);
+    const dependencies: WakeHookDependencies = { beforeCommit: async () => { await rm(join(f.home, ".claude")); await symlink(other, join(f.home, ".claude")); } };
+    expect(await f.run("remove", { dependencies })).toEqual({ status: "failed", code: "settings_changed" });
+    expect(await readdir(other)).toEqual([]);
   });
 });
 
