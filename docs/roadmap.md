@@ -95,6 +95,32 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 6: ledger and event-bridge evaluation (2026-10-21)
+
+Added at the operator's explicit request of 2026-10-21 as a bounded,
+development-only evaluation
+([#104](https://github.com/plagor44-ux/pi-session-mcp/issues/104),
+[Sprint 6](sprints/2026-10-21-s6-ledger-event-bridge.md),
+[report](evaluation/ledger-event-bridge-2026-10-21/README.md)). It does not
+replace the isolation priority under #79 and changes no product code or
+contract.
+
+- Done: inventory of controller ledger, SDK completion semantics, client wake
+  paths and OMO Boulder; a provider-free prototype under `eval/bridge/` (ledger,
+  completion bridge, question broker, Claude Code `asyncRewake` adapter) with 75
+  tests; a client-level probe on Claude Code 2.1.303 (idle stream-json session
+  woken once per event, question round trip, controls; three attempts kept).
+- Verdict: the current procedure stays. A lean completion bridge with Claude
+  Code rewake is technically viable and is proposed in
+  [ADR 0011](adr/0011-turn-events-and-controller-wake.md) (Proposed). A file
+  ledger and a polling supervisor are not recommended as product features.
+- Open, with gates: the real-model measurement (L4) needs an explicit approval
+  of the [live plan](evaluation/ledger-event-bridge-2026-10-21/live-plan.md);
+  ADR 0011 is decided only after it; a question channel needs its own decision
+  and a minor release.
+- Deferred: Codex wake (no documented path), interactive and VS Code wake
+  checks, a supervisor-only detection arm.
+
 ### Sprint 5 issue status
 
 Implemented means the code or text exists on the Sprint 5 branch; verified
@@ -190,6 +216,7 @@ in-memory state and one trusted local peer.
 | --- | --- |
 | OS isolation | Trigger fired on 2026-10-15 (coding profiles wrote on non-disposable repositories); decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and ADR 0008, interim rules in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules); profiles/skills are not an OS sandbox |
 | pi_turn_wait | Measured high polling cost per turn with pauses or tool/approval cost; 5–7 polls per invocation is insufficient evidence |
+| Turn events and controller wake (ADR 0011, Proposed) | Approved L4 measurement keeps quality and needs fewer controller model requests without higher uncached input; question channel separately, with demonstrated demand |
 | Persistence/resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |
