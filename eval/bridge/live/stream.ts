@@ -37,13 +37,16 @@ export function parseCounters(text: string): ServerCounters | null {
   } catch { return null; }
 }
 
-export type EndDecision = { end: true; reason: "all_sessions_closed" } | { end: false };
+export type EndDecision = { end: true; reason: "all_sessions_closed" | "no_open_session" } | { end: false };
 /**
  * Evaluated after every `result` event. All sessions closed (and at least one close seen) ends the run in both arms. A result
- * while sessions are open is the expected idle point of arm C and keeps stdin open; unreadable counters never end a run.
+ * while sessions are open is the expected idle point of arm C and keeps stdin open; a result with no open session ends it.
  */
 export function decideEnd(_arm: Arm, counters: ServerCounters | null): EndDecision {
   if (counters !== null && counters.open_sessions === 0 && counters.closes >= 1) return { end: true, reason: "all_sessions_closed" };
+  // No session is open (or the server never wrote counters: no tool call at all), so nothing can wake the controller again,
+  // e.g. after an API error on the first request. The server writes counters by atomic rename, so null means never written.
+  if (counters === null || counters.open_sessions === 0) return { end: true, reason: "no_open_session" };
   return { end: false };
 }
 
