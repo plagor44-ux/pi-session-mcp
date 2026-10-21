@@ -16,6 +16,7 @@ import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
 import { RUN_KEY_BYTES, canonicalJson } from "./output-mac.js";
 import { containmentSelfTest } from "./containment.js";
+import { refreshedHostAuth, type HostCredentials } from "./credentials.js";
 import { planSandbox, sandboxed, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
@@ -41,6 +42,8 @@ export interface WaveInput {
   ledgerPath: string;
   signal?: AbortSignal | undefined;
   hostAuth: unknown;
+  /** Where the host auth lives and how to refresh an OAuth credential in it (R86); without it the auth is used as given. */
+  hostCredentials?: HostCredentials | undefined;
   /** The production configuration: `workspaces` (absolute paths by repo alias), `executionProfiles` and `skillCatalog`. */
   productionConfig: unknown;
   extensionTemplate: string;
@@ -194,6 +197,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     await writeFile(join(waveDir, "approval.json"), `${JSON.stringify(input.approval, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   }
   const waveStart = now();
+  // The host auth as last read; an OAuth credential is refreshed and the file read again before each run (R86).
+  let hostAuth = input.hostAuth;
   const authTypes = new Map<string, RunRecord["authType"]>();
   for (const profile of new Set(runs.map((r) => r.profile))) {
     const provider = config.executionProfiles[profile]!.provider;
@@ -230,7 +235,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       try {
         const source = productionConfig.workspaces[task.repo]!;
         scope = await prepareScope({
-          waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.extensionTemplate, hostAuth: input.hostAuth,
+          waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.extensionTemplate, hostAuth,
           productionProfile: productionConfig.executionProfiles[run.profile]!, skillCatalog: productionConfig.skillCatalog, pairing: pairingOf(run), tools,
           ...(input.depsDir === undefined ? {} : { depsDir: input.depsDir }),
         });
@@ -380,7 +385,11 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     else if (now() - waveStart >= waveTimeoutMs) before = "wave_timeout";
     else if (input.signal?.aborted) before = "interrupted";
     else if (!ledger.ledger.allows(run.profile)) before = "budget";
-    else if (typeof provider === "string" && expiresWithin(input.hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
+    else if (typeof provider === "string") {
+      // R86: an OAuth credential is refreshed on the host and the auth read again before the expiry check and the copy into the scope.
+      hostAuth = await refreshedHostAuth(input.hostCredentials, hostAuth, provider);
+      if (expiresWithin(hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
+    }
     if (before !== null) {
       stopReason = before;
       await persist(notRun(run, before, authOf(run)));

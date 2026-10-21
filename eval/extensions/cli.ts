@@ -10,6 +10,7 @@ import { approvalSchema, matrixDigest, parseProductionConfig, routesOf, tasksDig
 import { sourceIsDirty } from "./bound.js";
 import { isAuditStop } from "./classify.js";
 import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
+import { fileHostCredentials } from "./credentials.js";
 import { dryLoad, type DryLoadDeps } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
@@ -272,10 +273,13 @@ async function liveInputs(parsed: ParsedArgs) {
   const approval = validateApproval(raw, {
     sourceCommit: await sourceCommit(), tasks, routes: routesOf(productionConfig, shape.data.runs.map((r) => r.profile)),
   });
-  const hostAuth = await readJson(parsed.options["--auth"] ?? join(homedir(), ".pi", "agent", "auth.json"));
+  const authPath = resolve(parsed.options["--auth"] ?? join(homedir(), ".pi", "agent", "auth.json"));
+  const hostAuth = await readJson(authPath);
+  // OAuth credentials are refreshed in this file through the Pi SDK before each route and run (R86).
+  const hostCredentials = fileHostCredentials(authPath);
   const waveDir = resolve(parsed.options["--out"]!);
   await mkdir(waveDir, { recursive: true, mode: 0o700 });
-  return { tasks, runs: approval.runs, productionConfig, approval, hostAuth, waveDir, ledgerPath: resolve(parsed.options["--ledger"]!) };
+  return { tasks, runs: approval.runs, productionConfig, approval, hostAuth, hostCredentials, waveDir, ledgerPath: resolve(parsed.options["--ledger"]!) };
 }
 
 /**
@@ -291,17 +295,17 @@ export async function withAbort<T>(body: (signal: AbortSignal) => Promise<T>, em
 }
 
 async function preflight(parsed: ParsedArgs): Promise<void> {
-  const { approval, hostAuth, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
-  const result = await withAbort((signal) => runPreflight({ approval, waveDir, ledgerPath, hostAuth, productionConfig, signal }));
+  const { approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
+  const result = await withAbort((signal) => runPreflight({ approval, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, signal }));
   write(result);
   if (result.routes.some((r) => !r.ok)) process.exitCode = 1;
 }
 
 async function wave(parsed: ParsedArgs): Promise<void> {
-  const { tasks, approval, hostAuth, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
+  const { tasks, approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
   await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval, ledgerPath);
   const result = await withAbort((signal) => runWave({
-    approval, tasks, waveDir, ledgerPath, hostAuth, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
+    approval, tasks, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
     ...(parsed.options["--deps"] === undefined ? {} : { depsDir: resolve(parsed.options["--deps"]) }),
     ...(parsed.maxRuns === undefined ? {} : { maxRuns: parsed.maxRuns }), resume: parsed.resume,
   }));
