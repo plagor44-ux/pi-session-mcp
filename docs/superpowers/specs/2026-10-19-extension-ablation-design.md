@@ -634,3 +634,34 @@ the text above, they win.
   tree check and the source binding of HEAD stay. Cost: the evidence no longer
   says that every wave ran the code at HEAD; it says which bound files differ,
   and a reader judges whether a changed file affects a wave's records.
+
+## Amendments (2026-10-21, repeat)
+
+- **Replicates are a slot dimension (R90).** The first `pl-code` result (A 2/3,
+  B 2/3, decided by one timeout) is one run per task and arm, which cannot tell
+  an extension effect from run-to-run noise of a model that is not
+  deterministic. `--plan --replicates <N>` (integer 1 to 9, `--plan` only,
+  `invalid_argument` elsewhere; default 1) plans every task and arm N times.
+  The slot is now (task, profile, arm, replicate). The canonical matrix (R58)
+  is built once per replicate and concatenated replicate by replicate, ordinals
+  run over the whole list, and the arm-A/arm-B order per task flips between
+  consecutive replicates (so every task sees both orders). With N > 1 every run
+  id ends in `-r<k>` (also `-r1`) and the run and its record carry `replicate`;
+  the approval records `replicates`, which is part of the binding
+  (`validateApproval` checks the run list against the canonical matrix of that
+  replicate count; `matrixDigest` covers the runs). `--exclude-wave`, `--resume`
+  and the charge guard (G1) key on the run id, which names one slot, and refuse
+  a record of the same id for another task, profile, arm or replicate. The
+  report merges per run id with that consistency check. For an implementation
+  pairing it pairs arm A and arm B per (task, replicate) unit, applies the
+  pre-registered rule (`recommend()`, unchanged) to those units, and still asks
+  for three distinct tasks before it calls a pairing complete; the summary adds
+  per task the units paired and the accepted ones per arm (read as `k of N`)
+  and the per-arm totals over the units. Review pairings stay descriptive.
+  With N = 1 nothing changes: run ids, ordinals, order, digests, records and
+  every output are byte-identical, and the approvals and evidence of
+  2026-10-20 still parse and report the same. Cost: the budget scales with N
+  (the repeat plan projects 18 runs for `pl-code`), and a rule written for
+  three tasks now runs over up to 3 N units, so its "strictly better on one
+  task" clause is met more easily by noise; the write-up reads the per-task
+  counts beside the verdict.
