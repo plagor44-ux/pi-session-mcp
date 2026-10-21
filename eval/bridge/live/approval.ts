@@ -4,7 +4,14 @@ import { open } from "node:fs/promises";
 // Approval binding and credential-file checks for the live L1 pair. Refusal reasons are fixed codes: no message ever carries
 // a path, an approval value or credential content.
 export const REQUIRED_CONTROLLER = { client_version: "2.1.306 (Claude Code)", model: "claude-sonnet-5-5", auth: "api-key" } as const;
-export const REQUIRED_WORKER = { profile_alias: "explore-fast", provider: "openai", model: "gpt-6-luna", thinkingLevel: "low" } as const;
+/** The worker routes an approval may name; their values mirror the operator's profiles of the same alias. */
+export const WORKER_ROUTES = {
+  "explore-fast": { profile_alias: "explore-fast", provider: "openai", model: "gpt-6-luna", thinkingLevel: "low" },
+  review: { profile_alias: "review", provider: "openai", model: "gpt-6.1-sol", thinkingLevel: "high" },
+} as const;
+export type WorkerRoute = (typeof WORKER_ROUTES)[keyof typeof WORKER_ROUTES];
+/** The route of dry runs and of the first live pair. */
+export const DEFAULT_WORKER: WorkerRoute = WORKER_ROUTES["explore-fast"];
 export const API_KEY_FILE_ENV = "CLAUDE_EVAL_API_KEY_FILE";
 
 export type Arm = "A" | "C";
@@ -30,12 +37,17 @@ export function validateApproval(approval: unknown, context: ApprovalContext): A
   if (!context.worktreeClean) return refuse("worktree_dirty");
   const controller = approval.controller;
   if (!isObject(controller) || (Object.keys(REQUIRED_CONTROLLER) as Array<keyof typeof REQUIRED_CONTROLLER>).some((key) => controller[key] !== REQUIRED_CONTROLLER[key])) return refuse("controller_mismatch");
-  const worker = approval.worker;
-  if (!isObject(worker) || (Object.keys(REQUIRED_WORKER) as Array<keyof typeof REQUIRED_WORKER>).some((key) => worker[key] !== REQUIRED_WORKER[key])
-    || !Array.isArray(worker.skills) || worker.skills.length !== 0) return refuse("worker_mismatch");
+  if (approvedWorker(approval.worker) === undefined) return refuse("worker_mismatch");
   const budget = approval.budget_usd_advisory;
   if (typeof budget !== "number" || !Number.isFinite(budget) || budget < 0) return refuse("budget_invalid");
   return { ok: true };
+}
+
+/** The approved worker route: one of the fixed routes with exactly its values and no skills, else undefined. */
+export function approvedWorker(worker: unknown): WorkerRoute | undefined {
+  if (!isObject(worker) || !Array.isArray(worker.skills) || worker.skills.length !== 0) return undefined;
+  const route = Object.values(WORKER_ROUTES).find((candidate) => candidate.profile_alias === worker.profile_alias);
+  return route !== undefined && (Object.keys(route) as Array<keyof WorkerRoute>).every((key) => worker[key] === route[key]) ? route : undefined;
 }
 
 export const approvalDigest = (bytes: Uint8Array | string): `sha256:${string}` => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
