@@ -2,8 +2,10 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { chmod, mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
+import { z } from "zod";
 import { parseArgs } from "../eval/extensions/cli.js";
 import { assertDependencyDir, checkDependencies } from "../eval/extensions/dependencies.js";
 import { buildMatrix, PAIRINGS } from "../eval/extensions/matrix.js";
@@ -58,6 +60,26 @@ describe("task dependencies in the task schema (R68)", () => {
     ["a path above another dependency", [{ path: "backend/.venv/lib", lockfile: "backend/uv.lock" }, DEPENDENCY]],
   ])("refuses %s", (_name, dependencies) => {
     expect(parse(dependencies).success).toBe(false);
+  });
+});
+
+describe("allowedPaths entries (R77)", () => {
+  const parse = (allowedPaths: unknown) => taskSpecSchema.safeParse(baseTask({ allowedPaths }));
+
+  it("accepts files and directory prefixes with a trailing slash", () => {
+    expect(parse([]).success).toBe(true);
+    expect(parse(["a.txt", "src/config.ts"]).success).toBe(true);
+    expect(parse(["backend/tests/", "src/a.ts", "docs/"]).success).toBe(true);
+  });
+
+  it.each([["an absolute prefix", "/abs/"], ["an absolute file", "/abs.txt"], ["a parent segment in a prefix", "a/../b/"], ["a parent segment in a file", "a/../b.txt"],
+    ["a glob in a prefix", "src/*/"], ["a brace in a prefix", "src/{a,b}/"], ["an empty entry", ""], ["a backslash", "a\\b.txt"]])("refuses %s", (_name, entry) => {
+    expect(parse([entry]).success).toBe(false);
+  });
+
+  it("parses the pre-registered tasks file", () => {
+    const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("../docs/evaluation/extension-ablation-2026-10-20/tasks.json", import.meta.url)), "utf8")) as unknown;
+    expect(z.array(taskSpecSchema).min(1).safeParse(tasks).success).toBe(true);
   });
 });
 
