@@ -194,7 +194,7 @@ acknowledges a change you reviewed. Details: [Pi skills](skills.md#customize-and
 
 ### Wake hook
 
-For a Claude Code target and a configuration with `"events": { "delivery": "spool" }`,
+For a Claude Code target and a configuration with `"events": { "delivery": "spool" }` (`"off"` or an absent field means no hook),
 `--apply` adds one `PostToolUse` entry with `asyncRewake` to the settings file
 of the target's scope, after the registration succeeded. Guided steps and limits:
 [Installation](installation.md#wake-the-controller-claude-code); design:
@@ -303,7 +303,7 @@ Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
 }
 ```
 
-Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions` and `skills` described in [Installation](installation.md) and [Pi skills](skills.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. An optional top-level `events` field, exactly `{ "delivery": "spool" }`, enables turn-event delivery for the Claude Code wake and is off by default; any other shape fails startup with `invalid_event_delivery`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
+Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions` and `skills` described in [Installation](installation.md) and [Pi skills](skills.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. An optional top-level `events` field, exactly `{ "delivery": "spool" }` or `{ "delivery": "off" }`, controls turn-event delivery for the Claude Code wake (`spool` enables it; `off`, the default when the field is absent, writes nothing); any other shape fails startup with `invalid_event_delivery`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
 
 Use placeholders until a locally available provider/model pair is known. Do not put keys, tokens, credential objects, headers, base URLs, or authentication paths in this file.
 
