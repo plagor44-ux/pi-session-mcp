@@ -1,7 +1,9 @@
 # ADR 0011: Turn events and controller wake
 
 **Status:** Proposed (2026-10-21). Not accepted. Nothing in the product
-changes until a maintainer decision. Evidence:
+changes until a maintainer decision. **Evaluation recommendation: defer.**
+Two real-model pairs met the critical assumption but not the decision gate
+below. Evidence:
 [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.md),
 [#104](https://github.com/plagor44-ux/pi-session-mcp/issues/104).
 
@@ -25,15 +27,17 @@ A provider-free evaluation reached the following, at its stated levels:
   its answer back to the waiting call (L1 on a real `AgentSession`, L3 round
   trip).
 
-- In one approved real-model pair (L4, Claude Code 2.1.306,
-  `claude-sonnet-5-5`, case L1), the woken controller read the turn once with
-  no poll and no sleep. The numbers: 7 model requests against 8, 0 running polls
-  against 2, 0.050 USD against 0.060 USD. That pair did not meet the quality
-  criterion, because the worker answer failed the oracle in the polling arm.
+- In two approved real-model pairs (L4, Claude Code 2.1.306,
+  `claude-sonnet-5-5`, short case L1), the woken controller read each turn
+  once with no poll and no sleep. It reacted to a finished turn after 1.8 and
+  2.2 s, against 10.4 and 20.7 s with polling. But the gate was not met:
+  - controller requests were 7 against 8 and 8 against 8;
+  - uncached input and cost were mixed;
+  - pair 1's polling arm failed the quality oracle on the worker side.
 
-Not shown: a repeatable L4 effect with quality kept in every pair, a question
-round trip with a real model, interactive and VS Code behavior, and any Codex
-wake path (none is documented).
+Not shown: a request or token saving, which the model expects only for long
+worker turns; a question round trip with a real model; interactive and VS Code
+behavior; any Codex wake path (none is documented).
 
 ## Proposal (for decision)
 
@@ -54,6 +58,12 @@ wake path (none is documented).
 4. **Optional, separate decision:** a question channel, meaning a worker tool
    `ask_controller` and public answer tools. That is a public contract change:
    minor release, contract tests, deadlines, limits, and unchanged rights.
+
+## Revisit triggers
+
+Long worker turns, where polling needs many polls; demand for worker questions
+to the controller; or controller reaction time to finished turns becoming a
+bottleneck.
 
 ## Decision gate
 
