@@ -206,6 +206,13 @@ of the target's scope, after the registration succeeded. Guided steps and limits
 | `claude-code:project` | `<project>/.claude/settings.json` |
 | `claude-code:local` | `<project>/.claude/settings.local.json` |
 
+**Where the hook reads.** The hook that a `pi-session-mcp` tool call arms reads only
+the `inst-*` directories directly under `$XDG_RUNTIME_DIR/pi-session-mcp/events`.
+The hook that a `pi-coding-<name>-wN` tool call arms reads only the `inst-*`
+directories of that writer's own spool, `~/.local/state/pi-session-mcp/writers/<name>-wN/events`.
+It reads no other location, and it keeps its claims and waiter locks in
+`$XDG_RUNTIME_DIR/pi-session-mcp/claims`, outside both spools.
+
 `<project>` is the real path of the directory in which setup runs. Claude Code
 has no command for hooks, so setup follows the contract of the settings file,
 not a client version (ADR 0004): it edits the JSON, and `--verify` compares the

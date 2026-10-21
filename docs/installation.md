@@ -400,6 +400,11 @@ and keeps its permissions; every other setting stays as it was. Verify checks
 the file and that the program exists; it does not test that Claude Code honors
 the hook.
 
+The hook reads only the spool of the server that armed it: the host's
+`$XDG_RUNTIME_DIR/pi-session-mcp/events/inst-*` for `pi-session-mcp`, and a
+writer's own `~/.local/state/pi-session-mcp/writers/<name>-wN/events/inst-*` for
+`pi-coding-<name>-wN`. Its claims stay in `$XDG_RUNTIME_DIR/pi-session-mcp/claims`.
+
 **Change and remove.** With delivery switched off, `--apply` removes an entry
 that setup owns (`hook_removed`); `--remove` and `--rollback` remove it with the
 registration. Setup never replaces or deletes an entry it did not write or that

@@ -1,6 +1,7 @@
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, openSync, opendirSync, readSync, realpathSync, unlinkSync, watch, writeSync, type FSWatcher } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
-import { TURN_EVENT_FILE_PATTERN, TURN_EVENT_MAX_BYTES, parseTurnEvent, type TurnEvent } from "./turn-events.js";
+import { TURN_EVENT_FILE_PATTERN, TURN_EVENT_MAX_BYTES, parseTurnEvent, writerEventsDir, type TurnEvent } from "./turn-events.js";
 import { WRITER_NAME_PATTERN } from "./writer-state.js";
 
 /**
@@ -10,16 +11,18 @@ import { WRITER_NAME_PATTERN } from "./writer-state.js";
  * identifiers and a state only, never prompt, answer or assistant text.
  *
  * Trust model. An event is a wake trigger only; it carries no instruction and no content. Writer
- * namespaces (`<events>/writer-<name>/`) are writable by the worker inside that writer's container, which
- * can create any file, directory or symlink there. The spool is therefore read defensively:
+ * namespaces (`<home>/.local/state/pi-session-mcp/writers/<name>/events/`, see `writerEventsDir`) are writable by the
+ * worker inside that writer's container, which can create any file, directory or symlink there. The spool is therefore read defensively:
  * - The accepted namespace follows from the arming tool name: `mcp__pi-session-mcp__*` reads the top-level
- *   `<events>/inst-*` directories only; `mcp__pi-coding-<name>-wN__*` reads exactly `<events>/writer-<name>-wN/inst-*`.
- *   No other writer's directory is listed, and the claim key carries the namespace, so a forged event in
+ *   `<events>/inst-*` directories only; `mcp__pi-coding-<name>-wN__*` reads exactly `inst-*` below
+ *   `writerEventsDir(home, "<name>-wN")`. The old `<events>/writer-<name>/` location is not read, no other writer's
+ *   directory is listed, and the claim key carries the namespace, so a forged event in
  *   one namespace can neither take nor block a claim of another.
  * - Every directory is opened with `O_NOFOLLOW|O_DIRECTORY`, checked on the handle (a directory of this user)
  *   and read through that handle (`/proc/self/fd/<fd>/<name>` on Linux; elsewhere with `realpath` checks before and
  *   after the read). Event files are opened with `O_NOFOLLOW`, must be regular and small.
- * - Entries, instance directories and cached files are capped; a flooding worker can at most delay or suppress
+ * - A scan retains only events of the armed session and turn, reads at most a fixed number of bytes and lists at most a
+ *   fixed number of names; entries, instance directories and cached files are capped; a flooding worker can at most delay or suppress
  *   wakes within its own namespace (the budget wake still fires).
  * - Claims live in a host directory outside the events root, which no container can write.
  */
@@ -36,6 +39,7 @@ export const SCAN_MAX_ENTRIES_PER_DIRECTORY = 4096;
 export const SCAN_MAX_INSTANCE_DIRECTORIES = 64;
 export const CACHE_MAX_ENTRIES = 4096;
 export const SCAN_MAX_ENTRIES_PER_SCAN = 2048;
+export const SCAN_MAX_BYTES_PER_SCAN = 256 * 1024;
 export const MIN_SCAN_GAP_MS = 25;
 /** The scan gap once any cap was hit: a flooded namespace is read at a slow, steady rate. */
 export const CAPPED_SCAN_GAP_MS = 1000;
@@ -139,13 +143,19 @@ export interface ScanLimits {
   readonly cacheEntries?: number;
   /** Names listed and `lstat`ed across all directories of one scan. */
   readonly entriesPerScan?: number;
+  /** File bytes read over all directories of one scan; files already in the cache cost nothing. */
+  readonly bytesPerScan?: number;
+  /** Keep only turn_terminal events of this session and turn (everything else is cached as a miss). The cache belongs to one such filter. */
+  readonly retain?: { readonly sessionId: string; readonly turnId: string };
+  /** The home directory a writer's spool lives under; defaults to `os.homedir()`. */
+  readonly home?: string;
   /** Test seam: `false` forces the `realpath` fallback used where `/proc/self/fd` does not exist. */
   readonly useProcFd?: boolean;
 }
 export interface ScanResult {
   readonly events: TurnEvent[];
   readonly directories: string[];
-  /** The namespace directory exists (the root for the host, `writer-<name>` for a writer). */
+  /** The namespace's spool directory exists (the events root for the host, `writerEventsDir` for a writer). */
   readonly namespaceFound: boolean;
   /** Real `inst-*` directories seen in the namespace, before the newest-N cap. */
   readonly instanceDirectoryCount: number;
@@ -228,7 +238,7 @@ function readEventText(path: string): string | undefined {
 }
 
 /** What one scan may still spend, and whether it ran into a cap. */
-interface ScanBudget { left: number; capped: boolean; readonly entriesCap: number }
+interface ScanBudget { left: number; bytesLeft: number; capped: boolean; readonly entriesCap: number }
 
 /** Lists a directory within the per-directory and per-scan caps; marks the scan as capped when either bites. */
 function listWithin(path: string, budget: ScanBudget): string[] {
@@ -255,31 +265,33 @@ function newestInstanceDirectories(dir: Dir, budget: ScanBudget, cap: number): {
 }
 
 /**
- * The valid events of one namespace below an events root, ordered by time then sequence: the top-level `inst-*`
- * directories for the host, exactly `writer-<name>/inst-*` for a writer. Nothing outside that namespace is listed.
- * Every directory is opened `O_NOFOLLOW`, checked on its handle and read through it; no link is followed. An event
- * file must also sit in the directory of its own instance. `cache` is rebuilt per scan from the files seen in it, results
- * that are not events included, keyed by path, inode, size, mtime and ctime; it never holds more than `cacheEntries`.
- * One scan lists and `lstat`s at most `entriesPerScan` names over all directories.
+ * The valid events of one namespace, ordered by time then sequence: the top-level `inst-*` directories of the events
+ * root for the host, the `inst-*` directories of `writerEventsDir(home, name)` for a writer (`root` is not used then).
+ * Nothing else is listed. Every directory is opened `O_NOFOLLOW`, checked on its handle and read through it; no link is
+ * followed. An event file must also sit in the directory of its own instance. `cache` is rebuilt per scan from the files
+ * seen in it, results that are not events included, keyed by path, inode, size, mtime and ctime; it never holds more
+ * than `cacheEntries`. One scan lists and `lstat`s at most `entriesPerScan` names and reads at most `bytesPerScan`
+ * bytes over all directories. With `retain`, only events of that session and turn are kept, in the result and the cache.
  */
 export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAMESPACE, cache: SpoolCache = newSpoolCache(), limits: ScanLimits = {}): ScanResult {
   const useProc = limits.useProcFd ?? PROC_FD_AVAILABLE;
   const instanceCap = limits.instanceDirectories ?? SCAN_MAX_INSTANCE_DIRECTORIES, cacheCap = limits.cacheEntries ?? CACHE_MAX_ENTRIES;
-  const budget: ScanBudget = { left: limits.entriesPerScan ?? SCAN_MAX_ENTRIES_PER_SCAN, capped: false, entriesCap: limits.entriesPerDirectory ?? SCAN_MAX_ENTRIES_PER_DIRECTORY };
+  const budget: ScanBudget = {
+    left: limits.entriesPerScan ?? SCAN_MAX_ENTRIES_PER_SCAN, bytesLeft: limits.bytesPerScan ?? SCAN_MAX_BYTES_PER_SCAN, capped: false,
+    entriesCap: limits.entriesPerDirectory ?? SCAN_MAX_ENTRIES_PER_DIRECTORY,
+  };
   const events: TurnEvent[] = [], directories: string[] = [], opened: Dir[] = [];
   const seen = new Map<string, TurnEvent | null>();
   let namespaceFound = false, instanceDirectoryCount = 0;
+  const retain = limits.retain;
+  const wanted = (event: TurnEvent): boolean => retain === undefined || (event.kind === "turn_terminal" && event.session === retain.sessionId && event.turn === retain.turnId);
   try {
-    const rootDir = openDir(undefined, root, useProc);
-    if (rootDir === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
-    opened.push(rootDir);
-    let space: Dir | undefined = rootDir;
-    if (namespace.kind === "writer") {
-      if (!WRITER_NAME_PATTERN.test(namespace.name)) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
-      space = openDir(rootDir, `writer-${namespace.name}`, useProc);
-      if (space === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
-      opened.push(space);
-    }
+    const home = limits.home ?? homedir();
+    const spool = namespace.kind === "host" ? root : (isAbsolute(home) && !home.includes("\0") ? writerEventsDir(home, namespace.name) : undefined);
+    if (spool === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
+    const space = openDir(undefined, spool, useProc);
+    if (space === undefined) return { events, directories, namespaceFound, instanceDirectoryCount, capped: false };
+    opened.push(space);
     namespaceFound = true;
     directories.push(space.path);
     const instances = newestInstanceDirectories(space, budget, instanceCap);
@@ -301,10 +313,13 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
         let event = seen.get(key) ?? cache.files.get(key);
         if (event === undefined) {
           if (!stat.isFile() || stat.size > TURN_EVENT_MAX_BYTES) event = null; // never opened
+          else if (stat.size > budget.bytesLeft) { budget.capped = true; continue; } // read in a later scan; the cache keeps what was done
           else {
+            budget.bytesLeft -= stat.size;
             cache.reads += 1;
             const text = readEventText(path);
-            event = text === undefined ? null : parseTurnEvent(text) ?? null;
+            const parsed = text === undefined ? undefined : parseTurnEvent(text);
+            event = parsed !== undefined && wanted(parsed) ? parsed : null; // an event of another turn is kept as a miss, not as data
           }
         }
         if (seen.size < cacheCap) seen.set(key, event); else budget.capped = true;
@@ -454,8 +469,16 @@ export interface WaitOptions {
   readonly limits?: ScanLimits;
   /** How long the namespace may show no instance directory before the wait ends with `no_spool` (default 2 s). */
   readonly graceMs?: number;
+  /** The home directory a writer's spool lives under; defaults to `os.homedir()`. */
+  readonly home?: string;
   /** Called right after a claim was won and before the wake is returned, so the caller can release it on SIGTERM. */
   readonly onClaim?: (path: string) => void;
+}
+
+/** The runtime directory is full: claims and locks cannot be written, but a budget wake needs neither. */
+export function isNoSpace(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "ENOSPC" || code === "EDQUOT";
 }
 
 function errorCode(error: unknown): { code?: string } {
@@ -465,7 +488,8 @@ function errorCode(error: unknown): { code?: string } {
 
 /** Waits for the first `turn_terminal` event of one turn, claims it, and resolves with the wake or the reason to stay silent. */
 export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
-  if (isInside(options.eventsRoot, options.claimsDir)) return { action: "silent", reason: "claims_unsafe" };
+  const writerSpool = options.namespace.kind === "writer" ? writerEventsDir(options.home ?? homedir(), options.namespace.name) : undefined;
+  if (isInside(options.eventsRoot, options.claimsDir) || (writerSpool !== undefined && isInside(writerSpool, options.claimsDir))) return { action: "silent", reason: "claims_unsafe" };
   const now = options.now ?? Date.now, pollMs = options.pollMs ?? 500, parentCheckMs = options.parentCheckMs ?? 1000;
   const deadline = now() + options.budgetMs;
   const cache = newSpoolCache();
@@ -486,8 +510,8 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
       const gap = scanGapMs - (Date.now() - lastScan);
       if (gap > 0) await new Promise<void>((resolve) => setTimeout(resolve, gap));
       lastScan = Date.now();
-      watchDir(options.eventsRoot);
-      const { events, directories, namespaceFound, instanceDirectoryCount, capped } = scanTurnEvents(options.eventsRoot, options.namespace, cache, options.limits);
+      if (options.namespace.kind === "host") watchDir(options.eventsRoot);
+      const { events, directories, namespaceFound, instanceDirectoryCount, capped } = scanTurnEvents(options.eventsRoot, options.namespace, cache, { ...options.limits, retain: { sessionId: options.sessionId, turnId: options.turnId }, ...(options.home === undefined ? {} : { home: options.home }) });
       if (capped) scanGapMs = CAPPED_SCAN_GAP_MS; // a flooded namespace is read slowly for the rest of the run
       if (namespaceFound && instanceDirectoryCount > 0) spoolSeen = true;
       for (const dir of directories) watchDir(dir);
@@ -497,10 +521,16 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
       if (hit !== undefined && hit.via === "close") return { action: "silent", reason: "closed" };
       if (hit !== undefined) {
         let claim: string | undefined;
-        try { claim = tryClaim(options.claimsDir, hit, options.namespace); } catch (error) { return { action: "silent", reason: "claim_error", ...errorCode(error) }; }
-        if (claim === undefined) return { action: "silent", reason: "lost_claim" };
-        options.onClaim?.(claim);
-        return { action: "wake", reason: "terminal", message: formatTerminalWake(hit), claimPath: claim };
+        let full = false;
+        try { claim = tryClaim(options.claimsDir, hit, options.namespace); } catch (error) {
+          // A full runtime directory must not swallow the wake: keep waiting, the budget wake needs no claim.
+          if (isNoSpace(error)) full = true; else return { action: "silent", reason: "claim_error", ...errorCode(error) };
+        }
+        if (!full) {
+          if (claim === undefined) return { action: "silent", reason: "lost_claim" };
+          options.onClaim?.(claim);
+          return { action: "wake", reason: "terminal", message: formatTerminalWake(hit), claimPath: claim };
+        }
       }
       const t = now();
       if (t >= nextParentCheck) {
