@@ -43,9 +43,10 @@ expected but unmeasured.
 
 1. **Internal completion observer.** A registry-internal listener at the
    existing terminal transition emits one content-free event per turn:
-   instance, session, turn, state and `via`. The registry read model stays the
-   only source of truth. A turn that `close` removes before its state can be
-   read is reported as unobserved, never with a guessed state.
+   instance, session, turn, state and `via` (`registry`, or `close` when close
+   aborts a running turn). It fires inside that single transition, so its state
+   always equals the read model. The read model stays the only source of
+   truth.
 2. **Local event spool, opt-in.** It is enabled by a new optional server
    configuration field and off by default. Without it, behavior is unchanged
    for every client, including Codex. Host servers write under
@@ -97,6 +98,10 @@ read back by the server. Persistence and resume stay rejected.
 ## Limits and consequences
 
 - Codex controllers keep polling; Codex documents no external wake.
+- Linux first: the spool lives under `XDG_RUNTIME_DIR`, which macOS does not
+  set by default. With delivery enabled and no runtime directory, the server
+  refuses to start (`event_spool_unavailable`). macOS support needs its own
+  runtime-directory choice and acceptance.
 - One-shot `claude -p` runs hold the next model request until the hook ends.
   The adapter is meant for interactive and stream-json sessions. The setup
   documentation says so.

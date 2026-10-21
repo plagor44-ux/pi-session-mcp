@@ -116,6 +116,7 @@ The [installation guide](docs/installation.md) also covers installing from a rel
 - An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`.
 - A profile can grant individual tools of local stdio MCP servers to its sessions; see [External MCP tools in embedded sessions](docs/session-mcp.md).
 - An optional top-level `skillCatalog` maps skill aliases to `builtin:<name>` (a skill of the package or of your override directory) or to a `SKILL.md` file, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
+- An optional top-level `"events": { "delivery": "spool" }` turns on content-free turn events, so that a Claude Code hook can wake the controller when a turn ends instead of polling. It is off by default and changes nothing for Codex. See [Wake the controller](docs/installation.md#wake-the-controller-claude-code).
 - The server reads the file once at startup. Start a new client session after changing it.
 
 ## Run it by hand
@@ -171,6 +172,7 @@ Contract and design:
 - [ADR 0003: no new feature phase after the MVP](docs/adr/0003-post-mvp-maintenance.md)
 - [ADR 0004: setup accepts clients by contract, not by version](docs/adr/0004-client-contract-not-version.md)
 - [ADR 0007: execution profiles select Pi skills from an operator catalog](docs/adr/0007-profile-skill-selection.md)
+- [ADR 0011: turn events and controller wake](docs/adr/0011-turn-events-and-controller-wake.md)
 
 Maintain:
 
