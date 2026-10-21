@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import { parseArgs } from "../eval/extensions/cli.js";
+import { assertDependencyDir, checkDependencies } from "../eval/extensions/dependencies.js";
 import { buildMatrix, PAIRINGS } from "../eval/extensions/matrix.js";
 import { changedPaths, scoreImplementation } from "../eval/extensions/oracles.js";
 import { bwrapArgs, planSandbox, sandboxed, type SandboxBind, type SandboxPlan } from "../eval/extensions/sandbox.js";
@@ -205,6 +206,16 @@ describe("the worker clone holds only history reachable from the base commit (R6
     expect(refs).toEqual(["refs/heads/dev", "refs/heads/main", "refs/tags/solution-tag"]);
   });
 
+  it("never overwrites a source branch, whatever it is called", async () => {
+    const root = await temporaryRoot("ablation-history-name-");
+    const { source, base, later, git } = await sourceWithFuture(root);
+    await git("branch", "eval-base", later);
+    const scope = await scopeFor(root, source, taskAt(base));
+    expect((await exec("git", ["--git-dir", scope.baseGitDir, "rev-parse", "refs/heads/eval-base"])).stdout.trim()).toBe(later);
+    expect((await exec("git", ["-C", scope.clone, "for-each-ref"])).stdout).toBe("");
+    expect((await exec("git", ["-C", scope.clone, "rev-parse", "HEAD"])).stdout.trim()).toBe(base);
+  });
+
   it("lets the oracle reach a later commit through the pristine bare clone, e.g. to check out the solution in a setup step", async () => {
     const root = await temporaryRoot("ablation-history-oracle-");
     const { source, base, later } = await sourceWithFuture(root);
@@ -298,6 +309,21 @@ describe("preparing the dependencies of a task (R68)", () => {
       await mkdir(join(taskDir, "lock", "other"), { recursive: true });
       await writeFile(join(taskDir, "lock", "other", "x.lock"), "lock-v1\n");
     }],
+    ["dependency_mount_invalid", "a task directory that is a link", async (root, taskDir) => {
+      await mkdir(join(root, "elsewhere"), { recursive: true });
+      await rename(taskDir, join(root, "elsewhere", "impl-1"));
+      await symlink(join(root, "elsewhere", "impl-1"), taskDir);
+    }],
+    ["dependency_mount_invalid", "a mounts directory that is a link to a tree with a source checkout", async (root, taskDir) => {
+      // The scenario of the review: `mounts -> ~/src` with a repository (and its .git) where the mount path leads.
+      await mkdir(join(root, "projects", "backend", ".venv", ".git"), { recursive: true });
+      await rm(join(taskDir, "mounts"), { recursive: true });
+      await symlink(join(root, "projects"), join(taskDir, "mounts"));
+    }],
+    ["dependency_lock_mismatch", "a lock directory that is a link", async (root, taskDir) => {
+      await rename(join(taskDir, "lock"), join(root, "lock-real"));
+      await symlink(join(root, "lock-real"), join(taskDir, "lock"));
+    }],
     ["dependency_missing", "a missing mount directory", async (_r, taskDir) => { await rm(join(taskDir, "mounts", "backend", ".venv"), { recursive: true }); }],
     ["dependency_missing", "a task directory that does not exist", async (_r, taskDir) => { await rm(taskDir, { recursive: true }); }],
     ["dependency_mount_invalid", "a mount that is a link to a real directory", async (root, taskDir) => {
@@ -332,6 +358,40 @@ describe("preparing the dependencies of a task (R68)", () => {
     expect(existsSync(join(privateRunDir(join(root, "wave"), arm(task).runId), "base.git"))).toBe(false);
   });
 
+  it("refuses a deps directory that is a link or has a link on its way (deps_dir_not_canonical)", async () => {
+    const root = await temporaryRoot("ablation-deps-canonical-");
+    const { source, base } = await sourceWithFuture(root);
+    const { deps } = await depsFor(root);
+    await symlink(deps, join(root, "link-to-deps"));
+    await expect(scopeFor(root, source, withDeps(base), join(root, "link-to-deps"))).rejects.toThrow("deps_dir_not_canonical");
+    await mkdir(join(root, "parent"));
+    await symlink(root, join(root, "parent", "up"));
+    await expect(scopeFor(root, source, withDeps(base), join(root, "parent", "up", "deps"))).rejects.toThrow("deps_dir_not_canonical");
+    await expect(assertDependencyDir(join(root, "link-to-deps"), [], [join(root, "elsewhere")])).rejects.toThrow("deps_dir_not_canonical");
+    await expect(assertDependencyDir(deps, [], [join(root, "elsewhere")])).resolves.toBeUndefined();
+    // A directory that does not exist yet is the mount check's business.
+    await expect(assertDependencyDir(join(root, "not-yet"), [], [])).resolves.toBeUndefined();
+  });
+
+  it("checks every bind source against the sources, with the read-only checks alone and a single git contract", async () => {
+    const root = await temporaryRoot("ablation-deps-check-");
+    const { source, base } = await sourceWithFuture(root);
+    const { deps, taskDir } = await depsFor(root);
+    const task = withDeps(base);
+    const calls: string[][] = [];
+    const git = async (args: string[]) => { calls.push(args); return exec("git", ["-C", source, ...args]); };
+    const checked = await checkDependencies({ depsDir: deps, task, git, sources: [source] });
+    expect(checked).toEqual({ mounts: [{ path: "backend/.venv", source: join(await realpath(deps), "impl-1", "mounts", "backend", ".venv") }], runtime: join(await realpath(deps), "impl-1", "runtime") });
+    // The injected function chooses the repository: no argument names one.
+    expect(calls.length).toBeGreaterThan(0);
+    for (const args of calls) expect(args).not.toContain("--git-dir");
+    // Nothing is created in any clone, and a source that contains a bind source refuses.
+    await expect(checkDependencies({ depsDir: deps, task, git, sources: [deps] })).rejects.toThrow("deps_dir_in_source");
+    await expect(checkDependencies({ depsDir: deps, task, git, sources: [join(taskDir, "mounts", "backend")] })).rejects.toThrow("deps_dir_in_source");
+    await expect(checkDependencies({ depsDir: undefined, task, git })).rejects.toThrow("deps_missing");
+    await expect(checkDependencies({ depsDir: join(root, "nope"), task, git })).rejects.toThrow("dependency_missing");
+  });
+
   it("refuses with dependency_path_tracked when the path exists in the base tree, as a file or as a directory", async () => {
     const root = await temporaryRoot("ablation-deps-tracked-");
     const { source, base, git } = await sourceWithFuture(root);
@@ -361,6 +421,12 @@ describe("a real bind (R68)", () => {
     const clone = join(scopeDir, "clone");
     const deps = join(root, "deps", "impl-1");
     await mkdir(join(clone, "backend", ".venv"), { recursive: true });
+    // The clone is a repository, as in a run: its base commit is what the scope check compares with.
+    const git = (...args: string[]) => exec("git", ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(clone, "a.txt"), "base\n");
+    await git("add", "a.txt"); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
     await mkdir(join(deps, "mounts", "backend", ".venv", "bin"), { recursive: true });
     await mkdir(join(deps, "runtime"), { recursive: true });
     await mkdir(join(deps, "lock"), { recursive: true });
@@ -381,5 +447,9 @@ describe("a real bind (R68)", () => {
     expect(await readFile(join(clone, "written"), "utf8")).toBe("ok\n");
     expect(await readdir(join(clone, "backend", ".venv"))).toEqual([]);
     expect(existsSync(join(deps, "runtime", "new"))).toBe(false);
+    // After the run the mount point is an empty directory again, and the scope check reports only what the run wrote.
+    expect(await changedPaths(clone, { gitDir: join(clone, ".git"), commit: base }, [])).toEqual(["written"]);
+    await rm(join(clone, "written"));
+    expect(await changedPaths(clone, { gitDir: join(clone, ".git"), commit: base }, [])).toEqual([]);
   });
 });

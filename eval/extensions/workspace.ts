@@ -1,4 +1,5 @@
 import { access, appendFile, cp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { selectBoundaryCredentials, writeBoundaryCredentials } from "../../src/writer-credentials.js";
@@ -78,9 +79,8 @@ async function makeScopeDirs(root: string): Promise<{ home: string; agentDir: st
 
 const gitEnv = (home: string): Record<string, string> => ({ PATH: process.env.PATH ?? "", HOME: home, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" });
 const NO_HOOKS = ["-c", "core.hooksPath=/dev/null"];
-/** The temporary branch in the pristine bare clone that the worker clone is made from (R69); it is removed again right after. */
-const BASE_BRANCH = "eval-base";
-const BASE_REF = `refs/heads/${BASE_BRANCH}`;
+/** A temporary branch name for the pristine bare clone that the worker clone is made from (R69); random, so no branch of the source can share it. */
+const baseBranch = (): string => `eval-base-${randomBytes(6).toString("hex")}`;
 
 const inside = (root: string, path: string): boolean => path === root || path.startsWith(root + sep);
 
@@ -147,23 +147,25 @@ async function buildScope(input: ScopeInput, root: string, baseGitDir: string): 
   // R69: the worker clone holds only the history reachable from the base commit. A temporary branch at the base commit is the only
   // thing a single-branch clone over the transport (`--no-local`) fetches; no later commit, branch or tag can be read from the clone.
   const bare = (args: string[]) => git(["--git-dir", baseGitDir, ...args]);
-  await bare(["update-ref", BASE_REF, task.baseCommit]);
-  await git(["clone", "--no-local", "--single-branch", "--branch", BASE_BRANCH, "--no-tags", "--quiet", "--", baseGitDir, clone]);
-  await bare(["update-ref", "-d", BASE_REF]);
+  const branch = baseBranch();
+  // The empty old value makes the update fail if the ref exists, so nothing is ever overwritten.
+  await bare(["update-ref", `refs/heads/${branch}`, task.baseCommit, ""]);
+  await git(["clone", "--no-local", "--single-branch", "--branch", branch, "--no-tags", "--quiet", "--", baseGitDir, clone]);
+  await bare(["update-ref", "--no-deref", "-d", `refs/heads/${branch}`]);
   await refuseAlternates([join(clone, ".git", "objects", "info", "alternates")]);
   await runHelper(input.tools.git, ["--git-dir", baseGitDir, "config", "--unset", "remote.origin.url"], { env: gitEnv(dirs.home) }).catch((error: { code?: unknown }) => {
     if (error.code !== 5) throw error; // 5: the key was not set
   });
   await git(["-c", "advice.detachedHead=false", "checkout", "--quiet", "--detach", task.baseCommit], clone);
   // The temporary branch and its remote-tracking ref go; whatever else the clone listed goes too, so no ref is left in it.
-  await git(["branch", "--quiet", "-D", BASE_BRANCH], clone);
-  for (const ref of (await git(["for-each-ref", "--format=%(refname)"], clone)).stdout.split("\n").filter((name) => name !== "")) await git(["update-ref", "-d", ref], clone);
+  await git(["branch", "--quiet", "-D", branch], clone);
+  for (const ref of (await git(["for-each-ref", "--format=%(refname)"], clone)).stdout.split("\n").filter((name) => name !== "")) await git(["update-ref", "--no-deref", "-d", ref], clone);
   await assertCloneSymlinks(clone);
   // The clone must not point at the real repository: a push or fetch goes to the pristine bare clone, outside the scope root.
   const remotes = (await git(["remote"], clone)).stdout.split("\n").filter((name) => name !== "");
   for (const name of remotes) if (name !== "origin") await git(["remote", "remove", name], clone);
   await git(remotes.includes("origin") ? ["remote", "set-url", "origin", baseGitDir] : ["remote", "add", "origin", baseGitDir], clone);
-  const dependencyBinds = await prepareDependencies({ depsDir: input.depsDir, task, baseGitDir, clone, git: bare });
+  const dependencyBinds = await prepareDependencies({ depsDir: input.depsDir, task, clone, git: bare, sources: [input.sourceRepoPath] });
   await appendFile(join(clone, ".git", "info", "exclude"), "\n.codegraph/\n");
   await runHelper(input.tools.codegraph, ["init", "-y", clone], { env: dirs.env, cwd: root });
 
