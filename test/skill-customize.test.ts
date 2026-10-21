@@ -336,7 +336,7 @@ describe("skill customization transaction", () => {
       expect((await dry("plan", { released: trees })).findings[0]).toMatchObject({ status: "planned", code: "skill_base_unverified" });
       const config = async () => ({
         workspaces: new Map(), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "none",
-        configuration: { fingerprint: `sha256:${"0".repeat(64)}` as `sha256:${string}`, reloadPolicy: "restart-required" as const }, skillOverrideDirectory: override,
+        configuration: { fingerprint: `sha256:${"0".repeat(64)}` as `sha256:${string}`, reloadPolicy: "restart-required" as const }, eventDelivery: "off" as const, skillOverrideDirectory: override,
       });
       const checks = (await runDoctor({ packageRoot, loadConfig: config, releasedSkillTrees: trees })).checks.filter((check) => check.id === "skill_override_outdated");
       expect(checks.map((check) => [check.subject, check.severity])).toEqual([["skill:plan", "warning"], ["skill:review", "ok"]]);

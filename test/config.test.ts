@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError, loadConfig } from "../src/config.js";
+import { startupFailureDiagnostic } from "../src/process-diagnostics.js";
 import { shippedSkillsDirectory } from "../src/skill-library.js";
 import { toResolvedExecutionProfile } from "../src/execution-profile.js";
 import { PROFILE_TOOLS } from "../src/session-tools.js";
@@ -104,6 +105,39 @@ describe("loadConfig", () => {
       expect((profileError as ConfigError).code).toBe("invalid_execution_profile_config");
       expect(String(profileError)).not.toContain(sentinel); expect(JSON.stringify(profileError)).not.toContain(sentinel);
     }
+  });
+
+  describe("event delivery", () => {
+    const base = { workspaces: { repo: "." }, executionProfiles: { safe: validProfile } };
+
+    it("defaults to off when the events field is absent", async () => {
+      expect((await loadConfig(await writeConfig(base))).eventDelivery).toBe("off");
+    });
+
+    it("accepts the spool delivery", async () => {
+      expect((await loadConfig(await writeConfig({ ...base, events: { delivery: "spool" } }))).eventDelivery).toBe("spool");
+    });
+
+    it.each([
+      ["unknown delivery", { delivery: "socket" }],
+      ["off spelled out", { delivery: "off" }],
+      ["missing delivery", {}],
+      ["unknown key", { delivery: "spool", path: "/SECRET_EVENT_SENTINEL" }],
+      ["non-object", "spool"],
+      ["null", null],
+    ])("rejects %s with a sanitized invalid_event_delivery error", async (_label, events) => {
+      let thrown: unknown;
+      try { await loadConfig(await writeConfig({ ...base, events })); } catch (error) { thrown = error; }
+      expect(thrown).toBeInstanceOf(ConfigError);
+      expect(thrown).toMatchObject({ code: "invalid_event_delivery", message: "Event delivery configuration is invalid" });
+      expect(JSON.stringify(thrown)).not.toContain("SECRET_EVENT_SENTINEL");
+    });
+
+    it("projects the error as a sanitized startup diagnostic", () => {
+      expect(startupFailureDiagnostic(new ConfigError("invalid_event_delivery"))).toEqual({
+        level: "error", event: "startup_failed", stage: "startup", code: "invalid_event_delivery",
+      });
+    });
   });
 
   it("returns immutable execution aliases with all selected values", async () => {

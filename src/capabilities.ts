@@ -11,6 +11,7 @@ export function projectCapabilities(
   executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>,
   configuration: ConfigurationMetadata,
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
+  eventDelivery: "spool" | "off" = "off",
 ) {
   return {
     ok: true as const,
@@ -19,6 +20,7 @@ export function projectCapabilities(
       fingerprint: configuration.fingerprint,
       reloadPolicy: configuration.reloadPolicy,
     },
+    events: { delivery: eventDelivery },
     workspaces: [...workspaces.keys()]
       .sort(compareAliases)
       .map((alias) => ({ alias, mode: workspaceModes.get(alias)?.mode ?? "unset" })),

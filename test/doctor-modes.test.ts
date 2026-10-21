@@ -13,6 +13,7 @@ function dependencies(modes: Record<string, WorkspaceMode>, coding = true): Doct
     workspaceModes: new Map(Object.entries(modes).map(([alias, mode]) => [alias, { mode }])),
     executionProfiles: new Map([["profile", { alias: "profile", default: true, permissionProfile: coding ? "coding" : "read-only", provider: "fake", model: "fake", thinkingLevel: "off" }]]),
     defaultExecutionProfile: "profile",
+    eventDelivery: "off",
     skillOverrideDirectory: "/PRIVATE_SKILLS",
     configuration: { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" },
   };

@@ -1,6 +1,6 @@
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
@@ -9,6 +9,7 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
+import { eventsRoot } from "./turn-events.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
 import { readSkillBases, SkillBasesError } from "./skill-customize.js";
 import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFingerprint, shippedSkillsDirectory, type ReleasedSkillTree } from "./skill-library.js";
@@ -23,7 +24,8 @@ export type DoctorCheckId =
   | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
   | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch"
-  | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated";
+  | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
+  | "event_spool_root";
 
 export interface DoctorCheck {
   readonly id: DoctorCheckId;
@@ -66,7 +68,14 @@ export interface DoctorDependencies {
   readonly resolveExtension?: (extension: ExtensionSpec) => Promise<string>;
   /** Reference trees that resolve legacy skill bases; defaults to the released shipped skills. */
   readonly releasedSkillTrees?: readonly ReleasedSkillTree[];
+  /** Environment for the event spool check; defaults to the process environment. */
+  readonly env?: NodeJS.ProcessEnv;
+  /** Metadata of the spool root without following a final symbolic link, `undefined` when absent; used only when event delivery is enabled. */
+  readonly eventSpoolRoot?: (path: string) => Promise<EventSpoolRootInfo | undefined>;
+  /** Effective user id of the current process; defaults to the real one. */
+  readonly uid?: number;
 }
+export interface EventSpoolRootInfo { readonly isDirectory: boolean; readonly uid: number; readonly mode: number }
 
 /** Largest `.git` file Doctor inspects; a real gitfile is one short line. */
 const MAX_GITFILE_BYTES = 4096;
@@ -82,7 +91,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -169,6 +178,32 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
     const content = await (fs.readPrefix ?? readPrefix)(entry, MAX_GITFILE_BYTES + 1);
     return Buffer.byteLength(content, "utf8") <= MAX_GITFILE_BYTES && /^gitdir:[ \t]*\S/.test(content);
   } catch { return false; }
+}
+
+async function defaultEventSpoolRoot(path: string): Promise<EventSpoolRootInfo | undefined> {
+  try {
+    const info = await lstat(path);
+    return { isDirectory: info.isDirectory(), uid: info.uid, mode: info.mode };
+  } catch (error) { if (isMissing(error)) return undefined; throw error; }
+}
+
+/**
+ * Offline check of the event spool's runtime root, run only when event delivery is enabled.
+ * Nothing is created or repaired, and no path appears in the report. A missing runtime directory
+ * is a warning because Doctor may run in a different environment than the server; an existing
+ * `pi-session-mcp` entry that is not a private directory of the current user is an error.
+ */
+async function eventSpoolCheck(env: NodeJS.ProcessEnv, probe: (path: string) => Promise<EventSpoolRootInfo | undefined>, uid: number | undefined): Promise<DoctorCheck> {
+  const events = eventsRoot(env);
+  if (events === undefined) return warning("event_spool_root", "event spool", "set XDG_RUNTIME_DIR to an absolute path in the server environment, or disable events.delivery");
+  let info: EventSpoolRootInfo | undefined;
+  try { info = await probe(dirname(events)); }
+  catch { return failure("event_spool_root", "event spool", "grant access to the runtime directory"); }
+  if (info === undefined) return ok("event_spool_root", "event spool");
+  if (!info.isDirectory) return failure("event_spool_root", "event spool", "replace the pi-session-mcp runtime entry with a private directory owned by the current user");
+  if (uid !== undefined && info.uid !== uid) return failure("event_spool_root", "event spool", "the pi-session-mcp runtime directory must be owned by the current user");
+  if ((info.mode & 0o077) !== 0) return failure("event_spool_root", "event spool", "remove group and other permissions from the pi-session-mcp runtime directory (chmod 700)");
+  return ok("event_spool_root", "event spool");
 }
 
 async function defaultWriterRuntime() {
@@ -378,6 +413,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
+  if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultEventSpoolRoot, dependencies.uid ?? process.getuid?.()));
   if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot), dependencies.releasedSkillTrees));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
