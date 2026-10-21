@@ -4,7 +4,8 @@
 
 - Evaluation only (#104): a provider-free ledger, completion-event bridge and
   Claude Code rewake prototype under `eval/bridge/` (not shipped), its
-  [report](docs/evaluation/ledger-event-bridge-2026-10-21/README.md) and
+  [report](docs/evaluation/ledger-event-bridge-2026-10-21/README.md) (including
+  one operator-approved real-model pair) and
   [ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md) (Proposed). No
   runtime, tool, field or error-code change.
 

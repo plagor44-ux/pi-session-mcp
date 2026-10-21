@@ -25,8 +25,15 @@ A provider-free evaluation reached the following, at its stated levels:
   its answer back to the waiting call (L1 on a real `AgentSession`, L3 round
   trip).
 
-Not shown: the effect on a real controller model (L4), interactive and VS Code
-behavior, and any Codex wake path (none is documented).
+- In one approved real-model pair (L4, Claude Code 2.1.306,
+  `claude-sonnet-5-5`, case L1), the woken controller read the turn once with
+  no poll and no sleep. The numbers: 7 model requests against 8, 0 running polls
+  against 2, 0.050 USD against 0.060 USD. That pair did not meet the quality
+  criterion, because the worker answer failed the oracle in the polling arm.
+
+Not shown: a repeatable L4 effect with quality kept in every pair, a question
+round trip with a real model, interactive and VS Code behavior, and any Codex
+wake path (none is documented).
 
 ## Proposal (for decision)
 

@@ -24,7 +24,11 @@ export function sumUsage(rows: ReadonlyArray<{ usage: Usage }>): Usage {
   return total;
 }
 /** Plain arithmetic from the pre-registration: input minus cache read minus cache creation. */
-export const uncachedInput = (usage: Usage): number => usage.input_tokens - usage.cache_read_input_tokens - usage.cache_creation_input_tokens;
+/**
+ * Anthropic usage reports `input_tokens` without the cache parts, so input not served from the cache is `input_tokens` plus
+ * `cache_creation_input_tokens`. (The Codex M1 arithmetic, input minus cached, does not apply here.)
+ */
+export const uncachedInput = (usage: Usage): number => usage.input_tokens + usage.cache_creation_input_tokens;
 
 export function parseCounters(text: string): ServerCounters | null {
   try {

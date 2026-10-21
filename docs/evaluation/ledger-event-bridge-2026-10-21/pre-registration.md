@@ -102,4 +102,12 @@ count and budget. Earlier M1 approvals do not apply.
 
 ## Amendments
 
-None yet.
+- 2026-10-21, after the provider-free results and before any live run: the
+  operator approved only the smallest L4 test (one L1 pair), with an API key
+  (not a subscription token), Claude Code 2.1.306 (the client had updated from
+  2.1.303), and the `explore-fast` worker values. Arms, measures and decision
+  rules stayed unchanged.
+- 2026-10-21, during the live pair: the first attempt failed on an unscoped API
+  key and is kept. The operator raised the run cap to 3. After arm A's oracle
+  failure the stop rule applied, and the operator decided to run arm C anyway.
+  The pair is recorded as not meeting the quality criterion.
