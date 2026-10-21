@@ -391,23 +391,62 @@ describe("--report arguments", () => {
 });
 
 describe("several waves, approvals and unexpected connects", () => {
-  /** A second wave directory next to the first, with its own records and the same approval ledger. */
-  function secondWave(wave: Wave, taskIds: string[], ledgerId?: string): string {
-    const dir = join(wave.root, "wave-2");
+  const ledgerIdOf = (wave: Wave): string => JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).ledgerId;
+  const notRun = (r: SummaryRecord, overrides: Partial<SummaryRecord> = {}): SummaryRecord =>
+    ({ ...r, outcome: "not_run", accepted: null, usage: null, stopReason: null, ...overrides });
+  const put = (dir: string, r: SummaryRecord): void => writeFileSync(join(dir, "runs", `${r.runId}.json`), `${JSON.stringify({ ...r, durationMs: 5, harnessError: null })}\n`);
+  /** A wave directory with the given records and an approval over them. */
+  function waveOf(wave: Wave, name: string, records: SummaryRecord[]): string {
+    const dir = join(wave.root, name);
     mkdirSync(join(dir, "runs"), { recursive: true });
-    const records = taskIds.flatMap((id) => pair(id, true, true));
-    for (const r of records) writeFileSync(join(dir, "runs", `${r.runId}.json`), `${JSON.stringify({ ...r, durationMs: 5, harnessError: null })}\n`);
-    writeApproval(dir, wave.repo, ledgerId ?? JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")).ledgerId, records);
+    for (const r of records) put(dir, r);
+    writeApproval(dir, wave.repo, ledgerIdOf(wave), records);
     return dir;
   }
+  const recordsOf = (wave: Wave): SummaryRecord[] => wave.runIds.map((id) => JSON.parse(readFileSync(join(wave.waveDir, "runs", `${id}.json`), "utf8")) as SummaryRecord);
+  const merge = (wave: Wave, dirs: string[]) => writeEvidence(dirs, wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo });
 
-  it("merges the records of several wave directories and copies each approval", async () => {
+  it("merges the records of several wave directories per run id, copies each approval and lets an executed record replace a not_run one", async () => {
     const wave = await makeWave();
-    const second = secondWave(wave, ["t4", "t5"]);
-    const summary = await writeEvidence([wave.waveDir, second], wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo });
-    expect(tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT + 4);
+    // Wave 1 stopped before the last two runs of task t3; wave 2 ran them (R60).
+    const all = recordsOf(wave);
+    const tail = all.slice(4);
+    for (const r of tail) put(wave.waveDir, notRun(r, { stopReason: null }));
+    const second = waveOf(wave, "wave-2", tail);
+    const summary = await merge(wave, [wave.waveDir, second]);
+    const runFiles = tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"));
+    expect(runFiles).toHaveLength(RUN_COUNT);
     expect(tree(wave.evidenceDir).filter((f) => f.startsWith("approvals/"))).toEqual(["approvals/approval-1.json", "approvals/approval-2.json"]);
-    expect(summary.pairings.find((p) => p.id === pairing.id)?.tasks).toEqual(["t1", "t2", "t3", "t4", "t5"]);
+    for (const r of tail) expect(readFileSync(join(wave.evidenceDir, "runs", `${r.runId}.json`), "utf8")).toBe(readFileSync(join(second, "runs", `${r.runId}.json`), "utf8"));
+    expect(readFileSync(join(wave.evidenceDir, "runs", `${all[0]!.runId}.json`), "utf8")).toBe(readFileSync(join(wave.waveDir, "runs", `${all[0]!.runId}.json`), "utf8"));
+    expect(summary.pairings.find((p) => p.id === pairing.id)?.tasks).toEqual(["t1", "t2", "t3"]);
+    // The order of the directories does not matter.
+    rmSync(wave.evidenceDir, { recursive: true });
+    await merge(wave, [second, wave.waveDir]);
+    expect(readFileSync(join(wave.evidenceDir, "runs", `${tail[0]!.runId}.json`), "utf8")).toBe(readFileSync(join(second, "runs", `${tail[0]!.runId}.json`), "utf8"));
+  });
+
+  it("collapses several not_run records of one run id, and keeps a not_run slot nobody executed", async () => {
+    const wave = await makeWave();
+    const last = recordsOf(wave)[5]!;
+    put(wave.waveDir, notRun(last, { stopReason: "budget" }));
+    const second = waveOf(wave, "wave-2", [notRun(last)]);
+    const third = waveOf(wave, "wave-3", [notRun(last)]);
+    const summary = await merge(wave, [wave.waveDir, second, third]);
+    expect(tree(wave.evidenceDir).filter((f) => f.startsWith("runs/"))).toHaveLength(RUN_COUNT);
+    expect(summary.pairings.find((p) => p.id === pairing.id)?.tasks).toEqual(["t1", "t2"]);
+  });
+
+  it("refuses two executed records of one run id, and a run id that changes its task, profile or arm", async () => {
+    const wave = await makeWave();
+    const [first] = recordsOf(wave);
+    const twice = waveOf(wave, "wave-2", [{ ...first!, accepted: !first!.accepted }]);
+    await expect(merge(wave, [wave.waveDir, twice])).rejects.toThrow("duplicate_run_record");
+    for (const change of [{ taskId: "other" }, { profile: "code" as const }, { arm: "pi-lens" as const }]) {
+      const moved = waveOf(wave, `wave-${Object.keys(change)[0]}`, [notRun({ ...first!, ...change })]);
+      await expect(merge(wave, [wave.waveDir, moved])).rejects.toThrow("duplicate_run_record");
+    }
+    expect(existsSync(wave.evidenceDir)).toBe(false);
   });
 
   it("refuses a run id that two waves share, and a wave named twice", async () => {

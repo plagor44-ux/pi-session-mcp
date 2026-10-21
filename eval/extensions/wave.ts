@@ -10,7 +10,7 @@ import { auditLog, readVerifiedOutput } from "./audit.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
-import { PersistedLedger, isValidCost } from "./ledger-file.js";
+import { PersistedLedger, validSessionCost } from "./ledger-file.js";
 import { resolveAuditAddresses, type AuditAddresses } from "./network.js";
 import { scoreImplementation, scoreReview, type ImplementationScore } from "./oracles.js";
 import { RUN_KEY_BYTES, canonicalJson } from "./output-mac.js";
@@ -87,8 +87,9 @@ const notRun = (run: RunSpec, stopReason: StopReason | null, authType: RunRecord
 
 const failedRun = (run: RunSpec, harnessError: string, authType: RunRecord["authType"]): RunRecord => ({ ...notRun(run, "harness_failure", authType), outcome: "stopped", harnessError });
 
-/** `waveDir/status.json`: how the last invocation ended. Only a `paused` wave can be resumed. */
-const statusSchema = z.object({ state: z.enum(["paused", "stopped", "complete"]), stopReason: z.string().nullable(), executedRuns: z.number().int().min(0), recordedRuns: z.number().int().min(0) }).strict();
+/** `waveDir/status.json`: how the last invocation ended, or `running` while it is still going (or crashed). Only a `paused` wave can be resumed. */
+export const statusSchema = z.object({ state: z.enum(["running", "paused", "stopped", "complete"]), stopReason: z.string().nullable(), executedRuns: z.number().int().min(0), recordedRuns: z.number().int().min(0) }).strict();
+const storedRecordSchema = z.object({ stopReason: z.string().nullable() }).passthrough();
 const guardFileSchema = z.object({ files: z.record(z.string(), z.string()) }).strict();
 
 async function readJsonFile(path: string): Promise<unknown> {
@@ -128,9 +129,18 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     if (!status.success) throw new Error("resume_invalid");
     if (status.data.state === "stopped") throw new Error("wave_stopped");
     if (status.data.state === "complete") throw new Error("wave_complete");
+    // A crashed invocation leaves `running`: what it did is unknown, so it is continued only through a new plan and approval (R61).
+    if (status.data.state !== "paused") throw new Error("resume_invalid");
     const stored = approvalSchema.safeParse(await readJsonFile(join(input.waveDir, "approval.json")));
     if (!stored.success || canonicalJson(stored.data) !== canonicalJson(input.approval)) throw new Error("resume_approval_mismatch");
-    done = new Set((await readdir(join(input.waveDir, "runs"))).filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)));
+    const names = (await readdir(join(input.waveDir, "runs"))).filter((name) => name.endsWith(".json"));
+    done = new Set(names.map((name) => name.slice(0, -5)));
+    // A stale `paused` must not hide a stop: any record with a stop reason means the wave stopped.
+    for (const name of names) {
+      const record = storedRecordSchema.safeParse(await readJsonFile(join(input.waveDir, "runs", name)));
+      if (!record.success) throw new Error("resume_invalid");
+      if (record.data.stopReason !== null) throw new Error("wave_stopped");
+    }
   } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
   const pending = runs.filter((run) => !done.has(run.runId));
   for (const run of pending) {
@@ -155,8 +165,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   const dirGuard = await WaveDirGuard.capture(waveDir);
   await mkdir(join(waveDir, "runs"), { recursive: true, mode: 0o700 });
   // The ledger is the evaluation's one budget: it must exist and be the approval's (R55), and this process holds it exclusively.
-  const ledger = await PersistedLedger.openExisting(input.ledgerPath, input.approval.ledgerId);
-  await ledger.lock();
+  const ledger = await PersistedLedger.openLocked(input.ledgerPath, input.approval.ledgerId);
   try {
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
   const savedGuard = resume ? guardFileSchema.safeParse(await readJsonFile(join(waveDir, "guard.json"))) : null;
@@ -234,20 +243,17 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       if (tampered) waveFailure ??= "output_integrity";
 
       if (executed) {
-        // No trusted output (missing, forged, killed, bad exit status) or a cost the ledger would reject: the estimate stands in (R41).
-        // A trusted output with a session total is charged as measured. One without a session total whose assistant usage has tokens is a
-        // real billed response whose session stats failed: it charges the assistant cost sum, at least the estimate (I3). One without a
-        // session total and without any token (nothing at all, or a synthesized failure message) billed nothing: the cost is null (R11b).
-        const session = output?.usage.session ?? null;
+        // No trusted output (missing, forged, killed, bad exit status) or a session cost the ledger would reject: the estimate stands in (R41).
+        // A trusted output with a valid session total is charged as measured. One without (none, or an invalid cost, R62c) whose assistant
+        // usage has tokens is a real billed response whose session stats failed: it charges the assistant cost sum, at least the estimate
+        // (I3). One without a session total and without any token (nothing at all, or a synthesized failure message) billed nothing: the
+        // cost is null (R11b).
+        const sessionCost = validSessionCost(output?.usage.session);
         const assistant = output?.usage.assistant;
         const assistantTokens = assistant === undefined ? 0 : assistant.input + assistant.output + assistant.cacheRead + assistant.cacheWrite;
-        if (output !== null && session !== null && isValidCost(session.costUsd)) await ledger.record(run.runId, run.profile, session.costUsd);
-        else if (output !== null && session === null && !(assistantTokens > 0)) await ledger.record(run.runId, run.profile, null);
-        else {
-          if (output !== null && session !== null) waveFailure ??= "invalid_cost";
-          const assistantCost = assistant !== undefined && session === null && isValidCost(assistant.costUsd) ? assistant.costUsd : 0;
-          await ledger.recordEstimate(run.runId, run.profile, assistantCost);
-        }
+        if (output !== null && sessionCost !== null) await ledger.record(run.runId, run.profile, sessionCost);
+        else if (output !== null && !(assistantTokens > 0)) await ledger.record(run.runId, run.profile, null);
+        else await ledger.recordEstimate(run.runId, run.profile, validSessionCost(assistant) ?? 0);
       }
       const facts = { output, timedOut: supervised.timedOut, interrupted: supervised.interrupted, residualClean, trace, guardChanged: false, integrityFailed: tampered, waveFailure };
       let verdict = classifyRun(facts);
@@ -331,6 +337,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   };
   // A resumed wave whose guarded files changed while it was paused stops before its first run.
   let startStop: StopReason | null = savedGuard?.success && guardDiff(savedGuard.data, current).length > 0 ? "guard_changed" : null;
+  // From here on the invocation is `running`: if it dies before the final write below, the wave cannot be resumed on a stale `paused` (R61).
+  const writeStatus = (state: z.infer<typeof statusSchema>["state"], reason: StopReason | null, executed: number, recorded: number): Promise<void> =>
+    writeFile(join(waveDir, "status.json"), `${JSON.stringify({ state, stopReason: reason, executedRuns: executed, recordedRuns: recorded }, null, 2)}\n`, { mode: 0o600 });
+  await writeStatus("running", null, 0, done.size);
   for (const run of pending) {
     if (stopReason !== null) { await persist(notRun(run, null, authOf(run))); continue; }
     if (input.maxRuns !== undefined && executedRuns >= input.maxRuns) { paused = true; break; }
@@ -358,7 +368,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     await persist(record);
   }
   const state = stopReason !== null ? "stopped" : paused ? "paused" : "complete";
-  await writeFile(join(waveDir, "status.json"), `${JSON.stringify({ state, stopReason, executedRuns, recordedRuns: done.size + records.length }, null, 2)}\n`, { mode: 0o600 });
+  await writeStatus(state, stopReason, executedRuns, done.size + records.length);
   return { records, stopReason, spentUsd: ledger.ledger.spentUsd, paused };
   } finally {
     await ledger.release();

@@ -9,7 +9,7 @@ import { parseProductionConfig, type Approval } from "./approval.js";
 import { readVerifiedOutput } from "./audit.js";
 import { fixedCode } from "./classify.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
-import { PersistedLedger, isValidCost } from "./ledger-file.js";
+import { PersistedLedger, validSessionCost } from "./ledger-file.js";
 import { routeAddresses } from "./network.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
 import { containmentSelfTest } from "./containment.js";
@@ -88,8 +88,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   const waveDir = await realpath(input.waveDir);
   const dirGuard = await WaveDirGuard.capture(waveDir);
   // The ledger is the evaluation's one budget: it must exist and be the approval's (R55), and this process holds it exclusively.
-  const ledger = await PersistedLedger.openExisting(input.ledgerPath, input.approval.ledgerId);
-  await ledger.lock();
+  const ledger = await PersistedLedger.openLocked(input.ledgerPath, input.approval.ledgerId);
   try {
   const results: PreflightRoute[] = [];
   const timeoutMs = input.timeoutMs ?? PREFLIGHT_TIMEOUT_MS;
@@ -132,14 +131,14 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
       else ({ output, tampered } = verified);
       // Preflight costs are spend only (R54): they count toward the budget but never move the per-profile estimate. A real cost is
       // never lost: without a session total the assistant usage sum stands in, and without a trusted output the estimate is charged.
-      const session = output?.usage.session ?? null;
-      const assistantCost = output !== null && isValidCost(output.usage.assistant.costUsd) ? output.usage.assistant.costUsd : 0;
-      const cost = session !== null && isValidCost(session.costUsd) ? session.costUsd : output !== null ? assistantCost : null;
+      // A session total with an invalid cost counts as missing (R62c).
+      const sessionCost = validSessionCost(output?.usage.session);
+      const cost = sessionCost ?? (output !== null ? validSessionCost(output.usage.assistant) ?? 0 : null);
       charged = true;
       await ledger.recordPreflight(name, route.profile, cost);
       const answered = output !== null && output.terminal === "completed" && output.harnessError === null && output.sessionsLeft === 0 && clean && !supervised.timedOut && !supervised.interrupted;
-      // A completed PONG without a session total proves the cost-of-record path does not work for this route (I3).
-      if (answered && session !== null) results.push({ profile: route.profile, ok: true, terminal: output?.terminal ?? null, costUsd: cost, failure: null });
+      // A completed PONG without a usable session total proves the cost-of-record path does not work for this route (I3).
+      if (answered && sessionCost !== null) results.push({ profile: route.profile, ok: true, terminal: output?.terminal ?? null, costUsd: cost, failure: null });
       else {
         fail(
           tampered ? "output_integrity" : supervised.interrupted ? "interrupted" : supervised.timedOut ? "timeout" : !clean ? "cleanup_failure"

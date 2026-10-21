@@ -34,7 +34,10 @@ function assertUniqueTaskIds(tasks: TaskSpec[]): void {
   if (new Set(tasks.map((t) => t.id)).size !== tasks.length) throw new Error("duplicate_task_id");
 }
 
-function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
+const slotKey = (taskId: string, profile: ProfileId, arm: Arm): string => `${taskId}\u0000${profile}\u0000${arm}`;
+
+/** The drafts of `selections` in execution order. Ordinals are not assigned here; see `plan`. */
+function order(tasks: TaskSpec[], selections: Selection[]): Draft[] {
   // Position within the task's kind (task-list order), so alternation holds for interleaved lists.
   const seen = { review: 0, implementation: 0 };
   const kindIndex = new Map<TaskSpec, number>(tasks.map((t) => [t, seen[t.kind]++]));
@@ -44,7 +47,7 @@ function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
   for (const { pairing, tasks: selected } of selections) {
     for (const task of selected) {
       for (const arm of ["A", pairing.extension] as const) {
-        const key = `${task.id}\u0000${pairing.profile}\u0000${arm}`;
+        const key = slotKey(task.id, pairing.profile, arm);
         const draft = drafts.get(key);
         if (draft) { draft.priority = Math.min(draft.priority, pairing.priority); draft.pairings.push(pairing.id); continue; }
         drafts.set(key, { task, taskIndex: kindIndex.get(task)!, profile: pairing.profile, arm, priority: pairing.priority, profilePos: profilePos.get(pairing.profile)!, pairings: [pairing.id] });
@@ -54,25 +57,43 @@ function plan(tasks: TaskSpec[], selections: Selection[]): RunSpec[] {
   // Arm A leads on even task indexes and trails on odd ones, so position does not favour one arm.
   const armPos = (d: Draft) => (d.arm === "A" ? (d.taskIndex % 2 === 0 ? -1 : 1) : 0);
   return [...drafts.values()]
-    .sort((a, b) => a.priority - b.priority || a.profilePos - b.profilePos || a.taskIndex - b.taskIndex || armPos(a) - armPos(b) || a.arm.localeCompare(b.arm))
-    .map((d, i) => {
-      const ordinal = i + 1;
-      return { runId: `${String(ordinal).padStart(3, "0")}-${d.task.id}-${d.profile}-${d.arm}`, taskId: d.task.id, profile: d.profile, arm: d.arm, ordinal, pairings: d.pairings };
-    });
+    .sort((a, b) => a.priority - b.priority || a.profilePos - b.profilePos || a.taskIndex - b.taskIndex || armPos(a) - armPos(b) || a.arm.localeCompare(b.arm));
 }
 
-export function buildMatrix(tasks: TaskSpec[], pairings: readonly Pairing[]): RunSpec[] {
+/** The one definition of the run order and of the run id: the matrix of all pairings, untrimmed (R58). */
+function canonical(tasks: TaskSpec[]): RunSpec[] {
+  return order(tasks, select(tasks, PAIRINGS, new Map())).map((d, i) => {
+    const ordinal = i + 1;
+    return { runId: `${String(ordinal).padStart(3, "0")}-${d.task.id}-${d.profile}-${d.arm}`, taskId: d.task.id, profile: d.profile, arm: d.arm, ordinal, pairings: d.pairings };
+  });
+}
+
+/**
+ * A subsequence of the canonical matrix in canonical order: every slot keeps the `runId` and `ordinal` it has there (ordinals may have gaps),
+ * and `pairings` is the subset of pairings that selected it here. Slots in `skip` (run ids that already ran) are left out.
+ */
+function plan(tasks: TaskSpec[], selections: Selection[], skip: ReadonlySet<string>): RunSpec[] {
+  const slots = new Map(canonical(tasks).map((run) => [slotKey(run.taskId, run.profile, run.arm), run]));
+  return order(tasks, selections).map((d) => {
+    const slot = slots.get(slotKey(d.task.id, d.profile, d.arm));
+    if (!slot) throw new Error("unknown_pairing");
+    return { ...slot, pairings: d.pairings };
+  }).filter((run) => !skip.has(run.runId)).sort((a, b) => a.ordinal - b.ordinal);
+}
+
+/** Without `skip` the matrix of `pairings`; with it, the run ids that already ran are left out. */
+export function buildMatrix(tasks: TaskSpec[], pairings: readonly Pairing[], skip: ReadonlySet<string> = new Set()): RunSpec[] {
   assertUniqueTaskIds(tasks);
-  return plan(tasks, select(tasks, pairings, new Map()));
+  return plan(tasks, select(tasks, pairings, new Map()), skip);
 }
 
 export function trimMatrix(
-  tasks: TaskSpec[], pairings: readonly Pairing[], projectedUsd: (runs: RunSpec[]) => number, remainingUsd: number,
+  tasks: TaskSpec[], pairings: readonly Pairing[], projectedUsd: (runs: RunSpec[]) => number, remainingUsd: number, skip: ReadonlySet<string> = new Set(),
 ): { pairings: Pairing[]; tasksPerPairing: Record<string, string[]>; runs: RunSpec[] } {
   assertUniqueTaskIds(tasks);
   const limits = new Map<string, number>();
   let kept = [...pairings];
-  const current = () => plan(tasks, select(tasks, kept, limits));
+  const current = () => plan(tasks, select(tasks, kept, limits), skip);
   // Lowest priority is the highest number; on ties the later pairing in the list goes first.
   const lowest = (candidates: Pairing[]) => candidates.reduce((worst, p) => (p.priority >= worst.priority ? p : worst));
   const size = (p: Pairing) => select(tasks, [p], limits)[0]!.tasks.length;

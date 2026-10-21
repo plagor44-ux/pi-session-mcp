@@ -116,6 +116,45 @@ describe("extension ablation matrix", () => {
     expect(t.pairings).toEqual([]);
     expect(t.runs).toEqual([]);
   });
+  it("keeps the canonical run ids, ordinals and order in every subset of the matrix (R58)", () => {
+    const tasks = ["I1","I2","I3","I4","R1","R2","R3","R4"].map(id => id[0] === "I" ? impl(id) : review(id));
+    const full = buildMatrix(tasks, PAIRINGS);
+    const byId = new Map(full.map(r => [r.runId, r]));
+    const subsets = {
+      pairings: buildMatrix(tasks, PAIRINGS.filter(p => p.id === "pl-review" || p.id === "co-code")),
+      trimmed: trimMatrix(tasks, PAIRINGS, (runs) => runs.length * 0.5, 10).runs,
+      single: buildMatrix(tasks, PAIRINGS.filter(p => p.id === "pl-code")),
+    };
+    for (const runs of Object.values(subsets)) {
+      expect(runs.length).toBeGreaterThan(0);
+      expect(runs.length).toBeLessThan(full.length);
+      for (const run of runs) {
+        const canonical = byId.get(run.runId)!;
+        expect(canonical).toBeDefined();
+        expect({ ...run, pairings: undefined }).toEqual({ ...canonical, pairings: undefined });
+        // The pairings of a run are the subset that selected it in this plan.
+        expect(run.pairings.every(id => canonical.pairings.includes(id))).toBe(true);
+      }
+      expect(runs.map(r => r.ordinal)).toEqual([...runs.map(r => r.ordinal)].sort((a, b) => a - b));
+    }
+    // Ordinals have gaps in a subset, and the shared arm-A run lists only the selected pairing.
+    expect(subsets.single.map(r => r.ordinal)).not.toEqual(subsets.single.map((_, i) => i + 1));
+    const sharedA = subsets.pairings.find(r => r.profile === "review" && r.arm === "A" && r.taskId === "R1")!;
+    expect(sharedA.pairings).toEqual(["pl-review"]);
+    expect(byId.get(sharedA.runId)!.pairings.sort()).toEqual(["co-review", "pl-review"]);
+  });
+  it("leaves out the run ids in skip, before trimming, and projects only what remains (R59)", () => {
+    const tasks = [impl("I1"), impl("I2"), impl("I3")];
+    const full = buildMatrix(tasks, PAIRINGS);
+    const skip = new Set(full.slice(0, 2).map(r => r.runId));
+    const rest = buildMatrix(tasks, PAIRINGS, skip);
+    expect(rest).toEqual(full.slice(2));
+    const seen: number[] = [];
+    const t = trimMatrix(tasks, PAIRINGS, (runs) => { seen.push(runs.length); return runs.length; }, 100, skip);
+    expect(seen[0]).toBe(full.length - 2);
+    expect(t.runs).toEqual(rest);
+    expect(t.runs.every(r => !skip.has(r.runId))).toBe(true);
+  });
   it("grants the pre-registered pi-lens tools on review profiles only", () => {
     const granted = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report", "ast_grep_search", "ast_grep_outline"];
     expect(PAIRINGS.find(p => p.id === "pl-review")!.grantedExtensionTools).toEqual(granted);

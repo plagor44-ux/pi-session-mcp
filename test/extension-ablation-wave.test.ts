@@ -2301,3 +2301,315 @@ describe("source binding of approvals (I6a) and the real home (item 8)", () => {
     try { expect(realHome()).toBe(userInfo().homedir); expect(realHome()).not.toBe("/nonexistent-home-for-test"); } finally { process.env.HOME = previous; }
   });
 });
+
+/** The real route of the operator: `--plan` to approval, a (calibration) wave, re-plan with `--exclude-wave`, a new approval, a report over both waves. */
+describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () => {
+  async function flow() {
+    const root = await temporaryRoot("ablation-flow-");
+    const repo = join(root, "repo");
+    mkdirSync(repo);
+    const git = (...args: string[]) => exec("git", ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(repo, "a.txt"), "x");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const sources = join(root, "elsewhere");
+    const tasks = await Promise.all(["R1", "R2", "R3"].map((id) => reviewTask(sources, id)));
+    const tasksFile = join(root, "tasks.json");
+    const configFile = join(root, "config.json");
+    const ledgerPath = join(root, "ledger", "ledger.json");
+    await writeFile(tasksFile, JSON.stringify(tasks));
+    await writeFile(configFile, JSON.stringify(productionConfig));
+    type Plan = { exclusion?: { waves: { wave: string; executed: number }[]; ledgerOnly: number; removed: number; resumable: string | null };
+      matrix: { count: number; projectedUsd: number; runs: { runId: string; ordinal: number; taskId: string; profile: string; arm: string; pairings: string[] }[] };
+      trimmed: { remainingUsd: number }; approvalTemplate: Record<string, unknown> & { runs: RunSpec[] } };
+    const plan = async (...extra: string[]): Promise<Plan> =>
+      await buildPlan(parseArgs(["--plan", "--tasks", tasksFile, "--config", configFile, "--ledger", ledgerPath, ...extra]), { sourceCwd: repo }) as unknown as Plan;
+    const approve = (p: Plan): Approval => ({ ...p.approvalTemplate, approved: true, approvedAt: "2026-10-21T00:00:00Z" }) as unknown as Approval;
+    const hostAuth = { openai: { type: "oauth", access: "a", refresh: "", expires: Date.now() + 3_600_000 }, xai: { type: "api_key", key: "k" } };
+    const wave = (approval: Approval, name: string, steps: Step[], extra: Partial<WaveInput> = {}) => {
+      const { spawnRun, captured } = fake(steps, root);
+      const waveDir = join(root, name);
+      return { waveDir, captured, run: () => runWave({ approval, tasks, waveDir, ledgerPath, productionConfig, hostAuth, extensionTemplate: join(root, "template"), repoRoot: sources, killGraceMs: 0, ...extra }, { ...baseDeps(), spawnRun }) };
+    };
+    const report = (dirs: string[], evidence = "evidence") => writeEvidence(dirs, join(root, evidence), ledgerPath, { repoRoot: repo });
+    return { root, repo, tasks, ledgerPath, plan, approve, wave, report, git };
+  }
+
+  it("keeps the full matrix's run ids, ordinals and order in a --pairings and a --trim plan", async () => {
+    const f = await flow();
+    const full = await f.plan();
+    expect(full.matrix.count).toBe(15);
+    expect(full.matrix.runs.map((r) => r.ordinal)).toEqual(full.matrix.runs.map((_, i) => i + 1));
+    const byId = new Map(full.matrix.runs.map((r) => [r.runId, r]));
+    const subset = await f.plan("--pairings", "pl-review");
+    expect(subset.matrix.count).toBe(6);
+    expect(subset.matrix.runs.map((r) => r.ordinal)).not.toEqual(subset.matrix.runs.map((_, i) => i + 1));
+    const trimmed = await f.plan("--trim");
+    expect(trimmed.matrix.count).toBeLessThan(15);
+    for (const plan of [subset, trimmed]) {
+      for (const run of plan.matrix.runs) expect({ ...run, pairings: 0 }).toEqual({ ...byId.get(run.runId)!, pairings: 0 });
+      expect(plan.matrix.runs.map((r) => r.ordinal)).toEqual(plan.matrix.runs.map((r) => r.ordinal).sort((a, b) => a - b));
+      expect(plan.approvalTemplate.runs.map((r) => r.runId)).toEqual(plan.matrix.runs.map((r) => r.runId));
+    }
+    // The pairings of a run stay the subset that selected it in this plan.
+    expect(subset.matrix.runs.find((r) => r.arm === "A")!.pairings).toEqual(["pl-review"]);
+    expect(byId.get(subset.matrix.runs.find((r) => r.arm === "A")!.runId)!.pairings).toEqual(["pl-review", "co-review"]);
+    // The canonical runs are valid approval content (R62b).
+    expect(() => validateApproval(f.approve(subset), { sourceCommit: f.approve(subset).sourceCommit, tasks: f.tasks })).not.toThrow();
+  });
+
+  it("excludes the calibration runs, reports resumable when the list is unchanged, and resumes under the same approval", async () => {
+    const f = await flow();
+    const approval1 = f.approve(await f.plan());
+    const w1 = f.wave(approval1, "wave-1", [text({ cost: 0.1 }), text({ cost: 0.1 })], { maxRuns: 2 });
+    expect((await w1.run()).paused).toBe(true);
+    const again = await f.plan("--trim", "--exclude-wave", w1.waveDir);
+    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 2 }], ledgerOnly: 0, removed: 2, resumable: w1.waveDir });
+    expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
+    expect(again.matrix.count).toBe(13);
+    // The projection covers the 13 runs that remain: 4 observed grok runs at USD 0.1 and 9 unobserved review runs at the USD 1 floor.
+    expect(again.matrix.projectedUsd).toBeCloseTo(0.4 + 9);
+    expect(again.trimmed.remainingUsd).toBeCloseTo(9.8);
+    const w1again = f.wave(approval1, "wave-1", Array.from({ length: 13 }, () => text({ cost: 0.1 })), { resume: true });
+    const resumed = await w1again.run();
+    expect(resumed.paused).toBe(false);
+    expect(resumed.records).toHaveLength(13);
+    expect((await readdir(join(w1.waveDir, "runs"))).length).toBe(15);
+  });
+
+  it("re-plans after calibration with a forced trim: no resume, a new approval, a fresh wave and one report over both", async () => {
+    const f = await flow();
+    const full = await f.plan();
+    const approval1 = f.approve(full);
+    const w1 = f.wave(approval1, "wave-1", [text({ cost: 0.5 }), text({ cost: 0.5 })], { maxRuns: 2 });
+    await w1.run();
+    const again = await f.plan("--trim", "--exclude-wave", w1.waveDir);
+    expect(again.exclusion).toMatchObject({ removed: 2, resumable: null });
+    expect(again.matrix.count).toBe(10);
+    expect(again.matrix.runs.every((r) => !approval1.runs.slice(0, 2).some((x) => x.runId === r.runId))).toBe(true);
+    // Only the runs that remain are projected: 4 grok runs at USD 0.5 and 6 review runs at the USD 1 floor.
+    expect(again.matrix.projectedUsd).toBeCloseTo(2 + 6);
+    expect(again.trimmed.remainingUsd).toBeCloseTo(9);
+    const approval2 = f.approve(again);
+    expect(approval2.runs[0]!.runId).toBe(full.matrix.runs[2]!.runId);
+    const w2 = f.wave(approval2, "wave-2", Array.from({ length: 10 }, () => text({ cost: 0.05 })));
+    const second = await w2.run();
+    expect(second.stopReason).toBeNull();
+    expect(w2.captured).toHaveLength(10);
+    const summary = await f.report([w1.waveDir, w2.waveDir]);
+    const copied = (await readdir(join(f.root, "evidence", "runs"))).sort();
+    expect(copied).toHaveLength(12);
+    expect(new Set(copied).size).toBe(12);
+    expect((await readdir(join(f.root, "evidence", "approvals"))).sort()).toEqual(["approval-1.json", "approval-2.json"]);
+    expect(summary.pairings.find((p) => p.id === "pl-review-grok")).toMatchObject({ complete: true, tasks: ["R1", "R2", "R3"] });
+    expect(summary.pairings.find((p) => p.id === "pl-review")).toMatchObject({ complete: true, tasks: ["R1", "R2", "R3"] });
+    expect(summary.pairings.find((p) => p.id === "co-review")).toMatchObject({ recommendation: "not-run" });
+    // Wave 1 alone is reported with only its own spend.
+    expect(summary.waveSpend.observedUsd).toBeCloseTo(1 + 10 * 0.05);
+    expect(summary.budgetSpend.observedUsd).toBeCloseTo(1 + 10 * 0.05);
+  });
+
+  it("includes the not_run slots of a stopped wave, lets wave 2 execute some, and the report lets executed records replace not_run", async () => {
+    const f = await flow();
+    const full = await f.plan();
+    const approval1 = f.approve(full);
+    const outside = `${benignTrace()}4242 openat(AT_FDCWD</scope>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>\n`;
+    const w1 = f.wave(approval1, "wave-1", [text({ trace: outside })]);
+    expect((await w1.run()).stopReason).toBe("outside_write");
+    const again = await f.plan("--exclude-wave", w1.waveDir);
+    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 1 }], ledgerOnly: 0, removed: 1, resumable: null });
+    expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(1).map((r) => r.runId));
+    const approval2 = f.approve(again);
+    const w2 = f.wave(approval2, "wave-2", [text(), text(), text()], { maxRuns: 3 });
+    expect((await w2.run()).paused).toBe(true);
+    const summary = await f.report([w1.waveDir, w2.waveDir]);
+    const files = (await readdir(join(f.root, "evidence", "runs"))).sort();
+    expect(files).toEqual(approval1.runs.map((r) => `${r.runId}.json`).sort());
+    const outcome = async (dir: string, run: RunSpec) => (JSON.parse(await readFile(join(dir, "runs", `${run.runId}.json`), "utf8")) as RunRecord).outcome;
+    for (const run of approval1.runs.slice(1, 4)) {
+      expect(await outcome(w1.waveDir, run)).toBe("not_run");
+      expect(await readFile(join(f.root, "evidence", "runs", `${run.runId}.json`), "utf8")).toBe(await readFile(join(w2.waveDir, "runs", `${run.runId}.json`), "utf8"));
+    }
+    for (const run of approval1.runs.slice(4)) expect(await outcome(join(f.root, "evidence"), run)).toBe("not_run");
+    expect(summary.stopReason).toBe("outside_write");
+  });
+
+  it("excludes a slot that has only a ledger entry (a crash after the charge) and counts it as ledger-only", async () => {
+    const f = await flow();
+    const approval1 = f.approve(await f.plan());
+    const w1 = f.wave(approval1, "wave-1", [text(), text()], { maxRuns: 2 });
+    await w1.run();
+    await rm(join(w1.waveDir, "runs", `${approval1.runs[1]!.runId}.json`));
+    const again = await f.plan("--exclude-wave", w1.waveDir);
+    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 1 }], ledgerOnly: 1, removed: 2, resumable: null });
+    expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
+    // Without --exclude-wave the ledger is not consulted.
+    expect((await f.plan()).matrix.count).toBe(15);
+  });
+
+  it("refuses an excluded wave without an approval, under another ledger, without a runs directory, and bad arguments", async () => {
+    const f = await flow();
+    const approval1 = f.approve(await f.plan());
+    const w1 = f.wave(approval1, "wave-1", [text()], { maxRuns: 1 });
+    await w1.run();
+    const empty = join(f.root, "empty");
+    mkdirSync(empty);
+    await expect(f.plan("--exclude-wave", empty)).rejects.toThrow("approval_missing");
+    const other = join(f.root, "other");
+    mkdirSync(join(other, "runs"), { recursive: true });
+    await writeFile(join(other, "approval.json"), JSON.stringify({ ...approval1, ledgerId: "44444444-4444-4444-8444-444444444444" }));
+    await expect(f.plan("--exclude-wave", other)).rejects.toThrow("ledger_mismatch");
+    await rm(join(w1.waveDir, "runs"), { recursive: true });
+    await expect(f.plan("--exclude-wave", w1.waveDir)).rejects.toThrow("runs_missing");
+    const base = ["--plan", "--tasks", "t.json"];
+    expect(parseArgs([...base, "--ledger", "l.json", "--exclude-wave", "a", "--exclude-wave", "b"]).excludeWaves).toEqual(["a", "b"]);
+    expect(() => parseArgs([...base, "--exclude-wave", "a"])).toThrow("ledger_required");
+    expect(() => parseArgs([...base, "--ledger", "l.json", "--exclude-wave", "a", "--exclude-wave", "a"])).toThrow("invalid_argument");
+    const live = ["--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json"];
+    expect(() => parseArgs(["--wave", ...live, "--exclude-wave", "a"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--report", "--wave", "w", "--ledger", "l.json", "--evidence", "e", "--exclude-wave", "a"])).toThrow("invalid_argument");
+  });
+});
+
+describe("a stale status must not allow a resume (R61)", () => {
+  /** Deps whose clock fails from the first reading after a run was spawned, as a crash in the middle of an invocation would. */
+  const crashingAfterFirstRun = (s: Setup, steps: Step[]): WaveDeps => {
+    const d = s.deps(steps);
+    d.deps.now = () => { if (d.captured.length > 0) throw new Error("clock_failed"); return Date.now(); };
+    return d.deps;
+  };
+  const statusOf = async (dir: string) => JSON.parse(await readFile(join(dir, "status.json"), "utf8")) as { state: string };
+
+  it("leaves `running` after a fresh invocation that dies, and refuses to resume it", async () => {
+    const s = await waveSetup(3);
+    await expect(runWave(s.input, crashingAfterFirstRun(s, [text(), text()]))).rejects.toThrow("clock_failed");
+    expect(await statusOf(s.waveDir)).toMatchObject({ state: "running", stopReason: null });
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+    const resumed = s.deps([text()]);
+    await expect(runWave({ ...s.input, resume: true }, resumed.deps)).rejects.toThrow("resume_invalid");
+    expect(resumed.captured).toHaveLength(0);
+  });
+
+  it("leaves `running` after a resumed invocation that dies, so the earlier `paused` cannot be reused", async () => {
+    const s = await waveSetup(4);
+    await runWave({ ...s.input, maxRuns: 1 }, s.deps([text()]).deps);
+    expect(await statusOf(s.waveDir)).toMatchObject({ state: "paused" });
+    // The clock fails before the third run, after the second was recorded and charged.
+    await expect(runWave({ ...s.input, resume: true }, crashingAfterFirstRun(s, [text(), text()]))).rejects.toThrow("clock_failed");
+    expect(await statusOf(s.waveDir)).toMatchObject({ state: "running" });
+    expect((await readdir(join(s.waveDir, "runs"))).length).toBe(2);
+    const again = s.deps([text()]);
+    await expect(runWave({ ...s.input, resume: true }, again.deps)).rejects.toThrow("resume_invalid");
+    expect(again.captured).toHaveLength(0);
+  });
+
+  it("refuses wave_stopped when the status says paused but a record holds a stop reason", async () => {
+    const s = await waveSetup(3);
+    const outside = `${benignTrace()}4242 openat(AT_FDCWD</scope>, "/home/u/x", O_WRONLY|O_CREAT, 0644) = 3</home/u/x>\n`;
+    expect((await runWave(s.input, s.deps([text({ trace: outside })]).deps)).stopReason).toBe("outside_write");
+    const status = JSON.parse(await readFile(join(s.waveDir, "status.json"), "utf8")) as Record<string, unknown>;
+    await writeFile(join(s.waveDir, "status.json"), JSON.stringify({ ...status, state: "paused", stopReason: null }));
+    const resumed = s.deps([text()]);
+    await expect(runWave({ ...s.input, resume: true }, resumed.deps)).rejects.toThrow("wave_stopped");
+    expect(resumed.captured).toHaveLength(0);
+  });
+});
+
+describe("lock before read (R62a)", () => {
+  it("takes the lock first and leaves no lock file when opening fails", async () => {
+    const root = await temporaryRoot("ablation-open-locked-");
+    const path = join(root, "ledger.json");
+    await expect(PersistedLedger.openLocked(path, LEDGER_ID)).rejects.toThrow("ledger_missing");
+    expect(existsSync(`${path}.lock`)).toBe(false);
+    await seedLedger(path, [], "44444444-4444-4444-8444-444444444444");
+    await expect(PersistedLedger.openLocked(path, LEDGER_ID)).rejects.toThrow("ledger_mismatch");
+    expect(existsSync(`${path}.lock`)).toBe(false);
+    await writeFile(path, "{ not json");
+    await expect(PersistedLedger.openLocked(path, LEDGER_ID)).rejects.toThrow();
+    expect(existsSync(`${path}.lock`)).toBe(false);
+    await seedLedger(path);
+    const held = await PersistedLedger.openLocked(path, LEDGER_ID);
+    expect(existsSync(`${path}.lock`)).toBe(true);
+    // A second holder is refused before it reads anything, and its refusal does not remove the first holder's lock.
+    await expect(PersistedLedger.openLocked(path, LEDGER_ID)).rejects.toThrow("ledger_locked");
+    expect(existsSync(`${path}.lock`)).toBe(true);
+    await held.release();
+    expect(existsSync(`${path}.lock`)).toBe(false);
+  });
+});
+
+describe("approved runs must be canonical (R62b)", () => {
+  async function edited(change: (runs: RunSpec[]) => RunSpec[]) {
+    const root = await temporaryRoot("ablation-canonical-");
+    const tasks = [await reviewTask(root, "A1"), await reviewTask(root, "A2")];
+    const runs = buildMatrix(tasks, PAIRINGS);
+    const approval = approvalFor(tasks, change(runs));
+    return () => validateApproval(approval, { sourceCommit: approval.sourceCommit, tasks, routes: approval.routes });
+  }
+  const first = (runs: RunSpec[]): RunSpec => runs.find((r) => r.profile === "review-grok" && r.arm === "pi-lens")!;
+  const replaceFirst = (runs: RunSpec[], run: RunSpec): RunSpec[] => runs.map((r, i) => (i === 0 ? run : r));
+
+  it("accepts the canonical list and any subsequence of it with subset pairings", async () => {
+    expect((await edited((runs) => runs))()).toBeDefined();
+    expect((await edited((runs) => runs.slice(3, 9)))()).toBeDefined();
+    expect((await edited((runs) => runs.map((r) => ({ ...r, pairings: [r.pairings[0]!] }))))()).toBeDefined();
+  });
+
+  it("refuses an arm-B run of a profile that has no pairing for that extension", async () => {
+    const run = (runs: RunSpec[]) => ({ ...first(runs), arm: "pi-cache-optimizer" as const, runId: first(runs).runId.replace(/pi-lens$/, "pi-cache-optimizer") });
+    await expect((await edited((runs) => replaceFirst(runs, run(runs)))).bind(null)).toThrow("approval_binding_changed");
+  });
+
+  it("refuses an unknown pairing id, a duplicated pairing id, and a pairing of another slot", async () => {
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, pairings: ["no-such-pairing"] }))).toThrow("approval_binding_changed");
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, pairings: [runs[0]!.pairings[0]!, runs[0]!.pairings[0]!] }))).toThrow("approval_binding_changed");
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, pairings: ["pl-code"] }))).toThrow("approval_binding_changed");
+  });
+
+  it("refuses a run id that does not match its slot or ordinal", async () => {
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, runId: "999-A1-review-grok-A" }))).toThrow("approval_binding_changed");
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, ordinal: 99 }))).toThrow("approval_binding_changed");
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, taskId: "A2" }))).toThrow("approval_binding_changed");
+  });
+
+  it("refuses a review task on a code profile", async () => {
+    await expect(await edited((runs) => replaceFirst(runs, { ...runs[0]!, profile: "code", runId: runs[0]!.runId.replace("review-grok", "code") }))).toThrow("approval_binding_changed");
+  });
+
+  it("refuses runs that are not in increasing ordinal order", async () => {
+    await expect(await edited((runs) => [...runs].reverse())).toThrow("approval_binding_changed");
+    await expect(await edited((runs) => [runs[1]!, runs[0]!, ...runs.slice(2)])).toThrow("approval_binding_changed");
+  });
+});
+
+describe("an invalid session cost counts as missing (R62c)", () => {
+  const usage = (assistantCost: number, tokens: number) => ({
+    session: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, total: 17, costUsd: -1 },
+    assistant: { messages: 1, input: tokens, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: assistantCost }, providerError: null,
+  });
+  const entriesOf = async (path: string) => (JSON.parse(await readFile(path, "utf8")) as { entries: { runId: string; costUsd: number | null; estimated?: boolean }[] }).entries;
+
+  it("falls back in the wave like a missing session total: the assistant sum or the estimate when tokens exist, null otherwise", async () => {
+    const s = await waveSetup(2);
+    const r = await runWave(s.input, s.deps([text({ output: { usage: usage(1.5, 10) } }), text({ output: { usage: usage(0.4, 0) } })]).deps);
+    const entries = await entriesOf(s.input.ledgerPath);
+    expect(entries[0]).toMatchObject({ runId: s.runs[0]!.runId, costUsd: 1.5, estimated: true });
+    expect(entries[1]).toMatchObject({ runId: s.runs[1]!.runId, costUsd: null });
+    expect(entries[1]!.estimated).toBeUndefined();
+    expect(r.stopReason).toBeNull();
+    expect(r.spentUsd).toBeCloseTo(1.5);
+  });
+
+  it("fails a preflight route with usage_missing and still charges the assistant cost", async () => {
+    const root = await temporaryRoot("ablation-invalid-session-");
+    const tasks = [await reviewTask(join(root, "repo"), "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await seedLedger(join(root, "l.json"));
+    const { spawnRun } = fake([{ text: "PONG", output: { usage: usage(0.07, 10) } }], root);
+    const result = await runPreflight({ approval, waveDir: join(root, "w"), ledgerPath: join(root, "l.json"), productionConfig, hostAuth: { openai: { type: "api_key", key: "k" } } }, {
+      ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "x.log")), residualCheck: async () => true,
+    });
+    expect(result.routes).toMatchObject([{ profile: "review", ok: false, terminal: "completed", failure: "usage_missing" }]);
+    expect(await entriesOf(join(root, "l.json"))).toMatchObject([{ costUsd: 0.07 }]);
+  });
+});
