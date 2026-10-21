@@ -2,13 +2,59 @@
 
 ## Unreleased
 
-- Evaluation only (#104): a provider-free ledger, completion-event bridge and
+Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
+#108); `package.json` is bumped by the release step.
+
+- Added: opt-in turn events for a Claude Code controller wake. The optional
+  top-level server configuration field `events: { "delivery": "spool" }` (default
+  off; any other shape fails startup with `invalid_event_delivery`) makes the
+  registry's terminal transition write one content-free event file per turn
+  (identifiers, state, time) into a private spool below
+  `$XDG_RUNTIME_DIR/pi-session-mcp/events/`, removed at shutdown. An unusable
+  spool root stops startup with `event_spool_unavailable`; a later write failure
+  is one sanitized `event_spool_write_failed` diagnostic on stderr.
+- Added: the `pi-session-mcp-wake` executable, a Claude Code `PostToolUse`
+  `asyncRewake` hook. It waits for the event of a running turn, claims it exactly
+  once and wakes the controller with one line; after its wait budget (30 minutes)
+  it wakes so that the controller reads once and re-arms.
+- Added: `setup --apply` installs, `--verify` checks and `--remove` /
+  `--rollback` remove the hook entry in the settings file of the Claude Code
+  target's scope, under the existing dry-run, ownership and divergence rules
+  (`hook_*` and `settings_*` finding codes, see the
+  [client setup reference](docs/client-setup.md#wake-hook)). Codex targets report
+  `hook_not_applicable` and keep polling.
+- Added: container writers with delivery enabled get one dedicated spool mount
+  at `/pi/events`, created and checked at every launch (`events_directory_unavailable`
+  refuses the launch); acceptance binds delivery when enabled, and changing
+  delivery on an existing writer reports `writer_settings_changed` (remove and
+  add the writer). Amends ADR 0008.
+- Added: Doctor check `event_spool_root` (only when delivery is enabled) and a
+  section "Event delivery" in the controller skill `pi-session-orchestration`:
+  with `events.delivery` `spool`, wait for the wake instead of polling.
+- Changed: `pi_capabilities_get` gains `events: { delivery: "spool" | "off" }`.
+  This is a public contract change, hence a minor release under
+  [ADR 0003](docs/adr/0003-post-mvp-maintenance.md#versioning). The eight tools
+  and their other fields are unchanged.
+- Security: events are wake triggers only and carry no prompt, answer, path or
+  error text. A worker can write to its own writer's spool mount, so it can
+  forge, delete or flood events there; the effect is a spurious or missing wake
+  inside that namespace (the hook's budget then wakes once), never a changed
+  result, since the controller always reads `pi_turn_get`. The hook validates
+  events strictly, bounds its scans and follows no link, and its claims live
+  outside every writer mount. The mount gives the worker no other host access.
+  See the [threat model](docs/threat-model.md).
+- Limits: Claude Code only, in interactive or stream-json sessions (one-shot
+  `claude -p` blocks until the hook ends); Codex keeps polling. Claude Code may
+  need a restart or a `/hooks` review to load a new hook, and managed settings
+  can disable hooks. The setup hook path must be free of shell metacharacters
+  (`hook_path_unsafe`). No token or cost saving is claimed.
+- Evaluation (#104): a provider-free ledger, completion-event bridge and
   Claude Code rewake prototype under `eval/bridge/` (not shipped), its
   [report](docs/evaluation/ledger-event-bridge-2026-10-21/README.md) (including
   two operator-approved real-model pairs) and
   [ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md) (accepted
-  2026-10-21, items 1–3, with an ADR 0008 amendment; implementation planned for
-  0.11.0 in #108). No runtime, tool, field or error-code change yet.
+  2026-10-21, items 1–3, with an ADR 0008 amendment), implemented in #108 as described
+  above.
 
 ## 0.10.0 — 2026-10-19
 

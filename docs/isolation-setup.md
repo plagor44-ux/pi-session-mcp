@@ -38,7 +38,7 @@ macOS containment remains unaccepted and keeps the
 | Workspace | Separate full clone per writer, created via a base bundle; no hardlinks or shared linked-worktree metadata |
 | Wrapper | Generated stdio-only launcher bound to the release and writer name; no daemon between client connections |
 | Boundary | Rootless keep-id, read-only root, capability drop, no-new-privileges, tmpfs home and /tmp; clone read-write with hooks/config overmounted read-only |
-| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go cache |
+| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go cache, optional event spool directory ([below](#event-spool-mount)) |
 | Configuration | One workspace, selected coding profiles and a synthetic read-only default; internal acknowledged host mode permits writes only in the contained clone |
 | Credentials | Selected provider entries only; OAuth refresh token emptied, API keys retained; no host SSH/Git/client credentials intentionally mounted |
 | Acceptance | Explicit uncontained host control, then provider-free contained harness per writer; fingerprint gates readiness |
@@ -84,6 +84,58 @@ so inspecting a writer starts its container. Setup inspect and verify use that
 command too. Direct verify sets `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
 starts sessions nor uses a provider nor touches credentials in its direct launch.
 The client's separate health-check subprocess is not given that override by setup.
+
+## Event spool mount
+
+A writer can emit the content-free turn events of
+[ADR 0011](adr/0011-turn-events-and-controller-wake.md) so that a Claude Code
+hook on the host wakes the controller when a turn ends (see
+[Installation](installation.md#wake-the-controller-claude-code)). The container
+cannot reach the host's runtime directory, so a delivering writer gets **one
+extra bind mount**, as amended in
+[ADR 0008](adr/0008-coding-profile-isolation.md#amendment-2026-10-21-event-spool-mount).
+
+- **When.** Only if the writer's contained `pi-session-mcp.json` has
+  `"events": { "delivery": "spool" }`. Provisioning copies the `events` field
+  from your server configuration into that file. Anything else, including an
+  unreadable or differently shaped file, means no mount and no delivery.
+- **Mount.** The host directory
+  `$XDG_RUNTIME_DIR/pi-session-mcp/events/writer-<name>/` (mode 0700, the
+  operator's) is mounted read-write at `/pi/events`, and the wrapper sets
+  `PI_SESSION_MCP_EVENTS_DIR=/pi/events` for the server inside. It is never
+  shared between writers and holds no ledger, credentials, configuration or
+  results. Claims live in `$XDG_RUNTIME_DIR/pi-session-mcp/claims/`, outside
+  every mount.
+- **Creation at launch.** The runtime directory is a tmpfs that a logout empties,
+  so every launch creates the directory chain below `$XDG_RUNTIME_DIR`
+  (`pi-session-mcp`, `events`, `writer-<name>`; mode 0700) and checks each
+  level with `lstat`: a real directory, owned by the current user, without group
+  or other access. `$XDG_RUNTIME_DIR` itself must exist and is never created or
+  changed. If a level fails, or `$XDG_RUNTIME_DIR` is not an absolute path,
+  no container starts: the launcher writes one structured line to stderr with
+  `"stage": "events"` and `"code": "events_directory_unavailable"` and serves the
+  `writer_not_ready` refusal. Fix the directory (or disable delivery) and reconnect.
+- **Removal.** `--remove` deletes the writer's spool directory, best effort and
+  without following a link. A missing runtime directory does not fail the removal.
+- **Changing delivery.** The setting is part of the writer's provisioned
+  settings. Re-running the provisioning command with a different `events` field
+  reports `writer_settings_changed` and changes nothing: remove the writer
+  (`--writer <name> --remove`, after collecting work) and add it again.
+  Acceptance binds delivery when enabled, so a writer provisioned with delivery
+  needs its acceptance again after the change.
+- **Hook.** Setup installs the same Claude Code hook entry as for the host
+  server; its matcher also covers `mcp__pi-coding-*` tools, and the hook reads
+  only that writer's namespace.
+
+**What the mount allows.** The worker can create, delete and replace files in
+`/pi/events`, links and oversized files included. It gains no read access to
+host data and no write access outside that directory. It can forge, delete or
+flood events of its own writer, which causes at most a spurious wake, or a
+missing wake that the hook's wait budget replaces by one running read. The hook
+validates each event strictly, caps size and count and follows no link, and the
+controller never takes a state from a wake. The release acceptance for a writer
+with delivery enabled must show the missing access and the forged-event
+behavior in addition to the checks above; no such live result is recorded yet.
 
 ## Credentials and residual risks
 

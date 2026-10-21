@@ -192,6 +192,61 @@ takes no lock and writes nothing.
 After `skill_override_outdated`, `--apply` moves only the recorded base, which
 acknowledges a change you reviewed. Details: [Pi skills](skills.md#customize-and-add-skills).
 
+### Wake hook
+
+For a Claude Code target and a configuration with `"events": { "delivery": "spool" }`,
+`--apply` adds one `PostToolUse` entry with `asyncRewake` to the settings file
+of the target's scope, after the registration succeeded. Guided steps and limits:
+[Installation](installation.md#wake-the-controller-claude-code); design:
+[Architecture](architecture.md#turn-events-and-controller-wake).
+
+| Scope | Settings file |
+| --- | --- |
+| `claude-code:user` | `$CLAUDE_CONFIG_DIR/settings.json`, else `~/.claude/settings.json` |
+| `claude-code:project` | `<project>/.claude/settings.json` |
+| `claude-code:local` | `<project>/.claude/settings.local.json` |
+
+`<project>` is the real path of the directory in which setup runs. Claude Code
+has no command for hooks, so setup follows the contract of the settings file,
+not a client version (ADR 0004): it edits the JSON, and `--verify` compares the
+file's entry and checks that `dist/wake-main.js` exists. It cannot tell whether
+the running client honors the entry; restart Claude Code or review `/hooks`.
+In a project, a link at `.claude` or at the settings file makes the location
+invalid; in the user directory a linked settings file is followed. Ownership
+is the same pending-before-write transaction as for skills, keyed by scope
+(and by project for `project` and `local`), and holds a fingerprint only.
+
+The finding has the alias `hook:pi-session-mcp-wake`. Codes per operation:
+
+- `--dry-run`: `hook_add_planned` and `hook_update_planned` (planned; the update
+  replaces an entry that setup wrote for an earlier package path),
+  `hook_remove_planned` (planned; delivery is off and setup owns an entry),
+  `hook_already_equivalent` and `hook_not_enabled` (unchanged),
+  `hook_divergent` (divergent).
+- `--apply`: `hook_added`, `hook_updated`, `hook_recovered` (ok; an interrupted
+  run was settled and needed no further change) and `hook_removed` (ok; delivery
+  is off and an owned entry went), `hook_absent` (ok; the owned entry was
+  already gone and only the record was cleared), `hook_already_equivalent` and
+  `hook_not_enabled` (unchanged), `hook_divergent` (divergent).
+- `--verify`: `hook_verified` (ok); `hook_missing`, `hook_not_equivalent`,
+  `hook_not_owned`, `hook_ownership_pending`, `hook_program_missing` and
+  `hook_delivery_off` (failed; the entry exists but the configuration disables
+  delivery); `hook_not_enabled` (unchanged).
+- `--rollback` and `--remove`: `hook_removed`, `hook_absent`, `hook_not_owned`
+  (unchanged) and `hook_divergent` (more than one candidate, or an entry that
+  is not exactly the one setup wrote; nothing is deleted).
+- Any operation: `hook_not_applicable` (unchanged; a Codex target),
+  `hook_config_unreadable` (failed), `hook_path_unsafe` (failed; the Node or
+  package path contains a character that the unquoted command cannot carry),
+  `settings_location_invalid`, `settings_unreadable`, `settings_unparseable`,
+  `settings_shape_invalid` (`hooks` or `hooks.PostToolUse` has another shape),
+  `settings_changed` (the file changed twice during the edit) and
+  `hook_install_failed` (failed).
+
+Setup never replaces or deletes an entry that it did not write or that was
+edited, and it keeps all other settings. The entry is not part of the MCP
+registration, so `claude mcp` does not show it.
+
 ## Local configuration
 
 Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
@@ -220,7 +275,7 @@ Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
 }
 ```
 
-Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions` and `skills` described in [Installation](installation.md) and [Pi skills](skills.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
+Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions` and `skills` described in [Installation](installation.md) and [Pi skills](skills.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. An optional top-level `events` field, exactly `{ "delivery": "spool" }`, enables turn-event delivery for the Claude Code wake and is off by default; any other shape fails startup with `invalid_event_delivery`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
 
 Use placeholders until a locally available provider/model pair is known. Do not put keys, tokens, credential objects, headers, base URLs, or authentication paths in this file.
 
@@ -294,7 +349,7 @@ Claude Code enforces each tool's declared JSON Schema (`additionalProperties: fa
 1. Call `pi_capabilities_get` with `{}` and select explicit workspace and read-only execution-profile aliases from the returned config-derived lists.
 2. Call `pi_session_start` with those aliases. The server resolves the configured provider/model through its shared `ModelRuntime` (a profile with extensions gets a fresh runtime for each session), loads and validates the profile's selected skills, checks existing local Pi authentication and availability, creates with explicit model/thinking/tools, and verifies the effective SDK result.
 3. Call `pi_session_prompt` with the returned `sessionId` and a read-only prompt. It returns after accepted preflight with a `turnId` in `running` state.
-4. Poll `pi_turn_get` with that `sessionId` and `turnId` until `completed`, `failed`, or `aborted`, with a deadline no longer than three minutes. There is no `pi_turn_wait` tool.
+4. Poll `pi_turn_get` with that `sessionId` and `turnId` until `completed`, `failed`, or `aborted`, with a deadline no longer than three minutes. There is no `pi_turn_wait` tool. With event delivery active (`events.delivery` is `spool` in `pi_capabilities_get`) and the wake hook installed, a Claude Code controller waits for the wake instead and reads the turn once.
 5. Call `pi_session_close` when the session is no longer needed.
 
 Capability discovery sorts both arrays by alias and returns no workspace paths. It reports configured provider/model intent without checking authentication, provider availability, the filesystem, or the network. Session start remains the first runtime check.

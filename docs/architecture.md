@@ -47,7 +47,7 @@ reconciled only when the registration still matches that binding. A changed
 release fails closed and cannot silently inherit or replace another release's
 registration.
 
-`pi_capabilities_get` projects the validated workspace and execution-profile maps plus the immutable configuration metadata captured while loading the file. It returns aliases plus the configured permission/provider/model/thinking intent, the configured extension specs and the selected skill aliases, sorted by alias, and `configuration: { fingerprint, reloadPolicy: "restart-required" }`. The fingerprint is SHA-256 over the exact loaded file bytes, including formatting; it is not a current-file freshness check. The projection makes no provider, authentication, filesystem, network, server-reachability, or catalog-state probe, so it cannot assert availability.
+`pi_capabilities_get` projects the validated workspace and execution-profile maps plus the immutable configuration metadata captured while loading the file. It returns aliases plus the configured permission/provider/model/thinking intent, the configured extension specs and the selected skill aliases, sorted by alias, `configuration: { fingerprint, reloadPolicy: "restart-required" }` and `events: { delivery: "spool" | "off" }`. The fingerprint is SHA-256 over the exact loaded file bytes, including formatting; it is not a current-file freshness check. The projection makes no provider, authentication, filesystem, network, server-reachability, or catalog-state probe, so it cannot assert availability.
 
 ## Deterministic Pi selection
 
@@ -81,6 +81,44 @@ The public SDK does not provide a hard-kill guarantee for a blocked provider/net
 
 Public errors are stable and sanitized. They omit caller values, complete prompts, paths, provider/SDK details, authentication data, credential locations, and SDK identifiers.
 
+## Turn events and controller wake
+
+Event delivery is opt-in (`"events": { "delivery": "spool" }` in the server configuration, default `off`) and decided in [ADR 0011](adr/0011-turn-events-and-controller-wake.md). Without it nothing below exists and no client sees a difference.
+
+```text
+registry terminal transition --> onTurnTerminal --> TurnEventSpool --> event file
+                                                                          |
+Claude Code asyncRewake <-- exit 2 + one line <-- pi-session-mcp-wake <---+
+        |
+        +--> controller reads pi_turn_get once
+```
+
+- **Observer.** `SessionRegistry` calls the optional `onTurnTerminal` listener from the one place that makes a published turn terminal (`notifyTerminal`), once per turn, with session ID, turn ID, state (`completed`, `failed` or `aborted`) and `via`. `via` is `close` when `close` marked a still running turn aborted and `registry` otherwise. A rejected, timed-out or restored preflight never had a public turn and emits nothing. A throwing listener is swallowed; it cannot change registry state or reach a caller.
+- **Spool.** `src/main.ts` opens a `TurnEventSpool` at startup only when delivery is `spool` and writes one `turn_terminal` event per notice. An unusable spool root stops the server with the startup code `event_spool_unavailable`. Later write failures never reach the registry: they are counted, and one sanitized `event_spool_write_failed` diagnostic goes to stderr.
+- **Event.** One file per event, `<8-digit sequence>-<kind>.json`, at most 1,024 bytes, mode 0600, written to a temporary name and renamed into place. It holds `v`, `seq`, `at`, `instance` and, for `turn_terminal`, `session`, `turn`, `state` and `via`; `instance_ended` holds a `reason` (`eof`, `signal` or `shutdown`) instead. Never a prompt, an answer, a path or an error text. `src/turn-events.ts` owns the contract and its strict parser; the server and the hook program share it.
+- **Hook.** `pi-session-mcp-wake` (`dist/wake-main.js`) is a Claude Code `PostToolUse` command hook with `asyncRewake`. It arms on `pi_session_prompt` and on `pi_turn_get` results that show a running turn, waits for that turn's event, claims it exactly once and exits 2 with one line on stderr, which Claude Code turns into a new model request. After its wait budget it wakes with a different line so that the controller reads once and re-arms. Every other path exits 0 silently.
+- **Controller.** It reads `pi_turn_get` once. An event is a wake trigger and never state: the registry read model stays the only truth, and the controller never acts on a state taken from a wake line.
+
+### Layout and lifecycle
+
+```text
+$XDG_RUNTIME_DIR/pi-session-mcp/
+  events/                         0700, owned by the operator
+    inst-<16 hex>/                one per host server process
+    writer-<name>/                one per container writer, mounted at /pi/events
+      inst-<16 hex>/
+  claims/                         wake claims, never inside events/
+```
+
+A host server uses `events/` itself as its spool root unless `PI_SESSION_MCP_EVENTS_DIR` names an absolute directory; the writer wrapper sets it to `/pi/events`, so inside the boundary the instance directories sit directly in the mount. The root is created with mode 0700 if missing and must be a real directory of the current user without group or other access. Each server process creates its own instance directory.
+
+- **Start.** The instance directory is created when the server starts with delivery enabled.
+- **Stop.** After the registry shutdown has finished, so that the terminal events which `close` generates come first, the spool writes `instance_ended` and removes its instance directory. This runs on stdin EOF, signals, a failed start and the shutdown deadline. A crash or `SIGKILL` leaves a stale instance directory of content-free files; nothing cleans it up automatically, and the hook reads only the 64 newest instance directories of a namespace.
+- **Claims.** The hook creates `claims/<namespace>-<instance>-<sequence>` exclusively; the winner wakes, so one event wakes at most once even with several waiting hooks. A hook that is killed before its wake was delivered releases its claim. Claims older than 24 hours are removed by later hook runs.
+- **Not state.** The server never reads the spool back, nothing survives a logout (the runtime directory is a tmpfs on systemd hosts), and no event is replayed. This is the narrow, content-free exception to in-memory-only operation that ADR 0011 records.
+
+Container writers get one dedicated spool directory each, bind-mounted read-write; see [Isolation setup](isolation-setup.md#event-spool-mount). Codex has no external wake and keeps polling.
+
 ## Scope
 
-The product boundary is local stdio and in-memory-only operation for one trusted local MCP peer. Allowlisted Pi extensions may persist state of their own outside this boundary, and their input hooks see every client prompt as `rpc` input, never `interactive`; Pi Session MCP itself keeps no state beyond process memory. A controller keeps one immutable configuration/profile snapshot for its lifetime; file edits require a genuinely new controller process and do not hot-reload, mark stale, or mutate running sessions. Each new session performs external catalog discovery within the loaded grants, so catalog changes do not require a controller restart, but a running session's active tools remain fixed. Skill selection is part of that snapshot, but skill file contents are not: the SDK keeps file paths, so operators must not change a skill file while sessions that use it are active (see [Pi skills](skills.md)). Restarting the controller loses all sessions; reconnecting a client reloads configuration only when it actually starts a new controller process. Capability discovery reports captured metadata only and does not prove current-file freshness, server reachability, provider availability, or catalog state. It excludes HTTP, a web UI, persistence/resume, remote access, multi-user behavior, transcript export, streaming, live provider/model discovery, availability probes during capability discovery, and provider credential management. A coding execution profile is an application-level tool selection, not an OS sandbox.
+The product boundary is local stdio and in-memory-only operation for one trusted local MCP peer. Allowlisted Pi extensions may persist state of their own outside this boundary, and their input hooks see every client prompt as `rpc` input, never `interactive`; Pi Session MCP itself keeps no state beyond process memory; the opt-in event spool is a transient, content-free notification channel, not state (see above). A controller keeps one immutable configuration/profile snapshot for its lifetime; file edits require a genuinely new controller process and do not hot-reload, mark stale, or mutate running sessions. Each new session performs external catalog discovery within the loaded grants, so catalog changes do not require a controller restart, but a running session's active tools remain fixed. Skill selection is part of that snapshot, but skill file contents are not: the SDK keeps file paths, so operators must not change a skill file while sessions that use it are active (see [Pi skills](skills.md)). Restarting the controller loses all sessions; reconnecting a client reloads configuration only when it actually starts a new controller process. Capability discovery reports captured metadata only and does not prove current-file freshness, server reachability, provider availability, or catalog state. It excludes HTTP, a web UI, persistence/resume, remote access, multi-user behavior, transcript export, streaming, live provider/model discovery, availability probes during capability discovery, and provider credential management. A coding execution profile is an application-level tool selection, not an OS sandbox.
