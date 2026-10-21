@@ -15,6 +15,7 @@ import { assertHostSafe } from "../eval/extensions/supervise.js";
 import { resolveTools, type ToolPaths } from "../eval/extensions/tools.js";
 import { countIoUringSetups } from "../eval/extensions/trace.js";
 import { privateRunDir, scopeRoot, type RunScope, type ScopeInput } from "../eval/extensions/workspace.js";
+import { realHostWith } from "./real-host.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 const execFileAsync = promisify(execFile);
@@ -406,8 +407,7 @@ describe("dry load report assembly (provider-free, injected scope and process)",
   });
 });
 
-const which = (name: string): string | undefined => (process.env.PATH ?? "").split(delimiter).map((dir) => join(dir, name)).find((path) => existsSync(path));
-const hasTools = ["bwrap", "strace", "prlimit", "git", "codegraph"].every((name) => which(name) !== undefined);
+const hasTools = realHostWith("strace", "prlimit", "git", "codegraph");
 const ptrace = (() => { try { return Number(readFileSync("/proc/sys/kernel/yama/ptrace_scope", "utf8").trim()) >= 1; } catch { return false; } })();
 
 describe("dry load through the real sandbox", () => {

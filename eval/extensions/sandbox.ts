@@ -24,7 +24,9 @@ import { realHome, resolveTool, type ToolPaths } from "./tools.js";
  *   lock copies, other tasks) is not visible.
  * - The network namespace is shared, because the providers are reached over it. Abstract-namespace Unix sockets (and so an X11
  *   server's abstract socket, which still needs a valid cookie that $HOME no longer holds) therefore remain reachable. They are
- *   detected, not prevented: any abstract connect is unresolved egress and stops the wave (R43). This is a residual risk (R50).
+ *   detected, not prevented: an abstract connect is unresolved egress and stops the wave (R43), unless the name was bound successfully
+ *   earlier in the same trace by a process that is still alive (R88). Filesystem sockets below the private /tmp and /var/tmp are the
+ *   sandbox's own (R87), except below a host path bound in. This is a residual risk (R50).
  */
 
 /** The only entries of the host's /etc that the sandbox sees (those that exist are bound read-only). */

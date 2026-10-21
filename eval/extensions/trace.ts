@@ -56,7 +56,7 @@ export interface TraceFindings {
   unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
   /** All inet/inet6 connect attempts, whatever their return value. */
   connects: number;
-  /** Egress that cannot be audited: every `io_uring_setup` that did not fail, every AF_UNIX `connect` outside the allowed socket roots and every abstract socket (R43) (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
+  /** Egress that cannot be audited: every `io_uring_setup` that did not fail, every AF_UNIX `connect` outside the allowed socket roots (below the sandbox's private /tmp and /var/tmp is internal unless under a bound host path, R87) and every abstract socket that no live process of the trace bound earlier (R43, R88) (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
   unresolvedEgress: number;
   /**
    * The raw log line that caused each outside write, unresolved write and unresolved egress (both lines of a joined unfinished/resumed
@@ -257,7 +257,10 @@ function messageDestinations(token: string | undefined): (Destination | null)[] 
   return names.map(parseSockaddr);
 }
 
-/** Name-service sockets any process may use. Everything else on the filesystem, and every abstract socket, can reach outside the traced tree (`systemd-run --user`, D-Bus). */
+/**
+ * Name-service sockets any process may use. Every other filesystem socket outside the scope and the sandbox's private /tmp and /var/tmp (R87),
+ * and every abstract socket that no live process of the trace bound earlier (R88), can reach outside the traced tree (`systemd-run --user`, D-Bus).
+ */
 const SOCKET_ALLOWLIST = ["/run/systemd/resolve/", "/run/systemd/userdb/", "/run/nscd/", "/var/run/nscd/"];
 
 const mappedV4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/;
@@ -583,8 +586,9 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   }
 
   /**
-   * An AF_UNIX connect that did not fail and does not stay inside the allowed roots (R43): a pathname outside the scope root and the
-   * name-service allowlist, a relative pathname, or any abstract-namespace socket (`@name`).
+   * An AF_UNIX connect that did not fail and does not stay inside the allowed roots (R43): a pathname outside the scope root, the
+   * name-service allowlist and (in a sandboxed trace) the private /tmp and /var/tmp, a pathname below a bound host path, a relative
+   * pathname, or an abstract-namespace socket (`@name`) that no live process of the trace bound earlier (R88).
    */
   function unixConnectEscapes(token: string | undefined, ret: Return): boolean {
     if (ret.kind === "failed" || token === undefined || !/sa_family=AF_UNIX\b/.test(token)) return false;

@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { selectBoundaryCredentials } from "../../src/writer-credentials.js";
 
 /*

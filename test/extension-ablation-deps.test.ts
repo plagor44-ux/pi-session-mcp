@@ -15,6 +15,7 @@ import { taskSpecSchema, type TaskSpec } from "../eval/extensions/schemas.js";
 import { BUILD_ROOT, spawnTracedRunOne, tracedCommand } from "../eval/extensions/supervise.js";
 import { assertDepsDirOutsideSources, resolveTool } from "../eval/extensions/tools.js";
 import { privateRunDir, prepareRunScope, scopeRoot, type RunScope } from "../eval/extensions/workspace.js";
+import { bubblewrapWorks, which } from "./real-host.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 const exec = promisify(execFile);
@@ -437,10 +438,9 @@ describe("preparing the dependencies of a task (R68)", () => {
   });
 });
 
-// A real bind needs bubblewrap; the test skips without it. The plan comes from the host, without codegraph.
-const which = (name: string): string | undefined => (process.env.PATH ?? "").split(delimiter).filter((dir) => dir.startsWith("/")).map((dir) => join(dir, name)).find((path) => existsSync(path));
+// A real bind needs a bubblewrap that can create a user namespace (Linux); the test skips without it. The plan comes from the host, without codegraph.
 describe("a real bind (R68)", () => {
-  it.skipIf(which("bwrap") === undefined)("shows the mount read-only at its place in the clone and the runtime at its own path, and nothing else of the deps directory", async () => {
+  it.skipIf(!bubblewrapWorks())("shows the mount read-only at its place in the clone and the runtime at its own path, and nothing else of the deps directory", async () => {
     const bwrap = which("bwrap")!;
     const root = await temporaryRoot("ablation-deps-real-");
     const scopeDir = join(root, "scope");
