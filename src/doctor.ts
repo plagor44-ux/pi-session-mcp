@@ -9,7 +9,7 @@ import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
-import { eventsRoot } from "./turn-events.js";
+import { claimsRoot, eventsRoot } from "./turn-events.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
 import { readSkillBases, SkillBasesError } from "./skill-customize.js";
 import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFingerprint, shippedSkillsDirectory, type ReleasedSkillTree } from "./skill-library.js";
@@ -188,21 +188,29 @@ async function defaultEventSpoolRoot(path: string): Promise<EventSpoolRootInfo |
 }
 
 /**
- * Offline check of the event spool's runtime root, run only when event delivery is enabled.
+ * Offline check of the event spool's runtime directories, run only when event delivery is enabled.
  * Nothing is created or repaired, and no path appears in the report. A missing runtime directory
- * is a warning because Doctor may run in a different environment than the server; an existing
- * `pi-session-mcp` entry that is not a private directory of the current user is an error.
+ * variable is a warning because Doctor may run in a different environment than the server.
+ * The `pi-session-mcp` entry, its `events` root and its `claims` directory, when present, must be
+ * real directories of the current user without group or other access: the rule that
+ * `TurnEventSpool.open` applies to the events root and the wake hook to the claims directory.
+ * An absent entry is fine because the server creates it, so Doctor cannot be green where startup
+ * fails with `event_spool_unavailable` for these directories.
  */
 async function eventSpoolCheck(env: NodeJS.ProcessEnv, probe: (path: string) => Promise<EventSpoolRootInfo | undefined>, uid: number | undefined): Promise<DoctorCheck> {
   const events = eventsRoot(env);
   if (events === undefined) return warning("event_spool_root", "event spool", "set XDG_RUNTIME_DIR to an absolute path in the server environment, or disable events.delivery");
-  let info: EventSpoolRootInfo | undefined;
-  try { info = await probe(dirname(events)); }
-  catch { return failure("event_spool_root", "event spool", "grant access to the runtime directory"); }
-  if (info === undefined) return ok("event_spool_root", "event spool");
-  if (!info.isDirectory) return failure("event_spool_root", "event spool", "replace the pi-session-mcp runtime entry with a private directory owned by the current user");
-  if (uid !== undefined && info.uid !== uid) return failure("event_spool_root", "event spool", "the pi-session-mcp runtime directory must be owned by the current user");
-  if ((info.mode & 0o077) !== 0) return failure("event_spool_root", "event spool", "remove group and other permissions from the pi-session-mcp runtime directory (chmod 700)");
+  const runtime = dirname(events);
+  const entries: ReadonlyArray<readonly [string, string]> = [[runtime, "pi-session-mcp runtime"], [events, "events"], [claimsRoot(env) ?? join(runtime, "claims"), "claims"]];
+  for (const [path, label] of entries) {
+    let info: EventSpoolRootInfo | undefined;
+    try { info = await probe(path); }
+    catch { return failure("event_spool_root", "event spool", `grant access to the ${label} directory`); }
+    if (info === undefined) { if (path === runtime) break; continue; }
+    if (!info.isDirectory) return failure("event_spool_root", "event spool", `replace the ${label} entry with a private directory owned by the current user`);
+    if (uid !== undefined && info.uid !== uid) return failure("event_spool_root", "event spool", `the ${label} directory must be owned by the current user`);
+    if ((info.mode & 0o077) !== 0) return failure("event_spool_root", "event spool", `remove group and other permissions from the ${label} directory (chmod 700)`);
+  }
   return ok("event_spool_root", "event spool");
 }
 

@@ -52,9 +52,39 @@ describe("doctor event_spool_root", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it("is ok for a private directory of the current user", async () => {
-    const { checks } = await spoolChecks("spool", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probing(privateDirectory), uid: 1000 });
+  it("is ok for a private directory of the current user and inspects the runtime, events and claims directories", async () => {
+    const seen: string[] = [];
+    const { checks } = await spoolChecks("spool", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probing(privateDirectory, seen), uid: 1000 });
     expect(checks).toEqual([{ id: "event_spool_root", severity: "ok", subject: "event spool" }]);
+    expect(seen).toEqual([`${RUNTIME}/pi-session-mcp`, `${RUNTIME}/pi-session-mcp/events`, `${RUNTIME}/pi-session-mcp/claims`]);
+  });
+
+  it("is ok when events and claims are absent below a private runtime directory", async () => {
+    const probe = async (path: string) => path === `${RUNTIME}/pi-session-mcp` ? privateDirectory : undefined;
+    const { checks } = await spoolChecks("spool", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probe, uid: 1000 });
+    expect(checks).toEqual([{ id: "event_spool_root", severity: "ok", subject: "event spool" }]);
+  });
+
+  it.each(["events", "claims"])("fails when only the %s directory is unsafe", async (name) => {
+    for (const bad of [{ ...privateDirectory, isDirectory: false }, { ...privateDirectory, uid: 0 }, { ...privateDirectory, mode: 0o40750 }, { ...privateDirectory, mode: 0o40705 }]) {
+      const probe = async (path: string) => path.endsWith(`/${name}`) ? bad : privateDirectory;
+      const { result, checks } = await spoolChecks("spool", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probe, uid: 1000 });
+      expect(checks).toEqual([{ id: "event_spool_root", severity: "error", subject: "event spool", remediation: expect.stringContaining(name) }]);
+      expect(result.exitCode).toBe(2);
+    }
+  });
+
+  it.each(["events", "claims"])("fails when the %s probe errors", async (name) => {
+    const probe = async (path: string) => { if (path.endsWith(`/${name}`)) throw new Error("SECRET"); return privateDirectory; };
+    const { checks } = await spoolChecks("spool", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probe, uid: 1000 });
+    expect(checks).toEqual([{ id: "event_spool_root", severity: "error", subject: "event spool", remediation: expect.stringContaining(name) }]);
+  });
+
+  it("adds no check for an explicit off", async () => {
+    const seen: string[] = [];
+    const { checks } = await spoolChecks("off", { env: { XDG_RUNTIME_DIR: RUNTIME }, eventSpoolRoot: probing(privateDirectory, seen), uid: 1000 });
+    expect(checks).toEqual([]);
+    expect(seen).toEqual([]);
   });
 
   it.each([undefined, "", "relative/run", "./run"])("warns when XDG_RUNTIME_DIR is %j", async (value) => {
@@ -115,6 +145,28 @@ describe("doctor event_spool_root", () => {
     });
     it("fails for a regular file", async () => {
       expect((await real(async (runtime) => { await writeFile(join(runtime, "pi-session-mcp"), ""); }))?.severity).toBe("error");
+    });
+    it("is ok for private events and claims directories", async () => {
+      const check = await real(async (runtime) => {
+        for (const name of ["pi-session-mcp", "pi-session-mcp/events", "pi-session-mcp/claims"]) await mkdir(join(runtime, name), { mode: 0o700 });
+      });
+      expect(check?.severity).toBe("ok");
+    });
+    it.each(["events", "claims"])("fails for a group-accessible %s directory below a private runtime directory", async (name) => {
+      const check = await real(async (runtime) => {
+        await mkdir(join(runtime, "pi-session-mcp"), { mode: 0o700 });
+        await mkdir(join(runtime, "pi-session-mcp", name), { mode: 0o700 });
+        await chmod(join(runtime, "pi-session-mcp", name), 0o750);
+      });
+      expect(check?.severity).toBe("error");
+    });
+    it("fails for an events entry that is a symbolic link to a private directory", async () => {
+      const check = await real(async (runtime) => {
+        await mkdir(join(runtime, "pi-session-mcp"), { mode: 0o700 });
+        await mkdir(join(runtime, "elsewhere"), { mode: 0o700 });
+        await symlink(join(runtime, "elsewhere"), join(runtime, "pi-session-mcp", "events"));
+      });
+      expect(check?.severity).toBe("error");
     });
     it("fails for a symbolic link, even to a private directory", async () => {
       const check = await real(async (runtime) => {

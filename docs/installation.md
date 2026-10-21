@@ -179,9 +179,10 @@ Rules:
   configuration file's directory; `~` is not expanded. The example already uses
   `builtin:` for the two worker skills, so you need not change its skill
   entries. See [Pi skills](#pi-skills).
-- An optional top-level `events` field, exactly `{ "delivery": "spool" }`, turns
-  on turn-event delivery for the Claude Code wake. It is off by default; any other
-  shape fails startup with `invalid_event_delivery`. See
+- An optional top-level `events` field, `{ "delivery": "spool" }` or
+  `{ "delivery": "off" }`, turns turn-event delivery for the Claude Code wake on
+  or states explicitly that it is off. Delivery is off by default and when the
+  field is absent; any other shape fails startup with `invalid_event_delivery`. See
   [Wake the controller](#wake-the-controller-claude-code).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
@@ -364,7 +365,9 @@ not a token or cost saving, and none is measured on short tasks. Design:
    `XDG_RUNTIME_DIR` (set by systemd user sessions; macOS does not set it by
    default, and delivery there is untested). Without a usable directory the
    server stops with the startup code `event_spool_unavailable`. Doctor checks
-   the directory offline (`event_spool_root`).
+   the runtime, `events` and `claims` directories offline (`event_spool_root`):
+   each that exists must be a real directory of your user without group or
+   other access.
 2. Plan, then apply, for each Claude Code target. Run `setup` from the project
    directory for `project` and `local` scope, as in [Register a client](#4-register-a-client):
 
@@ -400,7 +403,10 @@ the hook.
 **Change and remove.** With delivery switched off, `--apply` removes an entry
 that setup owns (`hook_removed`); `--remove` and `--rollback` remove it with the
 registration. Setup never replaces or deletes an entry it did not write or that
-you edited (`hook_divergent`). The upgrade procedure below removes the entry with the
+you edited (`hook_divergent`). The local-scope entry of a project is shared by
+the host registration and the writer registrations there and stays
+(`hook_kept_shared`) until the last of them that needs it is removed. With
+delivery off and no entry of its own, setup does not read the settings file. The upgrade procedure below removes the entry with the
 old registration and adds it again with the new one, because it names the
 package path. The settings-file codes are in the
 [client setup reference](client-setup.md#wake-hook).
