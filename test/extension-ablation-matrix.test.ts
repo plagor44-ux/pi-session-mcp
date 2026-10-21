@@ -156,7 +156,7 @@ describe("extension ablation matrix", () => {
     expect(t.runs.every(r => !skip.has(r.runId))).toBe(true);
   });
   it("grants the pre-registered pi-lens tools on review profiles only", () => {
-    const granted = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report", "ast_grep_search", "ast_grep_outline"];
+    const granted = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report"];
     expect(PAIRINGS.find(p => p.id === "pl-review")!.grantedExtensionTools).toEqual(granted);
     expect(PAIRINGS.find(p => p.id === "pl-review-grok")!.grantedExtensionTools).toEqual(granted);
     expect(PAIRINGS.find(p => p.id === "pl-code")!.grantedExtensionTools).toBeUndefined();

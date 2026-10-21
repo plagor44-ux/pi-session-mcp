@@ -44,6 +44,10 @@ export interface ScopeInput {
 export const scopeRoot = (waveDir: string, runId: string): string => join(waveDir, "scopes", runId);
 export const privateRunDir = (waveDir: string, runId: string): string => join(waveDir, "private", runId);
 
+/** The codegraph MCP server checks for updates and reports telemetry unless told not to; it would connect out in both arms (R65). */
+const TELEMETRY_OPT_OUT: Readonly<Record<string, string>> = { DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" };
+const MAX_ENV_FROM = 64; // src/mcp-config.ts
+
 /** The environment of every traced process: identical for both arms and entirely inside `root`. */
 export function scopeEnv(root: string, dirs: { home: string; agentDir: string }): Record<string, string> {
   const xdg = join(root, "xdg");
@@ -53,6 +57,7 @@ export function scopeEnv(root: string, dirs: { home: string; agentDir: string })
     PI_LENS_HOME: join(root, "pi-lens"),
     PI_LENS_DISABLE_TOOL_INSTALL: "1", PI_LENS_DISABLE_LSP_INSTALL: "1", PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING: "1",
     UV_USE_IO_URING: "0",
+    ...TELEMETRY_OPT_OUT,
     PATH: process.env.PATH ?? "",
   };
 }
@@ -160,12 +165,32 @@ export function pairingOf(run: RunSpec): Pairing | undefined {
 }
 
 /**
+ * The profile with the opt-out variables forwarded to every MCP server (R65). The MCP child does not inherit the run environment,
+ * only what `envFrom` names from the worker's, so each server maps the opt-out variables to themselves. The evaluation's mapping
+ * wins for these variables; every other entry and the rest of the profile stay as they are.
+ */
+function withTelemetryOptOut(profile: Record<string, unknown>): Record<string, unknown> {
+  const servers = profile.mcpServers;
+  if (typeof servers !== "object" || servers === null || Array.isArray(servers)) return profile;
+  const mapped = Object.fromEntries(Object.entries(servers).map(([alias, server]) => {
+    if (typeof server !== "object" || server === null || Array.isArray(server)) return [alias, server];
+    const existing = (server as { envFrom?: unknown }).envFrom;
+    const envFrom = { ...(typeof existing === "object" && existing !== null ? existing : {}), ...Object.fromEntries(Object.keys(TELEMETRY_OPT_OUT).map((name) => [name, name])) };
+    if (Object.keys(envFrom).length > MAX_ENV_FROM) throw new Error("mcp_env_from_overflow");
+    return [alias, { ...server, envFrom }];
+  }));
+  return { ...profile, mcpServers: mapped };
+}
+
+/**
  * Production profile under its own alias, `default` for read-only ones. A coding profile cannot be the default, so a read-only copy
- * named `<alias>-ro` is the default beside it. Arm B adds the extension pin and, where the pairing grants them, its tools.
+ * named `<alias>-ro` is the default beside it. The profile is copied as it is, except that every MCP server forwards the telemetry
+ * and update-check opt-out variables (R65). Arm B adds the extension pin and, where the pairing grants them, its tools.
  */
 export function runConfig(
-  alias: ProfileId, arm: Arm, profile: Record<string, unknown>, clone: string, skillCatalog: Record<string, string> | undefined, pairing: Pairing | undefined,
+  alias: ProfileId, arm: Arm, production: Record<string, unknown>, clone: string, skillCatalog: Record<string, string> | undefined, pairing: Pairing | undefined,
 ): Record<string, unknown> {
+  const profile = withTelemetryOptOut(production);
   const entry: Record<string, unknown> = { ...profile };
   if (arm !== "A") {
     const existing = Array.isArray(profile.extensions) ? profile.extensions as string[] : [];

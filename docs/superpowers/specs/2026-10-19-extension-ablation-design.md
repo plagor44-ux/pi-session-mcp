@@ -278,7 +278,8 @@ text above, they win.
   (writes), `lens_diagnostic_mark`, `pi_lens_activate_tools`, `lsp_navigation`,
   `lens_diagnostics` (LSP spawning is off in untrusted projects) and
   `effective_config`. Coding profiles activate every registered tool; that is
-  product behaviour.
+  product behaviour. (Superseded, see Amendments 2026-10-21: the AST tools are
+  situational and cannot be granted.)
 - **"Warming disabled"** means `PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING=1`,
   the extension's only warming lever. Pi's own `cacheWarming` stays at its
   default `streaming` in both arms
@@ -312,3 +313,35 @@ text above, they win.
 - **Arm B start failures.** Arm B session-start failures
   (`extension_load_failed`, `extension_tool_missing`) are harness failures and
   stop the wave.
+
+## Amendments (2026-10-21)
+
+Findings of the first provider-free dry load (Task 9). Where they contradict
+the text above, they win.
+
+- **Review grant narrowed to five tools.** The granted `pi-lens` set on the
+  review profiles is `symbol_search`, `project_report`, `read_symbol`,
+  `read_enclosing` and `module_report`. `ast_grep_search` and
+  `ast_grep_outline` are removed. Evidence: in `pi-lens@4.4.3`
+  (`dist/index.js`, `TOOL_REGISTRY`) `ast_grep_search`, `ast_grep_replace`,
+  `ast_grep_outline`, `lsp_navigation` and `lens_diagnostic_mark` are
+  `situational: true`, so they are inactive until `pi_lens_activate_tools` runs.
+  On the code profiles the active tools were exactly `bash`, `edit`,
+  `effective_config`, `find`, `grep`, `lens_diagnostics`, `ls`,
+  `mcp_codegraph_explore`, `module_report`, `pi_lens_activate_tools`,
+  `project_report`, `read`, `read_enclosing`, `read_symbol`, `symbol_search`
+  and `write`; the review pairings failed at start with
+  `extension_tool_missing` for the two AST tools. `pi_lens_activate_tools` stays
+  ungranted, so **review arm B has no AST search**.
+- **Codegraph phone-home disabled in both arms.** The `codegraph` MCP server
+  (`codegraph serve --mcp`) runs a background update check against
+  `github.com` and `api.github.com`, and the sandbox `HOME` is fresh per run, so
+  every session connected out. The evaluation sets `DO_NOT_TRACK=1`,
+  `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_TELEMETRY=0` in the run
+  environment and, because the MCP child does not inherit that environment,
+  adds an identity `envFrom` mapping for these three variables to every
+  `mcpServers` entry of the copied profile. This is the single deviation from
+  "copied verbatim except `workspaces`" besides the extension pin and grant.
+- **`io_uring_setup` counting.** A call split by `<unfinished ...>` is joined
+  with its `resumed` line and counts only if its final return value is
+  non-negative; the injected `ENOSYS` no longer counts.

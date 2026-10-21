@@ -2,7 +2,7 @@ import type { Arm, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
 
 export type { Arm, ExtensionId, Pairing, ProfileId, RunSpec, TaskSpec } from "./schemas.js";
 
-const PI_LENS_REVIEW_TOOLS = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report", "ast_grep_search", "ast_grep_outline"];
+const PI_LENS_REVIEW_TOOLS = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report"];
 
 export const PAIRINGS: readonly Pairing[] = [
   { id: "pl-code-deepseek", extension: "pi-lens", profile: "code-deepseek", priority: 1 },

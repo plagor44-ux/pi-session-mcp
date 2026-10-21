@@ -277,16 +277,21 @@ const root = (cell: Cell): Cell => (cell.forward ? root(cell.forward) : cell);
  */
 export function countIoUringSetups(text: string): number {
   let count = 0;
-  const pending = new Set<number>();
+  const pending = new Map<number, string>();
   for (const line of text.split("\n")) {
     const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
     if (!m) continue;
     const pid = Number(m[1] ?? m[2]), body = m[3]!;
     const resumed = /^<\.\.\. io_uring_setup resumed>([^]*)$/.exec(body);
     if (resumed) {
-      if (pending.delete(pid) && parseReturn(resumed[1]!.replace(/^\s*\)/, ""))?.kind !== "failed") count++;
+      // The return value follows the closing of the argument list, which is split across the two halves: join them as the audit does.
+      const head = pending.get(pid);
+      if (head === undefined) continue;
+      pending.delete(pid);
+      if (parseCall(head + resumed[1]!.replace(/^\s*<unfinished \.\.\.>/, ""))?.ret.kind !== "failed") count++;
     } else if (/^io_uring_setup\(/.test(body)) {
-      if (/<unfinished \.\.\.>\s*$/.test(body)) pending.add(pid);
+      const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
+      if (unfinished) pending.set(pid, unfinished[1]!);
       else if (parseCall(body)?.ret.kind !== "failed") count++;
     }
   }

@@ -42,6 +42,8 @@ afterAll(removeTemporaryRoots);
 const SOURCE = "/src/example-repo";
 const PROFILE = { provider: "openai", model: "model-a", thinkingLevel: "high", permissionProfile: "read-only", default: true, skills: ["pi-session-review"] };
 const CODING = { provider: "deepseek", model: "model-b", thinkingLevel: "high", permissionProfile: "coding", default: false, skills: ["pi-session-implementation"] };
+const OPT_OUT = { DO_NOT_TRACK: "DO_NOT_TRACK", CODEGRAPH_NO_UPDATE_CHECK: "CODEGRAPH_NO_UPDATE_CHECK", CODEGRAPH_TELEMETRY: "CODEGRAPH_TELEMETRY" };
+const CODEGRAPH_SERVER = { command: "/usr/bin/codegraph", args: ["serve", "--mcp"], tools: { explore: { name: "codegraph_explore", readOnly: true } } };
 const productionConfig = {
   workspaces: { repo: SOURCE },
   skillCatalog: { "pi-session-review": "builtin:pi-session-review", "pi-session-implementation": "builtin:pi-session-implementation" },
@@ -591,6 +593,29 @@ describe("run scope", () => {
     expect(Object.entries(code.executionProfiles).map(([k, v]) => [k, v.permissionProfile, v.default])).toEqual([["code", "coding", false], ["code-ro", "read-only", true]]);
   });
 
+  it("forwards the telemetry and update-check opt-out to every MCP server and changes nothing else (R65)", () => {
+    const profile = { ...PROFILE, mcpServers: {
+      codegraph: CODEGRAPH_SERVER,
+      other: { command: "/usr/bin/other", envFrom: { TOKEN: "HOST_TOKEN", DO_NOT_TRACK: "SOMETHING_ELSE" }, tools: { t: { name: "t", readOnly: true } } },
+    } };
+    const before = structuredClone(profile);
+    const { executionProfiles } = runConfig("review", "A", profile, "/c", undefined, undefined) as { executionProfiles: { review: { mcpServers: Record<string, { envFrom: Record<string, string> }> } & Record<string, unknown> } };
+    const { mcpServers, ...rest } = executionProfiles.review;
+    expect(mcpServers.codegraph!.envFrom).toEqual(OPT_OUT);
+    expect(mcpServers.other!.envFrom).toEqual({ TOKEN: "HOST_TOKEN", ...OPT_OUT });
+    const { envFrom: _kept, ...otherRest } = mcpServers.other!;
+    expect(otherRest).toEqual({ command: "/usr/bin/other", tools: { t: { name: "t", readOnly: true } } });
+    expect(rest).toEqual({ ...PROFILE, default: true });
+    expect(profile).toEqual(before);
+    const code = runConfig("code", "A", { ...CODING, mcpServers: { codegraph: CODEGRAPH_SERVER } }, "/c", undefined, undefined) as { executionProfiles: Record<string, { mcpServers: Record<string, { envFrom: unknown }> }> };
+    for (const entry of Object.values(code.executionProfiles)) expect(entry.mcpServers.codegraph!.envFrom).toEqual(OPT_OUT);
+  });
+
+  it("refuses an MCP server whose merged envFrom would exceed the product limit", () => {
+    const envFrom = Object.fromEntries(Array.from({ length: 62 }, (_, i) => [`VAR_${i}`, `HOST_${i}`]));
+    expect(() => runConfig("review", "A", { ...PROFILE, mcpServers: { codegraph: { ...CODEGRAPH_SERVER, envFrom } } }, "/c", undefined, undefined)).toThrow("mcp_env_from_overflow");
+  });
+
   it("adds the pin to arm B and the granted tools on review pairings only", () => {
     const pl = PAIRINGS.find((p) => p.id === "pl-review")!;
     const b = runConfig("review", "pi-lens", PROFILE, "/c", undefined, pl) as { executionProfiles: { review: Record<string, unknown> } };
@@ -630,7 +655,7 @@ describe("run scope", () => {
       scope = await prepareRunScope({
         waveDir: join(root, "wave"), run, task, sourceRepoPath: source, extensionTemplate: template,
         hostAuth: { openai: { type: "oauth", access: "tok", refresh: "secret-refresh", expires: 1 }, xai: { type: "api_key", key: "other" } },
-        productionProfile: PROFILE, skillCatalog: productionConfig.skillCatalog, pairing: PAIRINGS.find((p) => p.id === "pl-review"), tools: await realTools(bin),
+        productionProfile: { ...PROFILE, mcpServers: { codegraph: CODEGRAPH_SERVER } }, skillCatalog: productionConfig.skillCatalog, pairing: PAIRINGS.find((p) => p.id === "pl-review"), tools: await realTools(bin),
       });
     } finally { process.env.PATH = previousPath; }
     expect(await readFile(join(scope.clone, "a.txt"), "utf8")).toBe("base");
@@ -645,13 +670,16 @@ describe("run scope", () => {
     expect(Object.keys(auth)).toEqual(["openai"]);
     expect(auth.openai).toMatchObject({ access: "tok", refresh: "" });
     expect(existsSync(join(scope.agentDir, "npm", "node_modules", "pi-lens", "index.js"))).toBe(true);
-    const config = JSON.parse(await readFile(scope.configPath, "utf8")) as { workspaces: { clone: string }; executionProfiles: Record<string, { extensions?: string[] }> };
+    const config = JSON.parse(await readFile(scope.configPath, "utf8")) as { workspaces: { clone: string }; executionProfiles: Record<string, { extensions?: string[]; mcpServers?: unknown }> };
     expect(config.workspaces.clone).toBe(scope.clone);
+    // R65: the MCP child does not inherit the run environment, so the written configuration forwards the opt-out variables to it.
+    expect(config.executionProfiles.review!.mcpServers).toEqual({ codegraph: { ...CODEGRAPH_SERVER, envFrom: OPT_OUT } });
     expect(config.executionProfiles.review!.extensions).toEqual(["npm:pi-lens@4.4.3"]);
     for (const key of ["HOME", "PI_CODING_AGENT_DIR", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "PI_LENS_HOME"]) {
       expect(scope.env[key]!.startsWith(scope.root + "/")).toBe(true);
     }
     expect(scope.env).toMatchObject({ PI_LENS_DISABLE_TOOL_INSTALL: "1", PI_LENS_DISABLE_LSP_INSTALL: "1", PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING: "1", UV_USE_IO_URING: "0" });
+    expect(scope.env).toMatchObject({ DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" });
   });
 
   it("removes a failed scope with its credentials and its bare clone", async () => {

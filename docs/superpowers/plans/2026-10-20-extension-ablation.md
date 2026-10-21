@@ -43,7 +43,7 @@
 - [ ] **Step 1: Add an "Amendments (2026-10-20)" section at the end of the spec** with these points, each with its evidence:
   - `openwiki@0.7.2` (latest on npm) registers only `openwiki_begin`, `openwiki_submit_plan`, `openwiki_next_page`, `openwiki_inspect_page_claims`, `openwiki_submit_page` and `openwiki_finish` (`dist/integrations/pi/openwiki.js`). It has no retrieval tool and no context hook. Operator decision 2026-10-20: replace that pairing with `pi-lens@4.4.3` on `code` and `code-deepseek`.
   - New priority order: (1) `pi-lens` on `code-deepseek`, (2) `pi-lens` on `code`, (3) `pi-lens` on `review-grok` and `review`, (4) `pi-cache-optimizer` on `code` and `review`. Calibration runs on pairing 1.
-  - The `pi-lens` review pairing is unblocked: v0.10.0 (ADR 0010) shipped `grantedExtensionTools`. Granted set on review profiles: `symbol_search`, `project_report`, `read_symbol`, `read_enclosing`, `module_report`, `ast_grep_search`, `ast_grep_outline`. Left out: `ast_grep_replace` (writes), `lens_diagnostic_mark`, `pi_lens_activate_tools`, `lsp_navigation`, `lens_diagnostics` (LSP spawning is off in untrusted projects) and `effective_config`. Coding profiles activate every registered tool; that is product behaviour.
+  - The `pi-lens` review pairing is unblocked: v0.10.0 (ADR 0010) shipped `grantedExtensionTools`. Granted set on review profiles: `symbol_search`, `project_report`, `read_symbol`, `read_enclosing`, `module_report`. Left out: `ast_grep_search`, `ast_grep_outline`, `ast_grep_replace`, `lsp_navigation` and `lens_diagnostic_mark` (situational in 4.4.3, inactive until `pi_lens_activate_tools`, which is not granted; see the spec Amendments 2026-10-21), `pi_lens_activate_tools`, `lens_diagnostics` (LSP spawning is off in untrusted projects) and `effective_config`. Coding profiles activate every registered tool; that is product behaviour.
   - "Warming disabled" means `PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING=1`, the extension's only warming lever. Pi's own `cacheWarming` stays at its default `streaming` in both arms, because that is production behaviour and only one variable changes.
   - `pi-lens` safety: untrusted projects already block tool install and LSP spawn (`isToolInstallAllowedByTrust`, `isLspSpawnAllowedByTrust`). Both arms additionally set `PI_LENS_DISABLE_TOOL_INSTALL=1`, `PI_LENS_DISABLE_LSP_INSTALL=1` and `PI_LENS_HOME` inside the run scope.
   - Usage source: the public `AgentSession` captured through the adapter seams. Per run, `getSessionStats()` (one turn per session, so it is the run total, including warming refreshes) is the cost of record. The sum of assistant `usage` is a cross-check.
@@ -72,7 +72,7 @@ git commit -m "docs: amend the extension ablation design and plan its implementa
   - `interface Pairing { id: string; extension: ExtensionId; profile: ProfileId; priority: 1|2|3|4; grantedExtensionTools?: string[] }`.
   - `interface TaskSpec { id: string; kind: "review" | "implementation"; repo: string /* alias of the source repo */; baseCommit: string; promptRef: string /* path under eval/results, untracked */; promptHash: string; sourceSession: string /* transcript session id */; allowedPaths: string[]; scopeIgnore: string[]; oracle: ReviewOracle | ImplementationOracle }` (oracle types from Task 5, declared here as zod schemas).
   - `interface RunSpec { runId: string; taskId: string; profile: ProfileId; arm: Arm; ordinal: number; pairings: string[] /* pairings this run serves */ }`.
-  - `const PAIRINGS: readonly Pairing[]` with ids `pl-code-deepseek` (1), `pl-code` (2), `pl-review-grok` (3), `pl-review` (3), `co-code` (4), `co-review` (4). The two review pairings carry `grantedExtensionTools` with the seven names fixed in Task 1.
+  - `const PAIRINGS: readonly Pairing[]` with ids `pl-code-deepseek` (1), `pl-code` (2), `pl-review-grok` (3), `pl-review` (3), `co-code` (4), `co-review` (4). The two review pairings carry `grantedExtensionTools` with the five names fixed in Task 1.
   - `buildMatrix(tasks: TaskSpec[], pairings: readonly Pairing[]): RunSpec[]`
   - `trimMatrix(tasks: TaskSpec[], pairings: readonly Pairing[], projectedUsd: (runs: RunSpec[]) => number, remainingUsd: number): { pairings: Pairing[]; tasksPerPairing: Record<string, string[]>; runs: RunSpec[] }`
   - `class BudgetLedger { constructor(limitUsd: number); record(profile: ProfileId, costUsd: number | null): void; estimate(profile: ProfileId): number; allows(profile: ProfileId): boolean; get spentUsd(): number }`; `BUDGET_USD = 10`, `INITIAL_RUN_ESTIMATE_USD = 1`.
@@ -105,7 +105,7 @@ it("trims tasks from the lowest priority first, never below 3, then drops whole 
   expect(t.runs).toHaveLength(18);
 });
 it("grants the pre-registered pi-lens tools on review profiles only", () => {
-  const granted = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report", "ast_grep_search", "ast_grep_outline"];
+  const granted = ["symbol_search", "project_report", "read_symbol", "read_enclosing", "module_report"];
   expect(PAIRINGS.find(p => p.id === "pl-review")!.grantedExtensionTools).toEqual(granted);
   expect(PAIRINGS.find(p => p.id === "pl-code")!.grantedExtensionTools).toBeUndefined();
 });
