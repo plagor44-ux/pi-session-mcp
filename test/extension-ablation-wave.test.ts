@@ -13,6 +13,7 @@ import type { ImplementationScore } from "../eval/extensions/oracles.js";
 import { runHelper } from "../eval/extensions/helpers.js";
 import { readVerifiedOutput } from "../eval/extensions/audit.js";
 import { WaveDirGuard, removeTree } from "../eval/extensions/evidence.js";
+import { fileHostCredentials, type HostCredentials } from "../eval/extensions/credentials.js";
 import { ABSENT_PATHS, containmentSelfTest } from "../eval/extensions/containment.js";
 import { ETC_ENTRIES, EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type PlanHost, type SandboxPlan } from "../eval/extensions/sandbox.js";
 import { dirtyBoundPaths, sourceIsDirty } from "../eval/extensions/bound.js";
@@ -874,6 +875,144 @@ describe("run scope", () => {
     await expect(prepareRunScope({
       waveDir: join(root, "wave"), run, task, sourceRepoPath: source, extensionTemplate: join(root, "t"), hostAuth: {}, productionProfile: PROFILE, tools: await realTools(),
     })).rejects.toThrow("clone_symlink_escape");
+  });
+});
+
+/** R86: OAuth credentials are refreshed on the host before each route and run; the refresh is a fake seam, the real auth file is never touched. */
+describe("host credential refresh (R86)", () => {
+  const SECRET_REFRESH = "REFRESH-TOKEN-SECRET";
+  const oauth = (access: string, expiresInMs: number) => ({ openai: { type: "oauth", access, refresh: SECRET_REFRESH, expires: Date.now() + expiresInMs } });
+
+  /** A fake host: `refresh` is called with the provider, `fresh` replaces the stored auth at the n-th call (or the call fails). */
+  function fakeHost(initial: unknown, behaviour: { fresh?: (n: number) => unknown; fail?: boolean } = {}) {
+    const calls: string[] = [];
+    let stored = initial;
+    let reads = 0;
+    const host: HostCredentials = {
+      read: async () => { reads += 1; return stored; },
+      refresh: async (provider) => {
+        calls.push(provider);
+        if (behaviour.fail) throw new Error(`refresh failed with ${SECRET_REFRESH}`);
+        if (behaviour.fresh) stored = behaviour.fresh(calls.length);
+      },
+    };
+    return { host, calls, reads: () => reads, stored: () => stored };
+  }
+  async function withStderr<T>(body: () => Promise<T>): Promise<{ result: T; stderr: string }> {
+    let stderr = "";
+    const spy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => { stderr += String(chunk); return true; }) as typeof process.stderr.write);
+    try { return { result: await body(), stderr }; } finally { spy.mockRestore(); }
+  }
+  /** The access token the scope was prepared with, per run. */
+  const copied = (accesses: string[]): Partial<WaveDeps> => ({
+    prepareScope: async (input) => {
+      const entry = (input.hostAuth as { openai?: { access?: string } }).openai;
+      accesses.push(entry?.access ?? "none");
+      return fakePrepare(input);
+    },
+  });
+  const everythingOnDisk = async (dir: string): Promise<string> => (await Promise.all((await findFiles(dir, /./)).map((file) => readFile(file, "utf8")))).join("\n");
+
+  it("refreshes an OAuth provider once per run, reads the auth again and copies the re-read credential", async () => {
+    const source = fakeHost(oauth("old-access", 3_600_000), { fresh: (n) => oauth(`fresh-access-${n}`, 3_600_000) });
+    const s = await waveSetup(4, { hostAuth: oauth("old-access", 3_600_000), hostCredentials: source.host });
+    const accesses: string[] = [];
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps(Array.from({ length: 4 }, () => text()), copied(accesses)).deps));
+    expect(result.stopReason).toBeNull();
+    expect(source.calls).toEqual(["openai", "openai", "openai", "openai"]);
+    expect(source.reads()).toBe(4);
+    expect(accesses).toEqual(["fresh-access-1", "fresh-access-2", "fresh-access-3", "fresh-access-4"]);
+    expect(stderr).not.toContain("credential_refresh_failed");
+    // Records keep the type of the credential only.
+    expect(result.records.map((r) => r.authType)).toEqual(["oauth", "oauth", "oauth", "oauth"]);
+    const disk = await everythingOnDisk(s.waveDir);
+    for (const secret of [SECRET_REFRESH, "fresh-access", "old-access"]) { expect(disk).not.toContain(secret); expect(stderr).not.toContain(secret); }
+  });
+
+  it("never refreshes an API key", async () => {
+    const source = fakeHost({ openai: { type: "api_key", key: "sk-api-key-secret" } });
+    const s = await waveSetup(2, { hostAuth: { openai: { type: "api_key", key: "sk-api-key-secret" } }, hostCredentials: source.host });
+    const { result } = await withStderr(() => runWave(s.input, s.deps([text(), text()]).deps));
+    expect(result.stopReason).toBeNull();
+    expect(source.calls).toEqual([]);
+    expect(source.reads()).toBe(0);
+    expect(result.records.map((r) => r.authType)).toEqual(["api_key", "api_key"]);
+  });
+
+  it("goes on after a failed refresh while the stored token is still valid, and leaves a secret-free event", async () => {
+    const source = fakeHost(oauth("still-valid", 3_600_000), { fail: true });
+    const s = await waveSetup(2, { hostAuth: oauth("still-valid", 3_600_000), hostCredentials: source.host });
+    const accesses: string[] = [];
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text(), text()], copied(accesses)).deps));
+    expect(result.stopReason).toBeNull();
+    expect(accesses).toEqual(["still-valid", "still-valid"]);
+    const events = stderr.split("\n").filter((line) => line.startsWith("{")).map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(events).toEqual([
+      { event: "credential_refresh_failed", provider: "openai", code: "refresh_failed" },
+      { event: "credential_refresh_failed", provider: "openai", code: "refresh_failed" },
+    ]);
+    for (const secret of [SECRET_REFRESH, "still-valid"]) expect(stderr).not.toContain(secret);
+  });
+
+  it("stops with credential_expiring when the refresh fails and the token is too close to expiry", async () => {
+    const source = fakeHost(oauth("about-to-expire", 5 * 60_000), { fail: true });
+    const s = await waveSetup(3, { hostAuth: oauth("about-to-expire", 5 * 60_000), hostCredentials: source.host });
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text()]).deps));
+    expect(result.stopReason).toBe("credential_expiring");
+    expect(result.records.map((r) => r.outcome)).toEqual(["not_run", "not_run", "not_run"]);
+    expect(source.calls).toEqual(["openai"]);
+    expect(stderr).toContain("credential_refresh_failed");
+    expect(stderr).not.toContain(SECRET_REFRESH);
+    expect(await everythingOnDisk(s.waveDir)).not.toContain(SECRET_REFRESH);
+  });
+
+  it("runs when the refresh turns an expiring token into a valid one", async () => {
+    const source = fakeHost(oauth("about-to-expire", 5 * 60_000), { fresh: () => oauth("renewed", 3_600_000) });
+    const s = await waveSetup(2, { hostAuth: oauth("about-to-expire", 5 * 60_000), hostCredentials: source.host });
+    const accesses: string[] = [];
+    const { result } = await withStderr(() => runWave(s.input, s.deps([text(), text()], copied(accesses)).deps));
+    expect(result.stopReason).toBeNull();
+    expect(accesses).toEqual(["renewed", "renewed"]);
+  });
+
+  it("does not touch the credentials when no source is given", async () => {
+    const s = await waveSetup(1, { hostAuth: oauth("as-given", 3_600_000) });
+    const accesses: string[] = [];
+    await withStderr(() => runWave(s.input, s.deps([text()], copied(accesses)).deps));
+    expect(accesses).toEqual(["as-given"]);
+  });
+
+  it("refreshes before each OAuth route of the preflight and never for an API key route", async () => {
+    const root = await temporaryRoot("ablation-preflight-refresh-");
+    const tasks = [await reviewTask(root, "P1")];
+    const runs = buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review" || p.id === "pl-review-grok"));
+    const approval = approvalFor(tasks, runs);
+    await seedLedger(join(root, "ledger.json"));
+    const expiring = { ...oauth("about-to-expire", 5 * 60_000), xai: { type: "api_key", key: "k" } };
+    const source = fakeHost(expiring, { fresh: () => ({ ...oauth("renewed", 3_600_000), xai: { type: "api_key", key: "k" } }) });
+    const { spawnRun } = fake([{ cost: 0.01, text: "PONG" }, { cost: 0.01, text: "PONG" }], root);
+    const { result } = await withStderr(() => runPreflight({
+      approval, waveDir: join(root, "wave"), ledgerPath: join(root, "ledger.json"), productionConfig, hostAuth: expiring, hostCredentials: source.host,
+    }, { ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true }));
+    expect(source.calls).toEqual(["openai"]);
+    expect(result.routes.map((r) => [r.profile, r.ok, r.failure])).toEqual([["review", true, null], ["review-grok", true, null]]);
+    // Without the refresh the same expiring token fails the route.
+    const plain = await runPreflight({
+      approval, waveDir: join(root, "wave-plain"), ledgerPath: join(root, "ledger.json"), productionConfig, hostAuth: expiring,
+    }, { ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true });
+    expect(plain.routes.find((r) => r.profile === "review")).toMatchObject({ ok: false, failure: "credential_expiring" });
+  });
+
+  it("refreshes a throwaway auth file through the Pi SDK without changing a valid credential, and reads it back", async () => {
+    const root = await temporaryRoot("ablation-sdk-refresh-");
+    const path = join(root, "auth.json");
+    const content = { openai: { type: "oauth", access: "a", refresh: "r", expires: Date.now() + 10 * 3_600_000 } };
+    await writeFile(path, JSON.stringify(content));
+    const host = fileHostCredentials(path);
+    await host.refresh("openai");
+    await host.refresh("provider-the-sdk-does-not-know");
+    expect(await host.read()).toEqual(content);
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual(content);
   });
 });
 

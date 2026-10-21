@@ -553,3 +553,22 @@ the text above, they win.
   run id from any other wave replaces it, whatever the order in which the waves
   are given, two final records still refuse (`duplicate_run_record`), and
   `waveStops` keeps the earlier stop.
+- **OAuth credentials are refreshed on the host before each route and run
+  (R86, owner decision).** OAuth access tokens live about an hour, and a scope
+  gets the access token only (the refresh token is emptied, by design), so a
+  multi-hour wave stopped with `credential_expiring` as soon as a token neared
+  expiry. Before each preflight route and each wave run whose host credential
+  is OAuth, the evaluation now calls the Pi SDK's documented path (the
+  package-root `ModelRuntime`, created on the `--auth` file with no models
+  file, and its `getAuth` with a 30-minute minimum validity), which refreshes a
+  stored OAuth credential that is close to expiry under the credential store's
+  lock and writes it back; the evaluation then reads the auth file again and
+  applies the existing expiry check (20-minute margin) and the boundary
+  selection to what it read. An API-key credential is never refreshed. A failed
+  refresh is not fatal: a structured, secret-free `credential_refresh_failed`
+  event (provider and a fixed code) goes to stderr, and the existing check
+  decides, so a token too close to expiry still stops with
+  `credential_expiring`. Tokens, refresh tokens and the auth path are never
+  logged or recorded; records keep `authType` only. Cost: the evaluation writes
+  to the operator's auth store during the wave, as normal pi use does (a
+  refresh rotates the stored tokens).

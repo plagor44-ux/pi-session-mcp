@@ -13,6 +13,7 @@ import { PersistedLedger, validSessionCost } from "./ledger-file.js";
 import { routeAddresses } from "./network.js";
 import { RUN_KEY_BYTES } from "./output-mac.js";
 import { containmentSelfTest } from "./containment.js";
+import { refreshedHostAuth, type HostCredentials } from "./credentials.js";
 import { planSandbox, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
@@ -38,6 +39,8 @@ export interface PreflightInput {
   /** The evaluation's single budget ledger (R37). */
   ledgerPath: string;
   hostAuth: unknown;
+  /** Where the host auth lives and how to refresh an OAuth credential in it (R86); without it the auth is used as given. */
+  hostCredentials?: HostCredentials | undefined;
   productionConfig: unknown;
   signal?: AbortSignal | undefined;
   timeoutMs?: number | undefined;
@@ -91,6 +94,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
   const ledger = await PersistedLedger.openLocked(input.ledgerPath, input.approval.ledgerId);
   try {
   const results: PreflightRoute[] = [];
+  let hostAuth = input.hostAuth;
   const timeoutMs = input.timeoutMs ?? PREFLIGHT_TIMEOUT_MS;
   for (const route of input.approval.routes) {
     const fail = (failure: string, terminal: string | null = null, costUsd: number | null = null): void => {
@@ -100,7 +104,9 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     if (!profile) { fail("profile_missing"); continue; }
     if (input.signal?.aborted) { fail("interrupted"); continue; }
     if (!ledger.ledger.allows(route.profile)) { fail("budget"); continue; }
-    if (expiresWithin(input.hostAuth, [route.provider], CREDENTIAL_MARGIN_MINUTES, now())) { fail("credential_expiring"); continue; }
+    // R86: an OAuth credential is refreshed on the host and the auth read again before the expiry check and the copy into the scope.
+    hostAuth = await refreshedHostAuth(input.hostCredentials, hostAuth, route.provider);
+    if (expiresWithin(hostAuth, [route.provider], CREDENTIAL_MARGIN_MINUTES, now())) { fail("credential_expiring"); continue; }
     try { await (deps.checkRoute ?? routeAddresses)(route); } catch (error) { fail(fixedCode(error instanceof Error ? error.message : "") ?? "provider_host_unresolvable"); continue; }
     const name = `preflight-${route.profile}`;
     const privateRun = privateRunDir(waveDir, name);
@@ -109,7 +115,7 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     let executed = false;
     let charged = false;
     try {
-      scope = await prepareEmptyScope({ waveDir, name, profile: route.profile, hostAuth: input.hostAuth, productionProfile: profile, skillCatalog: config.skillCatalog });
+      scope = await prepareEmptyScope({ waveDir, name, profile: route.profile, hostAuth, productionProfile: profile, skillCatalog: config.skillCatalog });
       const runOneInput: RunOneInput = {
         runId: name, configPath: scope.configPath, workspaceAlias: "clone", profile: route.profile, promptText: PONG_PROMPT,
         turnTimeoutMs: Math.max(1_000, timeoutMs - 30_000), privateDir: scope.privateDir,
