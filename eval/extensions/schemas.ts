@@ -46,6 +46,9 @@ const oracleSchema = z.discriminatedUnion("kind", [reviewOracleSchema, implement
 const scopeIgnoreEntrySchema = z.string().min(1).refine((p) =>
   p.endsWith("/") && !p.startsWith("/") && !p.split("/").includes("..") && !/[*?[\]{}]/.test(p), { message: "scope_ignore_prefix_invalid" });
 
+/** An allowed path is a repo-relative file, or a directory prefix such as `backend/tests/` under the rules of a `scopeIgnore` entry (R77). */
+const allowedPathSchema = z.union([relativePathSchema, scopeIgnoreEntrySchema]);
+
 /** A repo-relative directory without trailing slash (`backend/.venv`): no `..`, no `.git` segment, no glob characters. */
 const dependencyPathSchema = relativePathSchema.refine((p) =>
   !p.split("/").includes(".git") && !/[*?[\]{}]/.test(p), { message: "dependency_path_invalid" });
@@ -60,7 +63,7 @@ export const taskSpecSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/), kind: z.enum(["review", "implementation"]),
   repo: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), baseCommit: z.string().regex(/^[a-f0-9]{40}$/),
   promptRef: relativePathSchema.refine((p) => p.startsWith("eval/results/")), promptHash: hashSchema,
-  sourceSession: z.string().min(1), allowedPaths: z.array(relativePathSchema), scopeIgnore: z.array(scopeIgnoreEntrySchema),
+  sourceSession: z.string().min(1), allowedPaths: z.array(allowedPathSchema), scopeIgnore: z.array(scopeIgnoreEntrySchema),
   oracle: oracleSchema, dependencies: dependenciesSchema.optional(),
 }).strict().refine((t) => t.kind === t.oracle.kind, { message: "oracle_kind_mismatch", path: ["oracle"] });
 export type TaskSpec = z.infer<typeof taskSpecSchema>;

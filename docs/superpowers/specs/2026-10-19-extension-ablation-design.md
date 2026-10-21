@@ -422,3 +422,7 @@ the text above, they win.
   creates a new `__pycache__` (or similar) elsewhere scores out of scope.
   Dependency mount points are not listed, because the harness keeps them empty
   and git does not report empty directories.
+- **Directory prefixes in `allowedPaths` (R77).** An `allowedPaths` entry is a
+  repo-relative file or a directory prefix ending in `/` (no leading `/`, no
+  `..` segment, no glob characters), as `scoreImplementation` already
+  supported; the task schema had refused the prefix form.
