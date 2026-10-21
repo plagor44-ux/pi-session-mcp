@@ -27,6 +27,9 @@ not a new live wave or production optimization. Sprint 5 added
 provider-free Claude Code projection probe),
 [tool-definition measurements](tool-definitions-2026-10-18/README.md) and an
 unapproved [A/B proposal](m1-ab-proposal-2026-10-18/README.md).
+Sprint 6 added the provider-free [ledger and event-bridge
+evaluation](ledger-event-bridge-2026-10-21/README.md) with a Claude Code
+client-level rewake probe; its real-model measurement is not approved.
 
 | Evidence | Observed result | Interpretation |
 |---|---|---|

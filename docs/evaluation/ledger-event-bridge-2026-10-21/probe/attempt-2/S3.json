@@ -1,0 +1,519 @@
+{
+  "tooling": {
+    "client_version": "2.1.303 (Claude Code)",
+    "node": "26.11.1"
+  },
+  "scenario": "S3",
+  "title": "controller question round trip",
+  "mode": "stream",
+  "hook_kind": "asyncRewake",
+  "hook_timeout_s": 60,
+  "expectation": "question wake, answer accepted, worker continues with the digest, terminal wake, pi_turn_get shows the digest",
+  "exit_code": 0,
+  "exit_signal": null,
+  "timed_out": false,
+  "exit_at_ms": 6093,
+  "stdin_ended_at_ms": 6031,
+  "harness_invalid": false,
+  "http_unexpected": 0,
+  "requests": {
+    "total": 9,
+    "main": 9,
+    "auxiliary": 0,
+    "list": [
+      {
+        "i": 1,
+        "t_ms": 287,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_start",
+        "step": 0,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 2,
+        "t_ms": 344,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_prompt",
+        "step": 1,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 3,
+        "t_ms": 389,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 2,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 4,
+        "t_ms": 2375,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": true,
+        "marker_places": [
+          "fresh_user_minus0:text_block"
+        ],
+        "marker_anywhere": [
+          "user@-0"
+        ],
+        "marker_total": 1,
+        "wake_kind": "question",
+        "wake_delivery": "own_request",
+        "scripted": "tool_use:eval_question_get",
+        "step": 3,
+        "step_ok": true,
+        "note": "question_wake",
+        "wake_ref": {
+          "kind": "question",
+          "turn": "t1",
+          "question": "q1"
+        }
+      },
+      {
+        "i": 5,
+        "t_ms": 2384,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [
+          "user@-3"
+        ],
+        "marker_total": 1,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:eval_question_answer",
+        "step": 4,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 6,
+        "t_ms": 2393,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [
+          "user@-6"
+        ],
+        "marker_total": 1,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 5,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 7,
+        "t_ms": 2421,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": true,
+        "marker_places": [
+          "fresh_user_minus0:text_block"
+        ],
+        "marker_anywhere": [
+          "user@-8",
+          "user@-0"
+        ],
+        "marker_total": 2,
+        "wake_kind": "terminal",
+        "wake_delivery": "own_request",
+        "scripted": "tool_use:pi_turn_get",
+        "step": 6,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": {
+          "kind": "terminal",
+          "turn": "t1",
+          "question": null
+        }
+      },
+      {
+        "i": 8,
+        "t_ms": 2463,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [
+          "user@-11",
+          "user@-3"
+        ],
+        "marker_total": 2,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_close",
+        "step": 7,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 9,
+        "t_ms": 2509,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [
+          "user@-14",
+          "user@-6"
+        ],
+        "marker_total": 2,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 8,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      }
+    ],
+    "scripted_tool_calls": 6
+  },
+  "wakes": {
+    "requests": 2,
+    "by_kind": {
+      "question": 1,
+      "terminal": 1
+    },
+    "by_delivery": {
+      "own_request": 2
+    },
+    "events_before_last_request": 2,
+    "missing": 0,
+    "duplicate": 0,
+    "delays_ms": [
+      20,
+      33
+    ]
+  },
+  "stream": {
+    "lines": 33,
+    "json_errors": 0,
+    "types": {
+      "system": 15,
+      "assistant": 9,
+      "user": 6,
+      "result": 3
+    },
+    "system_subtypes": {
+      "init": 3,
+      "hook_started": 6,
+      "hook_response": 6
+    },
+    "results": [
+      {
+        "t_ms": 393,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 3
+      },
+      {
+        "t_ms": 2395,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 3
+      },
+      {
+        "t_ms": 2511,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 3
+      }
+    ],
+    "hook_events": [
+      {
+        "t_ms": 303,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_start",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 336,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_start",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 351,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 351,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 382,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 2363,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": "error",
+        "exit_code": 2
+      },
+      {
+        "t_ms": 2389,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__eval_question_answer",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 2414,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__eval_question_answer",
+        "outcome": "error",
+        "exit_code": 2
+      },
+      {
+        "t_ms": 2426,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_turn_get",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 2459,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_turn_get",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 2468,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_close",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 2503,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_close",
+        "outcome": "success",
+        "exit_code": 0
+      }
+    ],
+    "hook_event_keys": [
+      "exit_code",
+      "hook_event",
+      "hook_id",
+      "hook_name",
+      "outcome",
+      "output",
+      "session_id",
+      "stderr",
+      "stdout",
+      "subtype",
+      "type",
+      "uuid"
+    ],
+    "mcp_statuses": [
+      "connected"
+    ]
+  },
+  "leftover": {
+    "at_exit": 0,
+    "at_exit_kinds": {},
+    "after_grace": 0,
+    "after_grace_kinds": {},
+    "group_alive_after_exit": false
+  },
+  "temp_removed": true,
+  "step_failures": 0,
+  "counters": {
+    "tools": {
+      "pi_session_start": 1,
+      "pi_session_prompt": 1,
+      "eval_question_get": 1,
+      "eval_question_answer": 1,
+      "pi_turn_get": 1,
+      "pi_session_close": 1
+    },
+    "pi_turn_get": {
+      "running": 0,
+      "terminal": 1,
+      "error": 0
+    }
+  },
+  "spool": {
+    "events": [
+      {
+        "instance": "i1",
+        "seq": 1,
+        "at_ms": 2355,
+        "kind": "question_opened",
+        "state": null,
+        "via": null,
+        "reason": null,
+        "recipient": "controller",
+        "question_kind": "select",
+        "session": "s1",
+        "turn": "t1",
+        "question": "q1"
+      },
+      {
+        "instance": "i1",
+        "seq": 2,
+        "at_ms": 2387,
+        "kind": "question_resolved",
+        "state": "answered",
+        "via": null,
+        "reason": null,
+        "recipient": null,
+        "question_kind": null,
+        "session": "s1",
+        "turn": "t1",
+        "question": "q1"
+      },
+      {
+        "instance": "i1",
+        "seq": 3,
+        "at_ms": 2388,
+        "kind": "turn_terminal",
+        "state": "completed",
+        "via": "bridge",
+        "reason": null,
+        "recipient": null,
+        "question_kind": null,
+        "session": "s1",
+        "turn": "t1",
+        "question": null
+      },
+      {
+        "instance": "i1",
+        "seq": 4,
+        "at_ms": 6032,
+        "kind": "instance_ended",
+        "state": null,
+        "via": null,
+        "reason": "server_exit",
+        "recipient": null,
+        "question_kind": null,
+        "session": null,
+        "turn": null,
+        "question": null
+      }
+    ],
+    "instance_dirs": 1,
+    "claims": 2,
+    "canary_in_spool": false
+  },
+  "waiters": {
+    "started": 2,
+    "by_reason": {
+      "wake_question": 1,
+      "wake_terminal": 1
+    },
+    "exit_codes": {
+      "2": 2
+    }
+  },
+  "per_event": [
+    {
+      "kind": "question_opened",
+      "seq": 1,
+      "at_ms": 2355,
+      "via": null,
+      "wakes": 1,
+      "delay_ms": 20
+    },
+    {
+      "kind": "turn_terminal",
+      "seq": 3,
+      "at_ms": 2388,
+      "via": "bridge",
+      "wakes": 1,
+      "delay_ms": 33
+    }
+  ],
+  "ledger": {
+    "revision": 4,
+    "outcomes_total": 10,
+    "outcomes": {
+      "applied": 7,
+      "duplicate": 3
+    },
+    "rejected_codes": {},
+    "hook_errors": 0,
+    "tasks": 1,
+    "task_work": {
+      "awaiting_review": 1
+    },
+    "turn_runtime": {
+      "completed": 1
+    },
+    "results_consumed": 1,
+    "cleanup": {
+      "closed": 1
+    },
+    "canary_in_ledger": false
+  },
+  "checks": {
+    "clean_teardown": true,
+    "question_and_terminal_wake": true,
+    "steps_ok": true,
+    "no_missing_or_duplicate": true,
+    "one_terminal_read": true
+  },
+  "passed_expectation": true
+}
