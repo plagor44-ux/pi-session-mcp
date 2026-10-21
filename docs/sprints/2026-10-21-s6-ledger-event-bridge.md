@@ -25,8 +25,10 @@ events and a structured question round trip; a ready-to-run live measurement
 plan; documentation and review.
 
 Not authorized and not done: public MCP contract changes, production
-persistence, changes to registrations, credentials or permissions, any live
-provider run, release, tag, publication or merge. The prototype writes only
+persistence, changes to registrations, credentials or permissions, release, tag,
+publication or merge. Live provider runs were not part of the original scope.
+Later the same day the operator approved two L1 pairs, which ran (see
+*Gates*). The prototype writes only
 synthetic local state into temporary directories.
 
 ## Preflight (2026-10-21)
@@ -79,5 +81,9 @@ See the [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.
   a local event spool or socket, a client hook installed by setup, a question
   tool) needs its own decision record, and a public tool or field needs a
   minor release.
-- The live measurement (L4) needs a new, explicit operator approval of the
-  [live plan](../evaluation/ledger-event-bridge-2026-10-21/live-plan.md).
+- Two approved L4 pairs ran on 2026-10-21 ([results](../evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
+  Any further live run needs a new, explicit operator approval.
+- ADR 0011 was accepted by the maintainer on 2026-10-21, items 1–3. The
+  implementation is
+  [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108), gated by
+  approval of its plan.
