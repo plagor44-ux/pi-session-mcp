@@ -1,0 +1,103 @@
+{
+  "ledgerId": "fecfbbca-0b08-493c-95a1-3303775bc7d7",
+  "limitUsd": 10,
+  "spentUsd": 8.3231724,
+  "entries": [
+    {
+      "runId": "preflight-code",
+      "profile": "code",
+      "costUsd": 0.004242,
+      "kind": "preflight"
+    },
+    {
+      "runId": "007-i-thoth-dms-code-A-r1",
+      "profile": "code",
+      "costUsd": 0.7858052
+    },
+    {
+      "runId": "008-i-thoth-dms-code-pi-lens-r1",
+      "profile": "code",
+      "costUsd": 1.0807632000000003
+    },
+    {
+      "runId": "009-i-spng-authz-code-pi-lens-r1",
+      "profile": "code",
+      "costUsd": 0.3161472
+    },
+    {
+      "runId": "010-i-spng-authz-code-A-r1",
+      "profile": "code",
+      "costUsd": 0.2604900000000001
+    },
+    {
+      "runId": "011-i-spng-pdf-code-A-r1",
+      "profile": "code",
+      "costUsd": 0.15467960000000003
+    },
+    {
+      "runId": "012-i-spng-pdf-code-pi-lens-r1",
+      "profile": "code",
+      "costUsd": 0.29173240000000006
+    },
+    {
+      "runId": "042-i-thoth-dms-code-pi-lens-r2",
+      "profile": "code",
+      "costUsd": 0.9643780000000002
+    },
+    {
+      "runId": "043-i-thoth-dms-code-A-r2",
+      "profile": "code",
+      "costUsd": 0.8677736
+    },
+    {
+      "runId": "044-i-spng-authz-code-A-r2",
+      "profile": "code",
+      "costUsd": 0.086322
+    },
+    {
+      "runId": "045-i-spng-authz-code-pi-lens-r2",
+      "profile": "code",
+      "costUsd": 0.3481888
+    },
+    {
+      "runId": "046-i-spng-pdf-code-pi-lens-r2",
+      "profile": "code",
+      "costUsd": 0.053820400000000004
+    },
+    {
+      "runId": "047-i-spng-pdf-code-A-r2",
+      "profile": "code",
+      "costUsd": 0.047746399999999994
+    },
+    {
+      "runId": "077-i-thoth-dms-code-A-r3",
+      "profile": "code",
+      "costUsd": 0.7179755999999999
+    },
+    {
+      "runId": "078-i-thoth-dms-code-pi-lens-r3",
+      "profile": "code",
+      "costUsd": 0.9859600000000001
+    },
+    {
+      "runId": "079-i-spng-authz-code-pi-lens-r3",
+      "profile": "code",
+      "costUsd": 0.6806012
+    },
+    {
+      "runId": "080-i-spng-authz-code-A-r3",
+      "profile": "code",
+      "costUsd": 0.26514240000000006
+    },
+    {
+      "runId": "081-i-spng-pdf-code-A-r3",
+      "profile": "code",
+      "costUsd": 0.18467120000000004
+    },
+    {
+      "runId": "082-i-spng-pdf-code-pi-lens-r3",
+      "profile": "code",
+      "costUsd": 0.22673320000000002
+    }
+  ]
+}

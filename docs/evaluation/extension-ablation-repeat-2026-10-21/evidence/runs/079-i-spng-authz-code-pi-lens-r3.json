@@ -1,0 +1,98 @@
+{
+  "runId": "079-i-spng-authz-code-pi-lens-r3",
+  "taskId": "i-spng-authz",
+  "profile": "code",
+  "arm": "pi-lens",
+  "replicate": 3,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 262311,
+      "output": 6268,
+      "cacheRead": 932992,
+      "cacheWrite": 0,
+      "total": 1201571,
+      "costUsd": 0.6806012
+    },
+    "assistant": {
+      "messages": 26,
+      "input": 262311,
+      "output": 6268,
+      "cacheRead": 932992,
+      "cacheWrite": 0,
+      "costUsd": 0.6806012
+    },
+    "providerError": null
+  },
+  "durationMs": 359318,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [
+      {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "port": 5544
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:400::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:600::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:200::223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.0.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.192.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.128.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.64.223",
+        "port": 443
+      }
+    ],
+    "unexpectedConnectCount": 9,
+    "connects": 61
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "0ffb04f8a6fe52b54b68d5c3ba0f0367e793d9c7eedec9cc4faff1626229fd7d",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}

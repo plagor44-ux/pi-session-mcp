@@ -1,0 +1,52 @@
+{
+  "runId": "008-i-thoth-dms-code-pi-lens-r1",
+  "taskId": "i-thoth-dms",
+  "profile": "code",
+  "arm": "pi-lens",
+  "replicate": 1,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 174456,
+      "output": 26108,
+      "cacheRead": 4707712,
+      "cacheWrite": 0,
+      "total": 4908276,
+      "costUsd": 1.0807632000000003
+    },
+    "assistant": {
+      "messages": 44,
+      "input": 174456,
+      "output": 26108,
+      "cacheRead": 4707712,
+      "cacheWrite": 0,
+      "costUsd": 1.0807632000000003
+    },
+    "providerError": null
+  },
+  "durationMs": 813799,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 30
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "05e5d750089dce4b3dcdd2f665c69aca95dd87ed6cd8f8174d5844af7cff27bb",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}

@@ -1,0 +1,58 @@
+{
+  "runId": "011-i-spng-pdf-code-A-r1",
+  "taskId": "i-spng-pdf",
+  "profile": "code",
+  "arm": "A",
+  "replicate": 1,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 31456,
+      "output": 5603,
+      "cacheRead": 357376,
+      "cacheWrite": 0,
+      "total": 394435,
+      "costUsd": 0.15467960000000003
+    },
+    "assistant": {
+      "messages": 17,
+      "input": 31456,
+      "output": 5603,
+      "cacheRead": 357376,
+      "cacheWrite": 0,
+      "costUsd": 0.15467960000000003
+    },
+    "providerError": null
+  },
+  "durationMs": 317556,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 1050,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [
+      {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "port": 5544
+      }
+    ],
+    "unexpectedConnectCount": 1,
+    "connects": 36
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "878db5bdbe9f8bb4e95ddb6c64c71b6548983cf1fca32aa31b1555b1b3e18381",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}

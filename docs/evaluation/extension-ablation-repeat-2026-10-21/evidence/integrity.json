@@ -1,0 +1,93 @@
+{
+  "kind": "extension-ablation-evidence-integrity",
+  "source_binding": {
+    "commit": "c9da9cb118deea423e8828e1809a4fadd8d03c45",
+    "digest": "sha256:966edeee792285dba911230dd16141c4a53c466892f8d8a0d991987d5820b1b1"
+  },
+  "files": [
+    {
+      "path": "approvals/approval-1.json",
+      "hash": "sha256:254978f41a1230081a6dbb57a7f611fe22f3435105aeb60828069148afe1bb7e"
+    },
+    {
+      "path": "ledger.json",
+      "hash": "sha256:cdcdc5b0fd281a9956bd79366333331597687093cab1c1659158121b17efcab1"
+    },
+    {
+      "path": "runs/007-i-thoth-dms-code-A-r1.json",
+      "hash": "sha256:290564c9fce6e63e0476a0ac1d6a07bcb69ed003c54eed3471282528cc55d428"
+    },
+    {
+      "path": "runs/008-i-thoth-dms-code-pi-lens-r1.json",
+      "hash": "sha256:bdca8cd1b3c5f63ae6a8a2d910341e7a591e873dd9640abc97f10d9b6ec1b6e5"
+    },
+    {
+      "path": "runs/009-i-spng-authz-code-pi-lens-r1.json",
+      "hash": "sha256:c01d46e8add762847cf33e585fdb3857ff75b8fa7965f607810d74b06fb6cf39"
+    },
+    {
+      "path": "runs/010-i-spng-authz-code-A-r1.json",
+      "hash": "sha256:51454ae71af089bf4a739fb0e69d10155a53ea5a03db28533334c49521888503"
+    },
+    {
+      "path": "runs/011-i-spng-pdf-code-A-r1.json",
+      "hash": "sha256:83f70531cf486f10f98b01222b3f19ae3c104688c54d030560afc931397fc421"
+    },
+    {
+      "path": "runs/012-i-spng-pdf-code-pi-lens-r1.json",
+      "hash": "sha256:fb2e13b51393152eaaebdaf2cb42d6dc17774952b6e8d354d082272d2d72630b"
+    },
+    {
+      "path": "runs/042-i-thoth-dms-code-pi-lens-r2.json",
+      "hash": "sha256:ce6eefdde69e82816c036f665d4067f1d07ed7cc36fad9c3596af4705026db05"
+    },
+    {
+      "path": "runs/043-i-thoth-dms-code-A-r2.json",
+      "hash": "sha256:3181d9f99e83aeddc9b49e974ae23aed85a7f68377e6f293e698b0fa8ad3f958"
+    },
+    {
+      "path": "runs/044-i-spng-authz-code-A-r2.json",
+      "hash": "sha256:ca44a50402d82882c16abbe6ea2b620b30a658ddf6009ef73c6f0662402f2086"
+    },
+    {
+      "path": "runs/045-i-spng-authz-code-pi-lens-r2.json",
+      "hash": "sha256:e861ceeb5965a45499c43c3ec24666e6b2f1730b70a29face9ef246dd1ae3023"
+    },
+    {
+      "path": "runs/046-i-spng-pdf-code-pi-lens-r2.json",
+      "hash": "sha256:f50c80834fb0e2d90f7fec2ea3810e779e77c41951e03ca4f8433dba3f2db291"
+    },
+    {
+      "path": "runs/047-i-spng-pdf-code-A-r2.json",
+      "hash": "sha256:7fa063165b928b520a72af35a7849e7bc196c0425c3ad51c605e2b997e9a8c7f"
+    },
+    {
+      "path": "runs/077-i-thoth-dms-code-A-r3.json",
+      "hash": "sha256:9e25646faa930f9ba22274aaffe3735d8fde82538f86e21d5532b372e2539980"
+    },
+    {
+      "path": "runs/078-i-thoth-dms-code-pi-lens-r3.json",
+      "hash": "sha256:9cc1b91e9213d5c77b8d63fd846a24c520c7f21cb15368a10d13340a88d02559"
+    },
+    {
+      "path": "runs/079-i-spng-authz-code-pi-lens-r3.json",
+      "hash": "sha256:0c06255464ab3d939f47ea6db93200c5d1ea20ddc3a390a14e485b20cbc25ba7"
+    },
+    {
+      "path": "runs/080-i-spng-authz-code-A-r3.json",
+      "hash": "sha256:5f583857b504c52a575adce79c11e0d02ab9e28663d26084d54629adfb08b368"
+    },
+    {
+      "path": "runs/081-i-spng-pdf-code-A-r3.json",
+      "hash": "sha256:ff6b0b4b220c74e0e4f105b4950e6b2f50c57c7cb1511cf88e9394fea2c31301"
+    },
+    {
+      "path": "runs/082-i-spng-pdf-code-pi-lens-r3.json",
+      "hash": "sha256:513d8bbfe503b277821d27039a21f6f6a9bacabdb02c1b55303ad53cd4a03fa9"
+    },
+    {
+      "path": "summary.json",
+      "hash": "sha256:04ae399f2dc98c8d4112d8c493feae13d861d5145306048a455291231b8bc8cd"
+    }
+  ]
+}

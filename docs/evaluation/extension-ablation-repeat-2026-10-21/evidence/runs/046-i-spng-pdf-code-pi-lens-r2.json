@@ -1,0 +1,52 @@
+{
+  "runId": "046-i-spng-pdf-code-pi-lens-r2",
+  "taskId": "i-spng-pdf",
+  "profile": "code",
+  "arm": "pi-lens",
+  "replicate": 2,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 22210,
+      "output": 501,
+      "cacheRead": 43904,
+      "cacheWrite": 0,
+      "total": 66615,
+      "costUsd": 0.053820400000000004
+    },
+    "assistant": {
+      "messages": 4,
+      "input": 22210,
+      "output": 501,
+      "cacheRead": 43904,
+      "cacheWrite": 0,
+      "costUsd": 0.053820400000000004
+    },
+    "providerError": null
+  },
+  "durationMs": 28214,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 5
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "3e77697939e2a1a33607ba2731b7d3db8789907575d40c68472c2c4560654fd4",
+  "outcome": "scored",
+  "accepted": false,
+  "implementation": {
+    "accepted": false,
+    "testsPassed": false,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}
