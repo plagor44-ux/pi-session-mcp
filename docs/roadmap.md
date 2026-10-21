@@ -115,14 +115,15 @@ contract.
   Code rewake is technically viable and is proposed in
   [ADR 0011](adr/0011-turn-events-and-controller-wake.md) (Proposed). A file
   ledger and a polling supervisor are not recommended as product features.
-- Done on 2026-10-21 with operator approval: one real-model pair (L4, case L1).
-  The woken controller read once, without polls or sleeps: 7 against 8 model
-  requests, 0.050 against 0.060 USD. The quality criterion was not met (the
-  worker answer failed in the polling arm) ([live results](evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
-- Open, with gates: a repeat pair with the M1 worker route, then the matrix of
-  the [live plan](evaluation/ledger-event-bridge-2026-10-21/live-plan.md), each
-  with its own approval. ADR 0011 is decided only after that. A question
-  channel needs its own decision and a minor release.
+- Done on 2026-10-21 with operator approval: two real-model pairs (L4, case L1)
+  ([live results](evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
+  - The woken controller read once, without polls or sleeps, and acted on a
+    finished turn after about 2 s instead of 10–21 s.
+  - The decision rule was not met: requests 7/8 and 8/8, mixed uncached input
+    and cost. The evaluation recommends deferring ADR 0011.
+- Open, with gates: a maintainer decision on ADR 0011; a revisit only with a
+  long-turn pair under its own approval. A question channel needs its own
+  decision and a minor release.
 - Deferred: Codex wake (no documented path), interactive and VS Code wake
   checks, a supervisor-only detection arm.
 

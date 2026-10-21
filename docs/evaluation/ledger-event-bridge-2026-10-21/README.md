@@ -13,24 +13,30 @@ the probe evidence in [`probe/`](probe/).
 
 Each claim names its evidence level: L0 source or docs, L1 unit test, L2 host
 event, L3 client wake with a scripted fake model, L4 real controller model.
-Everything up to L3 is provider-free. **L4 was reached for one approved pair
-only** (case L1, arm A and arm C, one run each; see [`live/`](live/README.md)).
+Everything up to L3 is provider-free. **L4 was reached for two approved
+pairs** (case L1, arm A and arm C, one run each per pair; see
+[`live/`](live/README.md)).
 
 ## Verdict
 
 **The current procedure stays.** That means the controller skill's internal
 ledger with consume-once and the #86 cadence. **A lean event bridge from the
 existing SDK completion, with a targeted Claude Code integration, is
-technically viable at the client level (L3).** In one real-model pair (L4)
-the woken controller read the turn once, without polling or sleeping. Arm A
-needed 8 model requests with 2 running polls and 3 sleeps; arm C needed 7 with
-none, at about 18 % less reported cost. The pre-registered product rule is
-still **not met**: arm A's worker answer failed the quality oracle, and one pair
-is no basis for a product decision. Product work stays conditional on a larger
-L4 measurement with a reliable worker route, and on its own decision record
-(proposed as [ADR 0011](../../adr/0011-turn-events-and-controller-wake.md)).
-The expected benefit grows with worker turn length and with worker questions.
-That is a model-based expectation; the L1 pair has short worker turns.
+technically viable at the client level (L3)**, and in two real-model pairs (L4)
+the woken controller read each turn once, without polling or sleeping. It does
+**not** pay off in controller requests or tokens for short tasks:
+
+- requests were 7 against 8 and 8 against 8;
+- uncached input and cost were mixed;
+- the pre-registered product rule is **not met**.
+
+What it does improve consistently is latency: the controller acted on a
+finished turn after about 2 s instead of 10–21 s with polling. The
+recommendation is therefore **not to build it now**
+([ADR 0011](../../adr/0011-turn-events-and-controller-wake.md) stays Proposed,
+with a recommendation to defer). Revisit if long worker turns, worker
+questions or reaction time become the bottleneck. The request saving that the
+model predicts for long turns is still unmeasured.
 
 - **File ledger:** not recommended as a product feature. It helps a human
   overview and context continuity after compaction. It does nothing for tokens
@@ -146,8 +152,8 @@ by signal (`instance_ended` = `server_exit`).
 
 The four kinds of evidence stay separate. A spool file is a host-side record
 (L1). A hook start or exit in the stream is L2. A new model request at the fake
-is L3. A real model choosing the right call is L4. That was tested once
-for completion (arm C of the live pair). It was not tested for questions.
+is L3. A real model choosing the right call is L4. That was tested twice
+for completion (arm C of both live pairs). It was not tested for questions.
 
 Interactive TUI and the VS Code extension were not tested. The extension uses
 the same stream-json input, which S1–S3 exercised, but that is an inference.
@@ -166,7 +172,7 @@ running polls for `T > 10 s`, with `c` = 15–30 s. That is 1–3 for the M1 cas
 (about 50–100 s), so C saves at most about two model requests per turn there. A
 10-minute turn would need about 20–40 polls against one wake. The benefit grows
 with turn length and with questions; for short turns it is close to neutral.
-This expectation is the reason L4 is needed before any product decision.
+This expectation was the reason for the L4 pairs. On the short case they confirmed it: no request saving (see [`live/`](live/README.md)).
 
 ### 4.6 Completion and questions
 
@@ -220,13 +226,13 @@ never woken.
 | --- | --- | --- | --- | --- |
 | Overview and context continuity | context only | `run.json`/`task.md` survive compaction | same as A, plus B if wanted | none |
 | LLM in status checks | every poll | every poll | none for running turns | none |
-| Real notification and resume | none | none | client wake L3 (stream-json; `-p` blocks); real model L4 once (completion) | needs C's delivery |
+| Real notification and resume | none | none | client wake L3 (stream-json; `-p` blocks); real model L4 in two pairs (completion) | needs C's delivery |
 | State and connection owner | server | server; ledger by hook | server; spool per instance | must be the same server |
 | Restart and cleanup | IDs become history | ledger marks unresolved | `instance_ended`; waiter ends at budget, parent loss or claim loss | as C |
 | Client dependency | none | Claude Code hooks (Codex has hooks too) | Claude Code `asyncRewake`; not Codex | as C |
 | Implementation and maintenance | none | small | observer, spool, setup-managed hook, waiter | timer plus C |
 | Decision or contract needed | none | none (dev aid) | ADR; spool is a new local surface; question tool = minor release | ADR |
-| Evidence | M1 A/B (Codex); one L4 run (Claude) | L1, L2 | L1, L3; one L4 pair | L1 partial; detection-only arm skipped |
+| Evidence | M1 A/B (Codex); two L4 runs (Claude) | L1, L2 | L1, L3; two L4 pairs | L1 partial; detection-only arm skipped |
 
 ## Prototype
 
@@ -302,7 +308,8 @@ untested.
 
 ## Not measured, not tested, unknown
 
-L4 beyond one pair (completion only, case L1, one client version and model); a
+L4 beyond two pairs (completion only, short case L1, one client version and
+model); long worker turns; a
 question round trip with a real model; worker usage; interactive
 TUI and VS Code wake; Codex; a supervisor-only detection arm (S7 skipped: the
 registry subclass has no supported way to switch off its event trigger);
@@ -321,11 +328,11 @@ why S5 (positional prompt) blocks while S8 (stream-json, stdin closed) exits.
   the client kills the waiter at its timeout (S6).
 - **Simpler alternative:** keep the skill cadence and add one rule: for long
   tasks, poll at the long end of the cadence. No mechanism, no contract.
-- **Critical assumption, checked once:** it held in the one live pair (arm C:
-  one wake, one read, no poll, no sleep).
-- **Smallest next test:** the same pair with the M1 worker route (`gpt-6.1-sol`,
-  high effort) so that quality holds in both arms, then the 3-pair matrix of the
-  live plan if the pair keeps quality.
+- **Critical assumption, checked twice:** it held in both live C runs (one
+  wake, one read, no poll, no sleep).
+- **Smallest next test, only if revisited:** one pair with a long worker turn
+  (several minutes), where the model predicts a request saving, rather than the
+  full short-task matrix.
 
 ## Reproduction
 

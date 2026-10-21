@@ -27,7 +27,7 @@ plan; documentation and review.
 Not authorized and not done: public MCP contract changes, production
 persistence, changes to registrations, credentials or permissions, release, tag,
 publication or merge. Live provider runs were not part of the original scope.
-Later the same day the operator approved exactly one L1 pair, which ran (see
+Later the same day the operator approved two L1 pairs, which ran (see
 *Gates*). The prototype writes only
 synthetic local state into temporary directories.
 
@@ -81,7 +81,5 @@ See the [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.
   a local event spool or socket, a client hook installed by setup, a question
   tool) needs its own decision record, and a public tool or field needs a
   minor release.
-- One approved L4 pair ran on 2026-10-21 ([results](../evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
-  Any further live run, starting with a repeat pair on the M1 worker route,
-  needs a new, explicit operator approval of the
-  [live plan](../evaluation/ledger-event-bridge-2026-10-21/live-plan.md).
+- Two approved L4 pairs ran on 2026-10-21 ([results](../evaluation/ledger-event-bridge-2026-10-21/live/README.md)).
+  Any further live run needs a new, explicit operator approval.

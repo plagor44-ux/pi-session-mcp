@@ -111,3 +111,7 @@ count and budget. Earlier M1 approvals do not apply.
   key and is kept. The operator raised the run cap to 3. After arm A's oracle
   failure the stop rule applied, and the operator decided to run arm C anyway.
   The pair is recorded as not meeting the quality criterion.
+- 2026-10-21, repeat pair: the operator approved a second pair with the M1
+  worker route (`review` values: `gpt-6.1-sol`, high), in the order C, then A.
+  The runner gained a fixed choice between the two worker routes; arms,
+  measures and rules stayed unchanged.
