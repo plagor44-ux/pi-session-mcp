@@ -55,7 +55,7 @@ export const privateRunDir = (waveDir: string, runId: string): string => join(wa
 const TELEMETRY_OPT_OUT: Readonly<Record<string, string>> = { DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" };
 /** Package managers fail fast in the sandbox instead of downloading toolchains, modules or interpreters, or syncing a read-only mount (R73). */
 const OFFLINE_PACKAGE_MANAGERS: Readonly<Record<string, string>> = {
-  GOPROXY: "off", GOTOOLCHAIN: "local", GOFLAGS: "-mod=mod",
+  GOPROXY: "off", GOTOOLCHAIN: "local",
   UV_OFFLINE: "1", UV_NO_SYNC: "1", UV_PYTHON_DOWNLOADS: "never", npm_config_offline: "true",
 };
 const MAX_ENV_FROM = 64; // src/mcp-config.ts
