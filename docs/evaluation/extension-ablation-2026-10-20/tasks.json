@@ -1,0 +1,2043 @@
+[
+  {
+    "id": "r-psm-smoke",
+    "kind": "review",
+    "repo": "pi-session-mcp",
+    "baseCommit": "bdfb95de9a46defa64d2eb382d58d454f97fc8fb",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/r-psm-smoke.txt",
+    "promptHash": "sha256:f1187f1bd8ff6721c2a9a03084f92bce3e9468681938c39a006793a03f9fe9a7",
+    "sourceSession": "9299a6ff-128a-4f65-baed-3a46bc3c8e01",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "findings": [
+        {
+          "id": "F1-kill-cleanup-unbounded",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "descendant"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "grandchild"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "pipe"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "handle"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "hang"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "wait"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sigkill",
+                "keeps running"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "process group"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "kill",
+                "inherit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "kill",
+                "orphan"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "pipes",
+                "hang"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "pipes",
+                "inherit"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2-exit-status-dropped",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "abnormal"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "crash",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "crash",
+                "eof"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "crash",
+                "shutdown"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "non-zero",
+                "shutdown"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "nonzero",
+                "shutdown"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "non-zero",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "nonzero",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "signal",
+                "close"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "discard"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "ignor"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "drop"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "never"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "not checked"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "unchecked"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "not inspect"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "lost"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "crash"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit status",
+                "not captured"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "discard"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "ignor"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "drop"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "never"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "not checked"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "unchecked"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "not inspect"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "lost"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "crash"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "exit code",
+                "not captured"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3-frames-bypass-stdout-cap",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "max_stdout_bytes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "frames",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "frames",
+                "memory"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "queue",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "queued"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "flood"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "noisy"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4-stderr-sanitization",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "stderr",
+                "spaces"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "path",
+                "spaces"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "secret"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "token="
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "redact"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "sanitiz"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5-tests-miss-branches",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "shutdown_timeout"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "stdout_invalid"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "package_invalid"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "untested"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "not tested"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "not covered"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "no test"
+              ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "does not cover"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "FF1-tarball-resolves-registry-package",
+          "anchors": [
+            {
+              "file": ".github/workflows/ci.yml",
+              "terms": [
+                "tarball",
+                "falls back to the registry"
+              ]
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "terms": [
+                "tarball",
+                "resolve to the registry"
+              ]
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "terms": [
+                "glob",
+                "multiple tarballs"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "FF2-unhandled-epipe-or-split-utf8",
+          "anchors": [
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "unhandled",
+                "epipe"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "multi-byte",
+                "split"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-thoth-gates",
+    "kind": "review",
+    "repo": "thoth",
+    "baseCommit": "8ed36fddfdab9e9102bb0f6d3e9a13a2bb462b65",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/r-thoth-gates.txt",
+    "promptHash": "sha256:8a1386b045efc4b9be3231183ab7085208c82ba0d2fe0bc80a3999f5f4fce17c",
+    "sourceSession": "35c08c30-b72e-4ea6-9493-4842419fd49f",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "findings": [
+        {
+          "id": "F1-preview-spoofing",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "newline"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "spoof"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "control char"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "unescaped"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "escap"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "verbatim"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "preview",
+                "crlf"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "newline"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "spoof"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "control char"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "unescaped"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "escap"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "verbatim"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "preview",
+                "crlf"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "newline"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "spoof"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "control char"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "unescaped"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "escap"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "verbatim"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "preview",
+                "crlf"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "formatpreview",
+                "newline"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "formatpreview",
+                "unescaped"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "formatpreview",
+                "spoof"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "formatpreview",
+                "forge"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2-process-tests-not-binding-fingerprint",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "fingerprint"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "request bod"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "never confirm"
+              ]
+            },
+            {
+              "file": "internal/tools/s3a_inventory_gaps1_test.go",
+              "terms": [
+                "request bod"
+              ]
+            },
+            {
+              "file": "internal/tools/s3a_inventory_gaps1_test.go",
+              "terms": [
+                "fingerprint"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3-blob-source-test-vacuous",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "still pass"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "vacuous"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "file was read"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "zero reads"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "non-existent"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports_blob_source_test.go",
+              "terms": [
+                "unreadable"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4-changelog-overstates-uri-validation",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "CHANGELOG.md",
+              "terms": [
+                "uri",
+                "validat"
+              ]
+            },
+            {
+              "file": "CHANGELOG.md",
+              "terms": [
+                "uri",
+                "nonempty"
+              ]
+            },
+            {
+              "file": "CHANGELOG.md",
+              "terms": [
+                "uri",
+                "non-empty"
+              ]
+            },
+            {
+              "file": "CHANGELOG.md",
+              "terms": [
+                "overstate"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5-validate-config-plan-dir-read",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "plan_dir"
+              ]
+            },
+            {
+              "file": "internal/tools/plan_loader.go",
+              "terms": [
+                "plan_dir"
+              ]
+            },
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "local file"
+              ]
+            },
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "client-chosen"
+              ]
+            },
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "client-selected"
+              ]
+            },
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "file read"
+              ]
+            },
+            {
+              "file": "internal/tools/plan_loader.go",
+              "terms": [
+                "file read"
+              ]
+            },
+            {
+              "file": "internal/tools/validate_config.go",
+              "terms": [
+                "outside",
+                "add_blob"
+              ]
+            },
+            {
+              "file": "internal/tools/plan_loader.go",
+              "terms": [
+                "outside",
+                "add_blob"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "FF1-add_blob-reads-client-path-when-local-access-off",
+          "anchors": [
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "os.readfile",
+                "bypass"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "arbitrary file",
+                "bypass"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "local access",
+                "bypass"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "FF2-content-disposition-header-injection",
+          "anchors": [
+            {
+              "file": "internal/adapters/inbound/adapter.go",
+              "terms": [
+                "header injection"
+              ]
+            },
+            {
+              "file": "internal/adapters/inbound/adapter.go",
+              "terms": [
+                "content-disposition",
+                "inject"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "FF3-base64-payload-in-audit-log",
+          "anchors": [
+            {
+              "file": "internal/tools/registry_gosdk.go",
+              "terms": [
+                "audit",
+                "base64"
+              ]
+            },
+            {
+              "file": "internal/tools/registry_gosdk.go",
+              "terms": [
+                "audit",
+                "content_base64"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-spng-authz",
+    "kind": "review",
+    "repo": "spng-stab-int",
+    "baseCommit": "a264c1a5cce71485a33ff6dc14689cb455ca9446",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/r-spng-authz.txt",
+    "promptHash": "sha256:69a89c95d61bcbd8ee5072c4d8fad7bfa27e5f62a8ebff7640f2093f76b6392b",
+    "sourceSession": "e6711afa-3972-4ff9-af7d-4310f20805b1",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "findings": [
+        {
+          "id": "F1-legacy-tool-not-bound-to-action",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "list_documents"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "health_ping"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not bound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "never bound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "unbound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not bind"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not tied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "never tied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not linked"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not checked"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "mismatch"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "different action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "another action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "any action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "arbitrary action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "unrelated action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "foreign action"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "other action"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2-token-probe-too-strong",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "capability_denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "tenant.read"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "probe",
+                "viewer"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "probe",
+                "editor"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3-oauth-admin-scope-allowed",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "allow"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "pass"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "accept"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "permit"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not rejected"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not blocked"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not caught"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not enforced"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "scope",
+                "admin",
+                "not refused"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "__post_init__",
+                "only"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4-ai_index-rebuild-self-mode",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "ai_index.rebuild"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "ai_index.rebuild"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5-job-actions-instance-mode",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "job.retry"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "view_storage_replication"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "retry_job"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "list_storage_replication_jobs"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "job.retry"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "retry_job"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F6-issuable-tiers-admin-channels",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "backend/app/authz/scopes.py",
+              "terms": [
+                "issuable_tiers",
+                "channel"
+              ]
+            },
+            {
+              "file": "backend/app/authz/scopes.py",
+              "terms": [
+                "channel",
+                "pat"
+              ]
+            },
+            {
+              "file": "backend/app/authz/scopes.py",
+              "terms": [
+                "issuable_tiers",
+                "every"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7-tests-pin-exact-sets",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "backend/tests/test_authz_core.py",
+              "terms": [
+                "frozenset"
+              ]
+            },
+            {
+              "file": "backend/tests/test_authz_core.py",
+              "terms": [
+                "list length"
+              ]
+            },
+            {
+              "file": "backend/tests/test_authz_core.py",
+              "terms": [
+                "lengths only"
+              ]
+            },
+            {
+              "file": "backend/tests/test_authz_core.py",
+              "terms": [
+                "exact set"
+              ]
+            },
+            {
+              "file": "backend/tests/test_authz_core.py",
+              "terms": [
+                "narrower_scope"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "FF1-oauth-keeps-operator-or-instance-admin",
+          "anchors": [
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "operator",
+                "retain"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "operator",
+                "preserve"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "operator",
+                "survive"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "operator",
+                "bypass"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "instance admin",
+                "retain"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "FF2-legacy-tools-json-deviates-from-inventory",
+          "anchors": [
+            {
+              "file": "backend/app/authz/legacy_tools.json",
+              "terms": [
+                "inventory",
+                "mismatch"
+              ]
+            },
+            {
+              "file": "backend/app/authz/legacy_tools.json",
+              "terms": [
+                "deviat"
+              ]
+            },
+            {
+              "file": "backend/app/authz/legacy_tools.json",
+              "terms": [
+                "does not match"
+              ]
+            },
+            {
+              "file": "backend/app/authz/legacy_tools.json",
+              "terms": [
+                "differs from"
+              ]
+            },
+            {
+              "file": "backend/app/authz/legacy_tools.json",
+              "terms": [
+                "inconsisten"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-spng-chat",
+    "kind": "review",
+    "repo": "spng-stab-int",
+    "baseCommit": "ae3b5e7189e3375ca9ddf248cfe85b91a71b732a",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/r-spng-chat.txt",
+    "promptHash": "sha256:9d3ed16238d317c415e59afc3cebfa592df1dcb90f8791dcb5d51b50a9368887",
+    "sourceSession": "d050dadd-e5a7-4f79-b0ee-be57dfc69a1c",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "findings": [
+        {
+          "id": "F1-escaped-brackets-become-citation-refs",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "micromark"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "citationref"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "citation"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "verweis"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "marker"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape",
+                "reference"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2-undefined-css-tokens",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--surface-overlay"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "undefined",
+                "token"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "undefined",
+                "variable"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "undefined",
+                "custom propert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "nicht definiert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "not defined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "do not exist"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3-non-object-citations-count-in-numbering",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/citationMarkers.js",
+              "terms": [
+                "nicht-objekt"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.js",
+              "terms": [
+                "non-object"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.js",
+              "terms": [
+                "non-dict"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.js",
+              "terms": [
+                "null",
+                "backend"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.js",
+              "terms": [
+                "_citation_number"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "nicht-objekt"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "non-object"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "non-dict"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "null",
+                "backend"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "_citation_number"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4-missing-tests",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/chatContentModel.test.mjs",
+              "terms": [
+                "escape"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.test.mjs",
+              "terms": [
+                "entity"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.test.mjs",
+              "terms": [
+                "linkreference"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.test.mjs",
+              "terms": [
+                "non-object"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/citationMarkers.test.mjs",
+              "terms": [
+                "ref",
+                "999"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5-index-keys-remount-anchor",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "key",
+                "remount"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "index-key"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "index",
+                "keys",
+                "stream"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "FF1-xss-in-markdown-rendering",
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "xss",
+                "vulnerab"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "xss",
+                "exploit"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "safehref",
+                "bypass"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "FF2-local-ids-or-stale-answers-leak",
+          "anchors": [
+            {
+              "file": "frontend/src/app/chat/ChatPanel.jsx",
+              "terms": [
+                "local-",
+                "backend",
+                "sends"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/ChatPanel.jsx",
+              "terms": [
+                "stale",
+                "leak"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/ChatPanel.jsx",
+              "terms": [
+                "late",
+                "foreign"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "i-thoth-dms",
+    "kind": "implementation",
+    "repo": "thoth-w3",
+    "baseCommit": "ab47013198f09c756f329ff8720211302779b278",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/i-thoth-dms.txt",
+    "promptHash": "sha256:2aa1fbeef7ea9dfedfbec4be7aa7fec19cb41e1a66070c96d1e36fe9f8668003",
+    "sourceSession": "0e6508fd-df05-4ffb-b770-4a481520ae66",
+    "allowedPaths": [
+      "docs/api-inventory/dms.md"
+    ],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "bash",
+        "scripts/api-inventory-check.sh",
+        "check",
+        "dms"
+      ],
+      "timeoutMs": 120000,
+      "setup": [
+        [
+          "grep",
+          "-qF",
+          "#215",
+          "docs/api-inventory/dms.md"
+        ],
+        [
+          "grep",
+          "-qF",
+          "#222",
+          "docs/api-inventory/dms.md"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "i-thoth-inv3",
+    "kind": "implementation",
+    "repo": "thoth-w6",
+    "baseCommit": "ab47013198f09c756f329ff8720211302779b278",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/i-thoth-inv3.txt",
+    "promptHash": "sha256:151a4fab32815f7871ba2ed83719d9d6d0bd56456f700f21211cf771047d26b6",
+    "sourceSession": "635f1c51-0f14-4167-9040-a872a1eea0b7",
+    "allowedPaths": [
+      "docs/api-inventory/businessobjects.md",
+      "docs/api-inventory/actions.md",
+      "docs/api-inventory/task.md"
+    ],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "bash",
+        "scripts/api-inventory-check.sh",
+        "check",
+        "businessobjects",
+        "actions",
+        "task"
+      ],
+      "timeoutMs": 120000,
+      "setup": [
+        [
+          "grep",
+          "-qF",
+          "#224",
+          "docs/api-inventory/businessobjects.md"
+        ],
+        [
+          "grep",
+          "-qF",
+          "#225",
+          "docs/api-inventory/actions.md"
+        ],
+        [
+          "grep",
+          "-qF",
+          "#223",
+          "docs/api-inventory/task.md"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "i-spng-authz",
+    "kind": "implementation",
+    "repo": "spng-stab-int",
+    "baseCommit": "8ac3b47b97789080ee5ae776bd2b4757eb61a386",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/i-spng-authz.txt",
+    "promptHash": "sha256:02ef2dbb88b5c8e9aaf7129384269b3e46f6157d07b0113dd9e097539e53e2a8",
+    "sourceSession": "92563767-20f1-400a-b8c5-f6123bd2f8f5",
+    "allowedPaths": [
+      "backend/app/authz/actions.py",
+      "backend/app/authz/decision.py",
+      "backend/app/authz/legacy_tools.json",
+      "backend/app/authz/scopes.py",
+      "backend/tests/test_authz_core.py"
+    ],
+    "scopeIgnore": [
+      "backend/.pytest_cache/",
+      "backend/.ruff_cache/",
+      "backend/app/__pycache__/",
+      "backend/app/ai_connections/__pycache__/",
+      "backend/app/ai_connections/discovery/__pycache__/",
+      "backend/app/authz/__pycache__/",
+      "backend/app/benchmark/__pycache__/",
+      "backend/app/chat/__pycache__/",
+      "backend/app/classify/__pycache__/",
+      "backend/app/db/__pycache__/",
+      "backend/app/decision/__pycache__/",
+      "backend/app/decision/providers/__pycache__/",
+      "backend/app/document_ai/__pycache__/",
+      "backend/app/embed/__pycache__/",
+      "backend/app/entities/__pycache__/",
+      "backend/app/extract/__pycache__/",
+      "backend/app/mail_importance/__pycache__/",
+      "backend/app/maintenance/__pycache__/",
+      "backend/app/mcp/__pycache__/",
+      "backend/app/mcp/tools/__pycache__/",
+      "backend/app/notifications/__pycache__/",
+      "backend/app/ocr/__pycache__/",
+      "backend/app/routes/__pycache__/",
+      "backend/app/storage/__pycache__/",
+      "backend/tests/__pycache__/",
+      "backend/tests/mcp/__pycache__/",
+      "backend/tests/nodb/__pycache__/",
+      "backend/tests/storage_control/__pycache__/",
+      "backend/tests/storage_operability/__pycache__/"
+    ],
+    "dependencies": [
+      {
+        "path": "backend/.venv",
+        "lockfile": "backend/uv.lock"
+      }
+    ],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "env",
+        "-C",
+        "backend",
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_authz_core.py"
+      ],
+      "timeoutMs": 300000,
+      "setup": [
+        [
+          "git",
+          "checkout",
+          "401ad18b094b12dc7cd6a7c7412c97b08f06a3ae",
+          "--",
+          "backend/tests/test_authz_core.py"
+        ]
+      ]
+    }
+  }
+]
