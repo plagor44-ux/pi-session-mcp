@@ -9,12 +9,13 @@ import { createMcpStdioLauncher } from "./setup-process.js";
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
 import { PACKAGE_VERSION, readLockfile, readPackageMetadata } from "./package-metadata.js";
 import { DurableOwnershipStore, MemoryOwnershipStore, type OwnershipAccess, type OwnershipStore, type OwnershipRecord } from "./setup-ownership.js";
+import { FileSetupHookInstaller, type SetupHookInstaller } from "./setup-hooks.js";
 import { FileSetupSkillInstaller, type SetupSkillInstaller } from "./setup-skills.js";
 import { result, type SetupFinding, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
 
 export interface SetupClientAdapter { readonly name: string; readonly supportedScopes: readonly string[]; inspect(target: SetupTarget, fingerprint: string): Promise<{ state: RegistrationState; fingerprint?: string }>; apply(target: SetupTarget, execution?: CommandExecution): Promise<void>; remove(target: SetupTarget, execution?: CommandExecution): Promise<void>; verify(target: SetupTarget): Promise<{ ok: boolean; code: string }>; }
 export interface SetupDoctor { check(): Promise<{ ok: boolean; code: string }>; }
-export interface SetupDependencies { readonly adapters?: readonly SetupClientAdapter[]; readonly doctor?: SetupDoctor; readonly ownership?: OwnershipStore; readonly skills?: SetupSkillInstaller; readonly intendedFingerprint: string; }
+export interface SetupDependencies { readonly adapters?: readonly SetupClientAdapter[]; readonly doctor?: SetupDoctor; readonly ownership?: OwnershipStore; readonly skills?: SetupSkillInstaller; readonly hooks?: SetupHookInstaller; readonly intendedFingerprint: string; }
 export interface SetupRequest { readonly operation?: SetupOperation; readonly targets: readonly SetupTarget[]; }
 export const isSupportedTarget = (target: SetupTarget): boolean =>
   target.alias === "pi-session-mcp" &&
@@ -36,23 +37,25 @@ export class SetupOrchestrator {
     if (operation === "rollback") return this.ownership.transaction((ownership) => this.restoreWithSkills(targets, "rolled_back", ownership));
     return this.ownership.transaction((ownership) => this.restoreWithSkills(targets, "removed", ownership));
   }
-  /** Registration planning gates apply; skill divergence must not block registration. */
+  /** Registration planning gates apply; skill or hook divergence must not block registration. */
   private async withSkills(registrations: SetupResult, ownership: OwnershipAccess): Promise<SetupResult> {
-    const skills = this.dependencies.skills;
-    if (!skills || this.refusedApplies.has(registrations)) return registrations;
+    const { skills, hooks } = this.dependencies;
+    if ((!skills && !hooks) || this.refusedApplies.has(registrations)) return registrations;
     const findings: SetupFinding[] = [];
     for (const finding of registrations.findings) {
       findings.push(finding);
       const operation = registrations.operation;
       const canRun = operation === "dry-run" || operation === "verify" ||
         (operation === "apply" ? ["ok", "unchanged"].includes(finding.status) : finding.status === "ok");
-      if (canRun) findings.push(...await skills.run(operation, finding.target, ownership));
+      if (canRun && skills) findings.push(...await skills.run(operation, finding.target, ownership));
+      // The wake hook follows the registration like a skill: only after the registration itself succeeded.
+      if (canRun && hooks) findings.push(...await hooks.run(operation, finding.target, ownership));
     }
     const failed = findings.some((finding) => ["failed", "unsupported", "divergent"].includes(finding.status));
     return result(registrations.operation, findings, failed ? "failed" : registrations.status, failed ? 1 : registrations.exitCode);
   }
   private async restoreWithSkills(targets: readonly SetupTarget[], success: "rolled_back" | "removed", ownership: OwnershipAccess): Promise<SetupResult> {
-    if (!this.dependencies.skills) return this.restore(targets, success, ownership);
+    if (!this.dependencies.skills && !this.dependencies.hooks) return this.restore(targets, success, ownership);
     const findings: SetupFinding[] = [];
     // Process each removal and its skill before removing another shared registration.
     for (const target of targets) findings.push(...(await this.withSkills(await this.restore([target], success, ownership), ownership)).findings);
@@ -163,10 +166,10 @@ export class SetupOrchestrator {
       let owned: OwnershipRecord | undefined;
       try { owned = await ownership.get(target); } catch { findings.push({ target, status: "failed", code: "ownership_unavailable" }); continue; }
       if (!adapter) { findings.push({ target, status: "unsupported", code: "client_unsupported" }); continue; }
-      if (!owned && this.dependencies.skills && await this.safe(() => this.dependencies.skills!.owns(target, ownership))) {
-        // Registration removal can finish before skill cleanup (or before a crash). Retry only
-        // for a skill setup still owns, and only after proving the registration is absent; an
-        // unowned live registration stays untouched.
+      if (!owned && await this.companionOwns(target, ownership)) {
+        // Registration removal can finish before skill or hook cleanup (or before a crash). Retry
+        // only for a skill or hook setup still owns, and only after proving the registration is
+        // absent; an unowned live registration stays untouched.
         const current = await this.safe(() => adapter.inspect(target, this.dependencies.intendedFingerprint));
         this.assertOwnershipHealthy(ownership);
         if (current?.state === "absent") { findings.push({ target, status: "ok", code: success }); continue; }
@@ -190,6 +193,10 @@ export class SetupOrchestrator {
       } catch { findings.push({ target, status: "failed", code: "cleanup_failed" }); }
     }
     return result(success === "removed" ? "remove" : "rollback", findings);
+  }
+  private async companionOwns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean> {
+    const { skills, hooks } = this.dependencies;
+    return (!!skills && await this.safe(() => skills.owns(target, ownership)) === true) || (!!hooks && await this.safe(() => hooks.owns(target, ownership)) === true);
   }
   private async safe<T>(call: () => Promise<T>): Promise<T | undefined> { try { return await call(); } catch { return undefined; } }
 }
@@ -272,6 +279,11 @@ export async function createProductionSetup(
       },
     },
     skills: new FileSetupSkillInstaller({ packageRoot, configPath, home: homedir(), cwd: process.cwd() }),
+    hooks: new FileSetupHookInstaller({
+      packageRoot, home: homedir(), cwd: process.cwd(), env: process.env, nodePath,
+      // The registered server configuration is the source of truth for whether the hook is wanted.
+      delivery: async () => { const { loadConfig } = await import("./config.js"); return (await loadConfig(configPath)).eventDelivery === "spool"; },
+    }),
     ownership: new DurableOwnershipStore(ownershipPath, { ...(signal ? { signal } : {}) }),
     intendedFingerprint: await fingerprintFor(referenceTarget),
   };
