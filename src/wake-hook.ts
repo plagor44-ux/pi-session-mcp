@@ -250,10 +250,17 @@ function listWithin(path: string, budget: ScanBudget): string[] {
   return names;
 }
 
-/** The `inst-*` children of a directory, newest first, at most `cap`; only real directories count. */
+/**
+ * The `inst-*` children of a directory, newest first, at most `cap`; only real directories count. Entries are read
+ * (up to the per-directory cap) without spending the scan budget on names that are not `inst-*`, so a worker that
+ * floods its spool with junk names cannot hide the instance directory from the first `entriesCap` names that way.
+ * Only the `lstat` of a candidate is charged.
+ */
 function newestInstanceDirectories(dir: Dir, budget: ScanBudget, cap: number): { names: string[]; count: number } {
   const found: Array<{ name: string; mtimeMs: number }> = [];
-  for (const name of listWithin(base(dir), budget)) {
+  const { names, truncated } = listNames(base(dir), budget.entriesCap);
+  if (truncated) budget.capped = true;
+  for (const name of names) {
     if (!INSTANCE_DIR_PATTERN.test(name)) continue;
     if (budget.left <= 0) { budget.capped = true; break; }
     budget.left -= 1;
@@ -337,12 +344,12 @@ export function scanTurnEvents(root: string, namespace: WakeNamespace = HOST_NAM
 
 // ---- claims
 
-/** Creates the claims directory (0700) and checks it is a real directory of this user that others cannot write. */
+/** Creates the claims directory (0700) and checks it is a real directory of this user that no group or other bit applies to. */
 export function prepareClaimsDir(claims: string): void {
   mkdirSync(claims, { recursive: true, mode: 0o700 });
   const stat = lstatSync(claims);
   const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
-  if (!stat.isDirectory() || (uid !== undefined && stat.uid !== uid) || (stat.mode & 0o022) !== 0) throw Object.assign(new Error("claims directory unsafe"), { code: "EUNSAFE" });
+  if (!stat.isDirectory() || (uid !== undefined && stat.uid !== uid) || (stat.mode & 0o077) !== 0) throw Object.assign(new Error("claims directory unsafe"), { code: "EUNSAFE" });
 }
 
 /** `host-<instance>-<seq>` or `writer-<name>-wN-<instance>-<seq>`: the namespace is part of the key, and every part is validated. */
@@ -513,7 +520,8 @@ export async function waitForTurn(options: WaitOptions): Promise<WaitResult> {
       if (options.namespace.kind === "host") watchDir(options.eventsRoot);
       const { events, directories, namespaceFound, instanceDirectoryCount, capped } = scanTurnEvents(options.eventsRoot, options.namespace, cache, { ...options.limits, retain: { sessionId: options.sessionId, turnId: options.turnId }, ...(options.home === undefined ? {} : { home: options.home }) });
       if (capped) scanGapMs = CAPPED_SCAN_GAP_MS; // a flooded namespace is read slowly for the rest of the run
-      if (namespaceFound && instanceDirectoryCount > 0) spoolSeen = true;
+      // No spool is only concluded from a complete listing: a capped one (a flooded namespace) may still hide a live instance directory.
+      if (namespaceFound && (instanceDirectoryCount > 0 || capped)) spoolSeen = true;
       for (const dir of directories) watchDir(dir);
       const hit = events.find((event): event is TerminalEvent => event.kind === "turn_terminal" && event.session === options.sessionId && event.turn === options.turnId);
       // `close` ends the turn because the controller closed its session (or the server shut down): the session is gone, so

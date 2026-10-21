@@ -401,8 +401,10 @@ describe("claims", () => {
   });
   it("refuses a claims directory that others can write or that is not a directory", async () => {
     const f = await fixture();
-    mkdirSync(f.claims, { mode: 0o700 }); chmodSync(f.claims, 0o770);
-    expect(() => tryClaim(f.claims, terminal(), HOST)).toThrow();
+    mkdirSync(f.claims, { mode: 0o700 });
+    for (const mode of [0o770, 0o750, 0o705, 0o701, 0o740, 0o702]) { chmodSync(f.claims, mode); expect(() => tryClaim(f.claims, terminal(), HOST), mode.toString(8)).toThrow(); }
+    chmodSync(f.claims, 0o700);
+    expect(tryClaim(f.claims, terminal(), HOST)).toBeDefined();
     const g = await fixture();
     mkdirSync(join(g.xdg, "pi-session-mcp"), { recursive: true }); writeFileSync(g.claims, "not a directory");
     expect(() => tryClaim(g.claims, terminal(), HOST)).toThrow();
@@ -555,6 +557,28 @@ describe("waitForTurn (in process)", () => {
     expect(isNoSpace(Object.assign(new Error("x"), { code: "EDQUOT" }))).toBe(true);
     for (const code of ["EACCES", "EEXIST", "ENOTDIR", undefined]) expect(isNoSpace(Object.assign(new Error("x"), { code }))).toBe(false);
     expect(isNoSpace(undefined)).toBe(false);
+  });
+  it("does not conclude no_spool from a flooded writer spool: junk names beside an instance directory, or more junk than can be listed", async () => {
+    const f = await fixture();
+    const spool = f.wdir("code-w1");
+    mkdirSync(spool, { recursive: true });
+    for (let i = 0; i < 3000; i += 1) writeFileSync(join(spool, `junk-${i}`), "");
+    mkdirSync(join(spool, INSTANCE_B));
+    expect(scan(f, W1)).toMatchObject({ namespaceFound: true, instanceDirectoryCount: 1 }); // the junk does not eat the listing budget
+    expect(await wait(f, { namespace: W1, graceMs: 200, budgetMs: 900 })).toMatchObject({ action: "wake", reason: "budget" });
+    f.put(terminal({ instance: INSTANCE_B }), join(spool, INSTANCE_B));
+    expect(await wait(f, { namespace: W1, graceMs: 200, budgetMs: 5000 })).toMatchObject({ action: "wake", reason: "terminal" });
+    // more junk than the per-directory cap: the listing is incomplete, so the spool may exist and the wait goes on
+    const g = await fixture();
+    const big = g.wdir("code-w1");
+    mkdirSync(big, { recursive: true });
+    for (let i = 0; i < 300; i += 1) writeFileSync(join(big, `junk-${i}`), "");
+    expect(await wait(g, { namespace: W1, graceMs: 200, budgetMs: 900, limits: { entriesPerDirectory: 100 } })).toMatchObject({ action: "wake", reason: "budget" });
+    // a complete listing without any instance directory still ends the wait
+    const h = await fixture();
+    mkdirSync(h.wdir("code-w1"), { recursive: true });
+    writeFileSync(join(h.wdir("code-w1"), "junk"), "");
+    expect(await wait(h, { namespace: W1, graceMs: 200, budgetMs: 5000 })).toEqual({ action: "silent", reason: "no_spool" });
   });
   it("ends silently with no_spool when the armed namespace has no instance directory after the grace period", async () => {
     const f = await fixture();
