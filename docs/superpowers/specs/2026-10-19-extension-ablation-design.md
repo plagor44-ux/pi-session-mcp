@@ -591,3 +591,21 @@ the text above, they win.
   egress; an unsandboxed trace gets no tmp exemption. Cost: a worker process can
   talk to another process of its own sandbox over a socket in `/tmp`, which it
   could already do with pipes and loopback.
+- **Abstract sockets that the trace itself bound are internal (R88).** A wave
+  stopped on abstract-socket connects that the task's own code created: the
+  smartpaper-ng PDF renderer's parent/child IPC (`@mail-pdf-<hex>`, run by the
+  task's tests) and the docker CLI's plugin socket (`@docker_cli_<hex>`). The
+  sandbox shares the host's network namespace, so an abstract name is a real
+  reach in general, and the audit could not tell who had created a name because
+  `bind` was not traced. `bind` is now in the traced calls. The parser remembers
+  every abstract AF_UNIX name that a process of the trace bound successfully
+  (`= 0`; the muted bubblewrap process does not count, and a bind that never
+  completed does not either), and a connect, `sendto`, `sendmsg` or `sendmmsg`
+  to such a name, later in the log, is internal. A connect before the bind, a
+  name whose bind failed (`EADDRINUSE` means a host process holds it) and every
+  other abstract name stay unresolved egress, and the filesystem socket rules
+  are unchanged; diagnostics (R84) still keep the line of any remaining
+  escape. Cost: a worker that binds a name nobody holds on the host can
+  connect to it without a stop (a process of its own sandbox is the only peer
+  at the moment of the bind, but a host process could take the name later; the
+  network namespace stays shared, R50).

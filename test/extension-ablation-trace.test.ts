@@ -29,7 +29,7 @@ describe("STRACE_ARGS", () => {
     expect(STRACE_ARGS.slice(5)).toEqual(["-e", "inject=io_uring_setup:error=ENOSYS", "--decode-pids=pidns"]);
     expect(STRACE_ARGS).toHaveLength(8);
     const set = STRACE_ARGS[3]!.replace("trace=", "").split(",");
-    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]) expect(set).toContain(name);
+    for (const name of ["connect", "openat", "openat2", "rmdir", "fchmodat2", "fsetxattr", "mknodat", "utimensat", "clone3", "fchdir", "sendto", "sendmsg", "sendmmsg", "io_uring_setup", "chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2", "bind"]) expect(set).toContain(name);
   });
 });
 
@@ -1182,6 +1182,71 @@ describe("window-born taint (R24)", () => {
       "100 fork() = 200",
       "200 chdir(\"/scope/clone/b\") = 0", "200 mkdir(\"x\", 0777) = 0",
     )).toBe(0);
+  });
+});
+
+describe("abstract sockets bound inside the trace (R88)", () => {
+  const sock = (n: number) => `${n}<socket:[${n}${n}]>`;
+  const bind = (pid: number, name: string, ret = "0") => `${pid} bind(${sock(3)}, {sa_family=AF_UNIX, sun_path=@"${name}"}, 44) = ${ret}`;
+  const connect = (pid: number, name: string, ret = "0") => `${pid} connect(${sock(4)}, {sa_family=AF_UNIX, sun_path=@"${name}"}, 44) = ${ret}`;
+  const sendmsg = (pid: number, name: string) =>
+    `${pid} sendmsg(${sock(5)}, {msg_name={sa_family=AF_UNIX, sun_path=@"${name}"}, msg_namelen=44, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = 1`;
+  const sendto = (pid: number, name: string) => `${pid} sendto(${sock(6)}, "x", 1, 0, {sa_family=AF_UNIX, sun_path=@"${name}"}, 44) = 1`;
+  const run = (...log: string[]) => parseStraceLog(lines(...log), ctx({}));
+  const MAIL = "mail-pdf-73342cfaea134cc4be84610388df1d0d";
+  const DOCKER = "docker_cli_bda8b079f8fdef11b684b7c481c7a6ce";
+
+  it("traces bind", () => {
+    expect(STRACE_ARGS[3]!.replace("trace=", "").split(",")).toContain("bind");
+  });
+
+  it("treats a connect to a name bound earlier in the trace as internal, whichever process binds or connects", () => {
+    expect(run(bind(100, "svc"), connect(100, "svc")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "svc"), connect(200, "svc"), sendmsg(300, "svc"), sendto(300, "svc")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "svc"), connect(100, "svc")).evidenceLines).toEqual([]);
+  });
+
+  it("keeps a connect without a bind, a connect before the bind and another name as escapes", () => {
+    expect(run(connect(100, "svc")).unresolvedEgress).toBe(1);
+    expect(run(connect(100, "svc"), bind(100, "svc")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "svc"), connect(100, "other")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "svc"), connect(100, "svc2"), connect(100, "sv")).unresolvedEgress).toBe(2);
+    expect(run(bind(100, "svc"), connect(100, "svc"), connect(100, "other")).evidenceLines).toEqual([connect(100, "other")]);
+  });
+
+  it("does not trust a failed bind: EADDRINUSE means a host process holds the name", () => {
+    expect(run(bind(100, "svc", "-1 EADDRINUSE (Address already in use)"), connect(100, "svc")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "svc", "-1 EACCES (Permission denied)"), connect(100, "svc")).unresolvedEgress).toBe(1);
+    // A bind that only started (never resumed) is not a bound name either.
+    expect(run(`100 bind(${sock(3)}, {sa_family=AF_UNIX, sun_path=@"svc"}, 44 <unfinished ...>`, connect(200, "svc")).unresolvedEgress).toBe(1);
+  });
+
+  it("counts a bind that is joined from an unfinished and a resumed line, and ignores binds that are not AF_UNIX abstract", () => {
+    expect(run(`100 bind(${sock(3)}, {sa_family=AF_UNIX, sun_path=@"svc"}, 44 <unfinished ...>`, "100 <... bind resumed>) = 0", connect(200, "svc")).unresolvedEgress).toBe(0);
+    expect(run(`100 bind(${sock(3)}, {sa_family=AF_INET, sin_port=htons(8080), sin_addr=inet_addr("127.0.0.1")}, 16) = 0`, connect(100, "svc")).unresolvedEgress).toBe(1);
+    expect(run(`100 bind(${sock(3)}, {sa_family=AF_UNIX, sun_path="/scope/x.sock"}, 20) = 0`, connect(100, "x.sock")).unresolvedEgress).toBe(1);
+    // A filesystem path is judged as before, bound or not.
+    expect(run(`100 bind(${sock(3)}, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 20) = 0`, `100 connect(${sock(4)}, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 20) = 0`).unresolvedEgress).toBe(1);
+  });
+
+  it("accepts the evidence lines of the stopped run once the matching bind is in the log, and not without it", () => {
+    const evidence = [
+      `4 connect(4<socket:[32553896]>, {sa_family=AF_UNIX, sun_path=@"${MAIL}"}, 44) = 0`.replace(/^4 /, "102 "),
+      `102 connect(3<socket:[32541120]>, {sa_family=AF_UNIX, sun_path=@"${DOCKER}"}, 46) = 0`,
+    ];
+    expect(run(...evidence).unresolvedEgress).toBe(2);
+    expect(run(bind(101, MAIL), bind(103, DOCKER), ...evidence).unresolvedEgress).toBe(0);
+    expect(run(bind(101, MAIL), ...evidence).evidenceLines).toEqual([evidence[1]]);
+  });
+
+  it("ignores a bind by the muted bubblewrap process but counts one by the workload, in a sandboxed trace", () => {
+    const prelude = [
+      "100 clone(child_stack=NULL, flags=CLONE_NEWNS|CLONE_NEWIPC|CLONE_NEWUSER|CLONE_NEWPID|SIGCHLD) = 101",
+      "101 clone(child_stack=NULL, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, child_tidptr=0x7f0) = 102",
+    ];
+    const judged = (...log: string[]) => parseStraceLog(lines(...prelude, ...log), { ...ctx({}), sandboxed: true }).unresolvedEgress;
+    expect(judged(bind(102, "svc"), connect(102, "svc"))).toBe(0);
+    expect(judged(bind(100, "svc"), connect(102, "svc"))).toBe(1);
   });
 });
 

@@ -9,7 +9,7 @@ export const STRACE_ARGS: readonly string[] = [
   "-f", "-q", "-e",
   "trace=connect,openat,open,creat,rename,renameat,renameat2,unlink,unlinkat,mkdir,mkdirat,symlink,symlinkat,link,linkat,truncate,chdir,fchdir,clone,clone3,fork,vfork"
     + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
-    + ",sendto,sendmsg,sendmmsg,io_uring_setup,chroot,pivot_root,setns,unshare,mount,open_tree,move_mount,fsopen,fsmount,fsconfig,mount_setattr,umount2",
+    + ",sendto,sendmsg,sendmmsg,bind,io_uring_setup,chroot,pivot_root,setns,unshare,mount,open_tree,move_mount,fsopen,fsmount,fsconfig,mount_setattr,umount2",
   "-y",
   // R36: Node's libuv calls io_uring_setup even with UV_USE_IO_URING=0 and it succeeds on some hosts. Failing it makes libuv fall back to its
   // thread pool, as on kernels without io_uring; the injected call returns -1, which the parser ignores (R23b).
@@ -323,6 +323,12 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
 function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const socketRoots = (ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r));
+  /**
+   * Abstract AF_UNIX names that a process of the trace bound successfully so far (R88). The sandbox shares the host's network namespace, so an
+   * abstract name is only internal when this very trace created it: a connect that precedes the bind, a failed bind (`EADDRINUSE` means a host
+   * process holds the name) and every other abstract name stay unresolved egress.
+   */
+  const boundNames = new Set<string>();
   const bound = (ctx.boundPaths ?? []).map((r) => posix.resolve("/", r));
   /** Inside bubblewrap /tmp and /var/tmp are fresh tmpfs mounts (R51): a socket there can only reach a process of the same sandbox (R87). */
   const privateTmp = ctx.sandboxed === true ? ["/tmp/", "/var/tmp/"] : [];
@@ -547,6 +553,11 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
     // Even absolute paths cannot be audited after a successful root/namespace change.
     if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") { unresolvedWrites++; noteEvidence(); } return; }
+    if (call.name === "bind") {
+      const abstract = /sa_family=AF_UNIX\b[^}]*sun_path=@"((?:[^"\\]|\\[\s\S])*)"/.exec(call.args[1] ?? "");
+      if (abstract && call.ret.kind === "ok" && call.ret.value === 0) boundNames.add(decodeEscapes(abstract[1]!));
+      return;
+    }
     if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[1], true); }
     if (call.name === "sendto") { if (unixConnectEscapes(call.args[4], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[4]); }
     if (call.name === "sendmsg" || call.name === "sendmmsg") {
@@ -574,7 +585,8 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   }
 
   /**
-   * The AF_UNIX destination judged by name: abstract, relative, below a host path bound into the sandbox, or outside the allowed roots.
+   * The AF_UNIX destination judged by name: an abstract name no process of the trace has bound before (R88), relative, below a host path bound
+   * into the sandbox, or outside the allowed roots.
    * Order: the name-service allowlist is always allowed (the plan binds /run/systemd/resolve back read-only for it); else a path below a
    * bound host path is an escape; else, in a sandboxed trace, a path below /tmp or /var/tmp is the sandbox's own tmpfs (R87), and so is one
    * below an allowed socket root (the scope root, R43).
@@ -582,7 +594,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   function unixPathEscapes(token: string): boolean {
     const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
     if (!m) return true; // no readable path: cannot be judged
-    if (m[1] === "@") return true;
+    if (m[1] === "@") return !boundNames.has(decodeEscapes(m[2]!));
     const path = decodeEscapes(m[2]!);
     if (!path.startsWith("/")) return true;
     const resolved = posix.resolve(path);
