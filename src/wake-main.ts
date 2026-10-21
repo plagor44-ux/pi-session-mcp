@@ -53,7 +53,7 @@ export async function main(argv: readonly string[] = process.argv.slice(2), env:
     prepareClaimsDir(claims);
     cleanupOldClaims(claims);
     const result = await waitForTurn({
-      eventsRoot: root, claimsDir: claims, sessionId: target.sessionId, turnId: target.turnId, budgetMs, isParentAlive: parentAlive,
+      eventsRoot: root, namespace: target.namespace, claimsDir: claims, sessionId: target.sessionId, turnId: target.turnId, budgetMs, isParentAlive: parentAlive,
       onClaim: (path) => { heldClaim = path; },
     });
     if (result.action === "wake") return finish(2, result.message);
