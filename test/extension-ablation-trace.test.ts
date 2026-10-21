@@ -1246,6 +1246,11 @@ describe("abstract sockets bound inside the trace (R88)", () => {
     // Another process binds the freed name, or the binder execs: the name is held again.
     expect(run(bind(100, "svc"), "100 +++ exited with 0 +++", bind(101, "svc"), connect(200, "svc")).unresolvedEgress).toBe(0);
     expect(run(bind(100, "svc"), "100 +++ superseded by execve in pid 100 +++", connect(100, "svc")).unresolvedEgress).toBe(0);
+    // A thread that binds and then execs becomes the process: its name is held by the process, and ends with it.
+    const thread = ["200 +++ superseded by execve in pid 201 +++"];
+    expect(run(bind(201, "svc"), ...thread, connect(300, "svc")).unresolvedEgress).toBe(0);
+    expect(run(bind(201, "svc"), ...thread, "200 +++ exited with 0 +++", connect(300, "svc")).unresolvedEgress).toBe(1);
+    expect(run(bind(201, "svc"), ...thread, "201 +++ exited with 0 +++", connect(300, "svc")).unresolvedEgress).toBe(0);
     // Two holders: it stays while either lives.
     expect(run(bind(100, "svc"), bind(101, "svc"), "100 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(0);
     expect(run(bind(100, "svc"), bind(101, "svc"), "100 +++ exited with 0 +++", "101 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(1);

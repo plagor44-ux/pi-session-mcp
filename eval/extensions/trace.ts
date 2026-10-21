@@ -644,6 +644,8 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
         records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
       } else live.delete(pid);
       if (oldTid !== pid) live.delete(oldTid);
+      // The exec'ing thread becomes the process `pid`: a name it bound is held by `pid` from now on, and dies with `pid` (R88).
+      if (oldTid !== pid) for (const binders of boundNames.values()) if (binders.delete(oldTid)) binders.add(pid);
       if (tainted.has(oldTid)) taint(pid);
       if (uncertain.has(oldTid)) uncertain.add(pid);
       else uncertain.delete(pid);
