@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   acceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerName,
-  writerPaths, writerRegistrationName, writersRoot, writeWriterState, WriterStateError,
+  writerEventDeliveryEnabled, writerPaths, writerRegistrationName, writersRoot, writeWriterState, WriterStateError,
   type WriterState,
 } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -142,4 +142,30 @@ it("fingerprints canonical key-sorted JSON and includes Podman version", () => {
   expect(acceptanceFingerprint(input)).toBe(`sha256:${createHash("sha256").update(canonical).digest("hex")}`);
   expect(acceptanceFingerprint(input)).toBe(acceptanceFingerprint(reordered));
   expect(acceptanceFingerprint(input)).not.toBe(acceptanceFingerprint({ ...input, podmanVersion: "5.1.0" }));
+});
+
+it.each([
+  [{ events: { delivery: "spool" }, workspaces: {} }, true],
+  [{ workspaces: {} }, false],
+  [{ events: {} }, false],
+  [{ events: { delivery: "off" } }, false],
+  [{ events: { delivery: "spool", extra: true } }, false],
+  [{ events: [{ delivery: "spool" }] }, false],
+  [{ events: null }, false],
+  [[], false],
+  [null, false],
+])("reads event delivery from the writer configuration %j as %s", async (config, enabled) => {
+  const directory = await temporaryRoot("pi-writer-delivery-");
+  await writeFile(join(directory, "pi-session-mcp.json"), JSON.stringify(config));
+  expect(await writerEventDeliveryEnabled(directory)).toBe(enabled);
+});
+it("treats a missing, malformed or linked writer configuration as delivery disabled", async () => {
+  const directory = await temporaryRoot("pi-writer-delivery-");
+  expect(await writerEventDeliveryEnabled(directory)).toBe(false);
+  await writeFile(join(directory, "pi-session-mcp.json"), "{not json");
+  expect(await writerEventDeliveryEnabled(directory)).toBe(false);
+  const other = await temporaryRoot("pi-writer-delivery-");
+  await writeFile(join(other, "real.json"), JSON.stringify({ events: { delivery: "spool" } }));
+  await symlink(join(other, "real.json"), join(other, "pi-session-mcp.json"));
+  expect(await writerEventDeliveryEnabled(other)).toBe(false);
 });

@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { configSchema } from "./config.js";
+import { writerEventsDir } from "./turn-events.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
-import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
+import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
 
 export interface WriterContext {
   home: string;
@@ -16,6 +17,8 @@ export interface WriterContext {
   runner: CommandRunner;
   checkout: string;
   alias: string;
+  /** Locates the runtime directory of the event spool; defaults to the process environment. */
+  env?: NodeJS.ProcessEnv;
 }
 export type WriterOutcome = { code: string; status: "ok" | "planned" | "unchanged" | "failed" };
 
@@ -56,7 +59,8 @@ export function renderContainedConfig(alias: string, clonePath: string, rawConfi
     default: true, permissionProfile: "read-only", provider: first.provider,
     model: first.model, thinkingLevel: first.thinkingLevel,
   };
-  const rendered = { workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
+  // The writer's own configuration is the single source of event delivery for the boundary: launch reads it.
+  const rendered = { ...(raw.events === undefined ? {} : { events: raw.events }), workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
   const parsed = configSchema.safeParse(rendered);
   if (!parsed.success) throw new LifecycleError("container_profile_unsupported");
   // Validate with the real schema without normalizing or resolving the raw profile objects.
@@ -140,6 +144,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
       const equal = existing.imageId === imageId && existing.lifecycle === settings.lifecycle && existing.network === settings.network
         && existing.cache === settings.cache && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
         && JSON.stringify(existing.providers) === JSON.stringify(providers)
+        && await writerEventDeliveryEnabled(paths.config) === (config.events?.delivery === "spool")
         && (input.baseRef === undefined || (existing.base.ref === `refs/heads/${short}` && existing.base.commit === commit));
       return { code: equal ? "writer_unchanged" : "writer_settings_changed", status: equal ? "unchanged" : "failed" };
     }
@@ -365,6 +370,15 @@ export async function finishWriter(ctx: WriterContext, name: string): Promise<Wr
   } catch (error) { return failure(error); }
 }
 
+/** Best effort: the spool directory lives in a runtime directory that may already be gone. A link is never followed. */
+async function removeEventsDirectory(ctx: WriterContext, name: string): Promise<void> {
+  try {
+    const directory = writerEventsDir(ctx.env ?? process.env, name);
+    if (directory === undefined || !(await lstat(directory)).isDirectory()) return;
+    await rm(directory, { recursive: true, force: true });
+  } catch { /* A missing or unreadable spool directory must not fail the removal. */ }
+}
+
 export async function removeWriter(ctx: WriterContext, name: string, opts: { discard: boolean }): Promise<WriterOutcome> {
   try {
     const paths = writerPaths(ctx.home, name);
@@ -375,6 +389,7 @@ export async function removeWriter(ctx: WriterContext, name: string, opts: { dis
       if (!work.baseline && state.collected?.digest !== work.digest) throw new LifecycleError("writer_uncollected");
     }
     await rm(paths.root, { recursive: true, force: true });
+    await removeEventsDirectory(ctx, name);
     return { code: "writer_removed", status: "ok" };
   } catch (error) { return failure(error); }
 }

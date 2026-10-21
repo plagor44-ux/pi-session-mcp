@@ -1,9 +1,10 @@
-import { mkdir, symlink, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { chmod, lstat, mkdir, readdir, symlink, unlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "../src/client-adapters/command.js";
-import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
+import { BOUNDARY_GIT, BoundaryError, EventsDirectoryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, ensureWriterEventsDirectory, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
 import { writerPaths, type WriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -35,6 +36,102 @@ it("builds the restricted serving boundary with explicit environment and Git pro
   expect(args).not.toContain(`${paths.go}:/pi/go:rw`);
   const go = serveArgs(paths, { ...state, cache: "go", network: "none" }, [], "/release");
   for (const value of [`${paths.go}:/pi/go:rw`, "GOPATH=/pi/go", "GOCACHE=/pi/go/cache", "GOTOOLCHAIN=local", "--network=none"]) expect(go).toContain(value);
+});
+
+const baseArgs = (): string[] => [
+  "run", "-i", "--rm", "--pull=never", "--userns=keep-id", "--read-only",
+  "--cap-drop=all", "--security-opt=no-new-privileges", "--network=pasta",
+  "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
+  "--tmpfs", "/pi/home:rw,nosuid,nodev,mode=0700,size=64m,U",
+  "-v", `${paths.clone}:${paths.clone}:rw`,
+  "-v", `${paths.clone}/.git/hooks:${paths.clone}/.git/hooks:ro`,
+  "-v", `${paths.clone}/.git/config:${paths.clone}/.git/config:ro`,
+  "-v", "/release:/opt/pi-session-mcp:ro",
+  "-v", `${paths.config}:/pi/config:ro`,
+  "-v", `${paths.agent}:/pi/agent:rw`,
+  "--workdir", paths.clone,
+  "-e", "HOME=/pi/home",
+  "-e", "PI_SESSION_MCP_CONFIG=/pi/config/pi-session-mcp.json",
+  "-e", "PI_CODING_AGENT_DIR=/pi/agent",
+  "-e", "PI_SESSION_MCP_WRITER_GUARD=/pi/config/writer-guard.json",
+];
+const serve = ["node", "/opt/pi-session-mcp/dist/main.js"];
+
+it("keeps the serving arguments exactly as they were without event delivery", () => {
+  expect(serveArgs(paths, state, serve, "/release")).toEqual([...baseArgs(), imageId, ...serve]);
+  expect(serveArgs(paths, state, serve, "/release", undefined)).toEqual(serveArgs(paths, state, serve, "/release"));
+});
+
+it("adds exactly one dedicated spool mount and its environment variable when delivery is enabled", () => {
+  const dir = "/run/user/1000/pi-session-mcp/events/writer-repo-w1";
+  const args = serveArgs(paths, state, serve, "/release", dir);
+  const without = serveArgs(paths, state, serve, "/release");
+  expect(args).toEqual([...baseArgs(), "-v", `${dir}:/pi/events:rw`, "-e", "PI_SESSION_MCP_EVENTS_DIR=/pi/events", imageId, ...serve]);
+  // Nothing else moves: removing the two additions restores the original arguments.
+  const at = args.indexOf(`${dir}:/pi/events:rw`);
+  expect([...args.slice(0, at - 1), ...args.slice(at + 3)]).toEqual(without);
+  expect(args.filter((arg) => arg.includes(":/pi/events"))).toHaveLength(1);
+  const go = serveArgs(paths, { ...state, cache: "go" }, serve, "/release", dir);
+  expect(go).toEqual([...baseArgs(), "-v", `${dir}:/pi/events:rw`, "-e", "PI_SESSION_MCP_EVENTS_DIR=/pi/events",
+    "-v", `${paths.go}:/pi/go:rw`, "-e", "GOPATH=/pi/go", "-e", "GOCACHE=/pi/go/cache", "-e", "GOTOOLCHAIN=local", imageId, ...serve]);
+});
+
+const uid = process.getuid!();
+async function runtime(mode = 0o700): Promise<string> {
+  const root = await temporaryRoot("pi-writer-runtime-");
+  await chmod(root, mode);
+  return root;
+}
+it("creates the private spool chain below the runtime directory and accepts it again", async () => {
+  const root = await runtime();
+  const env = { XDG_RUNTIME_DIR: root };
+  const dir = await ensureWriterEventsDirectory(env, "repo-w1", uid);
+  expect(dir).toBe(join(root, "pi-session-mcp", "events", "writer-repo-w1"));
+  for (const path of [join(root, "pi-session-mcp"), join(root, "pi-session-mcp", "events"), dir]) expect((await lstat(path)).mode & 0o777).toBe(0o700);
+  expect(await ensureWriterEventsDirectory(env, "repo-w1", uid)).toBe(dir);
+  // Another writer gets its own directory next to it; the claims directory is never created.
+  expect(await ensureWriterEventsDirectory(env, "repo-w2", uid)).toBe(join(root, "pi-session-mcp", "events", "writer-repo-w2"));
+  await expect(lstat(join(root, "pi-session-mcp", "claims"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it.each([
+  ["no runtime directory", () => ({}) as NodeJS.ProcessEnv],
+  ["an empty runtime directory", () => ({ XDG_RUNTIME_DIR: "" })],
+  ["a relative runtime directory", () => ({ XDG_RUNTIME_DIR: "run/user" })],
+  ["a missing runtime directory", () => ({ XDG_RUNTIME_DIR: join(tmpdir(), "pi-writer-missing-runtime-dir") })],
+])("refuses %s with the stable code and no path", async (_label, env) => {
+  const failure = await ensureWriterEventsDirectory(env(), "repo-w1", uid).catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(EventsDirectoryError);
+  expect(failure).toMatchObject({ code: "events_directory_unavailable", message: "events_directory_unavailable" });
+});
+it("refuses a malformed writer name", async () => {
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: await runtime() }, "../x", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+});
+it("refuses a directory owned by someone else", async () => {
+  const root = await runtime();
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid + 1)).rejects.toBeInstanceOf(EventsDirectoryError);
+  await expect(lstat(join(root, "pi-session-mcp"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it.each([0o750, 0o705, 0o770])("refuses a runtime directory with mode %o", async (mode) => {
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: await runtime(mode) }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+});
+it.each([["pi-session-mcp"], ["pi-session-mcp/events"], ["pi-session-mcp/events/writer-repo-w1"]])("refuses an existing group-accessible %s", async (relative) => {
+  const root = await runtime();
+  await mkdir(join(root, relative), { recursive: true, mode: 0o700 });
+  await chmod(join(root, relative), 0o770);
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+});
+it.each([["pi-session-mcp"], ["pi-session-mcp/events"], ["pi-session-mcp/events/writer-repo-w1"]])("refuses a symlink at %s and does not follow it", async (relative) => {
+  const root = await runtime(), outside = await temporaryRoot("pi-writer-outside-");
+  await chmod(outside, 0o700);
+  if (relative.includes("/")) await mkdir(join(root, dirname(relative)), { recursive: true, mode: 0o700 });
+  await symlink(outside, join(root, relative));
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
+  expect(await readdir(outside)).toEqual([]);
+});
+it("refuses a runtime directory that is a symlink", async () => {
+  const real = await runtime(), parent = await temporaryRoot("pi-writer-link-");
+  await symlink(real, join(parent, "run"));
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: join(parent, "run") }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
 });
 
 it("keeps hostile values positional and mounts only requested throwaway data", () => {

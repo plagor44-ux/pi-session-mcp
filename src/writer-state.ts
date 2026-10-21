@@ -129,6 +129,24 @@ export async function writeWriterState(home: string, name: string, state: Writer
   }
 }
 
+/**
+ * Whether the writer's own server configuration (the one mounted at /pi/config) enables event delivery.
+ * Anything unreadable or unexpected counts as disabled, so a doubtful configuration never adds the spool mount.
+ */
+export async function writerEventDeliveryEnabled(configDirectory: string): Promise<boolean> {
+  try {
+    const handle = await open(join(configDirectory, "pi-session-mcp.json"), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      if (!(await handle.stat()).isFile()) return false;
+      const config: unknown = JSON.parse(await handle.readFile("utf8"));
+      if (config === null || typeof config !== "object" || Array.isArray(config)) return false;
+      const events = (config as Record<string, unknown>).events;
+      return events !== null && typeof events === "object" && !Array.isArray(events)
+        && Object.keys(events).length === 1 && (events as Record<string, unknown>).delivery === "spool";
+    } finally { await handle.close(); }
+  } catch { return false; }
+}
+
 export async function currentAcceptanceFingerprint(wrapper: string, state: WriterState, podmanVersion: string): Promise<string> {
   return acceptanceFingerprint({ wrapperDigest: wrapperDigest(await readFile(wrapper, "utf8")), packageVersion: PACKAGE_VERSION,
     imageId: state.imageId, podmanVersion, network: state.network, cache: state.cache });
