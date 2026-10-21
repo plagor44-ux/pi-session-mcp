@@ -18,11 +18,12 @@ export const approvalSchema = z.object({
   runs: z.array(runSpecSchema).min(1),
   routes: z.array(routeSchema).min(1),
   /**
-   * Run ids of the run list whose earlier attempt was stopped by the trace audit (R85) and is planned again: the ledger already holds a charge
-   * for each, and only these ids may run despite it. Written by `--plan` from the excluded waves; the approval, and with it this list, is
-   * what the operator approves and what a resumed wave must match exactly.
+   * Runs of the run list whose earlier attempts were all stopped by the trace audit (R85) and which are planned again: the ledger already
+   * holds `charges` run charges for each, and a listed run may run despite them only while the ledger still holds exactly that many (a run
+   * that was charged again since, by a wave the plan did not see or a crash after the charge, is refused). Written by `--plan`; the approval,
+   * and with it this list, is what the operator approves and what a resumed wave must match exactly.
    */
-  replannedStopped: z.array(z.string().min(1)).optional(),
+  replannedStopped: z.array(z.object({ runId: z.string().min(1), charges: z.number().int().min(1) }).strict()).optional(),
 }).strict();
 export type Approval = z.infer<typeof approvalSchema>;
 
@@ -90,7 +91,7 @@ export function validateApproval(
     || approval.matrixDigest !== matrixDigest(approval.runs)
     || approval.runs.some((run) => !known.has(run.taskId))
     || new Set(approval.runs.map((run) => run.runId)).size !== approval.runs.length
-    || !(approval.replannedStopped ?? []).every((id, index, ids) => approval.runs.some((run) => run.runId === id) && ids.indexOf(id) === index)
+    || !(approval.replannedStopped ?? []).every(({ runId }, index, listed) => approval.runs.some((run) => run.runId === runId) && listed.findIndex((other) => other.runId === runId) === index)
     || !runsAreCanonical(approval.runs, current.tasks)
     || (current.routes !== undefined && sortedRoutes(approval.routes) !== sortedRoutes(current.routes));
   if (changed) throw new Error("approval_binding_changed");

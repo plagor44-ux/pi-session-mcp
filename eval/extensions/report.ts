@@ -260,8 +260,9 @@ export async function readApproval(waveDir: string): Promise<{ bytes: Buffer; ap
 /**
  * Merges the records of several waves per run id (R60). A run id keeps its task, profile and arm across waves; at most one wave holds a
  * final record for it (scored, or stopped for a reason other than the trace audit), and that one replaces the `not_run` records other
- * waves wrote for the slot. A record stopped by the trace audit is not final (R85): the slot may be planned again, and a later executed
- * record of the same run id replaces it (the stop itself stays in `waveStops`). A run id appears once per wave.
+ * waves wrote for the slot. A record stopped by the trace audit is not final (R85): the slot may be planned again, and a final record of the
+ * same run id from any other wave replaces it, whatever the order of the waves (the stop itself stays in `waveStops`); among audit stops the
+ * later wave given wins. A run id appears once per wave.
  */
 function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
   const merged = new Map<string, WaveRun>();
@@ -274,10 +275,11 @@ function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
       const prior = merged.get(runId)?.record;
       if (prior === undefined) { merged.set(runId, run); continue; }
       const same = prior.taskId === run.record.taskId && prior.profile === run.record.profile && prior.arm === run.record.arm;
-      const auditStopped = (record: SummaryRecord): boolean => record.outcome === "stopped" && isAuditStop(record.stopReason);
-      const priorFinal = prior.outcome !== "not_run" && !auditStopped(prior);
-      if (!same || (priorFinal && run.record.outcome !== "not_run")) throw new Error("duplicate_run_record");
-      if (run.record.outcome !== "not_run") merged.set(runId, run);
+      const isFinal = (record: SummaryRecord): boolean => record.outcome !== "not_run" && !(record.outcome === "stopped" && isAuditStop(record.stopReason));
+      if (!same || (isFinal(prior) && isFinal(run.record))) throw new Error("duplicate_run_record");
+      // A final record wins over an audit stop and an audit stop over a `not_run` slot, in whichever wave each one is.
+      const rank = (record: SummaryRecord): number => (isFinal(record) ? 2 : record.outcome === "not_run" ? 0 : 1);
+      if (rank(run.record) > rank(prior) || (rank(run.record) === 1 && rank(prior) === 1)) merged.set(runId, run);
     }
   }
   return [...merged.values()];

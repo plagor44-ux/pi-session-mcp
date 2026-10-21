@@ -524,7 +524,12 @@ the text above, they win.
   before the private directory is removed; the dry load does the same for an
   unclean load. Nothing else is kept, and the report never reads or copies
   `diagnostics/`. Cost: worker-controlled paths and addresses exist on disk in
-  that one private file, and an audit stop is the only trigger.
+  that one private file, the kept lines can include up to 32 bytes of syscall
+  payload (strace's default string size), for example the start of a message
+  sent over an escaping socket, and an audit stop is the only trigger. A failed
+  write leaves a structured, path-free `diagnostics_write_failed` event on
+  stderr and the stop stands; a `diagnostics/` that is not a real directory is
+  refused.
 - **Audit-stopped slots are planned again (R85).** A trace-audit stop says
   nothing about the extension's result, but the slot stays charged in the
   ledger, which used to exclude it for good. `--plan --exclude-wave` now plans a
@@ -532,12 +537,19 @@ the text above, they win.
   with an audit reason (`exclusion.replannedStopped`); a ledger charge without
   any record still excludes it, and a slot with any other executed record stays
   excluded. The earlier charge stays in the ledger and in `remainingUsd`.
-  The approval carries `replannedStopped` (run ids of its own list, unique,
-  written by the plan, covered by the approval the operator signs and compared
-  exactly on resume); the wave's guard against running a charged run id
-  (`run_already_charged`) skips exactly those ids. Alternatives considered: a
+  The plan does so only when the ledger agrees with the records: the slot must
+  hold exactly one run charge per excluded wave that stopped it by the audit;
+  any other count (a wave left out of `--exclude-wave` that already re-ran it,
+  or a charge without a record after a crash) keeps it excluded and is listed
+  in `exclusion.notReplanned`. The approval carries `replannedStopped` as
+  `{ runId, charges }` entries (run ids of its own list, unique, written by the
+  plan, covered by the approval the operator signs and compared exactly on
+  resume); the wave's guard against running a charged run id
+  (`run_already_charged`) skips a listed id only while the ledger still holds
+  exactly `charges` run charges for it, checked up front and per run. Alternatives considered: a
   guard that reads the earlier waves' records (the wave does not have them) or
   one that drops the charge check (it protects against double spending). In the
-  report a record stopped by the audit is not final: a later executed record of
-  the same run id replaces it, two final records still refuse
-  (`duplicate_run_record`), and `waveStops` keeps the earlier stop.
+  report a record stopped by the audit is not final: a final record of the same
+  run id from any other wave replaces it, whatever the order in which the waves
+  are given, two final records still refuse (`duplicate_run_record`), and
+  `waveStops` keeps the earlier stop.

@@ -21,8 +21,17 @@ export async function writeDiagnostics(waveDir: string, runId: string, evidenceL
   if (evidenceLines.length === 0) return;
   const directory = join(waveDir, "diagnostics");
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  // A link (or anything but a real directory) in its place would redirect the write: refuse, as the wave guard does for its directories.
+  if (!(await lstat(directory)).isDirectory()) throw new Error("diagnostics_dir_invalid");
   const entries = evidenceLines.map((entry) => entry.split("\n").map((line) => line.slice(0, MAX_DIAGNOSTIC_LINE_CHARS)).join("\n"));
   await writeFile(join(directory, `${runId}.txt`), `${entries.join("\n--\n")}\n`, { flag: "wx", mode: 0o600 });
+}
+
+/** A failed diagnostics write does not change the stop; it leaves a structured, path-free event on stderr instead (R84). */
+export function reportDiagnosticsFailure(runId: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : "";
+  const code = /^[a-z][a-z0-9_]{0,60}$/.test(message) ? message : (error as NodeJS.ErrnoException | undefined)?.code?.toLowerCase().replace(/[^a-z0-9_]/g, "") || "write_failed";
+  process.stderr.write(`${JSON.stringify({ event: "diagnostics_write_failed", runId, code })}\n`);
 }
 
 /**
