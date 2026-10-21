@@ -110,6 +110,8 @@ export interface ReviewPairingResult extends PairingBase { kind: "review"; a: Re
 export type PairingResult = ImplementationPairingResult | ReviewPairingResult;
 export interface Spend { observedUsd: number; estimatedUsd: number }
 export interface ReportSpend { budget: Spend; wave: Spend }
+/** What `--allow-source-drift` records per wave (R89): the commit its approval named and the bound paths that differ between it and HEAD. */
+export interface SourceDrift { wave: number; sourceCommit: string; boundPathsChangedSinceSource: string[]; allowSourceDrift: true }
 export interface ReportSummary {
   pairings: PairingResult[];
   /** Everything charged against the budget so far (`budgetSpend`, observed plus estimated). */
@@ -121,6 +123,8 @@ export interface ReportSummary {
   stopReason: StopReason | null;
   /** Every stop reason recorded in any wave before the merge, by the 1-based index of its `--wave` argument; a superseded `not_run` stop survives here. */
   waveStops: { wave: number; runId: string; stopReason: StopReason }[];
+  /** Only with `--allow-source-drift`: per wave, by its 1-based position among the `--wave` arguments, what changed since the code it ran. */
+  sourceDrift?: SourceDrift[];
 }
 
 const costOf = (record: SummaryRecord): number => record.usage?.session?.costUsd ?? 0;
@@ -342,6 +346,23 @@ async function assertBoundCodeUnchanged(root: string, commit: string): Promise<v
   try { await exec("git", ["diff", "--quiet", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root }); } catch { throw new Error("approval_source_mismatch"); }
 }
 
+/**
+ * `--allow-source-drift` (R89): instead of refusing a difference, the repo-relative bound paths that changed between the approval's commit and
+ * HEAD are listed. The commit must exist and be an ancestor of HEAD (`approval_source_unknown` otherwise), so the evidence still describes
+ * code that HEAD contains; what changed since is recorded, not judged.
+ */
+async function boundPathsChangedSince(root: string, commit: string): Promise<string[]> {
+  if (!/^[0-9a-f]{40,64}$/.test(commit)) throw new Error("approval_source_unknown");
+  try {
+    await exec("git", ["cat-file", "-e", `${commit}^{commit}`], { cwd: root });
+    await exec("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { cwd: root });
+  } catch { throw new Error("approval_source_unknown"); }
+  try {
+    const { stdout } = await exec("git", ["diff", "--name-only", "-z", commit, "HEAD", "--", ...BOUND_PATHSPECS], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return stdout.split("\0").filter((path) => path !== "").sort();
+  } catch { throw new Error("source_unavailable"); }
+}
+
 /** Removes the directories this call created, innermost first, and stops at the first one that is not empty. */
 async function removeCreatedParents(parent: string, firstCreated: string | undefined): Promise<void> {
   if (firstCreated === undefined) return;
@@ -356,7 +377,9 @@ async function removeCreatedParents(parent: string, firstCreated: string | undef
  * `integrity.json`. Everything is built in memory and checked for private data first; the directory appears only complete.
  * `evidenceDir` must not exist. Returns the summary that was written.
  */
-export async function writeEvidence(waveDirs: string | readonly string[], evidenceDir: string, ledgerPath: string, options: { repoRoot?: string } = {}): Promise<ReportSummary> {
+export async function writeEvidence(
+  waveDirs: string | readonly string[], evidenceDir: string, ledgerPath: string, options: { repoRoot?: string; allowSourceDrift?: boolean } = {},
+): Promise<ReportSummary> {
   const waves = (typeof waveDirs === "string" ? [waveDirs] : [...waveDirs]).map((dir) => resolve(dir));
   if (waves.length === 0 || new Set(waves).size !== waves.length) throw new Error("wave_required");
   const target = resolve(evidenceDir);
@@ -375,11 +398,14 @@ export async function writeEvidence(waveDirs: string | readonly string[], eviden
   assertNoDuplicates(summarized);
   const ledger = await readLedger(resolve(ledgerPath), new Set(summarized.map((r) => r.runId)));
   const root = options.repoRoot ?? REPO_ROOT;
-  for (const { approval } of approvals) {
+  const sourceDrift: SourceDrift[] = [];
+  for (const [index, { approval }] of approvals.entries()) {
     if (approval.ledgerId !== ledger.spend.ledgerId) throw new Error("ledger_mismatch");
-    await assertBoundCodeUnchanged(root, approval.sourceCommit);
+    if (options.allowSourceDrift === true) {
+      sourceDrift.push({ wave: index + 1, sourceCommit: approval.sourceCommit, boundPathsChangedSinceSource: await boundPathsChangedSince(root, approval.sourceCommit), allowSourceDrift: true });
+    } else await assertBoundCodeUnchanged(root, approval.sourceCommit);
   }
-  const summary: ReportSummary = { ...summarize(summarized, ledger.spend), waveStops };
+  const summary: ReportSummary = { ...summarize(summarized, ledger.spend), waveStops, ...(options.allowSourceDrift === true ? { sourceDrift } : {}) };
 
   const files = new Map<string, Buffer>();
   for (const run of runs) files.set(`runs/${run.name}`, run.bytes);
@@ -388,7 +414,7 @@ export async function writeEvidence(waveDirs: string | readonly string[], eviden
   files.set("summary.json", json(summary));
   const binding = await boundSource(root);
   files.set("integrity.json", json({
-    kind: "extension-ablation-evidence-integrity", source_binding: binding,
+    kind: "extension-ablation-evidence-integrity", source_binding: binding, ...(options.allowSourceDrift === true ? { source_drift: sourceDrift } : {}),
     files: [...files.entries()].sort(([x], [y]) => (x < y ? -1 : 1)).map(([path, bytes]) => ({ path, hash: hash(bytes) })),
   }));
   await assertNoPrivateData(files, waves);

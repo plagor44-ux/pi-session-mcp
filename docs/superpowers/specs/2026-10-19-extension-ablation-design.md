@@ -619,3 +619,18 @@ the text above, they win.
   environments never carry `DISPLAY`, `WAYLAND_DISPLAY`,
   `DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` or `XDG_RUNTIME_DIR` (a test sets
   them in the host process and checks both).
+- **A report across waves at different commits (R89).** The report refuses
+  (`approval_source_mismatch`) unless the bound code is unchanged between each
+  wave's approval commit and HEAD, which a multi-wave evaluation with fixes
+  between its waves cannot meet. `--report` takes `--allow-source-drift`
+  (refused in every other mode): then each wave's `sourceCommit` must exist and
+  be an ancestor of HEAD (`git merge-base --is-ancestor`, else
+  `approval_source_unknown`), and instead of refusing, the repo-relative bound
+  paths changed between that commit and HEAD (`git diff --name-only`) are
+  recorded per wave, by its 1-based position among the `--wave` arguments, as
+  `{ wave, sourceCommit, boundPathsChangedSinceSource, allowSourceDrift: true }`
+  in `summary.json` (`sourceDrift`) and `integrity.json` (`source_drift`); both
+  fields are absent without the option, whose output is unchanged. The dirty
+  tree check and the source binding of HEAD stay. Cost: the evidence no longer
+  says that every wave ran the code at HEAD; it says which bound files differ,
+  and a reader judges whether a changed file affects a wave's records.
