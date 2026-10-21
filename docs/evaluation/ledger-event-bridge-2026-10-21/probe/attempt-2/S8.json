@@ -1,0 +1,280 @@
+{
+  "tooling": {
+    "client_version": "2.1.303 (Claude Code)",
+    "node": "26.11.1"
+  },
+  "scenario": "S8",
+  "title": "diagnostic: stream-json input, stdin closed after the first message",
+  "mode": "stream",
+  "hook_kind": "asyncRewake",
+  "hook_timeout_s": 60,
+  "expectation": "recorded only (does the client wait for the hook when stdin is closed?); no leftover process",
+  "exit_code": 0,
+  "exit_signal": null,
+  "timed_out": false,
+  "exit_at_ms": 439,
+  "stdin_ended_at_ms": null,
+  "harness_invalid": false,
+  "http_unexpected": 0,
+  "requests": {
+    "total": 3,
+    "main": 3,
+    "auxiliary": 0,
+    "list": [
+      {
+        "i": 1,
+        "t_ms": 272,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_start",
+        "step": 0,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 2,
+        "t_ms": 326,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_prompt",
+        "step": 1,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 3,
+        "t_ms": 372,
+        "role": "main",
+        "request_class": null,
+        "marker_in_last_user": false,
+        "marker_places": [],
+        "marker_anywhere": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 2,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      }
+    ],
+    "scripted_tool_calls": 2
+  },
+  "wakes": {
+    "requests": 0,
+    "by_kind": {},
+    "by_delivery": {},
+    "events_before_last_request": 0,
+    "missing": 0,
+    "duplicate": 0,
+    "delays_ms": [
+      null
+    ]
+  },
+  "stream": {
+    "lines": 13,
+    "json_errors": 0,
+    "types": {
+      "system": 7,
+      "assistant": 3,
+      "user": 2,
+      "result": 1
+    },
+    "system_subtypes": {
+      "init": 1,
+      "hook_started": 3,
+      "hook_response": 3
+    },
+    "results": [
+      {
+        "t_ms": 376,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 3
+      }
+    ],
+    "hook_events": [
+      {
+        "t_ms": 286,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_start",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 318,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_start",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 332,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 333,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 366,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 382,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-eval__pi_session_prompt",
+        "outcome": "error",
+        "exit_code": 2
+      }
+    ],
+    "hook_event_keys": [
+      "exit_code",
+      "hook_event",
+      "hook_id",
+      "hook_name",
+      "outcome",
+      "output",
+      "session_id",
+      "stderr",
+      "stdout",
+      "subtype",
+      "type",
+      "uuid"
+    ],
+    "mcp_statuses": [
+      "connected"
+    ]
+  },
+  "leftover": {
+    "at_exit": 0,
+    "at_exit_kinds": {},
+    "after_grace": 0,
+    "after_grace_kinds": {},
+    "group_alive_after_exit": false
+  },
+  "temp_removed": true,
+  "step_failures": 0,
+  "counters": {
+    "tools": {
+      "pi_session_start": 1,
+      "pi_session_prompt": 1
+    },
+    "pi_turn_get": {
+      "running": 0,
+      "terminal": 0,
+      "error": 0
+    }
+  },
+  "spool": {
+    "events": [
+      {
+        "instance": "i1",
+        "seq": 1,
+        "at_ms": 378,
+        "kind": "instance_ended",
+        "state": null,
+        "via": null,
+        "reason": "server_exit",
+        "recipient": null,
+        "question_kind": null,
+        "session": null,
+        "turn": null,
+        "question": null
+      },
+      {
+        "instance": "i1",
+        "seq": 2,
+        "at_ms": 379,
+        "kind": "turn_terminal",
+        "state": "aborted",
+        "via": "close",
+        "reason": null,
+        "recipient": null,
+        "question_kind": null,
+        "session": "s1",
+        "turn": "t1",
+        "question": null
+      }
+    ],
+    "instance_dirs": 1,
+    "claims": 1,
+    "canary_in_spool": false
+  },
+  "waiters": {
+    "started": 1,
+    "by_reason": {
+      "wake_terminal": 1
+    },
+    "exit_codes": {
+      "2": 1
+    }
+  },
+  "per_event": [
+    {
+      "kind": "turn_terminal",
+      "seq": 2,
+      "at_ms": 379,
+      "via": "close",
+      "wakes": 0,
+      "delay_ms": null
+    }
+  ],
+  "ledger": {
+    "revision": 2,
+    "outcomes_total": 5,
+    "outcomes": {
+      "applied": 4,
+      "duplicate": 1
+    },
+    "rejected_codes": {},
+    "hook_errors": 0,
+    "tasks": 1,
+    "task_work": {
+      "running": 1
+    },
+    "turn_runtime": {
+      "running": 1
+    },
+    "results_consumed": 0,
+    "cleanup": {
+      "open": 1
+    },
+    "canary_in_ledger": false
+  },
+  "checks": {
+    "clean_teardown": true,
+    "recorded_only": true
+  },
+  "passed_expectation": true
+}

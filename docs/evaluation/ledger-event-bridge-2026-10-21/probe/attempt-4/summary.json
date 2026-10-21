@@ -1,0 +1,307 @@
+{
+  "schema_version": "bridge-host-probe-1",
+  "client_version": "2.1.303 (Claude Code)",
+  "node": "26.11.1",
+  "started_at": "2026-10-21T11:23:33.797Z",
+  "ended_at": "2026-10-21T11:24:40.884Z",
+  "skipped": [
+    {
+      "scenario": "S7",
+      "reason": "no supported switch disables the registry's event-driven reconcile (settlement schedules it internally); a supervisor-only arm cannot be isolated without editing private state, so the detection-delay comparison is not run"
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario": "S1",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "one_wake": true,
+        "wake_is_own_request": true,
+        "steps_ok": true,
+        "no_missing_or_duplicate": true,
+        "one_terminal_read": true
+      },
+      "exit_code": 0,
+      "requests": 6,
+      "wakes": 1,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        19
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1,
+          "pi_turn_get": 1,
+          "pi_session_close": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 1,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 4,
+        "outcomes": {
+          "applied": 7,
+          "duplicate": 3
+        }
+      }
+    },
+    {
+      "scenario": "S2",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "two_wakes": true,
+        "wakes_are_own_requests": true,
+        "steps_ok": true,
+        "no_missing_or_duplicate": true,
+        "two_terminal_reads": true
+      },
+      "exit_code": 0,
+      "requests": 11,
+      "wakes": 2,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        17,
+        12
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 2,
+          "pi_session_prompt": 2,
+          "pi_turn_get": 2,
+          "pi_session_close": 2
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 2,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 8,
+        "outcomes": {
+          "applied": 13,
+          "duplicate": 7
+        }
+      }
+    },
+    {
+      "scenario": "S3",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "question_and_terminal_wake": true,
+        "steps_ok": true,
+        "no_missing_or_duplicate": true,
+        "one_terminal_read": true
+      },
+      "exit_code": 0,
+      "requests": 9,
+      "wakes": 2,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        15,
+        42
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1,
+          "eval_question_get": 1,
+          "eval_question_answer": 1,
+          "pi_turn_get": 1,
+          "pi_session_close": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 1,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 4,
+        "outcomes": {
+          "applied": 7,
+          "duplicate": 3
+        }
+      }
+    },
+    {
+      "scenario": "S4",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "no_wake": true,
+        "spool_event_seen": true
+      },
+      "exit_code": 0,
+      "requests": 3,
+      "wakes": 0,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        null
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 0,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 2,
+        "outcomes": {
+          "applied": 4,
+          "duplicate": 1
+        }
+      }
+    },
+    {
+      "scenario": "S5",
+      "passed_expectation": false,
+      "checks": {
+        "clean_teardown": true,
+        "no_wake_own_request": true,
+        "no_wake_text_in_any_request": false,
+        "client_did_not_wait_for_worker": false
+      },
+      "exit_code": 0,
+      "requests": 3,
+      "wakes": 1,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        12
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 0,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 2,
+        "outcomes": {
+          "applied": 4,
+          "duplicate": 1
+        }
+      }
+    },
+    {
+      "scenario": "S6",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "recorded_only": true
+      },
+      "exit_code": 0,
+      "requests": 3,
+      "wakes": 0,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        null
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 0,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 2,
+        "outcomes": {
+          "applied": 4,
+          "duplicate": 1
+        }
+      }
+    },
+    {
+      "scenario": "S8",
+      "passed_expectation": true,
+      "checks": {
+        "clean_teardown": true,
+        "recorded_only": true
+      },
+      "exit_code": 0,
+      "requests": 3,
+      "wakes": 0,
+      "missing": 0,
+      "duplicate": 0,
+      "delays_ms": [
+        null
+      ],
+      "leftover_after_grace": 0,
+      "counters": {
+        "tools": {
+          "pi_session_start": 1,
+          "pi_session_prompt": 1
+        },
+        "pi_turn_get": {
+          "running": 0,
+          "terminal": 0,
+          "error": 0
+        }
+      },
+      "ledger": {
+        "revision": 2,
+        "outcomes": {
+          "applied": 4,
+          "duplicate": 1
+        }
+      }
+    },
+    {
+      "scenario": "X6",
+      "passed_expectation": true,
+      "checks": {
+        "two_instances": true,
+        "unknown_session_in_second": true,
+        "second_list_empty": true,
+        "first_list_had_session": true,
+        "first_close_ok": true,
+        "no_leftover": true,
+        "temp_removed": true,
+        "harness_ok": true
+      },
+      "exit_code": null,
+      "requests": null,
+      "wakes": null,
+      "missing": null,
+      "duplicate": null,
+      "delays_ms": null,
+      "leftover_after_grace": 0,
+      "counters": null,
+      "ledger": null
+    }
+  ]
+}
