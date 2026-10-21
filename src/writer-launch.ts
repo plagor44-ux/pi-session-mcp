@@ -7,9 +7,9 @@ import type { CommandRunner } from "./client-adapters/types.js";
 import { isEntryPoint } from "./entry-point.js";
 import { serveRefusal } from "./refusal-server.js";
 import { createProcessRunner } from "./setup-process.js";
-import { podmanInfo, serveArgs } from "./writer-boundary.js";
+import { ensureWriterEventsDirectory, podmanInfo, serveArgs } from "./writer-boundary.js";
 import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
-import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
+import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerEventDeliveryEnabled, writerPaths } from "./writer-state.js";
 export { currentAcceptanceFingerprint } from "./writer-state.js";
 export { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
 export interface LaunchDependencies {
@@ -19,6 +19,8 @@ export interface LaunchDependencies {
   runner: CommandRunner;
   spawnPodman(args: string[]): ChildProcess;
   env: NodeJS.ProcessEnv;
+  /** The user id that must own the event spool directory; defaults to the process user. */
+  uid?: () => number;
   now(): number;
   setInterval(callback: () => void, ms: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
@@ -26,6 +28,10 @@ export interface LaunchDependencies {
 
 function launchFailure(stage: "spawn" | "entry"): void {
   process.stderr.write(JSON.stringify({ level: "error", event: "writer_launch_failed", stage, code: "writer_launch_failed" }) + "\n");
+}
+
+function eventsFailure(): void {
+  process.stderr.write(JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n");
 }
 
 export async function launchEntry(argv: readonly string[], deps: LaunchDependencies): Promise<number> {
@@ -48,6 +54,11 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
       if (state.phase !== "ready" || state.acceptance?.fingerprint !== await currentAcceptanceFingerprint(paths.wrapper, state, info.version)) return refuse("writer_not_ready");
     }
   } catch { return refuse("writer_not_ready"); }
+  let eventsDir: string | undefined;
+  if (await writerEventDeliveryEnabled(paths.config)) {
+    try { eventsDir = await ensureWriterEventsDirectory(deps.env, name, (deps.uid ?? (() => process.getuid!()))()); }
+    catch { eventsFailure(); return refuse("writer_not_ready"); }
+  }
   const providers = state.providers;
   const names = providers.map(({ provider }) => provider);
   const readHost = async (): Promise<unknown> => {
@@ -68,7 +79,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   try { if (enabled) await refresh(); } catch { return refuse("writer_not_ready"); }
   const command = argv.length > 1 ? argv.slice(1) : ["node", "/opt/pi-session-mcp/dist/main.js"];
   let child: ChildProcess;
-  try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot)); } catch { launchFailure("spawn"); return 1; }
+  try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot, eventsDir)); } catch { launchFailure("spawn"); return 1; }
   let busy = false;
   const timer = enabled ? deps.setInterval(() => {
     if (busy) return;

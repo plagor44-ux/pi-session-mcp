@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -126,4 +126,91 @@ it("reads fresh credentials, copies after failed refresh, skips overlapping tick
   for (let i = 0; i < 5; i++) tick();
   expect(credentials.refreshHostLogin).toHaveBeenCalledTimes(2);
   child.emit("close", 0); await running; expect(deps.clearInterval).toHaveBeenCalled();
+});
+
+const uid = process.getuid!();
+async function enableDelivery(config: unknown = { events: { delivery: "spool" } }) {
+  const paths = writerPaths(home, "x-w1");
+  await mkdir(paths.config, { recursive: true });
+  await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(config));
+}
+async function runtimeDirectory(mode = 0o700): Promise<string> {
+  const runtime = join(home, "runtime");
+  await mkdir(runtime, { mode });
+  await chmod(runtime, mode);
+  return runtime;
+}
+const eventsFailure = JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n";
+it("mounts a freshly created private spool directory when the writer configuration enables delivery", async () => {
+  await save(true); await enableDelivery();
+  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
+  expect(await launch(["x-w1"], deps)).toBe(7);
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", dir));
+  const args = vi.mocked(deps.spawnPodman).mock.calls[0]![0];
+  expect(args).toContain(`${dir}:/pi/events:rw`); expect(args).toContain("PI_SESSION_MCP_EVENTS_DIR=/pi/events");
+  expect((await lstat(dir)).mode & 0o777).toBe(0o700);
+  expect(serveRefusal).not.toHaveBeenCalled();
+});
+it("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
+  await save(); await enableDelivery();
+  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
+  await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
+  expect(deps.spawnPodman).toHaveBeenCalledTimes(2);
+  for (const call of vi.mocked(deps.spawnPodman).mock.calls) expect(call[0]).toEqual(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-"], "/release", dir));
+});
+it.each([
+  ["no events field", { workspaces: {} }],
+  ["an unexpected delivery value", { events: { delivery: "off" } }],
+  ["extra events keys", { events: { delivery: "spool", extra: true } }],
+  ["a non-object events field", { events: "spool" }],
+])("adds no mount and creates no directory with %s", async (_label, config) => {
+  await save(true); await enableDelivery(config);
+  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  await launch(["x-w1"], deps);
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
+  await expect(lstat(join(runtime, "pi-session-mcp"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("adds no mount without a writer configuration file", async () => {
+  await save(true); const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  await launch(["x-w1"], deps);
+  expect(vi.mocked(deps.spawnPodman).mock.calls[0]![0].join(" ")).not.toContain("/pi/events");
+});
+it("does not need a runtime directory when delivery is not enabled", async () => {
+  await save(true); delete deps.env.XDG_RUNTIME_DIR;
+  expect(await launch(["x-w1"], deps)).toBe(7);
+  expect(serveRefusal).not.toHaveBeenCalled();
+});
+it.each([
+  ["a missing runtime directory", async () => ({}) as NodeJS.ProcessEnv],
+  ["a relative runtime directory", async () => ({ XDG_RUNTIME_DIR: "relative" })],
+  ["a runtime directory that does not exist", async () => ({ XDG_RUNTIME_DIR: join(home, "absent") })],
+  ["a group-accessible runtime directory", async () => ({ XDG_RUNTIME_DIR: await runtimeDirectory(0o770) })],
+  ["a symlinked spool root", async () => {
+    const runtime = await runtimeDirectory(), outside = join(home, "outside");
+    await mkdir(outside, { mode: 0o700 }); await symlink(outside, join(runtime, "pi-session-mcp"));
+    return { XDG_RUNTIME_DIR: runtime };
+  }],
+])("fails the launch with a stable sanitized code for %s", async (_label, makeEnv) => {
+  await save(true); await enableDelivery(); deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...await makeEnv() };
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  expect(await launch(["x-w1"], deps)).toBe(0);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  expect(stderr.mock.calls).toEqual([[eventsFailure]]);
+  expect(eventsFailure).not.toContain(home);
+});
+it("fails the launch when the spool directory belongs to another user", async () => {
+  await save(true); await enableDelivery();
+  deps.env = { ...deps.env, XDG_RUNTIME_DIR: await runtimeDirectory() }; deps.uid = () => uid + 1;
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  await launch(["x-w1"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  expect(stderr.mock.calls).toEqual([[eventsFailure]]);
+});
+it("does not refresh credentials when the spool directory fails", async () => {
+  await save(true); await enableDelivery(); deps.env = { XDG_RUNTIME_DIR: join(home, "absent") };
+  vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  await launch(["x-w1"], deps);
+  expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
 });

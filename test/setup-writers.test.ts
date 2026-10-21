@@ -95,6 +95,14 @@ describe("writer setup reconciliation", () => {
     expect(JSON.stringify(output)).not.toContain("SECRET");
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
   });
+  it("hands the host configuration's event delivery field to writer provisioning", async () => {
+    const f = await fixture();
+    const host = JSON.parse(await readFile(f.configPath, "utf8")) as object;
+    await writeFile(f.configPath, JSON.stringify({ ...host, events: { delivery: "spool" } }));
+    await changeWriterMode(f.configPath, mode, f.deps);
+    expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
+    for (const [, input] of f.life.provisionWriter.mock.calls) expect(input.rawConfig).toMatchObject({ events: { delivery: "spool" } });
+  });
   it("does not remove when the API caller requests a dry run", async () => {
     const f = await fixture();
     const output = await runWriterOperation("x-w1", "remove", { apply: false, discard: true }, f.deps);

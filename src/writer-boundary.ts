@@ -1,7 +1,8 @@
-import { lstat, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "./client-adapters/command.js";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
+import { CONTAINER_EVENTS_DIR, EVENTS_DIR_ENV, writerEventsDir } from "./turn-events.js";
 import type { writerPaths, WriterState } from "./writer-state.js";
 
 export const NODE_IMAGE_REF = "docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d";
@@ -17,7 +18,8 @@ export class BoundaryError extends Error {
   }
 }
 
-export function serveArgs(paths: WriterPaths, state: WriterState, command: readonly string[], releaseRoot: string): string[] {
+/** `eventsDir` is the dedicated host spool directory of this writer; pass it only when event delivery is enabled for the writer. */
+export function serveArgs(paths: WriterPaths, state: WriterState, command: readonly string[], releaseRoot: string, eventsDir?: string): string[] {
   const args = [
     "run", "-i", "--rm", "--pull=never", "--userns=keep-id", "--read-only",
     "--cap-drop=all", "--security-opt=no-new-privileges", `--network=${state.network}`,
@@ -35,11 +37,49 @@ export function serveArgs(paths: WriterPaths, state: WriterState, command: reado
     "-e", "PI_CODING_AGENT_DIR=/pi/agent",
     "-e", "PI_SESSION_MCP_WRITER_GUARD=/pi/config/writer-guard.json",
   ];
+  if (eventsDir !== undefined) args.push(
+    "-v", `${eventsDir}:${CONTAINER_EVENTS_DIR}:rw`,
+    "-e", `${EVENTS_DIR_ENV}=${CONTAINER_EVENTS_DIR}`,
+  );
   if (state.cache === "go") args.push(
     "-v", `${paths.go}:/pi/go:rw`,
     "-e", "GOPATH=/pi/go", "-e", "GOCACHE=/pi/go/cache", "-e", "GOTOOLCHAIN=local",
   );
   return [...args, state.imageId, ...command];
+}
+
+export class EventsDirectoryError extends Error {
+  readonly code = "events_directory_unavailable";
+  constructor() {
+    super("events_directory_unavailable");
+    this.name = "EventsDirectoryError";
+  }
+}
+
+/**
+ * Creates (when missing) and verifies the dedicated spool directory of one writer under the operator's
+ * runtime directory, which is a tmpfs cleared at logout and therefore recreated at every launch.
+ * Every level must be a real directory owned by `uid` without group or other access; links are refused.
+ */
+export async function ensureWriterEventsDirectory(env: NodeJS.ProcessEnv, name: string, uid: number): Promise<string> {
+  const target = writerEventsDir(env, name);
+  if (target === undefined) throw new EventsDirectoryError();
+  const verify = async (path: string): Promise<void> => {
+    const stat = await lstat(path);
+    if (!stat.isDirectory() || stat.uid !== uid || (stat.mode & 0o077) !== 0) throw new EventsDirectoryError();
+  };
+  try {
+    const chain = [target, dirname(target), dirname(dirname(target)), dirname(dirname(dirname(target)))].reverse();
+    // chain[0] is the runtime directory itself: it must already exist and is never created or changed here.
+    await verify(chain[0]!);
+    for (const path of chain.slice(1)) {
+      try { await mkdir(path, { mode: 0o700 }); } catch (error) {
+        if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+      }
+      await verify(path);
+    }
+  } catch { throw new EventsDirectoryError(); }
+  return target;
 }
 
 export function throwawayArgs(
