@@ -279,7 +279,9 @@ text above, they win.
   `lens_diagnostics` (LSP spawning is off in untrusted projects) and
   `effective_config`. Coding profiles activate every registered tool; that is
   product behaviour. (Superseded, see Amendments 2026-10-21: the AST tools are
-  situational and cannot be granted.)
+  situational and cannot be granted, and coding profiles activate only the
+  non-situational registered tools; the situational pi-lens tools stay inactive
+  until `pi_lens_activate_tools`.)
 - **"Warming disabled"** means `PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING=1`,
   the extension's only warming lever. Pi's own `cacheWarming` stays at its
   default `streaming` in both arms
@@ -343,7 +345,7 @@ the text above, they win.
   `mcpServers` entry of the copied profile. This is a further deviation from
   "copied verbatim except `workspaces`", in addition to the extension pin and
   grant and to what `runConfig` already does (it sets the default profile and
-  adds the read-only copy).
+  adds the read-only copy for coding profiles).
 - **`io_uring_setup` counting.** A call split by `<unfinished ...>` is joined
   with its `resumed` line and counts only if its final return value is
   non-negative; the injected `ENOSYS` no longer counts.

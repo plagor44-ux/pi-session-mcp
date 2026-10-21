@@ -1,7 +1,7 @@
 # Extension ablation setup and dry load — 2026-10-21
 
-This record covers plan Task 9 Steps 3 and 4: the extension template install and
-the provider-free dry load. No model turn, provider call or spend took place.
+This record covers plan Task 9 Step 3: it records the results of Steps 1 and 2,
+the extension template install and the provider-free dry load. No model turn, provider call or spend took place.
 `$EVAL` stands for `~/.cache/pi-session-mcp/extension-ablation/2026-10-21`; the
 template and the dry-load output live there and are not tracked.
 
@@ -45,14 +45,16 @@ Root causes and fixes, all in commit 02cffa3 (spec Amendments 2026-10-21):
    sandbox home, which produced unexpected connects in both arms. Fix:
    `DO_NOT_TRACK=1`, `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_TELEMETRY=0`
    in the scope environment, passed to MCP servers through `envFrom` (R65). A
-   direct probe confirmed it: without the variable one connect to github.com,
-   with it none.
+   direct probe confirmed it: without these variables one connect to github.com,
+   with `DO_NOT_TRACK=1` none.
 2. `pi-lens` 4.4.3 keeps `ast_grep_search` and `ast_grep_outline` inactive until
    `pi_lens_activate_tools` runs (situational tools), so review sessions failed
    with `extension_tool_missing`. Fix: review profiles are granted the five
    always-active read tools (R66).
 3. The `io_uring` counter took an injected `ENOSYS` that `strace` split into
-   unfinished and resumed halves for a successful setup (R67).
+   unfinished and resumed halves for a successful setup (R67). Fix: a split call
+   is joined with its resumed line and counts only on a non-negative return
+   value.
 
 ### Second run (commit 02cffa3): every pairing ok
 
