@@ -13,49 +13,700 @@
       "kind": "review",
       "findings": [
         {
-          "id": "F1-kill-cleanup-unbounded",
+          "id": "F1-kill-leaves-script-alive-for-descendants",
           "critical": true,
           "anchors": [
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "sigkill",
-                "descendant"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "sigkill",
-                "grandchild"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "sigkill",
-                "pipe"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "sigkill",
-                "handle"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "sigkill",
-                "hang"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "sigkill",
+                "descendant",
                 "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "descendant",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "grandchild",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "orphan",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "inherit",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "retain",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "indefinite"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "forever"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "never exit"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "never return"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "no upper bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "without bound"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "stays alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "stay alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "outlive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "keeps the event loop alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "keeps the smoke alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "keeps the process alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "keeps it alive"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "uninterruptible",
+                "long after"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "cleanup",
+                "unbounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "cleanup",
+                "not bounded"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "cleanup",
+                "no upper bound"
               ]
             },
             {
@@ -69,120 +720,299 @@
               "file": "scripts/install-smoke.mjs",
               "terms": [
                 "sigkill",
-                "wait"
+                "not bounded"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
                 "sigkill",
-                "alive"
+                "no upper bound"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
                 "sigkill",
-                "keeps running"
+                "indefinite"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "grandchild"
+                "sigkill",
+                "forever"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "descendant"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "process group"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "kill",
-                "inherit"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "kill",
-                "orphan"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "pipes",
-                "hang"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "pipes",
-                "inherit"
+                "sigkill",
+                "never return"
               ]
             }
           ]
         },
         {
-          "id": "F2-exit-status-dropped",
+          "id": "F2-close-drops-status-so-failure-passes",
           "critical": true,
           "anchors": [
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "abnormal"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "crash",
+                "discard",
                 "smoke_passed"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "crash",
-                "eof"
+                "discard",
+                "still passes"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "crash",
-                "shutdown"
+                "discard",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "discard",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "ignores",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "ignores",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "ignores",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "ignores",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "drops",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "drops",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "drops",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "drops",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "dropped",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "dropped",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "dropped",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "dropped",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never inspect",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never inspect",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never inspect",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never inspect",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "not checked",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "not checked",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "not checked",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "not checked",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "unchecked",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "unchecked",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "unchecked",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "unchecked",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "does not check",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "does not check",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "does not check",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "does not check",
+                "reported as success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never checks",
+                "smoke_passed"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never checks",
+                "still passes"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never checks",
+                "reports success"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "never checks",
+                "reported as success"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
                 "non-zero",
-                "shutdown"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "nonzero",
-                "shutdown"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "non-zero",
                 "smoke_passed"
               ]
             },
@@ -196,148 +1026,22 @@
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "signal",
-                "close"
+                "exit 1",
+                "smoke_passed"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "exit status",
-                "discard"
+                "abnormal",
+                "smoke_passed"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "exit status",
-                "ignor"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "drop"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "never"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "not checked"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "unchecked"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "not inspect"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "lost"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "crash"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit status",
-                "not captured"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "discard"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "ignor"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "drop"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "never"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "not checked"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "unchecked"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "not inspect"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "lost"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "crash"
-              ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "exit code",
-                "not captured"
+                "abnormal",
+                "still pass"
               ]
             }
           ]
@@ -346,12 +1050,6 @@
           "id": "F3-frames-bypass-stdout-cap",
           "critical": false,
           "anchors": [
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "max_stdout_bytes"
-              ]
-            },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
@@ -369,14 +1067,22 @@
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "queue",
+                "queued",
                 "unbounded"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "queued"
+                "max_stdout_bytes",
+                "bypass"
+              ]
+            },
+            {
+              "file": "scripts/install-smoke.mjs",
+              "terms": [
+                "complete frames",
+                "bypass"
               ]
             },
             {
@@ -384,17 +1090,11 @@
               "terms": [
                 "flood"
               ]
-            },
-            {
-              "file": "scripts/install-smoke.mjs",
-              "terms": [
-                "noisy"
-              ]
             }
           ]
         },
         {
-          "id": "F4-stderr-sanitization",
+          "id": "F4-stderr-forwarding-leaks",
           "critical": false,
           "anchors": [
             {
@@ -414,13 +1114,13 @@
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "secret"
+                "token=secret"
               ]
             },
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "token="
+                "secret-bearing"
               ]
             },
             {
@@ -432,7 +1132,7 @@
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "sanitiz"
+                "sanitization requirement"
               ]
             }
           ]
@@ -468,19 +1168,7 @@
             {
               "file": "test/install-smoke.test.ts",
               "terms": [
-                "not tested"
-              ]
-            },
-            {
-              "file": "test/install-smoke.test.ts",
-              "terms": [
                 "not covered"
-              ]
-            },
-            {
-              "file": "test/install-smoke.test.ts",
-              "terms": [
-                "no test"
               ]
             },
             {
@@ -488,39 +1176,55 @@
               "terms": [
                 "does not cover"
               ]
+            },
+            {
+              "file": "test/install-smoke.test.ts",
+              "terms": [
+                "no test"
+              ]
             }
           ]
         }
       ],
       "falseFindings": [
         {
-          "id": "FF1-tarball-resolves-registry-package",
+          "id": "FF1-tarball-install-falls-back-to-registry-or-glob-matches-several",
           "anchors": [
             {
               "file": ".github/workflows/ci.yml",
               "terms": [
-                "tarball",
-                "falls back to the registry"
+                "falls back",
+                "registry"
               ]
             },
             {
               "file": ".github/workflows/ci.yml",
               "terms": [
-                "tarball",
-                "resolve to the registry"
+                "installs the registry"
               ]
             },
             {
               "file": ".github/workflows/ci.yml",
               "terms": [
-                "glob",
-                "multiple tarballs"
+                "glob matches several"
+              ]
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "terms": [
+                "glob expands to several"
+              ]
+            },
+            {
+              "file": ".github/workflows/ci.yml",
+              "terms": [
+                "glob expands to multiple"
               ]
             }
           ]
         },
         {
-          "id": "FF2-unhandled-epipe-or-split-utf8",
+          "id": "FF2-unhandled-epipe-on-stdin",
           "anchors": [
             {
               "file": "scripts/install-smoke.mjs",
@@ -532,8 +1236,8 @@
             {
               "file": "scripts/install-smoke.mjs",
               "terms": [
-                "multi-byte",
-                "split"
+                "uncaught",
+                "epipe"
               ]
             }
           ]
@@ -555,272 +1259,1279 @@
       "kind": "review",
       "findings": [
         {
-          "id": "F1-preview-spoofing",
+          "id": "F1-unescaped-client-values-forge-confirmation-lines",
           "critical": true,
           "anchors": [
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "newline"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports.go",
-              "terms": [
-                "preview",
-                "spoof"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports.go",
-              "terms": [
-                "preview",
+                "unescaped",
                 "forge"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
+                "unescaped",
                 "inject"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "control char"
+                "unescaped",
+                "extra line"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "unescaped"
+                "unescaped",
+                "extra field"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "escap"
+                "unescaped",
+                "additional field"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "verbatim"
+                "unescaped",
+                "fake"
               ]
             },
             {
               "file": "internal/tools/manage_imports.go",
               "terms": [
-                "preview",
-                "crlf"
+                "unescaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "verbatim",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "unquoted",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "not escaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "without escaping",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "raw",
+                "authoritative"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "newline"
-              ]
-            },
-            {
-              "file": "internal/tools/start_process.go",
-              "terms": [
-                "preview",
-                "spoof"
-              ]
-            },
-            {
-              "file": "internal/tools/start_process.go",
-              "terms": [
-                "preview",
+                "unescaped",
                 "forge"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
+                "unescaped",
                 "inject"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "control char"
+                "unescaped",
+                "extra line"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "unescaped"
+                "unescaped",
+                "extra field"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "escap"
+                "unescaped",
+                "additional field"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "verbatim"
+                "unescaped",
+                "fake"
               ]
             },
             {
               "file": "internal/tools/start_process.go",
               "terms": [
-                "preview",
-                "crlf"
+                "unescaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "verbatim",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "unquoted",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "not escaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "without escaping",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "raw",
+                "authoritative"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "newline"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_signatures.go",
-              "terms": [
-                "preview",
-                "spoof"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_signatures.go",
-              "terms": [
-                "preview",
+                "unescaped",
                 "forge"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
+                "unescaped",
                 "inject"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "control char"
+                "unescaped",
+                "extra line"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "unescaped"
+                "unescaped",
+                "extra field"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "escap"
+                "unescaped",
+                "additional field"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "verbatim"
+                "unescaped",
+                "fake"
               ]
             },
             {
               "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "preview",
-                "crlf"
+                "unescaped",
+                "authoritative"
               ]
             },
             {
-              "file": "internal/capabilities/confirm.go",
+              "file": "internal/tools/manage_signatures.go",
               "terms": [
-                "formatpreview",
-                "newline"
-              ]
-            },
-            {
-              "file": "internal/capabilities/confirm.go",
-              "terms": [
-                "formatpreview",
-                "unescaped"
-              ]
-            },
-            {
-              "file": "internal/capabilities/confirm.go",
-              "terms": [
-                "formatpreview",
-                "spoof"
-              ]
-            },
-            {
-              "file": "internal/capabilities/confirm.go",
-              "terms": [
-                "formatpreview",
+                "verbatim",
                 "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "verbatim",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "unquoted",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "not escaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "without escaping",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "raw",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unescaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "verbatim",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "unquoted",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "not escaped",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "without escaping",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "forge"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "inject"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "extra line"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "extra field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "additional field"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "fake"
+              ]
+            },
+            {
+              "file": "internal/capabilities/confirm.go",
+              "terms": [
+                "raw",
+                "authoritative"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "forge",
+                "structure"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_imports.go",
+              "terms": [
+                "forge",
+                "client-controlled"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "forge",
+                "structure"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process.go",
+              "terms": [
+                "forge",
+                "client-controlled"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "forge",
+                "structure"
+              ]
+            },
+            {
+              "file": "internal/tools/manage_signatures.go",
+              "terms": [
+                "forge",
+                "client-controlled"
               ]
             }
           ]
         },
         {
-          "id": "F2-process-tests-not-binding-fingerprint",
+          "id": "F2-process-tests-never-confirm-the-orders",
           "critical": false,
           "anchors": [
             {
               "file": "internal/tools/start_process_test.go",
               "terms": [
-                "fingerprint"
-              ]
-            },
-            {
-              "file": "internal/tools/start_process_test.go",
-              "terms": [
-                "request bod"
-              ]
-            },
-            {
-              "file": "internal/tools/start_process_test.go",
-              "terms": [
-                "never confirm"
+                "do not prove"
               ]
             },
             {
               "file": "internal/tools/s3a_inventory_gaps1_test.go",
               "terms": [
-                "request bod"
+                "do not prove"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "never confirms"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "without inspecting request bodies"
               ]
             },
             {
               "file": "internal/tools/s3a_inventory_gaps1_test.go",
               "terms": [
-                "fingerprint"
+                "request bodies"
+              ]
+            },
+            {
+              "file": "internal/tools/start_process_test.go",
+              "terms": [
+                "discards retention"
               ]
             }
           ]
         },
         {
-          "id": "F3-blob-source-test-vacuous",
+          "id": "F3-blob-source-test-cannot-fail",
           "critical": false,
           "anchors": [
             {
               "file": "internal/tools/manage_imports_blob_source_test.go",
               "terms": [
-                "still pass"
+                "would still pass"
               ]
             },
             {
@@ -832,25 +2543,13 @@
             {
               "file": "internal/tools/manage_imports_blob_source_test.go",
               "terms": [
-                "file was read"
+                "cannot establish"
               ]
             },
             {
               "file": "internal/tools/manage_imports_blob_source_test.go",
               "terms": [
                 "zero reads"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports_blob_source_test.go",
-              "terms": [
-                "non-existent"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports_blob_source_test.go",
-              "terms": [
-                "unreadable"
               ]
             }
           ]
@@ -862,8 +2561,7 @@
             {
               "file": "CHANGELOG.md",
               "terms": [
-                "uri",
-                "validat"
+                "overstate"
               ]
             },
             {
@@ -883,55 +2581,35 @@
             {
               "file": "CHANGELOG.md",
               "terms": [
-                "overstate"
+                "uri",
+                "only checks"
               ]
             }
           ]
         },
         {
-          "id": "F5-validate-config-plan-dir-read",
+          "id": "F5-plan_dir-read-outside-the-gate",
           "critical": false,
           "anchors": [
             {
               "file": "internal/tools/validate_config.go",
               "terms": [
-                "plan_dir"
-              ]
-            },
-            {
-              "file": "internal/tools/plan_loader.go",
-              "terms": [
-                "plan_dir"
-              ]
-            },
-            {
-              "file": "internal/tools/validate_config.go",
-              "terms": [
-                "local file"
-              ]
-            },
-            {
-              "file": "internal/tools/validate_config.go",
-              "terms": [
-                "client-chosen"
-              ]
-            },
-            {
-              "file": "internal/tools/validate_config.go",
-              "terms": [
+                "plan_dir",
                 "client-selected"
               ]
             },
             {
               "file": "internal/tools/validate_config.go",
               "terms": [
-                "file read"
+                "plan_dir",
+                "client-chosen"
               ]
             },
             {
               "file": "internal/tools/plan_loader.go",
               "terms": [
-                "file read"
+                "plan_dir",
+                "client-selected"
               ]
             },
             {
@@ -953,64 +2631,25 @@
       ],
       "falseFindings": [
         {
-          "id": "FF1-add_blob-reads-client-path-when-local-access-off",
-          "anchors": [
-            {
-              "file": "internal/tools/manage_imports.go",
-              "terms": [
-                "os.readfile",
-                "bypass"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports.go",
-              "terms": [
-                "arbitrary file",
-                "bypass"
-              ]
-            },
-            {
-              "file": "internal/tools/manage_imports.go",
-              "terms": [
-                "local access",
-                "bypass"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "FF2-content-disposition-header-injection",
+          "id": "FF1-content-disposition-header-injection",
           "anchors": [
             {
               "file": "internal/adapters/inbound/adapter.go",
               "terms": [
-                "header injection"
+                "allows header injection"
+              ]
+            },
+            {
+              "file": "internal/adapters/inbound/adapter.go",
+              "terms": [
+                "enables header injection"
               ]
             },
             {
               "file": "internal/adapters/inbound/adapter.go",
               "terms": [
                 "content-disposition",
-                "inject"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "FF3-base64-payload-in-audit-log",
-          "anchors": [
-            {
-              "file": "internal/tools/registry_gosdk.go",
-              "terms": [
-                "audit",
-                "base64"
-              ]
-            },
-            {
-              "file": "internal/tools/registry_gosdk.go",
-              "terms": [
-                "audit",
-                "content_base64"
+                "is injectable"
               ]
             }
           ]
@@ -1038,76 +2677,27 @@
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "list_documents"
+                "list_documents",
+                "document.upload"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "health_ping"
+                "health_ping",
+                "mail_account.manage"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "tool",
-                "not bound"
+                "caller-supplied action"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "tool",
-                "never bound"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "unbound"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "not bind"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "not tied"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "never tied"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "not linked"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "not checked"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "mismatch"
+                "supplied action"
               ]
             },
             {
@@ -1122,13 +2712,6 @@
               "terms": [
                 "tool",
                 "another action"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "tool",
-                "any action"
               ]
             },
             {
@@ -1156,19 +2739,135 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "tool",
-                "other action"
+                "not bound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "never bound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "unbound"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not tied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "never tied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "tool",
+                "not linked"
               ]
             }
           ]
         },
         {
-          "id": "F2-token-probe-too-strong",
+          "id": "F2-token-probe-classified-too-strong",
           "critical": true,
           "anchors": [
             {
               "file": "backend/app/authz/actions.py",
               "terms": [
-                "token.probe"
+                "token.probe",
+                "tenant.admin",
+                "viewer"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "editor"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "capability_denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "capability_denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "route only"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "only needs"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "only requires"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "scope full"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "viewer"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "editor"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "token.probe",
+                "tenant.admin",
+                "capability_denied"
               ]
             },
             {
@@ -1182,86 +2881,86 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "token.probe",
-                "tenant.read"
+                "tenant.admin",
+                "route only"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "token.probe",
-                "tenant.admin"
+                "tenant.admin",
+                "only needs"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "probe",
-                "viewer"
+                "token.probe",
+                "tenant.admin",
+                "only requires"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "probe",
-                "editor"
+                "token.probe",
+                "tenant.admin",
+                "scope full"
               ]
             }
           ]
         },
         {
-          "id": "F3-oauth-admin-scope-allowed",
+          "id": "F3-oauth-admin-scope-reaches-admin-actions",
           "critical": true,
           "anchors": [
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "allow"
+                "clears only"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "pass"
+                "only clears"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "accept"
+                "only strips"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "permit"
+                "only removes"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "not denied"
+                "not the gate"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
+                "legacy_rest_actions"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
                 "admin",
                 "not rejected"
               ]
@@ -1270,7 +2969,14 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
+                "admin",
+                "not denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
                 "admin",
                 "not blocked"
               ]
@@ -1279,7 +2985,6 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
                 "admin",
                 "not caught"
               ]
@@ -1288,16 +2993,6 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "scope",
-                "admin",
-                "not enforced"
-              ]
-            },
-            {
-              "file": "backend/app/authz/decision.py",
-              "terms": [
-                "oauth",
-                "scope",
                 "admin",
                 "not refused"
               ]
@@ -1306,8 +3001,96 @@
               "file": "backend/app/authz/decision.py",
               "terms": [
                 "oauth",
-                "__post_init__",
-                "only"
+                "admin",
+                "never rejected"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "never denied"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "never rejects"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "never denies"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "does not reject"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "does not deny"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "fails to reject"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "fails to deny"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "slips through"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "passes the"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "reaches"
+              ]
+            },
+            {
+              "file": "backend/app/authz/decision.py",
+              "terms": [
+                "oauth",
+                "admin",
+                "granted"
               ]
             }
           ]
@@ -1319,13 +3102,22 @@
             {
               "file": "backend/app/authz/actions.py",
               "terms": [
-                "ai_index.rebuild"
+                "ai_index.rebuild",
+                "403"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "ai_index.rebuild"
+                "ai_index.rebuild",
+                "403"
+              ]
+            },
+            {
+              "file": "backend/app/authz/actions.py",
+              "terms": [
+                "ai_index.rebuild",
+                "always"
               ]
             }
           ]
@@ -1337,64 +3129,69 @@
             {
               "file": "backend/app/authz/actions.py",
               "terms": [
-                "job.retry"
+                "job.retry",
+                "bearer_not_allowed"
               ]
             },
             {
               "file": "backend/app/authz/actions.py",
               "terms": [
-                "view_storage_replication"
+                "view_storage_replication",
+                "bearer_not_allowed"
               ]
             },
             {
               "file": "backend/app/authz/actions.py",
               "terms": [
-                "retry_job"
-              ]
-            },
-            {
-              "file": "backend/app/authz/actions.py",
-              "terms": [
-                "list_storage_replication_jobs"
+                "retry_job",
+                "bearer_not_allowed"
               ]
             },
             {
               "file": "backend/app/authz/decision.py",
               "terms": [
-                "job.retry"
+                "job.retry",
+                "bearer_not_allowed"
               ]
             },
             {
-              "file": "backend/app/authz/decision.py",
+              "file": "backend/app/authz/actions.py",
               "terms": [
-                "retry_job"
+                "list_storage_replication_jobs",
+                "bearer_not_allowed"
               ]
             }
           ]
         },
         {
-          "id": "F6-issuable-tiers-admin-channels",
+          "id": "F6-issuable-tiers-offers-admin",
           "critical": false,
           "anchors": [
             {
               "file": "backend/app/authz/scopes.py",
               "terms": [
-                "issuable_tiers",
-                "channel"
+                "every channel"
               ]
             },
             {
               "file": "backend/app/authz/scopes.py",
               "terms": [
                 "channel",
-                "pat"
+                "other than"
               ]
             },
             {
               "file": "backend/app/authz/scopes.py",
               "terms": [
-                "issuable_tiers",
-                "every"
+                "channel",
+                "fail closed"
+              ]
+            },
+            {
+              "file": "backend/app/authz/scopes.py",
+              "terms": [
+                "channel",
+                "only pat"
               ]
             }
           ]
@@ -1426,12 +3223,6 @@
               "terms": [
                 "exact set"
               ]
-            },
-            {
-              "file": "backend/tests/test_authz_core.py",
-              "terms": [
-                "narrower_scope"
-              ]
             }
           ]
         }
@@ -1445,7 +3236,7 @@
               "terms": [
                 "oauth",
                 "operator",
-                "retain"
+                "retains"
               ]
             },
             {
@@ -1453,7 +3244,7 @@
               "terms": [
                 "oauth",
                 "operator",
-                "preserve"
+                "keeps"
               ]
             },
             {
@@ -1461,7 +3252,7 @@
               "terms": [
                 "oauth",
                 "operator",
-                "survive"
+                "survives"
               ]
             },
             {
@@ -1469,7 +3260,7 @@
               "terms": [
                 "oauth",
                 "operator",
-                "bypass"
+                "remains"
               ]
             },
             {
@@ -1477,7 +3268,7 @@
               "terms": [
                 "oauth",
                 "instance admin",
-                "retain"
+                "retains"
               ]
             }
           ]
@@ -1488,20 +3279,7 @@
             {
               "file": "backend/app/authz/legacy_tools.json",
               "terms": [
-                "inventory",
-                "mismatch"
-              ]
-            },
-            {
-              "file": "backend/app/authz/legacy_tools.json",
-              "terms": [
-                "deviat"
-              ]
-            },
-            {
-              "file": "backend/app/authz/legacy_tools.json",
-              "terms": [
-                "does not match"
+                "deviates"
               ]
             },
             {
@@ -1513,7 +3291,7 @@
             {
               "file": "backend/app/authz/legacy_tools.json",
               "terms": [
-                "inconsisten"
+                "omits"
               ]
             }
           ]
@@ -1535,117 +3313,782 @@
       "kind": "review",
       "findings": [
         {
-          "id": "F1-escaped-brackets-become-citation-refs",
+          "id": "F1-unescaped-brackets-become-citation-refs",
           "critical": true,
           "anchors": [
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "micromark"
+                "micromark",
+                "wird zum"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "citationref"
+                "micromark",
+                "werden verweise"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "citation"
+                "micromark",
+                "werden zu"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "verweis"
+                "micromark",
+                "erzeugt ein"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "marker"
+                "micromark",
+                "becomes a"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "escape",
-                "reference"
+                "micromark",
+                "turns into"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "&#91;"
+                "micromark",
+                "is treated as"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "character reference"
+                "micromark",
+                "creates a"
               ]
             },
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "characterescape"
+                "micromark",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "micromark",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "wird zum"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "werden verweise"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "werden zu"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "erzeugt ein"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "becomes a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "turns into"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "is treated as"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "creates a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "wird zum"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "werden verweise"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "werden zu"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "erzeugt ein"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "becomes a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "turns into"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "is treated as"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "creates a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "character reference",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "wird zum"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "werden verweise"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "werden zu"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "erzeugt ein"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "becomes a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "turns into"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "is treated as"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "creates a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "unescaped",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "wird zum"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "werden verweise"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "werden zu"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "erzeugt ein"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "becomes a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "turns into"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "is treated as"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "creates a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescape",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "wird zum"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "werden verweise"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "werden zu"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "erzeugt ein"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "becomes a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "turns into"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "is treated as"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "creates a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "yields a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "&#91;",
+                "produces a"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape geht verloren"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "maskierung geht verloren"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash geht verloren"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "escape is lost"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "fällt weg"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "dropped"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "backslash",
+                "lost"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "erzeugt `citationref`"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chatContentModel.js",
+              "terms": [
+                "characterescapevalue"
               ]
             }
           ]
         },
         {
-          "id": "F2-undefined-css-tokens",
+          "id": "F2-css-custom-properties-do-not-exist",
           "critical": true,
           "anchors": [
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "--surface-overlay"
+                "--surface-overlay",
+                "fehlen in"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "--zone-selected"
+                "--surface-overlay",
+                "nicht definiert"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "--success-soft-fg"
+                "--surface-overlay",
+                "undefined"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "--warning-soft-fg"
+                "--surface-overlay",
+                "not defined"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "--danger-soft-fg"
+                "--surface-overlay",
+                "existiert nicht"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "undefined",
-                "token"
+                "--surface-overlay",
+                "existieren nicht"
               ]
             },
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "undefined",
-                "variable"
+                "--surface-overlay",
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--surface-overlay",
+                "do not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "fehlen in"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "nicht definiert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "undefined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "not defined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "existiert nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--zone-selected",
+                "do not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "fehlen in"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "nicht definiert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "undefined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "not defined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "existiert nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--success-soft-fg",
+                "do not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "fehlen in"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "nicht definiert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "undefined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "not defined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "existiert nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--warning-soft-fg",
+                "do not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "fehlen in"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "nicht definiert"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "undefined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "not defined"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "existiert nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "does not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "--danger-soft-fg",
+                "do not exist"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "existieren nicht"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/chat-content.css",
+              "terms": [
+                "nicht definierte"
               ]
             },
             {
@@ -1658,31 +4101,8 @@
             {
               "file": "frontend/src/app/chat/chat-content.css",
               "terms": [
-                "nicht definiert"
-              ]
-            },
-            {
-              "file": "frontend/src/app/chat/chat-content.css",
-              "terms": [
-                "existieren nicht"
-              ]
-            },
-            {
-              "file": "frontend/src/app/chat/chat-content.css",
-              "terms": [
-                "not defined"
-              ]
-            },
-            {
-              "file": "frontend/src/app/chat/chat-content.css",
-              "terms": [
-                "does not exist"
-              ]
-            },
-            {
-              "file": "frontend/src/app/chat/chat-content.css",
-              "terms": [
-                "do not exist"
+                "undefined",
+                "css variable"
               ]
             }
           ]
@@ -1700,7 +4120,8 @@
             {
               "file": "frontend/src/app/chat/citationMarkers.js",
               "terms": [
-                "non-object"
+                "non-object",
+                "numbering"
               ]
             },
             {
@@ -1731,7 +4152,8 @@
             {
               "file": "frontend/src/app/chat/chatContentModel.js",
               "terms": [
-                "non-object"
+                "non-object",
+                "numbering"
               ]
             },
             {
@@ -1769,12 +4191,6 @@
               "file": "frontend/src/app/chat/chatContentModel.test.mjs",
               "terms": [
                 "entity"
-              ]
-            },
-            {
-              "file": "frontend/src/app/chat/chatContentModel.test.mjs",
-              "terms": [
-                "linkreference"
               ]
             },
             {
@@ -1822,54 +4238,53 @@
       ],
       "falseFindings": [
         {
-          "id": "FF1-xss-in-markdown-rendering",
+          "id": "FF1-markdown-rendering-uses-dangerouslySetInnerHTML",
           "anchors": [
             {
               "file": "frontend/src/app/chat/AssistantContent.jsx",
               "terms": [
-                "xss",
-                "vulnerab"
+                "uses dangerouslysetinnerhtml"
               ]
             },
             {
               "file": "frontend/src/app/chat/AssistantContent.jsx",
               "terms": [
-                "xss",
-                "exploit"
+                "verwendet dangerouslysetinnerhtml"
               ]
             },
             {
               "file": "frontend/src/app/chat/AssistantContent.jsx",
               "terms": [
-                "safehref",
-                "bypass"
+                "nutzt dangerouslysetinnerhtml"
+              ]
+            },
+            {
+              "file": "frontend/src/app/chat/AssistantContent.jsx",
+              "terms": [
+                "renders html via"
               ]
             }
           ]
         },
         {
-          "id": "FF2-local-ids-or-stale-answers-leak",
+          "id": "FF2-local-ids-are-sent-to-the-backend",
           "anchors": [
             {
               "file": "frontend/src/app/chat/ChatPanel.jsx",
               "terms": [
-                "local-",
-                "backend",
-                "sends"
+                "sends local-"
               ]
             },
             {
               "file": "frontend/src/app/chat/ChatPanel.jsx",
               "terms": [
-                "stale",
-                "leak"
+                "sendet local-"
               ]
             },
             {
               "file": "frontend/src/app/chat/ChatPanel.jsx",
               "terms": [
-                "late",
-                "foreign"
+                "passes local-"
               ]
             }
           ]
@@ -1910,53 +4325,6 @@
           "-qF",
           "#222",
           "docs/api-inventory/dms.md"
-        ]
-      ]
-    }
-  },
-  {
-    "id": "i-go-app-inv3",
-    "kind": "implementation",
-    "repo": "go-app-w6",
-    "baseCommit": "ab47013198f09c756f329ff8720211302779b278",
-    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/i-go-app-inv3.txt",
-    "promptHash": "sha256:151a4fab32815f7871ba2ed83719d9d6d0bd56456f700f21211cf771047d26b6",
-    "sourceSession": "635f1c51-0f14-4167-9040-a872a1eea0b7",
-    "allowedPaths": [
-      "docs/api-inventory/businessobjects.md",
-      "docs/api-inventory/actions.md",
-      "docs/api-inventory/task.md"
-    ],
-    "scopeIgnore": [],
-    "oracle": {
-      "kind": "implementation",
-      "command": [
-        "bash",
-        "scripts/api-inventory-check.sh",
-        "check",
-        "businessobjects",
-        "actions",
-        "task"
-      ],
-      "timeoutMs": 120000,
-      "setup": [
-        [
-          "grep",
-          "-qF",
-          "#224",
-          "docs/api-inventory/businessobjects.md"
-        ],
-        [
-          "grep",
-          "-qF",
-          "#225",
-          "docs/api-inventory/actions.md"
-        ],
-        [
-          "grep",
-          "-qF",
-          "#223",
-          "docs/api-inventory/task.md"
         ]
       ]
     }
@@ -2036,6 +4404,85 @@
           "401ad18b094b12dc7cd6a7c7412c97b08f06a3ae",
           "--",
           "backend/tests/test_authz_core.py"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "i-pyng-pdf",
+    "kind": "implementation",
+    "repo": "pyng-stab-b",
+    "baseCommit": "203cfc07d528aef29be24a30f44cf2864edf67f6",
+    "promptRef": "eval/results/extension-ablation-2026-10-21/prompts/i-pyng-pdf.txt",
+    "promptHash": "sha256:eaca38af666094337fed95c8d521c0a1306646b2945084f5a079eefaafa5b3a8",
+    "sourceSession": "0c770e50-215b-42ac-af9b-8cdd26b6a3f7",
+    "allowedPaths": [
+      "backend/app/mail_pdf_render.py",
+      "backend/tests/",
+      "backend/tests/test_mail_pdf_diagnostics.py"
+    ],
+    "scopeIgnore": [
+      "backend/.pytest_cache/",
+      "backend/.ruff_cache/",
+      "backend/app/__pycache__/",
+      "backend/app/ai_connections/__pycache__/",
+      "backend/app/ai_connections/discovery/__pycache__/",
+      "backend/app/authz/__pycache__/",
+      "backend/app/benchmark/__pycache__/",
+      "backend/app/chat/__pycache__/",
+      "backend/app/classify/__pycache__/",
+      "backend/app/db/__pycache__/",
+      "backend/app/decision/__pycache__/",
+      "backend/app/decision/providers/__pycache__/",
+      "backend/app/document_ai/__pycache__/",
+      "backend/app/embed/__pycache__/",
+      "backend/app/entities/__pycache__/",
+      "backend/app/extract/__pycache__/",
+      "backend/app/mail_importance/__pycache__/",
+      "backend/app/maintenance/__pycache__/",
+      "backend/app/mcp/__pycache__/",
+      "backend/app/mcp/tools/__pycache__/",
+      "backend/app/notifications/__pycache__/",
+      "backend/app/ocr/__pycache__/",
+      "backend/app/routes/__pycache__/",
+      "backend/app/storage/__pycache__/",
+      "backend/tests/__pycache__/",
+      "backend/tests/mcp/__pycache__/",
+      "backend/tests/nodb/__pycache__/",
+      "backend/tests/storage_control/__pycache__/",
+      "backend/tests/storage_operability/__pycache__/"
+    ],
+    "dependencies": [
+      {
+        "path": "backend/.venv",
+        "lockfile": "backend/uv.lock"
+      }
+    ],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "env",
+        "-C",
+        "backend",
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "--noconftest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests/test_mail_pdf_diagnostics.py",
+        "-k",
+        "not test_lost_child_status_never_succeeds_or_signals_reaped_group and not test_unknown_child_status_never_succeeds and not test_timeout_kills_ready_process_group_and_reaps_parent"
+      ],
+      "timeoutMs": 300000,
+      "setup": [
+        [
+          "git",
+          "checkout",
+          "011acd7ab1a420a56603e053ddfe03a8c3497138",
+          "--",
+          "backend/tests/test_mail_pdf_diagnostics.py"
         ]
       ]
     }
