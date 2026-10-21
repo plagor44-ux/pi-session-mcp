@@ -1,4 +1,5 @@
-import { lstat, mkdir, readdir } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, lstat, mkdir, open, opendir, readdir, rmdir, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "./client-adapters/command.js";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
@@ -56,12 +57,102 @@ export class EventsDirectoryError extends Error {
   }
 }
 
+/** Upper bound of entries a launch deletes from the writer's own spool directory; more means the directory is refused. */
+export const EVENTS_CLEANUP_MAX_ENTRIES = 10_000;
+const EVENTS_CLEANUP_MAX_DEPTH = 8;
+
+const NO_FOLLOW_DIRECTORY = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+
+/**
+ * Requires a real directory owned by `uid` and resets its mode to 0700. The mode is changed first because a
+ * directory the worker stripped to 0000 cannot be opened; the handle opened afterwards must be the same inode.
+ */
+async function resetPrivateDirectory(path: string, uid: number): Promise<void> {
+  const before = await lstat(path);
+  if (!before.isDirectory() || before.uid !== uid) throw new EventsDirectoryError();
+  if ((before.mode & 0o777) !== 0o700) await chmod(path, 0o700);
+  const handle = await open(path, NO_FOLLOW_DIRECTORY);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isDirectory() || stat.uid !== uid || stat.ino !== before.ino || stat.dev !== before.dev || (stat.mode & 0o777) !== 0o700) throw new EventsDirectoryError();
+  } finally { await handle.close(); }
+}
+
+/** Removes everything below `directory` without following links; the budget is shared across the whole walk. */
+async function clearDirectory(directory: string, uid: number, budget: { left: number }, depth: number): Promise<void> {
+  if (depth > EVENTS_CLEANUP_MAX_DEPTH) throw new EventsDirectoryError();
+  for (const name of await listNames(directory, budget)) await removeEntry(join(directory, name), uid, budget, depth + 1);
+}
+
+/** Event files and temporary files of a server instance younger than this are never removed at launch. */
+export const EVENTS_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+const INSTANCE_DIRECTORY = /^inst-[0-9a-f]{16}$/;
+
+async function removeEntry(path: string, uid: number, budget: { left: number }, depth: number): Promise<void> {
+  const stat = await lstat(path);
+  if (stat.isDirectory()) {
+    if (stat.uid !== uid) throw new EventsDirectoryError();
+    await resetPrivateDirectory(path, uid);
+    await clearDirectory(path, uid, budget, depth);
+    await rmdir(path);
+  } else await unlink(path);
+}
+
+async function listNames(directory: string, budget: { left: number }): Promise<string[]> {
+  const names: string[] = [];
+  const handle = await opendir(directory);
+  try {
+    for await (const entry of handle) {
+      if (--budget.left < 0) throw new EventsDirectoryError();
+      names.push(entry.name);
+    }
+  } catch (error) { await handle.close().catch(() => {}); throw error; }
+  return names;
+}
+
+/**
+ * A server instance directory may belong to a live server of the same writer, so it is never removed while
+ * it could be in use: only event and temporary files older than the stale age go, and the directory goes
+ * only when it is then empty and itself has not changed within that age.
+ */
+async function sweepInstance(path: string, uid: number, before: { mtimeMs: number }, cutoff: number, budget: { left: number }): Promise<void> {
+  await resetPrivateDirectory(path, uid);
+  let kept = 0;
+  for (const name of await listNames(path, budget)) {
+    const entry = join(path, name), stat = await lstat(entry);
+    const old = stat.mtimeMs < cutoff;
+    // A live server only creates event and temporary files; anything else is junk that goes by age alone.
+    if (!old) { kept++; continue; }
+    await removeEntry(entry, uid, budget, 2);
+  }
+  if (kept === 0 && before.mtimeMs < cutoff) {
+    try { await rmdir(path); } catch (error) {
+      if (!(error instanceof Error && "code" in error && (error.code === "ENOTEMPTY" || error.code === "ENOENT"))) throw error;
+    }
+  }
+}
+
+/** Launch-time cleanup of the writer's own spool directory; see `ensureWriterEventsDirectory`. */
+async function sweepWriterDirectory(directory: string, uid: number, now: number): Promise<void> {
+  const budget = { left: EVENTS_CLEANUP_MAX_ENTRIES }, cutoff = now - EVENTS_STALE_AFTER_MS;
+  for (const name of await listNames(directory, budget)) {
+    const path = join(directory, name), stat = await lstat(path);
+    if (stat.isDirectory() && stat.uid === uid && INSTANCE_DIRECTORY.test(name)) await sweepInstance(path, uid, stat, cutoff, budget);
+    else await removeEntry(path, uid, budget, 1);
+  }
+}
+
 /**
  * Creates (when missing) and verifies the dedicated spool directory of one writer under the operator's
  * runtime directory, which is a tmpfs cleared at logout and therefore recreated at every launch.
- * Every level must be a real directory owned by `uid` without group or other access; links are refused.
+ * The parents must be real directories owned by `uid` without group or other access; links are refused.
+ * The writer's own directory is writable by the worker (same user inside the boundary), so a mode the
+ * worker changed is reset to 0700 instead of refused. Before it is mounted, everything that is not an
+ * `inst-<16 hex>` directory is removed, and inside instance directories only event and temporary files older
+ * than 24 hours (an instance directory only when then empty and itself that old), so a launch never breaks a
+ * live server of the same writer. The work is bounded and links are unlinked, never followed.
  */
-export async function ensureWriterEventsDirectory(env: NodeJS.ProcessEnv, name: string, uid: number): Promise<string> {
+export async function ensureWriterEventsDirectory(env: NodeJS.ProcessEnv, name: string, uid: number, now: number = Date.now()): Promise<string> {
   const target = writerEventsDir(env, name);
   if (target === undefined) throw new EventsDirectoryError();
   const verify = async (path: string): Promise<void> => {
@@ -72,12 +163,18 @@ export async function ensureWriterEventsDirectory(env: NodeJS.ProcessEnv, name: 
     const chain = [target, dirname(target), dirname(dirname(target)), dirname(dirname(dirname(target)))].reverse();
     // chain[0] is the runtime directory itself: it must already exist and is never created or changed here.
     await verify(chain[0]!);
-    for (const path of chain.slice(1)) {
+    for (const path of chain.slice(1, -1)) {
       try { await mkdir(path, { mode: 0o700 }); } catch (error) {
         if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
       }
       await verify(path);
     }
+    try { await mkdir(target, { mode: 0o700 }); } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+    }
+    if (!(await lstat(target)).isDirectory()) throw new EventsDirectoryError();
+    await resetPrivateDirectory(target, uid);
+    await sweepWriterDirectory(target, uid, now);
   } catch { throw new EventsDirectoryError(); }
   return target;
 }

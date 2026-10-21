@@ -115,6 +115,21 @@ extra bind mount**, as amended in
   no container starts: the launcher writes one structured line to stderr with
   `"stage": "events"` and `"code": "events_directory_unavailable"` and serves the
   `writer_not_ready` refusal. Fix the directory (or disable delivery) and reconnect.
+  The parents keep this strict check. The writer's own `writer-<name>` directory
+  is writable by the worker (same user under `--userns=keep-id`), so a launch
+  resets a mode the worker changed to 0700 instead of refusing; it still must
+  be a real directory of the current user, never a link. Before mounting, the
+  launch also cleans that directory, without ever breaking a live server of the
+  same writer (for example one that `--verify` or a second controller starts
+  next to a running one): every entry that is not a real `inst-<16 hex>`
+  directory (files, links, other directories) is removed, links unlinked and
+  never followed. An `inst-*` directory may belong to a live instance, so only
+  its entries older than 24 hours (event files, `.tmp-*` files, junk) are
+  removed, and the directory itself only when it is then empty and has not
+  changed for 24 hours. A fresh instance directory with fresh files always
+  survives a launch. The work is bounded: more than 10,000 entries or a nesting
+  deeper than 8 levels fails the launch with the same
+  `events_directory_unavailable` code.
 - **Removal.** `--remove` deletes the writer's spool directory, best effort and
   without following a link. A missing runtime directory does not fail the removal.
 - **Changing delivery.** The setting is part of the writer's provisioned
@@ -131,7 +146,16 @@ extra bind mount**, as amended in
 `/pi/events`, links and oversized files included. It gains no read access to
 host data and no write access outside that directory. It can forge, delete or
 flood events of its own writer, which causes at most a spurious wake, or a
-missing wake that the hook's wait budget replaces by one running read. The hook
+missing wake that the hook's wait budget replaces by one running read. The
+effect on wakes is limited to its own writer's namespace, but the write access
+is not: the directory lies in the operator's runtime tmpfs
+(`$XDG_RUNTIME_DIR`), and during a run the worker can write into it without a
+size limit through the mount. That can exhaust the runtime directory and
+disturb the operator's user session and its services. The launch-time cleanup
+and its bound do not prevent this; they only keep stale files from
+accumulating between runs. Delivery is opt-in for this reason: enable it only
+for writers whose runtime directory you can afford to have filled, and
+remove the writer or disable delivery if you cannot. The hook
 validates each event strictly, caps size and count and follows no link, and the
 controller never takes a state from a wake. The release acceptance for a writer
 with delivery enabled must show the missing access and the forged-event

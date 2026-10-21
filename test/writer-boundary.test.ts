@@ -1,10 +1,10 @@
-import { chmod, lstat, mkdir, readdir, symlink, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, symlink, utimes, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "../src/client-adapters/command.js";
-import { BOUNDARY_GIT, BoundaryError, EventsDirectoryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, ensureWriterEventsDirectory, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
+import { BOUNDARY_GIT, BoundaryError, EVENTS_CLEANUP_MAX_ENTRIES, EventsDirectoryError, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, ensureWriterEventsDirectory, isSafeRefName, podmanInfo, resolveImage, serveArgs, throwawayArgs, verifyCloneLayout } from "../src/writer-boundary.js";
 import { writerPaths, type WriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -114,7 +114,7 @@ it("refuses a directory owned by someone else", async () => {
 it.each([0o750, 0o705, 0o770])("refuses a runtime directory with mode %o", async (mode) => {
   await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: await runtime(mode) }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
 });
-it.each([["pi-session-mcp"], ["pi-session-mcp/events"], ["pi-session-mcp/events/writer-repo-w1"]])("refuses an existing group-accessible %s", async (relative) => {
+it.each([["pi-session-mcp"], ["pi-session-mcp/events"]])("refuses an existing group-accessible parent %s", async (relative) => {
   const root = await runtime();
   await mkdir(join(root, relative), { recursive: true, mode: 0o700 });
   await chmod(join(root, relative), 0o770);
@@ -127,6 +127,115 @@ it.each([["pi-session-mcp"], ["pi-session-mcp/events"], ["pi-session-mcp/events/
   await symlink(outside, join(root, relative));
   await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
   expect(await readdir(outside)).toEqual([]);
+});
+it.each([0o777, 0o770, 0o000, 0o500])("resets a spool directory the worker changed to mode %o instead of refusing", async (mode) => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(own, { recursive: true, mode: 0o700 });
+  await chmod(own, mode);
+  expect(await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).toBe(own);
+  expect((await lstat(own)).mode & 0o777).toBe(0o700);
+  // The parents keep the strict check, and other writers' directories are not touched.
+  const sibling = join(root, "pi-session-mcp", "events", "writer-repo-w2");
+  await mkdir(sibling, { mode: 0o700 }); await writeFile(join(sibling, "keep"), "keep"); await chmod(sibling, 0o770);
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid);
+  expect((await lstat(sibling)).mode & 0o777).toBe(0o770);
+});
+const HOUR = 3_600_000;
+const INSTANCE = "inst-0123456789abcdef", OTHER_INSTANCE = "inst-fedcba9876543210";
+async function age(path: string, hours: number): Promise<void> {
+  const when = new Date(Date.now() - hours * HOUR);
+  await utimes(path, when, when);
+}
+it("removes everything in the writer's own directory that is not an instance directory, without following links", async () => {
+  const root = await runtime(), outside = await temporaryRoot("pi-writer-outside-");
+  await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
+  const events = join(root, "pi-session-mcp", "events"), own = join(events, "writer-repo-w1"), sibling = join(events, "writer-repo-w2");
+  await mkdir(join(own, "junk", "deep"), { recursive: true, mode: 0o700 });
+  await writeFile(join(own, "stray"), "x"); await writeFile(join(own, "00000001-turn_terminal.json"), "{}");
+  await mkdir(join(own, "inst-short")); await mkdir(join(own, "INST-0123456789abcdef")); await mkdir(join(own, "inst-0123456789abcdeg"));
+  await symlink(outside, join(own, "link-dir")); await symlink(join(outside, "keep"), join(own, "link-file"));
+  // A link named like an instance directory is junk too and is not followed.
+  await symlink(outside, join(own, OTHER_INSTANCE));
+  await symlink(outside, join(own, "junk", "deep", "link-dir"));
+  await mkdir(join(own, "locked", "inner"), { recursive: true }); await writeFile(join(own, "locked", "inner", "f"), "x");
+  await chmod(join(own, "locked", "inner"), 0o000); await chmod(join(own, "locked"), 0o000);
+  await mkdir(sibling, { mode: 0o700 }); await writeFile(join(sibling, "keep"), "keep");
+  expect(await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).toBe(own);
+  expect(await readdir(own)).toEqual([]);
+  expect(await readdir(outside)).toEqual(["keep"]);
+  expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
+  expect(await readdir(sibling)).toEqual(["keep"]);
+});
+it("keeps an instance directory with fresh files, since its server may be live", async () => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(join(own, INSTANCE), { recursive: true, mode: 0o700 });
+  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+  for (const name of ["00000001-turn_terminal.json", "00000002-instance_ended.json", ".tmp-3-abcd1234"]) await writeFile(join(own, INSTANCE, name), "{}");
+  // An old but empty-looking instance directory that still holds a fresh file must stay, and so must its file.
+  await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}");
+  await age(join(own, OTHER_INSTANCE), 48);
+  await chmod(join(own, INSTANCE), 0o000);
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid);
+  expect((await readdir(own)).sort()).toEqual([INSTANCE, OTHER_INSTANCE].sort());
+  expect((await readdir(join(own, INSTANCE))).sort()).toEqual([".tmp-3-abcd1234", "00000001-turn_terminal.json", "00000002-instance_ended.json"]);
+  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
+  expect((await lstat(join(own, INSTANCE))).mode & 0o777).toBe(0o700);
+});
+it("removes event files older than 24 hours and then an instance directory that is empty and old", async () => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(join(own, INSTANCE), { recursive: true, mode: 0o700 });
+  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+  for (const name of ["00000001-turn_terminal.json", ".tmp-2-abcd1234"]) { await writeFile(join(own, INSTANCE, name), "{}"); await age(join(own, INSTANCE, name), 25); }
+  await age(join(own, INSTANCE), 25);
+  // An instance directory with one old and one fresh file keeps the fresh one and the directory.
+  await writeFile(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, OTHER_INSTANCE, "00000001-turn_terminal.json"), 30);
+  await writeFile(join(own, OTHER_INSTANCE, "00000002-turn_terminal.json"), "{}");
+  await age(join(own, OTHER_INSTANCE), 30);
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid);
+  expect(await readdir(own)).toEqual([OTHER_INSTANCE]);
+  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["00000002-turn_terminal.json"]);
+});
+it("keeps an emptied instance directory that changed within 24 hours, and removes old junk inside one without following links", async () => {
+  const root = await runtime(), outside = await temporaryRoot("pi-writer-outside-"), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await chmod(outside, 0o700); await writeFile(join(outside, "keep"), "keep");
+  await mkdir(join(own, INSTANCE), { recursive: true, mode: 0o700 });
+  await mkdir(join(own, OTHER_INSTANCE), { mode: 0o700 });
+  await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}"); await age(join(own, INSTANCE, "00000001-turn_terminal.json"), 25);
+  // The directory itself is fresh: it stays although it is now empty.
+  await symlink(outside, join(own, OTHER_INSTANCE, "link")); await mkdir(join(own, OTHER_INSTANCE, "dir")); await writeFile(join(own, OTHER_INSTANCE, "dir", "f"), "x");
+  await age(join(own, OTHER_INSTANCE, "dir", "f"), 30); await age(join(own, OTHER_INSTANCE, "dir"), 30);
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid);
+  expect(await readdir(own)).toEqual([INSTANCE, OTHER_INSTANCE].sort());
+  expect(await readdir(join(own, INSTANCE))).toEqual([]);
+  // The old directory with junk goes; the fresh link stays and is never followed.
+  expect(await readdir(join(own, OTHER_INSTANCE))).toEqual(["link"]);
+  expect(await readdir(outside)).toEqual(["keep"]);
+});
+it("uses the injected clock for the 24 hour boundary", async () => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(join(own, INSTANCE), { recursive: true, mode: 0o700 });
+  await writeFile(join(own, INSTANCE, "00000001-turn_terminal.json"), "{}");
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid, Date.now() + 23 * HOUR);
+  expect(await readdir(join(own, INSTANCE))).toEqual(["00000001-turn_terminal.json"]);
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid, Date.now() + 25 * HOUR);
+  expect(await readdir(own)).toEqual([]);
+});
+it("refuses a spool directory with more stale entries than the cleanup bound", async () => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(own, { recursive: true, mode: 0o700 });
+  await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES + 1 }, (_, i) => writeFile(join(own, `f${i}`), "")));
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).rejects.toMatchObject({ code: "events_directory_unavailable" });
+  // At the bound exactly, the directory is cleaned.
+  const at = await runtime(), ownAt = join(at, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(ownAt, { recursive: true, mode: 0o700 });
+  await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES }, (_, i) => writeFile(join(ownAt, `f${i}`), "")));
+  await ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: at }, "repo-w1", uid);
+  expect(await readdir(ownAt)).toEqual([]);
+});
+it("refuses a spool directory nested deeper than the cleanup bound", async () => {
+  const root = await runtime(), own = join(root, "pi-session-mcp", "events", "writer-repo-w1");
+  await mkdir(join(own, ...Array.from({ length: 12 }, () => "d")), { recursive: true, mode: 0o700 });
+  await expect(ensureWriterEventsDirectory({ XDG_RUNTIME_DIR: root }, "repo-w1", uid)).rejects.toBeInstanceOf(EventsDirectoryError);
 });
 it("refuses a runtime directory that is a symlink", async () => {
   const real = await runtime(), parent = await temporaryRoot("pi-writer-link-");
