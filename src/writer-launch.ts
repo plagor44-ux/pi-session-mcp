@@ -56,7 +56,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   } catch { return refuse("writer_not_ready"); }
   let eventsDir: string | undefined;
   if (await writerEventDeliveryEnabled(paths.config)) {
-    try { eventsDir = await ensureWriterEventsDirectory(deps.env, name, (deps.uid ?? (() => process.getuid!()))()); }
+    try { eventsDir = await ensureWriterEventsDirectory(deps.home, name, (deps.uid ?? (() => process.getuid!()))()); }
     catch { eventsFailure(); return refuse("writer_not_ready"); }
   }
   const providers = state.providers;

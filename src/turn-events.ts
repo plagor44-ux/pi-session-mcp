@@ -1,5 +1,5 @@
 import { isAbsolute, join } from "node:path";
-import { WRITER_NAME_PATTERN } from "./writer-state.js";
+import { WRITER_NAME_PATTERN, writerPaths } from "./writer-state.js";
 
 /**
  * The turn-event file contract shared by the server's spool writer and the wake hook program.
@@ -90,8 +90,11 @@ export function claimsRoot(env: NodeJS.ProcessEnv): string | undefined {
   return root === undefined ? undefined : join(root, "claims");
 }
 
-/** The per-writer spool directory under the events root; `undefined` for an unusable root or a malformed writer name. */
-export function writerEventsDir(env: NodeJS.ProcessEnv, writerName: string): string | undefined {
-  const root = eventsRoot(env);
-  return root === undefined || !WRITER_NAME_PATTERN.test(writerName) ? undefined : join(root, `writer-${writerName}`);
+/**
+ * The per-writer spool directory, `<home>/.local/state/pi-session-mcp/writers/<name>/events`, on disk inside the
+ * writer's own state directory (not on the runtime tmpfs): the container writer's worker can already write
+ * there through its clone mount. `undefined` for a malformed writer name. Pure; no file system access.
+ */
+export function writerEventsDir(home: string, writerName: string): string | undefined {
+  return WRITER_NAME_PATTERN.test(writerName) ? writerPaths(home, writerName).events : undefined;
 }

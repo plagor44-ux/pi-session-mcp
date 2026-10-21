@@ -44,7 +44,7 @@ it("derives the private writer layout", () => {
   expect(writersRoot(home)).toBe(join(home, ".local/state/pi-session-mcp/writers"));
   expect(writerPaths(home, name)).toEqual({
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), go: join(root, "go"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
   });
 });
 
