@@ -280,7 +280,7 @@ export async function createProductionSetup(
     },
     skills: new FileSetupSkillInstaller({ packageRoot, configPath, home: homedir(), cwd: process.cwd() }),
     hooks: new FileSetupHookInstaller({
-      packageRoot, home: homedir(), cwd: process.cwd(), env: process.env, nodePath,
+      packageRoot, configPath, home: homedir(), cwd: process.cwd(), env: process.env, nodePath,
       // The registered server configuration is the source of truth for whether the hook is wanted.
       delivery: async () => { const { loadConfig } = await import("./config.js"); return (await loadConfig(configPath)).eventDelivery === "spool"; },
     }),

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { wrapperDigest } from "./writer-wrapper.js";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import { PACKAGE_VERSION } from "./package-metadata.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
@@ -147,9 +147,16 @@ export async function writerEventDeliveryEnabled(configDirectory: string): Promi
   } catch { return false; }
 }
 
+/**
+ * The writer's own configuration sits next to its wrapper (`<root>/config`), so acceptance, launch
+ * and Doctor all read event delivery from the same place. Delivery is part of the fingerprint only
+ * when it is enabled: an accepted writer without delivery keeps its fingerprint, and enabling
+ * delivery (a new spool mount in the boundary) needs a new acceptance.
+ */
 export async function currentAcceptanceFingerprint(wrapper: string, state: WriterState, podmanVersion: string): Promise<string> {
+  const eventDelivery = await writerEventDeliveryEnabled(join(dirname(wrapper), "config"));
   return acceptanceFingerprint({ wrapperDigest: wrapperDigest(await readFile(wrapper, "utf8")), packageVersion: PACKAGE_VERSION,
-    imageId: state.imageId, podmanVersion, network: state.network, cache: state.cache });
+    imageId: state.imageId, podmanVersion, network: state.network, cache: state.cache, ...(eventDelivery ? { eventDelivery } : {}) });
 }
 
 export function acceptanceFingerprint(input: {
@@ -159,9 +166,11 @@ export function acceptanceFingerprint(input: {
   podmanVersion: string;
   network: string;
   cache: string;
+  /** Present only for an enabled delivery; an absent value must not change the canonical text of earlier fingerprints. */
+  eventDelivery?: boolean;
 }): string {
   const canonical = JSON.stringify({
-    cache: input.cache, imageId: input.imageId, network: input.network,
+    cache: input.cache, ...(input.eventDelivery ? { eventDelivery: true } : {}), imageId: input.imageId, network: input.network,
     packageVersion: input.packageVersion, podmanVersion: input.podmanVersion, wrapperDigest: input.wrapperDigest,
   });
   return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;

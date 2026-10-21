@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
-import { readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
+import { PACKAGE_VERSION } from "../src/package-metadata.js";
+import { wrapperDigest } from "../src/writer-wrapper.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
 async function fixture(exitCode = 0, classification = "not_limited") {
@@ -73,4 +75,19 @@ it("cleans the fresh disposable control clone even on harness failure", async ()
   expect(run.mock.calls.find(([cmd]) => cmd === "git")![1]).toContain("--no-hardlinks");
   await expect(readdir(clone)).rejects.toThrow();
   expect(await readdir(join(ctx.home, ".local/state/pi-session-mcp/writers"))).toEqual(["repo-w1"]);
+});
+it.each([[false], [true]])("binds the acceptance to event delivery only when enabled (delivery %s)", async (delivery) => {
+  const { ctx, paths } = await fixture();
+  await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict: "control_detected_escapes", at: "now" }));
+  await mkdir(paths.config, { recursive: true });
+  if (delivery) await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify({ events: { delivery: "spool" } }));
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("writer_accepted");
+  const state = (await readWriterState(ctx.home, "repo-w1"))!;
+  const wrapper = wrapperDigest("wrapper");
+  const expected = (eventDelivery: boolean) => acceptanceFingerprint({ wrapperDigest: wrapper, packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache, ...(eventDelivery ? { eventDelivery } : {}) });
+  expect(state.acceptance?.fingerprint).toBe(expected(delivery));
+  expect(state.acceptance?.fingerprint === expected(!delivery)).toBe(false);
+  // Changing the writer's delivery afterwards no longer matches the accepted fingerprint: it needs a new acceptance.
+  await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(delivery ? {} : { events: { delivery: "spool" } }));
+  expect(await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0")).not.toBe(state.acceptance?.fingerprint);
 });

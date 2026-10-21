@@ -5,11 +5,13 @@ import { lstat, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/pro
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
-  acceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerName,
+  acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerName,
   writerEventDeliveryEnabled, writerPaths, writerRegistrationName, writersRoot, writeWriterState, WriterStateError,
   type WriterState,
 } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+import { PACKAGE_VERSION } from "../src/package-metadata.js";
+import { wrapperDigest } from "../src/writer-wrapper.js";
 
 afterAll(removeTemporaryRoots);
 
@@ -168,4 +170,30 @@ it("treats a missing, malformed or linked writer configuration as delivery disab
   await writeFile(join(other, "real.json"), JSON.stringify({ events: { delivery: "spool" } }));
   await symlink(join(other, "real.json"), join(other, "pi-session-mcp.json"));
   expect(await writerEventDeliveryEnabled(other)).toBe(false);
+});
+
+describe("acceptance fingerprint and event delivery", () => {
+  const input = { wrapperDigest: "wrapper", packageVersion: "1.0.0", imageId: "a".repeat(64), podmanVersion: "5.0.0", network: "pasta", cache: "none" };
+  it("leaves a fingerprint without delivery unchanged and changes it only for an enabled delivery", () => {
+    const legacy = JSON.stringify({ cache: "none", imageId: input.imageId, network: "pasta", packageVersion: "1.0.0", podmanVersion: "5.0.0", wrapperDigest: "wrapper" });
+    expect(acceptanceFingerprint(input)).toBe(`sha256:${createHash("sha256").update(legacy).digest("hex")}`);
+    expect(acceptanceFingerprint({ ...input, eventDelivery: false })).toBe(acceptanceFingerprint(input));
+    expect(acceptanceFingerprint({ ...input, eventDelivery: true })).not.toBe(acceptanceFingerprint(input));
+    expect(acceptanceFingerprint({ ...input, eventDelivery: true })).toBe(acceptanceFingerprint({ ...input, eventDelivery: true }));
+  });
+  it("reads delivery from the configuration next to the wrapper", async () => {
+    const home = await temporaryRoot("pi-writer-fingerprint-");
+    const paths = writerPaths(home, name);
+    await mkdir(paths.config, { recursive: true });
+    await writeFile(paths.wrapper, "wrapper");
+    const plain = await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0");
+    // Without a configuration, and with delivery off, the fingerprint is the one an earlier release computed.
+    expect(plain).toBe(acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache }));
+    await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify({ events: { delivery: "off" } }));
+    expect(await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0")).toBe(plain);
+    await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify({ events: { delivery: "spool" } }));
+    const enabled = await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0");
+    expect(enabled).not.toBe(plain);
+    expect(enabled).toBe(acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache, eventDelivery: true }));
+  });
 });
