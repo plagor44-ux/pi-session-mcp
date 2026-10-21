@@ -132,5 +132,8 @@ present at the base commit), ruling R72.
 - Sandbox environment additions (ruling R73): six offline variables for Go, uv
   and npm (`GOPROXY=off`, `GOTOOLCHAIN=local`, `UV_OFFLINE=1`, `UV_NO_SYNC=1`,
   `UV_PYTHON_DOWNLOADS=never`, `npm_config_offline=true`).
-- Verdict patterns were timed against 64 KiB adversarial texts: worst case under
-  3 ms (ruling R80 requires linear patterns).
+- Verdict patterns are linear (ruling R80) and were timed on 89 adversarial
+  64 KiB inputs per pattern (worst case 2.9 ms). The full review scoring was
+  quadratic on long lines (6.3 s on one 64 KiB line) and has been linear since
+  commit b442979 (worst case about 90 ms on 25 adversarial 64 KiB texts, checked
+  by a differential fuzz against the old code).

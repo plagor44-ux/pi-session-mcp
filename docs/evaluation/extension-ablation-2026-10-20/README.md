@@ -50,17 +50,27 @@ Calibration: for each review task the recorded first review is accepted. Empty,
 generic and checklist-walking approval reviews (including approvals written by
 an independent reviewer) are rejected. Correct reviews with "no finding" lines
 are accepted. Non-approving reviews that argue a wrong defect are rejected.
-There were 101 controls in total, all as expected.
+There were 124 controls in total, all as expected. In addition, 39 held-out real
+reviews from the operator's transcripts all gave the correct verdict match; the
+patterns accept the real non-approving formats the models write (for example
+"Verdict: blockers exist.").
 
-Verdict patterns were timed against 64 KiB adversarial texts; the worst case was
-under 3 ms.
+Timing: verdict patterns are linear and were timed on 89 adversarial 64 KiB
+inputs per pattern (worst case 2.9 ms). The full review scoring was quadratic on
+long lines (6.3 s on one 64 KiB line) and has been linear since commit b442979
+(worst case about 90 ms on 25 adversarial 64 KiB texts, checked by a
+differential fuzz against the old code).
 
 ### Limits
 
 - The matcher is keyword-based and blind to negation.
-- A non-approving review that uses a task's exact defect words for the wrong
-  conclusion can still hit a finding. `r-go-app-gates`, with a single critical
-  finding, is the most exposed.
+- A non-approving review that denies a critical finding in the oracle's own
+  positive claim wording can still be accepted; this was seen in probes for
+  `r-psm-smoke`, `r-pyng-authz` and `r-go-app-gates`. `r-go-app-gates` has a single
+  critical finding and its prompt asks for a "checks with no finding" section,
+  which makes this more likely there.
+- `r-go-app-gates` counts "APPROVE WITH CHANGES" and "Approved with corrections"
+  as non-approving, and plain "APPROVE" and "APPROVE WITH NITS" as approving.
 - False findings fire on natural denials, which is why they are report-only.
 - The `i-pyng-pdf` oracle no longer checks the rule that an unknown child status
   is never success: the deselected tests assert an internal code name that the
