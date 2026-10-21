@@ -50,7 +50,18 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 - A session accepts one running turn. A second prompt on a running session fails with `session_running`.
 - Put the full task in the prompt: goal, base commit, change area, checks, expected report. Add nothing the task does not ask for. The worker cannot see your conversation.
 
-## 6. Poll with pauses
+## 6. Wait for results
+
+### Event delivery
+
+`pi_capabilities_get` reports `events.delivery`. Use the wake only when it is `spool` **and** you are Claude Code in an interactive or stream-json session with the `pi-session-mcp-wake` hook installed by setup. Otherwise poll as described below. Codex and one-shot `claude -p` runs always poll.
+
+- After `pi_session_prompt` returns a running turn, do not poll it and do not sleep. Start other tasks or end your turn.
+- A system reminder `pi-session-mcp: turn <turnId> of session <sessionId> is <state>.` means that turn is terminal. Read it once with `pi_turn_get` and continue as in section 7. With several running turns, each wake names one turn; read only that one.
+- A reminder `pi-session-mcp: no event for turn <turnId> within the wait budget` means no event arrived in time. Read that turn once. If it is still running, that read re-arms the wake; apply your time budget as usual.
+- A wake is only a trigger. The state you act on is always the one `pi_turn_get` returns.
+
+### Polling
 
 - Poll `pi_turn_get` with `sessionId` and `turnId`. There is no wait tool.
 - Cadence: first poll about 10 s after the prompt, then every 15 to 30 s, matched to the task budget: the short end for short budgets, the long end for long ones. Do not poll faster.
