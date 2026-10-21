@@ -1,10 +1,12 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { classifyRun, summarizeTrace, type RunRecord } from "../eval/extensions/classify.js";
 import type { RunOutput } from "../eval/extensions/run-one.js";
 import type { TraceFindings } from "../eval/extensions/trace.js";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import { parseArgs } from "../eval/extensions/cli.js";
 import { PersistedLedger } from "../eval/extensions/ledger-file.js";
@@ -621,6 +623,8 @@ describe("--allow-source-drift (R89)", () => {
     expect(summary.sourceDrift).toEqual(expected);
     expect(JSON.parse(readFileSync(join(wave.evidenceDir, "summary.json"), "utf8")).sourceDrift).toEqual(expected);
     expect((integrityOf(wave.evidenceDir) as unknown as { source_drift: unknown }).source_drift).toEqual(expected);
+    // The two records are the same data.
+    expect(JSON.parse(readFileSync(join(wave.evidenceDir, "summary.json"), "utf8")).sourceDrift).toEqual((integrityOf(wave.evidenceDir) as unknown as { source_drift: unknown }).source_drift);
     // The integrity index covers the summary, and nothing names a directory of this machine.
     const index = integrityOf(wave.evidenceDir);
     expect(index.files.find((f) => f.path === "summary.json")!.hash).toBe(hash(readFileSync(join(wave.evidenceDir, "summary.json"))));
@@ -662,4 +666,38 @@ describe("--allow-source-drift (R89)", () => {
     }
     expect(existsSync(wave.evidenceDir)).toBe(false);
   });
+});
+
+/** The production path: the wrapper compiles into a disposable build outside any repository and runs the CLI from there, with the repository as cwd. */
+describe("--report through the compiled CLI (module outside a git repository)", () => {
+  const REPO = fileURLToPath(new URL("..", import.meta.url));
+  let buildPromise: Promise<string> | undefined;
+  const compiled = (): Promise<string> => buildPromise ??= (async () => {
+    const root = await temporaryRoot("ablation-report-build-");
+    const build = join(root, "build");
+    await promisify(execFile)(process.execPath, [join(REPO, "node_modules/typescript/bin/tsc"), "-p", join(REPO, "tsconfig.eval.json"), "--outDir", build], { cwd: REPO, maxBuffer: 16 * 1024 * 1024 });
+    symlinkSync(join(REPO, "node_modules"), join(build, "node_modules"), "dir");
+    return join(build, "eval", "extensions", "cli.js");
+  })();
+  const cli = async (cwd: string, ...args: string[]) => {
+    const cliPath = await compiled();
+    expect(() => git(dirname(cliPath), "rev-parse", "--show-toplevel")).toThrow(); // the module's own location is not a repository
+    return promisify(execFile)(process.execPath, [cliPath, ...args], { cwd, env: { PATH: process.env.PATH ?? "", HOME: "/nonexistent" } });
+  };
+
+  it("binds the evidence to the repository of the cwd, in strict mode and with --allow-source-drift", async () => {
+    const wave = await makeWave();
+    const strict = await cli(wave.repo, "--report", "--wave", wave.waveDir, "--ledger", wave.ledgerPath, "--evidence", wave.evidenceDir);
+    expect(JSON.parse(strict.stdout.trim().split("\n").at(-1)!)).toMatchObject({ pairings: expect.any(Array) });
+    expect(integrityOf(wave.evidenceDir).source_binding.commit).toBe(git(wave.repo, "rev-parse", "HEAD").trim());
+
+    writeFileSync(join(wave.repo, "src", "a.ts"), "export const a = 2;\n");
+    commitAll(wave.repo, "src moved on");
+    await expect(cli(wave.repo, "--report", "--wave", wave.waveDir, "--ledger", wave.ledgerPath, "--evidence", join(wave.root, "evidence-strict"))).rejects.toMatchObject({ stderr: expect.stringContaining("approval_source_mismatch") });
+    const drift = join(wave.root, "evidence-drift");
+    await cli(wave.repo, "--report", "--wave", wave.waveDir, "--ledger", wave.ledgerPath, "--evidence", drift, "--allow-source-drift");
+    expect(JSON.parse(readFileSync(join(drift, "summary.json"), "utf8")).sourceDrift).toMatchObject([{ wave: 1, boundPathsChangedSinceSource: ["src/a.ts"], allowSourceDrift: true }]);
+    // A cwd that is not a repository is refused with a fixed code, not by an accident in the build directory.
+    await expect(cli(wave.root, "--report", "--wave", wave.waveDir, "--ledger", wave.ledgerPath, "--evidence", join(wave.root, "evidence-nowhere"))).rejects.toMatchObject({ stderr: expect.stringContaining("source_unavailable") });
+  }, 180_000);
 });

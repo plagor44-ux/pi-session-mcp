@@ -135,6 +135,14 @@ export async function sourceCommit(cwd?: string): Promise<string> {
   return (await run(["rev-parse", "HEAD"])).trim();
 }
 
+/**
+ * The root of the repository the CLI runs in (`git rev-parse --show-toplevel` from `cwd`, default the process's): the same repository
+ * `sourceCommit()` reads. The modules run from a disposable build outside any repository, so no path may be derived from their own location.
+ */
+export async function repositoryRoot(cwd?: string): Promise<string> {
+  try { return (await execFileAsync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8", ...(cwd === undefined ? {} : { cwd }) })).stdout.trim(); } catch { throw new Error("source_unavailable"); }
+}
+
 /** The production configuration with its workspace paths made absolute, as the config loader would resolve them. */
 async function loadProductionConfig(path: string | undefined): Promise<ProductionConfig> {
   const file = resolve(path ?? process.env.PI_SESSION_MCP_CONFIG ?? join(homedir(), ".config", "pi-session-mcp", "pi-session-mcp.json"));
@@ -284,7 +292,7 @@ async function liveInputs(parsed: ParsedArgs) {
   const hostCredentials = fileHostCredentials(authPath);
   const waveDir = resolve(parsed.options["--out"]!);
   await mkdir(waveDir, { recursive: true, mode: 0o700 });
-  return { tasks, runs: approval.runs, productionConfig, approval, hostAuth, hostCredentials, waveDir, ledgerPath: resolve(parsed.options["--ledger"]!) };
+  return { tasks, runs: approval.runs, productionConfig, approval, hostAuth, hostCredentials, repoRoot: await repositoryRoot(), waveDir, ledgerPath: resolve(parsed.options["--ledger"]!) };
 }
 
 /**
@@ -300,17 +308,17 @@ export async function withAbort<T>(body: (signal: AbortSignal) => Promise<T>, em
 }
 
 async function preflight(parsed: ParsedArgs): Promise<void> {
-  const { approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
-  const result = await withAbort((signal) => runPreflight({ approval, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, signal }));
+  const { approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath, repoRoot } = await liveInputs(parsed);
+  const result = await withAbort((signal) => runPreflight({ approval, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, repoRoot, signal }));
   write(result);
   if (result.routes.some((r) => !r.ok)) process.exitCode = 1;
 }
 
 async function wave(parsed: ParsedArgs): Promise<void> {
-  const { tasks, approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath } = await liveInputs(parsed);
+  const { tasks, approval, hostAuth, hostCredentials, productionConfig, waveDir, ledgerPath, repoRoot } = await liveInputs(parsed);
   await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval, ledgerPath);
   const result = await withAbort((signal) => runWave({
-    approval, tasks, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
+    approval, tasks, waveDir, ledgerPath, hostAuth, hostCredentials, productionConfig, repoRoot, extensionTemplate: resolve(parsed.options["--template"]!), signal,
     ...(parsed.options["--deps"] === undefined ? {} : { depsDir: resolve(parsed.options["--deps"]) }),
     ...(parsed.maxRuns === undefined ? {} : { maxRuns: parsed.maxRuns }), resume: parsed.resume,
   }));
@@ -323,7 +331,7 @@ async function wave(parsed: ParsedArgs): Promise<void> {
 }
 
 async function report(parsed: ParsedArgs): Promise<void> {
-  const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!), { allowSourceDrift: parsed.allowSourceDrift });
+  const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!), { repoRoot: await repositoryRoot(), allowSourceDrift: parsed.allowSourceDrift });
   process.stdout.write(`${JSON.stringify({
     spentUsd: summary.spentUsd, budgetSpend: summary.budgetSpend, waveSpend: summary.waveSpend, stopReason: summary.stopReason,
     pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, complete: p.complete, recommendation: p.recommendation })),
@@ -347,8 +355,9 @@ export async function dryLoadCommand(parsed: ParsedArgs, options: { sourceCwd?: 
   const productionConfig = await loadProductionConfig(parsed.options["--config"]);
   const waveDir = resolve(parsed.options["--out"]!);
   if (existsSync(waveDir)) throw new Error("output_exists");
+  const repoRoot = await repositoryRoot(options.sourceCwd);
   const depsDir = parsed.options["--deps"] === undefined ? undefined : resolve(parsed.options["--deps"]);
-  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir, depsDir }, { ...options.deps, signal }));
+  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir, depsDir }, { repoRoot, ...options.deps, signal }));
   await writeFile(join(waveDir, "dry-load.json"), `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   write({
     ok: report.pairs.every((p) => p.ok),
