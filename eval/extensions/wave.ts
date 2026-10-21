@@ -17,7 +17,7 @@ import { scoreImplementation, scoreReview, type ImplementationScore } from "./or
 import { RUN_KEY_BYTES, canonicalJson } from "./output-mac.js";
 import { containmentSelfTest } from "./containment.js";
 import { refreshedHostAuth, type HostCredentials } from "./credentials.js";
-import { planSandbox, sandboxed, type SandboxPlan } from "./sandbox.js";
+import { boundTargets, planSandbox, sandboxed, type SandboxPlan } from "./sandbox.js";
 import type { RunOneInput, RunOutput } from "./run-one.js";
 import type { RunSpec, TaskSpec } from "./schemas.js";
 import { BUILD_ROOT, assertHostSafe, exitedCleanly, groupIsEmpty, killProcessGroup, spawnTracedRunOne, startWithKey, supervise, type Supervised } from "./supervise.js";
@@ -263,7 +263,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
           } else {
             ({ output, text, tampered } = verified);
           }
-          trace = await auditLog(log, [scope.root], scope.root, addresses);
+          trace = await auditLog(log, [scope.root], scope.root, addresses, boundTargets(plan, scope.dependencyBinds));
         }
       } catch (error) { waveFailure = failureCode(error); }
       if (tampered) waveFailure ??= "output_integrity";
@@ -314,7 +314,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
         }
         interruptedInOracle = input.signal?.aborted === true;
         for (const path of oracleLogs) {
-          const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses);
+          const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses, boundTargets(plan, dependencyBinds));
           if (found) trace = trace ? mergeTrace(trace, found) : found;
           else waveFailure ??= "trace_missing";
         }

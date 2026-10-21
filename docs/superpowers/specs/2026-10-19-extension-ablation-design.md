@@ -572,3 +572,22 @@ the text above, they win.
   logged or recorded; records keep `authType` only. Cost: the evaluation writes
   to the operator's auth store during the wave, as normal pi use does (a
   refresh rotates the stored tokens).
+- **Sockets in the sandbox's private tmpfs are internal (R87).** The first live
+  run stopped with `unresolved_egress`: the codegraph MCP server connects to its
+  daemon socket `/tmp/codegraph-<hash>.sock` (the MCP child has no `TMPDIR`, so
+  its temporary directory is `/tmp`). The sandbox mounts a fresh tmpfs on `/tmp`
+  and `/var/tmp`, so the only possible peer of a socket there is a process of
+  the same sandbox. For a trace from a sandboxed command the audit therefore
+  accepts a filesystem AF_UNIX path that resolves below `/tmp/` or `/var/tmp/`
+  (for `connect`, `sendto` and `sendmsg` alike), except below a host path bound
+  into the sandbox: the plan's read-only binds (the build root under `/tmp`,
+  node and codegraph directories, `/etc` entries, name-resolution directories,
+  home binds and links) and the task's dependency mounts and runtime, passed to
+  the audit as `boundPaths` from the run, the oracle, the dry load and the
+  containment self-test. A socket below a bound path is a host socket wherever
+  it lies, so this is also stricter than before for a socket inside a
+  dependency mount below the scope root. Abstract (`@`), relative, resolved-
+  outside (`/tmp/../home/x.sock`) and all other paths still count as unresolved
+  egress; an unsandboxed trace gets no tmp exemption. Cost: a worker process can
+  talk to another process of its own sandbox over a socket in `/tmp`, which it
+  could already do with pipes and loopback.

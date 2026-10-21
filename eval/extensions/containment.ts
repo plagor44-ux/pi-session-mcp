@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { auditLog } from "./audit.js";
 import { runHelper, type HelperRunner } from "./helpers.js";
-import type { SandboxPlan } from "./sandbox.js";
+import { boundTargets, type SandboxPlan } from "./sandbox.js";
 import { tracedCommand } from "./supervise.js";
 import { realHome, type ToolPaths } from "./tools.js";
 
@@ -91,7 +91,7 @@ export async function containmentSelfTest(
       && sockets.length === SOCKETS.length && sockets.every((value) => value === "ENOENT");
     if (!ok || await exists(marker)) throw new Error("containment_failed");
     // The probe's own strace log, parsed the way the wave parses a run: no outside write.
-    const found = await auditLog(log, [scope, oracleHome], scope, { providerAddresses: new Set(), dnsAddresses: new Set() });
+    const found = await auditLog(log, [scope, oracleHome], scope, { providerAddresses: new Set(), dnsAddresses: new Set() }, boundTargets(plan));
     if (found === null || found.outsideWrites.length > 0) throw new Error("containment_failed");
   } finally {
     await rm(marker, { force: true }).catch(() => undefined);

@@ -165,6 +165,13 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     expect(JSON.stringify(report)).not.toContain("sun_path");
   });
 
+  it("does not count the codegraph daemon socket in the sandbox's private /tmp as unresolved egress (R87)", async () => {
+    const daemon = `4242 connect(19<socket:[1234567]>, {sa_family=AF_UNIX, sun_path="/tmp/codegraph-9ae10b5c0e7502a8.sock"}, 110) = 0`;
+    const s = await setup(() => ({ trace: `${benignTrace()}${daemon}\n` }));
+    const report = await dryLoad(s.input, { ...s.deps, pairings: PAIRINGS.filter((p) => p.id === "pl-code-deepseek") });
+    expect(report.pairs[0]).toMatchObject({ ok: true, trace: { unresolvedEgress: 0 } });
+  });
+
   it("keeps a connection to a nameserver on port 53 out of the unexpected ones", async () => {
     const dns = (await import("../eval/extensions/network.js")).dnsServers;
     const address = [...await dns()].find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a)) ?? "127.0.0.53";
