@@ -1,0 +1,32 @@
+{
+  "scenario": "X6",
+  "title": "two server processes, same aliases, no shared registry",
+  "started_in_first": true,
+  "second_get_ok": false,
+  "second_get_error": "unknown_session",
+  "second_list_count": 0,
+  "first_list_count": 1,
+  "first_close_ok": true,
+  "instance_dirs": 2,
+  "spool_kinds": {
+    "instance_ended": 2
+  },
+  "instance_end_reasons": {
+    "eof": 2
+  },
+  "server_pids_started": 2,
+  "leftover_after_grace": 0,
+  "temp_removed": true,
+  "harness_invalid": false,
+  "checks": {
+    "two_instances": true,
+    "unknown_session_in_second": true,
+    "second_list_empty": true,
+    "first_list_had_session": true,
+    "first_close_ok": true,
+    "no_leftover": true,
+    "temp_removed": true,
+    "harness_ok": true
+  },
+  "passed_expectation": true
+}

@@ -159,6 +159,8 @@ export class BridgedRegistry extends SessionRegistry {
   }
   /** Marks the end of this instance's lifetime once, e.g. `eof` when the controller connection ended. */
   endInstance(reason: "closed" | "eof" | "server_exit"): void { if (this.ended) return; this.ended = true; this.bridge.emit({ kind: "instance_ended", reason }); }
+  /** Public entry for a periodic supervisor (evaluation only): runs one reconciliation pass now. */
+  reconcileNow(): void { this.reconcile(); }
   private schedule(): void {
     if (this.scheduled) return;
     this.scheduled = true;
