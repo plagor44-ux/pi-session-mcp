@@ -542,6 +542,25 @@ describe("several waves, approvals and unexpected connects", () => {
     await expect(writeEvidence([wave.waveDir, wave.waveDir], wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo })).rejects.toThrow("wave_required");
   });
 
+  it("refuses waves whose approvals disagree on the replicate count, and accepts waves that agree (R90)", async () => {
+    const wave = await makeWave();
+    const stub = [notRun(recordsOf(wave)[0]!)];
+    const second = waveOf(wave, "wave-2", stub);
+    writeApproval(second, wave.repo, ledgerIdOf(wave), stub, { replicates: 2 });
+    // One wave without a count (read as 1), one with 2.
+    await expect(merge(wave, [wave.waveDir, second])).rejects.toThrow("replicates_mixed");
+    await expect(merge(wave, [second, wave.waveDir])).rejects.toThrow("replicates_mixed");
+    // Two different counts above one.
+    const third = waveOf(wave, "wave-3", stub);
+    writeApproval(third, wave.repo, ledgerIdOf(wave), stub, { replicates: 3 });
+    await expect(merge(wave, [second, third])).rejects.toThrow("replicates_mixed");
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+    // The same count in every wave merges.
+    const fourth = waveOf(wave, "wave-4", stub);
+    writeApproval(fourth, wave.repo, ledgerIdOf(wave), stub, { replicates: 2 });
+    await expect(merge(wave, [second, fourth])).resolves.toBeDefined();
+  });
+
   it("refuses a wave without its approval, with an invalid one, or under another ledger", async () => {
     const missing = await makeWave((dir) => { /* approval written afterwards */ void dir; });
     rmSync(join(missing.waveDir, "approval.json"));
@@ -705,49 +724,80 @@ describe("--report through the compiled CLI (module outside a git repository)", 
   }, 180_000);
 });
 
-describe("replicates in the report (R90)", () => {
+describe("replicates in the report (R90, R92)", () => {
   /** One run of arm `arm` of `taskId` in replicate `replicate`; `accepted` null is a stopped run. */
   const run = (taskId: string, arm: "A" | "pi-lens", replicate: number, accepted: boolean | null, cost = 0.1): SummaryRecord =>
     record(taskId, arm, accepted, { runId: `${String(++counter).padStart(3, "0")}-${taskId}-code-deepseek-${arm}-r${replicate}`, replicate }, cost);
-  /** Per task, the accepted flags of arm A and of arm B over the replicates. */
-  const records = (spec: Record<string, { a: (boolean | null)[]; b: (boolean | null)[] }>): SummaryRecord[] =>
-    Object.entries(spec).flatMap(([taskId, { a, b }]) => a.flatMap((_, k) => [run(taskId, "A", k + 1, a[k]!), run(taskId, "pi-lens", k + 1, b[k]!)]));
+  /** Per task, the accepted flags of arm A and of arm B over the replicates (null: a stopped run). */
+  const records = (spec: Record<string, { a: (boolean | null)[]; b: (boolean | null)[] }>, costB = 0.1): SummaryRecord[] =>
+    Object.entries(spec).flatMap(([taskId, { a, b }]) => a.flatMap((_, k) => [run(taskId, "A", k + 1, a[k]!), run(taskId, "pi-lens", k + 1, b[k]!, costB)]));
   const found = (all: SummaryRecord[], replicates = 3) => summarize(all, undefined, replicates).pairings.find((p) => p.id === pairing.id)!;
+  const T = [true, true, true];
+  const F = [false, false, false];
+  const flags = (...v: boolean[]) => v;
 
-  it("pairs arm A and arm B per (task, replicate) unit and gives the accepted count per task and arm", () => {
+  it("counts, per task and arm, the runs scored and accepted and whether more than half of the N runs were accepted", () => {
     const result = found(records({
-      t1: { a: [true, false, true], b: [false, true, true] },
-      t2: { a: [true, true, true], b: [true, true, null] },
-      t3: { a: [false, false, false], b: [false, false, false] },
+      t1: { a: flags(true, true, false), b: flags(true, false, false) },
+      t2: { a: T, b: F },
+      t3: { a: F, b: T },
     }));
-    expect(result.tasks).toEqual(["t1", "t2", "t3"]);
-    expect(result.replicated).toMatchObject({ replicates: 3 });
-    // The stopped arm-B run of t2 in replicate 3 leaves that unit unpaired.
-    expect(result.replicated!.units).toHaveLength(8);
-    expect(result.replicated!.units).not.toContainEqual({ taskId: "t2", replicate: 3 });
+    expect(result.replicated).toMatchObject({ replicates: 3, incompleteTasks: [], solvedTasks: { a: 2, b: 1 } });
     expect(result.replicated!.perTask).toEqual([
-      { taskId: "t1", paired: 3, acceptedA: 2, acceptedB: 2 }, { taskId: "t2", paired: 2, acceptedA: 2, acceptedB: 2 }, { taskId: "t3", paired: 3, acceptedA: 0, acceptedB: 0 },
+      { taskId: "t1", a: { scored: 3, accepted: 2, solved: true }, b: { scored: 3, accepted: 1, solved: false }, counted: true },
+      { taskId: "t2", a: { scored: 3, accepted: 3, solved: true }, b: { scored: 3, accepted: 0, solved: false }, counted: true },
+      { taskId: "t3", a: { scored: 3, accepted: 0, solved: false }, b: { scored: 3, accepted: 3, solved: true }, counted: true },
     ]);
-    expect(result.a).toMatchObject({ accepted: 4, scored: 8 });
-    expect(result.b).toMatchObject({ accepted: 4, scored: 8 });
-    expect(result.complete).toBe(true);
+    expect(result).toMatchObject({ tasks: ["t1", "t2", "t3"], complete: true });
+    // The arm totals are the runs of the counted tasks.
+    expect(result.a).toMatchObject({ accepted: 5, scored: 9 });
+    expect(result.b).toMatchObject({ accepted: 4, scored: 9 });
+    expect(result.a.costUsd).toBeCloseTo(0.9);
   });
 
-  it("applies the pre-registered rule to the units: equal totals with a won unit enable, fewer accepted units do not", () => {
-    // B accepts where A did not in t1 (replicate 2) and loses nowhere in total; cost is equal.
-    expect(found(records({ t1: { a: [true, false, true], b: [false, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [false, false, false] } })).recommendation).toBe("enable");
-    expect(found(records({ t1: { a: [true, true, true], b: [true, true, false] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [true, true, true] } })).recommendation).toBe("enable");
-    expect(found(records({ t1: { a: [true, true, true], b: [true, false, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, true, false], b: [false, false, false] } })).recommendation).toBe("do-not-enable");
-    expect(found(records({ t1: { a: [true, true, true], b: [true, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [true, true, true], b: [true, true, true] } })).recommendation).toBe("inconclusive");
-    // The cost clause applies to the totals over the units.
-    const dear = records({ t1: { a: [true, false, true], b: [false, true, true] }, t2: { a: [true, true, true], b: [true, true, true] }, t3: { a: [false, false, false], b: [false, false, false] } });
-    expect(found(dear.map((r) => (r.arm === "pi-lens" ? { ...r, usage: { session: { input: 100, cacheRead: 50, costUsd: 0.2 } } } : r))).recommendation).toBe("inconclusive");
+  it("applies the rule to the per-task outcomes: 3 of 3 against 1 of 3 is decided for the solving arm", () => {
+    expect(found(records({ t1: { a: flags(true, false, false), b: T }, t2: { a: T, b: T }, t3: { a: F, b: F } })).recommendation).toBe("enable");
+    expect(found(records({ t1: { a: T, b: flags(true, false, false) }, t2: { a: T, b: T }, t3: { a: F, b: F } })).recommendation).toBe("do-not-enable");
+    expect(found(records({ t1: { a: T, b: T }, t2: { a: T, b: T }, t3: { a: F, b: F } })).recommendation).toBe("inconclusive");
   });
 
-  it("still asks for three distinct tasks before a pairing is complete", () => {
-    const two = found(records({ t1: { a: [true, true, true], b: [true, true, true] }, t2: { a: [false, false, false], b: [true, true, true] } }));
-    expect(two.replicated!.units).toHaveLength(6);
-    expect(two).toMatchObject({ complete: false, recommendation: "inconclusive", tasks: ["t1", "t2"] });
+  it("does not count a tie of 2 of 3 against 2 of 3 as better, and a bare majority solves a task", () => {
+    const tie = found(records({ t1: { a: flags(true, true, false), b: flags(false, true, true) }, t2: { a: T, b: T }, t3: { a: F, b: F } }));
+    expect(tie.replicated!.perTask![0]).toMatchObject({ a: { accepted: 2, solved: true }, b: { accepted: 2, solved: true } });
+    expect(tie.recommendation).toBe("inconclusive");
+    // One accepted run of three is not a solved task, and without a strictly better task there is no enable.
+    expect(found(records({ t1: { a: flags(true, false, false), b: flags(true, false, false) }, t2: { a: T, b: T }, t3: { a: F, b: F } })).recommendation).toBe("inconclusive");
+  });
+
+  it("does not count a task whose arm lacks scored runs, lists it as incomplete, and makes the pairing inconclusive", () => {
+    const result = found(records({ t1: { a: F, b: T }, t2: { a: T, b: [true, true, null] }, t3: { a: T, b: T } }));
+    expect(result.complete).toBe(false);
+    expect(result.recommendation).toBe("inconclusive");
+    expect(result.tasks).toEqual(["t1", "t3"]);
+    expect(result.replicated).toMatchObject({ incompleteTasks: ["t2"], solvedTasks: { a: 1, b: 2 } });
+    // The unpaired runs are still counted per task and arm.
+    expect(result.replicated!.perTask!.find((task) => task.taskId === "t2")).toEqual({ taskId: "t2", a: { scored: 3, accepted: 3, solved: true }, b: { scored: 2, accepted: 2, solved: true }, counted: false });
+    // Not even three tasks: incomplete too.
+    expect(found(records({ t1: { a: F, b: T }, t2: { a: F, b: T } })).complete).toBe(false);
+  });
+
+  it("applies the cost clause to the counted tasks' runs", () => {
+    const spec = { t1: { a: flags(true, false, false), b: T }, t2: { a: T, b: T }, t3: { a: F, b: F } };
+    expect(found(records(spec, 0.12)).recommendation).toBe("enable");
+    expect(found(records(spec, 0.13)).recommendation).toBe("inconclusive");
+    // Runs of a task that does not count are not part of the cost.
+    const withIncomplete = [...records(spec, 0.1), run("t4", "A", 1, true, 50), run("t4", "pi-lens", 1, true, 50)];
+    expect(found(withIncomplete).replicated!.incompleteTasks).toEqual(["t4"]);
+    expect(found(withIncomplete).a.costUsd).toBeCloseTo(0.9);
+  });
+
+  it("is not-run without scored runs, and adds no replicated block to a pairing without runs", () => {
+    const stopped = found(records({ t1: { a: [null, null, null], b: [null, null, null] } }));
+    expect(stopped.recommendation).toBe("not-run");
+    expect(found(records({ t1: { a: T, b: T } })).replicated).toBeDefined();
+    const other = summarize(records({ t1: { a: T, b: T } }), undefined, 3).pairings.find((p) => p.id === "co-code")!;
+    expect(other.replicated).toBeUndefined();
+    expect(other).toMatchObject({ tasks: [], complete: false, recommendation: "not-run" });
     expect(found([]).recommendation).toBe("not-run");
   });
 
@@ -768,6 +818,7 @@ describe("replicates in the report (R90)", () => {
     expect(result.replicated).toMatchObject({ replicates: 2 });
     expect(result.replicated!.units).toHaveLength(6);
     expect(result.replicated!.perTask).toBeUndefined();
+    expect(summarize(all, undefined, 2).pairings.find((p) => p.id === "co-review")!.replicated).toBeUndefined();
   });
 
   it("keys duplicates on the replicate: one slot twice is refused, the same slot in another replicate is not", () => {

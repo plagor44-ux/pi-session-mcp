@@ -16,8 +16,8 @@ export const approvalSchema = z.object({
   ledgerId: z.string().uuid(),
   /** The explicit, ordered run list that was approved (R56), trimmed if `--trim` was used. Wave and preflight run exactly this list. */
   runs: z.array(runSpecSchema).min(1),
-  /** The replicates the run ids and ordinals were planned for (R90); absent for a plan without replicates, read as 1. Part of the binding. */
-  replicates: z.number().int().min(1).max(MAX_REPLICATES).optional(),
+  /** The replicates the run ids and ordinals were planned for (R90); absent for a plan without replicates (read as 1; an explicit 1 is refused). Part of the binding: the highest replicate of the run list must equal it. */
+  replicates: z.number().int().min(2).max(MAX_REPLICATES).optional(),
   routes: z.array(routeSchema).min(1),
   /**
    * Runs of the run list whose earlier attempts were all stopped by the trace audit (R85) and which are planned again: the ledger already
@@ -96,6 +96,7 @@ export function validateApproval(
     || approval.runs.some((run) => !known.has(run.taskId))
     || new Set(approval.runs.map((run) => run.runId)).size !== approval.runs.length
     || !(approval.replannedStopped ?? []).every(({ runId }, index, listed) => approval.runs.some((run) => run.runId === runId) && listed.findIndex((other) => other.runId === runId) === index)
+    || Math.max(...approval.runs.map((run) => run.replicate ?? 1)) !== (approval.replicates ?? 1)
     || !runsAreCanonical(approval.runs, current.tasks, approval.replicates ?? 1)
     || (current.routes !== undefined && sortedRoutes(approval.routes) !== sortedRoutes(current.routes));
   if (changed) throw new Error("approval_binding_changed");

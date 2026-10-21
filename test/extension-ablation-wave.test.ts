@@ -3278,6 +3278,12 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       expect(check(approval)).not.toThrow();
       // The replicate count is part of the binding: the same runs under another count, or without one, are not canonical.
       expect(check({ ...approval, replicates: 2 })).toThrow("approval_binding_changed");
+      // The count is bound both ways: a larger count whose canonical matrix contains these runs is refused as well (the highest replicate is 3).
+      expect(check({ ...approval, replicates: 4 })).toThrow("approval_binding_changed");
+      // An explicit 1 is not a count; only more than one replicate may be written.
+      expect(check({ ...approval, replicates: 1 })).toThrow("approval_invalid");
+      expect(check({ ...f.approve(plain), replicates: 1 })).toThrow("approval_invalid");
+      expect(check({ ...f.approve(plain), runs: f.approve(plain).runs.map((r) => ({ ...r, replicate: 1 })) })).toThrow("approval_binding_changed");
       const { replicates: omitted, ...withoutCount } = approval;
       void omitted;
       expect(check(withoutCount)).toThrow("approval_binding_changed");
@@ -3289,7 +3295,11 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       void dropped;
       expect(check({ ...approval, runs: [bare, ...rest] })).toThrow("approval_binding_changed");
       // A subsequence of the replicated matrix is valid content, as for any plan (R58).
-      expect(check({ ...approval, ...{ runs: approval.runs.slice(2, 9), matrixDigest: matrixDigest(approval.runs.slice(2, 9)) } })).not.toThrow();
+      const subsequence = [...approval.runs.slice(2, 9), ...approval.runs.slice(-4)];
+      expect(check({ ...approval, runs: subsequence, matrixDigest: matrixDigest(subsequence) })).not.toThrow();
+      // Its highest replicate must be the count: a list that stops at replicate 2 is not an approval for 3.
+      const early = approval.runs.slice(2, 9);
+      expect(check({ ...approval, runs: early, matrixDigest: matrixDigest(early) })).toThrow("approval_binding_changed");
     });
 
     it("excludes executed runs by run id, resumes under the same approval, and reports the units of the replicates", async () => {
@@ -3345,6 +3355,13 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       void dropped;
       await writeFile(file, JSON.stringify(withoutReplicate));
       await expect(f.wave(approval, "wave-1", [text()], { resume: true }).run()).rejects.toThrow("resume_invalid");
+      // A record that does not name its slot at all cannot be checked, so it is refused too.
+      for (const key of ["taskId", "profile", "arm"]) {
+        const { [key]: removed, ...rest } = stored;
+        void removed;
+        await writeFile(file, JSON.stringify(rest));
+        await expect(f.wave(approval, "wave-1", [text()], { resume: true }).run()).rejects.toThrow("resume_invalid");
+      }
     });
   });
 });

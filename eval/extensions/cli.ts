@@ -355,7 +355,7 @@ async function report(parsed: ParsedArgs): Promise<void> {
   const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!), { repoRoot: await repositoryRoot(), allowSourceDrift: parsed.allowSourceDrift });
   process.stdout.write(`${JSON.stringify({
     spentUsd: summary.spentUsd, budgetSpend: summary.budgetSpend, waveSpend: summary.waveSpend, stopReason: summary.stopReason,
-    pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, ...(p.replicated === undefined ? {} : { pairedUnits: p.replicated.units.length }), complete: p.complete, recommendation: p.recommendation })),
+    pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, ...(p.replicated?.units === undefined ? {} : { pairedUnits: p.replicated.units.length }), ...(p.replicated?.incompleteTasks === undefined ? {} : { incompleteTasks: p.replicated.incompleteTasks }), complete: p.complete, recommendation: p.recommendation })),
   })}\n`);
 }
 
