@@ -11,7 +11,7 @@ import { evaluateTask } from "../../profiles/oracles.js";
 import { formatEmbeddedSkillTree } from "../../profiles/token-live.js";
 import { processesReferencing, type LeftoverProcess } from "../claude-probe.js";
 import { claimCount, readSpoolEvents } from "../hook-waiter.js";
-import { API_KEY_FILE_ENV, REQUIRED_CONTROLLER, REQUIRED_WORKER, approvalDigest, readCredentialFile, validateApproval, type Arm } from "./approval.js";
+import { API_KEY_FILE_ENV, DEFAULT_WORKER, REQUIRED_CONTROLLER, approvalDigest, approvedWorker, readCredentialFile, validateApproval, type Arm, type WorkerRoute } from "./approval.js";
 import { DUMMY_KEY, startFakeApi, type FakeApi } from "./fake-api.js";
 import { buildClaudeArgs, buildControllerEnv, buildMcpConfig, buildPiConfig, buildSettings, firstJsonObject, sha256Hex, systemPrompt, userPrompt } from "./plan.js";
 import { assertOutputClean, assertTopLevelAllowlist, decideEnd, eventToNextAssistantMs, parseCounters, StreamTracker, summarizeStream, type ServerCounters } from "./stream.js";
@@ -108,7 +108,7 @@ async function readJsonLines(path: string): Promise<Array<Record<string, unknown
 }
 
 interface RunInput {
-  options: LiveOptions; loc: Locations; apiKey: string; clientVersion: string; seq: number; approval: Record<string, unknown>; skillText: string; skillFingerprint: string;
+  options: LiveOptions; loc: Locations; apiKey: string; clientVersion: string; seq: number; approval: Record<string, unknown>; skillText: string; skillFingerprint: string; worker: WorkerRoute;
 }
 
 async function executeRun(input: RunInput): Promise<{ result: Record<string, unknown>; forbidden: string[] }> {
@@ -117,7 +117,7 @@ async function executeRun(input: RunInput): Promise<{ result: Record<string, unk
   const root = temp.root, home = join(root, "home"), configDir = join(home, "claude-config"), workspace = join(root, "workspace"), tmp = join(root, "tmp");
   const spool = join(root, "spool"), receiptDir = join(root, "receipts"), counterFile = join(root, "counters.json"), waiterLog = join(root, "waiters.log");
   const forbidden: string[] = [root, basename(root), apiKey];
-  const sysPrompt = systemPrompt(arm, input.skillText), usrPrompt = userPrompt();
+  const sysPrompt = systemPrompt(arm, input.skillText), usrPrompt = userPrompt(input.worker.profile_alias);
   let wallStart = Date.now();
   const tracker = new StreamTracker(() => Date.now() - wallStart);
   const startedAt = new Date().toISOString();
@@ -132,7 +132,7 @@ async function executeRun(input: RunInput): Promise<{ result: Record<string, unk
     const before = await snapshot(workspace);
     const piConfig = join(root, "pi-session-mcp.json"), liveConfig = join(root, "bridge-live.json"), mcpConfig = join(root, "mcp.json"), settingsFile = join(root, "settings.json");
     const receiptDry = dry ? await deriveDryReceipt(workspace) : undefined;
-    await writeFile(piConfig, JSON.stringify(buildPiConfig(workspace)), { mode: 0o600 });
+    await writeFile(piConfig, JSON.stringify(buildPiConfig(workspace, input.worker)), { mode: 0o600 });
     await writeFile(liveConfig, JSON.stringify({ mode: dry ? "scripted" : "sdk", piConfigPath: piConfig, spoolBase: spool, counterFile, receiptDir,
       ...(dry ? { scripts: [{ prompts: [[{ sleepMs: 3000 }, { complete: `Here is the receipt:\n${JSON.stringify(receiptDry)}` }]] }] } : {}) }), { mode: 0o600 });
     const agentDir = dry ? undefined : (process.env.PI_CODING_AGENT_DIR ?? join(process.env.HOME ?? "", ".pi/agent"));
@@ -245,7 +245,7 @@ async function executeRun(input: RunInput): Promise<{ result: Record<string, unk
 export async function runLive(options: LiveOptions): Promise<LiveSummary> {
   const loc = locate(), dry = options.dryRun;
   let approval: Record<string, unknown> = {}, apiKey = "";
-  let clientVersion: string;
+  let clientVersion: string, worker: WorkerRoute = DEFAULT_WORKER;
   const recorded = await recordedRuns(options.out, dry);
   if (!dry) {
     // Everything that can refuse happens here, before a process or a temporary directory exists.
@@ -264,7 +264,8 @@ export async function runLive(options: LiveOptions): Promise<LiveSummary> {
     clientVersion = installedClientVersion();
     if (clientVersion !== REQUIRED_CONTROLLER.client_version) throw new RefusedError("client_version_mismatch");
     const a = parsed as Record<string, unknown>;
-    approval = { digest: approvalDigest(bytes), source_commit: headCommit, max_controller_runs: a.max_controller_runs, budget_usd_advisory: a.budget_usd_advisory, controller: REQUIRED_CONTROLLER, worker: REQUIRED_WORKER };
+    worker = approvedWorker(a.worker) ?? DEFAULT_WORKER; // validated above: the approval names one fixed route exactly
+    approval = { digest: approvalDigest(bytes), source_commit: headCommit, max_controller_runs: a.max_controller_runs, budget_usd_advisory: a.budget_usd_advisory, controller: REQUIRED_CONTROLLER, worker };
   } else {
     if (process.platform !== "linux") throw new RefusedError("unsupported_platform");
     if (!Object.values(networkInterfaces()).flat().every((i) => i?.internal === true)) throw new RefusedError("network_namespace_not_isolated");
@@ -276,7 +277,7 @@ export async function runLive(options: LiveOptions): Promise<LiveSummary> {
   const skillText = formatEmbeddedSkillTree(tree);
   const seq = recorded + 1;
   await mkdir(options.out, { recursive: true });
-  const { result, forbidden } = await executeRun({ options, loc, apiKey, clientVersion, seq, approval, skillText, skillFingerprint: String(tree.fingerprint) });
+  const { result, forbidden } = await executeRun({ options, loc, apiKey, clientVersion, seq, approval, skillText, skillFingerprint: String(tree.fingerprint), worker });
   let written: Record<string, unknown> = result;
   try { assertTopLevelAllowlist(result); assertOutputClean(result, forbidden); } catch {
     written = { schema_version: "bridge-live-1", dry_run: dry, case: "L1", arm: options.arm, seq, outcome: "output_validation_failed", checks: { output_validation: false } };

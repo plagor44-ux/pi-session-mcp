@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { configSchema } from "../src/config.js";
 import { evaluateTask } from "../eval/profiles/oracles.js";
 import { copyFixture } from "../eval/profiles/files.js";
-import { approvalDigest, readCredentialFile, validateApproval, REQUIRED_CONTROLLER, REQUIRED_WORKER, type ApprovalContext, type RefusalReason } from "../eval/bridge/live/approval.js";
+import { approvalDigest, readCredentialFile, validateApproval, REQUIRED_CONTROLLER, DEFAULT_WORKER, WORKER_ROUTES, type ApprovalContext, type RefusalReason } from "../eval/bridge/live/approval.js";
 import { nextAction } from "../eval/bridge/live/fake-api.js";
 import {
   ARM_C_PARAGRAPH, buildClaudeArgs, buildControllerEnv, buildMcpConfig, buildPiConfig, buildSettings, firstJsonObject, L1_RUN_PROMPT, PRODUCT_TOOLS, shellQuote, systemPrompt, t1Prompt, TOOL_PREFIX, userPrompt, WAITER_MATCHER,
@@ -18,7 +18,7 @@ import { parseRequest } from "../eval/bridge/claude-probe.js";
 const HEAD = "a".repeat(40);
 const goodApproval = (): Record<string, unknown> => ({
   approved: true, case: "L1", arms: ["A", "C"], max_controller_runs: 2, source_commit: HEAD,
-  controller: { ...REQUIRED_CONTROLLER }, worker: { ...REQUIRED_WORKER, skills: [] }, budget_usd_advisory: 3,
+  controller: { ...REQUIRED_CONTROLLER }, worker: { ...DEFAULT_WORKER, skills: [] }, budget_usd_advisory: 3,
 });
 const ctx = (over: Partial<ApprovalContext> = {}): ApprovalContext => ({ arm: "A", headCommit: HEAD, worktreeClean: true, runsRecorded: 0, ...over });
 
@@ -59,6 +59,12 @@ describe("approval binding", () => {
   ];
   it.each(refusals)("refuses with %s", (reason, mutate, over) => {
     expect(validateApproval(mutate(goodApproval()), ctx(over))).toEqual({ ok: false, reason });
+  });
+  it("accepts the review route with exactly its values and refuses it with other values", () => {
+    const review = { ...goodApproval(), worker: { ...WORKER_ROUTES.review, skills: [] } };
+    expect(validateApproval(review, ctx())).toEqual({ ok: true });
+    expect(validateApproval({ ...review, worker: { ...review.worker, thinkingLevel: "low" } }, ctx())).toEqual({ ok: false, reason: "worker_mismatch" });
+    expect(validateApproval({ ...review, worker: { ...review.worker, profile_alias: "code" } }, ctx())).toEqual({ ok: false, reason: "worker_mismatch" });
   });
   it("digests bytes deterministically", () => {
     expect(approvalDigest("x")).toBe(approvalDigest(Buffer.from("x")));
@@ -284,6 +290,12 @@ describe("plan builders", () => {
     expect(Object.keys(parsed.executionProfiles)).toEqual(["explore-fast"]);
     expect(parsed.executionProfiles["explore-fast"]).toEqual({ permissionProfile: "read-only", provider: "openai", model: "gpt-6-luna", thinkingLevel: "low", default: true });
     expect(parsed.skillCatalog).toBeUndefined();
+  });
+  it("names the approved route in the Pi config and the run prompt", () => {
+    const parsed = configSchema.parse(buildPiConfig("/w", WORKER_ROUTES.review));
+    expect(parsed.executionProfiles.review).toEqual({ permissionProfile: "read-only", provider: "openai", model: "gpt-6.1-sol", thinkingLevel: "high", default: true });
+    expect(userPrompt("review")).toContain("using profile `review`");
+    expect(userPrompt()).toContain("using profile `explore-fast`");
   });
   it("finds the first JSON object in prose or a fence", () => {
     expect(firstJsonObject('Here:\n```json\n{"a":{"b":"}"},"c":[1]}\n```\n{"x":1}')).toEqual({ a: { b: "}" }, c: [1] });

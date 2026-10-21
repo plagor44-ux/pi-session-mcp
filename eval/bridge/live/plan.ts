@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { taskDefinitions } from "../../profiles/oracles.js";
-import type { Arm } from "./approval.js";
+import { DEFAULT_WORKER, type Arm, type WorkerRoute } from "./approval.js";
 
 // Pure builders for one live L1 run: prompts, settings, MCP config, Pi config and the Claude command line.
 export const SERVER_KEY = "pi-session-mcp";
@@ -10,12 +10,13 @@ export const PRODUCT_TOOLS = ["pi_capabilities_get", "pi_session_start", "pi_ses
 export const CONTROLLER_MODEL = "claude-sonnet-5-5";
 export const HOOK_TIMEOUT_S = 900;
 export const WAIT_BUDGET_MS = 840_000;
-export const WORKER_PROFILE = "explore-fast";
+export const WORKER_PROFILE: string = DEFAULT_WORKER.profile_alias;
 
 export const sha256Hex = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 
 /** Copy of RUN_PROMPTS[0] in eval/profiles/token-live.ts with the profile alias replaced (a test compares both against the source file). */
-export const L1_RUN_PROMPT = `For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start one read-only session in workspace alias \`fixture\` using profile \`${WORKER_PROFILE}\`; prompt once with the supplied task; poll with bounded pauses until terminal; retrieve its completed receipt; close it and verify the session list is empty. Do not start another session.`;
+export const runPrompt = (alias: string): string => `For this fresh isolated evaluation, use only the pi-session-mcp server. Discover capabilities; start one read-only session in workspace alias \`fixture\` using profile \`${alias}\`; prompt once with the supplied task; poll with bounded pauses until terminal; retrieve its completed receipt; close it and verify the session list is empty. Do not start another session.`;
+export const L1_RUN_PROMPT = runPrompt(WORKER_PROFILE);
 
 export const ARM_C_PARAGRAPH = "Event delivery is active for this run. After pi_session_prompt returns a running turn, do not poll that turn and do not sleep; end your turn instead. A system message starting with `pi-bridge:` will wake you when the turn is terminal. Then read the turn once with pi_turn_get. If you are woken by a budget message instead, poll once.";
 
@@ -24,7 +25,7 @@ export function t1Prompt(): string {
   if (!task) throw new Error("task_missing");
   return task.prompt;
 }
-export const userPrompt = (): string => `${L1_RUN_PROMPT}\nSupplied task:\n${t1Prompt()}`;
+export const userPrompt = (alias: string = WORKER_PROFILE): string => `${runPrompt(alias)}\nSupplied task:\n${t1Prompt()}`;
 export const systemPrompt = (arm: Arm, skillText: string): string => (arm === "C" ? `${skillText}\n\n${ARM_C_PARAGRAPH}` : skillText);
 
 /** POSIX single-quote quoting for a hook command line. */
@@ -45,11 +46,11 @@ export function buildMcpConfig(node: string, serverJs: string, input: ServerEnvI
   return { mcpServers: { [SERVER_KEY]: { command: node, args: [serverJs], env } } };
 }
 
-/** Pi configuration of the worker: one read-only profile, no skills, no extensions. */
-export function buildPiConfig(workspace: string): Record<string, unknown> {
+/** Pi configuration of the worker: one read-only profile with the route's values, no skills, no extensions. */
+export function buildPiConfig(workspace: string, route: WorkerRoute = DEFAULT_WORKER): Record<string, unknown> {
   return {
     workspaces: { fixture: workspace },
-    executionProfiles: { [WORKER_PROFILE]: { permissionProfile: "read-only", provider: "openai", model: "gpt-6-luna", thinkingLevel: "low", default: true } },
+    executionProfiles: { [route.profile_alias]: { permissionProfile: "read-only", provider: route.provider, model: route.model, thinkingLevel: route.thinkingLevel, default: true } },
   };
 }
 
