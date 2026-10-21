@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-credentials.js";
 import { approvalSchema, parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
+import { assertDependencyDir } from "./dependencies.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
@@ -49,6 +50,8 @@ export interface WaveInput {
   resume?: boolean | undefined;
   /** Root of the evaluated repository, against which `promptRef` is resolved. */
   repoRoot?: string | undefined;
+  /** The operator's dependency directory (R68); required when a pending run's task declares dependencies. */
+  depsDir?: string | undefined;
   runTimeoutMs?: number | undefined;
   killGraceMs?: number | undefined;
   turnTimeoutMs?: number | undefined;
@@ -143,6 +146,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     }
   } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
   const pending = runs.filter((run) => !done.has(run.runId));
+  await assertDependencyDir(input.depsDir, pending.map((run) => tasks.get(run.taskId)!), [...Object.values(config.workspaces), input.repoRoot ?? process.cwd(), input.waveDir]);
   for (const run of pending) {
     if ([join(input.waveDir, "runs", `${run.runId}.json`), privateRunDir(input.waveDir, run.runId), scopeRoot(input.waveDir, run.runId)].some((path) => existsSync(path))) {
       throw new Error("output_exists");
@@ -218,6 +222,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
         scope = await prepareScope({
           waveDir, run, task, sourceRepoPath: source, extensionTemplate: input.extensionTemplate, hostAuth: input.hostAuth,
           productionProfile: productionConfig.executionProfiles[run.profile]!, skillCatalog: productionConfig.skillCatalog, pairing: pairingOf(run), tools,
+          ...(input.depsDir === undefined ? {} : { depsDir: input.depsDir }),
         });
         const runOneInput: RunOneInput = {
           runId: run.runId, configPath: scope.configPath, workspaceAlias: "clone", profile: run.profile,
@@ -273,6 +278,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       if (scope && verdict.stopReason === null && terminal === "completed" && task.oracle.kind === "implementation") {
         await mkdir(oracleHome, { recursive: true, mode: 0o700 });
         const sandboxRoot = scope.root;
+        const dependencyBinds = scope.dependencyBinds;
         let sequence = 0;
         const oracleLogs: string[] = [];
         try {
@@ -284,7 +290,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
               // Outside the scope root, so the worker's candidate code cannot touch the log.
               const path = join(privateRun, `oracle-${sequence += 1}.strace`);
               oracleLogs.push(path);
-              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...sandboxed(tools, plan, sandboxRoot, argv, [oracleHome])];
+              return [tools.strace, ...STRACE_ARGS, "-o", path, "--", ...sandboxed(tools, plan, sandboxRoot, argv, [oracleHome], dependencyBinds)];
             },
           });
         } catch (error) {

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { runHelper, type HelperRunner } from "./helpers.js";
 import { encodeKey } from "./output-mac.js";
 import { STRACE_ARGS } from "./trace.js";
-import { sandboxed, type SandboxPlan } from "./sandbox.js";
+import { sandboxed, type SandboxBind, type SandboxPlan } from "./sandbox.js";
 import { resolveTool, type ToolPaths } from "./tools.js";
 import type { RunScope } from "./workspace.js";
 
@@ -28,10 +28,10 @@ const runOneArgs = (runInput: string): string[] => ["--disable-sigusr1", fileURL
  */
 export function tracedCommand(
   tools: Pick<ToolPaths, "strace" | "prlimit" | "bwrap">, plan: SandboxPlan, scopeRoot: string, log: string, runInput: string,
-  options: { workload?: string[]; extraWritable?: string[] } = {},
+  options: { workload?: string[]; extraWritable?: string[]; binds?: readonly SandboxBind[] } = {},
 ): { file: string; args: string[] } {
   const workload = options.workload ?? [process.execPath, ...runOneArgs(runInput)];
-  return { file: tools.prlimit, args: [CORE_LIMIT, "--", tools.strace, ...STRACE_ARGS, "-o", log, "--", ...sandboxed(tools, plan, scopeRoot, workload, options.extraWritable)] };
+  return { file: tools.prlimit, args: [CORE_LIMIT, "--", tools.strace, ...STRACE_ARGS, "-o", log, "--", ...sandboxed(tools, plan, scopeRoot, workload, options.extraWritable, options.binds)] };
 }
 
 /** The untraced preflight command, inside the same sandbox. */
@@ -46,7 +46,7 @@ export function untracedCommand(tools: Pick<ToolPaths, "prlimit" | "bwrap">, pla
 export function spawnTracedRunOne(tools: Pick<ToolPaths, "strace" | "prlimit" | "bwrap">, plan: SandboxPlan, scope: RunScope, runInput: string, log: string): ChildProcess {
   const stderr = openSync(join(scope.root, "run-one.stderr"), "a", 0o600);
   try {
-    const { file, args } = tracedCommand(tools, plan, scope.root, log, runInput);
+    const { file, args } = tracedCommand(tools, plan, scope.root, log, runInput, { binds: scope.dependencyBinds ?? [] });
     return spawn(file, args, { cwd: scope.root, env: scope.env, detached: true, stdio: ["pipe", "ignore", stderr] });
   } finally { closeSync(stderr); }
 }

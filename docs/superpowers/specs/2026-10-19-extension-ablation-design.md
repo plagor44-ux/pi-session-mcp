@@ -349,3 +349,34 @@ the text above, they win.
 - **`io_uring_setup` counting.** A call split by `<unfinished ...>` is joined
   with its `resumed` line and counts only if its final return value is
   non-negative; the injected `ENOSYS` no longer counts.
+- **Task dependencies, mounted read-only at the base lock (R68).** The sandbox
+  hides the home directory and a fresh clone has no installed dependencies, so
+  an implementation oracle (and the worker) could not run a repository's tests.
+  A task may declare up to four `dependencies` (`{ path, lockfile }`: a
+  repo-relative directory such as `backend/.venv` and the lockfile it was built
+  from). The operator builds them beforehand in a directory given by
+  `--deps <dir>` (`--dry-load` and `--wave`; not `--plan` or `--preflight`),
+  which must lie outside the repository, every configured workspace and the
+  wave directory (`deps_dir_in_source`) and is required (`deps_missing`) when a
+  task that will run declares dependencies. Per task, `<deps>/<taskId>/mounts/<path>/`
+  holds the content, `<deps>/<taskId>/lock/<lockfile>` the lockfile copy and
+  `<deps>/<taskId>/runtime/` optionally whatever the content references by
+  absolute path (the interpreter a venv points to). Before a scope is used, the
+  lock copy must equal the lockfile at the base commit
+  (`dependency_lock_mismatch`), the mount must exist and be a real directory
+  (`dependency_missing`, `dependency_mount_invalid`) and `<path>` must not exist
+  in the base tree (`dependency_path_tracked`). The harness creates `<path>`
+  as an empty directory in the clone, and the run, oracle and dry-load
+  sandboxes bind the mount read-only there and the runtime read-only at its own
+  real path, after the scope bind. Nothing else of `<deps>` is visible and no
+  absolute path reaches tracked evidence.
+- **The worker clone holds only history reachable from the base commit (R69).**
+  A local clone copies every object and ref, so a coding worker could read the
+  original solution with `git log --all` or `git show <branch>:<file>`. The
+  worker clone is now made over the transport (`--no-local --single-branch
+  --no-tags`) from a temporary branch at the base commit in the pristine bare
+  clone; the branch, the remote-tracking ref and every other ref are removed,
+  and `HEAD` is detached at the base commit. The bare clone itself keeps the
+  full history (it is outside the sandbox) because the scope check and the
+  oracle use it; an oracle setup step may therefore still run
+  `git checkout <solution> -- <file>`.

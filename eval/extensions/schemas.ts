@@ -46,12 +46,22 @@ const oracleSchema = z.discriminatedUnion("kind", [reviewOracleSchema, implement
 const scopeIgnoreEntrySchema = z.string().min(1).refine((p) =>
   p.endsWith("/") && !p.startsWith("/") && !p.split("/").includes("..") && !/[*?[\]{}]/.test(p), { message: "scope_ignore_prefix_invalid" });
 
+/** A repo-relative directory without trailing slash (`backend/.venv`): no `..`, no `.git` segment, no glob characters. */
+const dependencyPathSchema = relativePathSchema.refine((p) =>
+  !p.split("/").includes(".git") && !/[*?[\]{}]/.test(p), { message: "dependency_path_invalid" });
+/** An installed dependency (R68): the directory to mount read-only at its repo-relative place, and the lockfile it was built from. */
+export const dependencySchema = z.object({ path: dependencyPathSchema, lockfile: relativePathSchema }).strict();
+export type Dependency = z.infer<typeof dependencySchema>;
+const dependenciesSchema = z.array(dependencySchema).max(4)
+  // A mount below another mount cannot be created: its mount point would have to exist inside the read-only one.
+  .refine((list) => list.every((a, i) => list.every((b, j) => i === j || (a.path !== b.path && !a.path.startsWith(`${b.path}/`)))), { message: "dependency_paths_overlap" });
+
 export const taskSpecSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,40}$/), kind: z.enum(["review", "implementation"]),
   repo: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), baseCommit: z.string().regex(/^[a-f0-9]{40}$/),
   promptRef: relativePathSchema.refine((p) => p.startsWith("eval/results/")), promptHash: hashSchema,
   sourceSession: z.string().min(1), allowedPaths: z.array(relativePathSchema), scopeIgnore: z.array(scopeIgnoreEntrySchema),
-  oracle: oracleSchema,
+  oracle: oracleSchema, dependencies: dependenciesSchema.optional(),
 }).strict().refine((t) => t.kind === t.oracle.kind, { message: "oracle_kind_mismatch", path: ["oracle"] });
 export type TaskSpec = z.infer<typeof taskSpecSchema>;
 

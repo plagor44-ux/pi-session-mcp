@@ -42,14 +42,20 @@ async function canonical(path: string): Promise<string> {
 
 const within = (inner: string, outer: string): boolean => inner === outer || inner.startsWith(outer.endsWith("/") ? outer : `${outer}/`);
 
-/** Refuses a wave directory that lies inside a source repository or contains one (R44): scopes and kept records must not mix with sources. */
-export async function assertWaveDirOutsideSources(waveDir: string, sources: Iterable<string>): Promise<void> {
-  const wave = await canonical(waveDir);
+/** Refuses a directory that lies inside a source or contains one, with the fixed `code`. */
+export async function assertOutsideSources(dir: string, sources: Iterable<string>, code: string): Promise<void> {
+  const real = await canonical(dir);
   for (const source of sources) {
     const repo = await canonical(source);
-    if (within(wave, repo) || within(repo, wave)) throw new Error("wave_dir_in_source");
+    if (within(real, repo) || within(repo, real)) throw new Error(code);
   }
 }
+
+/** Refuses a wave directory that lies inside a source repository or contains one (R44): scopes and kept records must not mix with sources. */
+export const assertWaveDirOutsideSources = (waveDir: string, sources: Iterable<string>): Promise<void> => assertOutsideSources(waveDir, sources, "wave_dir_in_source");
+
+/** Refuses a dependency directory (R68) that lies inside a source repository, the wave directory or contains one: a source checkout must never be reachable through it. */
+export const assertDepsDirOutsideSources = (depsDir: string, sources: Iterable<string>): Promise<void> => assertOutsideSources(depsDir, sources, "deps_dir_in_source");
 
 /** The operator's real home from the account database, not from `$HOME`, which a caller's environment could point elsewhere. */
 export const realHome = (): string => userInfo().homedir;

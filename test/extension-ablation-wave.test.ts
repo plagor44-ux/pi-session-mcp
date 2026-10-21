@@ -524,6 +524,76 @@ describe("implementation oracle", () => {
   });
 });
 
+describe("task dependencies in a wave (R68)", () => {
+  const DEPENDENCIES = [{ path: "backend/.venv", lockfile: "backend/uv.lock" }];
+  const BINDS = [{ source: "/deps/T1/mounts/backend/.venv", target: "/scope/clone/backend/.venv" }, { source: "/deps/T1/runtime", target: "/deps/T1/runtime" }];
+
+  async function dependentWave(count: number) {
+    const s = await waveSetup(count, { kind: "implementation" });
+    s.input.tasks = s.input.tasks.map((task) => ({ ...task, dependencies: DEPENDENCIES }));
+    s.input.approval = approvalFor(s.input.tasks, s.runs);
+    return s;
+  }
+
+  it("refuses to start without a deps directory when a pending run's task declares dependencies, before anything exists", async () => {
+    const s = await dependentWave(1);
+    const { deps, captured } = s.deps([text()]);
+    await expect(runWave(s.input, deps)).rejects.toThrow("deps_missing");
+    expect(captured).toHaveLength(0);
+    expect(existsSync(s.waveDir)).toBe(false);
+    // A wave without dependencies needs none.
+    const plain = await waveSetup(1, { kind: "implementation" });
+    await expect(runWave(plain.input, plain.deps([text()]).deps)).resolves.toMatchObject({ stopReason: null });
+  });
+
+  it("refuses a deps directory inside the evaluation repository, a workspace or the wave directory, or above one", async () => {
+    const s = await dependentWave(1);
+    const { deps } = s.deps([text()]);
+    for (const dir of [join(s.root, "repo", "deps"), join(s.root, "repo"), "/src/example-repo/deps", "/src", join(s.waveDir, "deps"), s.root]) {
+      await expect(runWave({ ...s.input, depsDir: dir }, deps)).rejects.toThrow("deps_dir_in_source");
+    }
+    expect(existsSync(s.waveDir)).toBe(false);
+  });
+
+  it("hands the deps directory to the scope and sandboxes the oracle with the scope's binds after the scope and oracle-home binds", async () => {
+    const s = await dependentWave(1);
+    const depsDir = join(s.root, "deps");
+    const inputs: ScopeInput[] = [];
+    let argv: string[] = [];
+    const scoring: WaveDeps["scoreImplementation"] = async (_clone, _task, options) => {
+      argv = options.wrap!(["env", "-C", "backend", ".venv/bin/python", "-m", "pytest"]);
+      await writeFile(argv[argv.indexOf("-o") + 1]!, benignTrace());
+      return { accepted: true, testsPassed: true, outOfScope: [] };
+    };
+    const { deps } = s.deps([text()], {
+      prepareScope: async (input) => { inputs.push(input); return { ...await fakePrepare(input), dependencyBinds: BINDS }; }, scoreImplementation: scoring,
+    });
+    const result = await runWave({ ...s.input, depsDir }, deps);
+    expect(result.stopReason).toBeNull();
+    expect(inputs.map((input) => input.depsDir)).toEqual([depsDir]);
+    const at = (flag: string, source: string, target: string) => argv.findIndex((arg, i) => arg === flag && argv[i + 1] === source && argv[i + 2] === target);
+    const scopeBind = argv.findIndex((arg, i) => arg === "--bind" && argv[i + 1] === argv[i + 2] && argv[i + 1]!.includes("/scopes/"));
+    const oracleHome = argv.findIndex((arg, i) => arg === "--bind" && argv[i + 1] === argv[i + 2] && argv[i + 1]!.endsWith("oracle-home"));
+    expect(scopeBind).toBeGreaterThan(-1);
+    expect(oracleHome).toBeGreaterThan(scopeBind);
+    expect(at("--ro-bind", BINDS[0]!.source, BINDS[0]!.target)).toBeGreaterThan(oracleHome);
+    expect(at("--ro-bind", BINDS[1]!.source, BINDS[1]!.target)).toBeGreaterThan(at("--ro-bind", BINDS[0]!.source, BINDS[0]!.target));
+    expect(argv.slice(-6)).toEqual(["env", "-C", "backend", ".venv/bin/python", "-m", "pytest"]);
+    // The record says nothing about where the dependencies are.
+    const record = await readFile(join(s.waveDir, "runs", `${result.records[0]!.runId}.json`), "utf8");
+    expect(record).not.toContain(depsDir);
+    expect(record).not.toContain("/deps/");
+  });
+
+  it("records a dependency check that fails as a fixed harness code and stops the wave", async () => {
+    const s = await dependentWave(2);
+    const { deps } = s.deps([text()], { prepareScope: async () => { throw new Error("dependency_lock_mismatch"); } });
+    const result = await runWave({ ...s.input, depsDir: join(s.root, "deps") }, deps);
+    expect(result.stopReason).toBe("harness_failure");
+    expect(result.records.map((record) => [record.outcome, record.harnessError])).toEqual([["stopped", "dependency_lock_mismatch"], ["not_run", null]]);
+  });
+});
+
 describe("approval", () => {
   it("rejects an approval whose bindings changed", async () => {
     const root = await temporaryRoot("ablation-approval-");

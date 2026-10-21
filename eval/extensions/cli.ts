@@ -25,7 +25,7 @@ const MODES = ["--plan", "--preflight", "--wave", "--report", "--scan", "--dry-l
 type Mode = typeof MODES[number];
 /** `--report` reads a finished wave, so `--wave` is its value option there and not a mode. */
 const REPORT_MODES: readonly string[] = ["--plan", "--preflight", "--report"];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs", "--exclude-wave"] as const;
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs", "--exclude-wave", "--deps"] as const;
 
 export interface ParsedArgs {
   mode: Mode;
@@ -91,9 +91,11 @@ export function parseArgs(args: string[]): ParsedArgs {
   if (mode === "--dry-load") {
     if (!options["--template"]) throw new Error("template_required");
     if (!options["--out"]) throw new Error("out_required");
-    if (Object.keys(options).some((key) => !["--tasks", "--template", "--out", "--config"].includes(key)) || trim || resume) throw new Error("invalid_argument");
+    if (Object.keys(options).some((key) => !["--tasks", "--template", "--out", "--config", "--deps"].includes(key)) || trim || resume) throw new Error("invalid_argument");
     return result();
   }
+  // Dependencies (R68) are mounted by the modes that start a scope; the plan and the preflight start none.
+  if (options["--deps"] !== undefined && mode !== "--wave") throw new Error("invalid_argument");
   // The run list is decided at `--plan` time and carried by the approval (R56): trimming and pairing selection belong to the plan only.
   if (mode !== "--plan" && (trim || options["--pairings"] !== undefined)) throw new Error("invalid_argument");
   if (mode !== "--wave" && (resume || maxRuns !== undefined)) throw new Error("invalid_argument");
@@ -277,6 +279,7 @@ async function wave(parsed: ParsedArgs): Promise<void> {
   await assertPreflightPassed(resolve(parsed.options["--preflight-dir"] ?? parsed.options["--out"]!), approval, ledgerPath);
   const result = await withAbort((signal) => runWave({
     approval, tasks, waveDir, ledgerPath, hostAuth, productionConfig, extensionTemplate: resolve(parsed.options["--template"]!), signal,
+    ...(parsed.options["--deps"] === undefined ? {} : { depsDir: resolve(parsed.options["--deps"]) }),
     ...(parsed.maxRuns === undefined ? {} : { maxRuns: parsed.maxRuns }), resume: parsed.resume,
   }));
   write({
@@ -311,7 +314,8 @@ export async function dryLoadCommand(parsed: ParsedArgs, options: { sourceCwd?: 
   const productionConfig = await loadProductionConfig(parsed.options["--config"]);
   const waveDir = resolve(parsed.options["--out"]!);
   if (existsSync(waveDir)) throw new Error("output_exists");
-  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir }, { ...options.deps, signal }));
+  const depsDir = parsed.options["--deps"] === undefined ? undefined : resolve(parsed.options["--deps"]);
+  const report = await withAbort((signal) => dryLoad({ templateDir: resolve(parsed.options["--template"]!), tasks, productionConfig, waveDir, depsDir }, { ...options.deps, signal }));
   await writeFile(join(waveDir, "dry-load.json"), `${JSON.stringify(report, null, 2)}\n`, { flag: "wx", mode: 0o600 });
   write({
     ok: report.pairs.every((p) => p.ok),
