@@ -84,6 +84,8 @@ export interface ReportSummary {
   /** Only the ledger entries of runs that have a record in this wave. */
   waveSpend: Spend;
   stopReason: StopReason | null;
+  /** Every stop reason recorded in any wave before the merge, by the 1-based index of its `--wave` argument; a superseded `not_run` stop survives here. */
+  waveStops: { wave: number; runId: string; stopReason: StopReason }[];
 }
 
 const costOf = (record: SummaryRecord): number => record.usage?.session?.costUsd ?? 0;
@@ -141,7 +143,7 @@ export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend
   const ordered = [...records].sort((x, y) => (x.runId < y.runId ? -1 : x.runId > y.runId ? 1 : 0));
   return {
     pairings, spentUsd: budget.observedUsd + budget.estimatedUsd, budgetSpend: budget, waveSpend: wave,
-    stopReason: ordered.find((r) => r.stopReason !== null)?.stopReason ?? null,
+    stopReason: ordered.find((r) => r.stopReason !== null)?.stopReason ?? null, waveStops: [],
   };
 }
 
@@ -301,6 +303,8 @@ export async function writeEvidence(waveDirs: string | readonly string[], eviden
     perWave.push(await readRuns(wave));
     approvals.push(await readApproval(wave));
   }
+  const waveStops = perWave.flatMap((wave, index) => wave.filter((run) => run.record.stopReason !== null)
+    .map((run) => ({ wave: index + 1, runId: run.record.runId, stopReason: run.record.stopReason! })));
   const runs = mergeRuns(perWave);
   const summarized = runs.map((r) => r.record);
   assertNoDuplicates(summarized);
@@ -310,7 +314,7 @@ export async function writeEvidence(waveDirs: string | readonly string[], eviden
     if (approval.ledgerId !== ledger.spend.ledgerId) throw new Error("ledger_mismatch");
     await assertBoundCodeUnchanged(root, approval.sourceCommit);
   }
-  const summary = summarize(summarized, ledger.spend);
+  const summary: ReportSummary = { ...summarize(summarized, ledger.spend), waveStops };
 
   const files = new Map<string, Buffer>();
   for (const run of runs) files.set(`runs/${run.name}`, run.bytes);

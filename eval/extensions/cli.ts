@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import { isEntryPoint } from "../../src/entry-point.js";
@@ -150,17 +150,19 @@ function projectionOf(persisted: PersistedLedger | undefined): Projection {
 }
 
 /** An earlier wave a `--plan` leaves out: its approval, the run ids it has a record for, and those among them that executed. */
-interface ExcludedWave { label: string; dir: string; approval: Approval; recorded: Set<string>; executed: Set<string> }
+interface ExcludedWave { dir: string; approval: Approval; recorded: Set<string>; executed: Set<string> }
 
-/** Reads each wave with the report's safe readers; its approval must name the ledger (`ledger_mismatch`). */
-async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger): Promise<ExcludedWave[]> {
+/** Reads each wave with the report's safe readers; its approval must name the ledger (`ledger_mismatch`) and the current tasks (`tasks_changed`). */
+async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger, tasks: TaskSpec[]): Promise<ExcludedWave[]> {
   const waves: ExcludedWave[] = [];
-  for (const label of dirs) {
-    const dir = resolve(label);
+  for (const arg of dirs) {
+    const dir = resolve(arg);
     const { approval } = await readApproval(dir);
     if (approval.ledgerId !== ledger.id) throw new Error("ledger_mismatch");
+    // Run ids name tasks by id; waves planned over other task content do not describe these runs.
+    if (approval.tasksDigest !== tasksDigest(tasks)) throw new Error("tasks_changed");
     const records = (await readRuns(dir)).map((run) => run.record);
-    waves.push({ label, dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)) });
+    waves.push({ dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)) });
   }
   return waves;
 }
@@ -193,10 +195,14 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
   let ledger: PersistedLedger | undefined;
   if (parsed.options["--ledger"] !== undefined) {
     const path = resolve(parsed.options["--ledger"]);
-    ledger = await PersistedLedger.open(path);
-    if (!existsSync(path)) await ledger.save();
+    // With --exclude-wave the ledger must already be the evaluation's: a wrong path must not create a second one (M6).
+    if (parsed.excludeWaves.length > 0) ledger = await PersistedLedger.openExisting(path);
+    else {
+      ledger = await PersistedLedger.open(path);
+      if (!existsSync(path)) await ledger.save();
+    }
   }
-  const excluded = ledger === undefined ? [] : await loadExcludedWaves(parsed.excludeWaves, ledger);
+  const excluded = ledger === undefined ? [] : await loadExcludedWaves(parsed.excludeWaves, ledger, tasks);
   const { trimmed, runs, projection, skip } = await plannedRuns(tasks, parsed, ledger, excluded);
   const { projectedUsd, remainingUsd } = projection;
   let routes: unknown = [];
@@ -204,12 +210,12 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
   try { routes = routesOf(await loadProductionConfig(parsed.options["--config"]), runs.map((r) => r.profile)); } catch { routesNote = "production_config_unavailable"; }
   let exclusion: Record<string, unknown> | undefined;
   if (excluded.length > 0) {
-    // The last wave given is the resume candidate: only when the list left is exactly its runs without a record, and it is paused.
+    // Only the directory's name is printed, never a path (M4). The last wave given is the resume candidate: only when the list left is exactly its runs without a record, and it is paused.
     const last = excluded[excluded.length - 1]!;
     const unrecorded = last.approval.runs.filter((run) => !last.recorded.has(run.runId));
-    const resumable = unrecorded.length > 0 && matrixDigest(unrecorded) === matrixDigest(runs) && await waveIsPaused(last.dir) ? last.label : null;
+    const resumable = unrecorded.length > 0 && matrixDigest(unrecorded) === matrixDigest(runs) && await waveIsPaused(last.dir) ? basename(last.dir) : null;
     exclusion = {
-      waves: excluded.map((wave) => ({ wave: wave.label, executed: wave.executed.size })),
+      waves: excluded.map((wave) => ({ wave: basename(wave.dir), executed: wave.executed.size })),
       ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable,
     };
   }
