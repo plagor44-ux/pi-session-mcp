@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { link, lstat, mkdir, open, readFile, realpath, rename, rm, stat } from "node:fs/promises";
+import { link, lstat, mkdir, open, readdir, readFile, realpath, rename, rm, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { readWriterState, writerEventDeliveryEnabled, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 import type { OwnershipAccess, OwnershipRecord } from "./setup-ownership.js";
 import type { SetupFinding, SetupOperation, SetupStatus, SetupTarget } from "./setup-result.js";
 
@@ -70,6 +71,12 @@ export interface WakeHookRequest {
   readonly enabled: boolean;
   readonly ownership: OwnershipAccess;
   readonly dependencies?: WakeHookDependencies;
+  /**
+   * Shared entries: asked when an exactly owned entry would be removed (remove, rollback, or
+   * delivery turned off). `true` keeps the entry and its record for another registration that
+   * still needs it (`hook_kept_shared`). See `localHookNeededByOthers`.
+   */
+  readonly keep?: () => Promise<boolean>;
 }
 export interface WakeHookOutcome { readonly status: SetupStatus; readonly code: string }
 
@@ -333,6 +340,7 @@ async function step(request: WakeHookRequest, location: Location, dependencies: 
       if (mutating) { healthy(ownership); await ownership.delete(recordTarget); healthy(ownership); }
       return { status: mutating ? "ok" : "unchanged", code: mutating ? "hook_absent" : "hook_not_enabled" };
     }
+    if (request.keep && await request.keep()) return { status: "unchanged", code: "hook_kept_shared" };
     if (!mutating) return { status: "planned", code: "hook_remove_planned" };
     await commit(file, snapshot, edited(snapshot.document, (list) => { list.splice(named[0]!, 1); }, true), dependencies);
     await dependencies.checkpoint?.("written");
@@ -409,6 +417,12 @@ export async function installWakeHook(options: InstallWakeHookOptions): Promise<
   return { target: { client: "claude-code", scope: options.scope, alias: WAKE_HOOK_ALIAS }, ...outcome };
 }
 
+/** Whether setup holds a record for the hook of this scope (and, for project and local, this project). */
+export async function ownsWakeHook(scope: HookScope, roots: Pick<WakeHookRoots, "home" | "cwd" | "env">, ownership: OwnershipAccess): Promise<boolean> {
+  try { return (await ownership.get((await locate(scope, roots as WakeHookRoots)).recordTarget)) !== undefined; }
+  catch { return false; }
+}
+
 /** Companion of a registration, like the skill installer: runs after the registration succeeded. */
 export interface SetupHookInstaller {
   run(operation: SetupOperation, target: SetupTarget, ownership: OwnershipAccess): Promise<readonly SetupFinding[]>;
@@ -416,6 +430,11 @@ export interface SetupHookInstaller {
   owns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean>;
 }
 export interface SetupHookRoots extends WakeHookRoots {
+  /**
+   * The registered server configuration. With it, a local-scope removal keeps the entry while a
+   * writer registration of the same project still needs it.
+   */
+  readonly configPath?: string;
   /** Whether the server configuration setup registers enables spool delivery. */
   readonly delivery: () => Promise<boolean>;
 }
@@ -431,14 +450,64 @@ export class FileSetupHookInstaller implements SetupHookInstaller {
       try { enabled = await this.roots.delivery(); }
       catch { return [{ target: reported, status: "failed", code: "hook_config_unreadable" }]; }
     }
-    const { delivery: _delivery, ...roots } = this.roots;
-    const outcome = await runWakeHook({ operation, scope: target.scope as HookScope, roots, enabled, ownership, dependencies: this.dependencies });
+    const { delivery: _delivery, configPath, ...roots } = this.roots;
+    const keep = configPath !== undefined && target.scope === "local"
+      ? () => localHookNeededByOthers({ ownership, home: roots.home, cwd: roots.cwd, configPath, except: "host" })
+      : undefined;
+    const outcome = await runWakeHook({ operation, scope: target.scope as HookScope, roots, enabled, ownership, dependencies: this.dependencies, ...(keep ? { keep } : {}) });
     return [{ target: reported, ...outcome }];
   }
 
   async owns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean> {
     if (target.client !== "claude-code" || !["user", "project", "local"].includes(target.scope)) return false;
-    try { return (await ownership.get((await locate(target.scope as HookScope, this.roots)).recordTarget)) !== undefined; }
-    catch { return false; }
+    return ownsWakeHook(target.scope as HookScope, this.roots, ownership);
   }
+}
+
+/**
+ * The sharing rule of the local-scope entry. Claude Code's local settings file of a project holds
+ * one wake entry, and one ownership record stands for it, however many registrations need it.
+ * It is removed only when none of the others needs it any more. Another registration needs it
+ * when it is still owned in local scope and its server enables spool delivery:
+ *
+ * - a writer (`claude-code:local:pi-coding-<name>` owned) whose configured workspace resolves to
+ *   this project and whose own configuration enables delivery; a writer whose project cannot be
+ *   determined counts as needing it (the safe side: an entry too many, never one too few);
+ * - the host registration (`claude-code:local:pi-session-mcp` owned) while the host configuration
+ *   enables delivery. Its project is not recorded, so it counts for every project.
+ *
+ * `except` names the registration that is going away: a writer by its name, or the host.
+ * Any error answers `true`, so a doubt never removes a shared entry.
+ */
+export async function localHookNeededByOthers(options: {
+  readonly ownership: OwnershipAccess;
+  readonly home: string;
+  readonly cwd: string;
+  readonly configPath: string;
+  readonly except: "host" | { readonly writer: string };
+}): Promise<boolean> {
+  try {
+    const project = await realpath(options.cwd);
+    const { loadConfig } = await import("./config.js");
+    const config = await loadConfig(options.configPath);
+    if (options.except !== "host") {
+      const host = await options.ownership.get({ client: "claude-code", scope: "local", alias: "pi-session-mcp" });
+      if (host?.phase === "owned" && config.eventDelivery === "spool") return true;
+    }
+    let names: string[];
+    try { names = await readdir(writersRoot(options.home)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    for (const name of names.filter((candidate) => WRITER_NAME_PATTERN.test(candidate)).sort()) {
+      if (options.except !== "host" && options.except.writer === name) continue;
+      const record = await options.ownership.get({ client: "claude-code", scope: "local", alias: writerRegistrationName(name) });
+      if (record?.phase !== "owned") continue;
+      if (!await writerEventDeliveryEnabled(writerPaths(options.home, name).config)) continue;
+      const state = await readWriterState(options.home, name);
+      const workspace = state ? config.workspaces.get(state.alias) : undefined;
+      if (workspace === undefined) return true;
+      try { if (await realpath(workspace) === project) return true; }
+      catch { return true; }
+    }
+    return false;
+  } catch { return true; }
 }

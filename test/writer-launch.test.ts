@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { launch, launchEntry, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
-import { acceptanceFingerprint, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, writeWriterState, writerEventDeliveryEnabled, writerPaths, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { serveArgs } from "../src/writer-boundary.js";
 import { serveRefusal } from "../src/refusal-server.js";
@@ -27,7 +27,7 @@ afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await rm(home,
 async function save(ready = false, version = "5.0.0") {
   await writeWriterState(home, "x-w1", state);
   await writeFile(writerPaths(home, "x-w1").wrapper, "wrapper");
-  if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache }) } });
+  if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache, ...(await writerEventDeliveryEnabled(writerPaths(home, "x-w1").config) ? { eventDelivery: true } : {}) }) } });
 }
 it.each(["throw", "error"])("reports a Podman spawn %s once without leaking error details", async (kind) => {
   await save(); const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
@@ -142,7 +142,7 @@ async function runtimeDirectory(mode = 0o700): Promise<string> {
 }
 const eventsFailure = JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n";
 it("mounts a freshly created private spool directory when the writer configuration enables delivery", async () => {
-  await save(true); await enableDelivery();
+  await enableDelivery(); await save(true);
   const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
   const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
   expect(await launch(["x-w1"], deps)).toBe(7);
@@ -152,8 +152,16 @@ it("mounts a freshly created private spool directory when the writer configurati
   expect((await lstat(dir)).mode & 0o777).toBe(0o700);
   expect(serveRefusal).not.toHaveBeenCalled();
 });
+it("refuses a writer accepted without delivery once its configuration enables delivery", async () => {
+  await save(true);
+  await enableDelivery();
+  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  expect(await launch(["x-w1"], deps)).toBe(0);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  await expect(lstat(join(runtime, "pi-session-mcp"))).rejects.toMatchObject({ code: "ENOENT" });
+});
 it("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
-  await save(); await enableDelivery();
+  await enableDelivery(); await save();
   const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
   const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
   await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
@@ -166,7 +174,7 @@ it.each([
   ["extra events keys", { events: { delivery: "spool", extra: true } }],
   ["a non-object events field", { events: "spool" }],
 ])("adds no mount and creates no directory with %s", async (_label, config) => {
-  await save(true); await enableDelivery(config);
+  await enableDelivery(config); await save(true);
   const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
   await launch(["x-w1"], deps);
   expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
@@ -193,7 +201,7 @@ it.each([
     return { XDG_RUNTIME_DIR: runtime };
   }],
 ])("fails the launch with a stable sanitized code for %s", async (_label, makeEnv) => {
-  await save(true); await enableDelivery(); deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...await makeEnv() };
+  await enableDelivery(); await save(true); deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...await makeEnv() };
   const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   expect(await launch(["x-w1"], deps)).toBe(0);
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
@@ -201,7 +209,7 @@ it.each([
   expect(eventsFailure).not.toContain(home);
 });
 it("fails the launch when the spool directory belongs to another user", async () => {
-  await save(true); await enableDelivery();
+  await enableDelivery(); await save(true);
   deps.env = { ...deps.env, XDG_RUNTIME_DIR: await runtimeDirectory() }; deps.uid = () => uid + 1;
   const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   await launch(["x-w1"], deps);
@@ -209,7 +217,7 @@ it("fails the launch when the spool directory belongs to another user", async ()
   expect(stderr.mock.calls).toEqual([[eventsFailure]]);
 });
 it("does not refresh credentials when the spool directory fails", async () => {
-  await save(true); await enableDelivery(); deps.env = { XDG_RUNTIME_DIR: join(home, "absent") };
+  await enableDelivery(); await save(true); deps.env = { XDG_RUNTIME_DIR: join(home, "absent") };
   vi.spyOn(process.stderr, "write").mockReturnValue(true);
   await launch(["x-w1"], deps);
   expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
