@@ -41,6 +41,8 @@ const ERRNO_PATTERN = /^[A-Z0-9_]{1,20}$/;
 const MAX_SEQ = 99_999_999;
 const DIRECTORY_MODE = 0o700;
 const FILE_MODE = 0o600;
+/** How many of its newest event files an instance keeps; the wake hook scans a bounded number of entries. */
+export const SPOOL_RETAINED_EVENTS = 256;
 
 function sanitizedCode(error: unknown): string {
   const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
@@ -58,8 +60,13 @@ export class TurnEventSpool {
   private failureCount = 0;
   private reported = false;
   private closed = false;
+  /** Names of the event files this instance wrote and still keeps, oldest first. The directory is never listed. */
+  private readonly written: string[] = [];
 
-  private constructor(private readonly instanceDir: string, private readonly instance: string, private readonly options: EventSpoolOptions) {}
+  private constructor(
+    private readonly root: string, private readonly instanceDir: string, private readonly instance: string,
+    private readonly uid: number | undefined, private readonly options: EventSpoolOptions,
+  ) {}
 
   /**
    * Creates the root (mode 0700, recursively) if missing, refuses a root that is not a plain
@@ -77,7 +84,7 @@ export class TurnEventSpool {
       const instance = `inst-${randomBytes(8).toString("hex")}`;
       const instanceDir = join(dir, instance);
       mkdirSync(instanceDir, { mode: DIRECTORY_MODE });
-      return new TurnEventSpool(instanceDir, instance, options);
+      return new TurnEventSpool(dir, instanceDir, instance, uid, options);
     } catch (error) {
       throw error instanceof EventSpoolError ? error : new EventSpoolError();
     }
@@ -105,22 +112,54 @@ export class TurnEventSpool {
   }
 
   private append(fields: TurnEventFields): void {
-    let temporary: string | undefined;
     try {
       const seq = ++this.seq;
       if (seq > MAX_SEQ) throw Object.assign(new Error("sequence exhausted"), { code: "SEQ_EXHAUSTED" });
       const event = { v: TURN_EVENT_VERSION, seq, at: new Date().toISOString(), instance: this.instance, ...fields } as TurnEvent;
       const text = serializeTurnEvent(event);
       if (Buffer.byteLength(text, "utf8") > TURN_EVENT_MAX_BYTES) throw Object.assign(new Error("event too large"), { code: "EVENT_TOO_LARGE" });
-      temporary = join(this.instanceDir, `.tmp-${seq}-${randomBytes(4).toString("hex")}`);
-      const fd = openSync(temporary, "wx", FILE_MODE);
-      try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
-      renameSync(temporary, join(this.instanceDir, turnEventFileName(event)));
-      temporary = undefined;
+      const name = turnEventFileName(event);
+      try {
+        this.writeFile(seq, name, text);
+      } catch (error) {
+        // A writer launch may prune an instance directory that looked idle while this server lives on.
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        this.recreateInstanceDirectory();
+        this.writeFile(seq, name, text);
+      }
+      this.retain(name);
     } catch (error) {
-      if (temporary !== undefined) { try { unlinkSync(temporary); } catch { /* Nothing more to clean up. */ } }
       this.failureCount += 1;
       this.report(error);
+    }
+  }
+
+  private writeFile(seq: number, name: string, text: string): void {
+    const temporary = join(this.instanceDir, `.tmp-${seq}-${randomBytes(4).toString("hex")}`);
+    try {
+      const fd = openSync(temporary, "wx", FILE_MODE);
+      try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
+      renameSync(temporary, join(this.instanceDir, name));
+    } catch (error) {
+      try { unlinkSync(temporary); } catch { /* Nothing more to clean up. */ }
+      throw error;
+    }
+  }
+
+  /** Same rules as `open`, applied once more: the root must still be private, and the instance directory a plain one of ours. */
+  private recreateInstanceDirectory(): void {
+    verifyRoot(this.root, this.uid);
+    try { mkdirSync(this.instanceDir, { mode: DIRECTORY_MODE }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    verifyRoot(this.instanceDir, this.uid);
+    this.written.length = 0; // The pruned directory took its files with it.
+  }
+
+  /** Keeps only the newest `SPOOL_RETAINED_EVENTS` files this instance wrote. Best effort. */
+  private retain(name: string): void {
+    this.written.push(name);
+    while (this.written.length > SPOOL_RETAINED_EVENTS) {
+      const old = this.written.shift()!;
+      try { unlinkSync(join(this.instanceDir, old)); } catch { /* A file already gone needs no removal. */ }
     }
   }
 
