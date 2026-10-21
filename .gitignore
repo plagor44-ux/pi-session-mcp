@@ -7,5 +7,6 @@ coverage/
 *.log
 
 /.profile-eval/
+/.bridge-eval/
 /eval/results/
 /.vitest/
