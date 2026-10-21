@@ -226,21 +226,37 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     const dependent = (): TaskSpec[] => tasks.map((task) => ({ ...task, dependencies: [{ path: "backend/.venv", lockfile: "backend/uv.lock" }] }));
     const BINDS = [{ source: "/deps/t/mounts/backend/.venv", target: "/scope/clone/backend/.venv" }, { source: "/deps/t/runtime", target: "/deps/t/runtime" }];
 
-    it("requires --deps when a task that is loaded declares dependencies, before anything is prepared", async () => {
+    const NO_CHECK = { checkDependencies: async () => undefined };
+
+    it("requires --deps when a task declares dependencies, before anything is prepared", async () => {
       const s = await setup();
       await expect(dryLoad({ ...s.input, tasks: dependent() }, s.deps)).rejects.toThrow("deps_missing");
       expect(s.prepared).toHaveLength(0);
       expect(existsSync(s.waveDir)).toBe(false);
-      // Only tasks that are loaded count: the first task of each kind is used, and a second review task is not.
+      // Every task counts, also one that no pairing loads: the dry load is where a wrong lock shows.
       const [review] = tasks.filter((t) => t.kind === "review");
       const extra = { ...review!, id: "unused-review", dependencies: [{ path: "x", lockfile: "y" }] };
-      await expect(dryLoad({ ...s.input, tasks: [...tasks, extra] }, s.deps)).resolves.toBeDefined();
+      await expect(dryLoad({ ...s.input, tasks: [...tasks, extra] }, s.deps)).rejects.toThrow("deps_missing");
+    });
+
+    it("runs the read-only dependency checks for every task that declares dependencies, before anything is prepared", async () => {
+      const s = await setup();
+      const [review] = tasks.filter((t) => t.kind === "review");
+      const extra = { ...review!, id: "unused-review", dependencies: [{ path: "x", lockfile: "y" }] };
+      const seen: string[][] = [];
+      const check = async (input: { tasks: readonly TaskSpec[] }) => { seen.push(input.tasks.map((t) => t.id)); };
+      await dryLoad({ ...s.input, tasks: [...dependent(), extra], depsDir: join(s.root, "deps") }, { ...s.deps, checkDependencies: check, pairings: PAIRINGS.slice(0, 1) });
+      expect(seen).toEqual([[...dependent().map((t) => t.id), "unused-review"]]);
+      await expect(dryLoad({ ...s.input, tasks: dependent(), depsDir: join(s.root, "deps") }, {
+        ...s.deps, checkDependencies: async () => { throw new Error("dependency_lock_mismatch"); },
+      })).rejects.toThrow("dependency_lock_mismatch");
+      expect(s.prepared).toHaveLength(1);
     });
 
     it("refuses a deps directory inside a source, the evaluation repository or the wave directory", async () => {
       const s = await setup();
       for (const dir of [join(s.root, "source", "deps"), join(s.root, "repo", "deps"), join(s.waveDir, "deps"), s.root]) {
-        await expect(dryLoad({ ...s.input, tasks: dependent(), depsDir: dir }, s.deps)).rejects.toThrow("deps_dir_in_source");
+        await expect(dryLoad({ ...s.input, tasks: dependent(), depsDir: dir }, { ...s.deps, ...NO_CHECK })).rejects.toThrow("deps_dir_in_source");
       }
       expect(s.prepared).toHaveLength(0);
     });
@@ -248,7 +264,7 @@ describe("dry load report assembly (provider-free, injected scope and process)",
     it("hands the deps directory to every scope", async () => {
       const s = await setup();
       const depsDir = join(s.root, "deps");
-      await dryLoad({ ...s.input, tasks: dependent(), depsDir }, s.deps);
+      await dryLoad({ ...s.input, tasks: dependent(), depsDir }, { ...s.deps, ...NO_CHECK });
       expect(s.prepared.map((input) => input.depsDir)).toEqual(PAIRINGS.map(() => depsDir));
     });
 
@@ -259,7 +275,7 @@ describe("dry load report assembly (provider-free, injected scope and process)",
       writeFileSync(prlimit, `#!/bin/sh\nprintf '%s\\n' "$@" > "${join(root, "argv")}"\n`, { mode: 0o755 });
       const { spawn: _spawn, ...rest } = s.deps;
       await dryLoad({ ...s.input, tasks: dependent(), depsDir: join(root, "deps") }, {
-        ...rest, pairings: PAIRINGS.slice(0, 1), resolveTools: async () => ({ ...TOOLS, prlimit }),
+        ...rest, ...NO_CHECK, pairings: PAIRINGS.slice(0, 1), resolveTools: async () => ({ ...TOOLS, prlimit }),
         prepareScope: async (scopeInput) => ({ ...await s.deps.prepareScope!(scopeInput), dependencyBinds: BINDS }),
       });
       const argv = readFileSync(join(root, "argv"), "utf8").split("\n");

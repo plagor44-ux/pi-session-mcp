@@ -8,7 +8,7 @@ import { z } from "zod";
 import { parseProductionConfig } from "./approval.js";
 import { auditLog } from "./audit.js";
 import { containmentSelfTest } from "./containment.js";
-import { assertDependencyDir } from "./dependencies.js";
+import { assertDependencyDir, checkTaskDependencies } from "./dependencies.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { fixedCode } from "./classify.js";
 import { PAIRINGS, buildMatrix } from "./matrix.js";
@@ -86,6 +86,8 @@ export interface DryLoadDeps {
   hostCheck?: (() => Promise<void>) | undefined;
   containmentCheck?: ((tools: ToolPaths, plan: SandboxPlan) => Promise<void>) | undefined;
   planSandbox?: ((tools: ToolPaths) => Promise<SandboxPlan>) | undefined;
+  /** The read-only dependency checks of every task that declares dependencies (R68); the default reads the workspaces' git. */
+  checkDependencies?: typeof checkTaskDependencies | undefined;
   residualCheck?: ((pgid: number) => Promise<boolean>) | undefined;
   changedPaths?: typeof changedPaths | undefined;
   removeTree?: ((path: string) => Promise<void>) | undefined;
@@ -136,7 +138,10 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
   await (deps.hostCheck ?? assertHostSafe)();
   const tools = await (deps.resolveTools ?? resolveTools)();
   await assertWaveDirOutsideSources(input.waveDir, [...Object.values(config.workspaces), repoRoot]);
-  await assertDependencyDir(input.depsDir, jobs.map((job) => job.task), [...Object.values(config.workspaces), repoRoot, input.waveDir]);
+  // Every task that declares dependencies is checked, not only the one each pairing loads: the dry load is where a wrong lock shows.
+  const depsSources = [...Object.values(config.workspaces), repoRoot, input.waveDir];
+  await assertDependencyDir(input.depsDir, input.tasks, depsSources);
+  await (deps.checkDependencies ?? checkTaskDependencies)({ depsDir: input.depsDir, tasks: input.tasks, workspaces: config.workspaces, git: tools.git, sources: depsSources });
   const plan = await (deps.planSandbox ?? ((t: ToolPaths) => planSandbox({ tools: t, repoRoot, buildRoot: deps.buildRoot ?? BUILD_ROOT })))(tools);
   await (deps.containmentCheck ?? containmentSelfTest)(tools, plan);
   // The wave directory, `private` and `scopes` are pinned by device and inode; nothing is created or removed below them unless all three are intact.

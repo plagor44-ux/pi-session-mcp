@@ -566,7 +566,7 @@ describe("task dependencies in a wave (R68)", () => {
       return { accepted: true, testsPassed: true, outOfScope: [] };
     };
     const { deps } = s.deps([text()], {
-      prepareScope: async (input) => { inputs.push(input); return { ...await fakePrepare(input), dependencyBinds: BINDS }; }, scoreImplementation: scoring,
+      prepareScope: async (input) => { inputs.push(input); return { ...await fakePrepare(input), dependencyBinds: BINDS }; }, scoreImplementation: scoring, checkDependencies: async () => undefined,
     });
     const result = await runWave({ ...s.input, depsDir }, deps);
     expect(result.stopReason).toBeNull();
@@ -585,9 +585,45 @@ describe("task dependencies in a wave (R68)", () => {
     expect(record).not.toContain("/deps/");
   });
 
+  it("refuses a deps directory that is not canonical (a link on its way), before anything exists", async () => {
+    const s = await dependentWave(1);
+    await mkdir(join(s.root, "real-deps"));
+    await symlink(join(s.root, "real-deps"), join(s.root, "deps"));
+    await expect(runWave({ ...s.input, depsDir: join(s.root, "deps") }, s.deps([text()]).deps)).rejects.toThrow("deps_dir_not_canonical");
+    expect(existsSync(s.waveDir)).toBe(false);
+  });
+
+  it("checks the dependencies of every pending task before the first run: a wrong lock of a later task refuses the wave", async () => {
+    const root = await temporaryRoot("ablation-wave-deps-");
+    const source = join(root, "source");
+    await mkdir(join(source, "backend"), { recursive: true });
+    const git = (...args: string[]) => exec("git", ["-C", source, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(source, "backend", "uv.lock"), "lock-v1\n");
+    await git("add", "."); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
+    const s = await waveSetup(6, { kind: "implementation", productionConfig: { ...productionConfig, workspaces: { repo: source } } });
+    // The wave directory and the evaluation repository are siblings of the source in the temporary root `waveSetup` made; the deps live in ours.
+    s.input.tasks = s.input.tasks.map((task) => ({ ...task, baseCommit: base, dependencies: DEPENDENCIES }));
+    s.input.approval = approvalFor(s.input.tasks, s.runs);
+    const depsDir = join(root, "deps");
+    for (const [id, lock] of [["T1", "lock-v1\n"], ["T2", "lock-v2\n"], ["T3", "lock-v1\n"]] as const) {
+      await mkdir(join(depsDir, id, "mounts", "backend", ".venv"), { recursive: true });
+      await mkdir(join(depsDir, id, "lock", "backend"), { recursive: true });
+      await writeFile(join(depsDir, id, "lock", "backend", "uv.lock"), lock);
+    }
+    const { deps, captured } = s.deps([text()], { resolveTools: async () => ({ ...TOOLS, git: await resolveTool("git", process.env.PATH ?? "") }) });
+    await expect(runWave({ ...s.input, depsDir }, deps)).rejects.toThrow("dependency_lock_mismatch");
+    expect(captured).toHaveLength(0);
+    expect(existsSync(s.waveDir)).toBe(false);
+    // With the lock right, the up-front check passes and the scope check (fake here) is the only one left.
+    await writeFile(join(depsDir, "T2", "lock", "backend", "uv.lock"), "lock-v1\n");
+    await expect(runWave({ ...s.input, depsDir }, s.deps([text()], { resolveTools: async () => ({ ...TOOLS, git: await resolveTool("git", process.env.PATH ?? "") }) }).deps)).resolves.toMatchObject({ stopReason: null });
+  });
+
   it("records a dependency check that fails as a fixed harness code and stops the wave", async () => {
     const s = await dependentWave(2);
-    const { deps } = s.deps([text()], { prepareScope: async () => { throw new Error("dependency_lock_mismatch"); } });
+    const { deps } = s.deps([text()], { prepareScope: async () => { throw new Error("dependency_lock_mismatch"); }, checkDependencies: async () => undefined });
     const result = await runWave({ ...s.input, depsDir: join(s.root, "deps") }, deps);
     expect(result.stopReason).toBe("harness_failure");
     expect(result.records.map((record) => [record.outcome, record.harnessError])).toEqual([["stopped", "dependency_lock_mismatch"], ["not_run", null]]);

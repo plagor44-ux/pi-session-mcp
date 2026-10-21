@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-credentials.js";
 import { approvalSchema, parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
-import { assertDependencyDir } from "./dependencies.js";
+import { assertDependencyDir, checkTaskDependencies } from "./dependencies.js";
 import { WaveDirGuard, removeTree } from "./evidence.js";
 import { classifyRun, fixedCode, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
@@ -74,6 +74,8 @@ export interface WaveDeps {
   containmentCheck?: ((tools: ToolPaths, plan: SandboxPlan) => Promise<void>) | undefined;
   /** The host-dependent part of the sandbox (R48, R49); the default inspects the host once. */
   planSandbox?: ((tools: ToolPaths) => Promise<SandboxPlan>) | undefined;
+  /** The read-only dependency checks of the pending tasks (R68), before any run starts; the default reads the workspaces' git. */
+  checkDependencies?: typeof checkTaskDependencies | undefined;
   now?: (() => number) | undefined;
 }
 
@@ -146,7 +148,11 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     }
   } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
   const pending = runs.filter((run) => !done.has(run.runId));
-  await assertDependencyDir(input.depsDir, pending.map((run) => tasks.get(run.taskId)!), [...Object.values(config.workspaces), input.repoRoot ?? process.cwd(), input.waveDir]);
+  const pendingTasks = pending.map((run) => tasks.get(run.taskId)!);
+  const depsSources = [...Object.values(config.workspaces), input.repoRoot ?? process.cwd(), input.waveDir];
+  await assertDependencyDir(input.depsDir, pendingTasks, depsSources);
+  // A wrong lock or a missing mount of a later task is found before the first run is paid for; each scope checks again.
+  await (deps.checkDependencies ?? checkTaskDependencies)({ depsDir: input.depsDir, tasks: pendingTasks, workspaces: config.workspaces, git: tools.git, sources: depsSources });
   for (const run of pending) {
     if ([join(input.waveDir, "runs", `${run.runId}.json`), privateRunDir(input.waveDir, run.runId), scopeRoot(input.waveDir, run.runId)].some((path) => existsSync(path))) {
       throw new Error("output_exists");

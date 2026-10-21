@@ -357,8 +357,16 @@ the text above, they win.
   from). The operator builds them beforehand in a directory given by
   `--deps <dir>` (`--dry-load` and `--wave`; not `--plan` or `--preflight`),
   which must lie outside the repository, every configured workspace and the
-  wave directory (`deps_dir_in_source`) and is required (`deps_missing`) when a
-  task that will run declares dependencies. Per task, `<deps>/<taskId>/mounts/<path>/`
+  wave directory (`deps_dir_in_source`), must be canonical (its realpath is its
+  path, `deps_dir_not_canonical`) and is required (`deps_missing`) when a
+  task that will run declares dependencies. No link is allowed below it on the
+  way to a bind source: each mount and the runtime must be exactly
+  `<deps>/<taskId>/mounts/<path>` and `<deps>/<taskId>/runtime` by realpath
+  (`dependency_mount_invalid`; a linked `lock` directory is a
+  `dependency_lock_mismatch`), so a link cannot bring a source checkout into
+  the sandbox. The read-only checks run for every pending task up front in a
+  wave and for every task that declares dependencies in a dry load, and again
+  for each scope. Per task, `<deps>/<taskId>/mounts/<path>/`
   holds the content, `<deps>/<taskId>/lock/<lockfile>` the lockfile copy and
   `<deps>/<taskId>/runtime/` optionally whatever the content references by
   absolute path (the interpreter a venv points to). Before a scope is used, the
@@ -380,3 +388,11 @@ the text above, they win.
   full history (it is outside the sandbox) because the scope check and the
   oracle use it; an oracle setup step may therefore still run
   `git checkout <solution> -- <file>`.
+- **Residual risk: the oracle's `.git` holds the full history (R69).** The
+  worker clone is cut at the base commit, but `neutralizeGitDir` replaces the
+  clone's `.git` with one cloned from the pristine bare clone before the oracle
+  runs, so candidate code that executes in the oracle (a `conftest.py`, a
+  pretest script) could read later commits and the original solution. This is
+  not prevented: the oracle's setup steps need that history, and the run unit
+  has finished by then. It is detected only insofar as the oracle's strace
+  audit shows an unexpected write or connection. No code change.
