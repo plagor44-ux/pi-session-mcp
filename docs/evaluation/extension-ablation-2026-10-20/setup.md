@@ -81,3 +81,36 @@ Active tools per pairing (sorted, from the private report):
   as arm A.
 - On the coding profiles `pi_lens_activate_tools` is active, so coding arm B can
   activate the AST tools mid-session. Review arm B cannot.
+
+## Dry load with the final tasks (Task 10 Step 5)
+
+Commit 1c228ad (dependency mounts, ruling R68; base-only clone history, ruling
+R69) with the final tasks file `docs/evaluation/extension-ablation-2026-10-20/tasks.json`.
+
+Dependencies: task `i-pyng-authz` declares `backend/.venv` with lockfile
+`backend/uv.lock`. The deps directory `$EVAL/deps/i-pyng-authz` holds:
+
+- `mounts/backend/.venv`, built with `uv sync --frozen --offline
+  --no-install-project` (`UV_PROJECT_ENVIRONMENT`) from a temporary checkout at
+  the base commit, which was removed afterwards.
+- `lock/backend/uv.lock`, SHA-256
+  `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca`, equal to
+  the base commit's lockfile.
+- `runtime/`, a copy of uv's CPython 3.12.13, which the venv's interpreter link
+  points to.
+
+No network was used (local uv cache).
+
+| Run | Tasks loaded | Purpose |
+| --- | --- | --- |
+| 1 | The full tasks file; the dry load loads one task per pairing (`r-psm-smoke` for review pairings, `i-go-app-dms` for implementation pairings) | All six pairings with the final file |
+| 2 | A subset with `r-pyng-authz` and `i-pyng-authz` | Also loads the pynode-app worktree and the real venv mount |
+
+Both runs: every pairing ok, no clone writes, no inet connects, no unexpected
+connects, no outside or unresolved writes, no denied writes, no `io_uring`
+setups. Active tool lists are as in the earlier section.
+
+Result: no extension writes into a clone, so no task gets a `scopeIgnore` entry
+from the dry load. `i-pyng-authz` carries 29 `scopeIgnore` prefixes for the
+worker's own test caches (pytest and ruff caches, `__pycache__` directories
+present at the base commit), ruling R72.
