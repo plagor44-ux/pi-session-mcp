@@ -340,8 +340,10 @@ the text above, they win.
   `CODEGRAPH_NO_UPDATE_CHECK=1` and `CODEGRAPH_TELEMETRY=0` in the run
   environment and, because the MCP child does not inherit that environment,
   adds an identity `envFrom` mapping for these three variables to every
-  `mcpServers` entry of the copied profile. This is the single deviation from
-  "copied verbatim except `workspaces`" besides the extension pin and grant.
+  `mcpServers` entry of the copied profile. This is a further deviation from
+  "copied verbatim except `workspaces`", in addition to the extension pin and
+  grant and to what `runConfig` already does (it sets the default profile and
+  adds the read-only copy).
 - **`io_uring_setup` counting.** A call split by `<unfinished ...>` is joined
   with its `resumed` line and counts only if its final return value is
   non-negative; the injected `ENOSYS` no longer counts.
