@@ -158,15 +158,11 @@ const budgetTail: Step[] = [
   (c) => { const ok = result(c, "pi_turn_get")?.turn?.state === "running"; return callOut("pi_session_abort", { sessionId: c.kv.sid ?? "missing" }, ok, ok ? undefined : "turn_not_running"); },
   ...Array.from({ length: 6 }, () => abortedReactor),
 ];
-// Observation: close a session whose turn is still running. The close generates the terminal event (via close); the wake is delivered, but the session is gone.
+// Close a session whose turn is still running. The close writes the terminal event (via close); the product hook ignores it, so the
+// controller does not wait for a wake: it ends its turn right after the close and the probe ends stdin after a fixed observation window.
 const closeRunningTail: Step[] = [
-  (c) => { learnTurn(c); return callOut("pi_session_close", { sessionId: c.kv.sid ?? "missing" }); },
-  ...Array.from({ length: 6 }, (): Step => (c) => {
-    const read = result(c, "pi_turn_get");
-    if (read) { c.kv.readAfterClose = read.ok === true ? "ok" : safeLabel(read.error?.code) ?? "unlabelled"; return textOut("Read the closed turn.", true, undefined, true); }
-    const wake = takeWake(c, "terminal");
-    return wake ? readTurn(wake, "aborted", c) : textOut("Waiting for the close event.");
-  }),
+  (c) => { learnTurn(c); return callOut("pi_session_close", { sessionId: c.kv.sid ?? "missing" }, c.kv.tid !== undefined); },
+  (c) => textOut("Closed the session; nothing to wait for.", result(c, "pi_session_close")?.ok === true, undefined, true),
 ];
 export const SCENARIOS: Scenario[] = [
   { id: "P1", title: "completion wake with spool delivery", delivery: "spool", hookBudgetMs: 120_000, sessions: [complete(3000)],
@@ -187,9 +183,9 @@ export const SCENARIOS: Scenario[] = [
   { id: "P4", title: "delivery off", delivery: "off", hookBudgetMs: 120_000, sessions: [complete(2000)],
     script: lastDone(startAndPrompt("off")), finish: { kind: "script_done", extraMs: 6000 }, maxMs: 30_000,
     expect: "capabilities report off; setup reports hook_not_enabled and writes nothing; no spool directory; no wake" },
-  { id: "P6", title: "observation: close of a running turn", delivery: "spool", hookBudgetMs: 120_000, sessions: [{ steps: [{ hang: true }] }],
-    script: [...startAndPrompt("spool").slice(0, 3), ...closeRunningTail], finish: { kind: "script_done", extraMs: 3500 }, maxMs: 30_000,
-    expect: "recorded: the close writes a terminal event (via close) and the armed hook wakes; the later pi_turn_get result is only labelled" },
+  { id: "P6", title: "close of a running turn: no wake", delivery: "spool", hookBudgetMs: 120_000, sessions: [{ steps: [{ hang: true }] }],
+    script: [...startAndPrompt("spool").slice(0, 3), ...closeRunningTail], finish: { kind: "script_done", extraMs: 5500 }, maxMs: 30_000,
+    expect: "the close writes one aborted terminal event (via close); the armed hook ends silently (exit 0), no wake request appears within 5 s after the event and no claim is created; the controller ends its turn and the probe ends stdin" },
 ];
 
 // ---------------------------------------------------------------- helpers
@@ -442,13 +438,13 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
   }
 
   const main = requests.filter((r) => r.role === "main"), wakeRequests = requests.filter((r) => r.wake_kind !== null);
-  const perEvent = (collected.per_event ?? []) as Array<{ wakes: number; delay_ms: number | null; state: string; via: string }>;
+  const perEvent = (collected.per_event ?? []) as Array<{ wakes: number; delay_ms: number | null; state: string; via: string; at_ms: number }>;
   const counters = (collected.counters ?? {}) as { tools?: Record<string, number>; pi_turn_get?: { running: number; terminal: number; error: number }; spool_failures?: number; delivery?: string; spool_opened?: boolean; xdg_runtime_dir_set?: boolean; shutdown?: string };
   const spoolInfo = (collected.spool ?? {}) as Record<string, any>;
   const base = {
     tooling: { client_version: version, node: process.versions.node }, scenario: sc.id, title: sc.title, delivery: sc.delivery, hook_budget_ms: sc.hookBudgetMs, expectation: sc.expect,
     exit_code: st.exitCode, exit_signal: st.exitSignal, timed_out: timedOut, exit_at_ms: st.exitAt, stdin_ended_at_ms: st.stdinEndedAt, harness_invalid: st.invalid, http_unexpected: st.httpUnexpected,
-    setup, caps_delivery_seen_by_client: kv.capsDelivery ?? null, read_after_close: kv.readAfterClose ?? null,
+    setup, caps_delivery_seen_by_client: kv.capsDelivery ?? null,
     requests: { total: requests.length, main: main.length, auxiliary: requests.length - main.length, list: requests, scripted_tool_calls: st.toolCalls },
     wakes: { requests: wakeRequests.length, by_kind: histogram(wakeRequests.map((r) => String(r.wake_kind))), by_delivery: histogram(wakeRequests.map((r) => String(r.wake_delivery))), kinds_in_order: wakeRequests.map((r) => String(r.wake_kind)),
       missing: perEvent.filter((e) => e.wakes === 0).length, duplicate: perEvent.filter((e) => e.wakes > 1).length, delays_ms: perEvent.map((e) => e.delay_ms) },
@@ -493,9 +489,12 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
   });
   if (sc.id === "P6") Object.assign(checks, hookEntryChecks(), {
     server_spool_open: counters.delivery === "spool" && counters.spool_opened === true, no_spool_failures: counters.spool_failures === 0,
-    one_terminal_wake: wakes === 1 && wakeRequests[0]?.wake_kind === "terminal" && wakeRequests[0]?.wake_ref?.state === "aborted",
-    one_aborted_spool_event_via_close: perEvent.length === 1 && perEvent[0]!.state === "aborted" && perEvent[0]!.via === "close" && base.wakes.missing === 0 && base.wakes.duplicate === 0,
-    read_after_close_labelled: kv.readAfterClose !== undefined,
+    one_aborted_spool_event_via_close: perEvent.length === 1 && perEvent[0]!.state === "aborted" && perEvent[0]!.via === "close" && spoolInfo.events?.filter((e: { kind: string }) => e.kind === "turn_terminal").length === 1,
+    no_wake_request: wakes === 0 && requests.every((r) => !r.marker_in_fresh && r.marker_total === 0),
+    window_after_event_at_least_5s: perEvent[0] !== undefined && st.stdinEndedAt !== null && st.stdinEndedAt - perEvent[0].at_ms >= 5000,
+    armed_hook_ended_silently: stream.hook_events.some((h) => h.subtype === "hook_started") && stream.hook_events.filter((h) => h.subtype === "hook_response").length === 1 && stream.hook_events.every((h) => h.subtype !== "hook_response" || (h.exit_code === 0 && h.outcome === "success")),
+    no_claim_created: spoolInfo.claims_max === 0, no_turn_read: (counters.tools?.pi_turn_get ?? 0) === 0 && (counters.tools?.pi_session_close ?? 0) === 1,
+    controller_ended_turn_and_stdin_closed_by_probe: st.scriptDone && st.stdinEndedAt !== null && !timedOut,
   });
   if (sc.id === "P4") Object.assign(checks, {
     setup_dry_run_not_enabled: setupOk("dry_run", "unchanged", "hook_not_enabled"), setup_apply_not_enabled: setupOk("apply", "unchanged", "hook_not_enabled"), setup_verify_not_enabled: setupOk("verify", "unchanged", "hook_not_enabled"),
