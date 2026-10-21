@@ -21,6 +21,7 @@ export interface OwnershipRecord {
    * transaction id also names the update's intermediate directories, so recovery needs no path.
    * Skill fingerprints are `v2:` values; a bare 64-hex value is a record that 0.8.0 wrote and
    * names a tree only once a trusted reference proves it.
+   * Hook records also use it while pending, for the owned entry (a 64-hex fingerprint) that the update replaces.
    */
   readonly replaces?: string;
 }
@@ -182,6 +183,9 @@ async function syncDirectory(path: string): Promise<void> {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 
+/** `hook:pi-session-mcp-wake` for the user settings; `…@<16 hex>` for a project or local settings file bound to an opaque project identity. */
+const HOOK_RECORD_ALIAS = /^hook:pi-session-mcp-wake(?:@([0-9a-f]{16}))?$/;
+
 /** `skill:<name>` for a home slot; `skill:<name>@<16 hex>` for a project slot bound to an opaque project identity. */
 const SKILL_RECORD_ALIAS = /^skill:([^@]+)(?:@([0-9a-f]{16}))?$/;
 
@@ -202,12 +206,15 @@ export function isRecord(value: unknown): value is OwnershipRecord {
   const skill = skillAlias !== null && SKILL_NAME_PATTERN.test(skillAlias[1]!) &&
     (client === "codex" ? scope === "user" && skillAlias[2] === undefined
       : client === "claude-code" && ((scope === "user" && skillAlias[2] === undefined) || (scope === "project" && skillAlias[2] !== undefined)));
+  const hookAlias = typeof alias === "string" ? HOOK_RECORD_ALIAS.exec(alias) : null;
+  const hook = hookAlias !== null && client === "claude-code" &&
+    ((scope === "user" && hookAlias[1] === undefined) || ((scope === "project" || scope === "local") && hookAlias[1] !== undefined));
   // A registration fingerprint is a snapshot hash; a skill fingerprint is a version 2 tree value or a 0.8.0 legacy one.
   const validFingerprint = (value: unknown): boolean => typeof value === "string" &&
     (skill ? SKILL_TREE_FINGERPRINT_PATTERN.test(value) || LEGACY_SKILL_TREE_FINGERPRINT_PATTERN.test(value) : /^[a-f0-9]{64}$/.test(value));
-  // `replaces` belongs only to a pending skill record.
-  if ("replaces" in x && !(skill && x.phase === "pending" && validFingerprint(x.replaces))) return false;
-  return (registration || writer || skill) && validFingerprint(x.fingerprint) &&
+  // `replaces` belongs only to a pending skill or hook record.
+  if ("replaces" in x && !((skill || hook) && x.phase === "pending" && validFingerprint(x.replaces))) return false;
+  return (registration || writer || skill || hook) && validFingerprint(x.fingerprint) &&
     (x.phase === "pending" || x.phase === "owned") && x.previous === "absent" &&
     typeof x.transactionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(x.transactionId);
 }
