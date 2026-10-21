@@ -1,0 +1,54 @@
+{
+  "runId": "014-r-psm-smoke-review-grok-pi-lens",
+  "taskId": "r-psm-smoke",
+  "profile": "review-grok",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-review-grok"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 158250,
+      "output": 54577,
+      "cacheRead": 798848,
+      "cacheWrite": 0,
+      "total": 1011675,
+      "costUsd": 1.0433860000000001
+    },
+    "assistant": {
+      "messages": 24,
+      "input": 158250,
+      "output": 54577,
+      "cacheRead": 798848,
+      "cacheWrite": 0,
+      "costUsd": 1.0433860000000001
+    },
+    "providerError": null
+  },
+  "durationMs": 712352,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 15
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "8ed613f07ef1e3ca850c17020289cfc26a49da19cb30eda22c887c91dab12d96",
+  "outcome": "scored",
+  "accepted": false,
+  "review": {
+    "accepted": false,
+    "criticalHit": 2,
+    "criticalTotal": 2,
+    "verdictMatched": false,
+    "recall": 0.6,
+    "falseFindings": []
+  },
+  "stopReason": null
+}

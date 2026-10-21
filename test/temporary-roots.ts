@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,7 +17,8 @@ import { join } from "node:path";
 const roots: string[] = [];
 
 export async function temporaryRoot(prefix: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), prefix));
+  // The real path: on macOS the temporary directory sits below a symlink (/var -> /private/var), and the harness refuses paths that are not canonical.
+  const root = await realpath(await mkdtemp(join(tmpdir(), prefix)));
   roots.push(root);
   return root;
 }

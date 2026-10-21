@@ -1,0 +1,394 @@
+{
+  "approved": true,
+  "approvedAt": "2026-10-21T12:39:32Z",
+  "budgetUsd": 10,
+  "sourceCommit": "662f6e7dfb56763e1b4933f488f4abf20bef2617",
+  "tasksDigest": "sha256:644f302133c66f701a646fffe0629ae76d1d8c3ba2f34e83a1cc0aedc22bee3a",
+  "matrixDigest": "sha256:c756deca193eefe9c5aa4b72d2595d7f6fd069be72a75264cf7d036560cad7ac",
+  "ledgerId": "dce52c6f-76ab-4043-a8b6-f88d320b2180",
+  "runs": [
+    {
+      "runId": "001-i-thoth-dms-code-deepseek-A",
+      "taskId": "i-thoth-dms",
+      "profile": "code-deepseek",
+      "arm": "A",
+      "ordinal": 1,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "002-i-thoth-dms-code-deepseek-pi-lens",
+      "taskId": "i-thoth-dms",
+      "profile": "code-deepseek",
+      "arm": "pi-lens",
+      "ordinal": 2,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "003-i-spng-authz-code-deepseek-pi-lens",
+      "taskId": "i-spng-authz",
+      "profile": "code-deepseek",
+      "arm": "pi-lens",
+      "ordinal": 3,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "004-i-spng-authz-code-deepseek-A",
+      "taskId": "i-spng-authz",
+      "profile": "code-deepseek",
+      "arm": "A",
+      "ordinal": 4,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "005-i-spng-pdf-code-deepseek-A",
+      "taskId": "i-spng-pdf",
+      "profile": "code-deepseek",
+      "arm": "A",
+      "ordinal": 5,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "006-i-spng-pdf-code-deepseek-pi-lens",
+      "taskId": "i-spng-pdf",
+      "profile": "code-deepseek",
+      "arm": "pi-lens",
+      "ordinal": 6,
+      "pairings": [
+        "pl-code-deepseek"
+      ]
+    },
+    {
+      "runId": "007-i-thoth-dms-code-A",
+      "taskId": "i-thoth-dms",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 7,
+      "pairings": [
+        "pl-code",
+        "co-code"
+      ]
+    },
+    {
+      "runId": "008-i-thoth-dms-code-pi-lens",
+      "taskId": "i-thoth-dms",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 8,
+      "pairings": [
+        "pl-code"
+      ]
+    },
+    {
+      "runId": "009-i-spng-authz-code-pi-lens",
+      "taskId": "i-spng-authz",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 9,
+      "pairings": [
+        "pl-code"
+      ]
+    },
+    {
+      "runId": "010-i-spng-authz-code-A",
+      "taskId": "i-spng-authz",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 10,
+      "pairings": [
+        "pl-code",
+        "co-code"
+      ]
+    },
+    {
+      "runId": "011-i-spng-pdf-code-A",
+      "taskId": "i-spng-pdf",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 11,
+      "pairings": [
+        "pl-code",
+        "co-code"
+      ]
+    },
+    {
+      "runId": "012-i-spng-pdf-code-pi-lens",
+      "taskId": "i-spng-pdf",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 12,
+      "pairings": [
+        "pl-code"
+      ]
+    },
+    {
+      "runId": "013-r-psm-smoke-review-grok-A",
+      "taskId": "r-psm-smoke",
+      "profile": "review-grok",
+      "arm": "A",
+      "ordinal": 13,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "014-r-psm-smoke-review-grok-pi-lens",
+      "taskId": "r-psm-smoke",
+      "profile": "review-grok",
+      "arm": "pi-lens",
+      "ordinal": 14,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "015-r-thoth-gates-review-grok-pi-lens",
+      "taskId": "r-thoth-gates",
+      "profile": "review-grok",
+      "arm": "pi-lens",
+      "ordinal": 15,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "016-r-thoth-gates-review-grok-A",
+      "taskId": "r-thoth-gates",
+      "profile": "review-grok",
+      "arm": "A",
+      "ordinal": 16,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "017-r-spng-authz-review-grok-A",
+      "taskId": "r-spng-authz",
+      "profile": "review-grok",
+      "arm": "A",
+      "ordinal": 17,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "018-r-spng-authz-review-grok-pi-lens",
+      "taskId": "r-spng-authz",
+      "profile": "review-grok",
+      "arm": "pi-lens",
+      "ordinal": 18,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "019-r-spng-chat-review-grok-pi-lens",
+      "taskId": "r-spng-chat",
+      "profile": "review-grok",
+      "arm": "pi-lens",
+      "ordinal": 19,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "020-r-spng-chat-review-grok-A",
+      "taskId": "r-spng-chat",
+      "profile": "review-grok",
+      "arm": "A",
+      "ordinal": 20,
+      "pairings": [
+        "pl-review-grok"
+      ]
+    },
+    {
+      "runId": "021-r-psm-smoke-review-A",
+      "taskId": "r-psm-smoke",
+      "profile": "review",
+      "arm": "A",
+      "ordinal": 21,
+      "pairings": [
+        "pl-review",
+        "co-review"
+      ]
+    },
+    {
+      "runId": "022-r-psm-smoke-review-pi-lens",
+      "taskId": "r-psm-smoke",
+      "profile": "review",
+      "arm": "pi-lens",
+      "ordinal": 22,
+      "pairings": [
+        "pl-review"
+      ]
+    },
+    {
+      "runId": "023-r-thoth-gates-review-pi-lens",
+      "taskId": "r-thoth-gates",
+      "profile": "review",
+      "arm": "pi-lens",
+      "ordinal": 23,
+      "pairings": [
+        "pl-review"
+      ]
+    },
+    {
+      "runId": "024-r-thoth-gates-review-A",
+      "taskId": "r-thoth-gates",
+      "profile": "review",
+      "arm": "A",
+      "ordinal": 24,
+      "pairings": [
+        "pl-review",
+        "co-review"
+      ]
+    },
+    {
+      "runId": "025-r-spng-authz-review-A",
+      "taskId": "r-spng-authz",
+      "profile": "review",
+      "arm": "A",
+      "ordinal": 25,
+      "pairings": [
+        "pl-review",
+        "co-review"
+      ]
+    },
+    {
+      "runId": "026-r-spng-authz-review-pi-lens",
+      "taskId": "r-spng-authz",
+      "profile": "review",
+      "arm": "pi-lens",
+      "ordinal": 26,
+      "pairings": [
+        "pl-review"
+      ]
+    },
+    {
+      "runId": "027-r-spng-chat-review-pi-lens",
+      "taskId": "r-spng-chat",
+      "profile": "review",
+      "arm": "pi-lens",
+      "ordinal": 27,
+      "pairings": [
+        "pl-review"
+      ]
+    },
+    {
+      "runId": "028-r-spng-chat-review-A",
+      "taskId": "r-spng-chat",
+      "profile": "review",
+      "arm": "A",
+      "ordinal": 28,
+      "pairings": [
+        "pl-review",
+        "co-review"
+      ]
+    },
+    {
+      "runId": "029-i-thoth-dms-code-pi-cache-optimizer",
+      "taskId": "i-thoth-dms",
+      "profile": "code",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 29,
+      "pairings": [
+        "co-code"
+      ]
+    },
+    {
+      "runId": "030-i-spng-authz-code-pi-cache-optimizer",
+      "taskId": "i-spng-authz",
+      "profile": "code",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 30,
+      "pairings": [
+        "co-code"
+      ]
+    },
+    {
+      "runId": "031-i-spng-pdf-code-pi-cache-optimizer",
+      "taskId": "i-spng-pdf",
+      "profile": "code",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 31,
+      "pairings": [
+        "co-code"
+      ]
+    },
+    {
+      "runId": "032-r-psm-smoke-review-pi-cache-optimizer",
+      "taskId": "r-psm-smoke",
+      "profile": "review",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 32,
+      "pairings": [
+        "co-review"
+      ]
+    },
+    {
+      "runId": "033-r-thoth-gates-review-pi-cache-optimizer",
+      "taskId": "r-thoth-gates",
+      "profile": "review",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 33,
+      "pairings": [
+        "co-review"
+      ]
+    },
+    {
+      "runId": "034-r-spng-authz-review-pi-cache-optimizer",
+      "taskId": "r-spng-authz",
+      "profile": "review",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 34,
+      "pairings": [
+        "co-review"
+      ]
+    },
+    {
+      "runId": "035-r-spng-chat-review-pi-cache-optimizer",
+      "taskId": "r-spng-chat",
+      "profile": "review",
+      "arm": "pi-cache-optimizer",
+      "ordinal": 35,
+      "pairings": [
+        "co-review"
+      ]
+    }
+  ],
+  "routes": [
+    {
+      "profile": "code",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "thinkingLevel": "medium"
+    },
+    {
+      "profile": "code-deepseek",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "thinkingLevel": "high"
+    },
+    {
+      "profile": "review",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "thinkingLevel": "high"
+    },
+    {
+      "profile": "review-grok",
+      "provider": "xai",
+      "model": "grok-4.7",
+      "thinkingLevel": "high"
+    }
+  ]
+}

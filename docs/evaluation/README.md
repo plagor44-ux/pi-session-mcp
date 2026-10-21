@@ -38,10 +38,12 @@ client-level rewake probe; its real-model measurement is not approved.
 | [Later authorized re-screen](live-rescreen-2026-10-17/README.md) | Five starts; three accepted tasks; sixth planned slot blocked | Sol met that revision's T1/T2 screening gate; Luna and Grok did not |
 | [Extension function checks](extension-functions-2026-10-17/README.md) | Seven selected candidates; actual functions and partial/inconclusive results distinguished | Provider-free component checks; no measured live B/C benefit |
 | [Publication verification](publication-2026-10-17/README.md) | Current checks and oracle early-exit regression evidence | Applies to the publishable implementation, separately from the historical live source |
+| [Extension ablation](extension-ablation-2026-10-20/README.md) | Approved live waves (four), 15 of 35 planned runs scored, USD 8.34 spent of the USD 10 budget; `pl-code-deepseek` do-not-enable (A 3/3, B 2/3), `pl-code` enable by the pre-registered rule (A 2/3, B 2/3); review pairings descriptive only; pi-cache-optimizer not run | One run per task and arm: indicative, not significant; both verdicts hinge on a single timeout or early stop; no production change recommended |
 
 The two approved live waves used 13 starts in total. Their actual token usage and
 cost remain unknown; the USD 5 amounts were advisory, with no demonstrated hard
-provider cap. No pilot, ablation or additional live call is authorized by this PR.
+provider cap. The PR that introduced these dossiers authorized no pilot, ablation
+or additional live call; the later extension ablation ran under its own approvals.
 Historical screening eligibility does not transfer across source bindings.
 
 ## Selected extension functions

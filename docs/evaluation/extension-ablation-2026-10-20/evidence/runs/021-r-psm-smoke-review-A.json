@@ -1,0 +1,21 @@
+{
+  "runId": "021-r-psm-smoke-review-A",
+  "taskId": "r-psm-smoke",
+  "profile": "review",
+  "arm": "A",
+  "pairings": [
+    "pl-review",
+    "co-review"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}
