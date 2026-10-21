@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { EventSpoolError, TurnEventSpool, type EventSpoolDiagnostic } from "../src/event-spool.js";
+import { EventSpoolError, SPOOL_RETAINED_EVENTS, TurnEventSpool, type EventSpoolDiagnostic } from "../src/event-spool.js";
 import { SessionRegistry } from "../src/session-registry.js";
 import { parseTurnEvent, TURN_EVENT_FILE_PATTERN, type TurnEvent } from "../src/turn-events.js";
 import { FakeAdapter } from "./fake-adapter.js";
@@ -115,16 +115,16 @@ describe("TurnEventSpool.write", () => {
 
   it("counts failures without throwing and reports exactly one sanitized diagnostic", async () => {
     const diagnostics: EventSpoolDiagnostic[] = [];
-    const { spool, instanceDir } = await openSpool({ diagnostic: (d) => diagnostics.push(d) });
+    const { spool, dir, instanceDir } = await openSpool({ diagnostic: (d) => diagnostics.push(d) });
     spool.write(turn()); expect(spool.failures).toBe(0);
-    rmSync(instanceDir, { recursive: true });
+    rmSync(dir, { recursive: true }); // the root is gone, so the instance directory cannot be recreated
     expect(() => spool.write(turn())).not.toThrow();
     expect(() => spool.write(turn())).not.toThrow();
     expect(spool.failures).toBe(2);
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]).toEqual({ level: "warn", event: "event_spool_write_failed", stage: "event_spool", code: "ENOENT" });
     expect(JSON.stringify(diagnostics)).not.toContain(instanceDir);
-    mkdirSync(instanceDir, { mode: 0o700 });
+    mkdirSync(dir, { mode: 0o700 });
     spool.write(turn());
     expect(spool.failures).toBe(2);
     expect(eventFiles(instanceDir)).toEqual(["00000004-turn_terminal.json"]);
@@ -132,10 +132,60 @@ describe("TurnEventSpool.write", () => {
   });
 
   it("survives a throwing diagnostic sink", async () => {
-    const { spool, instanceDir } = await openSpool({ diagnostic: () => { throw new Error("sink"); } });
-    rmSync(instanceDir, { recursive: true });
+    const { spool, dir } = await openSpool({ diagnostic: () => { throw new Error("sink"); } });
+    rmSync(dir, { recursive: true });
     expect(() => spool.write(turn())).not.toThrow();
     expect(spool.failures).toBe(1);
+  });
+});
+
+describe("TurnEventSpool retention and recovery", () => {
+  it("keeps exactly the newest files after more writes than the retention limit", async () => {
+    const { spool, instanceDir } = await openSpool();
+    const total = SPOOL_RETAINED_EVENTS + 5;
+    for (let i = 0; i < total; i += 1) spool.write(turn());
+    const seqs = readEvents(instanceDir).map((e) => e.seq);
+    expect(seqs).toHaveLength(SPOOL_RETAINED_EVENTS);
+    expect(seqs[0]).toBe(total - SPOOL_RETAINED_EVENTS + 1);
+    expect(seqs.at(-1)).toBe(total);
+    expect(readdirSync(instanceDir).filter((name) => name.startsWith("."))).toEqual([]);
+    expect(spool.failures).toBe(0);
+  });
+
+  it("does not fail when an older file is already gone", async () => {
+    const { spool, instanceDir } = await openSpool();
+    spool.write(turn()); rmSync(join(instanceDir, "00000001-turn_terminal.json"));
+    for (let i = 0; i < SPOOL_RETAINED_EVENTS; i += 1) spool.write(turn());
+    expect(spool.failures).toBe(0);
+    expect(eventFiles(instanceDir)).toHaveLength(SPOOL_RETAINED_EVENTS);
+  });
+
+  it("recreates a pruned instance directory once and lands the write", async () => {
+    const diagnostics: EventSpoolDiagnostic[] = [];
+    const { spool, instanceDir } = await openSpool({ diagnostic: (d) => diagnostics.push(d) });
+    spool.write(turn());
+    rmSync(instanceDir, { recursive: true });
+    spool.write(turn("failed"));
+    expect(spool.failures).toBe(0); expect(diagnostics).toEqual([]);
+    expect(mode(instanceDir)).toBe(0o700);
+    expect(readEvents(instanceDir).map((e) => [e.seq, e.kind === "turn_terminal" && e.state])).toEqual([[2, "failed"]]);
+  });
+
+  it("counts a failure when the root is gone, so the directory cannot be recreated", async () => {
+    const diagnostics: EventSpoolDiagnostic[] = [];
+    const { spool, dir } = await openSpool({ diagnostic: (d) => diagnostics.push(d) });
+    rmSync(dir, { recursive: true });
+    expect(() => spool.write(turn())).not.toThrow();
+    expect(spool.failures).toBe(1); expect(diagnostics).toHaveLength(1);
+  });
+
+  it("does not recreate the directory under a root that others can enter", async () => {
+    const { spool, dir, instanceDir } = await openSpool();
+    rmSync(instanceDir, { recursive: true });
+    chmodSync(dir, 0o755);
+    spool.write(turn());
+    expect(spool.failures).toBe(1);
+    expect(existsSync(instanceDir)).toBe(false);
   });
 });
 
