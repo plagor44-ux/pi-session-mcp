@@ -118,9 +118,17 @@ const sha256 = (value: string | Uint8Array): string => createHash("sha256").upda
 /** The fingerprint of an entry: sha256 of its JSON text, which is also what setup wrote. */
 export const wakeEntryFingerprint = (entry: unknown): string => sha256(JSON.stringify(entry));
 
+/** The settings directory as locate() saw it; `identity` is absent while the directory does not exist yet. */
+interface DirectoryGuard {
+  readonly path: string;
+  /** Project and local: the directory must itself be a real directory. User: a linked directory is the operator's own and is followed, but must stay the same one. */
+  readonly strict: boolean;
+  readonly identity?: { readonly dev: number; readonly ino: number };
+}
 interface Location {
   readonly file: string;
   readonly recordTarget: SetupTarget;
+  readonly guard: DirectoryGuard;
 }
 
 /**
@@ -139,7 +147,8 @@ async function recordTargetOf(scope: HookScope, roots: Pick<WakeHookRoots, "cwd"
 async function locate(scope: HookScope, roots: WakeHookRoots): Promise<Location> {
   if (scope === "user") {
     const file = wakeSettingsPath("user", roots);
-    return { file: await followUserLink(file), recordTarget: { client: "claude-code", scope, alias: WAKE_HOOK_ALIAS } };
+    const resolved = await followUserLink(file);
+    return { file: resolved, recordTarget: { client: "claude-code", scope, alias: WAKE_HOOK_ALIAS }, guard: await guardOf(dirname(resolved), false) };
   }
   let projectRoot: string;
   try { projectRoot = await realpath(roots.cwd); } catch { throw new HookError("settings_location_invalid"); }
@@ -151,7 +160,36 @@ async function locate(scope: HookScope, roots: WakeHookRoots): Promise<Location>
     if (entry.isSymbolicLink() || (directory ? !entry.isDirectory() : !entry.isFile())) throw new HookError("settings_location_invalid");
   }
   const identity = sha256(projectRoot).slice(0, 16);
-  return { file, recordTarget: { client: "claude-code", scope, alias: `${WAKE_HOOK_ALIAS}@${identity}` } };
+  return { file, recordTarget: { client: "claude-code", scope, alias: `${WAKE_HOOK_ALIAS}@${identity}` }, guard: await guardOf(dirname(file), true) };
+}
+
+async function directoryIdentity(path: string, strict: boolean): Promise<{ dev: number; ino: number }> {
+  let entry;
+  try { entry = strict ? await lstat(path) : await stat(path); } catch { throw new HookError("settings_location_invalid"); }
+  if (entry.isSymbolicLink() || !entry.isDirectory()) throw new HookError("settings_location_invalid");
+  return { dev: entry.dev, ino: entry.ino };
+}
+async function guardOf(path: string, strict: boolean): Promise<DirectoryGuard> {
+  try { return { path, strict, identity: await directoryIdentity(path, strict) }; }
+  catch (error) {
+    // A directory that does not exist yet is created, and then recorded, by the commit.
+    try { await lstat(path); } catch (inner) { if ((inner as NodeJS.ErrnoException).code === "ENOENT") return { path, strict }; }
+    throw error;
+  }
+}
+/**
+ * Re-checks the location right before it is written: the directory is still the one that was
+ * seen (and, for a project, not a link), and a project's settings file is not a link. A mismatch
+ * writes nothing.
+ */
+async function assertLocation(guard: DirectoryGuard, file: string): Promise<void> {
+  const now = await directoryIdentity(guard.path, guard.strict);
+  if (guard.identity && (now.dev !== guard.identity.dev || now.ino !== guard.identity.ino)) throw new HookError("settings_changed");
+  if (!guard.strict) return;
+  try {
+    const entry = await lstat(file);
+    if (entry.isSymbolicLink() || !entry.isFile()) throw new HookError("settings_location_invalid");
+  } catch (error) { if (error instanceof HookError) throw error; if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw new HookError("settings_location_invalid"); }
 }
 
 async function followUserLink(file: string): Promise<string> {
@@ -214,12 +252,21 @@ async function currentToken(file: string): Promise<string> {
 /**
  * Writes the document next to the file and swaps it in only while the file still has the bytes
  * that were read. The final compare happens right before the rename; a creation uses a hard link
- * so it can never replace a file that appeared meanwhile. A residual window between the compare
- * and the rename remains and is why a mismatch retries the whole read-modify-write.
+ * so it can never replace a file that appeared meanwhile. The location is re-checked at the same
+ * point (`assertLocation`): the directory is the one that was seen and not a link, and a project's
+ * settings file is not a link.
+ *
+ * Residual race, by design: a write by the same user that lands between the final compare and the
+ * rename is lost, because a rename-based swap cannot be made atomic against it and Claude Code
+ * does not honor setup's ownership lock. The compare keeps the window to a few system calls; a
+ * mismatch before it retries the whole read-modify-write.
  */
-async function commit(file: string, before: Snapshot, document: Record<string, unknown>, dependencies: WakeHookDependencies): Promise<void> {
+async function commit(file: string, before: Snapshot, document: Record<string, unknown>, dependencies: WakeHookDependencies, seen: DirectoryGuard): Promise<void> {
   const directory = dirname(file);
+  // A directory swapped for a link after locate() must not be created through or written into.
+  if (seen.identity) await assertLocation(seen, file);
   await mkdir(directory, { recursive: true, mode: 0o700 });
+  const guard: DirectoryGuard = seen.identity ? seen : { ...seen, identity: await directoryIdentity(directory, seen.strict) };
   const temporary = join(directory, `.${randomUUID()}.pi-session-mcp.tmp`);
   const mode = before.exists ? before.mode : 0o600;
   let installed = false;
@@ -228,6 +275,7 @@ async function commit(file: string, before: Snapshot, document: Record<string, u
     try { await handle.chmod(mode); await handle.writeFile(`${JSON.stringify(document, null, 2)}\n`); await handle.sync(); }
     finally { await handle.close(); }
     await dependencies.beforeCommit?.();
+    await assertLocation(guard, file);
     if (await currentToken(file) !== before.token) throw new SwapMismatch();
     if (before.exists) await rename(temporary, file);
     else {
@@ -353,7 +401,7 @@ async function step(request: WakeHookRequest, location: Location, dependencies: 
     }
     if (request.keep && await request.keep()) return { status: "unchanged", code: "hook_kept_shared" };
     if (!mutating) return { status: "planned", code: "hook_remove_planned" };
-    await commit(file, snapshot, edited(snapshot.document, (list) => { list.splice(named[0]!, 1); }, true), dependencies);
+    await commit(file, snapshot, edited(snapshot.document, (list) => { list.splice(named[0]!, 1); }, true), dependencies, location.guard);
     await dependencies.checkpoint?.("written");
     healthy(ownership); await ownership.delete(recordTarget); healthy(ownership);
     return { status: "ok", code: "hook_removed" };
@@ -397,7 +445,7 @@ async function step(request: WakeHookRequest, location: Location, dependencies: 
   };
   healthy(ownership); await ownership.put(pending); healthy(ownership);
   await dependencies.checkpoint?.("pending-recorded");
-  await commit(file, snapshot, edited(snapshot.document, place, false), dependencies);
+  await commit(file, snapshot, edited(snapshot.document, place, false), dependencies, location.guard);
   await dependencies.checkpoint?.("written");
   healthy(ownership); await ownership.put({ target: recordTarget, fingerprint, previous: "absent", phase: "owned", transactionId: pending.transactionId }); healthy(ownership);
   return { status: "ok", code: verb === "add" ? "hook_added" : "hook_updated" };

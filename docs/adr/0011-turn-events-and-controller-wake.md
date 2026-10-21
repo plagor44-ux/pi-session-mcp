@@ -50,7 +50,7 @@ expected but unmeasured.
 2. **Local event spool, opt-in.** It is enabled by a new optional server
    configuration field and off by default. Without it, behavior is unchanged
    for every client, including Codex. Host servers write under
-   `$XDG_RUNTIME_DIR/pi-session-mcp/<instance>/`:
+   `$XDG_RUNTIME_DIR/pi-session-mcp/events/<instance>/`:
    - one file per event, written atomically;
    - mode 0600, in directories of mode 0700;
    - removed when the server stops.
@@ -58,13 +58,18 @@ expected but unmeasured.
    Events carry only IDs, states, timestamps and codes. They are wake triggers,
    never state: the controller always reads the turn through `pi_turn_get`.
 3. **Container writers get one dedicated spool mount each**, as an amendment to
-   ADR 0008. It is a per-writer host directory under the same runtime root,
-   mounted read-write at one fixed path. It is never shared between writers and
-   never holds a ledger, credentials or any other state. Because the worker
-   inside the boundary can write to it (coding profiles have a shell there), the
-   following hold:
-   - forged events can at most cause spurious wakes;
-   - the hook validates the event schema strictly and caps file size and count;
+   ADR 0008. It is a per-writer directory inside that writer's own state
+   directory on disk (`~/.local/state/pi-session-mcp/writers/<name>/events/`),
+   mounted read-write at `/pi/events`. It is not on the shared runtime tmpfs, so
+   a worker cannot exhaust that tmpfs or the claims kept there; it can fill the
+   disk no more than it already can through its writable clone. It is never
+   shared between writers and never holds a ledger, credentials or any other
+   state. Because the worker inside the boundary can write to it (coding
+   profiles have a shell there), the following hold:
+   - forged events can at most cause spurious or missing wakes in that
+     writer's own namespace;
+   - the hook validates the event schema strictly, never follows links and
+     caps the work per scan;
    - the controller never trusts an event's state.
 4. **Client adapter, Claude Code only, installed by setup.** It is a
    `PostToolUse` `asyncRewake` hook on `pi_session_prompt` and on running
