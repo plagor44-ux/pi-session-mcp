@@ -609,3 +609,13 @@ the text above, they win.
   connect to it without a stop (a process of its own sandbox is the only peer
   at the moment of the bind, but a host process could take the name later; the
   network namespace stays shared, R50).
+  Names are compared as strace printed them (the escaped text, so two different
+  non-UTF-8 names never collide), a name with an escape strace cannot print is
+  never trusted, and a name is internal only while a process that bound it is
+  alive in the trace (its `+++ exited`/`+++ killed` line drops it; an execve
+  keeps it, because the socket survives it unless it is close-on-exec; a thread
+  that exits drops it although its process may live on, which errs towards a
+  stop). `close` is not traced, to keep logs small. The run and oracle
+  environments never carry `DISPLAY`, `WAYLAND_DISPLAY`,
+  `DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` or `XDG_RUNTIME_DIR` (a test sets
+  them in the host process and checks both).

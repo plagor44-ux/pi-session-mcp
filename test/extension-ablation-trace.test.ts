@@ -1229,6 +1229,30 @@ describe("abstract sockets bound inside the trace (R88)", () => {
     expect(run(`100 bind(${sock(3)}, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 20) = 0`, `100 connect(${sock(4)}, {sa_family=AF_UNIX, sun_path="/run/user/1000/bus"}, 20) = 0`).unresolvedEgress).toBe(1);
   });
 
+  it("compares the names as strace printed them: two different non-UTF-8 names are not the same, and a malformed escape is never trusted", () => {
+    expect(run(bind(100, "\\xfe"), connect(100, "\\xfe")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "\\xfe"), connect(100, "\\xff")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "a\\x00b"), connect(100, "a\\x01b")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "a\\q"), connect(100, "a\\q")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "a\\xZZ"), connect(100, "a\\xZZ")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "a\\101"), connect(100, "a\\101")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "a\\101"), connect(100, "aA")).unresolvedEgress).toBe(1);
+  });
+
+  it("keeps a name internal only while a process that bound it is alive; an execve keeps it", () => {
+    expect(run(bind(100, "svc"), "100 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "svc"), "100 +++ killed by SIGKILL +++", connect(200, "svc")).unresolvedEgress).toBe(1);
+    expect(run(bind(100, "svc"), "300 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(0);
+    // Another process binds the freed name, or the binder execs: the name is held again.
+    expect(run(bind(100, "svc"), "100 +++ exited with 0 +++", bind(101, "svc"), connect(200, "svc")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "svc"), "100 +++ superseded by execve in pid 100 +++", connect(100, "svc")).unresolvedEgress).toBe(0);
+    // Two holders: it stays while either lives.
+    expect(run(bind(100, "svc"), bind(101, "svc"), "100 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(0);
+    expect(run(bind(100, "svc"), bind(101, "svc"), "100 +++ exited with 0 +++", "101 +++ exited with 0 +++", connect(200, "svc")).unresolvedEgress).toBe(1);
+    // The exit comes after the connect: the connect was internal when it happened.
+    expect(run(bind(100, "svc"), connect(200, "svc"), "100 +++ exited with 0 +++").unresolvedEgress).toBe(0);
+  });
+
   it("accepts the evidence lines of the stopped run once the matching bind is in the log, and not without it", () => {
     const evidence = [
       `4 connect(4<socket:[32553896]>, {sa_family=AF_UNIX, sun_path=@"${MAIL}"}, 44) = 0`.replace(/^4 /, "102 "),

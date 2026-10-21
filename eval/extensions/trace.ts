@@ -267,6 +267,8 @@ const normalizeAddress = (address: string): string => {
 };
 
 const FLAGS_WRITE = /\bO_(?:WRONLY|RDWR|CREAT|TRUNC|TMPFILE)\b/;
+/** The escapes strace prints in a string: \n \t \r \v \a \b \f \\ \" \xHH and octal. Anything else is not a name it printed. */
+const WELL_FORMED_NAME = /^(?:[^\\]|\\(?:[ntrvabf\\"]|x[0-9a-fA-F]{2}|[0-7]{1,3}))*$/;
 const EXIT_LINE = /^\+\+\+ (?:exited|killed|superseded)\b/;
 
 /**
@@ -324,11 +326,14 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
   const socketRoots = (ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r));
   /**
-   * Abstract AF_UNIX names that a process of the trace bound successfully so far (R88). The sandbox shares the host's network namespace, so an
+   * Abstract AF_UNIX names, as strace printed them (the raw escaped text, so bind and connect compare exactly the same bytes), that a process of
+   * the trace bound successfully so far and that one of those processes (still alive) holds (R88). A name whose escapes strace could not have
+   * printed is never trusted, bound or not. A thread that exits drops the name although its process may live on: that errs towards a stop.
+   * An execve keeps the name (the socket survives it unless it is close-on-exec). The sandbox shares the host's network namespace, so an
    * abstract name is only internal when this very trace created it: a connect that precedes the bind, a failed bind (`EADDRINUSE` means a host
    * process holds the name) and every other abstract name stay unresolved egress.
    */
-  const boundNames = new Set<string>();
+  const boundNames = new Map<string, Set<number>>();
   const bound = (ctx.boundPaths ?? []).map((r) => posix.resolve("/", r));
   /** Inside bubblewrap /tmp and /var/tmp are fresh tmpfs mounts (R51): a socket there can only reach a process of the same sandbox (R87). */
   const privateTmp = ctx.sandboxed === true ? ["/tmp/", "/var/tmp/"] : [];
@@ -555,7 +560,9 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") { unresolvedWrites++; noteEvidence(); } return; }
     if (call.name === "bind") {
       const abstract = /sa_family=AF_UNIX\b[^}]*sun_path=@"((?:[^"\\]|\\[\s\S])*)"/.exec(call.args[1] ?? "");
-      if (abstract && call.ret.kind === "ok" && call.ret.value === 0) boundNames.add(decodeEscapes(abstract[1]!));
+      if (abstract && call.ret.kind === "ok" && call.ret.value === 0 && WELL_FORMED_NAME.test(abstract[1]!)) {
+        boundNames.set(abstract[1]!, (boundNames.get(abstract[1]!) ?? new Set<number>()).add(pid));
+      }
       return;
     }
     if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[1], true); }
@@ -594,7 +601,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   function unixPathEscapes(token: string): boolean {
     const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
     if (!m) return true; // no readable path: cannot be judged
-    if (m[1] === "@") return !boundNames.has(decodeEscapes(m[2]!));
+    if (m[1] === "@") return !WELL_FORMED_NAME.test(m[2]!) || (boundNames.get(m[2]!)?.size ?? 0) === 0;
     const path = decodeEscapes(m[2]!);
     if (!path.startsWith("/")) return true;
     const resolved = posix.resolve(path);
@@ -648,6 +655,8 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
       claimed.delete(pid);
       const lone = unclaimed.get(pid);
       if (lone) lone.exited = true;
+      // A name is internal only while a process that bound it is alive (R88); the socket of an exec'ed process stays, so a superseding execve keeps it.
+      for (const binders of boundNames.values()) binders.delete(pid);
       live.delete(pid); // the records stay: a clone return after this line still has to find the cell
       uncertain.delete(pid);
       continue;
