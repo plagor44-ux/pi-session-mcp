@@ -670,8 +670,8 @@ the text above, they win.
   accepted (2 of 3). A task counts only when both arms have all N runs scored
   for it; any other task of the pairing is listed as incomplete in the summary.
   The pre-registered rule (`recommend()`, unchanged) is applied to the per-task
-  outcomes of the counted tasks: B solves at least as many tasks as A, strictly
-  more on at least one, and the cost of B over the counted tasks' runs is at
+  outcomes of the counted tasks: B solves at least as many tasks as A, is
+  strictly better on at least one task, and the cost of B over the counted tasks' runs is at
   most 1.25 times that of A. The pairing is complete only when every task of the
   pairing counted and at least three did, and inconclusive otherwise. The
   summary gives per task and arm the runs scored, the runs accepted, whether the
