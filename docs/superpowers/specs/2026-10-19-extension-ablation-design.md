@@ -398,20 +398,27 @@ the text above, they win.
   audit shows an unexpected write or connection. No code change.
 - **Package managers run offline in the sandbox (R73).** The run environment
   of every traced process sets `GOPROXY=off`, `GOTOOLCHAIN=local`,
-  `GOFLAGS=-mod=mod`, `UV_OFFLINE=1`, `UV_NO_SYNC=1`, `UV_PYTHON_DOWNLOADS=never`
-  and `npm_config_offline=true`. Without them a `go test` fetched the toolchain
+  `UV_OFFLINE=1`, `UV_NO_SYNC=1`, `UV_PYTHON_DOWNLOADS=never` and
+  `npm_config_offline=true` (six variables; `GOFLAGS=-mod=mod` is deliberately
+  not set, since it breaks offline builds of vendored modules and is refused in
+  `go.work` workspace mode, and Go's default read-only module mode with
+  `GOPROXY=off` already fails fast). Without them a `go test` fetched the toolchain
   and modules that `go.mod` asked for (1.27.2 against the host's 1.27.1) and
   `uv run` would try to sync into the read-only venv mount, which adds network
   traffic and minutes to a run. Production workers have warm caches and the
   sandbox has none, so the commands fail fast instead. The variables are
   identical for every run and both arms; the oracle's own minimal environment is
-  unchanged (its commands are explicit argv). This is a documented deviation
+  unchanged (its commands are explicit argv). With `UV_NO_SYNC=1`, `uv run` in
+  a project without a mounted venv creates an empty `.venv` and fails later, at
+  the first import, rather than immediately. This is a documented deviation
   from the production environment.
 - **Task curation rulings (R70-R72).** R70: a task's `repo` is the recorded
   workspace alias (worktree aliases included), so `renderPrompt` rewrites the
   recorded paths to the clone. R71: the go-app implementation oracle adds
   `grep -qF` setup steps for the issue rows the prompt requires, because the
   repository's own checker only proves the callsite keys. R72: the
-  `i-pyng-authz` `scopeIgnore` lists the worker's test-cache prefixes that exist
-  at the base commit; dependency mount points are not listed, because the
-  harness keeps them empty and git does not report empty directories.
+  `i-pyng-authz` `scopeIgnore` lists the cache prefixes under package
+  directories that exist at the base commit. The cost is that a worker that
+  creates a new `__pycache__` (or similar) elsewhere scores out of scope.
+  Dependency mount points are not listed, because the harness keeps them empty
+  and git does not report empty directories.

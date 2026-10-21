@@ -786,9 +786,34 @@ describe("run scope", () => {
     }
     expect(scope.env).toMatchObject({ PI_LENS_DISABLE_TOOL_INSTALL: "1", PI_LENS_DISABLE_LSP_INSTALL: "1", PI_CACHE_OPTIMIZER_NO_ZERO_PRICE_WARMING: "1", UV_USE_IO_URING: "0" });
     // R73: package managers fail fast offline, the same in every run and arm.
-    expect(scope.env).toMatchObject({ GOPROXY: "off", GOTOOLCHAIN: "local", GOFLAGS: "-mod=mod", UV_OFFLINE: "1", UV_NO_SYNC: "1", UV_PYTHON_DOWNLOADS: "never", npm_config_offline: "true" });
-    expect(scopeEnv("/r", { home: "/r/home", agentDir: "/r/agent" })).toMatchObject({ GOPROXY: "off", npm_config_offline: "true" });
+    expect(scope.env).toMatchObject({ GOPROXY: "off", GOTOOLCHAIN: "local", UV_OFFLINE: "1", UV_NO_SYNC: "1", UV_PYTHON_DOWNLOADS: "never", npm_config_offline: "true" });
+    expect(scope.env).not.toHaveProperty("GOFLAGS");
     expect(scope.env).toMatchObject({ DO_NOT_TRACK: "1", CODEGRAPH_NO_UPDATE_CHECK: "1", CODEGRAPH_TELEMETRY: "0" });
+  });
+
+  it("keeps the offline package-manager variables out of the oracle's own minimal environment (R73)", async () => {
+    const root = await temporaryRoot("ablation-oracle-env-");
+    const clone = join(root, "clone");
+    await mkdir(clone);
+    const git = (...args: string[]) => exec("git", ["-C", clone, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", ...args]);
+    await git("init", "--quiet");
+    await writeFile(join(clone, "a.txt"), "base\n");
+    await git("add", "a.txt"); await git("commit", "--quiet", "-m", "base");
+    const base = (await git("rev-parse", "HEAD")).stdout.trim();
+    const previous = { GOPROXY: process.env.GOPROXY, UV_OFFLINE: process.env.UV_OFFLINE };
+    Object.assign(process.env, { GOPROXY: "host-value", UV_OFFLINE: "host-value" });
+    try {
+      const score = await scoreImplementation(clone, {
+        allowedPaths: ["env.txt"], scopeIgnore: [], baseCommit: base,
+        oracle: { kind: "implementation", command: ["sh", "-c", "env > env.txt"], timeoutMs: 30_000 },
+      }, { gitDir: join(clone, ".git"), home: join(root, "oracle-home") });
+      expect(score.testsPassed).toBe(true);
+    } finally {
+      for (const [name, value] of Object.entries(previous)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
+    }
+    const seen = (await readFile(join(clone, "env.txt"), "utf8")).split("\n").map((line) => line.split("=")[0]);
+    for (const name of ["GOPROXY", "GOTOOLCHAIN", "GOFLAGS", "UV_OFFLINE", "UV_NO_SYNC", "UV_PYTHON_DOWNLOADS", "npm_config_offline"]) expect(seen).not.toContain(name);
+    expect(seen).toEqual(expect.arrayContaining(["HOME", "TMPDIR", "CI"]));
   });
 
   it("removes a failed scope with its credentials and its bare clone", async () => {
