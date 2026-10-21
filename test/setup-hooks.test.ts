@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import {
-  buildWakeEntry, FileSetupHookInstaller, installWakeHook, runWakeHook, WAKE_BUDGET_MS, WAKE_HOOK_ALIAS, wakeEntryFingerprint, wakeSettingsPath,
+  buildWakeEntry, FileSetupHookInstaller, installWakeHook, ownsWakeHook, runWakeHook, WAKE_BUDGET_MS, WAKE_HOOK_ALIAS, wakeEntryFingerprint, wakeSettingsPath,
   type HookScope, type WakeHookDependencies, type WakeHookRoots,
 } from "../src/setup-hooks.js";
 import { DurableOwnershipStore, isRecord, MemoryOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
@@ -458,6 +458,36 @@ describe("wake hook with delivery off and nothing owned", () => {
       expect(output.findings.filter((finding) => finding.target.alias === WAKE_HOOK_ALIAS).map((finding) => finding.code)).toEqual(["hook_not_applicable", "hook_not_enabled"]);
     }
     expect(await readFile(f.settings("user"), "utf8")).toBe("{not json");
+  });
+});
+
+describe("wake hook with an unreadable ownership ledger", () => {
+  class BrokenStore extends CheckedStore {
+    override async get(): Promise<OwnershipRecord | undefined> { throw new Error("ownership_unreadable"); }
+  }
+  it("does not take the delivery-off shortcut and changes no settings", async () => {
+    const f = await fixture();
+    await f.run("apply");
+    const file = f.settings("user"); const bytes = await readFile(file, "utf8"); const before = await stat(file);
+    const broken = new BrokenStore();
+    for (const operation of ["dry-run", "apply", "verify", "remove"] as const) {
+      const outcome = await runWakeHook({ operation, scope: "user", roots: f.roots, enabled: false, ownership: broken });
+      expect(outcome).toEqual({ status: "failed", code: "ownership_unreadable" });
+    }
+    expect(await readFile(file, "utf8")).toBe(bytes);
+    expect((await stat(file)).mtimeMs).toBe(before.mtimeMs);
+  });
+  it("fails closed in ownsWakeHook but answers false for a project that does not exist", async () => {
+    const f = await fixture();
+    expect(await ownsWakeHook("user", f.roots, new BrokenStore())).toBe(true);
+    expect(await ownsWakeHook("local", { ...f.roots, cwd: join(f.root, "no-such-dir") }, new BrokenStore())).toBe(false);
+    expect(await ownsWakeHook("user", f.roots, f.ownership)).toBe(false);
+  });
+  it("keeps the no-read guarantee when the ledger is readable and shows no record", async () => {
+    const f = await fixture();
+    const file = await f.seed("user", "{not json");
+    expect(await f.run("apply", { enabled: false })).toEqual({ status: "unchanged", code: "hook_not_enabled" });
+    expect(await readFile(file, "utf8")).toBe("{not json");
   });
 });
 
