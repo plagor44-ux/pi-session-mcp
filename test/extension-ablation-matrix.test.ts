@@ -185,6 +185,46 @@ describe("the review verdict pattern (R78)", () => {
   });
 });
 
+describe("verdict patterns must run in linear time (R80)", () => {
+  const withVerdict = (pattern: string) => { const task = review("R1"); return { ...task, oracle: { ...task.oracle, verdict: { pattern } } }; };
+  const issue = (pattern: string): string | undefined => {
+    const result = taskSpecSchema.safeParse(withVerdict(pattern));
+    return result.success ? undefined : result.error.issues[0]?.message;
+  };
+
+  it.each([
+    "(a+)+", "^(\\w+\\s?)+$", "(\\w+\\s?)*", "(?:x*){2,}", "(x+)*", "((a+))+", "(a|b+)*c", "(a?b)+", "(?<w>a+){2,5}",
+    "(a)\\1", "(?<w>a)\\k<w>", "^(ok)\\2?",
+  ])("refuses %s as unsafe", (pattern) => {
+    expect(issue(pattern)).toBe("verdict_pattern_unsafe");
+  });
+
+  it.each([
+    "^.*\\b(request changes|blocker)\\b", "^verdict:\\s*(not ready|reject)", "(?:a+)?", "(a+)b+", "(abc){2}", "(a*)(b*)", "(?:foo|bar)+", "\\d{1,3}",
+    "[(a+)+]", "\\(a+\\)+", "(?<=x)a+", "(?!x)a+(?:b)", "a{", "(a){1}", "(a+)?", "(foo)+?bar", "approve|ship it",
+  ])("accepts %s", (pattern) => {
+    expect(issue(pattern)).toBeUndefined();
+  });
+
+  it("still reports an uncompilable pattern as invalid, not unsafe", () => {
+    expect(issue("(unclosed")).toBe("verdict_pattern_invalid");
+  });
+});
+
+describe("a review oracle needs a critical finding (R80)", () => {
+  it("refuses one whose findings are all non-critical or empty", () => {
+    const task = review("R1");
+    const oracle = task.oracle as Extract<TaskSpec["oracle"], { kind: "review" }>;
+    const finding = oracle.findings[0]!;
+    expect(taskSpecSchema.safeParse(task).success).toBe(true);
+    const none = taskSpecSchema.safeParse({ ...task, oracle: { ...oracle, findings: [{ ...finding, critical: false }] } });
+    expect(none.success).toBe(false);
+    expect(none.success ? undefined : none.error.issues[0]?.message).toBe("review_oracle_no_critical");
+    expect(taskSpecSchema.safeParse({ ...task, oracle: { ...oracle, findings: [] } }).success).toBe(false);
+    expect(taskSpecSchema.safeParse({ ...task, oracle: { ...oracle, findings: [{ ...finding, critical: false }, { ...finding, id: "F2", critical: true }] } }).success).toBe(true);
+  });
+});
+
 describe("extension ablation schemas", () => {
   it("accepts valid tasks of both kinds and rejects unknown keys and a kind mismatch", () => {
     expect(taskSpecSchema.parse(review("R1"))).toEqual(review("R1"));

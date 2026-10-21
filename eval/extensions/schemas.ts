@@ -26,17 +26,73 @@ const anchorFileSchema = relativePathSchema
   }, { message: "anchor_file_path_token" });
 export const anchorSchema = z.object({ file: anchorFileSchema, terms: z.array(z.string().min(1)).min(1) }).strict();
 export type Anchor = z.infer<typeof anchorSchema>;
-/** The review's required verdict (R78): a JavaScript regular expression source, compiled with flags `im`; at most 500 characters. */
+const BRACE_QUANTIFIER = /^\{(\d+)(?:(,)(\d*))?\}/;
+
+/**
+ * A conservative syntactic check that a verdict pattern runs in linear time (R80): no backreference (`\1`..`\9`, `\k<`) and no repeated
+ * group (`*`, `+`, `{n,}`, `{n,m}` with m > 1) that itself contains a quantifier, as in `(a+)+`, `(\w+\s?)*` or `(?:x*){2,}`. It does not see
+ * overlapping alternatives such as `(a|a)*`; verdict patterns should be literal alternations, anchors and simple classes.
+ */
+export function verdictPatternIsLinear(pattern: string): boolean {
+  const open: boolean[] = []; // per open group: it contains a quantifier
+  let closed: boolean | null = null; // the group just closed contained a quantifier
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i += 1) {
+    const c = pattern[i]!;
+    if (c === "\\") {
+      const next = pattern[i + 1] ?? "";
+      if (/[1-9]/.test(next) || (next === "k" && pattern[i + 2] === "<")) return false;
+      i += 1; closed = null;
+      continue;
+    }
+    if (inClass) { if (c === "]") inClass = false; continue; }
+    if (c === "[") { inClass = true; closed = null; continue; }
+    if (c === "(") {
+      open.push(false); closed = null;
+      if (pattern[i + 1] === "?") { // group syntax, not a quantifier: (?: (?= (?! (?<= (?<! (?<name>
+        i += 1;
+        if (":=!".includes(pattern[i + 1] ?? "\0")) i += 1;
+        else if (pattern[i + 1] === "<") i += pattern[i + 2] === "=" || pattern[i + 2] === "!" ? 2 : Math.max(pattern.indexOf(">", i) - i, 1);
+      }
+      continue;
+    }
+    if (c === ")") {
+      const inner = open.pop() ?? false;
+      if (open.length > 0 && inner) open[open.length - 1] = true;
+      closed = inner;
+      continue;
+    }
+    let repeats = false;
+    if (c === "*" || c === "+" || c === "?") repeats = c !== "?";
+    else if (c === "{") {
+      const brace = BRACE_QUANTIFIER.exec(pattern.slice(i));
+      if (brace === null) { closed = null; continue; }
+      const max = brace[2] === undefined ? Number(brace[1]) : brace[3] === "" ? Infinity : Number(brace[3]);
+      repeats = max > 1;
+      i += brace[0].length - 1;
+    } else { closed = null; continue; }
+    if (repeats && closed === true) return false;
+    if (open.length > 0) open[open.length - 1] = true;
+    closed = null;
+    if (pattern[i + 1] === "?") i += 1; // lazy marker
+  }
+  return true;
+}
+
+/**
+ * The review's required verdict (R78): a JavaScript regular expression source, compiled with flags `im`; at most 500 characters. It must run in
+ * linear time (R80): literal alternations, anchors and simple classes; a backreference or a repeated group containing a quantifier is refused.
+ */
 const VERDICT_FLAGS = "im";
 const verdictPatternSchema = z.string().min(1).max(500).refine((pattern) => {
   try { new RegExp(pattern, VERDICT_FLAGS); return true; } catch { return false; }
-}, { message: "verdict_pattern_invalid" });
+}, { message: "verdict_pattern_invalid" }).refine(verdictPatternIsLinear, { message: "verdict_pattern_unsafe" });
 const reviewOracleSchema = z.object({
   kind: z.literal("review"),
   verdict: z.object({ pattern: verdictPatternSchema }).strict(),
   findings: z.array(z.object({ id: z.string().min(1), critical: z.boolean(), anchors: z.array(anchorSchema).min(1) }).strict()),
   falseFindings: z.array(z.object({ id: z.string().min(1), anchors: z.array(anchorSchema).min(1) }).strict()),
-}).strict();
+}).strict().refine((oracle) => oracle.findings.some((finding) => finding.critical), { message: "review_oracle_no_critical", path: ["findings"] });
 export type ReviewOracle = z.infer<typeof reviewOracleSchema>;
 /** The decisive command and its setup share this deadline; it is capped so an oracle cannot outlast a run by hours. */
 const MAX_ORACLE_TIMEOUT_MS = 10 * 60_000;

@@ -67,9 +67,9 @@ const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchem
 
 export interface ArmTotals {
   accepted: number; costUsd: number; scored: number; unexpectedConnects: number;
-  /** Scored review runs that hit any false finding (R78); report-only, not part of the acceptance. */
+  /** Scored runs with a review score that hit any false finding (R78); report-only, not part of the acceptance. */
   falseFindingRuns: number;
-  /** Scored review runs whose text did not match the task's verdict pattern (R78). */
+  /** Scored runs with a review score whose text did not match the task's verdict pattern (R78). */
   verdictMissed: number;
 }
 export interface PairingResult {

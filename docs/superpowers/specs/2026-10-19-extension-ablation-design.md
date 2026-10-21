@@ -447,3 +447,10 @@ the text above, they win.
   that does hit a false finding can be accepted (the number is reported, not
   decisive). `verdictMatched` is carried in the run record's `review` score; the
   record keeps no pattern and no text.
+  Verdict patterns must run in linear time (R80): literal alternations,
+  anchors and simple classes. A pattern with a backreference or with a repeated
+  group that itself contains a quantifier (`(a+)+`) is refused at parse time
+  (`verdict_pattern_unsafe`; a conservative syntactic check). A review oracle
+  also needs at least one finding marked `critical: true`
+  (`review_oracle_no_critical`), since the verdict alone would otherwise accept
+  any review that matches it.
