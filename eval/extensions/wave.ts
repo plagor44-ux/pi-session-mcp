@@ -8,7 +8,7 @@ import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-crede
 import { approvalSchema, parseProductionConfig, routesOf, validateApproval, type Approval, type ProductionConfig } from "./approval.js";
 import { auditLog, readVerifiedOutput } from "./audit.js";
 import { assertDependencyDir, checkTaskDependencies } from "./dependencies.js";
-import { WaveDirGuard, removeTree, writeDiagnostics } from "./evidence.js";
+import { WaveDirGuard, removeTree, reportDiagnosticsFailure, writeDiagnostics } from "./evidence.js";
 import { classifyRun, fixedCode, isAuditStop, mergeTrace, summarizeTrace, type RunRecord, type StopReason } from "./classify.js";
 import { guardDiff, guardSnapshot, type GuardSnapshot } from "./guard.js";
 import { PersistedLedger, validSessionCost } from "./ledger-file.js";
@@ -179,8 +179,9 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   try {
   // No run is executed twice: a pending run the ledger already charged (another wave ran it, or a crash left a charge) refuses the invocation (G1).
   // A run stopped by the trace audit may run again under a new approval that names it (R85); its earlier charge stays in the ledger.
-  const replanned = new Set(input.approval.replannedStopped ?? []);
-  const charged = (runId: string): boolean => !replanned.has(runId) && ledger.hasRunEntry(runId);
+  // The listed number of charges must still be the ledger's: any further charge of that run id since the plan (an unseen wave, a crash after the charge) refuses it.
+  const replanned = new Map((input.approval.replannedStopped ?? []).map(({ runId, charges }) => [runId, charges]));
+  const charged = (runId: string): boolean => (replanned.has(runId) ? ledger.runEntryCount(runId) !== replanned.get(runId) : ledger.hasRunEntry(runId));
   if (pending.some((run) => charged(run.runId))) throw new Error("run_already_charged");
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
   const savedGuard = resume ? guardFileSchema.safeParse(await readJsonFile(join(waveDir, "guard.json"))) : null;
@@ -318,7 +319,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       verdict = classifyRun({ ...facts, interrupted: facts.interrupted || interruptedInOracle, trace, guardChanged, waveFailure });
       // R84: an audit stop keeps the log lines that caused it, privately, before the private run directory goes; the stop stands if this fails.
       if (isAuditStop(verdict.stopReason) && trace) {
-        try { await dirGuard.assertIntact(); await writeDiagnostics(waveDir, run.runId, trace.evidenceLines); } catch { /* best effort */ }
+        try { await dirGuard.assertIntact(); await writeDiagnostics(waveDir, run.runId, trace.evidenceLines); } catch (error) { reportDiagnosticsFailure(run.runId, error); }
       }
 
       const base = {

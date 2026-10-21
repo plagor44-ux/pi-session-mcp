@@ -131,6 +131,9 @@ export class PersistedLedger {
   /** True when a run (not a preflight PONG) was charged under this id, whether or not it left a record. */
   hasRunEntry(runId: string): boolean { return this.entries.some((entry) => entry.runId === runId && entry.kind !== "preflight"); }
 
+  /** The number of run charges (not preflight PONGs) under this id; a re-planned slot has one more for every attempt (R85). */
+  runEntryCount(runId: string): number { return this.entries.filter((entry) => entry.runId === runId && entry.kind !== "preflight").length; }
+
   async save(): Promise<void> { await this.write(this.entries); }
 
   private async write(entries: readonly LedgerEntry[]): Promise<void> {

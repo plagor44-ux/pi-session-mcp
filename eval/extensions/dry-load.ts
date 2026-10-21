@@ -9,7 +9,7 @@ import { parseProductionConfig } from "./approval.js";
 import { auditLog } from "./audit.js";
 import { containmentSelfTest } from "./containment.js";
 import { assertDependencyDir, checkTaskDependencies } from "./dependencies.js";
-import { WaveDirGuard, removeTree, writeDiagnostics } from "./evidence.js";
+import { WaveDirGuard, removeTree, reportDiagnosticsFailure, writeDiagnostics } from "./evidence.js";
 import { fixedCode } from "./classify.js";
 import { PAIRINGS, buildMatrix } from "./matrix.js";
 import { dnsServers } from "./network.js";
@@ -199,7 +199,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
       findings = await auditLog(log, [scope.root], scope.root, addresses);
       if (findings && (findings.outsideWrites.length > 0 || findings.unresolvedWrites > 0 || findings.unresolvedEgress > 0)) {
         // R84: the lines behind an unclean load are kept privately, as for a wave; the report stays as it is.
-        try { await guard.assertIntact(); await writeDiagnostics(input.waveDir, run.runId, findings.evidenceLines); } catch { /* best effort */ }
+        try { await guard.assertIntact(); await writeDiagnostics(input.waveDir, run.runId, findings.evidenceLines); } catch (error) { reportDiagnosticsFailure(run.runId, error); }
       }
       try { ioUring = countIoUringSetups((await readRegularFile(log, MAX_LOG_BYTES)).toString("utf8")); } catch { /* no log: reported as trace_missing below */ }
       cloneWrites = await diff(scope.clone, { gitDir: scope.baseGitDir, commit: task.baseCommit }, []);

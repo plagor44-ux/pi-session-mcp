@@ -185,20 +185,28 @@ async function waveIsPaused(dir: string): Promise<boolean> {
  * budget-trimmed version with `--trim`. Slots that already ran (a record that is not `not_run` in an excluded wave, or a run charge in the
  * ledger) are left out before trimming, so the projection covers what remains (R59). The exception (R85): a slot whose every executed record
  * in the excluded waves was stopped by the trace audit is planned again; its earlier charge stays in the ledger and in the remaining budget,
- * and the approval names the slot in `replannedStopped` so the wave may run it despite the charge.
+ * and the approval names the slot with its number of charges in `replannedStopped` so the wave may run it despite them, once. The ledger must
+ * agree with the records: a slot is planned again only when it holds exactly one run charge per excluded wave that stopped it by the audit; any
+ * other count (a wave left out of `--exclude-wave` that already ran it, a charge without a record) keeps it excluded (`notReplanned`).
  */
 async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: PersistedLedger | undefined, excluded: ExcludedWave[]) {
   const pairings = selectedPairings(parsed.options["--pairings"]);
   const projection = projectionOf(ledger);
-  const replanned = new Set<string>();
+  const replanned = new Map<string, number>();
+  const notReplanned: { runId: string; reason: string }[] = [];
   const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings).map((r) => r.runId).filter((id) => {
     const ran = excluded.filter((wave) => wave.executed.has(id));
-    if (ran.length > 0 && ran.every((wave) => wave.auditStopped.has(id))) { replanned.add(id); return false; }
+    if (ran.length > 0 && ran.every((wave) => wave.auditStopped.has(id))) {
+      const charges = ledger!.runEntryCount(id);
+      if (charges === ran.length) { replanned.set(id, charges); return false; }
+      notReplanned.push({ runId: id, reason: "ledger_charges_differ_from_records" });
+      return true;
+    }
     return ran.length > 0 || ledger!.hasRunEntry(id);
   }));
   const full = buildMatrix(tasks, pairings, skip);
   const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd, skip);
-  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip, replanned };
+  return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip, replanned, notReplanned };
 }
 
 const write = (value: unknown): void => { process.stdout.write(`${JSON.stringify(value, null, 2)}\n`); };
@@ -218,8 +226,8 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     }
   }
   const excluded = ledger === undefined ? [] : await loadExcludedWaves(parsed.excludeWaves, ledger, tasks);
-  const { trimmed, runs, projection, skip, replanned } = await plannedRuns(tasks, parsed, ledger, excluded);
-  const replannedStopped = runs.filter((run) => replanned.has(run.runId)).map((run) => run.runId);
+  const { trimmed, runs, projection, skip, replanned, notReplanned } = await plannedRuns(tasks, parsed, ledger, excluded);
+  const replannedStopped = runs.filter((run) => replanned.has(run.runId)).map((run) => ({ runId: run.runId, charges: replanned.get(run.runId)! }));
   const { projectedUsd, remainingUsd } = projection;
   let routes: unknown = [];
   let routesNote: string | undefined;
@@ -232,7 +240,7 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     const resumable = unrecorded.length > 0 && matrixDigest(unrecorded) === matrixDigest(runs) && await waveIsPaused(last.dir) ? basename(last.dir) : null;
     exclusion = {
       waves: excluded.map((wave) => ({ wave: basename(wave.dir), executed: wave.executed.size })),
-      ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable, replannedStopped,
+      ledgerOnly: [...skip].filter((id) => !excluded.some((wave) => wave.executed.has(id))).length, removed: skip.size, resumable, replannedStopped: replannedStopped.map(({ runId }) => runId), notReplanned,
     };
   }
   return {

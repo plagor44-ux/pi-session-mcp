@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { EventEmitter } from "node:events";
 import { homedir, userInfo } from "node:os";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { matrixDigest, routesOf, tasksDigest, validateApproval, type Approval } from "../eval/extensions/approval.js";
 import { parseArgs, sourceCommit, withAbort } from "../eval/extensions/cli.js";
 import { buildMatrix, PAIRINGS } from "../eval/extensions/matrix.js";
@@ -25,7 +25,7 @@ import { assertPreflightPassed, runPreflight } from "../eval/extensions/prefligh
 import { hash } from "../eval/profiles/files.js";
 import type { RunSpec, TaskSpec } from "../eval/extensions/schemas.js";
 import { buildPlan } from "../eval/extensions/cli.js";
-import { MAX_UNEXPECTED_CONNECTS, summarizeTrace } from "../eval/extensions/classify.js";
+import { MAX_UNEXPECTED_CONNECTS, mergeTrace, summarizeTrace } from "../eval/extensions/classify.js";
 import { PersistedLedger } from "../eval/extensions/ledger-file.js";
 import { scoreImplementation } from "../eval/extensions/oracles.js";
 import { writeEvidence } from "../eval/extensions/report.js";
@@ -2278,6 +2278,19 @@ describe("records: auth type and capped connects", () => {
     expect((await runWave(unknown.input, unknown.deps([text()]).deps)).records[0]!.authType).toBeNull();
   });
 
+  it("keeps at most 50 evidence entries when traces are merged, the run's own lines first", () => {
+    const trace = (prefix: string, count: number) => ({
+      outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: [], connects: 0, unresolvedEgress: 0,
+      evidenceLines: Array.from({ length: count }, (_, i) => `${prefix}${i}`),
+    });
+    const merged = mergeTrace(trace("run-", 30), trace("oracle-", 30));
+    expect(merged.evidenceLines).toHaveLength(50);
+    expect(merged.evidenceLines.slice(0, 30)).toEqual(trace("run-", 30).evidenceLines);
+    expect(merged.evidenceLines[30]).toBe("oracle-0");
+    expect(merged.evidenceLines.at(-1)).toBe("oracle-19");
+    expect(summarizeTrace(merged)).not.toHaveProperty("evidenceLines");
+  });
+
   it("caps the unexpected connects in a record and keeps their number", () => {
     const connects = Array.from({ length: 25 }, (_, i) => ({ family: "inet" as const, address: `203.0.113.${i}`, port: 443 }));
     const summary = summarizeTrace({ outsideWrites: [], unresolvedWrites: 0, deniedWriteAttempts: 0, unexpectedConnects: connects, connects: 25, unresolvedEgress: 0, evidenceLines: [] });
@@ -2548,7 +2561,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     const w1 = f.wave(approval1, "wave-1", [text({ cost: 0.1 }), text({ cost: 0.1 })], { maxRuns: 2 });
     expect((await w1.run()).paused).toBe(true);
     const again = await f.plan("--trim", "--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 2 }], ledgerOnly: 0, removed: 2, resumable: "wave-1", replannedStopped: [] });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 2 }], ledgerOnly: 0, removed: 2, resumable: "wave-1", replannedStopped: [], notReplanned: [] });
     expect(JSON.stringify(again.exclusion)).not.toContain(f.root);
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
     expect(again.matrix.count).toBe(13);
@@ -2603,7 +2616,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     expect((await w1.run()).stopReason).toBe("harness_failure");
     expect(existsSync(join(w1.waveDir, "diagnostics"))).toBe(false);
     const again = await f.plan("--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 0, removed: 1, resumable: null, replannedStopped: [] });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 0, removed: 1, resumable: null, replannedStopped: [], notReplanned: [] });
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(1).map((r) => r.runId));
     const approval2 = f.approve(again);
     const w2 = f.wave(approval2, "wave-2", [text(), text(), text()], { maxRuns: 3 });
@@ -2668,9 +2681,9 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       expect((await w1.run()).stopReason).toBe("outside_write");
       const first = approval1.runs[0]!.runId;
       const again = await f.plan("--exclude-wave", w1.waveDir);
-      expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 0, removed: 0, resumable: null, replannedStopped: [first] });
+      expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 0, removed: 0, resumable: null, replannedStopped: [first], notReplanned: [] });
       expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.map((r) => r.runId));
-      expect(again.approvalTemplate.replannedStopped).toEqual([first]);
+      expect(again.approvalTemplate.replannedStopped).toEqual([{ runId: first, charges: 1 }]);
       // The charge stays in the ledger and in the remaining budget.
       expect(again.trimmed.remainingUsd).toBeCloseTo(9.9);
       const approval2 = f.approve(again);
@@ -2699,6 +2712,97 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       await expect(f.report([w1.waveDir, w2.waveDir, copy], "evidence-duplicate")).rejects.toThrow("duplicate_run_record");
     });
 
+    it("scenario A: a wave left out of --exclude-wave that already re-ran the slot keeps it excluded, and the old approval is refused", async () => {
+      const f = await flow();
+      const approval1 = f.approve(await f.plan());
+      const first = approval1.runs[0]!.runId;
+      const w1 = f.wave(approval1, "wave-1", [text({ trace: outside })]);
+      await w1.run();
+      const approval2 = f.approve(await f.plan("--exclude-wave", w1.waveDir));
+      expect(approval2.replannedStopped).toEqual([{ runId: first, charges: 1 }]);
+      const w2 = f.wave(approval2, "wave-2", [text({ trace: outside })]);
+      expect((await w2.run()).stopReason).toBe("outside_write");
+      // Wave 2 charged the slot again and was stopped by the audit as well. Leaving it out of the plan must not plan the slot a third time.
+      const omitted = await f.plan("--exclude-wave", w1.waveDir);
+      expect(omitted.exclusion).toMatchObject({ replannedStopped: [], notReplanned: [{ runId: first, reason: "ledger_charges_differ_from_records" }] });
+      expect(omitted.matrix.runs.map((r) => r.runId)).not.toContain(first);
+      expect(omitted.approvalTemplate.replannedStopped).toBeUndefined();
+      // The approval written before wave 2 lists one charge, the ledger holds two: the guard refuses, up front.
+      const stale = f.wave(approval2, "wave-stale", [text()], { maxRuns: 1 });
+      await expect(stale.run()).rejects.toThrow("run_already_charged");
+      expect(stale.captured).toHaveLength(0);
+      // With both waves excluded the two charges match the two audit-stopped records, and the slot is planned with the count 2.
+      const both = await f.plan("--exclude-wave", w1.waveDir, "--exclude-wave", w2.waveDir);
+      expect(both.exclusion).toMatchObject({ replannedStopped: [first], notReplanned: [] });
+      expect(both.approvalTemplate.replannedStopped).toEqual([{ runId: first, charges: 2 }]);
+      const w3 = f.wave(f.approve(both), "wave-3", [text()], { maxRuns: 1 });
+      expect((await w3.run()).paused).toBe(true);
+      expect(w3.captured).toHaveLength(1);
+    });
+
+    it("scenario B: a charge without a record (a crash after the charge) keeps the slot excluded and the approval refused", async () => {
+      const f = await flow();
+      const approval1 = f.approve(await f.plan());
+      const first = approval1.runs[0]!.runId;
+      const w1 = f.wave(approval1, "wave-1", [text({ trace: outside })]);
+      await w1.run();
+      const approval2 = f.approve(await f.plan("--exclude-wave", w1.waveDir));
+      expect(approval2.replannedStopped).toEqual([{ runId: first, charges: 1 }]);
+      // The crash: the slot was run again and charged, and no record was written.
+      const ledger = await PersistedLedger.openExisting(f.ledgerPath);
+      await ledger.record(first, approval1.runs[0]!.profile, 0.1);
+      const replanned = await f.plan("--exclude-wave", w1.waveDir);
+      expect(replanned.exclusion).toMatchObject({ replannedStopped: [], notReplanned: [{ runId: first, reason: "ledger_charges_differ_from_records" }] });
+      expect(replanned.matrix.runs.map((r) => r.runId)).not.toContain(first);
+      const refused = f.wave(approval2, "wave-2", [text()], { maxRuns: 1 });
+      await expect(refused.run()).rejects.toThrow("run_already_charged");
+      expect(refused.captured).toHaveLength(0);
+    });
+
+    it("reports the same merge whatever the order of the waves", async () => {
+      const f = await flow();
+      const approval1 = f.approve(await f.plan());
+      const first = approval1.runs[0]!.runId;
+      const w1 = f.wave(approval1, "wave-1", [text({ trace: outside })]);
+      await w1.run();
+      const w2 = f.wave(f.approve(await f.plan("--exclude-wave", w1.waveDir)), "wave-2", [text(), text()], { maxRuns: 2 });
+      await w2.run();
+      const later = await readFile(join(w2.waveDir, "runs", `${first}.json`), "utf8");
+      for (const [name, order] of [["evidence-a", [w1.waveDir, w2.waveDir]], ["evidence-b", [w2.waveDir, w1.waveDir]]] as const) {
+        const summary = await f.report([...order], name);
+        expect(await readFile(join(f.root, name, "runs", `${first}.json`), "utf8")).toBe(later);
+        expect(summary.waveStops).toEqual([{ wave: order.indexOf(w1.waveDir) + 1, runId: first, stopReason: "outside_write" }]);
+        expect(summary.stopReason).toBeNull();
+      }
+    });
+
+    it("leaves a structured, path-free event on stderr when the diagnostics cannot be written, and the stop stands (R84)", async () => {
+      const f = await flow();
+      const approval1 = f.approve(await f.plan());
+      const runId = approval1.runs[0]!.runId;
+      const events: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation(((chunk: string | Uint8Array) => { events.push(String(chunk)); return true; }) as typeof process.stderr.write);
+      try {
+        // The file is already there (`wx`).
+        const existing = f.wave(approval1, "wave-exists", [text({ trace: outside })]);
+        await mkdir(join(existing.waveDir, "diagnostics"), { recursive: true });
+        await writeFile(join(existing.waveDir, "diagnostics", `${runId}.txt`), "earlier");
+        expect((await existing.run()).stopReason).toBe("outside_write");
+        // `diagnostics` is a link: nothing is written through it.
+        const g = await flow();
+        const linked = g.wave(g.approve(await g.plan()), "wave-linked", [text({ trace: outside })]);
+        const elsewhere = join(g.root, "elsewhere-diagnostics");
+        await mkdir(elsewhere);
+        await mkdir(linked.waveDir, { recursive: true });
+        await symlink(elsewhere, join(linked.waveDir, "diagnostics"));
+        expect((await linked.run()).stopReason).toBe("outside_write");
+        expect(await readdir(elsewhere)).toEqual([]);
+      } finally { spy.mockRestore(); }
+      const failures = events.filter((line) => line.includes("diagnostics_write_failed")).map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(failures).toEqual([{ event: "diagnostics_write_failed", runId, code: "eexist" }, { event: "diagnostics_write_failed", runId, code: "diagnostics_dir_invalid" }]);
+      expect(JSON.stringify(failures)).not.toMatch(/\/tmp\//);
+    });
+
     it("plans a slot again only when every executed record is an audit stop, and validates the list in an approval", async () => {
       const f = await flow();
       const approval1 = f.approve(await f.plan());
@@ -2709,13 +2813,16 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       await w2.run();
       // The slot now has a scored record in wave 2: excluding both waves leaves it out for good, excluding only wave 1 plans it again.
       const both = await f.plan("--exclude-wave", w1.waveDir, "--exclude-wave", w2.waveDir);
-      expect(both.exclusion).toMatchObject({ removed: 1, replannedStopped: [] });
+      expect(both.exclusion).toMatchObject({ removed: 1, replannedStopped: [], notReplanned: [] });
       expect(both.matrix.runs.map((r) => r.runId)).not.toContain(approval1.runs[0]!.runId);
-      expect((await f.plan("--exclude-wave", w1.waveDir)).exclusion).toMatchObject({ replannedStopped: [approval1.runs[0]!.runId] });
+      expect((await f.plan("--exclude-wave", w1.waveDir)).exclusion).toMatchObject({ replannedStopped: [], notReplanned: [{ runId: approval1.runs[0]!.runId, reason: "ledger_charges_differ_from_records" }] });
       // An approval may only name run ids of its own list, once each.
       const tasks = f.tasks;
-      expect(() => validateApproval({ ...second, replannedStopped: ["999-nope-review-A"] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_binding_changed");
-      expect(() => validateApproval({ ...second, replannedStopped: [second.runs[0]!.runId, second.runs[0]!.runId] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_binding_changed");
+      const entry = (runId: string) => ({ runId, charges: 1 });
+      expect(() => validateApproval({ ...second, replannedStopped: [entry("999-nope-review-A")] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_binding_changed");
+      expect(() => validateApproval({ ...second, replannedStopped: [entry(second.runs[0]!.runId), entry(second.runs[0]!.runId)] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_binding_changed");
+      expect(() => validateApproval({ ...second, replannedStopped: [{ runId: second.runs[0]!.runId }] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_invalid");
+      expect(() => validateApproval({ ...second, replannedStopped: [{ ...entry(second.runs[0]!.runId), extra: 1 }] }, { sourceCommit: second.sourceCommit, tasks })).toThrow("approval_invalid");
       expect(() => validateApproval(second, { sourceCommit: second.sourceCommit, tasks })).not.toThrow();
     });
   });
@@ -2727,7 +2834,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     await w1.run();
     await rm(join(w1.waveDir, "runs", `${approval1.runs[1]!.runId}.json`));
     const again = await f.plan("--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 1, removed: 2, resumable: null, replannedStopped: [] });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 1, removed: 2, resumable: null, replannedStopped: [], notReplanned: [] });
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
     // Without --exclude-wave the ledger is not consulted.
     expect((await f.plan()).matrix.count).toBe(15);

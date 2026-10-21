@@ -1355,11 +1355,11 @@ describe("evidence lines (R84)", () => {
     expect(found.evidenceLines).toEqual([headless]);
   });
 
-  it("keeps the line of an unresolved write", () => {
-    const relative = `100 openat(AT_FDCWD</scope/clone>, "y", O_RDWR) = 3`;
-    const found = find(lines(`100 chdir(1) = 0`, `200 <... openat resumed>) = 3`, relative));
-    expect(found.unresolvedWrites).toBeGreaterThan(0);
-    expect(found.evidenceLines.length).toBe(found.unresolvedWrites);
+  it("keeps the line of an unresolved write, and of a headless resumed write", () => {
+    const relative = `777 openat(AT_FDCWD, "y", O_RDWR) = 3`;
+    expect(find(lines(relative))).toMatchObject({ unresolvedWrites: 1, evidenceLines: [relative] });
+    const headless = `200 <... openat resumed>) = 3`;
+    expect(find(lines(benign, headless))).toMatchObject({ unresolvedWrites: 1, evidenceLines: [headless] });
   });
 
   it("keeps nothing for a clean log and for a refused write, and at most 50 entries", () => {
