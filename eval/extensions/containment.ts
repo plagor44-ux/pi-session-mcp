@@ -91,8 +91,9 @@ export async function containmentSelfTest(
       && sockets.length === SOCKETS.length && sockets.every((value) => value === "ENOENT");
     if (!ok || await exists(marker)) throw new Error("containment_failed");
     // The probe's own strace log, parsed the way the wave parses a run: no outside write.
-    const found = await auditLog(log, [scope, oracleHome], scope, { providerAddresses: new Set(), dnsAddresses: new Set() }, boundTargets(plan));
-    if (found === null || found.outsideWrites.length > 0) throw new Error("containment_failed");
+    const found = await auditLog(log, [scope, oracleHome], scope, { providerAddresses: new Set(), dnsAddresses: new Set() }, true, boundTargets(plan));
+    // No outside write and no egress that cannot be audited: the probe's DNS lookup and codegraph run exercise the same judgement as a run, before any paid one.
+    if (found === null || found.outsideWrites.length > 0 || found.unresolvedEgress > 0) throw new Error("containment_failed");
   } finally {
     await rm(marker, { force: true }).catch(() => undefined);
     await rm(scratch, { recursive: true, force: true });

@@ -8,7 +8,7 @@ import { parseStraceLog, type TraceFindings } from "./trace.js";
 
 /** Parses a strace log; null when it is missing or has no line, which means nothing can be audited. */
 export async function auditLog(
-  path: string, roots: string[], initialCwd: string, addresses: AuditAddresses, boundPaths: readonly string[] = [],
+  path: string, roots: string[], initialCwd: string, addresses: AuditAddresses, sandboxed: boolean, boundPaths: readonly string[] = [],
 ): Promise<TraceFindings | null> {
   let text: string;
   try { text = (await readRegularFile(path, MAX_LOG_BYTES)).toString("utf8"); } catch { return null; }
@@ -16,7 +16,7 @@ export async function auditLog(
   if (!first) return null;
   return parseStraceLog(text, {
     rootPid: Number(first[1] ?? first[2]), initialCwd, allowedWriteRoots: roots,
-    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses, allowedSocketRoots: roots, sandboxed: true, boundPaths: [...boundPaths],
+    providerAddresses: addresses.providerAddresses, dnsAddresses: addresses.dnsAddresses, allowedSocketRoots: roots, sandboxed, boundPaths: [...boundPaths],
   });
 }
 

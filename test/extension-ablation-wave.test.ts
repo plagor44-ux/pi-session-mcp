@@ -298,6 +298,16 @@ describe("runWave stop rules", () => {
       expect(existsSync(join(s.waveDir, "diagnostics"))).toBe(false);
     });
 
+    it("does not stop a run for a name-resolution socket although the plan binds /run/systemd/resolve back in", async () => {
+      const s = await waveSetup(2);
+      const plan = { ...EMPTY_PLAN, runReadOnly: ["/run/systemd/resolve"], extraReadOnly: ["/tmp/ablation-build-x"] };
+      const trace = `${benignTrace()}${connect("/run/systemd/resolve/io.systemd.Resolve")}`;
+      const r = await runWave(s.input, s.deps([text({ trace }), text()], { planSandbox: async () => plan }).deps);
+      expect(r.stopReason).toBeNull();
+      expect(r.records[0]).toMatchObject({ outcome: "scored", trace: { unresolvedEgress: 0 } });
+      expect(existsSync(join(s.waveDir, "diagnostics"))).toBe(false);
+    });
+
     it("still stops for a socket below a host path the plan binds in, and for one outside /tmp", async () => {
       for (const path of ["/tmp/ablation-build-x/run/x.sock", "/run/user/1000/bus"]) {
         const s = await waveSetup(2);
@@ -2187,6 +2197,16 @@ describe("bubblewrap containment (R46)", () => {
       return { stdout: JSON.stringify(good), stderr: "" };
     };
     await expect(containmentSelfTest(TOOLS, EMPTY_PLAN, { run: leaking, home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+  });
+
+  it("refuses when the probe's own log shows egress that cannot be audited, and accepts the name-resolution socket", async () => {
+    const withTrace = (extra: string) => async (_file: string, args: readonly string[]) => {
+      await writeFile(args[args.indexOf("-o") + 1]!, benignTrace() + extra);
+      return { stdout: JSON.stringify(good), stderr: "" };
+    };
+    const resolver = { ...EMPTY_PLAN, runReadOnly: ["/run/systemd/resolve"] };
+    await expect(containmentSelfTest(TOOLS, resolver, { run: withTrace('4242 connect(5<socket:[1]>, {sa_family=AF_UNIX, sun_path=@"x"}, 20) = 0\n'), home: "/home/x", uid: 1000 })).rejects.toThrow("containment_failed");
+    await containmentSelfTest(TOOLS, resolver, { run: withTrace('4242 connect(5<socket:[1]>, {sa_family=AF_UNIX, sun_path="/run/systemd/resolve/io.systemd.Resolve"}, 42) = 0\n'), home: "/home/x", uid: 1000 });
   });
 
   it("refuses when the sandbox does not start or prints garbage, and passes on the expected result through the production command", async () => {

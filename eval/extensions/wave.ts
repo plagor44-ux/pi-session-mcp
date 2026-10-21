@@ -263,7 +263,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
           } else {
             ({ output, text, tampered } = verified);
           }
-          trace = await auditLog(log, [scope.root], scope.root, addresses, boundTargets(plan, scope.dependencyBinds));
+          trace = await auditLog(log, [scope.root], scope.root, addresses, true, boundTargets(plan, scope.dependencyBinds));
         }
       } catch (error) { waveFailure = failureCode(error); }
       if (tampered) waveFailure ??= "output_integrity";
@@ -314,7 +314,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
         }
         interruptedInOracle = input.signal?.aborted === true;
         for (const path of oracleLogs) {
-          const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses, boundTargets(plan, dependencyBinds));
+          const found = await auditLog(path, [scope.root, oracleHome], scope.clone, addresses, true, boundTargets(plan, dependencyBinds));
           if (found) trace = trace ? mergeTrace(trace, found) : found;
           else waveFailure ??= "trace_missing";
         }
