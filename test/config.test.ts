@@ -118,9 +118,12 @@ describe("loadConfig", () => {
       expect((await loadConfig(await writeConfig({ ...base, events: { delivery: "spool" } }))).eventDelivery).toBe("spool");
     });
 
+    it("accepts an explicit off", async () => {
+      expect((await loadConfig(await writeConfig({ ...base, events: { delivery: "off" } }))).eventDelivery).toBe("off");
+    });
+
     it.each([
       ["unknown delivery", { delivery: "socket" }],
-      ["off spelled out", { delivery: "off" }],
       ["missing delivery", {}],
       ["unknown key", { delivery: "spool", path: "/SECRET_EVENT_SENTINEL" }],
       ["non-object", "spool"],

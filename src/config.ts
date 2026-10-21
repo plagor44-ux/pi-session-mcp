@@ -77,7 +77,7 @@ export class ConfigError extends Error {
   }
 }
 
-const eventsSchema = z.object({ delivery: z.literal("spool") }).strict();
+const eventsSchema = z.object({ delivery: z.enum(["spool", "off"]) }).strict();
 
 export const configSchema = z.object({
   events: eventsSchema.optional(),
