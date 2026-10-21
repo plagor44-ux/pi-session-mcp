@@ -2332,7 +2332,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
       return { waveDir, captured, run: () => runWave({ approval, tasks, waveDir, ledgerPath, productionConfig, hostAuth, extensionTemplate: join(root, "template"), repoRoot: sources, killGraceMs: 0, ...extra }, { ...baseDeps(), spawnRun }) };
     };
     const report = (dirs: string[], evidence = "evidence") => writeEvidence(dirs, join(root, evidence), ledgerPath, { repoRoot: repo });
-    return { root, repo, tasks, ledgerPath, plan, approve, wave, report, git };
+    return { root, repo, tasks, tasksFile, ledgerPath, plan, approve, wave, report, git };
   }
 
   it("keeps the full matrix's run ids, ordinals and order in a --pairings and a --trim plan", async () => {
@@ -2364,7 +2364,8 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     const w1 = f.wave(approval1, "wave-1", [text({ cost: 0.1 }), text({ cost: 0.1 })], { maxRuns: 2 });
     expect((await w1.run()).paused).toBe(true);
     const again = await f.plan("--trim", "--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 2 }], ledgerOnly: 0, removed: 2, resumable: w1.waveDir });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 2 }], ledgerOnly: 0, removed: 2, resumable: "wave-1" });
+    expect(JSON.stringify(again.exclusion)).not.toContain(f.root);
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
     expect(again.matrix.count).toBe(13);
     // The projection covers the 13 runs that remain: 4 observed grok runs at USD 0.1 and 9 unobserved review runs at the USD 1 floor.
@@ -2417,7 +2418,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     const w1 = f.wave(approval1, "wave-1", [text({ trace: outside })]);
     expect((await w1.run()).stopReason).toBe("outside_write");
     const again = await f.plan("--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 1 }], ledgerOnly: 0, removed: 1, resumable: null });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 0, removed: 1, resumable: null });
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(1).map((r) => r.runId));
     const approval2 = f.approve(again);
     const w2 = f.wave(approval2, "wave-2", [text(), text(), text()], { maxRuns: 3 });
@@ -2441,7 +2442,7 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     await w1.run();
     await rm(join(w1.waveDir, "runs", `${approval1.runs[1]!.runId}.json`));
     const again = await f.plan("--exclude-wave", w1.waveDir);
-    expect(again.exclusion).toEqual({ waves: [{ wave: w1.waveDir, executed: 1 }], ledgerOnly: 1, removed: 2, resumable: null });
+    expect(again.exclusion).toEqual({ waves: [{ wave: "wave-1", executed: 1 }], ledgerOnly: 1, removed: 2, resumable: null });
     expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval1.runs.slice(2).map((r) => r.runId));
     // Without --exclude-wave the ledger is not consulted.
     expect((await f.plan()).matrix.count).toBe(15);
@@ -2461,6 +2462,16 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     await expect(f.plan("--exclude-wave", other)).rejects.toThrow("ledger_mismatch");
     await rm(join(w1.waveDir, "runs"), { recursive: true });
     await expect(f.plan("--exclude-wave", w1.waveDir)).rejects.toThrow("runs_missing");
+    // M3: waves planned over other tasks do not describe these runs.
+    const kept = JSON.parse(await readFile(f.tasksFile, "utf8")) as unknown[];
+    await writeFile(f.tasksFile, JSON.stringify(kept.slice(0, 2)));
+    await mkdir(join(w1.waveDir, "runs"));
+    await expect(f.plan("--exclude-wave", w1.waveDir)).rejects.toThrow("tasks_changed");
+    await writeFile(f.tasksFile, JSON.stringify(kept));
+    // M6: a wrong --ledger with --exclude-wave creates nothing.
+    const wrong = join(f.root, "wrong", "ledger.json");
+    await expect(buildPlan(parseArgs(["--plan", "--tasks", f.tasksFile, "--ledger", wrong, "--exclude-wave", w1.waveDir]), { sourceCwd: f.repo })).rejects.toThrow("ledger_missing");
+    expect(existsSync(join(f.root, "wrong"))).toBe(false);
     const base = ["--plan", "--tasks", "t.json"];
     expect(parseArgs([...base, "--ledger", "l.json", "--exclude-wave", "a", "--exclude-wave", "b"]).excludeWaves).toEqual(["a", "b"]);
     expect(() => parseArgs([...base, "--exclude-wave", "a"])).toThrow("ledger_required");
@@ -2519,6 +2530,9 @@ describe("lock before read (R62a)", () => {
   it("takes the lock first and leaves no lock file when opening fails", async () => {
     const root = await temporaryRoot("ablation-open-locked-");
     const path = join(root, "ledger.json");
+    // A missing ledger in a missing directory creates neither the directory nor a lock (M6).
+    await expect(PersistedLedger.openLocked(join(root, "nodir", "ledger.json"), LEDGER_ID)).rejects.toThrow("ledger_missing");
+    expect(existsSync(join(root, "nodir"))).toBe(false);
     await expect(PersistedLedger.openLocked(path, LEDGER_ID)).rejects.toThrow("ledger_missing");
     expect(existsSync(`${path}.lock`)).toBe(false);
     await seedLedger(path, [], "44444444-4444-4444-8444-444444444444");
@@ -2583,21 +2597,26 @@ describe("approved runs must be canonical (R62b)", () => {
 });
 
 describe("an invalid session cost counts as missing (R62c)", () => {
-  const usage = (assistantCost: number, tokens: number) => ({
-    session: { input: 10, output: 5, cacheRead: 2, cacheWrite: 0, total: 17, costUsd: -1 },
+  const usage = (assistantCost: number, tokens: number, sessionTokens = 10) => ({
+    session: { input: sessionTokens, output: 0, cacheRead: 0, cacheWrite: 0, total: sessionTokens, costUsd: -1 },
     assistant: { messages: 1, input: tokens, output: 0, cacheRead: 0, cacheWrite: 0, costUsd: assistantCost }, providerError: null,
   });
   const entriesOf = async (path: string) => (JSON.parse(await readFile(path, "utf8")) as { entries: { runId: string; costUsd: number | null; estimated?: boolean }[] }).entries;
 
-  it("falls back in the wave like a missing session total: the assistant sum or the estimate when tokens exist, null otherwise", async () => {
-    const s = await waveSetup(2);
-    const r = await runWave(s.input, s.deps([text({ output: { usage: usage(1.5, 10) } }), text({ output: { usage: usage(0.4, 0) } })]).deps);
+  it("falls back in the wave like a missing session total: the assistant sum or the estimate when tokens show anywhere, null only without tokens (M2)", async () => {
+    const s = await waveSetup(3);
+    const r = await runWave(s.input, s.deps([
+      text({ output: { usage: usage(1.5, 10) } }), text({ output: { usage: usage(0.4, 0) } }), text({ output: { usage: usage(0.4, 0, 0) } }),
+    ]).deps);
     const entries = await entriesOf(s.input.ledgerPath);
     expect(entries[0]).toMatchObject({ runId: s.runs[0]!.runId, costUsd: 1.5, estimated: true });
-    expect(entries[1]).toMatchObject({ runId: s.runs[1]!.runId, costUsd: null });
-    expect(entries[1]!.estimated).toBeUndefined();
+    // Session tokens alone are a billed response: the estimate stands in (at least the assistant cost).
+    expect(entries[1]).toMatchObject({ runId: s.runs[1]!.runId, estimated: true });
+    expect(entries[1]!.costUsd).toBeGreaterThanOrEqual(1);
+    // No token anywhere: nothing was billed.
+    expect(entries[2]).toMatchObject({ runId: s.runs[2]!.runId, costUsd: null });
+    expect(entries[2]!.estimated).toBeUndefined();
     expect(r.stopReason).toBeNull();
-    expect(r.spentUsd).toBeCloseTo(1.5);
   });
 
   it("fails a preflight route with usage_missing and still charges the assistant cost", async () => {
@@ -2611,5 +2630,47 @@ describe("an invalid session cost counts as missing (R62c)", () => {
     });
     expect(result.routes).toMatchObject([{ profile: "review", ok: false, terminal: "completed", failure: "usage_missing" }]);
     expect(await entriesOf(join(root, "l.json"))).toMatchObject([{ costUsd: 0.07 }]);
+  });
+});
+
+describe("no run is executed twice (G1) and records are atomic (A1)", () => {
+  it("refuses to resume wave 1 once another wave executed one of its pending slots, before anything is written", async () => {
+    const s = await waveSetup(4);
+    await runWave({ ...s.input, maxRuns: 1 }, s.deps([text()]).deps);
+    // What a wave 2 under a re-approval would have left in the shared ledger.
+    const ledger = await PersistedLedger.openExisting(s.input.ledgerPath, LEDGER_ID);
+    await ledger.record(s.runs[2]!.runId, "review", 0.1);
+    const resumed = s.deps([text()]);
+    await expect(runWave({ ...s.input, resume: true }, resumed.deps)).rejects.toThrow("run_already_charged");
+    expect(resumed.captured).toHaveLength(0);
+    expect(JSON.parse(await readFile(join(s.waveDir, "status.json"), "utf8"))).toMatchObject({ state: "paused" });
+    expect((await readdir(join(s.waveDir, "runs"))).length).toBe(1);
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+  });
+
+  it("refuses a second fresh --out under the same approval", async () => {
+    const s = await waveSetup(2);
+    await runWave(s.input, s.deps([text(), text()]).deps);
+    const second = s.deps([text(), text()]);
+    const other = join(s.root, "wave-b");
+    await expect(runWave({ ...s.input, waveDir: other }, second.deps)).rejects.toThrow("run_already_charged");
+    expect(second.captured).toHaveLength(0);
+    expect(existsSync(join(other, "status.json"))).toBe(false);
+    expect(existsSync(join(other, "approval.json"))).toBe(false);
+    expect(existsSync(`${s.input.ledgerPath}.lock`)).toBe(false);
+  });
+
+  it("never overwrites an existing record and leaves no temporary file", async () => {
+    const s = await waveSetup(2);
+    const target = join(s.waveDir, "runs", `${s.runs[0]!.runId}.json`);
+    let calls = 0;
+    // The guard is read before the wave and after each run: the record appears in between.
+    const guard = async () => { calls += 1; if (calls === 2) await writeFile(target, "sentinel"); return { files: {} }; };
+    const r = await runWave(s.input, s.deps([text(), text()], { guard }).deps);
+    expect(r.stopReason).toBe("harness_failure");
+    expect(await readFile(target, "utf8")).toBe("sentinel");
+    expect((await readdir(s.waveDir)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    // The second run was not executed after the failed write.
+    expect(r.records.map((x) => x.outcome)).toEqual(["scored", "not_run"]);
   });
 });

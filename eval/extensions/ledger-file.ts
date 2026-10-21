@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { BUDGET_USD, BudgetLedger } from "./budget.js";
@@ -64,6 +64,11 @@ export class PersistedLedger {
    * holder commits in between can be missed. The lock is released again when reading or checking fails.
    */
   static async openLocked(path: string, expectedId: string): Promise<PersistedLedger> {
+    // A missing ledger is refused before the lock (which creates the parent directory), so nothing is left behind.
+    try { await access(path); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("ledger_missing");
+      throw error;
+    }
     const probe = new PersistedLedger(path);
     await probe.lock();
     try { const persisted = await PersistedLedger.openExisting(path, expectedId); persisted.locked = true; return persisted; } catch (error) {

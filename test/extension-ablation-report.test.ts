@@ -426,6 +426,19 @@ describe("several waves, approvals and unexpected connects", () => {
     expect(readFileSync(join(wave.evidenceDir, "runs", `${tail[0]!.runId}.json`), "utf8")).toBe(readFileSync(join(second, "runs", `${tail[0]!.runId}.json`), "utf8"));
   });
 
+  it("keeps every recorded stop in waveStops, also one that a later wave's executed record superseded (M1)", async () => {
+    const wave = await makeWave();
+    const last = recordsOf(wave)[5]!;
+    put(wave.waveDir, notRun(last, { stopReason: "wave_timeout" }));
+    const second = waveOf(wave, "wave-2", [last]);
+    const summary = await merge(wave, [wave.waveDir, second]);
+    expect(summary.waveStops).toEqual([{ wave: 1, runId: last.runId, stopReason: "wave_timeout" }]);
+    expect(summary.stopReason).toBeNull();
+    const written = JSON.parse(readFileSync(join(wave.evidenceDir, "summary.json"), "utf8")) as { waveStops: unknown };
+    expect(written.waveStops).toEqual(summary.waveStops);
+    expect(summarize([]).waveStops).toEqual([]);
+  });
+
   it("collapses several not_run records of one run id, and keeps a not_run slot nobody executed", async () => {
     const wave = await makeWave();
     const last = recordsOf(wave)[5]!;

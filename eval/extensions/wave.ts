@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, readdir, realpath, unlink, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { join } from "node:path";
 import { expiresWithin, selectBoundaryCredentials } from "../../src/writer-credentials.js";
@@ -167,6 +167,8 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   // The ledger is the evaluation's one budget: it must exist and be the approval's (R55), and this process holds it exclusively.
   const ledger = await PersistedLedger.openLocked(input.ledgerPath, input.approval.ledgerId);
   try {
+  // No run is executed twice: a pending run the ledger already charged (another wave ran it, or a crash left a charge) refuses the invocation (G1).
+  if (pending.some((run) => ledger.hasRunEntry(run.runId))) throw new Error("run_already_charged");
   const addresses = await (deps.resolveAddresses ?? resolveAuditAddresses)(input.approval.routes);
   const savedGuard = resume ? guardFileSchema.safeParse(await readJsonFile(join(waveDir, "guard.json"))) : null;
   if (savedGuard !== null && !savedGuard.success) throw new Error("resume_invalid");
@@ -187,8 +189,12 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
   }
   const authOf = (run: RunSpec): RunRecord["authType"] => authTypes.get(run.profile) ?? null;
 
-  const writeRecord = (record: RunRecord): Promise<void> =>
-    writeFile(join(waveDir, "runs", `${record.runId}.json`), `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+  // Atomic and never overwriting: the record is written beside `runs/` and linked in, which fails if the file exists (A1).
+  const writeRecord = async (record: RunRecord): Promise<void> => {
+    const temporary = join(waveDir, `.record-${randomBytes(8).toString("hex")}.tmp`);
+    await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    try { await link(temporary, join(waveDir, "runs", `${record.runId}.json`)); } finally { await unlink(temporary).catch(() => undefined); }
+  };
 
   async function execute(run: RunSpec, task: TaskSpec, productionConfig: ProductionConfig): Promise<RunRecord> {
     const privateRun = privateRunDir(waveDir, run.runId);
@@ -244,15 +250,17 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
 
       if (executed) {
         // No trusted output (missing, forged, killed, bad exit status) or a session cost the ledger would reject: the estimate stands in (R41).
-        // A trusted output with a valid session total is charged as measured. One without (none, or an invalid cost, R62c) whose assistant
-        // usage has tokens is a real billed response whose session stats failed: it charges the assistant cost sum, at least the estimate
-        // (I3). One without a session total and without any token (nothing at all, or a synthesized failure message) billed nothing: the
-        // cost is null (R11b).
+        // A trusted output with a valid session total is charged as measured. One without (none, or an invalid cost, R62c) that shows tokens
+        // in its session or assistant usage is a real billed response whose session stats failed: it charges the assistant cost sum, at
+        // least the estimate (I3, M2). One without a session total and without any token anywhere (nothing at all, or a synthesized failure
+        // message) billed nothing: the cost is null (R11b).
         const sessionCost = validSessionCost(output?.usage.session);
+        const session = output?.usage.session;
         const assistant = output?.usage.assistant;
-        const assistantTokens = assistant === undefined ? 0 : assistant.input + assistant.output + assistant.cacheRead + assistant.cacheWrite;
+        const tokens = (usage: { input: number; output: number; cacheRead: number; cacheWrite: number } | null | undefined): number =>
+          usage == null ? 0 : usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
         if (output !== null && sessionCost !== null) await ledger.record(run.runId, run.profile, sessionCost);
-        else if (output !== null && !(assistantTokens > 0)) await ledger.record(run.runId, run.profile, null);
+        else if (output !== null && !(tokens(assistant) > 0) && !(tokens(session) > 0)) await ledger.record(run.runId, run.profile, null);
         else await ledger.recordEstimate(run.runId, run.profile, validSessionCost(assistant) ?? 0);
       }
       const facts = { output, timedOut: supervised.timedOut, interrupted: supervised.interrupted, residualClean, trace, guardChanged: false, integrityFailed: tampered, waveFailure };
@@ -358,6 +366,7 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       await persist(notRun(run, before, authOf(run)));
       continue;
     }
+    if (ledger.hasRunEntry(run.runId)) throw new Error("run_already_charged");
     let record: RunRecord;
     try {
       await dirGuard.assertIntact();
