@@ -47,18 +47,25 @@ export const ABORT_DEADLINE_MS = 5_000;
 export const CLOSE_CLEANUP_DEADLINE_MS = 5_000;
 export const SHUTDOWN_DEADLINE_MS = 12_000;
 const stamp = () => new Date().toISOString();
-export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; }
+/**
+ * Content-free notice that a published turn became terminal. `via` is `close` when `close` marked a
+ * still running turn aborted, otherwise `registry`. The registry read model stays the only truth.
+ */
+export interface TurnTerminalNotice { sessionId: string; turnId: string; state: Exclude<TurnState, "running">; via: "registry" | "close"; }
+export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
   private readonly pendingStarts = new Set<Promise<SessionView>>();
-  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard">>;
+  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "onTurnTerminal">>;
   private readonly writerGuard: WriterGuard | undefined;
+  private readonly onTurnTerminal: ((event: TurnTerminalNotice) => void) | undefined;
   private readonly codingAdmissions = new Map<string, Promise<void>>();
   private stopping = false;
   private readonly shutdownController = new AbortController();
   constructor(private readonly adapter: PiSessionAdapter, private readonly workspaces: ReadonlyMap<string, string>, options: SessionRegistryOptions = {}) {
     this.writerGuard = options.writerGuard;
+    this.onTurnTerminal = options.onTurnTerminal;
     this.options = { preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
   async start(workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
@@ -235,6 +242,7 @@ export class SessionRegistry {
         const time = this.advance(turn.updatedAt);
         turn.updatedAt = time;
         turn.completedAt = time;
+        this.notifyTerminal(existing, turn, "close");
         const abortPromise = this.beginAbort(existing, turn);
         await this.withTimeout(abortPromise.then(() => undefined, () => undefined), this.options.closeCleanupDeadlineMs, undefined);
       }
@@ -266,8 +274,17 @@ export class SessionRegistry {
       throw new PiSessionCreationError("execution_selection_mismatch");
     }
   }
-  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; }
-  private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; }
+  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
+  private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
+  /**
+   * Called once per terminal transition, after the turn is final. Only a published turn is reported:
+   * a preflight that was rejected, timed out or restored never had a public turn id. A throwing
+   * listener is swallowed and can neither change registry state nor reach a caller.
+   */
+  private notifyTerminal(entry: Entry, turn: TurnEntry, via: "registry" | "close"): void {
+    if (!this.onTurnTerminal || turn.state === "running" || entry.turns.get(turn.turnId) !== turn) return;
+    try { this.onTurnTerminal({ sessionId: entry.id, turnId: turn.turnId, state: turn.state, via }); } catch { /* A listener must never affect the registry. */ }
+  }
   /**
    * Liveness only. Observed public SDK activity (assistant message start, update and end; tool
    * execution start, update and end) advances this turn, never another turn or the session.
