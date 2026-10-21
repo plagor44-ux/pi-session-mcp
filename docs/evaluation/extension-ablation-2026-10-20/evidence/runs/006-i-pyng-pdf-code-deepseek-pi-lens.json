@@ -1,0 +1,92 @@
+{
+  "runId": "006-i-pyng-pdf-code-deepseek-pi-lens",
+  "taskId": "i-pyng-pdf",
+  "profile": "code-deepseek",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-code-deepseek"
+  ],
+  "authType": "api_key",
+  "terminal": "timeout",
+  "usage": {
+    "session": {
+      "input": 47282,
+      "output": 40052,
+      "cacheRead": 2237568,
+      "cacheWrite": 0,
+      "total": 2324902,
+      "costUsd": 0.07567240800000001
+    },
+    "assistant": {
+      "messages": 45,
+      "input": 47282,
+      "output": 40052,
+      "cacheRead": 2237568,
+      "cacheWrite": 0,
+      "costUsd": 0.07567240800000001
+    },
+    "providerError": "other"
+  },
+  "durationMs": 840881,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 2097,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [
+      {
+        "family": "inet",
+        "address": "127.0.0.1",
+        "port": 5544
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:400::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:600::223",
+        "port": 443
+      },
+      {
+        "family": "inet6",
+        "address": "2a04:4e42:200::223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.64.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.128.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.0.223",
+        "port": 443
+      },
+      {
+        "family": "inet",
+        "address": "151.101.192.223",
+        "port": 443
+      }
+    ],
+    "unexpectedConnectCount": 9,
+    "connects": 43
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": null,
+  "outcome": "scored",
+  "accepted": false,
+  "stopReason": null
+}

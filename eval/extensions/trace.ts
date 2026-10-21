@@ -1,0 +1,718 @@
+import { posix } from "node:path";
+
+/**
+ * The caller appends `-o <log> --` and the command. `-y` annotates fds (including AT_FDCWD) with their paths.
+ * The trailing `-e inject=...` makes every `io_uring_setup` fail with ENOSYS (R36).
+ * `-q` (not `-qq`) keeps the `+++ exited +++` lines that free a pid's cwd; signal and exit lines are skipped by the parser.
+ */
+export const STRACE_ARGS: readonly string[] = [
+  "-f", "-q", "-e",
+  "trace=connect,openat,open,creat,rename,renameat,renameat2,unlink,unlinkat,mkdir,mkdirat,symlink,symlinkat,link,linkat,truncate,chdir,fchdir,clone,clone3,fork,vfork"
+    + ",rmdir,openat2,chmod,fchmod,fchmodat,fchmodat2,chown,fchown,lchown,fchownat,utimensat,utimes,setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr,mknod,mknodat"
+    + ",sendto,sendmsg,sendmmsg,bind,io_uring_setup,chroot,pivot_root,setns,unshare,mount,open_tree,move_mount,fsopen,fsmount,fsconfig,mount_setattr,umount2",
+  "-y",
+  // R36: Node's libuv calls io_uring_setup even with UV_USE_IO_URING=0 and it succeeds on some hosts. Failing it makes libuv fall back to its
+  // thread pool, as on kernels without io_uring; the injected call returns -1, which the parser ignores (R23b).
+  "-e", "inject=io_uring_setup:error=ENOSYS",
+  // R49b: inside bubblewrap's PID namespace a clone returns the namespace pid; strace appends the real one as `/* N in strace's PID NS */`.
+  "--decode-pids=pidns",
+];
+
+/*
+ * The lexical path model below is a DETECTOR, not a boundary. It resolves `..` and relative paths textually, so a symlink inside the
+ * scope (`ln -s . a`, then `a/../x`) can make the kernel act somewhere the parser does not see; it also judges AF_UNIX paths by name.
+ * The enforcement is the bubblewrap containment around every traced command (R46: read-only root, writable scope only, hidden
+ * /run/user and /run/dbus). Writes the kernel refuses appear here as `deniedWriteAttempts`; this audit is the second line of defence.
+ */
+export interface TraceContext {
+  rootPid: number;
+  initialCwd: string;
+  allowedWriteRoots: string[];
+  providerAddresses: ReadonlySet<string>;
+  dnsAddresses: ReadonlySet<string>;
+  /** Directories whose Unix sockets a worker may connect to besides the built-in name-service allowlist (R43); the wave passes the scope root. */
+  allowedSocketRoots?: string[];
+  /**
+   * The traced command is `bwrap … -- <workload>` (R46). bubblewrap's own setup (the user and mount namespace, `uid_map`, mounts, the
+   * `newroot` directories on a private tmpfs) happens before the workload and is not a host action: the root pid and the process it
+   * clones with CLONE_NEWPID are muted for everything except process and cwd tracking; the first child of that process is the workload.
+   */
+  sandboxed?: boolean;
+  /**
+   * Host paths bound into the sandbox (read-only binds, dependency mounts and their runtime; `boundTargets` in sandbox.ts). A socket below
+   * one of them belongs to the host, wherever it lies, and is never internal (R87).
+   */
+  boundPaths?: string[];
+}
+
+export interface TraceFindings {
+  /** Absolute targets of successful or in-progress writes outside the allowed roots, first-seen order, unique. */
+  outsideWrites: string[];
+  /** Write calls (successful or in progress) with at least one target that could not be resolved. */
+  unresolvedWrites: number;
+  /** Failed write calls with at least one resolved target outside the allowed roots. */
+  deniedWriteAttempts: number;
+  /** Distinct inet/inet6 destinations that are neither a provider address nor DNS on port 53. */
+  unexpectedConnects: { family: "inet" | "inet6"; address: string; port: number }[];
+  /** All inet/inet6 connect attempts, whatever their return value. */
+  connects: number;
+  /** Egress that cannot be audited: every `io_uring_setup` that did not fail, every AF_UNIX `connect` outside the allowed socket roots (below the sandbox's private /tmp and /var/tmp is internal unless under a bound host path, R87) and every abstract socket that no live process of the trace bound earlier (R43, R88) (io_uring can connect and write without further syscalls; R23b), and resumed halves whose head is missing. */
+  unresolvedEgress: number;
+  /**
+   * The raw log line that caused each outside write, unresolved write and unresolved egress (both lines of a joined unfinished/resumed
+   * call, separated by a newline), first-seen order, at most `MAX_EVIDENCE_LINES`. Private diagnostics only (R84): it holds paths and
+   * addresses, and neither the run record nor the summary copies it.
+   */
+  evidenceLines: string[];
+}
+
+/** The most evidence entries one log keeps. */
+export const MAX_EVIDENCE_LINES = 50;
+
+/** A write target: a path relative to `dir` (or the cwd when `dir` is absent), or an fd (`fd`). */
+type Target = { dir?: number; path: number; nullIsDir?: boolean } | { fd: number };
+interface Spec {
+  targets: Target[];
+  flags?: { arg: number; how?: boolean };
+  /** A successful call returns an fd annotated with the path the kernel really opened, which wins over the lexical path. */
+  kernelPath?: boolean;
+  /** Argument holding the symlink target string; where it points counts as a write destination. */
+  symlinkTarget?: number;
+}
+
+const cwdPath = (path: number): Target => ({ path });
+const atPath = (dir: number, path: number): Target => ({ dir, path });
+const SPECS: Record<string, Spec> = {
+  open: { targets: [cwdPath(0)], flags: { arg: 1 }, kernelPath: true },
+  openat: { targets: [atPath(0, 1)], flags: { arg: 2 }, kernelPath: true },
+  openat2: { targets: [atPath(0, 1)], flags: { arg: 2, how: true }, kernelPath: true },
+  creat: { targets: [cwdPath(0)], kernelPath: true },
+  rename: { targets: [cwdPath(0), cwdPath(1)] },
+  renameat: { targets: [atPath(0, 1), atPath(2, 3)] },
+  renameat2: { targets: [atPath(0, 1), atPath(2, 3)] },
+  unlink: { targets: [cwdPath(0)] },
+  unlinkat: { targets: [atPath(0, 1)] },
+  mkdir: { targets: [cwdPath(0)] },
+  mkdirat: { targets: [atPath(0, 1)] },
+  rmdir: { targets: [cwdPath(0)] },
+  symlink: { targets: [cwdPath(1)], symlinkTarget: 0 },
+  symlinkat: { targets: [atPath(1, 2)], symlinkTarget: 0 },
+  link: { targets: [cwdPath(0), cwdPath(1)] },
+  linkat: { targets: [atPath(0, 1), atPath(2, 3)] },
+  truncate: { targets: [cwdPath(0)] },
+  chmod: { targets: [cwdPath(0)] },
+  fchmodat: { targets: [atPath(0, 1)] },
+  fchmodat2: { targets: [atPath(0, 1)] },
+  fchmod: { targets: [{ fd: 0 }] },
+  chown: { targets: [cwdPath(0)] },
+  lchown: { targets: [cwdPath(0)] },
+  fchownat: { targets: [atPath(0, 1)] },
+  fchown: { targets: [{ fd: 0 }] },
+  utimes: { targets: [cwdPath(0)] },
+  utimensat: { targets: [{ dir: 0, path: 1, nullIsDir: true }] }, // futimens(fd) is utimensat(fd, NULL, ...)
+  setxattr: { targets: [cwdPath(0)] },
+  lsetxattr: { targets: [cwdPath(0)] },
+  fsetxattr: { targets: [{ fd: 0 }] },
+  removexattr: { targets: [cwdPath(0)] },
+  lremovexattr: { targets: [cwdPath(0)] },
+  fremovexattr: { targets: [{ fd: 0 }] },
+  mknod: { targets: [cwdPath(0)] },
+  mknodat: { targets: [atPath(0, 1)] },
+};
+const CLONES = new Set(["clone", "clone3", "fork", "vfork"]);
+const SEND_CALLS = new Set(["connect", "sendto", "sendmsg", "sendmmsg"]);
+const ROOT_CHANGES = new Set(["chroot", "pivot_root", "setns", "unshare", "mount", "open_tree", "move_mount", "fsopen", "fsmount", "fsconfig", "mount_setattr", "umount2"]);
+
+type Return = { kind: "ok"; value: number; annotation?: string } | { kind: "failed" } | { kind: "progress" };
+interface Call { name: string; args: string[]; ret: Return }
+
+/** Index of the `>` that closes a `-y` annotation opened at `open`; paths may contain `,` and `>`. */
+function annotationEnd(s: string, open: number): number {
+  for (let k = open + 1; k < s.length; k++) {
+    if (s[k] === ">" && (k + 1 === s.length || s[k + 1] === "," || s[k + 1] === ")" || s[k + 1] === " ")) return k;
+  }
+  return s.length - 1;
+}
+
+/** Splits the arguments after `from` at top-level commas. `end` is the index after the closing `)`, or -1 when the call is cut off. */
+function splitArgs(s: string, from: number): { args: string[]; end: number } {
+  const args: string[] = [];
+  let depth = 0, cur = "";
+  for (let i = from; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === "\"") {
+      let j = i + 1;
+      while (j < s.length && s[j] !== "\"") j += s[j] === "\\" ? 2 : 1;
+      cur += s.slice(i, j + 1);
+      i = j;
+      continue;
+    }
+    if (c === "<" && /^(?:AT_FDCWD|-?\d+)$/.test(cur.trim())) {
+      const close = annotationEnd(s, i);
+      cur += s.slice(i, close + 1);
+      i = close;
+      continue;
+    }
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) {
+        if (c === ")") { if (cur.trim() || args.length) args.push(cur.trim()); return { args, end: i + 1 }; }
+      } else depth--;
+    } else if (c === "," && depth === 0) { args.push(cur.trim()); cur = ""; continue; }
+    cur += c;
+  }
+  if (cur.trim()) args.push(cur.trim());
+  return { args, end: -1 };
+}
+
+function parseReturn(tail: string): Return | null {
+  const m = /^\s*=\s*(-?\d+|\?|0x[0-9a-f]+)(?:<(.*)>)?\s*(E[A-Z0-9]+)?/.exec(tail);
+  if (!m) return null;
+  // `= ? ERESTARTSYS (...)`: the call is interrupted and will be restarted, so it stays in progress and fails closed.
+  if (m[3]?.startsWith("ERESTART") || m[1] === "?") return { kind: "progress" };
+  // With --decode-pids=pidns a PID-namespace return is `= 2 /* 3372303 in strace's PID NS */`: the decoded pid is the one the log uses.
+  const decoded = /\/\*\s*(\d+) in strace's PID NS\s*\*\//.exec(tail)?.[1];
+  const value = decoded !== undefined ? Number(decoded) : Number(m[1]);
+  if (value < 0) return { kind: "failed" };
+  return m[2] === undefined ? { kind: "ok", value } : { kind: "ok", value, annotation: decodeEscapes(m[2]) };
+}
+
+/** A call cut off before its return value (an unfinished line that never resumed, a truncated log) is in progress. */
+function parseCall(text: string): Call | null {
+  const m = /^([a-z_0-9]+)\(/.exec(text);
+  if (!m) return null;
+  const { args, end } = splitArgs(text, m[0].length);
+  const ret = end < 0 ? null : parseReturn(text.slice(end));
+  return { name: m[1]!, args, ret: ret ?? { kind: "progress" } };
+}
+
+/** Decodes the escapes strace uses in quoted strings and in `-y` annotations: \n, \", \\, \xHH and octal. */
+function decodeEscapes(body: string): string {
+  const simple: Record<string, number> = { n: 10, t: 9, r: 13, a: 7, b: 8, f: 12, v: 11 };
+  const bytes: number[] = [];
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] !== "\\") { bytes.push(...Buffer.from(body[i]!)); continue; }
+    const next = body[++i];
+    if (next === undefined) { bytes.push(92); break; }
+    if (next in simple) bytes.push(simple[next]!);
+    else if (next === "x") { bytes.push(parseInt(body.slice(i + 1, i + 3), 16)); i += 2; }
+    else if (/[0-7]/.test(next)) {
+      const octal = /^[0-7]{1,3}/.exec(body.slice(i))![0];
+      bytes.push(parseInt(octal, 8));
+      i += octal.length - 1;
+    } else bytes.push(...Buffer.from(next));
+  }
+  return Buffer.from(bytes).toString("utf8");
+}
+
+/**
+ * A `-y` annotation is escaped like a string argument and carries ` (deleted)` for unlinked files. A real directory can also be
+ * named "x (deleted)", so every verdict is made on the annotation as printed and on the stripped form, and the stricter one wins.
+ */
+function pathVariants(annotation: string): string[] {
+  const stripped = annotation.replace(/ \(deleted\)$/, "");
+  return stripped === annotation ? [annotation] : [annotation, stripped];
+}
+
+/** `undefined` when the token is not a string literal, `null` for NULL. */
+function unquote(token: string | undefined): string | null | undefined {
+  if (token === undefined) return undefined;
+  if (token === "NULL") return null;
+  const m = /^"((?:[^"\\]|\\[\s\S])*)"(?:\.\.\.)?$/.exec(token);
+  return m ? decodeEscapes(m[1]!) : undefined;
+}
+
+interface Fd { cwd: boolean; annotation?: string }
+function parseFd(token: string | undefined): Fd | null {
+  const m = token === undefined ? null : /^(AT_FDCWD|-?\d+)(?:<([^]*)>)?$/.exec(token);
+  if (!m) return null;
+  const annotation = m[2] === undefined ? undefined : decodeEscapes(m[2]);
+  return { cwd: m[1] === "AT_FDCWD" || m[1] === "-100", ...(annotation === undefined ? {} : { annotation }) };
+}
+
+/** Every reading of a target that must be judged (cwd candidates, ` (deleted)` variants); `unresolved` when some reading is unknown. */
+type Resolved = { paths: string[]; unresolved: boolean } | { ignore: true };
+const UNRESOLVED: Resolved = { paths: [], unresolved: true };
+const resolveAll = (bases: string[], rest?: string): string[] =>
+  [...new Set(bases.map((b) => (rest === undefined ? posix.resolve(b) : posix.resolve(b, rest))))];
+type Destination = { family: "inet" | "inet6"; address: string; port: number };
+const UNKNOWN_DESTINATION: Destination = { family: "inet", address: "unknown", port: 0 };
+
+/** `null` for sockets that are not inet (AF_UNIX, AF_NETLINK, ...) and for NULL (a connected socket). A sockaddr that cannot be read is an unknown inet destination. */
+function parseSockaddr(token: string | undefined): Destination | null {
+  if (token === "NULL") return null;
+  if (token === undefined || /^0x[0-9a-f]+$/.test(token)) return UNKNOWN_DESTINATION;
+  const family = /sa_family=(AF_\w+)/.exec(token)?.[1];
+  if (family !== "AF_INET" && family !== "AF_INET6") return family === undefined ? UNKNOWN_DESTINATION : null;
+  const v6 = family === "AF_INET6";
+  const port = new RegExp(`${v6 ? "sin6_port" : "sin_port"}=htons\\((\\d+)\\)`).exec(token)?.[1];
+  const address = (v6 ? /inet_pton\(AF_INET6, "([^"]+)"/ : /inet_addr\("([^"]+)"\)/).exec(token)?.[1];
+  return { family: v6 ? "inet6" : "inet", address: address ?? "unknown", port: port === undefined ? 0 : Number(port) };
+}
+
+/** The `msg_name` sockaddrs of a `sendmsg` header or a `sendmmsg` vector; NULL entries are connected-socket sends and drop out. */
+function messageDestinations(token: string | undefined): (Destination | null)[] {
+  const names = [...(token ?? "").matchAll(/msg_name=(NULL|\{[^}]*\}|0x[0-9a-f]+)/g)].map((m) => m[1]!);
+  if (names.length === 0) return token === "[]" ? [] : [UNKNOWN_DESTINATION];
+  return names.map(parseSockaddr);
+}
+
+/**
+ * Name-service sockets any process may use. Every other filesystem socket outside the scope and the sandbox's private /tmp and /var/tmp (R87),
+ * and every abstract socket that no live process of the trace bound earlier (R88), can reach outside the traced tree (`systemd-run --user`, D-Bus).
+ */
+const SOCKET_ALLOWLIST = ["/run/systemd/resolve/", "/run/systemd/userdb/", "/run/nscd/", "/var/run/nscd/"];
+
+const mappedV4 = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/;
+const normalizeAddress = (address: string): string => {
+  const lower = address.toLowerCase();
+  return mappedV4.exec(lower)?.[1] ?? lower;
+};
+
+const FLAGS_WRITE = /\bO_(?:WRONLY|RDWR|CREAT|TRUNC|TMPFILE)\b/;
+/** The escapes strace prints in a string: \n \t \r \v \a \b \f \\ \" \xHH and octal. Anything else is not a name it printed. */
+const WELL_FORMED_NAME = /^(?:[^\\]|\\(?:[ntrvabf\\"]|x[0-9a-fA-F]{2}|[0-7]{1,3}))*$/;
+const EXIT_LINE = /^\+\+\+ (?:exited|killed|superseded)\b/;
+
+/**
+ * Possible cwds of one process, or of a CLONE_FS thread group (a shared cell). `null` means unknown. The set only ever
+ * over-approximates: lines of different pids arrive out of order under `-f`, so instead of trusting an order the parser keeps
+ * every cwd a pid may have had and judges a relative write against all of them.
+ */
+interface Cell {
+  cwds: Set<string | null>;
+  /** Set once a CLONE_FS merge happened: chdirs then add candidates instead of replacing them. */
+  shared: boolean;
+  /** Line of the last change, used only to decide which records of a reused pid count for a clone return. */
+  touched: number;
+  forward?: Cell;
+}
+const root = (cell: Cell): Cell => (cell.forward ? root(cell.forward) : cell);
+
+/**
+ * The number of `io_uring_setup` calls in a strace log that did not fail, which is what `parseStraceLog` counts as unresolved egress
+ * for this call (R36): with the injected `ENOSYS` the number must be 0 on a host the evaluation can run on. A call cut off before its
+ * return value counts. Same line and return parsing as the audit; the audit itself is unchanged.
+ */
+export function countIoUringSetups(text: string): number {
+  let count = 0;
+  const pending = new Map<number, string>();
+  for (const line of text.split("\n")) {
+    const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
+    if (!m) continue;
+    const pid = Number(m[1] ?? m[2]), body = m[3]!;
+    const resumed = /^<\.\.\. io_uring_setup resumed>([^]*)$/.exec(body);
+    if (resumed) {
+      // The return value follows the closing of the argument list, which is split across the two halves: join them as the audit does.
+      const head = pending.get(pid);
+      if (head === undefined) continue;
+      pending.delete(pid);
+      if (parseCall(head + resumed[1]!.replace(/^\s*<unfinished \.\.\.>/, ""))?.ret.kind !== "failed") count++;
+    } else if (/^io_uring_setup\(/.test(body)) {
+      const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
+      if (unfinished) pending.set(pid, unfinished[1]!);
+      else if (parseCall(body)?.ret.kind !== "failed") count++;
+    }
+  }
+  return count + pending.size;
+}
+
+/**
+ * Window-born taint (R24) is only known when a clone return line arrives, which can be after the tainted pid (or a pid it cloned
+ * earlier) already wrote. The first pass therefore collects the taint closure and the second pass judges every line with it.
+ */
+export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
+  return analyze(text, ctx, analyze(text, ctx, new Set()).tainted).findings;
+}
+
+function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
+  const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
+  const socketRoots = (ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r));
+  /**
+   * Abstract AF_UNIX names, as strace printed them (the raw escaped text, so bind and connect compare exactly the same bytes), that a process of
+   * the trace bound successfully so far and that one of those processes (still alive) holds (R88). A name whose escapes strace could not have
+   * printed is never trusted, bound or not. A thread that exits drops the name although its process may live on: that errs towards a stop.
+   * An execve keeps the name (the socket survives it unless it is close-on-exec). The sandbox shares the host's network namespace, so an
+   * abstract name is only internal when this very trace created it: a connect that precedes the bind, a failed bind (`EADDRINUSE` means a host
+   * process holds the name) and every other abstract name stay unresolved egress.
+   */
+  const boundNames = new Map<string, Set<number>>();
+  const bound = (ctx.boundPaths ?? []).map((r) => posix.resolve("/", r));
+  /** Inside bubblewrap /tmp and /var/tmp are fresh tmpfs mounts (R51): a socket there can only reach a process of the same sandbox (R87). */
+  const privateTmp = ctx.sandboxed === true ? ["/tmp/", "/var/tmp/"] : [];
+  const provider = new Set([...ctx.providerAddresses].map(normalizeAddress));
+  const dns = new Set([...ctx.dnsAddresses].map(normalizeAddress));
+  const live = new Map<number, Cell>();
+  /** Every cell ever made for a pid, live or exited, so a clone return can find what a fast child did before it. */
+  const records = new Map<number, { cell: Cell; created: number }[]>();
+  const pending = new Map<number, { head: string; seq: number; line: string }>();
+  /** A speculative group attachment may actually belong to a pending non-CLONE_FS parent. Local to the pid. */
+  const uncertain = new Set<number>();
+  /**
+   * Window-born pids (R24): a pid that emitted any traced line before its parent's clone return line, and every pid they clone.
+   * Such a pid may have been attached to the wrong parent, so its cwd-relative writes always count as unresolved. Never cleared.
+   */
+  const tainted = new Set<number>(seed);
+  const children = new Map<number, number[]>();
+  const taint = (pid: number): void => {
+    if (tainted.has(pid)) return;
+    tainted.add(pid);
+    for (const child of children.get(pid) ?? []) taint(child);
+  };
+  /** Pids whose clone return line has been seen (or the root); a pid that emits lines before that is unclaimed. */
+  const claimed = new Set<number>([ctx.rootPid]);
+  const unclaimed = new Map<number, { exited: boolean }>();
+  /** Pids whose writes, mounts and sockets are not judged: bubblewrap's setup processes (see `TraceContext.sandboxed`). */
+  const muted = new Set<number>(ctx.sandboxed === true ? [ctx.rootPid] : []);
+  const outside = new Set<string>();
+  const unexpected = new Map<string, Destination>();
+  let unresolvedWrites = 0, deniedWriteAttempts = 0, connects = 0, unresolvedEgress = 0;
+  const evidence: string[] = [];
+  /** The raw line(s) of the call being judged: the line itself, or the head line and the resumed line of a joined call. */
+  let currentLines: string[] = [];
+  const noteEvidence = (): void => { if (evidence.length < MAX_EVIDENCE_LINES) evidence.push(currentLines.join("\n")); };
+
+  function newCell(pid: number, cwds: Iterable<string | null>, seq: number): Cell {
+    const cell: Cell = { cwds: new Set(cwds), shared: false, touched: seq };
+    live.set(pid, cell);
+    records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
+    return cell;
+  }
+  newCell(ctx.rootPid, [posix.resolve("/", ctx.initialCwd)], -1);
+
+  // Magic links such as /proc/self/root and /proc/self/fd/N are deliberately not exempt.
+  // Inside bubblewrap /tmp, /var/tmp, /dev/shm and /run are fresh tmpfs mounts private to the sandbox (M2, R51); a write there is not a host write.
+  const privateRoots = ctx.sandboxed === true ? ["/tmp", "/var/tmp", "/dev/shm", "/run"] : [];
+  const underBound = (p: string): boolean => bound.some((r) => p === r || p.startsWith(`${r}/`));
+  // A host path bound into the sandbox below one of those directories (the build root under /tmp, the name-resolution directories under /run) is a host write.
+  const allowed = (p: string): boolean =>
+    (privateRoots.some((r) => p === r || p.startsWith(`${r}/`)) && !underBound(p)) || p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
+    || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
+  const cellOf = (pid: number): Cell | undefined => { const c = live.get(pid); return c && root(c); };
+
+  /** Before clone return reveals the child pid, an untracked pid may already share any pending parent's fs_struct. */
+  function attachPendingGroup(pid: number, seq: number): Cell | undefined {
+    const existing = cellOf(pid);
+    if (existing) return existing;
+    let group: Cell | undefined;
+    let nonSharedParent = false;
+    for (const [parentPid, head] of pending) {
+      const call = parseCall(head.head);
+      if (!call || !CLONES.has(call.name)) continue;
+      const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
+      if (flags === undefined || !/\bCLONE_FS\b/.test(flags)) nonSharedParent = true;
+      if (call.name === "fork" || call.name === "vfork" || (flags !== undefined && !/\bCLONE_FS\b/.test(flags))) continue;
+      const parent = cellOf(parentPid) ?? newCell(parentPid, [null], seq);
+      if (!group) group = parent;
+      else if (parent !== group) {
+        parent.cwds.forEach((cwd) => group!.cwds.add(cwd));
+        parent.forward = group;
+      }
+      group.shared = true;
+      if (flags === undefined) group.cwds.add(null);
+    }
+    if (group) {
+      if (nonSharedParent) uncertain.add(pid);
+      group.touched = seq;
+      live.set(pid, group);
+      records.set(pid, [...(records.get(pid) ?? []), { cell: group, created: seq }]);
+    }
+    return group;
+  }
+
+  /** Only a completed chdir replaces a lone cell; heads affect shared cells, and flushes only add candidates. */
+  function changeCwd(pid: number, map: (cwd: string | null) => string | null, seq: number, mode: "complete" | "head" | "flush" = "complete"): void {
+    const cell = cellOf(pid);
+    if (!cell) {
+      const group = attachPendingGroup(pid, seq);
+      // The first relative chdir still has an unknown base; retain that uncertainty in the union.
+      if (group) group.cwds.add(map(null));
+      else if (mode !== "head") newCell(pid, mode === "flush" ? [null, map(null)] : [map(null)], seq);
+      return;
+    }
+    if (mode === "head" && !cell.shared) return;
+    const next = [...cell.cwds].map(map);
+    if (cell.shared || mode === "flush") next.forEach((c) => cell.cwds.add(c));
+    else cell.cwds = new Set(next);
+    cell.touched = seq;
+  }
+
+  function resolveTarget(pid: number, args: string[], t: Target): Resolved {
+    if ("fd" in t) {
+      const fd = parseFd(args[t.fd]);
+      if (fd?.annotation === undefined) return UNRESOLVED;
+      return fd.annotation.startsWith("/") ? { paths: resolveAll(pathVariants(fd.annotation)), unresolved: false } : { ignore: true }; // socket:[n], pipe:[n], ...
+    }
+    const path = unquote(args[t.path]);
+    if (path === null && t.nullIsDir) return resolveTarget(pid, args, { fd: t.dir! });
+    if (path === undefined || path === null) return UNRESOLVED;
+    if (path.startsWith("/")) return { paths: resolveAll([path]), unresolved: false };
+    const fromCwd = (): Resolved => {
+      const cwds = cellOf(pid)?.cwds;
+      const known = [...(cwds ?? [])].filter((c): c is string => c !== null);
+      return { paths: resolveAll(known, path), unresolved: uncertain.has(pid) || tainted.has(pid) || !cwds || cwds.size === 0 || cwds.has(null) };
+    };
+    if (t.dir === undefined) return fromCwd();
+    const dir = parseFd(args[t.dir]);
+    if (dir?.annotation?.startsWith("/")) return { paths: resolveAll(pathVariants(dir.annotation), path), unresolved: false };
+    return dir?.cwd ? fromCwd() : UNRESOLVED;
+  }
+
+  function write(pid: number, call: Call, spec: Spec): void {
+    if (spec.flags) {
+      const token = call.args[spec.flags.arg];
+      const flags = spec.flags.how ? /\bflags=([^,}]+)/.exec(token ?? "")?.[1] : token;
+      if (flags !== undefined && !FLAGS_WRITE.test(flags)) return;
+    }
+    const failed = call.ret.kind === "failed";
+    let unresolved = false, denied = false, outsideHit = false;
+    const judge = (r: Resolved): void => {
+      if ("ignore" in r) return;
+      if (r.unresolved) unresolved = true;
+      for (const path of r.paths) {
+        if (allowed(path)) continue;
+        if (failed) denied = true;
+        else { outside.add(path); outsideHit = true; }
+      }
+    };
+    const resolved = spec.targets.map((target) => resolveTarget(pid, call.args, target));
+    const kernel = spec.kernelPath && call.ret.kind === "ok" ? call.ret.annotation : undefined;
+    if (kernel?.startsWith("/")) {
+      // The annotation is what the kernel opened (symlinks followed); it can only make the verdict stricter than the lexical path.
+      resolved.forEach((r) => { if (!("ignore" in r)) judge({ paths: r.paths, unresolved: false }); });
+      judge({ paths: resolveAll(pathVariants(kernel)), unresolved: false });
+    } else resolved.forEach(judge);
+    if (spec.symlinkTarget !== undefined) {
+      const target = unquote(call.args[spec.symlinkTarget]);
+      const link = resolved[0];
+      if (typeof target !== "string") judge(UNRESOLVED);
+      else if (target.startsWith("/")) judge({ paths: resolveAll([target]), unresolved: false });
+      else if (link && !("ignore" in link)) judge({ paths: resolveAll(link.paths.map((l) => posix.dirname(l)), target), unresolved: link.unresolved });
+      else judge(UNRESOLVED);
+    }
+    if (failed) { if (denied) deniedWriteAttempts++; } else if (unresolved) unresolvedWrites++;
+    if (!failed && (unresolved || outsideHit)) noteEvidence();
+  }
+
+  function judgeDestination(dest: Destination | null): void {
+    if (!dest) return;
+    const address = normalizeAddress(dest.address);
+    if (provider.has(address) || (dest.port === 53 && dns.has(address))) return;
+    unexpected.set(`${dest.family}|${dest.address}|${dest.port}`, dest);
+  }
+
+  /**
+   * The child starts with the parent's candidates plus every cell the child pid had since the clone head (it may have run, changed
+   * directory and exited before this return line). Records older than the head belong to an earlier process with the same pid; when
+   * a record might be newer it is included, because over-approximating only risks a false positive.
+   */
+  function clone(pid: number, call: Call, seq: number, headSeq: number): void {
+    const flags = /\bflags=([^,}]+)/.exec(call.args.join(","))?.[1];
+    const mutedParent = muted.has(pid);
+    if (!mutedParent && call.ret.kind === "ok" && flags !== undefined && /\bCLONE_NEW[A-Z]+\b/.test(flags)) { unresolvedWrites++; noteEvidence(); }
+    if (call.ret.kind !== "ok" || call.ret.value <= 0) return;
+    const child = call.ret.value;
+    if (mutedParent && flags !== undefined && /\bCLONE_NEWPID\b/.test(flags)) muted.add(child);
+    uncertain.delete(child);
+    const born = unclaimed.get(child);
+    children.set(pid, [...(children.get(pid) ?? []), child]);
+    if (born !== undefined || tainted.has(pid)) taint(child);
+    unclaimed.delete(child);
+    if (born === undefined || !born.exited) claimed.add(child);
+    const parent = cellOf(pid);
+    const own = [...new Set((records.get(child) ?? [])
+      .filter((r) => r.created > headSeq || root(r.cell).touched > headSeq)
+      .map((r) => root(r.cell)))].filter((c) => c !== parent);
+    const unreadable = flags === undefined && (call.name === "clone" || call.name === "clone3");
+    if (unreadable || (flags !== undefined && /\bCLONE_FS\b/.test(flags))) {
+      const group = parent ?? newCell(pid, [null], seq);
+      group.shared = true;
+      if (unreadable) group.cwds.add(null);
+      for (const cell of own) { cell.cwds.forEach((c) => group.cwds.add(c)); cell.forward = group; }
+      group.touched = seq;
+      live.set(child, group);
+      records.set(child, [...(records.get(child) ?? []), { cell: group, created: seq }]);
+      return;
+    }
+    const base: (string | null)[] = parent ? [...parent.cwds] : [null];
+    // Ownership is now known: snapshot candidates without keeping or forwarding any speculative group pointer.
+    newCell(child, [...base, ...own.flatMap((cell) => [...cell.cwds])], seq);
+  }
+
+  function chdir(pid: number, call: Call, seq: number, mode: "complete" | "head" | "flush" = call.ret.kind === "progress" ? "flush" : "complete"): void {
+    if (call.ret.kind !== "ok" && call.ret.kind !== "progress") return;
+    if (call.name === "fchdir") {
+      const annotation = parseFd(call.args[0])?.annotation;
+      const target = annotation?.startsWith("/") ? posix.resolve(annotation) : null;
+      changeCwd(pid, () => target, seq, mode);
+      return;
+    }
+    const path = unquote(call.args[0]);
+    if (typeof path !== "string") changeCwd(pid, () => null, seq, mode);
+    else if (path.startsWith("/")) changeCwd(pid, () => posix.resolve(path), seq, mode);
+    else changeCwd(pid, (cwd) => (cwd === null ? null : posix.resolve(cwd, path)), seq, mode);
+  }
+
+  function handle(pid: number, body: string, seq: number, headSeq: number): void {
+    const call = parseCall(body);
+    if (!call) return;
+    if (muted.has(pid) && !CLONES.has(call.name) && call.name !== "chdir" && call.name !== "fchdir") return;
+    const spec = SPECS[call.name];
+    if (spec) { attachPendingGroup(pid, seq); return write(pid, call, spec); }
+    // Even absolute paths cannot be audited after a successful root/namespace change.
+    if (ROOT_CHANGES.has(call.name)) { if (call.ret.kind !== "failed") { unresolvedWrites++; noteEvidence(); } return; }
+    if (call.name === "bind") {
+      const abstract = /sa_family=AF_UNIX\b[^}]*sun_path=@"((?:[^"\\]|\\[\s\S])*)"/.exec(call.args[1] ?? "");
+      if (abstract && call.ret.kind === "ok" && call.ret.value === 0 && WELL_FORMED_NAME.test(abstract[1]!)) {
+        boundNames.set(abstract[1]!, (boundNames.get(abstract[1]!) ?? new Set<number>()).add(pid));
+      }
+      return;
+    }
+    if (call.name === "connect") { if (unixConnectEscapes(call.args[1], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[1], true); }
+    if (call.name === "sendto") { if (unixConnectEscapes(call.args[4], call.ret)) { unresolvedEgress++; noteEvidence(); } return sendTarget(call.args[4]); }
+    if (call.name === "sendmsg" || call.name === "sendmmsg") {
+      // Every msg_name of family AF_UNIX is judged like a connect (datagram sockets need no connect); a failed send is ignored.
+      if (call.ret.kind !== "failed") {
+        const before = unresolvedEgress;
+        for (const name of (call.args[1] ?? "").matchAll(/msg_name=(\{[^}]*\})/g)) if (/sa_family=AF_UNIX\b/.test(name[1]!) && unixPathEscapes(name[1]!)) unresolvedEgress++;
+        if (unresolvedEgress > before) noteEvidence();
+      }
+      return messageDestinations(call.args[1]).forEach(judgeDestination);
+    }
+    // A failed setup (`= -1 E...`) creates no ring and cannot be used for I/O (R23b); a successful or in-progress one counts.
+    if (call.name === "io_uring_setup") { if (call.ret.kind !== "failed") { unresolvedEgress++; noteEvidence(); } return; }
+    if (CLONES.has(call.name)) return clone(pid, call, seq, headSeq);
+    if (call.name === "chdir" || call.name === "fchdir") chdir(pid, call, seq);
+  }
+
+  /**
+   * An AF_UNIX connect that did not fail and does not stay inside the allowed roots (R43): a pathname outside the scope root, the
+   * name-service allowlist and (in a sandboxed trace) the private /tmp and /var/tmp, a pathname below a bound host path, a relative
+   * pathname, or an abstract-namespace socket (`@name`) that no live process of the trace bound earlier (R88).
+   */
+  function unixConnectEscapes(token: string | undefined, ret: Return): boolean {
+    if (ret.kind === "failed" || token === undefined || !/sa_family=AF_UNIX\b/.test(token)) return false;
+    return unixPathEscapes(token);
+  }
+
+  /**
+   * The AF_UNIX destination judged by name: an abstract name no process of the trace has bound before (R88), relative, below a host path bound
+   * into the sandbox, or outside the allowed roots.
+   * Order: the name-service allowlist is always allowed (the plan binds /run/systemd/resolve back read-only for it); else a path below a
+   * bound host path is an escape; else, in a sandboxed trace, a path below /tmp or /var/tmp is the sandbox's own tmpfs (R87), and so is one
+   * below an allowed socket root (the scope root, R43).
+   */
+  function unixPathEscapes(token: string): boolean {
+    const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
+    if (!m) return true; // no readable path: cannot be judged
+    if (m[1] === "@") return !WELL_FORMED_NAME.test(m[2]!) || (boundNames.get(m[2]!)?.size ?? 0) === 0;
+    const path = decodeEscapes(m[2]!);
+    if (!path.startsWith("/")) return true;
+    const resolved = posix.resolve(path);
+    const below = (root: string): boolean => resolved === root || resolved.startsWith(root.endsWith("/") ? root : `${root}/`);
+    if (SOCKET_ALLOWLIST.some(below)) return false;
+    if (bound.some(below)) return true;
+    return !(privateTmp.some((root) => resolved.startsWith(root)) || socketRoots.some(below));
+  }
+
+  function sendTarget(token: string | undefined, isConnect = false): void {
+    const d = parseSockaddr(token);
+    if (isConnect && d) connects++;
+    judgeDestination(d);
+  }
+
+  /** A head whose resume never came (killed process, reused pid, end of log) is still an in-progress call. */
+  function flush(pid: number): void {
+    const head = pending.get(pid);
+    if (!head) return;
+    pending.delete(pid);
+    const saved = currentLines;
+    currentLines = [head.line];
+    handle(pid, head.head, head.seq, head.seq);
+    currentLines = saved;
+  }
+
+  for (const [seq, line] of text.split("\n").entries()) {
+    currentLines = [line];
+    const m = /^(?:\[pid\s+(\d+)\]|(\d+))\s+(.*)$/.exec(line);
+    if (!m) continue;
+    const pid = Number(m[1] ?? m[2]), body = m[3]!;
+    if (!claimed.has(pid)) unclaimed.set(pid, unclaimed.get(pid) ?? { exited: false });
+    const superseded = /^\+\+\+ superseded by execve in pid (\d+) \+\+\+$/.exec(body);
+    if (superseded) {
+      flush(pid);
+      const oldTid = Number(superseded[1]);
+      const cell = cellOf(oldTid);
+      if (cell) {
+        live.set(pid, cell);
+        records.set(pid, [...(records.get(pid) ?? []), { cell, created: seq }]);
+      } else live.delete(pid);
+      if (oldTid !== pid) live.delete(oldTid);
+      // The exec'ing thread becomes the process `pid`: a name it bound is held by `pid` from now on, and dies with `pid` (R88).
+      if (oldTid !== pid) for (const binders of boundNames.values()) if (binders.delete(oldTid)) binders.add(pid);
+      if (tainted.has(oldTid)) taint(pid);
+      if (uncertain.has(oldTid)) uncertain.add(pid);
+      else uncertain.delete(pid);
+      if (oldTid !== pid) uncertain.delete(oldTid);
+      continue;
+    }
+    if (EXIT_LINE.test(body)) {
+      flush(pid);
+      claimed.delete(pid);
+      const lone = unclaimed.get(pid);
+      if (lone) lone.exited = true;
+      // A name is internal only while a process that bound it is alive (R88); the socket of an exec'ed process stays, so a superseding execve keeps it.
+      for (const binders of boundNames.values()) binders.delete(pid);
+      live.delete(pid); // the records stay: a clone return after this line still has to find the cell
+      uncertain.delete(pid);
+      continue;
+    }
+    if (body.startsWith("--- ") || body.startsWith("+++ ")) continue;
+    const resumed = /^<\.\.\. (\w+) resumed>([^]*)$/.exec(body);
+    if (resumed) {
+      const head = pending.get(pid);
+      if (head === undefined) {
+        // The arguments are lost, so the call cannot be judged: fail closed.
+        const name = resumed[1]!;
+        if (muted.has(pid) && !CLONES.has(name) && name !== "chdir" && name !== "fchdir") continue;
+        if (SPECS[name]) { attachPendingGroup(pid, seq); unresolvedWrites++; noteEvidence(); }
+        else if (ROOT_CHANGES.has(name)) {
+          if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") { unresolvedWrites++; noteEvidence(); }
+        }
+        else if (name === "io_uring_setup") { if (parseReturn(resumed[2]!.replace(/^\s*\)/, ""))?.kind !== "failed") { unresolvedEgress++; noteEvidence(); } }
+        else if (SEND_CALLS.has(name)) { unresolvedEgress++; noteEvidence(); }
+        else if (name === "chdir" || name === "fchdir") changeCwd(pid, () => null, seq);
+        continue;
+      }
+      pending.delete(pid);
+      currentLines = [head.line, line];
+      handle(pid, head.head + resumed[2]!.replace(/^\s*<unfinished \.\.\.>/, ""), seq, head.seq);
+      continue;
+    }
+    flush(pid);
+    const unfinished = /^([^]*?)\s*<unfinished \.\.\.>\s*$/.exec(body);
+    if (unfinished) {
+      const head = unfinished[1]!;
+      const call = parseCall(head);
+      if (call && SPECS[call.name]) attachPendingGroup(pid, seq);
+      else if (call && (call.name === "chdir" || call.name === "fchdir")) chdir(pid, call, seq, "head");
+      pending.set(pid, { head, seq, line });
+      continue;
+    }
+    handle(pid, body, seq, seq);
+  }
+  for (const pid of [...pending.keys()]) flush(pid);
+
+  return {
+    findings: {
+      outsideWrites: [...outside],
+      unresolvedWrites,
+      deniedWriteAttempts,
+      unexpectedConnects: [...unexpected.values()],
+      connects,
+      unresolvedEgress,
+      evidenceLines: evidence,
+    },
+    tainted,
+  };
+}

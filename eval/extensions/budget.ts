@@ -1,0 +1,32 @@
+import type { ProfileId } from "./schemas.js";
+
+export const BUDGET_USD = 10;
+export const INITIAL_RUN_ESTIMATE_USD = 1;
+
+/** Tracks catalog cost per run. A null cost (unmeasured usage) is not an observation and keeps the estimate. */
+export class BudgetLedger {
+  private spent = 0;
+  private maxObserved = 0;
+  private readonly observed = new Set<ProfileId>();
+  constructor(private readonly limitUsd: number) {}
+  record(profile: ProfileId, costUsd: number | null): void {
+    if (costUsd === null) return;
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error("invalid_cost");
+    this.spent += costUsd;
+    this.maxObserved = Math.max(this.maxObserved, costUsd);
+    this.observed.add(profile);
+  }
+  /**
+   * Spend that is not an observation of a run's cost (the preflight's PONG prompts, R54): it counts toward the total but neither raises
+   * the per-profile estimate nor marks the profile as observed, so it cannot lower the floor charged for a run without trusted output.
+   */
+  recordSpendOnly(costUsd: number): void {
+    if (!Number.isFinite(costUsd) || costUsd < 0) throw new Error("invalid_cost");
+    this.spent += costUsd;
+  }
+  estimate(profile: ProfileId): number {
+    return this.observed.has(profile) ? this.maxObserved : Math.max(INITIAL_RUN_ESTIMATE_USD, this.maxObserved);
+  }
+  allows(profile: ProfileId): boolean { return this.spent + this.estimate(profile) <= this.limitUsd; }
+  get spentUsd(): number { return this.spent; }
+}

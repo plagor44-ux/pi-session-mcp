@@ -1,0 +1,54 @@
+{
+  "runId": "015-r-go-app-gates-review-grok-pi-lens",
+  "taskId": "r-go-app-gates",
+  "profile": "review-grok",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-review-grok"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 152496,
+      "output": 41739,
+      "cacheRead": 4210304,
+      "cacheWrite": 0,
+      "total": 4404539,
+      "costUsd": 2.660577999999999
+    },
+    "assistant": {
+      "messages": 64,
+      "input": 152496,
+      "output": 41739,
+      "cacheRead": 4210304,
+      "cacheWrite": 0,
+      "costUsd": 2.660577999999999
+    },
+    "providerError": null
+  },
+  "durationMs": 662214,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 15
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "a190c014589d8f3499155dc1ff208595b7f15f90db40eae554621d9b5b81c667",
+  "outcome": "scored",
+  "accepted": true,
+  "review": {
+    "accepted": true,
+    "criticalHit": 1,
+    "criticalTotal": 1,
+    "verdictMatched": true,
+    "recall": 0.6,
+    "falseFindings": []
+  },
+  "stopReason": null
+}

@@ -1,0 +1,20 @@
+{
+  "runId": "018-r-pyng-authz-review-grok-pi-lens",
+  "taskId": "r-pyng-authz",
+  "profile": "review-grok",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-review-grok"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}

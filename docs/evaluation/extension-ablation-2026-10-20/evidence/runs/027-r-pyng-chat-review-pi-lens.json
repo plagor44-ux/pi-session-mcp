@@ -1,0 +1,20 @@
+{
+  "runId": "027-r-pyng-chat-review-pi-lens",
+  "taskId": "r-pyng-chat",
+  "profile": "review",
+  "arm": "pi-lens",
+  "pairings": [
+    "pl-review"
+  ],
+  "authType": "oauth",
+  "outcome": "not_run",
+  "terminal": null,
+  "accepted": null,
+  "usage": null,
+  "durationMs": null,
+  "trace": null,
+  "stopReason": null,
+  "harnessError": null,
+  "assistantTextTruncated": null,
+  "assistantTextSha256": null
+}

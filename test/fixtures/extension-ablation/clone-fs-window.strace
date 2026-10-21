@@ -1,0 +1,11 @@
+3674192 clone3({flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, child_tid=0x7f071b3ffce8, parent_tid=0x7f071b3ff990, exit_signal=0, stack=0x7f071abff000, stack_size=0x7fff80, tls=0x7f071b3ff6c0} => {parent_tid=[3674193]}, 88) = 3674193
+3674192 clone(child_stack=0x565105518090, flags=CLONE_VM|CLONE_FS|CLONE_VFORK|SIGCHLD <unfinished ...>
+3674194 chdir("/s/q1/out") = 0
+3674193 mkdir("x", 0777)                = 0
+3674194 chdir("/s/q1/clone") = 0
+3674192 <... clone resumed>)            = 3674194
+3674194 +++ exited with 0 +++
+3674193 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=3674194, si_uid=1000, si_status=0, si_utime=0, si_stime=0} ---
+3674192 mkdir("y", 0777)                = 0
+3674193 +++ exited with 0 +++
+3674192 +++ exited with 0 +++
