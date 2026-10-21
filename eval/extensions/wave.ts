@@ -387,8 +387,9 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
     else if (!ledger.ledger.allows(run.profile)) before = "budget";
     else if (typeof provider === "string") {
       // R86: an OAuth credential is refreshed on the host and the auth read again before the expiry check and the copy into the scope.
-      hostAuth = await refreshedHostAuth(input.hostCredentials, hostAuth, provider);
-      if (expiresWithin(hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
+      const refreshed = await refreshedHostAuth(input.hostCredentials, hostAuth, provider, { signal: input.signal });
+      hostAuth = refreshed.hostAuth;
+      if (refreshed.unreadable || expiresWithin(hostAuth, [provider], CREDENTIAL_MARGIN_MINUTES, now())) before = "credential_expiring";
     }
     if (before !== null) {
       stopReason = before;
