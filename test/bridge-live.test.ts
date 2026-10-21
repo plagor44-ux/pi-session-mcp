@@ -111,9 +111,9 @@ describe("end detection", () => {
     expect(decideEnd("C", counters({ open_sessions: 2, closes: 1 }))).toEqual({ end: false });
   });
   it("does not end before any session was opened and closed", () => {
-    expect(decideEnd("A", counters({ open_sessions: 0, closes: 0 }))).toEqual({ end: false });
+    expect(decideEnd("A", counters({ open_sessions: 0, closes: 0 }))).toEqual({ end: true, reason: "no_open_session" });
   });
-  it("never ends on unreadable counters", () => { expect(decideEnd("A", null)).toEqual({ end: false }); });
+  it("ends when the server never wrote counters, e.g. after an API error on the first request", () => { expect(decideEnd("A", null)).toEqual({ end: true, reason: "no_open_session" }); });
   it("reads counters defensively", () => {
     expect(parseCounters("not json")).toBeNull();
     expect(parseCounters("{}")).toBeNull();
