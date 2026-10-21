@@ -197,7 +197,9 @@ export function bwrapArgs(scopeRoot: string, plan: SandboxPlan = EMPTY_PLAN, ext
 
 /**
  * The host paths a sandbox binds in besides the scope: the plan's read-only binds and links and the task's dependency binds. The trace audit
- * does not count a socket below one of them as internal to the sandbox's private /tmp (R87).
+ * does not count a socket or a write below one of them as internal to the sandbox's private tmpfs mounts (R87). The scope root and the oracle
+ * home are not listed: they are writable binds of the run's own directories and allowed socket roots (R43). The name-service allowlist of the
+ * audit still wins over this list (the plan's `runReadOnly` holds /run/systemd/resolve).
  */
 export function boundTargets(plan: SandboxPlan, binds: readonly SandboxBind[] = []): string[] {
   return [...plan.rootReadOnly, ...plan.etcReadOnly, ...plan.runReadOnly, ...plan.homeReadOnly, ...plan.extraReadOnly, ...plan.homeLinks.map((link) => link.path), ...binds.map((bind) => bind.target)];

@@ -322,7 +322,7 @@ export function parseStraceLog(text: string, ctx: TraceContext): TraceFindings {
 
 function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { findings: TraceFindings; tainted: Set<number> } {
   const roots = ctx.allowedWriteRoots.map((r) => posix.resolve("/", r));
-  const socketRoots = [...SOCKET_ALLOWLIST, ...(ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r))];
+  const socketRoots = (ctx.allowedSocketRoots ?? []).map((r) => posix.resolve("/", r));
   const bound = (ctx.boundPaths ?? []).map((r) => posix.resolve("/", r));
   /** Inside bubblewrap /tmp and /var/tmp are fresh tmpfs mounts (R51): a socket there can only reach a process of the same sandbox (R87). */
   const privateTmp = ctx.sandboxed === true ? ["/tmp/", "/var/tmp/"] : [];
@@ -369,8 +369,10 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   // Magic links such as /proc/self/root and /proc/self/fd/N are deliberately not exempt.
   // Inside bubblewrap /tmp, /var/tmp, /dev/shm and /run are fresh tmpfs mounts private to the sandbox (M2, R51); a write there is not a host write.
   const privateRoots = ctx.sandboxed === true ? ["/tmp", "/var/tmp", "/dev/shm", "/run"] : [];
+  const underBound = (p: string): boolean => bound.some((r) => p === r || p.startsWith(`${r}/`));
+  // A host path bound into the sandbox below one of those directories (the build root under /tmp, the name-resolution directories under /run) is a host write.
   const allowed = (p: string): boolean =>
-    privateRoots.some((r) => p === r || p.startsWith(`${r}/`)) || p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
+    (privateRoots.some((r) => p === r || p.startsWith(`${r}/`)) && !underBound(p)) || p === "/dev/null" || p === "/dev/tty" || /^\/dev\/pts\/\d+$/.test(p)
     || roots.some((r) => r === "/" || p === r || p.startsWith(`${r}/`));
   const cellOf = (pid: number): Cell | undefined => { const c = live.get(pid); return c && root(c); };
 
@@ -572,8 +574,10 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
   }
 
   /**
-   * The AF_UNIX destination judged by name: abstract, relative, below a host path bound into the sandbox, or outside the allowed roots. In a
-   * sandboxed trace a path that resolves below /tmp or /var/tmp (and not below a bound host path) is the sandbox's own tmpfs (R87).
+   * The AF_UNIX destination judged by name: abstract, relative, below a host path bound into the sandbox, or outside the allowed roots.
+   * Order: the name-service allowlist is always allowed (the plan binds /run/systemd/resolve back read-only for it); else a path below a
+   * bound host path is an escape; else, in a sandboxed trace, a path below /tmp or /var/tmp is the sandbox's own tmpfs (R87), and so is one
+   * below an allowed socket root (the scope root, R43).
    */
   function unixPathEscapes(token: string): boolean {
     const m = /sun_path=(@)?"((?:[^"\\]|\\[\s\S])*)"/.exec(token);
@@ -583,6 +587,7 @@ function analyze(text: string, ctx: TraceContext, seed: ReadonlySet<number>): { 
     if (!path.startsWith("/")) return true;
     const resolved = posix.resolve(path);
     const below = (root: string): boolean => resolved === root || resolved.startsWith(root.endsWith("/") ? root : `${root}/`);
+    if (SOCKET_ALLOWLIST.some(below)) return false;
     if (bound.some(below)) return true;
     return !(privateTmp.some((root) => resolved.startsWith(root)) || socketRoots.some(below));
   }

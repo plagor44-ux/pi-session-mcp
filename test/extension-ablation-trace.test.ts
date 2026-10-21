@@ -1260,6 +1260,33 @@ describe("Unix socket connects (R43)", () => {
       expect(egress(unix('"/scope/clone/x.sock"'), dependency)).toBe(0);
     });
 
+    it("keeps the name-service sockets allowed although the plan binds their directory in (the realistic plan of this host)", () => {
+      const realistic = { sandboxed: true, boundPaths: ["/run/systemd/resolve", "/opt", "/etc/resolv.conf", "/tmp/build-x"] };
+      const resolve = `100 connect(5<socket:[1]>, {sa_family=AF_UNIX, sun_path="/run/systemd/resolve/io.systemd.Resolve"}, 42) = 0`;
+      expect(egress(resolve, realistic)).toBe(0);
+      expect(egress(resolve.replace("connect(5<socket:[1]>, ", "sendto(5<socket:[1]>, \"x\", 1, 0, ").replace("}, 42)", "}, 42)"), realistic)).toBe(0);
+      for (const path of ["/run/systemd/userdb/io.systemd.Multiplexer", "/run/nscd/socket", "/var/run/nscd/socket", "/run/systemd/resolve/io.systemd.Resolve"]) {
+        expect(egress(unix(`"${path}"`), realistic), path).toBe(0);
+      }
+      // Other sockets below the same bound directory are not name-service sockets, and a bound path elsewhere still counts.
+      expect(egress(unix('"/run/systemd/private"'), realistic)).toBe(1);
+      expect(egress(unix('"/opt/x.sock"'), realistic)).toBe(1);
+    });
+
+    it("counts a write below a host path bound in below /tmp, /var/tmp, /dev/shm or /run as an outside write, and a link to it", () => {
+      const write = (path: string) => `100 openat(AT_FDCWD</scope/clone>, "${path}", O_WRONLY|O_CREAT, 0644) = 3<${path}>`;
+      const plan = { ...ctx({ allowed: ["/scope"] }), sandboxed: true, boundPaths: ["/tmp/build-x", "/run/systemd/resolve", "/dev/shm/host"] };
+      const outside = (line: string) => parseStraceLog(lines(...prelude, line.replace(/^100 /, "102 ")), plan).outsideWrites;
+      expect(outside(write("/tmp/build-x/file"))).toEqual(["/tmp/build-x/file"]);
+      expect(outside(write("/run/systemd/resolve/stub-resolv.conf"))).toEqual(["/run/systemd/resolve/stub-resolv.conf"]);
+      expect(outside(write("/dev/shm/host/x"))).toEqual(["/dev/shm/host/x"]);
+      expect(outside(`100 symlink("/tmp/build-x/target", "/scope/clone/link") = 0`)).toEqual(["/tmp/build-x/target"]);
+      // The sandbox's own tmpfs stays private, and so does a sibling that only shares a prefix with a bound path.
+      expect(outside(write("/tmp/other/file"))).toEqual([]);
+      expect(outside(write("/tmp/build-xy/file"))).toEqual([]);
+      expect(outside(`100 symlink("/tmp/other/target", "/scope/clone/link") = 0`)).toEqual([]);
+    });
+
     it("keeps abstract, relative, other and resolved-outside paths as escapes", () => {
       expect(egress(unix('@"/tmp/codegraph-9ae10b5c0e7502a8.sock"'), sandboxed)).toBe(1);
       expect(egress(unix('"tmp/x.sock"'), sandboxed)).toBe(1);

@@ -196,7 +196,7 @@ export async function dryLoad(input: DryLoadInput, deps: DryLoadDeps = {}): Prom
       killProcessGroup(child.pid);
       interrupted = supervised.interrupted;
       const verified = await readVerifiedDryLoad(scope.root, run.runId, key);
-      findings = await auditLog(log, [scope.root], scope.root, addresses, boundTargets(plan, scope.dependencyBinds));
+      findings = await auditLog(log, [scope.root], scope.root, addresses, true, boundTargets(plan, scope.dependencyBinds));
       if (findings && (findings.outsideWrites.length > 0 || findings.unresolvedWrites > 0 || findings.unresolvedEgress > 0)) {
         // R84: the lines behind an unclean load are kept privately, as for a wave; the report stays as it is.
         try { await guard.assertIntact(); await writeDiagnostics(input.waveDir, run.runId, findings.evidenceLines); } catch (error) { reportDiagnosticsFailure(run.runId, error); }
