@@ -3,6 +3,7 @@ import {
   CONTAINER_EVENTS_DIR, EVENTS_DIR_ENV, TURN_EVENT_FILE_PATTERN, TURN_EVENT_MAX_BYTES, TURN_EVENT_VERSION,
   claimsRoot, eventsRoot, parseTurnEvent, serializeTurnEvent, turnEventFileName, writerEventsDir, type TurnEvent,
 } from "../src/turn-events.js";
+import { writerPaths } from "../src/writer-state.js";
 
 const terminal: TurnEvent = {
   v: 1, seq: 7, at: "2026-10-21T12:00:00.123Z", instance: "inst-0123456789abcdef", kind: "turn_terminal",
@@ -114,7 +115,11 @@ describe("spool paths", () => {
     const env = { XDG_RUNTIME_DIR: "/run/user/1000" };
     expect(eventsRoot(env)).toBe("/run/user/1000/pi-session-mcp/events");
     expect(claimsRoot(env)).toBe("/run/user/1000/pi-session-mcp/claims");
-    expect(writerEventsDir(env, "repo-w1")).toBe("/run/user/1000/pi-session-mcp/events/writer-repo-w1");
+  });
+
+  it("puts a writer's spool on disk in its state directory, independent of the runtime directory", () => {
+    expect(writerEventsDir("/home/example", "repo-w1")).toBe("/home/example/.local/state/pi-session-mcp/writers/repo-w1/events");
+    expect(writerEventsDir("/home/example", "repo-w1")).toBe(writerPaths("/home/example", "repo-w1").events);
   });
 
   it("normalizes a trailing slash", () => {
@@ -125,11 +130,10 @@ describe("spool paths", () => {
     const env = value === undefined ? {} : { XDG_RUNTIME_DIR: value };
     expect(eventsRoot(env)).toBeUndefined();
     expect(claimsRoot(env)).toBeUndefined();
-    expect(writerEventsDir(env, "repo-w1")).toBeUndefined();
   });
 
   it.each(["", "..", "../x", "repo", "Repo-w1", "repo-w1/..", "repo/w1-w1", "repo-w"])("rejects the writer name %j", (name) => {
-    expect(writerEventsDir({ XDG_RUNTIME_DIR: "/run/user/1000" }, name)).toBeUndefined();
+    expect(writerEventsDir("/home/example", name)).toBeUndefined();
   });
 
   it("exposes the explicit directory variable and the container mount", () => {

@@ -1,10 +1,10 @@
 import { constants } from "node:fs";
-import { chmod, lstat, mkdir, open, opendir, readdir, rmdir, unlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, opendir, readdir, rmdir, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "./client-adapters/command.js";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
 import { CONTAINER_EVENTS_DIR, EVENTS_DIR_ENV, writerEventsDir } from "./turn-events.js";
-import type { writerPaths, WriterState } from "./writer-state.js";
+import { writerPaths, type WriterState } from "./writer-state.js";
 
 export const NODE_IMAGE_REF = "docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d";
 export const IMAGE_PULL_TIMEOUT_MS = 900_000;
@@ -60,47 +60,57 @@ export class EventsDirectoryError extends Error {
 /** Upper bound of entries a launch deletes from the writer's own spool directory; more means the directory is refused. */
 export const EVENTS_CLEANUP_MAX_ENTRIES = 10_000;
 const EVENTS_CLEANUP_MAX_DEPTH = 8;
-
-const NO_FOLLOW_DIRECTORY = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
-
-/**
- * Requires a real directory owned by `uid` and resets its mode to 0700. The mode is changed first because a
- * directory the worker stripped to 0000 cannot be opened; the handle opened afterwards must be the same inode.
- */
-async function resetPrivateDirectory(path: string, uid: number): Promise<void> {
-  const before = await lstat(path);
-  if (!before.isDirectory() || before.uid !== uid) throw new EventsDirectoryError();
-  if ((before.mode & 0o777) !== 0o700) await chmod(path, 0o700);
-  const handle = await open(path, NO_FOLLOW_DIRECTORY);
-  try {
-    const stat = await handle.stat();
-    if (!stat.isDirectory() || stat.uid !== uid || stat.ino !== before.ino || stat.dev !== before.dev || (stat.mode & 0o777) !== 0o700) throw new EventsDirectoryError();
-  } finally { await handle.close(); }
-}
-
-/** Removes everything below `directory` without following links; the budget is shared across the whole walk. */
-async function clearDirectory(directory: string, uid: number, budget: { left: number }, depth: number): Promise<void> {
-  if (depth > EVENTS_CLEANUP_MAX_DEPTH) throw new EventsDirectoryError();
-  for (const name of await listNames(directory, budget)) await removeEntry(join(directory, name), uid, budget, depth + 1);
-}
-
 /** Event files and temporary files of a server instance younger than this are never removed at launch. */
 export const EVENTS_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 const INSTANCE_DIRECTORY = /^inst-[0-9a-f]{16}$/;
 
-async function removeEntry(path: string, uid: number, budget: { left: number }, depth: number): Promise<void> {
-  const stat = await lstat(path);
-  if (stat.isDirectory()) {
-    if (stat.uid !== uid) throw new EventsDirectoryError();
-    await resetPrivateDirectory(path, uid);
-    await clearDirectory(path, uid, budget, depth);
-    await rmdir(path);
-  } else await unlink(path);
+const NO_FOLLOW_DIRECTORY = constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW;
+// Linux O_PATH (0o10000000). Node's `constants` does not declare it; writers are Linux-only.
+const O_PATH = 0o10000000;
+const PROC_FD = "/proc/self/fd";
+
+/**
+ * Test seam for the race windows of the cleanup: called with the logical path of an entry after it was listed
+ * and inspected and before it is opened or removed (`"inspected"`), and before an emptied directory is removed
+ * (`"emptied"`). A test uses it to swap the entry for a symlink, which the cleanup must not follow.
+ */
+export type EventsCleanupSeam = (stage: "inspected" | "emptied", logicalPath: string) => Promise<void> | void;
+
+interface Walk { uid: number; budget: { left: number }; cutoff: number; seam: EventsCleanupSeam | undefined }
+
+/**
+ * The cleanup runs in a directory that a worker of the same user can change concurrently, for example while
+ * another container of the same writer is still running. Every directory is therefore held as an open file
+ * descriptor and all children are reached through `/proc/self/fd/<fd>/<name>`, which resolves relative to the
+ * already opened directory and never through a path a worker could swap for a link.
+ */
+const fdPath = (handle: FileHandle): string => `${PROC_FD}/${handle.fd}`;
+
+/**
+ * Opens a real directory (never through a link), requires `uid` as owner and resets its mode to 0700. The inode
+ * is first pinned with an `O_PATH` descriptor, so even a directory the worker stripped to 0000 can be changed
+ * without following a link; `chmod` on the descriptor's magic link applies to that inode. The directory is then
+ * reopened for reading and must be the same inode.
+ */
+async function openPrivateDirectory(path: string, uid: number): Promise<FileHandle> {
+  const pin = await open(path, O_PATH | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  let pinned;
+  try {
+    pinned = await pin.stat();
+    if (!pinned.isDirectory() || pinned.uid !== uid) throw new EventsDirectoryError();
+    if ((pinned.mode & 0o777) !== 0o700) await chmod(fdPath(pin), 0o700);
+  } finally { await pin.close(); }
+  const handle = await open(path, NO_FOLLOW_DIRECTORY);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isDirectory() || stat.uid !== uid || stat.ino !== pinned.ino || stat.dev !== pinned.dev || (stat.mode & 0o777) !== 0o700) throw new EventsDirectoryError();
+  } catch (error) { await handle.close().catch(() => {}); throw error; }
+  return handle;
 }
 
-async function listNames(directory: string, budget: { left: number }): Promise<string[]> {
+async function listNames(directory: FileHandle, budget: { left: number }): Promise<string[]> {
   const names: string[] = [];
-  const handle = await opendir(directory);
+  const handle = await opendir(fdPath(directory));
   try {
     for await (const entry of handle) {
       if (--budget.left < 0) throw new EventsDirectoryError();
@@ -110,22 +120,46 @@ async function listNames(directory: string, budget: { left: number }): Promise<s
   return names;
 }
 
+/** Removes everything below `directory`; links are unlinked, never followed. */
+async function clearDirectory(directory: FileHandle, logical: string, walk: Walk, depth: number): Promise<void> {
+  if (depth > EVENTS_CLEANUP_MAX_DEPTH) throw new EventsDirectoryError();
+  for (const name of await listNames(directory, walk.budget)) await removeEntry(directory, logical, name, walk, depth + 1);
+}
+
+async function removeEntry(parent: FileHandle, logicalParent: string, name: string, walk: Walk, depth: number): Promise<void> {
+  const path = `${fdPath(parent)}/${name}`, logical = join(logicalParent, name);
+  const stat = await lstat(path);
+  await walk.seam?.("inspected", logical);
+  if (stat.isDirectory()) {
+    if (stat.uid !== walk.uid) throw new EventsDirectoryError();
+    const directory = await openPrivateDirectory(path, walk.uid);
+    try {
+      await clearDirectory(directory, logical, walk, depth);
+      await walk.seam?.("emptied", logical);
+    } finally { await directory.close(); }
+    await rmdir(path);
+  } else await unlink(path);
+}
+
 /**
  * A server instance directory may belong to a live server of the same writer, so it is never removed while
- * it could be in use: only event and temporary files older than the stale age go, and the directory goes
- * only when it is then empty and itself has not changed within that age.
+ * it could be in use: only entries older than the stale age go, and the directory goes only when it is then
+ * empty and itself has not changed within that age.
  */
-async function sweepInstance(path: string, uid: number, before: { mtimeMs: number }, cutoff: number, budget: { left: number }): Promise<void> {
-  await resetPrivateDirectory(path, uid);
+async function sweepInstance(parent: FileHandle, logicalParent: string, name: string, before: { mtimeMs: number }, walk: Walk): Promise<void> {
+  const path = `${fdPath(parent)}/${name}`, logical = join(logicalParent, name);
+  const directory = await openPrivateDirectory(path, walk.uid);
   let kept = 0;
-  for (const name of await listNames(path, budget)) {
-    const entry = join(path, name), stat = await lstat(entry);
-    const old = stat.mtimeMs < cutoff;
-    // A live server only creates event and temporary files; anything else is junk that goes by age alone.
-    if (!old) { kept++; continue; }
-    await removeEntry(entry, uid, budget, 2);
-  }
-  if (kept === 0 && before.mtimeMs < cutoff) {
+  try {
+    for (const entry of await listNames(directory, walk.budget)) {
+      const stat = await lstat(`${fdPath(directory)}/${entry}`);
+      // A live server only creates event and temporary files; fresh entries of any kind are kept, old ones go by age alone.
+      if (stat.mtimeMs >= walk.cutoff) { kept++; continue; }
+      await removeEntry(directory, logical, entry, walk, 2);
+    }
+    if (kept === 0 && before.mtimeMs < walk.cutoff) await walk.seam?.("emptied", logical);
+  } finally { await directory.close(); }
+  if (kept === 0 && before.mtimeMs < walk.cutoff) {
     try { await rmdir(path); } catch (error) {
       if (!(error instanceof Error && "code" in error && (error.code === "ENOTEMPTY" || error.code === "ENOENT"))) throw error;
     }
@@ -133,48 +167,41 @@ async function sweepInstance(path: string, uid: number, before: { mtimeMs: numbe
 }
 
 /** Launch-time cleanup of the writer's own spool directory; see `ensureWriterEventsDirectory`. */
-async function sweepWriterDirectory(directory: string, uid: number, now: number): Promise<void> {
-  const budget = { left: EVENTS_CLEANUP_MAX_ENTRIES }, cutoff = now - EVENTS_STALE_AFTER_MS;
-  for (const name of await listNames(directory, budget)) {
-    const path = join(directory, name), stat = await lstat(path);
-    if (stat.isDirectory() && stat.uid === uid && INSTANCE_DIRECTORY.test(name)) await sweepInstance(path, uid, stat, cutoff, budget);
-    else await removeEntry(path, uid, budget, 1);
+async function sweepWriterDirectory(directory: FileHandle, logical: string, walk: Walk): Promise<void> {
+  for (const name of await listNames(directory, walk.budget)) {
+    const stat = await lstat(`${fdPath(directory)}/${name}`);
+    if (stat.isDirectory() && stat.uid === walk.uid && INSTANCE_DIRECTORY.test(name)) {
+      await walk.seam?.("inspected", join(logical, name));
+      await sweepInstance(directory, logical, name, stat, walk);
+    } else await removeEntry(directory, logical, name, walk, 1);
   }
 }
 
 /**
- * Creates (when missing) and verifies the dedicated spool directory of one writer under the operator's
- * runtime directory, which is a tmpfs cleared at logout and therefore recreated at every launch.
- * The parents must be real directories owned by `uid` without group or other access; links are refused.
- * The writer's own directory is writable by the worker (same user inside the boundary), so a mode the
- * worker changed is reset to 0700 instead of refused. Before it is mounted, everything that is not an
- * `inst-<16 hex>` directory is removed, and inside instance directories only event and temporary files older
- * than 24 hours (an instance directory only when then empty and itself that old), so a launch never breaks a
- * live server of the same writer. The work is bounded and links are unlinked, never followed.
+ * Creates (when missing) and verifies the dedicated spool directory of one writer, `events` inside the
+ * writer's state directory. That state directory is created by setup, must be a real directory of `uid`
+ * without group or other access, and is never created or changed here. The spool directory is writable by
+ * the worker (same user inside the boundary), so a mode the worker changed is reset to 0700 instead of
+ * refused. Before it is mounted, everything that is not an `inst-<16 hex>` directory is removed, and inside
+ * instance directories only entries older than 24 hours (an instance directory only when then empty and
+ * itself that old), so a launch never breaks a live server of the same writer. The work is bounded, runs
+ * through open directory descriptors (a swapped link is never followed), and needs `/proc/self/fd`.
  */
-export async function ensureWriterEventsDirectory(env: NodeJS.ProcessEnv, name: string, uid: number, now: number = Date.now()): Promise<string> {
-  const target = writerEventsDir(env, name);
+export async function ensureWriterEventsDirectory(
+  home: string, name: string, uid: number, now: number = Date.now(), seam?: EventsCleanupSeam,
+): Promise<string> {
+  const target = writerEventsDir(home, name);
   if (target === undefined) throw new EventsDirectoryError();
-  const verify = async (path: string): Promise<void> => {
-    const stat = await lstat(path);
-    if (!stat.isDirectory() || stat.uid !== uid || (stat.mode & 0o077) !== 0) throw new EventsDirectoryError();
-  };
   try {
-    const chain = [target, dirname(target), dirname(dirname(target)), dirname(dirname(dirname(target)))].reverse();
-    // chain[0] is the runtime directory itself: it must already exist and is never created or changed here.
-    await verify(chain[0]!);
-    for (const path of chain.slice(1, -1)) {
-      try { await mkdir(path, { mode: 0o700 }); } catch (error) {
-        if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
-      }
-      await verify(path);
-    }
+    if (!(await lstat(PROC_FD)).isDirectory()) throw new EventsDirectoryError();
+    const root = await lstat(dirname(target));
+    if (!root.isDirectory() || root.uid !== uid || (root.mode & 0o077) !== 0) throw new EventsDirectoryError();
     try { await mkdir(target, { mode: 0o700 }); } catch (error) {
       if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
     }
-    if (!(await lstat(target)).isDirectory()) throw new EventsDirectoryError();
-    await resetPrivateDirectory(target, uid);
-    await sweepWriterDirectory(target, uid, now);
+    const directory = await openPrivateDirectory(target, uid);
+    try { await sweepWriterDirectory(directory, target, { uid, budget: { left: EVENTS_CLEANUP_MAX_ENTRIES }, cutoff: now - EVENTS_STALE_AFTER_MS, seam }); }
+    finally { await directory.close(); }
   } catch { throw new EventsDirectoryError(); }
   return target;
 }

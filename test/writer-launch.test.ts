@@ -132,19 +132,15 @@ const uid = process.getuid!();
 async function enableDelivery(config: unknown = { events: { delivery: "spool" } }) {
   const paths = writerPaths(home, "x-w1");
   await mkdir(paths.config, { recursive: true });
+  await chmod(paths.root, 0o700); // setup creates the writer state directory private
   await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(config));
 }
-async function runtimeDirectory(mode = 0o700): Promise<string> {
-  const runtime = join(home, "runtime");
-  await mkdir(runtime, { mode });
-  await chmod(runtime, mode);
-  return runtime;
-}
 const eventsFailure = JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n";
-it("mounts a freshly created private spool directory when the writer configuration enables delivery", async () => {
+const eventsDir = () => writerPaths(home, "x-w1").events;
+it("mounts a freshly created private spool directory of the writer when its configuration enables delivery", async () => {
   await enableDelivery(); await save(true);
-  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
-  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
+  const dir = eventsDir();
+  expect(dir).toBe(join(writerPaths(home, "x-w1").root, "events"));
   expect(await launch(["x-w1"], deps)).toBe(7);
   expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", dir));
   const args = vi.mocked(deps.spawnPodman).mock.calls[0]![0];
@@ -152,18 +148,26 @@ it("mounts a freshly created private spool directory when the writer configurati
   expect((await lstat(dir)).mode & 0o777).toBe(0o700);
   expect(serveRefusal).not.toHaveBeenCalled();
 });
+it("needs no runtime directory for writer delivery", async () => {
+  await enableDelivery(); await save(true);
+  for (const env of [{}, { XDG_RUNTIME_DIR: "relative" }, { XDG_RUNTIME_DIR: join(home, "absent") }]) {
+    deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...env };
+    expect(await launch(["x-w1"], deps)).toBe(7);
+  }
+  expect(deps.spawnPodman).toHaveBeenCalledTimes(3);
+  expect(serveRefusal).not.toHaveBeenCalled();
+  await expect(lstat(join(home, "absent"))).rejects.toMatchObject({ code: "ENOENT" });
+});
 it("refuses a writer accepted without delivery once its configuration enables delivery", async () => {
   await save(true);
   await enableDelivery();
-  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
   expect(await launch(["x-w1"], deps)).toBe(0);
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
-  await expect(lstat(join(runtime, "pi-session-mcp"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
   await enableDelivery(); await save();
-  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
-  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1");
+  const dir = eventsDir();
   await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
   expect(deps.spawnPodman).toHaveBeenCalledTimes(2);
   for (const call of vi.mocked(deps.spawnPodman).mock.calls) expect(call[0]).toEqual(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-"], "/release", dir));
@@ -175,58 +179,46 @@ it.each([
   ["a non-object events field", { events: "spool" }],
 ])("adds no mount and creates no directory with %s", async (_label, config) => {
   await enableDelivery(config); await save(true);
-  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
   await launch(["x-w1"], deps);
   expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
-  await expect(lstat(join(runtime, "pi-session-mcp"))).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("adds no mount without a writer configuration file", async () => {
-  await save(true); const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
+  await save(true);
   await launch(["x-w1"], deps);
   expect(vi.mocked(deps.spawnPodman).mock.calls[0]![0].join(" ")).not.toContain("/pi/events");
 });
-it("does not need a runtime directory when delivery is not enabled", async () => {
-  await save(true); delete deps.env.XDG_RUNTIME_DIR;
-  expect(await launch(["x-w1"], deps)).toBe(7);
-  expect(serveRefusal).not.toHaveBeenCalled();
-});
 it.each([
-  ["a missing runtime directory", async () => ({}) as NodeJS.ProcessEnv],
-  ["a relative runtime directory", async () => ({ XDG_RUNTIME_DIR: "relative" })],
-  ["a runtime directory that does not exist", async () => ({ XDG_RUNTIME_DIR: join(home, "absent") })],
-  ["a group-accessible runtime directory", async () => ({ XDG_RUNTIME_DIR: await runtimeDirectory(0o770) })],
-  ["a symlinked spool root", async () => {
-    const runtime = await runtimeDirectory(), outside = join(home, "outside");
-    await mkdir(outside, { mode: 0o700 }); await symlink(outside, join(runtime, "pi-session-mcp"));
-    return { XDG_RUNTIME_DIR: runtime };
+  ["a group-accessible writer state directory", async () => { await chmod(writerPaths(home, "x-w1").root, 0o770); }],
+  ["a symlinked spool directory", async () => {
+    const outside = join(home, "outside");
+    await mkdir(outside, { mode: 0o700 }); await symlink(outside, eventsDir());
   }],
-])("fails the launch with a stable sanitized code for %s", async (_label, makeEnv) => {
-  await enableDelivery(); await save(true); deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...await makeEnv() };
+])("fails the launch with a stable sanitized code for %s", async (_label, damage) => {
+  await enableDelivery(); await save(true); await damage();
   const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   expect(await launch(["x-w1"], deps)).toBe(0);
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
   expect(stderr.mock.calls).toEqual([[eventsFailure]]);
   expect(eventsFailure).not.toContain(home);
 });
-it("fails the launch when the spool directory belongs to another user", async () => {
-  await enableDelivery(); await save(true);
-  deps.env = { ...deps.env, XDG_RUNTIME_DIR: await runtimeDirectory() }; deps.uid = () => uid + 1;
+it("fails the launch when the writer state directory belongs to another user", async () => {
+  await enableDelivery(); await save(true); deps.uid = () => uid + 1;
   const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   await launch(["x-w1"], deps);
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
   expect(stderr.mock.calls).toEqual([[eventsFailure]]);
 });
 it("does not refresh credentials when the spool directory fails", async () => {
-  await enableDelivery(); await save(true); deps.env = { XDG_RUNTIME_DIR: join(home, "absent") };
+  await enableDelivery(); await save(true); deps.env = {}; deps.uid = () => uid + 1;
   vi.spyOn(process.stderr, "write").mockReturnValue(true);
   await launch(["x-w1"], deps);
   expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
 });
 it("repairs a changed mode and removes junk but leaves a possibly live instance directory alone", async () => {
   await enableDelivery(); await save(true);
-  const runtime = await runtimeDirectory(); deps.env = { ...deps.env, XDG_RUNTIME_DIR: runtime };
-  const dir = join(runtime, "pi-session-mcp", "events", "writer-x-w1"), live = join(dir, "inst-0123456789abcdef");
-  for (const path of [join(runtime, "pi-session-mcp"), join(runtime, "pi-session-mcp", "events"), dir, live]) await mkdir(path, { mode: 0o700 });
+  const dir = eventsDir(), live = join(dir, "inst-0123456789abcdef");
+  await mkdir(live, { recursive: true, mode: 0o700 });
   await writeFile(join(live, "00000001-turn_terminal.json"), "{}");
   await writeFile(join(dir, "stray"), "x"); await mkdir(join(dir, "junk")); await chmod(dir, 0o777);
   let seen: string[] | undefined, mode: number | undefined;

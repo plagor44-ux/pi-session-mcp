@@ -147,9 +147,11 @@ it("propagates the event delivery field into the contained configuration and let
   expect(renderContainedConfig("repo", "/clone", rawConfig, ["code"])).not.toHaveProperty("events");
   const config = renderContainedConfig("repo", "/clone", { ...rawConfig, events: { delivery: "spool" } }, ["code"]);
   expect(config.events).toEqual({ delivery: "spool" });
-  for (const events of [{ delivery: "off" }, { delivery: "spool", extra: 1 }, "spool", null]) {
+  for (const events of [{ delivery: "on" }, { delivery: "spool", extra: 1 }, "spool", null]) {
     expect(() => renderContainedConfig("repo", "/clone", { ...rawConfig, events }, ["code"])).toThrow("container_profile_unsupported");
   }
+  // An explicit "off" is carried over and does not enable the boundary mount.
+  expect(renderContainedConfig("repo", "/clone", { ...rawConfig, events: { delivery: "off" } }, ["code"]).events).toEqual({ delivery: "off" });
   const f = await fixture();
   await provisionWriter(f.ctx, { index: 1, settings, rawConfig: { ...rawConfig, events: { delivery: "spool" } } });
   expect(JSON.parse(await readFile(join(f.paths.config, "pi-session-mcp.json"), "utf8"))).toMatchObject({ events: { delivery: "spool" } });
@@ -167,35 +169,22 @@ it("reports a delivery change on a provisioned writer as a settings change", asy
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents })).toEqual({ code: "writer_unchanged", status: "unchanged" });
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
 });
-it("removes only the writer's own spool directory with the writer", async () => {
-  const f = await fixture(), runtime = await temporaryRoot("pi-writer-runtime-");
-  const ctx = { ...f.ctx, env: { XDG_RUNTIME_DIR: runtime } };
-  await provisionWriter(ctx, { index: 1, settings, rawConfig });
-  const events = join(runtime, "pi-session-mcp", "events");
-  await mkdir(join(events, "writer-repo-w1"), { recursive: true });
-  await writeFile(join(events, "writer-repo-w1", "00000001-turn_terminal.json"), "{}");
-  await mkdir(join(events, "writer-repo-w2"), { recursive: true });
-  await mkdir(join(runtime, "pi-session-mcp", "claims"), { recursive: true });
-  expect(await removeWriter(ctx, "repo-w1", { discard: true })).toEqual({ code: "writer_removed", status: "ok" });
-  await expect(lstat(join(events, "writer-repo-w1"))).rejects.toMatchObject({ code: "ENOENT" });
+it("removes the writer's spool directory together with its state directory and nothing else", async () => {
+  const f = await fixture(), other = writerPaths(f.ctx.home, "repo-w2");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  await mkdir(join(f.paths.events, "inst-0123456789abcdef"), { recursive: true });
+  await writeFile(join(f.paths.events, "inst-0123456789abcdef", "00000001-turn_terminal.json"), "{}");
+  await mkdir(join(other.events), { recursive: true }); await writeFile(join(other.events, "keep"), "keep");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ code: "writer_removed", status: "ok" });
+  await expect(lstat(f.paths.events)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await lstat(join(events, "writer-repo-w2"))).isDirectory()).toBe(true);
-  expect((await lstat(join(runtime, "pi-session-mcp", "claims"))).isDirectory()).toBe(true);
-});
-it("removes a writer without failing when there is no spool directory or runtime directory", async () => {
-  for (const env of [{ XDG_RUNTIME_DIR: await temporaryRoot("pi-writer-runtime-") }, {}]) {
-    const f = await fixture();
-    await provisionWriter({ ...f.ctx, env }, { index: 1, settings, rawConfig });
-    expect(await removeWriter({ ...f.ctx, env }, "repo-w1", { discard: true })).toEqual({ code: "writer_removed", status: "ok" });
-  }
+  expect(await readFile(join(other.events, "keep"), "utf8")).toBe("keep");
 });
 it("never follows a symlinked spool directory when removing", async () => {
-  const f = await fixture(), runtime = await temporaryRoot("pi-writer-runtime-"), outside = await temporaryRoot("pi-writer-outside-");
-  const ctx = { ...f.ctx, env: { XDG_RUNTIME_DIR: runtime } };
-  await provisionWriter(ctx, { index: 1, settings, rawConfig });
+  const f = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   await writeFile(join(outside, "keep"), "keep");
-  await mkdir(join(runtime, "pi-session-mcp", "events"), { recursive: true });
-  await symlink(outside, join(runtime, "pi-session-mcp", "events", "writer-repo-w1"));
-  expect(await removeWriter(ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
+  await symlink(outside, f.paths.events);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
   expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
 });
