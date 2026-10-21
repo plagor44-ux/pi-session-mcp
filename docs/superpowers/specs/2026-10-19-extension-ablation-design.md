@@ -450,7 +450,46 @@ the text above, they win.
   Verdict patterns must run in linear time (R80): literal alternations,
   anchors and simple classes. A pattern with a backreference or with a repeated
   group that itself contains a quantifier (`(a+)+`) is refused at parse time
-  (`verdict_pattern_unsafe`; a conservative syntactic check). A review oracle
+  (`verdict_pattern_unsafe`; a conservative syntactic check that does not
+  detect overlapping alternations such as `(a|a)*`, nor adjacent overlapping
+  quantifiers such as `^\W*(x\s*)?\W*` or `[^\n]*\b[\w/-]+\.` tried from
+  every `^` position, so curation must time each pattern on adversarial 64 KiB
+  inputs). A review oracle
   also needs at least one finding marked `critical: true`
   (`review_oracle_no_critical`), since the verdict alone would otherwise accept
   any review that matches it.
+- **Review anchors use defect-claim vocabulary (R74; partly superseded by R78).**
+  Review anchors use words that claim a defect and do not occur in the prompt's
+  own checklist. Every review task must reject an approval that walks the
+  checklist and the empty and generic controls, must accept the original first
+  review as recorded, and its false findings must not hit a correct review that
+  writes "no finding" lines; a task that cannot meet this is dropped (an oracle
+  that needs judgment is dropped). Cost: possibly fewer review tasks. The part
+  about false findings is superseded by R78: they are report-only, and the
+  verdict gate rejects the approvals.
+- **`i-thoth-inv3` is dropped and `i-spng-pdf` replaces it (R75).** The recorded
+  first turn of `i-thoth-inv3` exceeded the 15-minute run timeout. The
+  replacement is the mail PDF renderer task in smartpaper-ng (base `203cfc07`,
+  worktree `spng-stab-b`), whose oracle deselects implementation-coupled tests
+  with `-k` and passes base-fail/solution-pass with a base-lock venv. Cost: a
+  replacement whose recorded first turn needed a test-only follow-up.
+- **`i-spng-pdf` allows `backend/tests/` (R76).** The prompt allows a new
+  renderer test file, so `allowedPaths` adds the directory prefix
+  `backend/tests/` (accepted by the schema since R77). Cost: edits to other test
+  files are allowed too; the oracle restores its own test file.
+- **`i-spng-pdf` oracle command (R79).** It pins `-c pyproject.toml` (a
+  `pytest.ini` under the allowed test prefix cannot override the configuration)
+  and runs with a short `TMPDIR=/tmp` (sandbox-private) so the AF_UNIX timeout
+  test is kept; only the two tests that assert the internal code
+  `process_status` stay deselected. Cost: the ECHILD check of the deselected
+  tests is lost.
+- **Verdict patterns are hardened and timed (R81).** After the final review
+  found that the first patterns missed real non-approving formats and that one
+  was super-linear, the reviewer's tested variants were adopted: wider authz
+  and chat patterns, direct phrases for psm, bounded `[^\w\n]{0,N}` instead of
+  `\W*`/`\s*`, and the `*+spoof` anchors of the thoth task dropped. The 101
+  controls, the reviewer's probes, a held-out set and an adversarial timing suite
+  (the reviewer's inputs plus generic classes) are re-run, with 50 ms per
+  pattern at 64 KiB as the bound; the timing claim in the README and setup notes
+  is corrected. The R80 check does not detect adjacent overlapping quantifiers,
+  which is why timing is part of curation. Cost: one more curation round.

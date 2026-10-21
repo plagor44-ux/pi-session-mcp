@@ -31,7 +31,9 @@ const BRACE_QUANTIFIER = /^\{(\d+)(?:(,)(\d*))?\}/;
 /**
  * A conservative syntactic check that a verdict pattern runs in linear time (R80): no backreference (`\1`..`\9`, `\k<`) and no repeated
  * group (`*`, `+`, `{n,}`, `{n,m}` with m > 1) that itself contains a quantifier, as in `(a+)+`, `(\w+\s?)*` or `(?:x*){2,}`. It does not see
- * overlapping alternatives such as `(a|a)*`; verdict patterns should be literal alternations, anchors and simple classes.
+ * overlapping alternations such as `(a|a)*`, nor adjacent overlapping quantifiers such as `^\W*(x\s*)?\W*` or `[^\n]*\b[\w/-]+\.` tried from
+ * every `^` position (multiline), which are super-linear without any nested quantifier. Verdict patterns should be literal alternations,
+ * anchors and simple classes with bounded widths (`[^\w\n]{0,N}`); curation must time each pattern on adversarial 64 KiB inputs.
  */
 export function verdictPatternIsLinear(pattern: string): boolean {
   const open: boolean[] = []; // per open group: it contains a quantifier
