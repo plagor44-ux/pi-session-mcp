@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": ".bridge-eval", "rootDir": ".", "declaration": false },
+  "include": ["src/**/*.ts", "test/fake-adapter.ts", "eval/profiles/**/*.ts", "eval/bridge/**/*.ts"]
+}
