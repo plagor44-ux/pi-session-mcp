@@ -35,6 +35,7 @@ import { runWave, type RunRecord, type WaveDeps, type WaveInput } from "../eval/
 import {
   assertCloneSymlinks, prepareEmptyScope, prepareRunScope, privateRunDir, renderPrompt, runConfig, scopeEnv, scopeRoot, type RunScope, type ScopeInput,
 } from "../eval/extensions/workspace.js";
+import { realHostWith } from "./real-host.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 const exec = promisify(execFile);
@@ -1704,7 +1705,7 @@ describe("exit status and host safety (N1, R40)", () => {
   });
 
   // A real-host test: it needs prlimit on the PATH and skips otherwise.
-  it.skipIf(!(process.env.PATH ?? "").split(":").some((dir) => dir.startsWith("/") && existsSync(join(dir, "prlimit"))))("sets a hard core limit of 0 with the flag the spawn uses", async () => {
+  it.skipIf(process.platform !== "linux" || !(process.env.PATH ?? "").split(":").some((dir) => dir.startsWith("/") && existsSync(join(dir, "prlimit"))))("sets a hard core limit of 0 with the flag the spawn uses", async () => {
     const { stdout } = await exec("prlimit", [CORE_LIMIT, "sh", "-c", "ulimit -Hc; ulimit -Sc"]);
     expect(stdout.trim().split("\n")).toEqual(["0", "0"]);
   }, 60_000);
@@ -2010,7 +2011,8 @@ describe("Unix socket stop and preflight charge", () => {
 describe("bubblewrap containment (R46)", () => {
   // The real-host test below needs bwrap, strace, prlimit and codegraph on the PATH and skips when any is missing.
   const onPath = (name: string): string => (process.env.PATH ?? "").split(":").filter((dir) => dir.startsWith("/")).map((dir) => join(dir, name)).find((path) => existsSync(path)) ?? "";
-  const hasBwrap = ["bwrap", "strace", "prlimit"].every((name) => onPath(name) !== "");
+  // Linux with a bubblewrap that can create a user namespace; the self-test's DNS lookup also needs the network, so it is a real-host test.
+  const hasBwrap = realHostWith("strace", "prlimit");
   const codegraphPath = onPath("codegraph");
   const hasCodegraph = codegraphPath !== "";
 

@@ -26,7 +26,10 @@ const FORBIDDEN_KEYS = new Set(["access", "refresh", "key"]);
 const PATH_LIKE = /(^|[\s"'=:(,])\/[A-Za-z0-9._-]/;
 const exec = promisify(execFile);
 
-/** The pre-registered rule: enable only when B loses nothing, wins at least one task A lost, and costs at most 1.25 times A. */
+/**
+ * The pre-registered rule for an implementation pairing: `do-not-enable` when B accepts fewer tasks than A; `enable` when B accepts at least as
+ * many as A, is strictly better on at least one task (accepted where A was not) and costs at most 1.25 times A; `inconclusive` otherwise.
+ */
 export function recommend(
   a: { accepted: number; costUsd: number }, b: { accepted: number; costUsd: number }, perTask: { a: boolean; b: boolean }[],
 ): Recommendation {
