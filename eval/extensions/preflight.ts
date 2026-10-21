@@ -105,8 +105,9 @@ export async function runPreflight(input: PreflightInput, deps: PreflightDeps = 
     if (input.signal?.aborted) { fail("interrupted"); continue; }
     if (!ledger.ledger.allows(route.profile)) { fail("budget"); continue; }
     // R86: an OAuth credential is refreshed on the host and the auth read again before the expiry check and the copy into the scope.
-    hostAuth = await refreshedHostAuth(input.hostCredentials, hostAuth, route.provider);
-    if (expiresWithin(hostAuth, [route.provider], CREDENTIAL_MARGIN_MINUTES, now())) { fail("credential_expiring"); continue; }
+    const refreshed = await refreshedHostAuth(input.hostCredentials, hostAuth, route.provider, { signal: input.signal });
+    hostAuth = refreshed.hostAuth;
+    if (refreshed.unreadable || expiresWithin(hostAuth, [route.provider], CREDENTIAL_MARGIN_MINUTES, now())) { fail("credential_expiring"); continue; }
     try { await (deps.checkRoute ?? routeAddresses)(route); } catch (error) { fail(fixedCode(error instanceof Error ? error.message : "") ?? "provider_host_unresolvable"); continue; }
     const name = `preflight-${route.profile}`;
     const privateRun = privateRunDir(waveDir, name);

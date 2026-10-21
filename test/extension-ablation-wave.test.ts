@@ -13,7 +13,7 @@ import type { ImplementationScore } from "../eval/extensions/oracles.js";
 import { runHelper } from "../eval/extensions/helpers.js";
 import { readVerifiedOutput } from "../eval/extensions/audit.js";
 import { WaveDirGuard, removeTree } from "../eval/extensions/evidence.js";
-import { fileHostCredentials, type HostCredentials } from "../eval/extensions/credentials.js";
+import { HostCredentialError, fileHostCredentials, type HostCredentials } from "../eval/extensions/credentials.js";
 import { ABSENT_PATHS, containmentSelfTest } from "../eval/extensions/containment.js";
 import { ETC_ENTRIES, EMPTY_PLAN, bwrapArgs, planSandbox, sandboxed, type PlanHost, type SandboxPlan } from "../eval/extensions/sandbox.js";
 import { dirtyBoundPaths, sourceIsDirty } from "../eval/extensions/bound.js";
@@ -1001,6 +1001,117 @@ describe("host credential refresh (R86)", () => {
       approval, waveDir: join(root, "wave-plain"), ledgerPath: join(root, "ledger.json"), productionConfig, hostAuth: expiring,
     }, { ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true });
     expect(plain.routes.find((r) => r.profile === "review")).toMatchObject({ ok: false, failure: "credential_expiring" });
+  });
+
+  /** A host whose reads fail as told: `failReads` is how many reads fail first, `Infinity` for all of them. */
+  function flakyHost(stored: unknown, fresh: unknown | undefined, failReads: number, refreshFails = false) {
+    let current = stored;
+    let failed = 0;
+    const signals: (AbortSignal | undefined)[] = [];
+    const host: HostCredentials = {
+      read: async () => { if (failed < failReads) { failed += 1; throw new SyntaxError(`unterminated ${SECRET_REFRESH}`); } return current; },
+      refresh: async (_provider, signal) => { signals.push(signal); if (refreshFails) throw new Error(SECRET_REFRESH); if (fresh !== undefined) current = fresh; },
+    };
+    return { host, signals };
+  }
+  const eventsOf = (stderr: string) => stderr.split("\n").filter((line) => line.startsWith("{")).map((line) => JSON.parse(line) as Record<string, unknown>);
+
+  it("tries the re-read once more after a successful refresh and uses what it then reads", async () => {
+    const { host } = flakyHost(oauth("old", 5 * 60_000), oauth("renewed", 3_600_000), 1);
+    const s = await waveSetup(1, { hostAuth: oauth("old", 5 * 60_000), hostCredentials: host });
+    const accesses: string[] = [];
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text()], copied(accesses)).deps));
+    expect(result.stopReason).toBeNull();
+    expect(accesses).toEqual(["renewed"]);
+    expect(eventsOf(stderr)).toEqual([]);
+  });
+
+  it("stops as for an expiring credential when the auth stays unreadable after a successful refresh, even with a valid old token", async () => {
+    const { host } = flakyHost(oauth("old", 3_600_000), oauth("renewed", 3_600_000), Infinity);
+    const s = await waveSetup(2, { hostAuth: oauth("old", 3_600_000), hostCredentials: host });
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text()]).deps));
+    expect(result.stopReason).toBe("credential_expiring");
+    expect(result.records.map((r) => r.outcome)).toEqual(["not_run", "not_run"]);
+    expect(eventsOf(stderr)).toEqual([{ event: "credential_refresh_failed", provider: "openai", code: "auth_unreadable" }]);
+    expect(stderr).not.toContain(SECRET_REFRESH);
+  });
+
+  it("keeps the previous auth when the refresh failed and the file cannot be read either", async () => {
+    const { host } = flakyHost(oauth("old", 3_600_000), undefined, Infinity, true);
+    const s = await waveSetup(1, { hostAuth: oauth("old", 3_600_000), hostCredentials: host });
+    const accesses: string[] = [];
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text()], copied(accesses)).deps));
+    expect(result.stopReason).toBeNull();
+    expect(accesses).toEqual(["old"]);
+    expect(eventsOf(stderr).map((event) => event.code)).toEqual(["refresh_failed", "auth_unreadable"]);
+    expect(stderr).not.toContain(SECRET_REFRESH);
+  });
+
+  it("reports a refresh that returned a token that expires too soon by its own code, and nothing of the message", async () => {
+    const host: HostCredentials = { read: async () => oauth("short", 3_600_000), refresh: async () => { throw new HostCredentialError("refresh_too_short"); } };
+    const s = await waveSetup(1, { hostAuth: oauth("short", 3_600_000), hostCredentials: host });
+    const { result, stderr } = await withStderr(() => runWave(s.input, s.deps([text()]).deps));
+    expect(result.stopReason).toBeNull();
+    expect(eventsOf(stderr)).toEqual([{ event: "credential_refresh_failed", provider: "openai", code: "refresh_too_short" }]);
+  });
+
+  it("hands the abort signal of the wave and of the preflight to the refresh", async () => {
+    const controller = new AbortController();
+    const waveHost = flakyHost(oauth("old", 3_600_000), undefined, 0);
+    const s = await waveSetup(1, { hostAuth: oauth("old", 3_600_000), hostCredentials: waveHost.host, signal: controller.signal });
+    await withStderr(() => runWave(s.input, s.deps([text()]).deps));
+    expect(waveHost.signals).toEqual([controller.signal]);
+    const root = await temporaryRoot("ablation-preflight-signal-");
+    const tasks = [await reviewTask(root, "P1")];
+    const approval = approvalFor(tasks, buildMatrix(tasks, PAIRINGS.filter((p) => p.id === "pl-review")));
+    await seedLedger(join(root, "ledger.json"));
+    const preflightHost = flakyHost(oauth("old", 3_600_000), undefined, 0);
+    const { spawnRun } = fake([{ cost: 0.01, text: "PONG" }], root);
+    await withStderr(() => runPreflight({
+      approval, waveDir: join(root, "wave"), ledgerPath: join(root, "ledger.json"), productionConfig, hostAuth: oauth("old", 3_600_000), hostCredentials: preflightHost.host, signal: controller.signal,
+    }, { ...seams(), spawnRun: (scope, input) => spawnRun(scope, input, join(scope.root, "ignored.log")), residualCheck: async () => true }));
+    expect(preflightHost.signals).toEqual([controller.signal]);
+  });
+
+  describe("the file credentials", () => {
+    const authFile = async (expires: number) => {
+      const root = await temporaryRoot("ablation-file-credentials-");
+      const path = join(root, "auth.json");
+      await writeFile(path, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r", expires } }));
+      return path;
+    };
+
+    it("does not keep a runtime whose creation was rejected, forwards the signal and the minimum validity", async () => {
+      const path = await authFile(Date.now() + 3_600_000);
+      let created = 0;
+      const seen: unknown[] = [];
+      const host = fileHostCredentials(path, async () => {
+        created += 1;
+        if (created === 1) throw new Error("sdk import failed");
+        return { getAuth: async (_provider, overrides) => { seen.push(overrides); return undefined; } };
+      });
+      const controller = new AbortController();
+      await expect(host.refresh("openai", controller.signal)).rejects.toMatchObject({ code: "refresh_failed" });
+      await host.refresh("openai", controller.signal);
+      await host.refresh("openai");
+      expect(created).toBe(2);
+      expect(seen).toEqual([{ minOAuthValidityMs: 30 * 60_000, signal: controller.signal }, { minOAuthValidityMs: 30 * 60_000 }]);
+    });
+
+    it("tells a refresh that returned a token which still expires too soon from other OAuth failures, by the stored expiry having moved", async () => {
+      const path = await authFile(Date.now() + 60_000);
+      const tooShort = fileHostCredentials(path, async () => ({
+        getAuth: async () => {
+          await writeFile(path, JSON.stringify({ openai: { type: "oauth", access: "b", refresh: "r2", expires: Date.now() + 120_000 } }));
+          throw Object.assign(new Error("OAuth refresh returned a token that expires too soon"), { code: "oauth" });
+        },
+      }));
+      await expect(tooShort.refresh("openai")).rejects.toMatchObject({ code: "refresh_too_short", message: "refresh_too_short" });
+      const unchanged = fileHostCredentials(path, async () => ({ getAuth: async () => { throw Object.assign(new Error("endpoint down"), { code: "oauth" }); } }));
+      await expect(unchanged.refresh("openai")).rejects.toMatchObject({ code: "refresh_failed", message: "refresh_failed" });
+      const other = fileHostCredentials(path, async () => ({ getAuth: async () => { throw Object.assign(new Error("lock"), { code: "auth" }); } }));
+      await expect(other.refresh("openai")).rejects.toMatchObject({ code: "refresh_failed" });
+    });
   });
 
   it("refreshes a throwaway auth file through the Pi SDK without changing a valid credential, and reads it back", async () => {
