@@ -39,6 +39,8 @@ export interface ParsedArgs {
   excludeWaves: string[];
   maxRuns?: number;
   resume: boolean;
+  /** `--report` only (R89): record the bound paths that changed since each wave's commit instead of refusing. */
+  allowSourceDrift: boolean;
 }
 
 export function parseArgs(args: string[]): ParsedArgs {
@@ -51,11 +53,13 @@ export function parseArgs(args: string[]): ParsedArgs {
   const excludeWaves: string[] = [];
   let trim = false;
   let resume = false;
+  let allowSourceDrift = false;
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!;
     if (modeNames.includes(arg)) continue;
     if (arg === "--trim") { trim = true; continue; }
     if (arg === "--resume") { resume = true; continue; }
+    if (arg === "--allow-source-drift") { allowSourceDrift = true; continue; }
     const next = args[i + 1];
     if (!(VALUE_OPTIONS as readonly string[]).includes(arg) || next === undefined || next.startsWith("--")) throw new Error("invalid_argument");
     if (arg === "--wave" && mode === "--report") { waves.push(next); i += 1; continue; }
@@ -72,7 +76,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     if (!/^[1-9][0-9]{0,3}$/.test(options["--max-runs"])) throw new Error("invalid_argument");
     maxRuns = Number(options["--max-runs"]);
   }
-  const result = (): ParsedArgs => ({ mode, options, trim, waves, excludeWaves, resume, ...(maxRuns === undefined ? {} : { maxRuns }) });
+  const result = (): ParsedArgs => ({ mode, options, trim, waves, excludeWaves, resume, allowSourceDrift, ...(maxRuns === undefined ? {} : { maxRuns }) });
   if (mode === "--report") {
     if (waves.length === 0) throw new Error("wave_required");
     if (!options["--ledger"]) throw new Error("ledger_required");
@@ -80,6 +84,7 @@ export function parseArgs(args: string[]): ParsedArgs {
     if (Object.keys(options).length !== 2 || trim || resume) throw new Error("invalid_argument");
     return result();
   }
+  if (allowSourceDrift) throw new Error("invalid_argument");
   if (options["--evidence"]) throw new Error("invalid_argument");
   if (options["--wave"]) throw new Error("invalid_argument");
   if (mode === "--scan") {
@@ -318,7 +323,7 @@ async function wave(parsed: ParsedArgs): Promise<void> {
 }
 
 async function report(parsed: ParsedArgs): Promise<void> {
-  const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!));
+  const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!), { allowSourceDrift: parsed.allowSourceDrift });
   process.stdout.write(`${JSON.stringify({
     spentUsd: summary.spentUsd, budgetSpend: summary.budgetSpend, waveSpend: summary.waveSpend, stopReason: summary.stopReason,
     pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, complete: p.complete, recommendation: p.recommendation })),

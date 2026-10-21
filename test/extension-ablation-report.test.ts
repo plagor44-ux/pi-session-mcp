@@ -572,3 +572,94 @@ describe("several waves, approvals and unexpected connects", () => {
     expect(found.b.unexpectedConnects).toBe(0);
   });
 });
+
+describe("--allow-source-drift (R89)", () => {
+  const base = ["--report", "--wave", "w", "--ledger", "l.json", "--evidence", "e"];
+  const approvalCommit = (dir: string) => (JSON.parse(readFileSync(join(dir, "approval.json"), "utf8")) as { sourceCommit: string }).sourceCommit;
+  const drifted = (wave: Wave) => writeEvidence(wave.waveDir, wave.evidenceDir, wave.ledgerPath, { repoRoot: wave.repo, allowSourceDrift: true });
+  /** A second wave dir with one record of its own, approved at the repository's current commit and under the first wave's ledger. */
+  function secondWave(wave: Wave, name = "wave-2"): string {
+    const dir = join(wave.root, name);
+    mkdirSync(join(dir, "runs"), { recursive: true });
+    const own = record("t9", "A", true);
+    writeFileSync(join(dir, "runs", `${own.runId}.json`), `${JSON.stringify({ ...own, durationMs: 5, harnessError: null })}\n`);
+    writeApproval(dir, wave.repo, (JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")) as { ledgerId: string }).ledgerId, [own]);
+    return dir;
+  }
+
+  it("is a report option only", () => {
+    expect(parseArgs([...base, "--allow-source-drift"])).toMatchObject({ mode: "--report", allowSourceDrift: true });
+    expect(parseArgs(base).allowSourceDrift).toBe(false);
+    expect(parseArgs(["--allow-source-drift", ...base]).allowSourceDrift).toBe(true);
+    for (const other of [
+      ["--plan", "--tasks", "t.json"], ["--scan", "--transcripts", "t", "--out", "o"], ["--dry-load", "--tasks", "t.json", "--template", "x", "--out", "o"],
+      ["--wave", "--approval", "a.json", "--tasks", "t.json", "--template", "x", "--out", "w", "--ledger", "l.json"],
+      ["--preflight", "--approval", "a.json", "--tasks", "t.json", "--out", "w", "--ledger", "l.json"],
+    ]) expect(() => parseArgs([...other, "--allow-source-drift"])).toThrow("invalid_argument");
+  });
+
+  it("still refuses a difference in the bound code by default, and adds nothing to the output", async () => {
+    const wave = await makeWave();
+    writeFileSync(join(wave.repo, "src", "a.ts"), "export const a = 2;\n");
+    commitAll(wave.repo, "src moved on");
+    await expect(write(wave)).rejects.toThrow("approval_source_mismatch");
+    const unchanged = await makeWave();
+    const summary = await write(unchanged);
+    expect(summary).not.toHaveProperty("sourceDrift");
+    expect(integrityOf(unchanged.evidenceDir)).not.toHaveProperty("source_drift");
+  });
+
+  it("accepts an ancestor commit and records the bound paths that changed, in summary.json and integrity.json, without absolute paths", async () => {
+    const wave = await makeWave();
+    const commit = approvalCommit(wave.waveDir);
+    writeFileSync(join(wave.repo, "src", "a.ts"), "export const a = 2;\n");
+    writeFileSync(join(wave.repo, "eval", "extensions", "x.ts"), "export const x = 2;\n");
+    writeFileSync(join(wave.repo, "docs", "notes.md"), "changed notes\n");
+    commitAll(wave.repo, "moved on");
+    const summary = await drifted(wave);
+    const expected = [{ wave: 1, sourceCommit: commit, boundPathsChangedSinceSource: ["eval/extensions/x.ts", "src/a.ts"], allowSourceDrift: true }];
+    expect(summary.sourceDrift).toEqual(expected);
+    expect(JSON.parse(readFileSync(join(wave.evidenceDir, "summary.json"), "utf8")).sourceDrift).toEqual(expected);
+    expect((integrityOf(wave.evidenceDir) as unknown as { source_drift: unknown }).source_drift).toEqual(expected);
+    // The integrity index covers the summary, and nothing names a directory of this machine.
+    const index = integrityOf(wave.evidenceDir);
+    expect(index.files.find((f) => f.path === "summary.json")!.hash).toBe(hash(readFileSync(join(wave.evidenceDir, "summary.json"))));
+    for (const file of tree(wave.evidenceDir)) expect(readFileSync(join(wave.evidenceDir, file), "utf8")).not.toContain(wave.root);
+  });
+
+  it("records an empty list when nothing bound changed, and a list per wave in the order of the --wave arguments", async () => {
+    const wave = await makeWave();
+    writeFileSync(join(wave.repo, "docs", "notes.md"), "changed notes\n");
+    commitAll(wave.repo, "docs only");
+    expect((await drifted(wave)).sourceDrift).toEqual([{ wave: 1, sourceCommit: approvalCommit(wave.waveDir), boundPathsChangedSinceSource: [], allowSourceDrift: true }]);
+
+    const two = await makeWave();
+    writeFileSync(join(two.repo, "src", "a.ts"), "export const a = 2;\n");
+    commitAll(two.repo, "src moved on");
+    const later = secondWave(two);
+    const forward = await writeEvidence([two.waveDir, later], two.evidenceDir, two.ledgerPath, { repoRoot: two.repo, allowSourceDrift: true });
+    expect(forward.sourceDrift!.map((d) => [d.wave, d.sourceCommit === approvalCommit(two.waveDir), d.boundPathsChangedSinceSource])).toEqual([[1, true, ["src/a.ts"]], [2, false, []]]);
+    const reversed = await writeEvidence([later, two.waveDir], join(two.root, "evidence-reversed"), two.ledgerPath, { repoRoot: two.repo, allowSourceDrift: true });
+    expect(reversed.sourceDrift!.map((d) => [d.wave, d.boundPathsChangedSinceSource])).toEqual([[1, []], [2, ["src/a.ts"]]]);
+    // Strict mode refuses the same two waves because of the first.
+    await expect(writeEvidence([two.waveDir, later], join(two.root, "evidence-strict"), two.ledgerPath, { repoRoot: two.repo })).rejects.toThrow("approval_source_mismatch");
+  });
+
+  it("refuses a commit that is not an ancestor of HEAD, an unknown one and one that is not a commit id, with nothing written", async () => {
+    const wave = await makeWave();
+    // A commit on a side branch: it exists, but HEAD does not contain it.
+    const original = git(wave.repo, "rev-parse", "--abbrev-ref", "HEAD").trim();
+    git(wave.repo, "checkout", "--quiet", "-b", "side");
+    writeFileSync(join(wave.repo, "src", "a.ts"), "export const a = 3;\n");
+    commitAll(wave.repo, "side");
+    const side = git(wave.repo, "rev-parse", "HEAD").trim();
+    git(wave.repo, "checkout", "--quiet", original);
+    expect(() => git(wave.repo, "merge-base", "--is-ancestor", side, "HEAD")).toThrow(); // the side commit is not an ancestor of HEAD
+    const approval = JSON.parse(readFileSync(join(wave.waveDir, "approval.json"), "utf8")) as Record<string, unknown>;
+    for (const sourceCommit of [side, "f".repeat(40), "main", "HEAD", "A".repeat(40)]) {
+      writeFileSync(join(wave.waveDir, "approval.json"), JSON.stringify({ ...approval, sourceCommit }));
+      await expect(drifted(wave), sourceCommit).rejects.toThrow("approval_source_unknown");
+    }
+    expect(existsSync(wave.evidenceDir)).toBe(false);
+  });
+});
