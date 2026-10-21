@@ -10,7 +10,7 @@ import { approvalSchema, type Approval } from "./approval.js";
 import { BOUND_PATH, BOUND_PATHSPECS, dirtyBoundPaths } from "./bound.js";
 import type { RunRecord, StopReason } from "./classify.js";
 import { ledgerFileSchema } from "./ledger-file.js";
-import { PAIRINGS } from "./matrix.js";
+import { PAIRINGS, taskKind } from "./matrix.js";
 import { armSchema, profileIdSchema } from "./schemas.js";
 import { readRegularFile } from "./safe-read.js";
 import { realHome } from "./tools.js";
@@ -43,7 +43,7 @@ export type SummaryRecord = Pick<RunRecord, "runId" | "taskId" | "profile" | "ar
   /** The number of destinations outside the provider and DNS allowlists; the record itself keeps only the first few. */
   trace?: { unexpectedConnectCount?: number | undefined } | null | undefined;
   /** What the report reads of a review score (R78): the false findings it hit and whether the verdict matched. */
-  review?: { falseFindings: string[]; verdictMatched?: boolean | undefined } | undefined;
+  review?: { falseFindings: string[]; verdictMatched?: boolean | undefined; criticalHit?: number | undefined; criticalTotal?: number | undefined; recall?: number | undefined; accepted?: boolean | undefined } | undefined;
 };
 
 const STOP_REASONS = [
@@ -61,7 +61,10 @@ const summaryRecordSchema = z.object({
   usage: z.object({ session: z.object({ input: z.number(), cacheRead: z.number(), costUsd: z.number() }).nullable() }).nullable(),
   stopReason: z.enum(STOP_REASONS).nullable(),
   trace: z.object({ unexpectedConnectCount: z.number().int().min(0).optional() }).nullable().optional(),
-  review: z.object({ falseFindings: z.array(z.string()), verdictMatched: z.boolean().optional() }).optional(),
+  review: z.object({
+    falseFindings: z.array(z.string()), verdictMatched: z.boolean().optional(), criticalHit: z.number().optional(), criticalTotal: z.number().optional(),
+    recall: z.number().optional(), accepted: z.boolean().optional(),
+  }).optional(),
 });
 const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchema.parse(value);
 
@@ -72,16 +75,39 @@ export interface ArmTotals {
   /** Scored runs with a review score whose text did not match the task's verdict pattern (R78). */
   verdictMissed: number;
 }
-export interface PairingResult {
+/**
+ * What a review pairing reports per arm (R83): cost, network and the oracle's numbers as description. There is no acceptance count among the
+ * totals; `oracleAccepted` is what the keyword oracle computed, not an outcome that decides anything.
+ */
+export interface ReviewArmTotals {
+  costUsd: number; scored: number; unexpectedConnects: number;
+  /** Scored runs with a review score (a run that did not complete has none). */
+  reviewScored: number;
+  /** Sum over those runs of the critical findings hit and of the critical findings the oracle has. */
+  criticalHitSum: number; criticalTotalSum: number;
+  /** Mean over those runs of criticalHit / criticalTotal (a run counts 0 when the oracle has no critical finding). */
+  criticalHitMean: number;
+  /** Runs whose text matched the task's verdict pattern. */
+  verdictMatched: number;
+  /** Mean recall over those runs. */
+  recallMean: number;
+  /** Runs that hit any false finding. */
+  falseFindingRuns: number;
+  /** Runs the keyword oracle accepted (verdict matched and every critical finding hit); descriptive only. */
+  oracleAccepted: number;
+}
+interface PairingBase {
   id: string;
   /** The tasks scored in both arms, in task-id order. */
   tasks: string[];
+  /** At least three tasks were scored in both arms. */
   complete: boolean;
-  a: ArmTotals;
-  b: ArmTotals;
-  recommendation: Recommendation | "not-run";
   cacheReadShare: { a: number; b: number };
 }
+export interface ImplementationPairingResult extends PairingBase { kind: "implementation"; a: ArmTotals; b: ArmTotals; recommendation: Recommendation | "not-run" }
+/** Review pairings are descriptive (R83): a review run is scored and reported, but its acceptance never yields a recommendation. */
+export interface ReviewPairingResult extends PairingBase { kind: "review"; a: ReviewArmTotals; b: ReviewArmTotals; recommendation: "descriptive" }
+export type PairingResult = ImplementationPairingResult | ReviewPairingResult;
 export interface Spend { observedUsd: number; estimatedUsd: number }
 export interface ReportSpend { budget: Spend; wave: Spend }
 export interface ReportSummary {
@@ -115,6 +141,19 @@ function totals(records: SummaryRecord[]): { arm: ArmTotals; input: number; cach
   return { arm, input, cacheRead };
 }
 
+function reviewTotals(records: SummaryRecord[], arm: ArmTotals): ReviewArmTotals {
+  const scored = records.filter((record) => record.review !== undefined);
+  const sum = (pick: (review: NonNullable<SummaryRecord["review"]>) => number): number => scored.reduce((total, record) => total + pick(record.review!), 0);
+  const mean = (value: number): number => (scored.length === 0 ? 0 : value / scored.length);
+  const ratio = (review: NonNullable<SummaryRecord["review"]>): number => ((review.criticalTotal ?? 0) > 0 ? (review.criticalHit ?? 0) / review.criticalTotal! : 0);
+  return {
+    costUsd: arm.costUsd, scored: arm.scored, unexpectedConnects: arm.unexpectedConnects, reviewScored: scored.length,
+    criticalHitSum: sum((review) => review.criticalHit ?? 0), criticalTotalSum: sum((review) => review.criticalTotal ?? 0), criticalHitMean: mean(sum(ratio)),
+    verdictMatched: scored.filter((record) => record.review!.verdictMatched === true).length, recallMean: mean(sum((review) => review.recall ?? 0)),
+    falseFindingRuns: arm.falseFindingRuns, oracleAccepted: scored.filter((record) => record.review!.accepted === true).length,
+  };
+}
+
 function assertNoDuplicates(records: readonly SummaryRecord[]): void {
   const ids = new Set<string>();
   const slots = new Set<string>();
@@ -127,8 +166,9 @@ function assertNoDuplicates(records: readonly SummaryRecord[]): void {
 }
 
 /**
- * Per pairing, only tasks scored in both arms count (R6). Fewer than three such tasks is inconclusive and incomplete, none at all is
- * not run. `spend` defaults to the cost observed in the records; the ledger adds the estimates charged for runs without trusted output.
+ * Per pairing, only tasks scored in both arms count (R6). For an implementation pairing, fewer than three such tasks is inconclusive and
+ * incomplete, none at all is not run. A review pairing is descriptive (R83): it has the recommendation `descriptive` in every case and
+ * reports the oracle's numbers per arm without any decision. `spend` defaults to the cost observed in the records; the ledger adds the estimates charged for runs without trusted output.
  * The cache-read share uses Pi's token split, where `input` excludes cache reads.
  */
 export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend): ReportSummary {
@@ -143,11 +183,19 @@ export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend
     const a = totals(tasks.map((id) => armA.get(id)!));
     const b = totals(tasks.map((id) => armB.get(id)!));
     const share = (t: { input: number; cacheRead: number }): number => (t.input + t.cacheRead > 0 ? t.cacheRead / (t.input + t.cacheRead) : 0);
-    const base = { id: pairing.id, tasks, a: a.arm, b: b.arm, cacheReadShare: { a: share(a), b: share(b) } };
-    if (tasks.length === 0) return { ...base, complete: false, recommendation: "not-run" };
-    if (tasks.length < MIN_PAIRED_TASKS) return { ...base, complete: false, recommendation: "inconclusive" };
+    const base = { id: pairing.id, tasks, cacheReadShare: { a: share(a), b: share(b) } };
+    if (taskKind(pairing.profile) === "review") {
+      // R83: no recommendation of any kind, whatever the oracle accepted.
+      return {
+        ...base, kind: "review", complete: tasks.length >= MIN_PAIRED_TASKS, recommendation: "descriptive",
+        a: reviewTotals(tasks.map((id) => armA.get(id)!), a.arm), b: reviewTotals(tasks.map((id) => armB.get(id)!), b.arm),
+      };
+    }
+    const impl = { ...base, kind: "implementation" as const, a: a.arm, b: b.arm };
+    if (tasks.length === 0) return { ...impl, complete: false, recommendation: "not-run" };
+    if (tasks.length < MIN_PAIRED_TASKS) return { ...impl, complete: false, recommendation: "inconclusive" };
     const perTask = tasks.map((id) => ({ a: armA.get(id)!.accepted === true, b: armB.get(id)!.accepted === true }));
-    return { ...base, complete: true, recommendation: recommend(a.arm, b.arm, perTask) };
+    return { ...impl, complete: true, recommendation: recommend(a.arm, b.arm, perTask) };
   });
   const observed: Spend = { observedUsd: records.reduce((sum, r) => sum + costOf(r), 0), estimatedUsd: 0 };
   const { budget, wave } = spend ?? { budget: observed, wave: observed };

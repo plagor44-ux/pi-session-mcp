@@ -493,3 +493,20 @@ the text above, they win.
   pattern at 64 KiB as the bound; the timing claim in the README and setup notes
   is corrected. The R80 check does not detect adjacent overlapping quantifiers,
   which is why timing is part of curation. Cost: one more curation round.
+- **Review tasks are descriptive only (R83, owner decision 2026-10-21).** Review
+  runs still run and are scored by `scoreReview`, and their records keep the
+  score, but no review pairing (`pl-review-grok`, `pl-review`, `co-review`)
+  yields a recommendation: its `recommendation` is the fixed value
+  `descriptive`, and review acceptance never decides anything. The summary
+  reports per arm, next to cost, cache-read share and unexpected connects, the
+  oracle's numbers as description: runs with a review score, critical findings
+  hit (sum, total and mean ratio), verdict matches, mean recall, runs with a
+  false finding and `oracleAccepted` (what the keyword oracle computed, not an
+  outcome); there is no `accepted` total in a review pairing, and `complete`
+  only means at least three tasks were scored in both arms. The CLI's wave
+  summary counts accepted implementation runs only. Why: four curation rounds
+  and three independent reviews showed that the keyword oracle does not converge
+  on fresh text (8 to 11 of 18 fresh correct reviews were accepted); the rule
+  that an oracle needing judgment is dropped applies to acceptance. Cost: no
+  recommendation for `review-grok`, `review` and `co-review` in this wave; cost,
+  cache, network and the descriptive oracle numbers are still reported.
