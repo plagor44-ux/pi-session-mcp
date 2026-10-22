@@ -6,9 +6,9 @@
  * test lets `setup`'s own launcher and verifier talk to the built server.
  */
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../package.json" with { type: "json" };
 import { MCP_MAX_FRAME_BYTES, verifyMcpCapabilities } from "../src/client-adapters/mcp-verifier.js";
 import { createMcpStdioLauncher } from "../src/setup-process.js";
@@ -130,5 +130,25 @@ describe("setup verification against the real server", () => {
     const result = await verifyMcpCapabilities({ launch, timeoutMs: 20_000 });
     expect(result).toMatchObject({ status: "verified", initialize: true, toolsList: true, capabilitiesGet: true });
     expect(existsSync(join(runtime, "pi-session-mcp", "events"))).toBe(withRuntime);
+    // A verify run must not leave an instance directory that a wake hook would wait on.
+    if (withRuntime) expect(await readdir(join(runtime, "pi-session-mcp", "events"))).toEqual([]);
+  }, 60_000);
+
+  it("inherits the caller's XDG_RUNTIME_DIR by default (#113)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-setup-verify-inherit-");
+    const runtime = join(root, "runtime");
+    await mkdir(runtime, { mode: 0o700 });
+    const config = join(root, "config.json");
+    await writeFile(config, JSON.stringify({
+      events: { delivery: "spool" },
+      workspaces: { project: root },
+      executionProfiles: { safe: { default: true, permissionProfile: "read-only", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" } },
+    }), { mode: 0o600 });
+    vi.stubEnv("XDG_RUNTIME_DIR", runtime);
+    try {
+      const launch = createMcpStdioLauncher({ nodePath: process.execPath, entryPath: entry, configPath: config, timeoutMs: 20_000 });
+      expect(await verifyMcpCapabilities({ launch, timeoutMs: 20_000 })).toMatchObject({ status: "verified", capabilitiesGet: true });
+    } finally { vi.unstubAllEnvs(); }
+    expect(await readdir(join(runtime, "pi-session-mcp", "events"))).toEqual([]);
   }, 60_000);
 });
