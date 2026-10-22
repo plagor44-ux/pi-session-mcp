@@ -422,7 +422,7 @@ package path. The settings-file codes are in the
   through `/proc/self/fd`; on any other platform `pi-session-mcp-wake` exits
   without a wake, so the controller polls.
 - Claude Code only. Codex has no external wake, so Codex controllers keep
-  polling; `setup` reports `hook_not_applicable` for a Codex target.
+  polling; `setup` reports no hook finding for a Codex target.
 - Use interactive or stream-json sessions. A one-shot `claude -p` run holds its
   next model request until the hook ends, so do not use it with delivery on.
 - The path of the Node executable and of the package must contain only

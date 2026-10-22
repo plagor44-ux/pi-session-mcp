@@ -455,7 +455,7 @@ describe("wake hook with delivery off and nothing owned", () => {
     for (const operation of ["dry-run", "apply", "verify", "apply"] as const) {
       const output = await orchestrator.run({ operation, targets: [{ client: "codex", scope: "user", alias: "pi-session-mcp" }, { client: "claude-code", scope: "user", alias: "pi-session-mcp" }] });
       expect(output.exitCode).toBe(0);
-      expect(output.findings.filter((finding) => finding.target.alias === WAKE_HOOK_ALIAS).map((finding) => finding.code)).toEqual(["hook_not_applicable", "hook_not_enabled"]);
+      expect(output.findings.filter((finding) => finding.target.alias === WAKE_HOOK_ALIAS)).toEqual([]);
     }
     expect(await readFile(f.settings("user"), "utf8")).toBe("{not json");
   });
@@ -623,13 +623,13 @@ describe("wake hook in the setup orchestrator", () => {
     const { f, orchestrator } = await orchestrated();
     const dry = await orchestrator.run({ targets: [registration("codex"), registration("claude-code")] });
     expect(summary(dry)).toEqual([
-      "codex/user/pi-session-mcp:absent:absent", `codex/user/${WAKE_HOOK_ALIAS}:unchanged:hook_not_applicable`,
+      "codex/user/pi-session-mcp:absent:absent",
       "claude-code/user/pi-session-mcp:absent:absent", `claude-code/user/${WAKE_HOOK_ALIAS}:planned:hook_add_planned`,
     ]);
     await expect(stat(join(f.home, ".claude"))).rejects.toThrow();
     const applied = await orchestrator.run({ operation: "apply", targets: [registration("codex"), registration("claude-code")] });
     expect(summary(applied)).toEqual([
-      "codex/user/pi-session-mcp:ok:applied", `codex/user/${WAKE_HOOK_ALIAS}:unchanged:hook_not_applicable`,
+      "codex/user/pi-session-mcp:ok:applied",
       "claude-code/user/pi-session-mcp:ok:applied", `claude-code/user/${WAKE_HOOK_ALIAS}:ok:hook_added`,
     ]);
     expect(applied.exitCode).toBe(0);
@@ -667,10 +667,42 @@ describe("wake hook in the setup orchestrator", () => {
     expect(summary(retried)).toEqual(["claude-code/user/pi-session-mcp:ok:rolled_back", `claude-code/user/${WAKE_HOOK_ALIAS}:ok:hook_removed`]);
     expect(await f.ownership.get(f.userTarget)).toBeUndefined();
   });
+  it("reports exactly what a setup without the hook installer reports while delivery is off and nothing is owned", async () => {
+    const targets = [registration("codex"), registration("claude-code"), { client: "claude-code", scope: "local", alias: "pi-session-mcp" }, { client: "claude-code", scope: "project", alias: "pi-session-mcp" }];
+    const make = async (withHooks: boolean) => {
+      const f = await fixture();
+      const registered = new Set<string>();
+      const adapters: SetupClientAdapter[] = ["codex", "claude-code"].map((name) => ({
+        name, supportedScopes: name === "codex" ? ["user"] : ["user", "local", "project"],
+        async inspect(target) { return registered.has(`${target.client}:${target.scope}`) ? { state: "equivalent", fingerprint: "a".repeat(64) } : { state: "absent" }; },
+        async apply(target) { registered.add(`${target.client}:${target.scope}`); },
+        async remove(target) { registered.delete(`${target.client}:${target.scope}`); },
+        async verify() { return { ok: true, code: "mcp_verified" }; },
+      }));
+      return { f, orchestrator: new SetupOrchestrator({ adapters, ownership: f.ownership, intendedFingerprint: "a".repeat(64), ...(withHooks ? { hooks: new FileSetupHookInstaller({ ...f.roots, delivery: async () => false }) } : {}) }) };
+    };
+    const [withHooks, without] = [await make(true), await make(false)];
+    for (const operation of ["dry-run", "apply", "verify", "apply", "rollback", "apply", "remove", "remove"] as const) {
+      const a = await withHooks.orchestrator.run({ operation, targets });
+      const b = await without.orchestrator.run({ operation, targets });
+      expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+      expect(a.findings.length).toBeGreaterThan(0);
+    }
+    await expect(stat(join(withHooks.f.home, ".claude"))).rejects.toThrow();
+    await expect(stat(join(withHooks.f.cwd, ".claude"))).rejects.toThrow();
+  });
+  it("still reports a failed verify of an unowned canonical entry", async () => {
+    const { f, orchestrator } = await orchestrated();
+    await f.seed("user", { hooks: { PostToolUse: [f.entry] } });
+    await orchestrator.run({ operation: "apply", targets: [registration("claude-code")] });
+    const output = await orchestrator.run({ operation: "verify", targets: [registration("claude-code")] });
+    expect(summary(output)).toEqual(["claude-code/user/pi-session-mcp:ok:mcp_verified", `claude-code/user/${WAKE_HOOK_ALIAS}:failed:hook_not_owned`]);
+    expect(output.exitCode).toBe(1);
+  });
   it("does not install while delivery is off, and verify stays green", async () => {
     const { f, orchestrator } = await orchestrated(false);
     const output = await orchestrator.run({ operation: "apply", targets: [registration("claude-code")] });
-    expect(summary(output)).toEqual(["claude-code/user/pi-session-mcp:ok:applied", `claude-code/user/${WAKE_HOOK_ALIAS}:unchanged:hook_not_enabled`]);
+    expect(summary(output)).toEqual(["claude-code/user/pi-session-mcp:ok:applied"]);
     await expect(stat(join(f.home, ".claude"))).rejects.toThrow();
     expect((await orchestrator.run({ operation: "verify", targets: [registration("claude-code")] })).exitCode).toBe(0);
   });
