@@ -11,22 +11,33 @@ comparative run, commit `569c89f`), [design](design.md), [inventory](inventory.m
 (source and documentation facts), [live plan](live-plan.md) (not approved) and
 the probe evidence in [`probe/`](probe/).
 
-No live provider ran. Every result below is provider-free, and each claim
-names its evidence level: L0 source or docs, L1 unit test, L2 host event, L3
-client wake with a scripted fake model, L4 real controller model. **L4 was not
-reached.**
+Each claim names its evidence level: L0 source or docs, L1 unit test, L2 host
+event, L3 client wake with a scripted fake model, L4 real controller model.
+Everything up to L3 is provider-free. **L4 was reached for two approved
+pairs** (case L1, arm A and arm C, one run each per pair; see
+[`live/`](live/README.md)).
 
 ## Verdict
 
 **The current procedure stays.** That means the controller skill's internal
 ledger with consume-once and the #86 cadence. **A lean event bridge from the
 existing SDK completion, with a targeted Claude Code integration, is
-technically viable at the client level (L3).** Whether it is justified as
-product work stays conditional, as the pre-registration requires without L4. It
-needs an approved L4 measurement and its own decision record (proposed as
-[ADR 0011](../../adr/0011-turn-events-and-controller-wake.md)). The expected
-benefit grows with worker turn length and with worker questions. That is a
-model-based expectation, not a measurement.
+technically viable at the client level (L3)**, and in two real-model pairs (L4)
+the woken controller read each turn once, without polling or sleeping. It does
+**not** pay off in controller requests or tokens for short tasks:
+
+- requests were 7 against 8 and 8 against 8;
+- uncached input and cost were mixed;
+- the pre-registered product rule is **not met**.
+
+What it does improve consistently is latency: the controller acted on a
+finished turn after about 2 s instead of 10–21 s with polling. The evaluation
+therefore recommended **not to build it now**. On 2026-10-21 the maintainer
+decided otherwise, for reaction time:
+[ADR 0011](../../adr/0011-turn-events-and-controller-wake.md) is accepted for
+items 1–3 (implementation in
+[#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108)). The request
+saving that the model predicts for long turns is still unmeasured.
 
 - **File ledger:** not recommended as a product feature. It helps a human
   overview and context continuity after compaction. It does nothing for tokens
@@ -142,7 +153,8 @@ by signal (`instance_ended` = `server_exit`).
 
 The four kinds of evidence stay separate. A spool file is a host-side record
 (L1). A hook start or exit in the stream is L2. A new model request at the fake
-is L3. A real model choosing the right call is L4, **not tested**.
+is L3. A real model choosing the right call is L4. That was tested twice
+for completion (arm C of both live pairs). It was not tested for questions.
 
 Interactive TUI and the VS Code extension were not tested. The extension uses
 the same stream-json input, which S1–S3 exercised, but that is an inference.
@@ -161,7 +173,7 @@ running polls for `T > 10 s`, with `c` = 15–30 s. That is 1–3 for the M1 cas
 (about 50–100 s), so C saves at most about two model requests per turn there. A
 10-minute turn would need about 20–40 polls against one wake. The benefit grows
 with turn length and with questions; for short turns it is close to neutral.
-This expectation is the reason L4 is needed before any product decision.
+This expectation was the reason for the L4 pairs. On the short case they confirmed it: no request saving (see [`live/`](live/README.md)).
 
 ### 4.6 Completion and questions
 
@@ -215,17 +227,17 @@ never woken.
 | --- | --- | --- | --- | --- |
 | Overview and context continuity | context only | `run.json`/`task.md` survive compaction | same as A, plus B if wanted | none |
 | LLM in status checks | every poll | every poll | none for running turns | none |
-| Real notification and resume | none | none | client wake L3 (stream-json; `-p` blocks); real model L4 open | needs C's delivery |
+| Real notification and resume | none | none | client wake L3 (stream-json; `-p` blocks); real model L4 in two pairs (completion) | needs C's delivery |
 | State and connection owner | server | server; ledger by hook | server; spool per instance | must be the same server |
 | Restart and cleanup | IDs become history | ledger marks unresolved | `instance_ended`; waiter ends at budget, parent loss or claim loss | as C |
 | Client dependency | none | Claude Code hooks (Codex has hooks too) | Claude Code `asyncRewake`; not Codex | as C |
 | Implementation and maintenance | none | small | observer, spool, setup-managed hook, waiter | timer plus C |
 | Decision or contract needed | none | none (dev aid) | ADR; spool is a new local surface; question tool = minor release | ADR |
-| Evidence | M1 A/B (Codex) | L1, L3 | L1, L3; L4 open | L1 partial; detection-only arm skipped |
+| Evidence | M1 A/B (Codex); two L4 runs (Claude) | L1, L2 | L1, L3; two L4 pairs | L1 partial; detection-only arm skipped |
 
 ## Prototype
 
-`eval/bridge/` (about 2,130 lines) with 91 provider-free tests in five files.
+`eval/bridge/` (about 3,000 lines) with 91 provider-free tests in five files.
 Not in the runtime path or the npm package. No `src/` change.
 
 - `ledger.ts`, `ledger-store.ts`, `ledger-cli.ts`: reducer, locked store,
@@ -240,9 +252,11 @@ Not in the runtime path or the npm package. No `src/` change.
   parent-loss exit.
 - `hook-ledger.ts`: PostToolUse ledger projection, storing result hashes only.
 - `claude-probe.ts`, `cli.ts`: the L3 probe.
+- `live/`: the approval-bound runner for the L4 pair, with a provider-free dry
+  run.
 
-Tests after the review fixes: 91 in `bridge-ledger`, `bridge-ledger-lock`,
-`bridge-events`, `bridge-sdk-faux` and `bridge-hooks`.
+Tests: 163 in `bridge-ledger`, `bridge-ledger-lock`, `bridge-events`,
+`bridge-sdk-faux`, `bridge-hooks` and `bridge-live`.
 
 Ledger limits that are deliberate:
 
@@ -295,7 +309,9 @@ untested.
 
 ## Not measured, not tested, unknown
 
-L4 with a real model; token, cache and money effects; worker usage; interactive
+L4 beyond two pairs (completion only, short case L1, one client version and
+model); long worker turns; a
+question round trip with a real model; worker usage; interactive
 TUI and VS Code wake; Codex; a supervisor-only detection arm (S7 skipped: the
 registry subclass has no supported way to switch off its event trigger);
 `PostToolUseFailure` projection into the ledger; a worker finishing before its
@@ -313,9 +329,11 @@ why S5 (positional prompt) blocks while S8 (stream-json, stdin closed) exits.
   the client kills the waiter at its timeout (S6).
 - **Simpler alternative:** keep the skill cadence and add one rule: for long
   tasks, poll at the long end of the cadence. No mechanism, no contract.
-- **Smallest next test:** one approved L4 pair of case L1 (arm A and arm C, one
-  run each), `explore-fast` worker, Claude Code 2.1.303 controller. It checks
-  the critical assumption before the full matrix.
+- **Critical assumption, checked twice:** it held in both live C runs (one
+  wake, one read, no poll, no sleep).
+- **Smallest next test, only if revisited:** one pair with a long worker turn
+  (several minutes), where the model predicts a request saving, rather than the
+  full short-task matrix.
 
 ## Reproduction
 

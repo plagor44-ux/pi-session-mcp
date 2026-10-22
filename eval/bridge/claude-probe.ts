@@ -186,7 +186,7 @@ export const SCENARIOS: Scenario[] = [
 
 // ---------------------------------------------------------------- helpers
 export interface LeftoverProcess { pid: number; kind: string }
-async function processesReferencing(root: string): Promise<LeftoverProcess[]> {
+export async function processesReferencing(root: string): Promise<LeftoverProcess[]> {
   const found: LeftoverProcess[] = [];
   for (const name of (await readdir("/proc")).filter((value) => /^\d+$/.test(value))) {
     if (Number(name) === process.pid) continue;
