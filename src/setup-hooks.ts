@@ -509,12 +509,15 @@ export interface SetupHookRoots extends WakeHookRoots {
   /** Whether the server configuration setup registers enables spool delivery. */
   readonly delivery: () => Promise<boolean>;
 }
+/** Unchanged outcomes that say nothing happened because nothing was wanted or owned; never part of a setup report. (Verify's failed `hook_not_owned` is news.) */
+const NO_NEWS: ReadonlySet<string> = new Set(["hook_not_enabled", "hook_not_owned"]);
 export class FileSetupHookInstaller implements SetupHookInstaller {
   constructor(private readonly roots: SetupHookRoots, private readonly dependencies: WakeHookDependencies = {}) {}
 
   async run(operation: SetupOperation, target: SetupTarget, ownership: OwnershipAccess): Promise<readonly SetupFinding[]> {
     const reported: SetupTarget = { ...target, alias: WAKE_HOOK_ALIAS };
-    if (target.client !== "claude-code" || !["user", "project", "local"].includes(target.scope)) return [{ target: reported, status: "unchanged", code: "hook_not_applicable" }];
+    // Not applicable (a Codex target) is no news and is not reported, so a report without hooks keeps its 0.10 shape.
+    if (target.client !== "claude-code" || !["user", "project", "local"].includes(target.scope)) return [];
     let enabled = false;
     // Removal follows the record; only the other operations depend on the configuration.
     if (operation !== "remove" && operation !== "rollback") {
@@ -526,7 +529,8 @@ export class FileSetupHookInstaller implements SetupHookInstaller {
       ? () => localHookNeededByOthers({ ownership, home: roots.home, cwd: roots.cwd, configPath, except: "host" })
       : undefined;
     const outcome = await runWakeHook({ operation, scope: target.scope as HookScope, roots, enabled, ownership, dependencies: this.dependencies, ...(keep ? { keep } : {}) });
-    return [{ target: reported, ...outcome }];
+    // No hook wanted and none owned is no news either: omitted, like the writer path does.
+    return outcome.status === "unchanged" && NO_NEWS.has(outcome.code) ? [] : [{ target: reported, ...outcome }];
   }
 
   async owns(target: SetupTarget, ownership: OwnershipAccess): Promise<boolean> {
