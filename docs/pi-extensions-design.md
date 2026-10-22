@@ -39,7 +39,34 @@ Success means:
 - Installing or updating extensions. Pi owns that (`pi update --extensions`).
 - Version ranges or "latest". A version is pinned exactly.
 - Pi's built-in extensions (`mcp`, `codemode`, `tool-search`, `llama.cpp`).
-  pi-session-mcp keeps its own `mcpServers` bridge.
+  pi-session-mcp keeps its own `mcpServers` bridge. Re-checked against Pi SDK
+  1.4.0 for [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115):
+  - **Not loaded.** Only the Pi CLI passes its `builtInExtensions` to the
+    resource loader. `createAgentSession` and `createAgentSessionServices` add
+    them only when `extensionFactories` names them, which this server never
+    does. Both resource loaders also set `noExtensions`.
+  - **Regression guard.** `test/sdk-extension-contract.test.ts` places a
+    `mcp.json` in the global agent directory (`PI_CODING_AGENT_DIR`), in the
+    workspace and in `.pi/`. It checks that a session, including its
+    `session_start`, starts none of these servers. With the built-ins
+    injected, the test fails.
+  - **Why the own bridge stays.**
+    - Pi's client discovers servers from files: `<agent dir>/mcp.json`, which
+      `pi mcp add` writes, and, for trusted projects, `.pi/mcp.json`.
+      Config values may run commands (`!cmd`). HTTP servers can carry OAuth or
+      a provider token (`auth.provider`).
+    - Its `exposure` and `toolExposure` settings control visibility to the
+      model, not authorization. A `--tools` allowlist without an `mcp__` entry
+      keeps MCP tools outside the allowlist.
+    - The bridge, in contrast, connects only operator-configured local stdio
+      servers with absolute commands and an `envFrom` allowlist. It grants
+      named tools per profile, and in `read-only` profiles only those the
+      operator marked `readOnly`. Startup, calls and shutdown are bounded.
+  - **Grants for `mcp__` names** are not planned. They would require loading
+    the built-in client and the codemode or tool-search machinery around it.
+    The rejection of extension tool names that start with `mcp__` stays.
+  - **Revisit** if the SDK offers, as a root export, a per-session MCP
+    configuration without file discovery and with an exact tool allowlist.
 - Extension CLI flags (for example `--cursor-runtime`) and extension UI. Flags
   keep their defaults; UI calls go to the SDK's no-op UI.
 - Extension slash commands triggered by client prompt text.

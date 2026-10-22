@@ -3,7 +3,8 @@
  * fixture extension. No provider, credentials or network: the fixture provider answers
  * from memory. When an SDK upgrade breaks an assumption, the failing test names it.
  */
-import { cp, mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as waitFor } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -47,7 +48,7 @@ async function harness(permissionProfile: PermissionProfile, grantedExtensionToo
     alias: "fixture", permissionProfile, provider: "fixture-ext", model: "fixture-ext-model", thinkingLevel: "off", extensions: [extension],
     ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools }),
   };
-  return { registry, executionProfile };
+  return { registry, executionProfile, workspace, agentDir };
 }
 
 async function terminal(registry: SessionRegistry, sessionId: string, turnId: string): Promise<TurnView> {
@@ -72,6 +73,36 @@ describe("Pi SDK contract for allowlisted extensions", () => {
     } finally {
       await registry.close(session.id);
     }
+  }, 30_000);
+
+  it("never runs Pi's built-in MCP client, so a workspace mcp.json starts no server even after session_start (#115)", async () => {
+    const { registry, executionProfile, workspace, agentDir } = await harness("coding");
+    // Pi's MCP extension reads `mcp.json` from the global agent directory (where `pi mcp add`
+    // writes) and, for trusted projects, `.pi/mcp.json`. The session's own agent directory is
+    // the workspace, so a repository could carry a copy there too.
+    const marker = join(workspace, "mcp-server-started");
+    const server = { command: process.execPath, args: ["-e", `require("node:fs").writeFileSync(${JSON.stringify(marker)}, "")`], exposure: "direct" };
+    await mkdir(join(workspace, ".pi"));
+    for (const file of [join(agentDir, "mcp.json"), join(workspace, "mcp.json"), join(workspace, ".pi", "mcp.json")]) {
+      await writeFile(file, JSON.stringify({ mcpServers: { configured: server } }));
+    }
+    const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    try {
+      const session = await registry.start("repo", executionProfile);
+      try {
+        const accepted = await registry.prompt(session.id, "hello");
+        expect(await terminal(registry, session.id, accepted.turn.turnId)).toMatchObject({ state: "completed" });
+        expect(events()).toContain("session_start");
+      } finally {
+        await registry.close(session.id);
+      }
+      await waitFor(500);
+    } finally {
+      if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+      else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+    }
+    expect(existsSync(marker)).toBe(false);
   }, 30_000);
 
   it("shows client prompts to extension input hooks as rpc input", async () => {
