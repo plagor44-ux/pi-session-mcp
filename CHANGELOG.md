@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Fixed: on Linux, a mutating `setup` run could fail at random with
+  `ownership_lock_unavailable` while other processes exited
+  ([#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109)). The
+  process-table scan behind the setup fence treated a process that vanished
+  during the scan as indeterminate. Listing `/proc` with file types made Node
+  `lstat` an entry whose type procfs did not report, which happens for a
+  process that exits during the listing, and that `lstat` threw `ENOENT`.
+  Reading `/proc/<pid>/stat` of a process that is being reaped returns
+  `ESRCH` or process group `-1`. The guardian then refused to start, and a
+  cleanup loop could report an indeterminate state. Such processes now count
+  as gone, as a vanished `/proc` entry already did; a group of `-1` is read
+  once more and counts as gone only if the process has vanished by then. Any
+  other read or parse failure still makes the scan indeterminate and keeps the
+  fence.
+
 ## 0.11.1 — 2026-10-22
 
 Patch release for [#113](https://github.com/plagor44-ux/pi-session-mcp/issues/113).
