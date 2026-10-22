@@ -2,8 +2,21 @@
 
 ## Unreleased
 
-Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
-#108); `package.json` is bumped by the release step.
+## 0.11.0 — 2026-10-22
+
+Minor release under ADR 0003 for
+[ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md) (#108, #110):
+`pi_capabilities_get` gains `events`.
+
+- Security, development dependencies only (nothing in the production install
+  path; `npm audit` and `npm audit --omit=dev` report 0 vulnerabilities):
+  - `@modelcontextprotocol/inspector` 2.10.1 → 2.11.0, which pins the MCP SDK at
+    2.3.1 like this package, so the nested `@modelcontextprotocol/client` and
+    `server` 2.2.0 copies are gone (GHSA-6prh-2h8m-c8cw, GHSA-jm63-cq47-j5jp,
+    GHSA-46jr-4wx8-v453, GHSA-rvq5-wwqv-78pq).
+  - Lockfile only: `hono` 4.13.7 → 4.13.13 (GHSA-5r4p-p66f-jhc7) and `vite`
+    8.3.0 → 8.3.5 (GHSA-9jrq-w75r-8gcw and the bundled `launch-editor`
+    advisories), with their `@rolldown`, `@napi-rs` and `@oxc-project` builds.
 
 - Added: opt-in turn events for a Claude Code controller wake. The optional
   top-level server configuration field `events: { "delivery": "spool" | "off" }`
@@ -28,8 +41,9 @@ Planned as 0.11.0 ([ADR 0011](docs/adr/0011-turn-events-and-controller-wake.md),
   `--rollback` remove the hook entry in the settings file of the Claude Code
   target's scope, under the existing dry-run, ownership and divergence rules
   (`hook_*` and `settings_*` finding codes, see the
-  [client setup reference](docs/client-setup.md#wake-hook)). Codex targets report
-  `hook_not_applicable` and keep polling.
+  [client setup reference](docs/client-setup.md#wake-hook)). With delivery off
+  and no entry of its own, and for Codex targets, setup reports no hook finding,
+  so its report keeps the 0.10 shape; Codex controllers keep polling.
 - Added: container writers with delivery enabled get one dedicated spool mount
   at `/pi/events`. The spool lives on disk in the writer's own state directory
   (`~/.local/state/pi-session-mcp/writers/<name>/events/`), not on the runtime
