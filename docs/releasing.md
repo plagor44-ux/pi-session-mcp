@@ -200,6 +200,8 @@ Steps:
 5. Run the working-tree
    [Level 2 acceptance](acceptance.md#tooling) on the release candidate with
    `scripts/setup-acceptance.mjs`, unless the release notes state its absence.
+   Run it twice: once as is, with delivery off, and once with
+   `--events spool`, with turn-event delivery enabled (#113).
 6. Run the packed-tarball Level 2 acceptance on the same candidate. Pack the
    built package, install the tarball into a fresh prefix and point the harness
    at the installed package:
@@ -214,6 +216,8 @@ Steps:
      --label packed-<x.y.z> --out level2-result.json
    rm -rf "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
    ```
+
+   Repeat the harness run with `--events spool` against the same prefix.
 
    This is the only acceptance-level pre-release check that resolves
    dependencies like a consumer: the working tree and the CI build use our

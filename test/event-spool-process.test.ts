@@ -7,7 +7,7 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -167,9 +167,28 @@ describeWithProcessInspection("server entry point with turn-event delivery", () 
 
   it.each([
     ["neither an explicit directory nor a runtime directory", {}],
-    ["a relative explicit directory", { PI_SESSION_MCP_EVENTS_DIR: "relative/events" }],
-  ])("fails startup with event_spool_unavailable for %s", async (_label, events) => {
-    const harness = await startServer({ delivery: "spool", events, initialize: false });
+    ["a relative runtime directory", { XDG_RUNTIME_DIR: "relative/runtime" }],
+  ])("starts with delivery inactive for %s, as under Codex (#113)", async (_label, events) => {
+    const harness = await startServer({ delivery: "spool", events });
+    const capabilities = await harness.callTool("pi_capabilities_get", {});
+    expect(capabilities.structuredContent).toMatchObject({ events: { delivery: "off" } });
+    harness.server.stdin.end();
+    expect(await exitWithinBound(harness)).toEqual({ code: 0, signal: null });
+    await expect(readdir(harness.spool)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(harness.diagnostics()).toEqual([{ level: "warn", event: "event_delivery_inactive", stage: "startup", code: "event_runtime_dir_missing" }]);
+  }, TEST_TIMEOUT_MS);
+
+  it("fails startup with event_spool_unavailable for a relative explicit directory", async () => {
+    const harness = await startServer({ delivery: "spool", events: { PI_SESSION_MCP_EVENTS_DIR: "relative/events" }, initialize: false });
+    expect(await exitWithinBound(harness)).toEqual({ code: 1, signal: null });
+    expect(harness.diagnostics()).toEqual([{ level: "error", event: "startup_failed", stage: "startup", code: "event_spool_unavailable" }]);
+  }, TEST_TIMEOUT_MS);
+
+  it("fails startup with event_spool_unavailable for a runtime directory that is not private", async () => {
+    const runtime = await temporaryRoot("pi-session-mcp-spool-open-");
+    await mkdir(join(runtime, "pi-session-mcp", "events"), { recursive: true, mode: 0o755 });
+    await chmod(join(runtime, "pi-session-mcp", "events"), 0o755);
+    const harness = await startServer({ delivery: "spool", events: { XDG_RUNTIME_DIR: runtime }, initialize: false });
     expect(await exitWithinBound(harness)).toEqual({ code: 1, signal: null });
     expect(harness.diagnostics()).toEqual([{ level: "error", event: "startup_failed", stage: "startup", code: "event_spool_unavailable" }]);
   }, TEST_TIMEOUT_MS);

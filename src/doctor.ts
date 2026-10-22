@@ -199,7 +199,7 @@ async function defaultEventSpoolRoot(path: string): Promise<EventSpoolRootInfo |
  */
 async function eventSpoolCheck(env: NodeJS.ProcessEnv, probe: (path: string) => Promise<EventSpoolRootInfo | undefined>, uid: number | undefined): Promise<DoctorCheck> {
   const events = eventsRoot(env);
-  if (events === undefined) return warning("event_spool_root", "event spool", "set XDG_RUNTIME_DIR to an absolute path in the server environment, or disable events.delivery");
+  if (events === undefined) return warning("event_spool_root", "event spool", "without an absolute XDG_RUNTIME_DIR in the server environment, delivery stays inactive: set it, or disable events.delivery");
   const runtime = dirname(events);
   const entries: ReadonlyArray<readonly [string, string]> = [[runtime, "pi-session-mcp runtime"], [events, "events"], [claimsRoot(env) ?? join(runtime, "claims"), "claims"]];
   for (const [path, label] of entries) {
