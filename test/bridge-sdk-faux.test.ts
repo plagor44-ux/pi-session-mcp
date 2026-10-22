@@ -51,7 +51,7 @@ async function harness(responses: Parameters<ReturnType<typeof fauxProvider>["se
   return { session: session as AgentSession, faux, broker, bridged, toolSignals, log, events };
 }
 
-describe("Pi SDK 1.3.0 on the faux provider", () => {
+describe("Pi SDK 1.4.0 on the faux provider", () => {
   it("(a) retries a transient provider error inside one prompt(): agent_end before the success, one agent_settled, prompt() last", async () => {
     const { session, log, faux } = await harness([
       fauxAssistantMessage("", { stopReason: "error", errorMessage: "503 service unavailable" }),

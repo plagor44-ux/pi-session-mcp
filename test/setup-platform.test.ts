@@ -89,6 +89,63 @@ describe("macOS process table", () => {
   });
 });
 
+describe("Linux process table", () => {
+  const stat = (pid: number, group: number | string, state = "S") => `${pid} (node (worker)) ${state} 1 ${group} ${group} 0 -1 4194304`;
+  const errno = (code: string) => Object.assign(new Error(code), { code });
+  /** Each pid answers its reads in order; the last answer repeats. */
+  const table = (reads: Record<number, readonly (string | Error)[]>, names: readonly string[] = ["self", ...Object.keys(reads)]) => {
+    const count = new Map<number, number>();
+    return createProcessTable("linux", {
+      selfPid: 100,
+      procfs: {
+        list: () => names,
+        readStat: (pid) => {
+          const answers = reads[pid] ?? [errno("ENOENT")];
+          const index = Math.min(count.get(pid) ?? 0, answers.length - 1);
+          count.set(pid, index + 1);
+          const answer = answers[index]!;
+          if (answer instanceof Error) throw answer;
+          return answer;
+        },
+      },
+    });
+  };
+  it("reports a group with a live member as alive and one with only zombies as gone", async () => {
+    expect(await table({ 100: [stat(100, 100)], 200: [stat(200, 200)] }).groupState(200)).toBe("alive");
+    expect(await table({ 100: [stat(100, 100)], 201: [stat(201, 200, "Z")] }).groupState(200)).toBe("gone");
+  });
+  it.each([
+    ["vanished from /proc (ENOENT)", [errno("ENOENT")]],
+    ["reaped between open and read (ESRCH)", [errno("ESRCH")]],
+    ["reported with group -1 and then vanished", [stat(200, -1), errno("ESRCH")]],
+  ] as const)("counts a process that %s as gone and stays readable", async (_name, reads) => {
+    const subject = table({ 100: [stat(100, 100)], 200: reads });
+    expect(await subject.groupState(200)).toBe("gone");
+    expect(await table({ 100: [stat(100, 100)], 200: reads }).readable()).toBe(true);
+  });
+  it("reads a member again that first reports group -1 and finds it alive", async () => {
+    expect(await table({ 100: [stat(100, 100)], 200: [stat(200, -1), stat(200, 200)] }).groupState(200)).toBe("alive");
+  });
+  it.each([
+    ["group -1 on both reads", [stat(200, -1)]],
+    ["a negative group other than -1", [stat(200, -2)]],
+    ["a missing group field", ["200 (node) S 1"]],
+    ["a malformed stat line", ["garbage"]],
+    ["a read error other than ENOENT or ESRCH", [errno("EACCES")]],
+  ] as const)("is unknown and unreadable for %s", async (_name, reads) => {
+    expect(await table({ 100: [stat(100, 100)], 200: reads }).groupState(300)).toBe("unknown");
+    expect(await table({ 100: [stat(100, 100)], 200: reads }).readable()).toBe(false);
+  });
+  it("is unknown and unreadable when /proc cannot be listed", async () => {
+    const subject = createProcessTable("linux", { selfPid: 100, procfs: { list: () => { throw errno("EMFILE"); }, readStat: () => stat(100, 100) } });
+    expect(await subject.groupState(200)).toBe("unknown");
+    expect(await subject.readable()).toBe(false);
+  });
+  it("is unreadable when the caller is missing", async () => {
+    expect(await table({ 300: [stat(300, 300)] }).readable()).toBe(false);
+  });
+});
+
 describe.skipIf(!currentSetupPlatform())("live process table", () => {
   it("is readable and tracks a detached child's process group", async () => {
     const subject = createProcessTable(currentSetupPlatform()!);
@@ -104,6 +161,34 @@ describe.skipIf(!currentSetupPlatform())("live process table", () => {
     }
     expect(await subject.groupState(child.pid!)).toBe("gone");
   });
+});
+
+describe.skipIf(currentSetupPlatform() !== "linux")("Linux process table under process churn", () => {
+  // Processes that exit while /proc is listed must not make a scan indeterminate (#109).
+  it("stays readable and determinate while short-lived processes come and go", async () => {
+    const subject = createProcessTable("linux");
+    // A reaped group makes groupState scan the whole table, past the churning entries.
+    const reaped = spawn("/bin/true", [], { detached: true, stdio: "ignore" });
+    await once(reaped, "close");
+    const churn = spawn("/bin/sh", ["-c", "for i in 1 2; do (while :; do /bin/true; done) & done; wait"], { detached: true, stdio: "ignore" });
+    const closed = once(churn, "close");
+    let scans = 0; let unreadable = 0; let notAlive = 0; let notGone = 0;
+    try {
+      await once(churn, "spawn");
+      const deadline = Date.now() + 2_000;
+      while (Date.now() < deadline) {
+        scans++;
+        if (!(await subject.readable())) unreadable++;
+        if ((await subject.groupState(churn.pid!)) !== "alive") notAlive++;
+        if ((await subject.groupState(reaped.pid!)) !== "gone") notGone++;
+      }
+    } finally {
+      process.kill(-churn.pid!, "SIGKILL");
+      await closed;
+    }
+    expect(scans).toBeGreaterThan(10);
+    expect({ unreadable, notAlive, notGone }).toEqual({ unreadable: 0, notAlive: 0, notGone: 0 });
+  }, 30_000);
 });
 
 describe("filesystem rule", () => {

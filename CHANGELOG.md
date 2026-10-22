@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.11.2 — 2026-10-22
+
+Patch release for [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109) and
+[#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117).
+
+- Changed: Pi SDK `@earendil-works/pi-coding-agent` 1.4.0, together with its
+  family packages `pi-ai`, `pi-mcp`, `pi-tui`, `pi-codemode`, `pi-agent-core`
+  and `pi-telemetry`, all exactly pinned at 1.4.0
+  ([#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117)). No MCP
+  contract change. The SDK's reserved MCP tool names and stop reasons are
+  unchanged. Upstream changes that operators may notice:
+  - The `grep` tool runs `rg --no-config` and ignores `RIPGREP_CONFIG_PATH`.
+  - Provider attribution headers come from pi-ai's client identity, so an
+    extension's `before_provider_headers` handler no longer sees the
+    OpenRouter, NVIDIA NIM and OpenCode attribution headers.
+  - Default models changed for GitHub Copilot (`gpt-6.1-sol`), NVIDIA and
+    Xiaomi. The `openai-codex` provider no longer offers `gpt-5.5` and
+    `gpt-5.3-codex-spark`.
+  - Compaction summaries use the model's output limit. A session now recovers
+    after a response cut off at the output limit, and automatic retry covers
+    more transient gateway errors.
+- Fixed: on Linux, a mutating `setup` run could fail at random with
+  `ownership_lock_unavailable` while other processes exited
+  ([#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109)). The
+  process-table scan behind the setup fence treated a process that vanished
+  during the scan as indeterminate. Listing `/proc` with file types made Node
+  `lstat` an entry whose type procfs did not report, which happens for a
+  process that exits during the listing, and that `lstat` threw `ENOENT`.
+  Reading `/proc/<pid>/stat` of a process that is being reaped returns
+  `ESRCH` or process group `-1`. The guardian then refused to start, and a
+  cleanup loop could report an indeterminate state. Such processes now count
+  as gone, as a vanished `/proc` entry already did; a group of `-1` is read
+  once more and counts as gone only if the process has vanished by then. Any
+  other read or parse failure still makes the scan indeterminate and keeps the
+  fence.
+
 ## 0.11.1 — 2026-10-22
 
 Patch release for [#113](https://github.com/plagor44-ux/pi-session-mcp/issues/113).

@@ -137,6 +137,15 @@ contract.
   With delivery enabled, 0.11.0 refused to start without `XDG_RUNTIME_DIR`,
   which Codex never passes, so a shared configuration broke Codex and setup
   verification. Delivery now stays inactive there (ADR 0011 amendment).
+- Prepared as 0.11.2:
+  - [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109): processes
+    that exited during a `/proc` scan made the Linux setup fence fail at random
+    with `ownership_lock_unavailable`, in CI and on busy hosts.
+  - [#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117): Pi SDK
+    1.4.0.
+  - Not yet decided:
+    [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115), whether
+    Pi's native MCP client should replace this server's `mcpServers` bridge.
 - Open operator checks: wake in the VS Code extension, whether a running
   session loads a newly written hook without a restart or `/hooks` review, and
   a wrapped container writer with delivery under rootless Podman, including the
