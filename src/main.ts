@@ -13,6 +13,11 @@ import { EVENTS_DIR_ENV, eventsRoot } from "./turn-events.js";
 import { createWriterGuard } from "./writer-guard.js";
 
 type ProcessDiagnostic = SdkPiAdapterDiagnostic | StartupDiagnostic | EventSpoolDiagnostic | {
+  readonly level: "warn";
+  readonly event: "event_delivery_inactive";
+  readonly stage: "startup";
+  readonly code: "event_runtime_dir_missing";
+} | {
   readonly level: "error";
   readonly event: "mcp_transport_error";
   readonly stage: "transport";
@@ -28,12 +33,16 @@ function writeDiagnostic(diagnostic: ProcessDiagnostic): void {
   process.stderr.write(JSON.stringify(diagnostic) + "\n");
 }
 
-/** An explicit absolute directory wins; otherwise the runtime directory decides. Throws without either. */
-function eventSpoolDirectory(env: NodeJS.ProcessEnv): string {
+/**
+ * An explicit directory wins and must be absolute; otherwise the runtime directory decides.
+ * `undefined` when neither is set: a launcher such as Codex passes no `XDG_RUNTIME_DIR`, and no
+ * controller there could be woken, so delivery stays inactive instead of failing startup (#113).
+ */
+function eventSpoolDirectory(env: NodeJS.ProcessEnv): string | undefined {
   const explicit = env[EVENTS_DIR_ENV];
-  const dir = explicit !== undefined && explicit.length > 0 ? explicit : eventsRoot(env);
-  if (dir === undefined || dir.includes("\0") || !isAbsolute(dir)) throw new EventSpoolError();
-  return dir;
+  if (explicit === undefined || explicit.length === 0) return eventsRoot(env);
+  if (explicit.includes("\0") || !isAbsolute(explicit)) throw new EventSpoolError();
+  return explicit;
 }
 
 async function main(): Promise<void> {
@@ -43,7 +52,14 @@ async function main(): Promise<void> {
   try {
     const config = await loadConfig();
     const guardPath = process.env.PI_SESSION_MCP_WRITER_GUARD;
-    if (config.eventDelivery === "spool") spool = TurnEventSpool.open(eventSpoolDirectory(process.env), { diagnostic: writeDiagnostic });
+    let delivery = config.eventDelivery;
+    if (delivery === "spool") {
+      const directory = eventSpoolDirectory(process.env);
+      if (directory === undefined) {
+        delivery = "off";
+        writeDiagnostic({ level: "warn", event: "event_delivery_inactive", stage: "startup", code: "event_runtime_dir_missing" });
+      } else spool = TurnEventSpool.open(directory, { diagnostic: writeDiagnostic });
+    }
     const events = spool;
     registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces, {
       ...(guardPath === undefined ? {} : { writerGuard: createWriterGuard(guardPath, config.workspaces) }),
@@ -52,7 +68,7 @@ async function main(): Promise<void> {
       }),
     });
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, config.eventDelivery),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),
