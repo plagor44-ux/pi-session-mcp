@@ -2218,6 +2218,53 @@ Not established for `0.11.2`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.2 post-release evidence
+
+The published-release acceptance of `v0.11.2` ran on 2026-10-22 from 20:07 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.308`. Level 2 passed for the tag and for the installed npm
+package, each with delivery off and with `--events spool`. Level 1 was not
+repeated on the tag clone: the release commit has the same tree as the
+release branch head `d6ed5ec`, which differs from the accepted candidate
+`9cd3f69` only by the acceptance record.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.2` (tag object
+`03d6a9e844ebaef51ba4936e6b97ad6c88e85458`) peels to
+`39f823b3a6f1155f22c794ed52017f118f193404`, the merge of #116, and
+`git describe --tags --exact-match` reports `v0.11.2`. CI passed on the merge
+commit (run `39843660550`) and on the tag (run `39845222402`).
+
+Package publication, a release fact and not an acceptance level:
+- The maintainer published `pi-session-mcp@0.11.2` at 19:59:55 UTC, before the
+  tag existed, so the package was not built from a tag clone as
+  [Releasing](releasing.md#publish-a-release) describes.
+- Byte equality stands in for that step. The registry serves shasum
+  `34b697cd8eaf3c216daa65e8f03a02cecc3d7e9c` and integrity
+  `sha512-SjtvGZ8i/yK3tb9d9bSn1ughj1A2SAoSbEBDkDGtHJEspv1vShIh9F3I78+RcSPJmcKigpYDblEcuynYaHeGUw==`.
+  Both equal a local `npm pack` of a fresh clone of the merge commit, and
+  later of the tag, after `npm ci`, `npm run build` and `npm run build:cli`.
+- Doctor on the tag clone reported `packageVersion` `0.11.2`. It exited with
+  `2` because no configuration was set (`config_missing`).
+- The GitHub release `v0.11.2` was created after the tag CI passed.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile. Every `@earendil-works` package resolved to
+  `1.4.0` with one copy each. The install smoke reported `smoke_passed` with
+  version `0.11.2`. Level 2 passed 160 of 160 checks with delivery off and 228
+  of 228 with `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+- The clone and the prefix were removed.
+
+Not established for `0.11.2`:
+- any live run on Pi SDK `1.4.0` (Level 3 or a real model);
+- the VS Code wake;
+- a wrapped container writer with delivery enabled;
+- macOS delivery.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
