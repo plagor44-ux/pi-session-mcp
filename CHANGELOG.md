@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.11.2 — 2026-10-22
+
+Patch release for [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109) and
+[#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117).
+
 - Changed: Pi SDK `@earendil-works/pi-coding-agent` 1.4.0, together with its
   family packages `pi-ai`, `pi-mcp`, `pi-tui`, `pi-codemode`, `pi-agent-core`
   and `pi-telemetry`, all exactly pinned at 1.4.0
