@@ -1,0 +1,52 @@
+{
+  "runId": "007-i-thoth-dms-code-A-r1",
+  "taskId": "i-thoth-dms",
+  "profile": "code",
+  "arm": "A",
+  "replicate": 1,
+  "pairings": [
+    "pl-code"
+  ],
+  "authType": "oauth",
+  "terminal": "completed",
+  "usage": {
+    "session": {
+      "input": 147736,
+      "output": 20817,
+      "cacheRead": 2821632,
+      "cacheWrite": 0,
+      "total": 2990185,
+      "costUsd": 0.7858052
+    },
+    "assistant": {
+      "messages": 31,
+      "input": 147736,
+      "output": 20817,
+      "cacheRead": 2821632,
+      "cacheWrite": 0,
+      "costUsd": 0.7858052
+    },
+    "providerError": null
+  },
+  "durationMs": 611709,
+  "trace": {
+    "outsideWrites": 0,
+    "unresolvedWrites": 0,
+    "deniedWriteAttempts": 0,
+    "unresolvedEgress": 0,
+    "unexpectedConnects": [],
+    "unexpectedConnectCount": 0,
+    "connects": 20
+  },
+  "harnessError": null,
+  "assistantTextTruncated": false,
+  "assistantTextSha256": "71c7999874e975b0582ed356ee181658d10aabad644dcee1fe54594399cc091b",
+  "outcome": "scored",
+  "accepted": true,
+  "implementation": {
+    "accepted": true,
+    "testsPassed": true,
+    "outOfScopeCount": 0
+  },
+  "stopReason": null
+}

@@ -13,7 +13,7 @@ import { BUDGET_USD, INITIAL_RUN_ESTIMATE_USD } from "./budget.js";
 import { fileHostCredentials } from "./credentials.js";
 import { dryLoad, type DryLoadDeps } from "./dry-load.js";
 import { PersistedLedger } from "./ledger-file.js";
-import { PAIRINGS, buildMatrix, trimMatrix } from "./matrix.js";
+import { PAIRINGS, buildMatrix, replicateOf, trimMatrix } from "./matrix.js";
 import { assertPreflightPassed, runPreflight } from "./preflight.js";
 import { readApproval, readRuns, writeEvidence } from "./report.js";
 import { readRegularFile } from "./safe-read.js";
@@ -27,7 +27,7 @@ const MODES = ["--plan", "--preflight", "--wave", "--report", "--scan", "--dry-l
 type Mode = typeof MODES[number];
 /** `--report` reads a finished wave, so `--wave` is its value option there and not a mode. */
 const REPORT_MODES: readonly string[] = ["--plan", "--preflight", "--report"];
-const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs", "--exclude-wave", "--deps"] as const;
+const VALUE_OPTIONS = ["--tasks", "--approval", "--out", "--pairings", "--ledger", "--config", "--auth", "--template", "--preflight-dir", "--wave", "--evidence", "--transcripts", "--max-runs", "--exclude-wave", "--deps", "--replicates"] as const;
 
 export interface ParsedArgs {
   mode: Mode;
@@ -39,6 +39,8 @@ export interface ParsedArgs {
   excludeWaves: string[];
   maxRuns?: number;
   resume: boolean;
+  /** `--plan` only (R90): how many times each task and arm is planned, 1 to 9; 1 is a plan without replicates. */
+  replicates: number;
   /** `--report` only (R89): record the bound paths that changed since each wave's commit instead of refusing. */
   allowSourceDrift: boolean;
 }
@@ -76,7 +78,12 @@ export function parseArgs(args: string[]): ParsedArgs {
     if (!/^[1-9][0-9]{0,3}$/.test(options["--max-runs"])) throw new Error("invalid_argument");
     maxRuns = Number(options["--max-runs"]);
   }
-  const result = (): ParsedArgs => ({ mode, options, trim, waves, excludeWaves, resume, allowSourceDrift, ...(maxRuns === undefined ? {} : { maxRuns }) });
+  let replicates = 1;
+  if (options["--replicates"] !== undefined) {
+    if (mode !== "--plan" || !/^[1-9]$/.test(options["--replicates"])) throw new Error("invalid_argument");
+    replicates = Number(options["--replicates"]);
+  }
+  const result = (): ParsedArgs => ({ mode, options, trim, waves, excludeWaves, resume, replicates, allowSourceDrift, ...(maxRuns === undefined ? {} : { maxRuns }) });
   if (mode === "--report") {
     if (waves.length === 0) throw new Error("wave_required");
     if (!options["--ledger"]) throw new Error("ledger_required");
@@ -170,7 +177,13 @@ function projectionOf(persisted: PersistedLedger | undefined): Projection {
  * An earlier wave a `--plan` leaves out: its approval, the run ids it has a record for, those among them that executed, and those among
  * the executed that were stopped by the trace audit (R85).
  */
-interface ExcludedWave { dir: string; approval: Approval; recorded: Set<string>; executed: Set<string>; auditStopped: Set<string> }
+interface ExcludedWave {
+  dir: string; approval: Approval; recorded: Set<string>; executed: Set<string>; auditStopped: Set<string>;
+  /** The slot (task, profile, arm, replicate) each recorded run id has in that wave (R90). */
+  slots: Map<string, string>;
+}
+
+const slotOf = (run: { taskId: string; profile: string; arm: string; replicate?: number | undefined }): string => `${run.taskId}\u0000${run.profile}\u0000${run.arm}\u0000${replicateOf(run)}`;
 
 /** Reads each wave with the report's safe readers; its approval must name the ledger (`ledger_mismatch`) and the current tasks (`tasks_changed`). */
 async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger, tasks: TaskSpec[]): Promise<ExcludedWave[]> {
@@ -185,6 +198,7 @@ async function loadExcludedWaves(dirs: string[], ledger: PersistedLedger, tasks:
     waves.push({
       dir, approval, recorded: new Set(records.map((r) => r.runId)), executed: new Set(records.filter((r) => r.outcome !== "not_run").map((r) => r.runId)),
       auditStopped: new Set(records.filter((r) => r.outcome === "stopped" && isAuditStop(r.stopReason)).map((r) => r.runId)),
+      slots: new Map(records.map((r) => [r.runId, slotOf(r)])),
     });
   }
   return waves;
@@ -205,10 +219,14 @@ async function waveIsPaused(dir: string): Promise<boolean> {
  */
 async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: PersistedLedger | undefined, excluded: ExcludedWave[]) {
   const pairings = selectedPairings(parsed.options["--pairings"]);
+  const { replicates } = parsed;
   const projection = projectionOf(ledger);
   const replanned = new Map<string, number>();
   const notReplanned: { runId: string; reason: string }[] = [];
-  const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings).map((r) => r.runId).filter((id) => {
+  const skip = new Set(excluded.length === 0 ? [] : buildMatrix(tasks, pairings, new Set(), replicates).filter((run) => {
+    const id = run.runId;
+    // A run id names one slot; a record of that id for another task, profile, arm or replicate is not this plan's run (R90).
+    if (excluded.some((wave) => wave.slots.has(id) && wave.slots.get(id) !== slotOf(run))) throw new Error("wave_slot_mismatch");
     const ran = excluded.filter((wave) => wave.executed.has(id));
     if (ran.length > 0 && ran.every((wave) => wave.auditStopped.has(id))) {
       const charges = ledger!.runEntryCount(id);
@@ -217,9 +235,9 @@ async function plannedRuns(tasks: TaskSpec[], parsed: ParsedArgs, ledger: Persis
       return true;
     }
     return ran.length > 0 || ledger!.hasRunEntry(id);
-  }));
-  const full = buildMatrix(tasks, pairings, skip);
-  const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd, skip);
+  }).map((run) => run.runId));
+  const full = buildMatrix(tasks, pairings, skip, replicates);
+  const trimmed = trimMatrix(tasks, pairings, projection.projectedUsd, projection.remainingUsd, skip, replicates);
   return { full, trimmed, runs: parsed.trim ? trimmed.runs : full, projection, skip, replanned, notReplanned };
 }
 
@@ -261,14 +279,17 @@ export async function buildPlan(parsed: ParsedArgs, options: { sourceCwd?: strin
     approved: false,
     tasks: tasks.length,
     ...(exclusion === undefined ? {} : { exclusion }),
-    matrix: { count: runs.length, projectedUsd: projectedUsd(runs), runs: runs.map(({ runId, ordinal, taskId, profile, arm, pairings: ids }) => ({ runId, ordinal, taskId, profile, arm, pairings: ids })) },
+    matrix: {
+      count: runs.length, projectedUsd: projectedUsd(runs),
+      runs: runs.map(({ runId, ordinal, taskId, profile, arm, replicate, pairings: ids }) => ({ runId, ordinal, taskId, profile, arm, ...(replicate === undefined ? {} : { replicate }), pairings: ids })),
+    },
     trimmed: {
       remainingUsd, pairings: trimmed.pairings.map((p) => p.id), tasksPerPairing: trimmed.tasksPerPairing,
       count: trimmed.runs.length, projectedUsd: projectedUsd(trimmed.runs), matrixDigest: matrixDigest(trimmed.runs),
     },
     approvalTemplate: {
       approved: false, approvedAt: null, budgetUsd: BUDGET_USD, sourceCommit: await sourceCommit(options.sourceCwd),
-      tasksDigest: tasksDigest(tasks), matrixDigest: matrixDigest(runs), ledgerId: ledger?.id ?? null, runs, routes, ...(routesNote === undefined ? {} : { routesNote }),
+      tasksDigest: tasksDigest(tasks), matrixDigest: matrixDigest(runs), ledgerId: ledger?.id ?? null, runs, ...(parsed.replicates === 1 ? {} : { replicates: parsed.replicates }), routes, ...(routesNote === undefined ? {} : { routesNote }),
       ...(replannedStopped.length === 0 ? {} : { replannedStopped }),
     },
   };
@@ -334,7 +355,7 @@ async function report(parsed: ParsedArgs): Promise<void> {
   const summary = await writeEvidence(parsed.waves.map((wave) => resolve(wave)), resolve(parsed.options["--evidence"]!), resolve(parsed.options["--ledger"]!), { repoRoot: await repositoryRoot(), allowSourceDrift: parsed.allowSourceDrift });
   process.stdout.write(`${JSON.stringify({
     spentUsd: summary.spentUsd, budgetSpend: summary.budgetSpend, waveSpend: summary.waveSpend, stopReason: summary.stopReason,
-    pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, complete: p.complete, recommendation: p.recommendation })),
+    pairings: summary.pairings.map((p) => ({ id: p.id, pairedTasks: p.tasks.length, ...(p.replicated?.units === undefined ? {} : { pairedUnits: p.replicated.units.length }), ...(p.replicated?.incompleteTasks === undefined ? {} : { incompleteTasks: p.replicated.incompleteTasks }), complete: p.complete, recommendation: p.recommendation })),
   })}\n`);
 }
 

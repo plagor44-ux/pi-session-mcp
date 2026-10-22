@@ -9,8 +9,8 @@ import { approvalSchema, type Approval } from "./approval.js";
 import { BOUND_PATH, BOUND_PATHSPECS, dirtyBoundPaths } from "./bound.js";
 import { isAuditStop, type RunRecord, type StopReason } from "./classify.js";
 import { ledgerFileSchema } from "./ledger-file.js";
-import { PAIRINGS, taskKind } from "./matrix.js";
-import { armSchema, profileIdSchema } from "./schemas.js";
+import { MAX_REPLICATES, PAIRINGS, replicateOf, taskKind } from "./matrix.js";
+import { armSchema, profileIdSchema, type Pairing } from "./schemas.js";
 import { readRegularFile } from "./safe-read.js";
 import { realHome } from "./tools.js";
 
@@ -41,6 +41,8 @@ export function recommend(
 /** The fields of a run record the report reads; a full `RunRecord` satisfies it. */
 export type SummaryRecord = Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings" | "outcome" | "accepted" | "stopReason"> & {
   usage: { session: { input: number; cacheRead: number; costUsd: number } | null } | null;
+  /** The record's replicate (R90); absent for a plan without replicates, read as 1. */
+  replicate?: number | undefined;
   /** The number of destinations outside the provider and DNS allowlists; the record itself keeps only the first few. */
   trace?: { unexpectedConnectCount?: number | undefined } | null | undefined;
   /** What the report reads of a review score (R78): the false findings it hit and whether the verdict matched. */
@@ -56,8 +58,10 @@ type Assert<T extends true> = T;
 /** Compile-time check: the list above is exactly `StopReason`, so a new stop reason cannot be silently rejected when records are read. */
 export type StopReasonListMatches = Assert<Equal<typeof STOP_REASONS[number], StopReason>>;
 
+/** The replicate a run id names (R90): its `-r<k>` suffix, or none. */
+const RUN_ID_REPLICATE = /-r([1-9])$/;
 const summaryRecordSchema = z.object({
-  runId: z.string().min(1), taskId: z.string().min(1), profile: profileIdSchema, arm: armSchema, pairings: z.array(z.string()),
+  runId: z.string().min(1), taskId: z.string().min(1), profile: profileIdSchema, arm: armSchema, replicate: z.number().int().min(1).max(MAX_REPLICATES).optional(), pairings: z.array(z.string()),
   outcome: z.enum(["scored", "stopped", "not_run"]), accepted: z.boolean().nullable(),
   usage: z.object({ session: z.object({ input: z.number(), cacheRead: z.number(), costUsd: z.number() }).nullable() }).nullable(),
   stopReason: z.enum(STOP_REASONS).nullable(),
@@ -66,6 +70,9 @@ const summaryRecordSchema = z.object({
     falseFindings: z.array(z.string()), verdictMatched: z.boolean().optional(), criticalHit: z.number().optional(), criticalTotal: z.number().optional(),
     recall: z.number().optional(), accepted: z.boolean().optional(),
   }).optional(),
+}).refine((record) => {
+  const suffix = RUN_ID_REPLICATE.exec(record.runId)?.[1];
+  return (suffix === undefined ? undefined : Number(suffix)) === record.replicate;
 });
 const parseSummaryRecord = (value: unknown): SummaryRecord => summaryRecordSchema.parse(value);
 
@@ -97,13 +104,34 @@ export interface ReviewArmTotals {
   /** Runs the keyword oracle accepted (verdict matched and every critical finding hit); descriptive only. */
   oracleAccepted: number;
 }
+/** One arm of one task in a replicated plan (R92): the runs scored, those accepted, and whether more than half of the N runs were accepted. */
+export interface ReplicatedArm { scored: number; accepted: number; solved: boolean }
+/**
+ * What a replicated plan (R90, R92) adds to a pairing that has runs in the evidence. An implementation pairing reports every task of the pairing
+ * with both arms' counts (also for unpaired runs) and whether it counted (both arms have all N runs scored); the totals and the recommendation
+ * are taken over the counted tasks. A review pairing, descriptive only, lists the (task, replicate) units scored in both arms.
+ */
+export interface ReplicatedResult {
+  /** The replicates the plan asked for (N): `accepted` is read as `k of N`. */
+  replicates: number;
+  /** Implementation pairings: every task of the pairing, in task-id order. */
+  perTask?: { taskId: string; a: ReplicatedArm; b: ReplicatedArm; counted: boolean }[];
+  /** Implementation pairings: the tasks that do not count because an arm lacks scored runs; the pairing is then incomplete. */
+  incompleteTasks?: string[];
+  /** Implementation pairings: per arm, the counted tasks it solved. */
+  solvedTasks?: { a: number; b: number };
+  /** Review pairings: the (task, replicate) units scored in both arms, in task-id then replicate order. */
+  units?: { taskId: string; replicate: number }[];
+}
 interface PairingBase {
   id: string;
-  /** The tasks scored in both arms, in task-id order. */
+  /** The tasks scored in both arms, in task-id order; with replicates, the tasks that counted (R92). */
   tasks: string[];
-  /** At least three tasks were scored in both arms. */
+  /** At least three tasks were scored in both arms; with replicates, every task of the pairing counted and at least three did (R92). */
   complete: boolean;
   cacheReadShare: { a: number; b: number };
+  /** Only for a plan with replicates (R90); a plan without them has exactly the fields it always had. */
+  replicated?: ReplicatedResult;
 }
 export interface ImplementationPairingResult extends PairingBase { kind: "implementation"; a: ArmTotals; b: ArmTotals; recommendation: Recommendation | "not-run" }
 /** Review pairings are descriptive (R83): a review run is scored and reported, but its acceptance never yields a recommendation. */
@@ -163,11 +191,43 @@ function assertNoDuplicates(records: readonly SummaryRecord[]): void {
   const ids = new Set<string>();
   const slots = new Set<string>();
   for (const record of records) {
-    const slot = `${record.taskId}\u0000${record.profile}\u0000${record.arm}`;
+    const slot = `${record.taskId}\u0000${record.profile}\u0000${record.arm}\u0000${replicateOf(record)}`;
     if (ids.has(record.runId) || slots.has(slot)) throw new Error("duplicate_run_record");
     ids.add(record.runId);
     slots.add(slot);
   }
+}
+
+const share = (t: { input: number; cacheRead: number }): number => (t.input + t.cacheRead > 0 ? t.cacheRead / (t.input + t.cacheRead) : 0);
+const byTaskId = (x: string, y: string): number => (x < y ? -1 : x > y ? 1 : 0);
+
+/** An implementation pairing of a plan with `replicates` > 1 (R92): `own` are the records of its two arms, whatever their outcome. */
+function replicatedImplementation(pairing: Pairing, own: readonly SummaryRecord[], replicates: number): ImplementationPairingResult {
+  const scoredRuns = (taskId: string, arm: SummaryRecord["arm"]): SummaryRecord[] =>
+    own.filter((r) => r.taskId === taskId && r.arm === arm && r.outcome === "scored" && r.accepted !== null);
+  const side = (runs: SummaryRecord[]): ReplicatedArm => {
+    const accepted = runs.filter((r) => r.accepted === true).length;
+    return { scored: runs.length, accepted, solved: 2 * accepted > replicates };
+  };
+  const perTask = [...new Set(own.map((r) => r.taskId))].sort(byTaskId).map((taskId) => {
+    const a = side(scoredRuns(taskId, "A"));
+    const b = side(scoredRuns(taskId, pairing.extension));
+    return { taskId, a, b, counted: a.scored === replicates && b.scored === replicates };
+  });
+  const counted = perTask.filter((task) => task.counted);
+  const runsOf = (arm: SummaryRecord["arm"]): SummaryRecord[] => counted.flatMap((task) => scoredRuns(task.taskId, arm));
+  const a = totals(runsOf("A"));
+  const b = totals(runsOf(pairing.extension));
+  const solved = { a: counted.filter((task) => task.a.solved).length, b: counted.filter((task) => task.b.solved).length };
+  const complete = counted.length === perTask.length && counted.length >= MIN_PAIRED_TASKS;
+  const hasScored = perTask.some((task) => task.a.scored > 0 || task.b.scored > 0);
+  const recommendation = !hasScored ? "not-run" : !complete ? "inconclusive"
+    : recommend({ accepted: solved.a, costUsd: a.arm.costUsd }, { accepted: solved.b, costUsd: b.arm.costUsd }, counted.map((task) => ({ a: task.a.solved, b: task.b.solved })));
+  return {
+    id: pairing.id, tasks: counted.map((task) => task.taskId), cacheReadShare: { a: share(a), b: share(b) },
+    replicated: { replicates, perTask, incompleteTasks: perTask.filter((task) => !task.counted).map((task) => task.taskId), solvedTasks: solved },
+    kind: "implementation", a: a.arm, b: b.arm, complete, recommendation,
+  };
 }
 
 /**
@@ -175,32 +235,45 @@ function assertNoDuplicates(records: readonly SummaryRecord[]): void {
  * incomplete, none at all is not run. A review pairing is descriptive (R83): it has the recommendation `descriptive` in every case and
  * reports the oracle's numbers per arm without any decision. `spend` defaults to the cost observed in the records; the ledger adds the estimates charged for runs without trusted output.
  * The cache-read share uses Pi's token split, where `input` excludes cache reads.
+ *
+ *
+ * With `replicates` N > 1 (R90, R92) an implementation pairing is decided per task: an arm solves a task when more than N/2 of its N runs were
+ * accepted, a task counts only when both arms have all N runs scored, and `recommend()` runs over the solved flags of the counted tasks
+ * (`accepted` is the number of solved tasks, the cost that of the counted tasks' runs). The pairing is complete only when every task of the
+ * pairing counted and at least three did, and inconclusive otherwise. A review pairing stays descriptive over the (task, replicate) units
+ * scored in both arms. `replicated` is added to pairings that have runs; with one replicate nothing changes.
  */
-export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend): ReportSummary {
+export function summarize(records: readonly SummaryRecord[], spend?: ReportSpend, replicates = 1): ReportSummary {
   assertNoDuplicates(records);
+  const unitKey = (taskId: string, replicate: number): string => `${taskId}\u0000${replicate}`;
   const pairings = PAIRINGS.map((pairing): PairingResult => {
+    const own = records.filter((r) => r.profile === pairing.profile && r.pairings.includes(pairing.id) && (r.arm === "A" || r.arm === pairing.extension));
+    if (replicates > 1 && own.length > 0 && taskKind(pairing.profile) === "implementation") return replicatedImplementation(pairing, own, replicates);
     const scoredBy = (arm: SummaryRecord["arm"]): Map<string, SummaryRecord> => new Map(records
       .filter((r) => r.outcome === "scored" && r.accepted !== null && r.arm === arm && r.profile === pairing.profile && r.pairings.includes(pairing.id))
-      .map((r) => [r.taskId, r]));
+      .map((r) => [unitKey(r.taskId, replicateOf(r)), r]));
     const armA = scoredBy("A");
     const armB = scoredBy(pairing.extension);
-    const tasks = [...armA.keys()].filter((id) => armB.has(id)).sort();
-    const a = totals(tasks.map((id) => armA.get(id)!));
-    const b = totals(tasks.map((id) => armB.get(id)!));
-    const share = (t: { input: number; cacheRead: number }): number => (t.input + t.cacheRead > 0 ? t.cacheRead / (t.input + t.cacheRead) : 0);
+    const paired = [...armA.keys()].filter((key) => armB.has(key)).map((key) => ({ taskId: armA.get(key)!.taskId, replicate: replicateOf(armA.get(key)!), key }))
+      .sort((x, y) => (x.taskId < y.taskId ? -1 : x.taskId > y.taskId ? 1 : x.replicate - y.replicate));
+    const tasks = [...new Set(paired.map((unit) => unit.taskId))];
+    const a = totals(paired.map((unit) => armA.get(unit.key)!));
+    const b = totals(paired.map((unit) => armB.get(unit.key)!));
     const base = { id: pairing.id, tasks, cacheReadShare: { a: share(a), b: share(b) } };
+    const units = paired.map(({ taskId, replicate }) => ({ taskId, replicate }));
+    const replicated = (): { replicated?: ReplicatedResult } => (replicates > 1 && own.length > 0 ? { replicated: { replicates, units } } : {});
     if (taskKind(pairing.profile) === "review") {
       // R83: no recommendation of any kind, whatever the oracle accepted.
       return {
-        ...base, kind: "review", complete: tasks.length >= MIN_PAIRED_TASKS, recommendation: "descriptive",
-        a: reviewTotals(tasks.map((id) => armA.get(id)!), a.arm), b: reviewTotals(tasks.map((id) => armB.get(id)!), b.arm),
+        ...base, ...replicated(), kind: "review", complete: tasks.length >= MIN_PAIRED_TASKS, recommendation: "descriptive",
+        a: reviewTotals(paired.map((unit) => armA.get(unit.key)!), a.arm), b: reviewTotals(paired.map((unit) => armB.get(unit.key)!), b.arm),
       };
     }
+    const perUnit = paired.map((unit) => ({ a: armA.get(unit.key)!.accepted === true, b: armB.get(unit.key)!.accepted === true }));
     const impl = { ...base, kind: "implementation" as const, a: a.arm, b: b.arm };
     if (tasks.length === 0) return { ...impl, complete: false, recommendation: "not-run" };
     if (tasks.length < MIN_PAIRED_TASKS) return { ...impl, complete: false, recommendation: "inconclusive" };
-    const perTask = tasks.map((id) => ({ a: armA.get(id)!.accepted === true, b: armB.get(id)!.accepted === true }));
-    return { ...impl, complete: true, recommendation: recommend(a.arm, b.arm, perTask) };
+    return { ...impl, complete: true, recommendation: recommend(a.arm, b.arm, perUnit) };
   });
   const observed: Spend = { observedUsd: records.reduce((sum, r) => sum + costOf(r), 0), estimatedUsd: 0 };
   const { budget, wave } = spend ?? { budget: observed, wave: observed };
@@ -263,7 +336,7 @@ export async function readApproval(waveDir: string): Promise<{ bytes: Buffer; ap
 }
 
 /**
- * Merges the records of several waves per run id (R60). A run id keeps its task, profile and arm across waves; at most one wave holds a
+ * Merges the records of several waves per run id (R60). A run id keeps its task, profile, arm and replicate across waves; at most one wave holds a
  * final record for it (scored, or stopped for a reason other than the trace audit), and that one replaces the `not_run` records other
  * waves wrote for the slot. A record stopped by the trace audit is not final (R85): the slot may be planned again, and a final record of the
  * same run id from any other wave replaces it, whatever the order of the waves (the stop itself stays in `waveStops`); among audit stops the
@@ -279,7 +352,7 @@ function mergeRuns(waves: readonly WaveRun[][]): WaveRun[] {
       inWave.add(runId);
       const prior = merged.get(runId)?.record;
       if (prior === undefined) { merged.set(runId, run); continue; }
-      const same = prior.taskId === run.record.taskId && prior.profile === run.record.profile && prior.arm === run.record.arm;
+      const same = prior.taskId === run.record.taskId && prior.profile === run.record.profile && prior.arm === run.record.arm && prior.replicate === run.record.replicate;
       const isFinal = (record: SummaryRecord): boolean => record.outcome !== "not_run" && !(record.outcome === "stopped" && isAuditStop(record.stopReason));
       if (!same || (isFinal(prior) && isFinal(run.record))) throw new Error("duplicate_run_record");
       // A final record wins over an audit stop and an audit stop over a `not_run` slot, in whichever wave each one is.
@@ -407,7 +480,11 @@ export async function writeEvidence(
       sourceDrift.push({ wave: index + 1, sourceCommit: approval.sourceCommit, boundPathsChangedSinceSource: await boundPathsChangedSince(root, approval.sourceCommit), allowSourceDrift: true });
     } else await assertBoundCodeUnchanged(root, approval.sourceCommit);
   }
-  const summary: ReportSummary = { ...summarize(summarized, ledger.spend), waveStops, ...(options.allowSourceDrift === true ? { sourceDrift } : {}) };
+  // Waves of one evaluation share one replicate count (R90): run ids of different counts would merge into slots that are not one plan's.
+  const counts = new Set(approvals.map(({ approval }) => approval.replicates ?? 1));
+  if (counts.size !== 1) throw new Error("replicates_mixed");
+  const replicates = [...counts][0]!;
+  const summary: ReportSummary = { ...summarize(summarized, ledger.spend, replicates), waveStops, ...(options.allowSourceDrift === true ? { sourceDrift } : {}) };
 
   const files = new Map<string, Buffer>();
   for (const run of runs) files.set(`runs/${run.name}`, run.bytes);

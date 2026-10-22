@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BUDGET_USD, BudgetLedger, INITIAL_RUN_ESTIMATE_USD } from "../eval/extensions/budget.js";
 import { PAIRINGS, buildMatrix, trimMatrix } from "../eval/extensions/matrix.js";
+import { parseArgs } from "../eval/extensions/cli.js";
 import { pairingSchema, runSpecSchema, taskSpecSchema, type TaskSpec } from "../eval/extensions/schemas.js";
 
 const HASH = `sha256:${"a".repeat(64)}` as const;
@@ -271,5 +272,99 @@ describe("extension ablation budget ledger", () => {
     expect(l.estimate("review")).toBe(1);
     expect(l.spentUsd).toBe(0);
     expect(l.allows("review")).toBe(true);
+  });
+});
+
+describe("replicates (R90)", () => {
+  const tasks = [impl("I1"), impl("I2"), impl("I3")];
+  const plCode = PAIRINGS.filter((p) => p.id === "pl-code");
+
+  it("is byte-identical with one replicate: ids, ordinals, order and no replicate field", () => {
+    const plain = buildMatrix(tasks, PAIRINGS);
+    expect(buildMatrix(tasks, PAIRINGS, new Set(), 1)).toEqual(plain);
+    expect(JSON.stringify(buildMatrix(tasks, PAIRINGS, new Set(), 1))).toBe(JSON.stringify(plain));
+    expect(plain.every((r) => !("replicate" in r) && !/-r\d$/.test(r.runId))).toBe(true);
+    expect(plain[0]!.runId).toBe("001-I1-code-deepseek-A");
+    expect(trimMatrix(tasks, PAIRINGS, (runs) => runs.length, 100, new Set(), 1).runs).toEqual(trimMatrix(tasks, PAIRINGS, (runs) => runs.length, 100).runs);
+  });
+
+  it("with three replicates builds the matrix replicate by replicate, ids suffixed, ordinals over the whole list", () => {
+    const one = buildMatrix(tasks, PAIRINGS);
+    const three = buildMatrix(tasks, PAIRINGS, new Set(), 3);
+    expect(three).toHaveLength(3 * one.length);
+    expect(three.map((r) => r.ordinal)).toEqual(three.map((_, i) => i + 1));
+    expect(three.map((r) => r.replicate)).toEqual(three.map((_, i) => Math.floor(i / one.length) + 1));
+    for (const r of three) {
+      expect(r.runId.endsWith(`-r${r.replicate}`)).toBe(true);
+      expect(r.runId.startsWith(String(r.ordinal).padStart(3, "0"))).toBe(true);
+      expect(runSpecSchema.parse(r)).toEqual(r);
+    }
+    expect(three[0]!.runId).toBe("001-I1-code-deepseek-A-r1");
+    expect(three[one.length]!.runId).toBe(`${String(one.length + 1).padStart(3, "0")}-I1-code-deepseek-${three[one.length]!.arm}-r2`);
+    // Run ids are unique, and every replicate holds the slots of the single matrix.
+    expect(new Set(three.map((r) => r.runId)).size).toBe(three.length);
+    for (let k = 1; k <= 3; k += 1) {
+      const slots = three.filter((r) => r.replicate === k).map((r) => `${r.taskId}/${r.profile}/${r.arm}`);
+      expect([...slots].sort()).toEqual(one.map((r) => `${r.taskId}/${r.profile}/${r.arm}`).sort());
+    }
+  });
+
+  it("flips the arm order of every task between consecutive replicates", () => {
+    const runs = buildMatrix(tasks, plCode, new Set(), 3);
+    const armOrder = (taskId: string, k: number) => runs.filter((r) => r.taskId === taskId && r.replicate === k).map((r) => r.arm);
+    for (const id of ["I1", "I2", "I3"]) {
+      const orders = [1, 2, 3].map((k) => armOrder(id, k).join(">"));
+      expect(orders[0]).not.toBe(orders[1]);
+      expect(orders[1]).not.toBe(orders[2]);
+      expect(orders[0]).toBe(orders[2]);
+    }
+    // Within a replicate the alternation over tasks is the one of a single matrix.
+    expect([1, 2, 3].map((k) => armOrder("I1", k)[0])).toEqual(["A", "pi-lens", "A"]);
+    expect([1, 2, 3].map((k) => armOrder("I2", k)[0])).toEqual(["pi-lens", "A", "pi-lens"]);
+  });
+
+  it("keeps the canonical ids and ordinals in a pairing subset, a skip and a trim of the replicated matrix", () => {
+    const full = buildMatrix(tasks, PAIRINGS, new Set(), 3);
+    const byId = new Map(full.map((r) => [r.runId, r]));
+    const subset = buildMatrix(tasks, plCode, new Set(), 3);
+    expect(subset).toHaveLength(18);
+    for (const run of subset) expect({ ...byId.get(run.runId)!, pairings: 0 }).toEqual({ ...run, pairings: 0 });
+    expect(subset.map((r) => r.ordinal)).toEqual([...subset.map((r) => r.ordinal)].sort((a, b) => a - b));
+    expect(subset.slice(0, 6).every((r) => r.replicate === 1)).toBe(true);
+    const skip = new Set(subset.slice(0, 4).map((r) => r.runId));
+    expect(buildMatrix(tasks, plCode, skip, 3)).toEqual(subset.slice(4));
+    const trimmed = trimMatrix(tasks, plCode, (runs) => runs.length, 100, skip, 3);
+    expect(trimmed.runs).toEqual(subset.slice(4));
+    expect(trimMatrix(tasks, plCode, (runs) => runs.length, 100, new Set(), 3).runs).toEqual(subset);
+  });
+
+  it("accepts 1 to 9 replicates only", () => {
+    expect(buildMatrix([impl("I1")], plCode, new Set(), 9)).toHaveLength(18);
+    for (const bad of [0, 10, 1.5, -1, Number.NaN]) {
+      expect(() => buildMatrix(tasks, plCode, new Set(), bad)).toThrow("invalid_argument");
+      expect(() => trimMatrix(tasks, plCode, (runs) => runs.length, 100, new Set(), bad)).toThrow("invalid_argument");
+    }
+  });
+
+  it("parses a run spec with and without a replicate and rejects a bad one", () => {
+    const run = { runId: "001-I1-code-A", taskId: "I1", profile: "code", arm: "A", ordinal: 1, pairings: ["pl-code"] };
+    expect(runSpecSchema.parse(run)).toEqual(run);
+    expect(runSpecSchema.parse({ ...run, runId: "001-I1-code-pi-lens-r3", arm: "pi-lens", replicate: 3 })).toMatchObject({ replicate: 3 });
+    for (const replicate of [0, 10, 1.5]) expect(() => runSpecSchema.parse({ ...run, replicate })).toThrow();
+  });
+
+  it("accepts --replicates with --plan only, as one digit from 1 to 9", () => {
+    const plan = ["--plan", "--tasks", "t.json"];
+    expect(parseArgs(plan).replicates).toBe(1);
+    expect(parseArgs([...plan, "--replicates", "3"]).replicates).toBe(3);
+    expect(parseArgs([...plan, "--replicates", "9"]).replicates).toBe(9);
+    for (const bad of ["0", "10", "x", "-1", "1.5", "03"]) expect(() => parseArgs([...plan, "--replicates", bad])).toThrow("invalid_argument");
+    expect(() => parseArgs([...plan, "--replicates", "2", "--replicates", "3"])).toThrow("invalid_argument");
+    const live = ["--approval", "a.json", "--tasks", "t.json", "--out", "w", "--ledger", "l.json", "--replicates", "3"];
+    expect(() => parseArgs(["--preflight", ...live])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--wave", ...live, "--template", "x"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--report", "--wave", "w", "--ledger", "l.json", "--evidence", "e", "--replicates", "3"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--dry-load", "--tasks", "t.json", "--template", "/tpl", "--out", "/o", "--replicates", "3"])).toThrow("invalid_argument");
+    expect(() => parseArgs(["--scan", "--transcripts", "t", "--out", "o", "--replicates", "3"])).toThrow("invalid_argument");
   });
 });
