@@ -10,7 +10,11 @@ before the session is returned.
 Global and project extensions are never auto-discovered; only the extensions
 that a profile allowlists load (see [Pi extensions](installation.md#pi-extensions)).
 Installing `pi-mcp-adapter` globally is neither required nor sufficient for this
-integration. Skills are likewise never auto-discovered; a profile gets only the
+integration. The same holds for Pi's own MCP client (Pi 1.2 and later: `pi mcp
+add`, `~/.pi/agent/mcp.json`, the built-in `mcp` extension). It belongs to the
+Pi CLI; embedded sessions never load it. A server added with `pi mcp add` or
+listed in a project `.pi/mcp.json` is therefore invisible to Pi Session MCP
+workers. Grant it through `mcpServers` instead. Skills are likewise never auto-discovered; a profile gets only the
 skills it selects from the operator's catalog (see [Pi skills](skills.md)).
 Granting an external MCP tool through `mcpServers` and selecting a skill are
 independent: a skill grants no tool.
