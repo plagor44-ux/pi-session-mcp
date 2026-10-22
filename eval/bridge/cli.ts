@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runProbe, SCENARIOS } from "./claude-probe.js";
+import { runLive, RefusedError } from "./live/runner.js";
 
 // `node cli.js probe --out <dir> [--client-version <v>] [--only S1,S2,X6]`
+// `node cli.js live --arm A|C --out <dir> (--approval <file> | --dry-run [--client-version <v>])`
 // The probe re-executes itself inside `unshare -rn` (new user and network namespace, loopback only) and refuses to run elsewhere.
 const USAGE = "usage: cli.js probe --out <absolute dir> [--client-version <version>] [--only S1,S2,...,X6]";
 interface Parsed { out: string; clientVersion?: string; only?: string[]; inside: boolean }
@@ -37,7 +39,51 @@ function reexecInsideNamespace(parsed: Parsed): number {
   return run.status ?? 1;
 }
 
+// ---------------------------------------------------------------- live (one approved L1 run, or its provider-free dry run)
+const LIVE_USAGE = "usage: cli.js live --arm A|C --out <dir> --approval <file>   |   cli.js live --arm A|C --out <dir> --dry-run [--client-version <version>]";
+interface LiveParsed { arm: "A" | "C"; out: string; approval?: string; dryRun: boolean; clientVersion?: string; inside: boolean }
+function parseLive(rest: string[]): LiveParsed | undefined {
+  let arm: string | undefined, out: string | undefined, approval: string | undefined, clientVersion: string | undefined, dryRun = false, inside = false;
+  for (let i = 0; i < rest.length; i += 1) {
+    const key = rest[i];
+    if (key === "--dry-run") dryRun = true;
+    else if (key === "--inside") inside = true;
+    else if (key === "--arm" || key === "--out" || key === "--approval" || key === "--client-version") {
+      const value = rest[++i];
+      if (value === undefined || value.startsWith("--")) return undefined;
+      if (key === "--arm") arm = value; else if (key === "--out") out = value; else if (key === "--approval") approval = value; else clientVersion = value;
+    } else return undefined;
+  }
+  if ((arm !== "A" && arm !== "C") || !out) return undefined;
+  if (dryRun ? approval !== undefined : (approval === undefined || clientVersion !== undefined || inside)) return undefined;
+  return { arm, out: resolve(out), dryRun, inside, ...(approval ? { approval: resolve(approval) } : {}), ...(clientVersion ? { clientVersion } : {}) };
+}
+function reexecLiveInsideNamespace(parsed: LiveParsed): number {
+  if (process.platform !== "linux") { process.stderr.write("refused: the dry run needs Linux (user and network namespaces)\n"); return 3; }
+  const check = spawnSync("unshare", ["-rn", "true"], { stdio: "ignore" });
+  if (check.error || check.status !== 0) { process.stderr.write("refused: unshare -rn is unavailable here\n"); return 3; }
+  const args = ["live", "--arm", parsed.arm, "--out", parsed.out, "--dry-run", ...(parsed.clientVersion ? ["--client-version", parsed.clientVersion] : []), "--inside"];
+  const run = spawnSync("unshare", ["-rn", "sh", "-c", 'ip link set lo up && exec "$@"', "sh", process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: "inherit" });
+  return run.status ?? 1;
+}
+async function mainLive(rest: string[]): Promise<number> {
+  const parsed = parseLive(rest);
+  if (!parsed) { process.stderr.write(`${LIVE_USAGE}\n`); return 64; }
+  if (parsed.dryRun && !parsed.inside) return reexecLiveInsideNamespace(parsed);
+  try {
+    const summary = await runLive({ arm: parsed.arm, out: parsed.out, dryRun: parsed.dryRun, ...(parsed.approval ? { approvalPath: parsed.approval } : {}), ...(parsed.clientVersion ? { clientVersion: parsed.clientVersion } : {}) });
+    const r = summary.result, stream = (r.stream ?? {}) as Record<string, any>, server = (r.server ?? {}) as Record<string, any>, checks = (r.checks ?? {}) as Record<string, boolean>;
+    process.stdout.write(`${summary.dryRun ? "dry-" : ""}${String(summary.seq).padStart(2, "0")}-L1-${summary.arm} outcome=${summary.outcome} requests=${String(stream.model_requests)} wakes=${String(stream.wakes?.started)} polls=${String(server.polls_running)} oracle=${String((r.oracle as Record<string, unknown> | undefined)?.status)} clean=${String(Object.values(checks).every(Boolean))}\n`);
+    return summary.outcome === "completed" && Object.values(checks).every(Boolean) ? 0 : 1;
+  } catch (error) {
+    if (error instanceof RefusedError) { process.stderr.write(`refused: ${error.reason}\n`); return 3; }
+    process.stderr.write("live run failed\n");
+    return 2;
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
+  if (argv[0] === "live") return mainLive(argv.slice(1));
   const parsed = parse(argv);
   if (!parsed) { process.stderr.write(`${USAGE}\n`); return 64; }
   if (!parsed.inside) return reexecInsideNamespace(parsed);

@@ -1,4 +1,12 @@
-# Live measurement plan (L4): not approved, nothing has run
+# Live measurement plan (L4)
+
+**Status 2026-10-21:** the full matrix below is not approved and has not run.
+Instead, the operator approved two L1 pairs, with these changes: an API key (no
+subscription token) and Claude Code 2.1.306. Pair 1 used the worker values of
+`explore-fast`, pair 2 those of `review`. Results are in
+[`live/`](live/README.md): the decision rule was not met. Running the full
+short-task matrix is not recommended. If the question is revisited, test one
+long worker turn first.
 
 Purpose: measure what the provider-free work cannot. Does a real Claude Code
 controller model, woken by the event bridge (arm C), finish the same tasks with
