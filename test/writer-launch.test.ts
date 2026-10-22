@@ -1,12 +1,12 @@
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { launch, launchEntry, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
-import { acceptanceFingerprint, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, writeWriterState, writerEventDeliveryEnabled, writerPaths, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { serveArgs } from "../src/writer-boundary.js";
 import { serveRefusal } from "../src/refusal-server.js";
@@ -27,7 +27,7 @@ afterEach(async () => { vi.restoreAllMocks(); vi.useRealTimers(); await rm(home,
 async function save(ready = false, version = "5.0.0") {
   await writeWriterState(home, "x-w1", state);
   await writeFile(writerPaths(home, "x-w1").wrapper, "wrapper");
-  if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache }) } });
+  if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache, ...(await writerEventDeliveryEnabled(writerPaths(home, "x-w1").config) ? { eventDelivery: true } : {}) }) } });
 }
 it.each(["throw", "error"])("reports a Podman spawn %s once without leaking error details", async (kind) => {
   await save(); const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
@@ -126,4 +126,112 @@ it("reads fresh credentials, copies after failed refresh, skips overlapping tick
   for (let i = 0; i < 5; i++) tick();
   expect(credentials.refreshHostLogin).toHaveBeenCalledTimes(2);
   child.emit("close", 0); await running; expect(deps.clearInterval).toHaveBeenCalled();
+});
+
+const uid = process.getuid!();
+async function enableDelivery(config: unknown = { events: { delivery: "spool" } }) {
+  const paths = writerPaths(home, "x-w1");
+  await mkdir(paths.config, { recursive: true });
+  await chmod(paths.root, 0o700); // setup creates the writer state directory private
+  await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(config));
+}
+// The spool cleanup needs /proc/self/fd; writers are Linux-only in the product.
+const itLinux = it.runIf(process.platform === "linux");
+const eventsFailure = JSON.stringify({ level: "error", event: "writer_launch_failed", stage: "events", code: "events_directory_unavailable" }) + "\n";
+const eventsDir = () => writerPaths(home, "x-w1").events;
+itLinux("mounts a freshly created private spool directory of the writer when its configuration enables delivery", async () => {
+  await enableDelivery(); await save(true);
+  const dir = eventsDir();
+  expect(dir).toBe(join(writerPaths(home, "x-w1").root, "events"));
+  expect(await launch(["x-w1"], deps)).toBe(7);
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", dir));
+  const args = vi.mocked(deps.spawnPodman).mock.calls[0]![0];
+  expect(args).toContain(`${dir}:/pi/events:rw`); expect(args).toContain("PI_SESSION_MCP_EVENTS_DIR=/pi/events");
+  expect((await lstat(dir)).mode & 0o777).toBe(0o700);
+  expect(serveRefusal).not.toHaveBeenCalled();
+});
+itLinux("needs no runtime directory for writer delivery", async () => {
+  await enableDelivery(); await save(true);
+  for (const env of [{}, { XDG_RUNTIME_DIR: "relative" }, { XDG_RUNTIME_DIR: join(home, "absent") }]) {
+    deps.env = { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...env };
+    expect(await launch(["x-w1"], deps)).toBe(7);
+  }
+  expect(deps.spawnPodman).toHaveBeenCalledTimes(3);
+  expect(serveRefusal).not.toHaveBeenCalled();
+  await expect(lstat(join(home, "absent"))).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("refuses a writer accepted without delivery once its configuration enables delivery", async () => {
+  await save(true);
+  await enableDelivery();
+  expect(await launch(["x-w1"], deps)).toBe(0);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
+});
+itLinux("mounts the spool directory for a probe launch too, and reuses an existing one", async () => {
+  await enableDelivery(); await save();
+  const dir = eventsDir();
+  await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
+  expect(deps.spawnPodman).toHaveBeenCalledTimes(2);
+  for (const call of vi.mocked(deps.spawnPodman).mock.calls) expect(call[0]).toEqual(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-"], "/release", dir));
+});
+it.each([
+  ["no events field", { workspaces: {} }],
+  ["an unexpected delivery value", { events: { delivery: "off" } }],
+  ["extra events keys", { events: { delivery: "spool", extra: true } }],
+  ["a non-object events field", { events: "spool" }],
+])("adds no mount and creates no directory with %s", async (_label, config) => {
+  await enableDelivery(config); await save(true);
+  await launch(["x-w1"], deps);
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
+  await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("adds no mount without a writer configuration file", async () => {
+  await save(true);
+  await launch(["x-w1"], deps);
+  expect(vi.mocked(deps.spawnPodman).mock.calls[0]![0].join(" ")).not.toContain("/pi/events");
+});
+it.each([
+  ["a group-accessible writer state directory", async () => { await chmod(writerPaths(home, "x-w1").root, 0o770); }],
+  ["a symlinked spool directory", async () => {
+    const outside = join(home, "outside");
+    await mkdir(outside, { mode: 0o700 }); await symlink(outside, eventsDir());
+  }],
+])("fails the launch with a stable sanitized code for %s", async (_label, damage) => {
+  await enableDelivery(); await save(true); await damage();
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  expect(await launch(["x-w1"], deps)).toBe(0);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  expect(stderr.mock.calls).toEqual([[eventsFailure]]);
+  expect(eventsFailure).not.toContain(home);
+});
+it("fails the launch when the writer state directory belongs to another user", async () => {
+  await enableDelivery(); await save(true); deps.uid = () => uid + 1;
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  await launch(["x-w1"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  expect(stderr.mock.calls).toEqual([[eventsFailure]]);
+});
+it("does not refresh credentials when the spool directory fails", async () => {
+  await enableDelivery(); await save(true); deps.env = {}; deps.uid = () => uid + 1;
+  vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  await launch(["x-w1"], deps);
+  expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled();
+});
+itLinux("repairs a changed mode and removes junk but leaves a possibly live instance directory alone", async () => {
+  await enableDelivery(); await save(true);
+  const dir = eventsDir(), live = join(dir, "inst-0123456789abcdef");
+  await mkdir(live, { recursive: true, mode: 0o700 });
+  await writeFile(join(live, "00000001-turn_terminal.json"), "{}");
+  await writeFile(join(dir, "stray"), "x"); await mkdir(join(dir, "junk")); await chmod(dir, 0o777);
+  let seen: string[] | undefined, mode: number | undefined;
+  const { readdir } = await import("node:fs/promises");
+  vi.mocked(deps.spawnPodman).mockImplementation(() => {
+    void Promise.all([readdir(dir), lstat(dir)]).then(([names, stat]) => { seen = names; mode = stat.mode & 0o777; });
+    setImmediate(() => child.emit("close", 7)); return child;
+  });
+  expect(await launch(["x-w1"], deps)).toBe(7);
+  await vi.waitFor(() => expect(seen).toEqual(["inst-0123456789abcdef"]));
+  expect(mode).toBe(0o700);
+  expect(await readdir(live)).toEqual(["00000001-turn_terminal.json"]);
+  expect(serveRefusal).not.toHaveBeenCalled();
 });

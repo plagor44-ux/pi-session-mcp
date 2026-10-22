@@ -68,7 +68,7 @@ describe("orchestration skill start-error classification", () => {
     expect(mcpErrorCodes).toContain("writer_uncollected");
     expect(mcpErrorCodes).toContain("writer_busy");
     expect(new Set(mcpErrorCodes).size).toBe(mcpErrorCodes.length);
-    expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes"]);
+    expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes", "invalid_event_delivery", "event_spool_unavailable"]);
   });
 
   it("puts every documented start code in exactly one class", () => {

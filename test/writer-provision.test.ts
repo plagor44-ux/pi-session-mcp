@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { loadConfig } from "../src/config.js";
 import { inspectWork, provisionWriter, removeWriter, renderContainedConfig, type WriterContext } from "../src/writer-lifecycle.js";
-import { readWriterState, writerPaths, writeWriterState } from "../src/writer-state.js";
+import { readWriterState, writerEventDeliveryEnabled, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
@@ -141,4 +141,50 @@ it("inspects work and refuses removal unless baseline, collected or discarded", 
   await writeWriterState(f.ctx.home, "repo-w1", { ...(await readWriterState(f.ctx.home, "repo-w1"))!, collected: { digest: work.digest, at: new Date().toISOString() } });
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok" });
   await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("propagates the event delivery field into the contained configuration and lets the loader accept it", async () => {
+  expect(renderContainedConfig("repo", "/clone", rawConfig, ["code"])).not.toHaveProperty("events");
+  const config = renderContainedConfig("repo", "/clone", { ...rawConfig, events: { delivery: "spool" } }, ["code"]);
+  expect(config.events).toEqual({ delivery: "spool" });
+  for (const events of [{ delivery: "on" }, { delivery: "spool", extra: 1 }, "spool", null]) {
+    expect(() => renderContainedConfig("repo", "/clone", { ...rawConfig, events }, ["code"])).toThrow("container_profile_unsupported");
+  }
+  // An explicit "off" is carried over and does not enable the boundary mount.
+  expect(renderContainedConfig("repo", "/clone", { ...rawConfig, events: { delivery: "off" } }, ["code"]).events).toEqual({ delivery: "off" });
+  const f = await fixture();
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig: { ...rawConfig, events: { delivery: "spool" } } });
+  expect(JSON.parse(await readFile(join(f.paths.config, "pi-session-mcp.json"), "utf8"))).toMatchObject({ events: { delivery: "spool" } });
+  expect(await writerEventDeliveryEnabled(f.paths.config)).toBe(true);
+  const plain = await fixture();
+  await provisionWriter(plain.ctx, { index: 1, settings, rawConfig });
+  expect(await writerEventDeliveryEnabled(plain.paths.config)).toBe(false);
+});
+it("reports a delivery change on a provisioned writer as a settings change", async () => {
+  const f = await fixture(), withEvents = { ...rawConfig, events: { delivery: "spool" } };
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: withEvents })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  const g = await fixture();
+  await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents });
+  expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents })).toEqual({ code: "writer_unchanged", status: "unchanged" });
+  expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+});
+it("removes the writer's spool directory together with its state directory and nothing else", async () => {
+  const f = await fixture(), other = writerPaths(f.ctx.home, "repo-w2");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  await mkdir(join(f.paths.events, "inst-0123456789abcdef"), { recursive: true });
+  await writeFile(join(f.paths.events, "inst-0123456789abcdef", "00000001-turn_terminal.json"), "{}");
+  await mkdir(join(other.events), { recursive: true }); await writeFile(join(other.events, "keep"), "keep");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ code: "writer_removed", status: "ok" });
+  await expect(lstat(f.paths.events)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(other.events, "keep"), "utf8")).toBe("keep");
+});
+it("never follows a symlinked spool directory when removing", async () => {
+  const f = await fixture(), outside = await temporaryRoot("pi-writer-outside-");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  await writeFile(join(outside, "keep"), "keep");
+  await symlink(outside, f.paths.events);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
+  expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
 });

@@ -11,7 +11,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((p) => rm(p, { rec
 async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "doctor-writer-")); roots.push(home);
   const paths = writerPaths(home, "repo-w1");
-  const config: AppConfig = { workspaces: new Map([["repo", home]]), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "ro", skillOverrideDirectory: join(home, "skills"), configuration: { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" } };
+  const config: AppConfig = { workspaces: new Map([["repo", home]]), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "ro", eventDelivery: "off", skillOverrideDirectory: join(home, "skills"), configuration: { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" } };
   const configured = { ...config, workspaceModes: new Map([["repo", { mode: "container" as const, container: { writers: 1, lifecycle: "persistent" as const, profiles: ["coding"], image: "node", network: "pasta" as const, cache: "none" as const } }]]) };
   const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
   const check = async (version = "5.4.0", image = true) => (await runDoctor({ home, loadConfig: async () => configured, containerRuntime: async () => true, writerRuntime: async () => ({ podmanVersion: version, imageExists: async () => image }) })).checks.filter((c) => c.id.startsWith("writer_"));

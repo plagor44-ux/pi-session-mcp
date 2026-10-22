@@ -4,6 +4,7 @@ import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runProbe, SCENARIOS } from "./claude-probe.js";
 import { runLive, RefusedError } from "./live/runner.js";
+import { runProductProbe, SCENARIOS as PRODUCT_SCENARIOS } from "./product-probe.js";
 
 // `node cli.js probe --out <dir> [--client-version <v>] [--only S1,S2,X6]`
 // `node cli.js live --arm A|C --out <dir> (--approval <file> | --dry-run [--client-version <v>])`
@@ -82,8 +83,46 @@ async function mainLive(rest: string[]): Promise<number> {
   }
 }
 
+// ---------------------------------------------------------------- product-probe (provider-free acceptance of the product's turn events and wake hook, ADR 0011)
+const PRODUCT_USAGE = "usage: cli.js product-probe --out <absolute dir> [--only P1,P2,P3,P4,P6]";
+interface ProductParsed { out: string; only?: string[]; inside: boolean }
+function parseProduct(rest: string[]): ProductParsed | undefined {
+  let out: string | undefined, only: string[] | undefined, inside = false;
+  for (let i = 0; i < rest.length; i += 1) {
+    const key = rest[i];
+    if (key === "--inside") inside = true;
+    else if (key === "--out" || key === "--only") {
+      const value = rest[++i];
+      if (value === undefined || value.startsWith("--")) return undefined;
+      if (key === "--out") out = value; else only = value.split(",").filter(Boolean);
+    } else return undefined;
+  }
+  if (!out || !isAbsolute(out) || only?.some((id) => !PRODUCT_SCENARIOS.some((s) => s.id === id))) return undefined;
+  return { out, inside, ...(only ? { only } : {}) };
+}
+async function mainProduct(rest: string[]): Promise<number> {
+  const parsed = parseProduct(rest);
+  if (!parsed) { process.stderr.write(`${PRODUCT_USAGE}\n`); return 64; }
+  if (!parsed.inside) {
+    if (process.platform !== "linux") { process.stderr.write("refused: the probe needs Linux (user and network namespaces)\n"); return 3; }
+    const check = spawnSync("unshare", ["-rn", "true"], { stdio: "ignore" });
+    if (check.error || check.status !== 0) { process.stderr.write("refused: unshare -rn is unavailable here\n"); return 3; }
+    const args = ["product-probe", "--out", parsed.out, ...(parsed.only ? ["--only", parsed.only.join(",")] : []), "--inside"];
+    return spawnSync("unshare", ["-rn", "sh", "-c", 'ip link set lo up && exec "$@"', "sh", process.execPath, fileURLToPath(import.meta.url), ...args], { stdio: "inherit" }).status ?? 1;
+  }
+  try {
+    const summary = await runProductProbe({ out: parsed.out, ...(parsed.only ? { only: parsed.only } : {}) });
+    for (const row of summary.scenarios as Array<Record<string, unknown>>) process.stdout.write(`${String(row.scenario).padEnd(3)} expectation=${row.passed_expectation === true ? "met" : "NOT met"} requests=${String(row.requests)} wakes=${String(row.wakes)} leftover=${String(row.leftover_after_grace)}\n`);
+    return summary.all_passed === true ? 0 : 1;
+  } catch (error) {
+    process.stderr.write(`product probe refused or failed: ${error instanceof Error ? error.message : "unknown"}\n`);
+    return 2;
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   if (argv[0] === "live") return mainLive(argv.slice(1));
+  if (argv[0] === "product-probe") return mainProduct(argv.slice(1));
   const parsed = parse(argv);
   if (!parsed) { process.stderr.write(`${USAGE}\n`); return 64; }
   if (!parsed.inside) return reexecInsideNamespace(parsed);

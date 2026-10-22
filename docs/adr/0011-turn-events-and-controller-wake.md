@@ -43,13 +43,14 @@ expected but unmeasured.
 
 1. **Internal completion observer.** A registry-internal listener at the
    existing terminal transition emits one content-free event per turn:
-   instance, session, turn, state and `via`. The registry read model stays the
-   only source of truth. A turn that `close` removes before its state can be
-   read is reported as unobserved, never with a guessed state.
+   instance, session, turn, state and `via` (`registry`, or `close` when close
+   aborts a running turn). It fires inside that single transition, so its state
+   always equals the read model. The read model stays the only source of
+   truth.
 2. **Local event spool, opt-in.** It is enabled by a new optional server
    configuration field and off by default. Without it, behavior is unchanged
    for every client, including Codex. Host servers write under
-   `$XDG_RUNTIME_DIR/pi-session-mcp/<instance>/`:
+   `$XDG_RUNTIME_DIR/pi-session-mcp/events/<instance>/`:
    - one file per event, written atomically;
    - mode 0600, in directories of mode 0700;
    - removed when the server stops.
@@ -57,13 +58,18 @@ expected but unmeasured.
    Events carry only IDs, states, timestamps and codes. They are wake triggers,
    never state: the controller always reads the turn through `pi_turn_get`.
 3. **Container writers get one dedicated spool mount each**, as an amendment to
-   ADR 0008. It is a per-writer host directory under the same runtime root,
-   mounted read-write at one fixed path. It is never shared between writers and
-   never holds a ledger, credentials or any other state. Because the worker
-   inside the boundary can write to it (coding profiles have a shell there), the
-   following hold:
-   - forged events can at most cause spurious wakes;
-   - the hook validates the event schema strictly and caps file size and count;
+   ADR 0008. It is a per-writer directory inside that writer's own state
+   directory on disk (`~/.local/state/pi-session-mcp/writers/<name>/events/`),
+   mounted read-write at `/pi/events`. It is not on the shared runtime tmpfs, so
+   a worker cannot exhaust that tmpfs or the claims kept there; it can fill the
+   disk no more than it already can through its writable clone. It is never
+   shared between writers and never holds a ledger, credentials or any other
+   state. Because the worker inside the boundary can write to it (coding
+   profiles have a shell there), the following hold:
+   - forged events can at most cause spurious or missing wakes in that
+     writer's own namespace;
+   - the hook validates the event schema strictly, never follows links and
+     caps the work per scan;
    - the controller never trusts an event's state.
 4. **Client adapter, Claude Code only, installed by setup.** It is a
    `PostToolUse` `asyncRewake` hook on `pi_session_prompt` and on running
@@ -90,13 +96,22 @@ expected but unmeasured.
 ## Boundary amendment (ADR 0003)
 
 Pi Session MCP still keeps no session or turn state beyond process memory. The
-event spool is a transient, content-free notification channel. It lives on a
-runtime directory (tmpfs on systemd hosts), is removed at shutdown and is never
-read back by the server. Persistence and resume stay rejected.
+event spool is a transient, content-free notification channel and is never read
+back by the server. A host server's spool lives on the runtime directory (tmpfs
+on systemd hosts) and is removed at shutdown. A container writer's spool lives on
+disk in the writer's own state directory (see item 3), because its worker must
+not be able to fill the runtime tmpfs. The server removes its instance directory
+at shutdown there too. A crashed instance directory can survive until a later
+launch of that writer prunes it, after 24 hours at the earliest. Persistence and
+resume stay rejected.
 
 ## Limits and consequences
 
 - Codex controllers keep polling; Codex documents no external wake.
+- Linux first: the spool lives under `XDG_RUNTIME_DIR`, which macOS does not
+  set by default. With delivery enabled and no runtime directory, the server
+  refuses to start (`event_spool_unavailable`). macOS support needs its own
+  runtime-directory choice and acceptance.
 - One-shot `claude -p` runs hold the next model request until the hook ends.
   The adapter is meant for interactive and stream-json sessions. The setup
   documentation says so.

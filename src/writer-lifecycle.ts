@@ -7,7 +7,7 @@ import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
-import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
+import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
 
 export interface WriterContext {
   home: string;
@@ -56,7 +56,8 @@ export function renderContainedConfig(alias: string, clonePath: string, rawConfi
     default: true, permissionProfile: "read-only", provider: first.provider,
     model: first.model, thinkingLevel: first.thinkingLevel,
   };
-  const rendered = { workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
+  // The writer's own configuration is the single source of event delivery for the boundary: launch reads it.
+  const rendered = { ...(raw.events === undefined ? {} : { events: raw.events }), workspaces: { [alias]: clonePath }, executionProfiles, ...(Object.keys(skillCatalog).length === 0 ? {} : { skillCatalog }) };
   const parsed = configSchema.safeParse(rendered);
   if (!parsed.success) throw new LifecycleError("container_profile_unsupported");
   // Validate with the real schema without normalizing or resolving the raw profile objects.
@@ -140,6 +141,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
       const equal = existing.imageId === imageId && existing.lifecycle === settings.lifecycle && existing.network === settings.network
         && existing.cache === settings.cache && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
         && JSON.stringify(existing.providers) === JSON.stringify(providers)
+        && await writerEventDeliveryEnabled(paths.config) === (config.events?.delivery === "spool")
         && (input.baseRef === undefined || (existing.base.ref === `refs/heads/${short}` && existing.base.commit === commit));
       return { code: equal ? "writer_unchanged" : "writer_settings_changed", status: equal ? "unchanged" : "failed" };
     }

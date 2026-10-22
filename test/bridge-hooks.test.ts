@@ -342,7 +342,8 @@ describe("hook-ledger projection", () => {
   it("loses no update when at least six hook invocations run in parallel, including the first one", async () => {
     const dir = await temporaryRoot("bridge-hooks-ledger-");
     const ids = Array.from({ length: 8 }, (_, i) => `aaaaaaa${i}-1111-4111-8111-111111111111`);
-    const runs = await Promise.all(ids.map((id, i) => runLedgerHook(hookInput("pi_session_start", startResponse(id), {}, `toolu_p${i}`), { dir, instance: "ctl-unit", runId: "run-unit", now: clock })));
+    const runs = await Promise.all(ids.map((id, i) => runLedgerHook(hookInput("pi_session_start", startResponse(id), {}, `toolu_p${i}`), { dir, instance: "ctl-unit", runId: "run-unit", now: clock, lockTimeoutMs: 30_000 })));
+    // A generous lock wait: this checks that serialized writers lose nothing, not the 1 s skip of a single hook.
     expect(runs.filter((r) => r.error)).toEqual([]);
     const ledger = await new LedgerStore(dir).read();
     expect(ledger.tasks.map((t) => t.taskId).sort()).toEqual(ids.map((id) => `t-${id.slice(0, 8)}`).sort());
