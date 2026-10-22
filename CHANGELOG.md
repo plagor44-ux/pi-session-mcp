@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Documentation: Pi's own MCP client (Pi 1.2 and later: `pi mcp add`,
+  `~/.pi/agent/mcp.json`, the built-in `mcp` extension) is never loaded in
+  embedded sessions. A server registered with it is invisible to workers and
+  must be granted through `mcpServers`
+  ([#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115)). A new
+  SDK contract test makes sure that no `mcp.json` starts a server in a session.
+
 ## 0.11.2 — 2026-10-22
 
 Patch release for [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109) and
