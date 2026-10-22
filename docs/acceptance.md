@@ -2121,6 +2121,103 @@ Not established for `0.11.1`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.1 post-release evidence
+
+The published-release acceptance of `v0.11.1` ran on 2026-10-22 from 19:20 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.308`. Level 2 passed for the tag and for the installed npm
+package, each with delivery off and with `--events spool`. Level 1 was not
+repeated on the tag clone: the tag differs from the accepted candidate
+`6e7c46b` only by the acceptance record.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.1` (tag object
+`fc1c7e34379a6474a08e1ada032c533c44ed0839`) peels to
+`262ad845e883c7aa2955f3e5139fa2513f382fc6`, the merge of #114, and
+`git describe --tags --exact-match` reports `v0.11.1`. CI passed on the merge
+commit (run `39764645133`) and on the tag (run `39765299541`).
+
+Package publication, a release fact and not an acceptance level:
+- The registry serves `pi-session-mcp@0.11.1` with shasum
+  `739c23bbc8f0fa1f156311d4a1d3139d905e46fd`. This equals a local `npm pack` of
+  the tag clone after `npm ci`, `npm run build` and `npm run build:cli`.
+- The integrity is
+  `sha512-a7G7G5r2cSqQkLxzetWiMLZx+UJM0Dj7QjASA523UIMr0nX0r6XI262jYb7cwF+euu71cShLgk9pum4sc2amkA==`.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile. Every `@earendil-works` package resolved to
+  `1.3.0` with one copy each. Level 2 passed 160 of 160 checks with delivery
+  off and 228 of 228 with `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+- The clone and the prefix were removed.
+
+Not established for `0.11.1`:
+- the VS Code wake;
+- whether a running Claude Code session loads a newly written hook;
+- a wrapped container writer with delivery enabled;
+- Level 3 and real-model runs;
+- macOS delivery.
+
+### v0.11.2 pre-release acceptance
+
+`v0.11.2` was accepted on 2026-10-22 from 19:15 UTC on its release candidate
+`9cd3f69`, on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.308`. Level 1 passed. Level 2 passed in the
+working tree and for the packed tarball, each with delivery off and with
+delivery on.
+
+The patch fixes #109 and moves the Pi SDK family from `1.3.0` to `1.4.0`
+(#117). It does not change the MCP contract.
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3335 passed and 13 skipped, and no unhandled error. Thirteen is
+    the same skip count as for `0.11.1`.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 816 files.
+  - Doctor reported `packageVersion` `0.11.2`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+- Packed-tarball Level 2:
+  - The candidate's tarball (sha256
+    `3470f4427676287ee19a2bfc9e2fa71ea2503bdda91964bead41284bcea29701`) was
+    installed with `npm install -g --prefix` into a fresh prefix without the
+    lockfile.
+  - Every `@earendil-works` package resolved to `1.4.0`, with a single copy
+    each.
+  - The install smoke reported `smoke_passed` with version `0.11.2`.
+  - Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+    `--events spool`.
+- In every Level 2 run the real client registrations were unchanged, no
+  process remained, the built files were unchanged, and the path-leak check
+  passed. The tarball and the prefix were removed.
+- #109, provider-free:
+  - A Linux churn test on the real procfs failed in 4 of 4 runs against the old
+    `src/setup-platform.ts`. All three symptoms appeared: an unreadable table,
+    an `unknown` state for a live group, and a reaped group that was not
+    `gone`.
+  - On the candidate, 45 runs of `test/setup-platform.test.ts` in three
+    parallel loops passed.
+  - An independent review found no blocker. Its findings were taken in: a
+    second read of a group `-1` sample, deterministic tests through a procfs
+    seam, a lighter churn load and the changelog wording.
+- #117, provider-free: `scripts/pi-sdk-canary.sh 1.4.0` exited with `0`
+  (typecheck, 339 SDK tests in 15 files). `npm ls` showed one copy of each
+  family package. The SDK's reserved MCP tool names are unchanged.
+
+Not established for `0.11.2`:
+- any live run on Pi SDK `1.4.0` (Level 3 or a real model);
+- the VS Code wake;
+- a wrapped container writer with delivery enabled;
+- macOS delivery.
+
+CI covers macOS 15 and 26. The published-release acceptance follows after
+publication, with both Level 2 variants.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
