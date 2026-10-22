@@ -24,8 +24,22 @@ export interface PsOutput { readonly exitCode: number; readonly stdout: string; 
 export interface ProcessTableDependencies {
   /** Test seam for the macOS `ps` call; undefined means it could not run. */
   readonly runPs?: () => Promise<PsOutput | undefined>;
+  /** Test seam for the Linux `/proc` reads; the default reads the real procfs. */
+  readonly procfs?: LinuxProcfs;
   readonly selfPid?: number;
 }
+export interface LinuxProcfs {
+  /** The names in `/proc`. */
+  list(): readonly string[];
+  /** The text of `/proc/<pid>/stat`; throws the read error. */
+  readStat(pid: number): string;
+}
+const realProcfs: LinuxProcfs = {
+  // Names only: `withFileTypes` makes Node lstat entries whose type procfs does
+  // not report, and that lstat throws ENOENT for a process that exits meanwhile.
+  list: () => readdirSync("/proc"),
+  readStat: (pid) => readFileSync(`/proc/${pid}/stat`, "utf8"),
+};
 
 export function currentSetupPlatform(platform: NodeJS.Platform = process.platform): SetupPlatform | undefined {
   return platform === "linux" || platform === "darwin" ? platform : undefined;
@@ -39,45 +53,63 @@ export function isTrustedSystemBinary(path: string, statFile: (path: string) => 
   } catch { return false; }
 }
 
-function readLinuxProcessGroup(pid: number): { readonly group: number; readonly state: string } {
-  const line = readFileSync(`/proc/${pid}/stat`, "utf8").trim();
+const VANISHED = Symbol("vanished");
+
+/** One stat sample, or VANISHED when the entry is gone (ENOENT) or was reaped between open and read (ESRCH). */
+function sampleLinuxProcess(procfs: LinuxProcfs, pid: number): { readonly group: string; readonly state: string } | typeof VANISHED {
+  let line;
+  try { line = procfs.readStat(pid).trim(); }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ESRCH") return VANISHED;
+    throw error;
+  }
   const close = line.lastIndexOf(") ");
   const state = line[close + 2];
   if (close < 3 || !state || !/^[A-Za-z]$/.test(state) || line[close + 3] !== " ") throw new Error("process_stat_invalid");
   const fields = line.slice(close + 4).trim().split(/\s+/);
-  const group = Number(fields[1]);
-  if (!Number.isSafeInteger(group) || group < 0) throw new Error("process_group_invalid");
-  return { group, state };
+  return { group: fields[1] ?? "", state };
 }
 
-function linuxGroupState(group: number): ProcessGroupState {
-  let entries;
-  try { entries = readdirSync("/proc", { withFileTypes: true }); }
-  catch { return "unknown"; }
-  for (const entry of entries) {
-    if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-    try {
-      const sample = readLinuxProcessGroup(Number(entry.name));
-      if (sample.group === group && sample.state !== "Z") return "alive";
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return "unknown";
-    }
+/**
+ * Undefined for a process that is already gone (#109). Besides ENOENT and ESRCH,
+ * `do_task_stat` reports process group -1 once the kernel has released the
+ * process's signal state while reaping it; that sample is read once more, and
+ * only a vanished entry on the second read counts as gone. Any other failure
+ * throws and makes the scan indeterminate.
+ */
+function readLinuxProcessGroup(procfs: LinuxProcfs, pid: number): { readonly group: number; readonly state: string } | undefined {
+  let sample = sampleLinuxProcess(procfs, pid);
+  if (sample !== VANISHED && sample.group === "-1") {
+    sample = sampleLinuxProcess(procfs, pid);
+    if (sample !== VANISHED && sample.group === "-1") throw new Error("process_group_invalid");
   }
+  if (sample === VANISHED) return undefined;
+  const group = Number(sample.group);
+  if (sample.group === "" || !Number.isSafeInteger(group) || group < 0) throw new Error("process_group_invalid");
+  return { group, state: sample.state };
+}
+
+// Numeric /proc entries are process directories; a vanished one is skipped by readLinuxProcessGroup.
+function linuxProcessIds(procfs: LinuxProcfs): readonly number[] {
+  return procfs.list().filter((name) => /^\d+$/.test(name)).map(Number);
+}
+
+function linuxGroupState(procfs: LinuxProcfs, group: number): ProcessGroupState {
+  try {
+    for (const pid of linuxProcessIds(procfs)) {
+      const sample = readLinuxProcessGroup(procfs, pid);
+      if (sample && sample.group === group && sample.state !== "Z") return "alive";
+    }
+  } catch { return "unknown"; }
   return "gone";
 }
 
-function linuxTableReadable(selfPid: number): boolean {
+function linuxTableReadable(procfs: LinuxProcfs, selfPid: number): boolean {
   let sawSelf = false;
   try {
-    for (const entry of readdirSync("/proc", { withFileTypes: true })) {
-      if (!entry.isDirectory() || !/^\d+$/.test(entry.name)) continue;
-      try {
-        const pid = Number(entry.name);
-        readLinuxProcessGroup(pid);
-        if (pid === selfPid) sawSelf = true;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") return false;
-      }
+    for (const pid of linuxProcessIds(procfs)) {
+      if (readLinuxProcessGroup(procfs, pid) && pid === selfPid) sawSelf = true;
     }
   } catch { return false; }
   return sawSelf;
@@ -119,7 +151,8 @@ function runDarwinPs(): Promise<PsOutput | undefined> {
 export function createProcessTable(platform: SetupPlatform, dependencies: ProcessTableDependencies = {}): ProcessTable {
   const selfPid = dependencies.selfPid ?? process.pid;
   if (platform === "linux") {
-    return { pollMs: 10, groupState: async (group) => linuxGroupState(group), readable: async () => linuxTableReadable(selfPid) };
+    const procfs = dependencies.procfs ?? realProcfs;
+    return { pollMs: 10, groupState: async (group) => linuxGroupState(procfs, group), readable: async () => linuxTableReadable(procfs, selfPid) };
   }
   const runPs = dependencies.runPs ?? runDarwinPs;
   const scan = async (): Promise<readonly ProcessEntry[] | undefined> => {
