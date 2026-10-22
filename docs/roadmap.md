@@ -131,14 +131,17 @@ contract.
   [plan](superpowers/plans/2026-10-21-turn-events-and-controller-wake.md) and
   merged in [#110](https://github.com/plagor44-ux/pi-session-mcp/pull/110)
   (Linux only), after several independent review rounds and a provider-free
-  product probe on Claude Code 2.1.306. Release 0.11.0 is prepared with its
-  pre-release acceptance; merge, tag and publication stay maintainer decisions.
-- Open before or with the release, operator checks: wake in the interactive TUI
-  and in the VS Code extension (whether a running session loads a newly
-  written hook without a restart or `/hooks` review), and a wrapped container
-  writer with delivery under rootless Podman, including the isolation check of
-  the extra mount. The question channel is still undecided. The #79 isolation
-  review point of 2026-11-15 stays.
+  product probe on Claude Code 2.1.306. Released as 0.11.0 on 2026-10-22; the
+  operator confirmed the wake in the interactive Claude Code TUI.
+- Fixed in 0.11.1: [#113](https://github.com/plagor44-ux/pi-session-mcp/issues/113).
+  With delivery enabled, 0.11.0 refused to start without `XDG_RUNTIME_DIR`,
+  which Codex never passes, so a shared configuration broke Codex and setup
+  verification. Delivery now stays inactive there (ADR 0011 amendment).
+- Open operator checks: wake in the VS Code extension, whether a running
+  session loads a newly written hook without a restart or `/hooks` review, and
+  a wrapped container writer with delivery under rootless Podman, including the
+  isolation check of the extra mount. The question channel is still undecided.
+  The #79 isolation review point of 2026-11-15 stays.
 - Deferred: Codex wake (no documented path), macOS delivery (no
   `XDG_RUNTIME_DIR` and no `/proc/self/fd` by default), a supervisor-only
   detection arm.

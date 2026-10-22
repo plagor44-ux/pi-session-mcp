@@ -363,8 +363,13 @@ not a token or cost saving, and none is measured on short tasks. Design:
 
    The server and the hook locate the spool through an absolute
    `XDG_RUNTIME_DIR` (set by systemd user sessions; macOS does not set it by
-   default, and delivery there is untested). Without a usable directory the
-   server stops with the startup code `event_spool_unavailable`. Doctor checks
+   default, and delivery there is untested). If the server's environment has
+   no runtime directory, delivery stays inactive: the server starts, reports
+   `events.delivery: "off"` and writes one `event_delivery_inactive` warning.
+   This is how a Codex registration that shares the configuration behaves,
+   because Codex passes no `XDG_RUNTIME_DIR` to MCP servers. A runtime
+   directory that exists but is unusable stops the server with the startup
+   code `event_spool_unavailable`. Doctor checks
    the runtime, `events` and `claims` directories offline (`event_spool_root`):
    each that exists must be a real directory of your user without group or
    other access.

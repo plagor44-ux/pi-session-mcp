@@ -24,7 +24,10 @@ function loadScript(): ScriptFile {
   return raw as ScriptFile;
 }
 
-/** As src/main.ts: an explicit absolute directory wins; otherwise the runtime directory decides. */
+/**
+ * As src/main.ts in 0.11.0: an explicit absolute directory wins; otherwise the runtime directory decides.
+ * The probe always sets one; the product instead keeps delivery inactive without either (#113).
+ */
 function eventSpoolDirectory(env: NodeJS.ProcessEnv): string {
   const explicit = env[EVENTS_DIR_ENV];
   const dir = explicit !== undefined && explicit.length > 0 ? explicit : eventsRoot(env);

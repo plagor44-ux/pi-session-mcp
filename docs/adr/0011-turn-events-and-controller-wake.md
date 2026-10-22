@@ -109,9 +109,10 @@ resume stay rejected.
 
 - Codex controllers keep polling; Codex documents no external wake.
 - Linux first: the spool lives under `XDG_RUNTIME_DIR`, which macOS does not
-  set by default. With delivery enabled and no runtime directory, the server
-  refuses to start (`event_spool_unavailable`). macOS support needs its own
-  runtime-directory choice and acceptance.
+  set by default. With delivery enabled and no runtime directory, delivery
+  stays inactive (amended 2026-10-22, see below; 0.11.0 refused to start with
+  `event_spool_unavailable`). macOS support needs its own runtime-directory
+  choice and acceptance.
 - One-shot `claude -p` runs hold the next model request until the hook ends.
   The adapter is meant for interactive and stream-json sessions. The setup
   documentation says so.
@@ -141,3 +142,29 @@ resume stay rejected.
 - **A unix socket instead of a file spool:** untested, and needs a new listener
   with its own lifetime logic.
 - **A file ledger:** gives an overview only, no notification.
+
+## Amendment (2026-10-22): inactive delivery without a runtime directory
+
+0.11.0 refused to start when delivery was enabled and the server's environment
+named no spool location. That broke Codex: Codex 0.162.1 passes only `HOME`,
+`LANG`, `LOGNAME`, `PATH`, `SHELL` and `USER` plus the registered `env` to a
+stdio MCP server, so a configuration shared by a Claude Code and a Codex
+registration made the server fail in every new Codex session. Setup's direct
+verification spawned the server with `PI_SESSION_MCP_CONFIG` only and failed
+the same way (`mcp_unsupported`). The release acceptance ran with delivery off
+and missed both (#113).
+
+From 0.11.1:
+
+- Without `PI_SESSION_MCP_EVENTS_DIR` and without an absolute `XDG_RUNTIME_DIR`
+  the server starts with delivery inactive. `pi_capabilities_get` reports
+  `events.delivery: "off"`, so a controller keeps polling, and stderr carries
+  one `event_delivery_inactive` warning (`event_runtime_dir_missing`). No
+  controller in such an environment could be woken anyway: the wake hook needs
+  the same runtime directory.
+- A location that exists but is unusable still refuses startup with
+  `event_spool_unavailable`: a relative `PI_SESSION_MCP_EVENTS_DIR`, or a root
+  that is not a private directory of the current user. These are
+  misconfigurations or tampering, not a launcher's environment.
+- Setup's direct MCP verification passes the caller's `XDG_RUNTIME_DIR`, a path
+  and not a secret, so that it starts the server as Claude Code does.
