@@ -247,6 +247,6 @@ describe("host registration removal and writers that need the entry", () => {
     expect(JSON.parse(await readFile(f.settings(), "utf8")).hooks.PostToolUse).toEqual([f.entry]);
     // The writer's own removal is then the last registration and takes the entry along; the host has nothing left.
     expect(f.codes(await f.remove("x-w1"))).toEqual(["hook_removed"]);
-    expect((await hooks.run("remove", target, f.ownership))[0]?.code).toBe("hook_not_owned");
+    expect(await hooks.run("remove", target, f.ownership)).toEqual([]);
   });
 });
