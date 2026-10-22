@@ -10,6 +10,7 @@
 //   node scripts/setup-acceptance.mjs --setup "<command prefix>" \
 //     --label <text> --out <result.json> \
 //     [--build-dir <dir>] [--clients codex,claude-code] [--work-dir <dir>]
+//     [--events spool]
 //
 //   --setup      command that runs the setup CLI, for example
 //                "node <checkout>/dist/setup-main.js" or
@@ -26,6 +27,12 @@
 //                below a temporary directory (/tmp, /var/tmp, /dev/shm or the
 //                system temporary directory), because Codex refuses helper
 //                binaries there
+//   --events     "spool" runs the same lifecycle with turn-event delivery
+//                enabled (ADR 0011, #113): Claude Code commands get a
+//                disposable XDG_RUNTIME_DIR, Codex commands none (Codex passes
+//                none to MCP servers), and every Claude Code step also checks
+//                the wake hook finding, its settings entry, a foreign hook that
+//                must survive, and that no spool instance is left behind
 //
 // Exit status: 0 all checks passed, 1 a check failed, 2 on a usage,
 // environment or harness error; 130 and 143 after SIGINT and SIGTERM. Node
@@ -40,7 +47,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { parseArgs } from "node:util";
 
 const USAGE = 'usage: node scripts/setup-acceptance.mjs --setup "<command prefix>" --label <text> --out <result.json>\n' +
-  "         [--build-dir <dir>] [--clients codex,claude-code] [--work-dir <dir>]\n";
+  "         [--build-dir <dir>] [--clients codex,claude-code] [--work-dir <dir>] [--events spool]\n";
 const ALIAS = "pi-session-mcp";
 const ALL_CLIENTS = ["codex", "claude-code"];
 
@@ -61,6 +68,7 @@ function parseArguments() {
         "build-dir": { type: "string" },
         clients: { type: "string" },
         "work-dir": { type: "string" },
+        events: { type: "string" },
       },
     }));
   } catch (error) {
@@ -71,6 +79,7 @@ function parseArguments() {
   if (clients.length === 0 || clients.some((c) => !ALL_CLIENTS.includes(c)) || new Set(clients).size !== clients.length) {
     usageError(`--clients must be a comma-separated subset of ${ALL_CLIENTS.join(", ")}`);
   }
+  if (values.events !== undefined && values.events !== "spool") usageError('--events must be "spool"');
   return { ...values, clients };
 }
 
@@ -123,6 +132,7 @@ const SETUP_PREFIX = args.setup.trim().split(/\s+/);
 const RUN_ID = `${new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14)}-${process.pid}`;
 const ROOT = join(WORK_DIR, RUN_ID);
 const BASE_PATH = process.env.PATH ?? "";
+const DELIVERY = args.events === "spool";
 
 const sha = (data) => createHash("sha256").update(data).digest("hex");
 const canonical = (value) => {
@@ -173,10 +183,13 @@ const homes = { codex: join(ROOT, "home-codex"), "claude-code": join(ROOT, "home
 const project = join(ROOT, "project");
 const configPath = join(ROOT, "acceptance-config.json");
 const codexHome = join(homes.codex, ".codex");
+const runtimeDir = join(ROOT, "runtime");
 
 function envFor(client) {
   const env = { HOME: homes[client], PATH: BASE_PATH, PI_SESSION_MCP_CONFIG: configPath };
   if (client === "codex") env.CODEX_HOME = codexHome;
+  // Claude Code passes its full environment to MCP servers and hooks, Codex no runtime directory.
+  if (DELIVERY && client === "claude-code") env.XDG_RUNTIME_DIR = runtimeDir;
   return env;
 }
 // Every client and setup command runs with a scrubbed environment.
@@ -325,6 +338,28 @@ function skillParent(t) {
 const skillFile = (t) => join(skillParent(t), CONTROLLER_SKILL, "SKILL.md");
 const foreignSkillFile = (t) => join(skillParent(t), "acceptance-foreign-skill", "SKILL.md");
 const FOREIGN_SKILL_CONTENT = "foreign skill sentinel\n";
+
+// ---- wake hook (--events spool, Claude Code targets only) ------------------
+const HOOK_ALIAS = "hook:pi-session-mcp-wake";
+const HOOK_SEQUENCE = [
+  ["hook_add_planned", "planned"], ["hook_add_planned", "planned"],
+  ["hook_added", "ok"], ["hook_already_equivalent", "unchanged"],
+  ["hook_verified", "ok"], ["hook_removed", "ok"],
+  ["hook_added", "ok"], ["hook_verified", "ok"], ["hook_removed", "ok"],
+];
+const FOREIGN_HOOK = { matcher: "acceptance-foreign", hooks: [{ type: "command", command: "/bin/true" }] };
+const hookExpected = (t) => DELIVERY && t.client === "claude-code";
+function settingsFile(t) {
+  if (t.scope === "user") return join(homes["claude-code"], ".claude", "settings.json");
+  return join(project, ".claude", t.scope === "project" ? "settings.json" : "settings.local.json");
+}
+const postToolUse = (t) => readJson(settingsFile(t))?.hooks?.PostToolUse;
+const wakeEntries = (t) => (Array.isArray(postToolUse(t)) ? postToolUse(t).filter((e) => JSON.stringify(e).includes("/dist/wake-main.js")).length : -1);
+const foreignHookUnchanged = (t) => Array.isArray(postToolUse(t)) && postToolUse(t).some((e) => JSON.stringify(e) === JSON.stringify(FOREIGN_HOOK));
+// A verify run starts a real server; it must not leave an instance directory that a wake hook would wait on.
+function spoolInstances() {
+  try { return readdirSync(join(runtimeDir, "pi-session-mcp", "events")).filter((name) => name.startsWith("inst-")).length; } catch { return 0; }
+}
 function foreignSkillUnchanged(t) {
   try { return readFileSync(foreignSkillFile(t), "utf8") === FOREIGN_SKILL_CONTENT; } catch { return false; }
 }
@@ -333,7 +368,9 @@ function prepareEnvironment() {
   for (const dir of [ROOT, project, ...CLIENTS.map((c) => homes[c]), ...(CLIENTS.includes("codex") ? [codexHome] : [])]) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
+  if (DELIVERY) mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
   writeFileSync(configPath, JSON.stringify({
+    ...(DELIVERY ? { events: { delivery: "spool" } } : {}),
     workspaces: { "acceptance-project": project },
     executionProfiles: {
       "acceptance-readonly": { default: true, permissionProfile: "read-only", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" },
@@ -366,6 +403,10 @@ function addSentinels(result) {
     mkdirSync(dirname(foreignSkillFile(t)), { recursive: true, mode: 0o755 });
     writeFileSync(foreignSkillFile(t), FOREIGN_SKILL_CONTENT, { mode: 0o644 });
   }
+  for (const t of TARGETS.filter(hookExpected)) {
+    mkdirSync(dirname(settingsFile(t)), { recursive: true, mode: 0o755 });
+    writeFileSync(settingsFile(t), `${JSON.stringify({ hooks: { PostToolUse: [FOREIGN_HOOK] } }, null, 2)}\n`, { mode: 0o644 });
+  }
   for (const s of SENTINELS) {
     const r = run(s.client, s.argv);
     const added = check(r.status === 0 && present(s.client, s.scope, s.name));
@@ -379,9 +420,12 @@ function runStep(t, step, reports, stateBeforeStep1) {
   reports.push(r.stdout);
   let parsed;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = undefined; }
-  const finding = parsed?.findings?.length === 2 ? parsed.findings[0] : undefined;
-  const skillFinding = parsed?.findings?.length === 2 ? parsed.findings[1] : undefined;
+  const count = hookExpected(t) ? 3 : 2;
+  const finding = parsed?.findings?.length === count ? parsed.findings[0] : undefined;
+  const skillFinding = parsed?.findings?.length === count ? parsed.findings[1] : undefined;
+  const hookFinding = hookExpected(t) && parsed?.findings?.length === count ? parsed.findings[2] : undefined;
   const [skillCode, skillStatus] = SKILL_SEQUENCE[step.n - 1];
+  const [hookCode, hookStatus] = hookExpected(t) ? HOOK_SEQUENCE[step.n - 1] : [null, null];
   const observed = {
     overall: parsed?.status ?? null,
     status: finding?.status ?? null,
@@ -392,13 +436,23 @@ function runStep(t, step, reports, stateBeforeStep1) {
     exit: r.status,
     findingCount: parsed?.findings?.length ?? null,
     targetMatches: finding ? finding.target.client === t.client && finding.target.scope === t.scope && finding.target.alias === ALIAS : false,
+    hookStatus: hookFinding?.status ?? null,
+    hookCode: hookFinding?.code ?? null,
+    hookTargetMatches: hookFinding ? hookFinding.target.client === t.client && hookFinding.target.scope === t.scope && hookFinding.target.alias === HOOK_ALIAS : !hookExpected(t),
   };
   const pass = check(
     observed.overall === step.overall && observed.status === step.status && observed.code === step.code &&
-    observed.exit === 0 && observed.findingCount === 2 && observed.targetMatches &&
+    observed.exit === 0 && observed.findingCount === count && observed.targetMatches &&
+    observed.hookCode === hookCode && observed.hookStatus === hookStatus && observed.hookTargetMatches &&
     observed.skillCode === skillCode && observed.skillStatus === skillStatus && observed.skillTargetMatches && !r.error && !r.signal,
   );
-  const record = { step: step.n, operation: step.flag ?? "default", expected: { overall: step.overall, status: step.status, code: step.code, skillCode, skillStatus, exit: 0 }, observed, pass };
+  const record = { step: step.n, operation: step.flag ?? "default", expected: { overall: step.overall, status: step.status, code: step.code, skillCode, skillStatus, ...(hookExpected(t) ? { hookCode, hookStatus } : {}), exit: 0 }, observed, pass };
+  if (hookExpected(t)) {
+    record.wakeEntriesAfter = wakeEntries(t);
+    record.wakeEntryExpected = check(record.wakeEntriesAfter === (step.n === 3 || step.n === 4 || step.n === 5 || step.n === 7 || step.n === 8 ? 1 : 0));
+    record.foreignHookUnchanged = check(foreignHookUnchanged(t));
+  }
+  if (DELIVERY && (step.n === 5 || step.n === 8)) record.noSpoolInstanceLeft = check(spoolInstances() === 0);
   if (step.n === 1 || step.n === 2) record.clientStateUnchanged = check(clientState(t.client) === stateBeforeStep1);
   if (step.n === 3 || step.n === 7) record.registrationPresentAfter = check(present(t.client, t.scope, ALIAS));
   if (step.n === 3 || step.n === 7) record.skillPresentAfter = check(existsSync(skillFile(t)));
@@ -418,6 +472,7 @@ async function runTarget(t, reports) {
     skillAbsent: check(!existsSync(skillFile(t))),
     foreignSkillUnchanged: check(foreignSkillUnchanged(t)),
     sentinelPresent: check(SENTINELS.filter((s) => s.client === t.client).every((s) => present(s.client, s.scope, s.name))),
+    ...(hookExpected(t) ? { wakeEntryAbsent: check(wakeEntries(t) === 0), foreignHookUnchanged: check(foreignHookUnchanged(t)) } : {}),
     ...ownershipChecks(t.client),
   };
   return entry;
@@ -464,11 +519,11 @@ function scanReports(reports) {
 }
 
 function summarize(result) {
-  const lines = [`setup acceptance ${result.label}: ${total - failures}/${total} checks passed, ${failures} failed`];
+  const lines = [`setup acceptance ${result.label} (events ${result.events}): ${total - failures}/${total} checks passed, ${failures} failed`];
   const v = result.versions;
   lines.push(`versions: node ${v.node}; ${v.codex ?? "codex not run"}; ${v.claude ?? "claude not run"}`);
   for (const t of result.targets) {
-    const bad = t.steps.filter((s) => !s.pass).map((s) => `${s.step}(${s.observed.overall}/${s.observed.status}/${s.observed.code}/exit ${s.observed.exit})`);
+    const bad = t.steps.filter((s) => !s.pass).map((s) => `${s.step}(${s.observed.overall}/${s.observed.status}/${s.observed.code}${s.observed.hookCode ? `/${s.observed.hookCode}` : ""}/exit ${s.observed.exit})`);
     const post = Object.entries(t.postconditions).filter(([, ok]) => !ok).map(([k]) => k);
     lines.push(`  ${t.target}: steps ${t.steps.filter((s) => s.pass).length}/${SEQUENCE.length}${bad.length ? ` FAIL ${bad.join(", ")}` : ""}${post.length ? `; postcondition FAIL ${post.join(", ")}` : ""}`);
   }
@@ -480,6 +535,7 @@ function summarize(result) {
 // ---- main ----------------------------------------------------------------
 const result = {
   label: args.label,
+  events: DELIVERY ? "spool" : "off",
   timestamp: new Date().toISOString(),
   clients: CLIENTS,
   versions: {},
