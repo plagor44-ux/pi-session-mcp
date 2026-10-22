@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.11.1 — 2026-10-22
+
+Patch release for [#113](https://github.com/plagor44-ux/pi-session-mcp/issues/113).
+
+- Fixed: with `events.delivery: "spool"`, 0.11.0 refused to start
+  (`event_spool_unavailable`) when the server's environment had neither
+  `PI_SESSION_MCP_EVENTS_DIR` nor an absolute `XDG_RUNTIME_DIR`. Codex passes
+  only `HOME`, `LANG`, `LOGNAME`, `PATH`, `SHELL` and `USER` to stdio MCP
+  servers, so a configuration shared with a Codex registration broke
+  pi-session-mcp in every new Codex session. The server now starts with
+  delivery inactive: `pi_capabilities_get` reports `events.delivery: "off"`,
+  and stderr carries one `event_delivery_inactive` warning with code
+  `event_runtime_dir_missing`. A relative `PI_SESSION_MCP_EVENTS_DIR` or an
+  unsafe spool root still fails startup with `event_spool_unavailable`
+  ([ADR 0011 amendment](docs/adr/0011-turn-events-and-controller-wake.md#amendment-2026-10-22-inactive-delivery-without-a-runtime-directory)).
+- Fixed: `setup --verify` reported `mcp_unsupported` for every target when
+  delivery was enabled, because its direct MCP check started the server with
+  `PI_SESSION_MCP_CONFIG` only. It now also passes the caller's
+  `XDG_RUNTIME_DIR`.
+- Changed: Doctor's `event_spool_root` warning says that delivery stays
+  inactive without a runtime directory.
+- Operators of 0.11.0: leave `events` unset in a configuration that a Codex
+  registration uses, or upgrade.
+
 ## 0.11.0 — 2026-10-22
 
 Minor release under ADR 0003 for
