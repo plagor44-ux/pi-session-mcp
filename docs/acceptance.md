@@ -1964,6 +1964,124 @@ check of its spool mount, Level 3, macOS delivery (Linux only by design), and
 any real-model run on this candidate. CI covers macOS 15 and 26. The
 published-release acceptance follows after publication.
 
+### v0.11.0 post-release evidence
+
+The published-release acceptance of `v0.11.0` ran on 2026-10-22 from 06:47 UTC
+on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.308`. Level 2 passed for the tag and for the installed npm
+package. Level 1 was not repeated on the tag clone: the tag differs from the
+accepted candidate `800727e` only by the acceptance record.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.0` (tag object
+`0726316ea6705b6bbcd6fe67911b3833156b4d93`) peels to
+`8875dd5ad3e4fcd34e12b2359bce1611b1c9581e`, the merge of #112. CI passed on
+the merge commit (run `39732402829`) and on the tag (run `39734813506`).
+
+Package publication, a release fact and not an acceptance level: the npm
+package `pi-session-mcp@0.11.0` was staged with `npm stage publish` from that
+clone and approved by the maintainer. Its shasum is
+`6dfd69e2e7449ae9fbcf5c9ed05b43cd217322e8`, equal to a local `npm pack` of the
+tag, and its integrity is
+`sha512-Yr/l285Dm+R8AL8aJk3xa+TbVsdhtTgqrH+NcNrG4y8XFPUq6AAcB+22vAoU7N2iGfh9bepR9WCmTuTcv1Ja8w==`.
+The registry serves the staged shasum. The manifest keeps all four
+executables, including `pi-session-mcp-wake`.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed.
+- npm package, installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile: every `@earendil-works` package at `1.3.0` with
+  one copy each, and 160 of 160 checks passed.
+- In both runs the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+  The temporary prefix was removed.
+
+Manual operator check of the wake in the interactive Claude Code TUI, on
+2026-10-22 with the `0.11.0` build:
+- Setup. Setup could not add a `claude-code:local` registration in the test
+  project, because a same-named server is registered at user scope and
+  `claude mcp get` shows only the effective entry. Setup reported it as
+  `divergent` and changed nothing. The session therefore ran with
+  `--strict-mcp-config` and a test server configuration with delivery enabled.
+  The canonical hook entry was generated with `buildWakeEntry` and installed
+  by hand in `.claude/settings.local.json`.
+- Result. A real `explore-fast` worker turn of about 9 s completed. The idle
+  controller session was woken without polling, shown as hook feedback in the
+  TUI, read the turn once and closed the session.
+- Not established: whether the hook was loaded by a session that was already
+  running when the entry was written.
+
+Finding after publication (#113): the operator upgrade with delivery enabled
+in the shared configuration failed `setup --verify` for both targets with
+`mcp_unsupported`.
+- Cause. The server refused to start without `XDG_RUNTIME_DIR`. Setup's
+  verification launcher passes no such variable, and Codex `0.162.1` passes
+  only `HOME`, `LANG`, `LOGNAME`, `PATH`, `SHELL` and `USER`, as observed on a
+  Codex-launched server process.
+- Consequence. Every new Codex session would have lost pi-session-mcp.
+- Mitigation. The operator configuration went back to delivery off, and setup
+  removed its hook entry. `0.11.1` fixes the defect.
+
+Not established for `0.11.0`: the wake in the VS Code extension, a wrapped
+container writer with delivery enabled, Level 3, and any real-model run on
+this release other than the TUI check above.
+
+### v0.11.1 pre-release acceptance
+
+Before its release, `v0.11.1` passed Level 1, the working-tree Level 2 and the
+packed-tarball Level 2 on its release candidate `dd715d2` on Linux (`x64`), with
+Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code `2.1.308`,
+on 2026-10-22. The patch fixes #113: with delivery enabled and no runtime
+directory, the server now starts with delivery inactive instead of failing,
+and setup's direct verification passes the caller's `XDG_RUNTIME_DIR`.
+
+- Level 1 on the release branch: every command exited with `0`, except Doctor.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3322 passed and 13 skipped, and no unhandled error.
+  - Skipped tests: four macOS lock tests, one isolated output probe and one
+    red-before concurrency test, as before. The other seven are compiled-program
+    tests of the evaluation prototype in `test/bridge-hooks.test.ts`. They need
+    a `.bridge-eval` build that a fresh checkout does not have, and they do not
+    cover product code.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack --dry-run` listed 816 files.
+  - Doctor reported `packageVersion` `0.11.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. The real client registrations were
+  unchanged, no process remained, the built files were unchanged, and the
+  path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball (sha256
+  `b6da139d5b697722432b40b6f604f4a9f5d8fa2edb85e6f1db5b30387e33073c`) was
+  installed with `npm install -g --prefix` into a fresh prefix without the
+  lockfile.
+  - Every `@earendil-works` package resolved to `1.3.0`, with a single copy
+    each.
+  - The install smoke reported `smoke_passed` with version `0.11.1`.
+  - Level 2 against the installed package passed 160 of 160 checks.
+- Delivery on the installed tarball, provider-free, with a configuration that
+  enables delivery:
+  - Codex-like environment (`HOME`, `LANG`, `LOGNAME`, `PATH`, `SHELL`, `USER`
+    and the configuration only): the server started. `pi_capabilities_get`
+    reported `events.delivery: "off"`, and stderr carried one
+    `event_delivery_inactive` warning.
+  - With a private `XDG_RUNTIME_DIR`: the server reported `spool` and left an
+    empty `events` root after stdin EOF.
+- An independent review of the diff found no blocker. Its findings were fixed
+  in the candidate:
+  - a table row in `docs/tool-contracts.md` that did not render;
+  - a test for the inherited runtime directory;
+  - a test that a verify run leaves no instance directory behind.
+
+Not established for `0.11.1`:
+- the VS Code wake;
+- whether a running Claude Code session loads a newly written hook;
+- a wrapped container writer with delivery enabled;
+- Level 3 and real-model runs;
+- macOS delivery.
+
+CI covers macOS 15 and 26. The published-release acceptance follows after
+publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
