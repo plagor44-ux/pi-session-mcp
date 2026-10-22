@@ -18,6 +18,7 @@ const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   ok: true,
   server: { name: "pi-session-mcp", version: PACKAGE_VERSION },
   configuration: VERIFIED_CONFIGURATION,
+  events: { delivery: "off" },
   workspaces: [],
   executionProfiles: [VERIFIED_PROFILE],
 };
@@ -140,6 +141,10 @@ describe("client adapters", () => {
     ["unknown workspace key", { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo", mode: "host", extra: true }] }],
     ["missing configuration", withoutConfiguration(VERIFIED_CAPABILITIES)],
     ["unknown capabilities key", { ...VERIFIED_CAPABILITIES, extra: true }],
+    ["missing events", (({ events: _events, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
+    ["unknown events delivery", { ...VERIFIED_CAPABILITIES, events: { delivery: "socket" } }],
+    ["unknown events key", { ...VERIFIED_CAPABILITIES, events: { delivery: "off", path: "/run/x" } }],
+    ["non-object events", { ...VERIFIED_CAPABILITIES, events: "off" }],
     ["unknown configuration key", capabilitiesWith({ ...VERIFIED_CONFIGURATION, stale: false })],
     ["uppercase fingerprint", capabilitiesWith({ ...VERIFIED_CONFIGURATION, fingerprint: `sha256:${"A".repeat(64)}` })],
     ["short fingerprint", capabilitiesWith({ ...VERIFIED_CONFIGURATION, fingerprint: `sha256:${"a".repeat(63)}` })],
@@ -171,6 +176,10 @@ describe("client adapters", () => {
   it("accepts the maximum number of granted extension tools", async () => {
     const capabilities = capabilitiesWithProfile({ ...VERIFIED_PROFILE, grantedExtensionTools: Array.from({ length: 32 }, (_, index) => `tool_${index}`) });
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
+  });
+
+  it("accepts spool event delivery", async () => {
+    expect((await verifyCapabilityPayload({ ...VERIFIED_CAPABILITIES, events: { delivery: "spool" } })).status).toBe("verified");
   });
 
   it("accepts the maximum number of profile skills", async () => {

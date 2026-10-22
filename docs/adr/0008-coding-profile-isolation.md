@@ -258,13 +258,27 @@ event spool so that a Claude Code hook on the host can wake the controller when
 a turn ends. For a wrapped registration the server writes from inside the
 boundary, so each writer gets **one additional bind mount**:
 
-- A dedicated host directory under the operator's runtime root
-  (`$XDG_RUNTIME_DIR/pi-session-mcp/writer-<name>/`), mode 0700, mounted
-  read-write at one fixed path inside the boundary.
+- A dedicated host directory inside the writer's own state directory
+  (`~/.local/state/pi-session-mcp/writers/<name>/events/`), mode 0700, mounted
+  read-write at `/pi/events` inside the boundary. It is on disk, not on the
+  operator's runtime tmpfs, so the worker can fill only the disk that it can
+  already fill through its writable clone mount, and never `$XDG_RUNTIME_DIR`.
 - It is never shared between writers and never holds a ledger, credentials,
-  configuration or results. Setup creates it, checks its ownership and mode,
-  and removes it with the registration.
-- It is mounted only when the registration enables event delivery.
+  configuration or results.
+- Setup creates the writer's state directory (0700). Every launch checks it
+  (real directory, owner, no group or other access), creates `events/` if
+  missing, resets a mode that the worker changed, and prunes it before
+  mounting: entries that are not a server instance directory are removed, and
+  instance directories only by age, so a launch never breaks a live server of
+  the same writer. The cleanup runs through open directory descriptors and
+  never follows a link that a running worker swaps in. Removing the writer
+  deletes it with the writer's state directory.
+- It is mounted only when the writer's generated server configuration enables
+  event delivery. Changing delivery on an existing writer is reported as a
+  settings change: the writer has to be removed and added again.
+- Wake claims live outside every writer mount
+  (`$XDG_RUNTIME_DIR/pi-session-mcp/claims/`), so a worker cannot forge or block
+  claims.
 
 Threat note: the worker inside the boundary can write to this directory. It can
 therefore forge, delete or flood events. The consequences are bounded by design:

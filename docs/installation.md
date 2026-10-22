@@ -27,6 +27,7 @@ An installation consists of these locations:
 | Execution modes | `execution-modes.json` next to the configuration | Per-alias write policy; selected with `setup --repo`. See [Execution modes](execution-modes.md). |
 | Skill overrides (optional) | the `skills/` directory next to the configuration file, for example `~/.config/pi-session-mcp/skills/` | Your own or customized skills, plus `.pi-session-mcp-bases.json` and its lock file `.pi-session-mcp-bases.lock`. Created by you or by `setup --customize-skill`. See [Pi skills](#pi-skills). |
 | Controller skill | `~/.agents/skills/pi-session-orchestration` (Codex), `~/.claude/skills/pi-session-orchestration` or `<project>/.claude/skills/pi-session-orchestration` (Claude Code) | Written by `setup --apply`; see [Register a client](#4-register-a-client). |
+| Wake hook (optional) | `hooks.PostToolUse` in a Claude Code settings file: `~/.claude/settings.json` (user), `<project>/.claude/settings.json` (project) or `<project>/.claude/settings.local.json` (local); the program is `dist/wake-main.js` of the package | Written by `setup --apply` only when the configuration enables event delivery; see [Wake the controller](#wake-the-controller-claude-code). |
 | Setup ownership state | `~/.local/state/pi-session-mcp/ownership.json` | Written by `setup` only. Path-free and secret-free. |
 
 Never register a development checkout. A registered client launches
@@ -178,6 +179,11 @@ Rules:
   configuration file's directory; `~` is not expanded. The example already uses
   `builtin:` for the two worker skills, so you need not change its skill
   entries. See [Pi skills](#pi-skills).
+- An optional top-level `events` field, `{ "delivery": "spool" }` or
+  `{ "delivery": "off" }`, turns turn-event delivery for the Claude Code wake on
+  or states explicitly that it is off. Delivery is off by default and when the
+  field is absent; any other shape fails startup with `invalid_event_delivery`. See
+  [Wake the controller](#wake-the-controller-claude-code).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -337,6 +343,98 @@ directory, where the client discovers it without further steps:
 
 The codes and the rules are in [Pi skills](skills.md#install-the-orchestration-skill-into-codex-and-claude-code)
 and the [setup lifecycle design](client-setup-design.md#skill-installation).
+
+### Wake the controller (Claude Code)
+
+By default a controller learns that a turn ended by polling `pi_turn_get`. For
+Claude Code you can opt in to a wake instead, decided in
+[ADR 0011](adr/0011-turn-events-and-controller-wake.md): the server writes one
+content-free event file when a turn ends, and a Claude Code hook starts a new
+controller request that reads the turn once. This improves reaction time. It is
+not a token or cost saving, and none is measured on short tasks. Design:
+[Architecture](architecture.md#turn-events-and-controller-wake).
+
+1. Add the field to the server configuration and start a new client session
+   (the file is read at startup):
+
+   ```json
+   "events": { "delivery": "spool" }
+   ```
+
+   The server and the hook locate the spool through an absolute
+   `XDG_RUNTIME_DIR` (set by systemd user sessions; macOS does not set it by
+   default, and delivery there is untested). Without a usable directory the
+   server stops with the startup code `event_spool_unavailable`. Doctor checks
+   the runtime, `events` and `claims` directories offline (`event_spool_root`):
+   each that exists must be a real directory of your user without group or
+   other access.
+2. Plan, then apply, for each Claude Code target. Run `setup` from the project
+   directory for `project` and `local` scope, as in [Register a client](#4-register-a-client):
+
+   ```bash
+   pi-session-mcp-setup --dry-run --target claude-code:user:pi-session-mcp
+   pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
+   pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
+   ```
+
+   After the registration, `--apply` adds one `PostToolUse` entry to the settings
+   file of the same scope. A report line has the alias `hook:pi-session-mcp-wake`:
+
+   ```text
+   claude-code/user/hook:pi-session-mcp-wake: ok (hook_added)
+   ```
+
+3. Restart Claude Code, or review the new hook in `/hooks`, before relying on
+   it. Setup writes the file and cannot observe what the running client loaded.
+   The skill `pi-session-orchestration` reads `events.delivery` from
+   `pi_capabilities_get` and stops polling only when it is `spool`.
+
+**What setup writes.** One entry, with `matcher` for
+`pi_session_prompt` and `pi_turn_get` of `pi-session-mcp` and of the
+`pi-coding-*` writer registrations, and one command hook:
+`<node> <package>/dist/wake-main.js --budget-ms 1800000`, `asyncRewake: true`
+and `timeout` 1860 seconds (the 30-minute wait budget plus 60 seconds, so the
+client never ends the hook before its own budget). The entry is compared by
+fingerprint. Setup edits the JSON file with a compare-and-swap on its bytes
+and keeps its permissions; every other setting stays as it was. Verify checks
+the file and that the program exists; it does not test that Claude Code honors
+the hook.
+
+The hook reads only the spool of the server that armed it: the host's
+`$XDG_RUNTIME_DIR/pi-session-mcp/events/inst-*` for `pi-session-mcp`, and a
+writer's own `~/.local/state/pi-session-mcp/writers/<name>-wN/events/inst-*` for
+`pi-coding-<name>-wN`. Its claims stay in `$XDG_RUNTIME_DIR/pi-session-mcp/claims`.
+
+**Change and remove.** With delivery switched off, `--apply` removes an entry
+that setup owns (`hook_removed`); `--remove` and `--rollback` remove it with the
+registration. Setup never replaces or deletes an entry it did not write or that
+you edited (`hook_divergent`). The local-scope entry of a project is shared by
+the host registration and the writer registrations there and stays
+(`hook_kept_shared`) until the last of them that needs it is removed. With
+delivery off and no entry of its own, setup does not read the settings file. The upgrade procedure below removes the entry with the
+old registration and adds it again with the new one, because it names the
+package path. The settings-file codes are in the
+[client setup reference](client-setup.md#wake-hook).
+
+**Limits.**
+
+- Linux only. The server spool needs `XDG_RUNTIME_DIR`, and the hook reads
+  through `/proc/self/fd`; on any other platform `pi-session-mcp-wake` exits
+  without a wake, so the controller polls.
+- Claude Code only. Codex has no external wake, so Codex controllers keep
+  polling; `setup` reports `hook_not_applicable` for a Codex target.
+- Use interactive or stream-json sessions. A one-shot `claude -p` run holds its
+  next model request until the hook ends, so do not use it with delivery on.
+- The path of the Node executable and of the package must contain only
+  letters, digits and `_ @ % + = : , . / -`. Otherwise setup refuses with
+  `hook_path_unsafe` and writes nothing, because the command is embedded in the
+  settings file without quoting. Install the package
+  under a path that fits.
+- Claude Code's managed settings can disable hooks; the controller then polls.
+- Wake in the interactive TUI and in the VS Code extension was not tested in
+  the evaluation behind ADR 0011.
+- Container writers need their own spool mount; see
+  [Isolation setup](isolation-setup.md#event-spool-mount).
 
 ### Register without setup
 
@@ -660,7 +758,8 @@ same owned removal and reports `rolled_back`; use it to undo an apply. After
 every target reports `removed`, uninstall the package or delete the release
 directory, and delete the configuration file and
 `~/.local/state/pi-session-mcp/`. The same call removes the controller skill
-that `setup` installed (`skill_removed`). It keeps a copy that you modified
+that `setup` installed (`skill_removed`) and the wake hook entry it added
+(`hook_removed`). It keeps a copy that you modified
 (`skill_divergent`) and the shared Claude Code directory while the other
 Claude Code registration is still owned (`skill_kept_shared`). Your override
 directory `skills/` next to the configuration file is yours: delete it with the

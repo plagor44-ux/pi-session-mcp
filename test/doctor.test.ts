@@ -40,6 +40,7 @@ const healthyConfig = async () => ({
   }]]),
   defaultExecutionProfile: "safe",
   configuration: TEST_CONFIGURATION,
+  eventDelivery: "off" as const,
   skillOverrideDirectory: "/hidden/skills",
 });
 
