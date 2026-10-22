@@ -121,12 +121,22 @@ export function createCommandMcpStdioLauncher(command: readonly [string, ...stri
   };
 }
 
-export interface McpLauncherOptions { readonly nodePath: string; readonly entryPath: string; readonly configPath: string; readonly timeoutMs?: number; readonly maxFrameBytes?: number; }
-/** Starts the local MCP server with only the controlled configuration environment. */
+export interface McpLauncherOptions {
+  readonly nodePath: string; readonly entryPath: string; readonly configPath: string; readonly timeoutMs?: number; readonly maxFrameBytes?: number;
+  /** Overrides the inherited `XDG_RUNTIME_DIR`; an empty string passes none. A seam for tests. */
+  readonly runtimeDir?: string;
+}
+/**
+ * Starts the local MCP server with only the controlled configuration environment, plus the runtime
+ * directory when this process has one: a server with event delivery enabled resolves its spool
+ * there, as it does under Claude Code (#113). The runtime directory is a path, not a secret.
+ */
 export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: AbortSignal) => Promise<McpStdioProcess> {
   return async (signal) => {
     const table = await currentProcessTable();
-    const child = spawn(options.nodePath, [options.entryPath], { stdio: ["pipe", "pipe", "pipe"], env: { PI_SESSION_MCP_CONFIG: options.configPath }, detached: process.platform !== "win32" });
+    const runtime = options.runtimeDir === undefined ? process.env.XDG_RUNTIME_DIR : options.runtimeDir;
+    const env = { PI_SESSION_MCP_CONFIG: options.configPath, ...(runtime === undefined || runtime === "" ? {} : { XDG_RUNTIME_DIR: runtime }) };
+    const child = spawn(options.nodePath, [options.entryPath], { stdio: ["pipe", "pipe", "pipe"], env, detached: process.platform !== "win32" });
     const max = options.maxFrameBytes ?? DEFAULT_MAX; let buffer = ""; let closed = false; let overflow = false;
     child.stdout.on("data", (chunk: Buffer) => { if (overflow) return; buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer, "utf8") > max) { overflow = true; buffer = ""; } });
     child.stderr.on("data", () => { /* Consume diagnostics without exposing them. */ });
