@@ -29,6 +29,8 @@ export interface RunRecord {
   taskId: string;
   profile: ProfileId;
   arm: Arm;
+  /** The run's replicate (R90); absent in a plan without replicates. */
+  replicate?: number;
   pairings: string[];
   outcome: "scored" | "stopped" | "not_run";
   terminal: RunOutput["terminal"] | null;

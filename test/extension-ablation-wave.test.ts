@@ -3247,6 +3247,123 @@ describe("canonical run ids, exclusion and the two-wave report (R58-R60)", () =>
     expect(() => parseArgs(["--wave", ...live, "--exclude-wave", "a"])).toThrow("invalid_argument");
     expect(() => parseArgs(["--report", "--wave", "w", "--ledger", "l.json", "--evidence", "e", "--exclude-wave", "a"])).toThrow("invalid_argument");
   });
+
+  describe("replicates (R90)", () => {
+    const grok = ["--pairings", "pl-review-grok"];
+    const records = async (dir: string): Promise<(RunRecord & { replicate?: number })[]> =>
+      Promise.all((await readdir(join(dir, "runs"))).sort().map(async (name) => JSON.parse(await readFile(join(dir, "runs", name), "utf8")) as RunRecord));
+
+    it("plans every task and arm per replicate, binds the replicate count in the approval, and leaves one replicate as it was", async () => {
+      const f = await flow();
+      const plain = await f.plan(...grok);
+      const one = await f.plan(...grok, "--replicates", "1");
+      expect(JSON.stringify(one.matrix)).toBe(JSON.stringify(plain.matrix));
+      expect(JSON.stringify(one.approvalTemplate)).toBe(JSON.stringify(plain.approvalTemplate));
+      expect("replicates" in plain.approvalTemplate).toBe(false);
+      expect(plain.approvalTemplate.runs.every((r) => !("replicate" in r) && !/-r\d$/.test(r.runId))).toBe(true);
+
+      const three = await f.plan(...grok, "--replicates", "3");
+      expect(three.matrix.count).toBe(3 * plain.matrix.count);
+      expect(three.approvalTemplate.replicates).toBe(3);
+      expect(three.approvalTemplate.runs.map((r) => r.replicate)).toEqual(three.approvalTemplate.runs.map((_, i) => Math.floor(i / plain.matrix.count) + 1));
+      expect(three.matrix.runs.map((r) => r.ordinal)).toEqual(three.matrix.runs.map((r) => r.ordinal).sort((a, b) => a - b));
+      expect(three.matrix.runs.every((r, i) => r.runId.endsWith(`-r${Math.floor(i / plain.matrix.count) + 1}`))).toBe(true);
+      // Arm A leads on R1 in replicate 1 and trails in replicate 2.
+      const firstArm = (k: number) => three.approvalTemplate.runs.find((r) => r.taskId === "R1" && r.replicate === k)!.arm;
+      expect([firstArm(1), firstArm(2), firstArm(3)]).toEqual(["A", "pi-lens", "A"]);
+      expect(matrixDigest(three.approvalTemplate.runs)).not.toBe(matrixDigest(plain.approvalTemplate.runs));
+
+      const approval = f.approve(three);
+      const check = (candidate: unknown) => () => validateApproval(candidate, { sourceCommit: approval.sourceCommit, tasks: f.tasks });
+      expect(check(approval)).not.toThrow();
+      // The replicate count is part of the binding: the same runs under another count, or without one, are not canonical.
+      expect(check({ ...approval, replicates: 2 })).toThrow("approval_binding_changed");
+      // The count is bound both ways: a larger count whose canonical matrix contains these runs is refused as well (the highest replicate is 3).
+      expect(check({ ...approval, replicates: 4 })).toThrow("approval_binding_changed");
+      // An explicit 1 is not a count; only more than one replicate may be written.
+      expect(check({ ...approval, replicates: 1 })).toThrow("approval_invalid");
+      expect(check({ ...f.approve(plain), replicates: 1 })).toThrow("approval_invalid");
+      expect(check({ ...f.approve(plain), runs: f.approve(plain).runs.map((r) => ({ ...r, replicate: 1 })) })).toThrow("approval_binding_changed");
+      const { replicates: omitted, ...withoutCount } = approval;
+      void omitted;
+      expect(check(withoutCount)).toThrow("approval_binding_changed");
+      expect(check({ ...f.approve(plain), replicates: 3 })).toThrow("approval_binding_changed");
+      expect(check({ ...approval, replicates: 10 })).toThrow("approval_invalid");
+      const [first, ...rest] = approval.runs;
+      expect(check({ ...approval, runs: [{ ...first!, replicate: 2 }, ...rest] })).toThrow("approval_binding_changed");
+      const { replicate: dropped, ...bare } = first!;
+      void dropped;
+      expect(check({ ...approval, runs: [bare, ...rest] })).toThrow("approval_binding_changed");
+      // A subsequence of the replicated matrix is valid content, as for any plan (R58).
+      const subsequence = [...approval.runs.slice(2, 9), ...approval.runs.slice(-4)];
+      expect(check({ ...approval, runs: subsequence, matrixDigest: matrixDigest(subsequence) })).not.toThrow();
+      // Its highest replicate must be the count: a list that stops at replicate 2 is not an approval for 3.
+      const early = approval.runs.slice(2, 9);
+      expect(check({ ...approval, runs: early, matrixDigest: matrixDigest(early) })).toThrow("approval_binding_changed");
+    });
+
+    it("excludes executed runs by run id, resumes under the same approval, and reports the units of the replicates", async () => {
+      const f = await flow();
+      const approval = f.approve(await f.plan(...grok, "--replicates", "2"));
+      expect(approval.runs).toHaveLength(12);
+      const w1 = f.wave(approval, "wave-1", [text({ cost: 0.1 }), text({ cost: 0.1 })], { maxRuns: 2 });
+      expect((await w1.run()).paused).toBe(true);
+      const written = await records(w1.waveDir);
+      expect(written.map((r) => r.replicate)).toEqual([1, 1]);
+      expect(written.every((r) => r.runId.endsWith("-r1"))).toBe(true);
+
+      const again = await f.plan(...grok, "--replicates", "2", "--exclude-wave", w1.waveDir);
+      expect(again.exclusion).toMatchObject({ removed: 2, resumable: "wave-1" });
+      expect(again.matrix.runs.map((r) => r.runId)).toEqual(approval.runs.slice(2).map((r) => r.runId));
+      // Replicate k of a plan with more replicates has the run ids of replicate k here, so a wave is excluded from it, but is no longer resumable.
+      const other = await f.plan(...grok, "--replicates", "3", "--exclude-wave", w1.waveDir);
+      expect(other.exclusion).toMatchObject({ removed: 2, resumable: null });
+      expect(other.matrix.count).toBe(16);
+      // A plan without replicates has other run ids (no suffix): nothing of this wave is one of its slots.
+      const plainPlan = await f.plan(...grok, "--exclude-wave", w1.waveDir);
+      expect(plainPlan.exclusion).toMatchObject({ removed: 0 });
+
+      const resumed = await f.wave(approval, "wave-1", Array.from({ length: 10 }, () => text({ cost: 0.1 })), { resume: true }).run();
+      expect(resumed.paused).toBe(false);
+      expect(resumed.records).toHaveLength(10);
+      // A different count in the approval is not the approval the wave ran under.
+      await expect(f.wave({ ...approval, replicates: 3 }, "wave-1", [text()], { resume: true }).run()).rejects.toThrow();
+
+      const summary = await f.report([w1.waveDir]);
+      const result = summary.pairings.find((p) => p.id === "pl-review-grok")!;
+      expect(result).toMatchObject({ kind: "review", recommendation: "descriptive", complete: true, tasks: ["R1", "R2", "R3"] });
+      expect(result.replicated).toMatchObject({ replicates: 2 });
+      expect(result.replicated!.units).toHaveLength(6);
+      expect(JSON.parse(await readFile(join(f.root, "evidence", "approvals", "approval-1.json"), "utf8"))).toMatchObject({ replicates: 2 });
+      // G1: the same run ids cannot be charged twice, whatever the wave directory.
+      await expect(f.wave(approval, "wave-again", [text()]).run()).rejects.toThrow("run_already_charged");
+    });
+
+    it("refuses a resume whose stored record belongs to another slot, and a plan whose excluded record names another slot", async () => {
+      const f = await flow();
+      const approval = f.approve(await f.plan(...grok, "--replicates", "2"));
+      const w1 = f.wave(approval, "wave-1", [text({ cost: 0.1 })], { maxRuns: 1 });
+      await w1.run();
+      const file = join(w1.waveDir, "runs", `${approval.runs[0]!.runId}.json`);
+      const stored = JSON.parse(await readFile(file, "utf8")) as Record<string, unknown>;
+      await writeFile(file, JSON.stringify({ ...stored, taskId: "R2" }));
+      await expect(f.plan(...grok, "--replicates", "2", "--exclude-wave", w1.waveDir)).rejects.toThrow("wave_slot_mismatch");
+      const resumed = f.wave(approval, "wave-1", [text()], { resume: true });
+      await expect(resumed.run()).rejects.toThrow("resume_invalid");
+      expect(resumed.captured).toHaveLength(0);
+      const { replicate: dropped, ...withoutReplicate } = stored;
+      void dropped;
+      await writeFile(file, JSON.stringify(withoutReplicate));
+      await expect(f.wave(approval, "wave-1", [text()], { resume: true }).run()).rejects.toThrow("resume_invalid");
+      // A record that does not name its slot at all cannot be checked, so it is refused too.
+      for (const key of ["taskId", "profile", "arm"]) {
+        const { [key]: removed, ...rest } = stored;
+        void removed;
+        await writeFile(file, JSON.stringify(rest));
+        await expect(f.wave(approval, "wave-1", [text()], { resume: true }).run()).rejects.toThrow("resume_invalid");
+      }
+    });
+  });
 });
 
 describe("a stale status must not allow a resume (R61)", () => {

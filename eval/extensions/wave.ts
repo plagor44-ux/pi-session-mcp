@@ -85,8 +85,8 @@ export interface WaveDeps {
 /** Only fixed codes reach the record; an error message may carry command lines and paths. */
 const failureCode = (error: unknown): string => fixedCode(error instanceof Error ? error.message : "") ?? "wave_step_failed";
 
-const baseOf = (run: RunSpec, authType: RunRecord["authType"]): Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "pairings" | "authType"> =>
-  ({ runId: run.runId, taskId: run.taskId, profile: run.profile, arm: run.arm, pairings: [...run.pairings], authType });
+const baseOf = (run: RunSpec, authType: RunRecord["authType"]): Pick<RunRecord, "runId" | "taskId" | "profile" | "arm" | "replicate" | "pairings" | "authType"> =>
+  ({ runId: run.runId, taskId: run.taskId, profile: run.profile, arm: run.arm, ...(run.replicate === undefined ? {} : { replicate: run.replicate }), pairings: [...run.pairings], authType });
 
 const notRun = (run: RunSpec, stopReason: StopReason | null, authType: RunRecord["authType"]): RunRecord => ({
   ...baseOf(run, authType), outcome: "not_run", terminal: null, accepted: null, usage: null, durationMs: null, trace: null, stopReason,
@@ -97,7 +97,9 @@ const failedRun = (run: RunSpec, harnessError: string, authType: RunRecord["auth
 
 /** `waveDir/status.json`: how the last invocation ended, or `running` while it is still going (or crashed). Only a `paused` wave can be resumed. */
 export const statusSchema = z.object({ state: z.enum(["running", "paused", "stopped", "complete"]), stopReason: z.string().nullable(), executedRuns: z.number().int().min(0), recordedRuns: z.number().int().min(0) }).strict();
-const storedRecordSchema = z.object({ stopReason: z.string().nullable() }).passthrough();
+const storedRecordSchema = z.object({
+  stopReason: z.string().nullable(), taskId: z.string(), profile: z.string(), arm: z.string(), replicate: z.number().optional(),
+}).passthrough();
 const guardFileSchema = z.object({ files: z.record(z.string(), z.string()) }).strict();
 
 async function readJsonFile(path: string): Promise<unknown> {
@@ -148,6 +150,10 @@ export async function runWave(input: WaveInput, deps: WaveDeps = {}): Promise<Wa
       const record = storedRecordSchema.safeParse(await readJsonFile(join(input.waveDir, "runs", name)));
       if (!record.success) throw new Error("resume_invalid");
       if (record.data.stopReason !== null) throw new Error("wave_stopped");
+      // A record belongs to the slot its run id names: task, profile, arm and replicate must be the approval's (R90).
+      const run = runs.find((candidate) => `${candidate.runId}.json` === name);
+      const slot = record.data;
+      if (run !== undefined && (slot.taskId !== run.taskId || slot.profile !== run.profile || slot.arm !== run.arm || slot.replicate !== run.replicate)) throw new Error("resume_invalid");
     }
   } else if (existsSync(join(input.waveDir, "approval.json")) || existsSync(join(input.waveDir, "status.json"))) throw new Error("output_exists");
   const pending = runs.filter((run) => !done.has(run.runId));

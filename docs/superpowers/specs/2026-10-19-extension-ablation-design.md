@@ -634,3 +634,51 @@ the text above, they win.
   tree check and the source binding of HEAD stay. Cost: the evidence no longer
   says that every wave ran the code at HEAD; it says which bound files differ,
   and a reader judges whether a changed file affects a wave's records.
+
+## Amendments (2026-10-21, repeat)
+
+- **Replicates are a slot dimension (R90).** The first `pl-code` result (A 2/3,
+  B 2/3, decided by one timeout) is one run per task and arm, which cannot tell
+  an extension effect from run-to-run noise of a model that is not
+  deterministic. `--plan --replicates <N>` (integer 1 to 9, `--plan` only,
+  `invalid_argument` elsewhere; default 1) plans every task and arm N times.
+  The slot is now (task, profile, arm, replicate). The canonical matrix (R58)
+  is built once per replicate and concatenated replicate by replicate, ordinals
+  run over the whole list, and the arm-A/arm-B order per task flips between
+  consecutive replicates (so every task sees both orders). With N > 1 every run
+  id ends in `-r<k>` (also `-r1`) and the run and its record carry `replicate`;
+  the approval records `replicates` (written only when greater than 1; an
+  explicit 1 is refused), which is part of the binding (`validateApproval`
+  checks the run list against the canonical matrix of that replicate count and
+  requires the highest replicate of the list to equal it; `matrixDigest` covers
+  the runs). `--exclude-wave`, `--resume` and the charge guard (G1) key on the
+  run id, which names one slot; exclusion and resume refuse a record of the same
+  id for another task, profile, arm or replicate, and the report merges per run
+  id with the same consistency check. How the report reads the replicates is
+  R92. With N = 1 nothing changes: run ids, ordinals, order, digests, records
+  and every output are byte-identical, and the approvals and evidence of
+  2026-10-20 still parse and report the same. A ledger must not mix waves of
+  different replicate counts: the run ids of replicates 1 and 2 coincide
+  between plans of 2 and 3 replicates, so a replicated wave gets a new ledger;
+  the report refuses waves whose approvals disagree on the count
+  (`replicates_mixed`).
+  Cost: the budget scales with N (the repeat plan projects 18 runs for
+  `pl-code`).
+- **A task is solved by a majority of its replicates (R92, owner decision
+  2026-10-21; replaces the first draft that paired per (task, replicate)
+  unit).** For N > 1, an arm solves a task when more than N/2 of its N runs are
+  accepted (2 of 3). A task counts only when both arms have all N runs scored
+  for it; any other task of the pairing is listed as incomplete in the summary.
+  The pre-registered rule (`recommend()`, unchanged) is applied to the per-task
+  outcomes of the counted tasks: B solves at least as many tasks as A, is
+  strictly better on at least one task, and the cost of B over the counted tasks' runs is at
+  most 1.25 times that of A. The pairing is complete only when every task of the
+  pairing counted and at least three did, and inconclusive otherwise. The
+  summary gives per task and arm the runs scored, the runs accepted, whether the
+  task is solved and whether it counted, also for runs that are not paired. The
+  `replicated` block appears only on pairings that have runs in the evidence.
+  With N = 1 nothing changes. Review pairings stay descriptive, over the
+  (task, replicate) units scored in both arms. Cost: a task with a stopped or
+  missing run in either arm makes the whole pairing inconclusive instead of
+  shrinking the sample, so a lost run can only be answered by planning that
+  slot again (R59, R85).

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { digest } from "../profiles/files.js";
 import { BUDGET_USD } from "./budget.js";
-import { PAIRINGS, buildMatrix } from "./matrix.js";
+import { MAX_REPLICATES, PAIRINGS, buildMatrix } from "./matrix.js";
 import { profileIdSchema, runSpecSchema, type ProfileId, type RunSpec, type TaskSpec } from "./schemas.js";
 
 const routeSchema = z.object({
@@ -16,6 +16,8 @@ export const approvalSchema = z.object({
   ledgerId: z.string().uuid(),
   /** The explicit, ordered run list that was approved (R56), trimmed if `--trim` was used. Wave and preflight run exactly this list. */
   runs: z.array(runSpecSchema).min(1),
+  /** The replicates the run ids and ordinals were planned for (R90); absent for a plan without replicates (read as 1; an explicit 1 is refused). Part of the binding: the highest replicate of the run list must equal it. */
+  replicates: z.number().int().min(2).max(MAX_REPLICATES).optional(),
   routes: z.array(routeSchema).min(1),
   /**
    * Runs of the run list whose earlier attempts were all stopped by the trace audit (R85) and which are planned again: the ledger already
@@ -56,16 +58,18 @@ export function routesOf(config: ProductionConfig, profiles: Iterable<ProfileId>
 
 /**
  * Every approved run is a slot of the canonical matrix (R58) with its own run id, ordinal and slot, the runs follow in canonical order,
- * and each one's pairings are a non-empty, unique subset of that slot's pairings (R62b).
+ * and each one's pairings are a non-empty, unique subset of that slot's pairings (R62b). The canonical matrix is the one of the approval's
+ * `replicates` (R90): its run ids carry `-r<k>`, so a run list of another replicate count matches no slot.
  */
-function runsAreCanonical(runs: readonly RunSpec[], tasks: TaskSpec[]): boolean {
-  const slots = new Map(buildMatrix(tasks, PAIRINGS).map((slot) => [slot.runId, slot]));
+function runsAreCanonical(runs: readonly RunSpec[], tasks: TaskSpec[], replicates: number): boolean {
+  const slots = new Map(buildMatrix(tasks, PAIRINGS, new Set(), replicates).map((slot) => [slot.runId, slot]));
   let last = 0;
   return runs.every((run) => {
     const slot = slots.get(run.runId);
     const ordered = run.ordinal > last;
     last = run.ordinal;
     return ordered && slot !== undefined && slot.ordinal === run.ordinal && slot.taskId === run.taskId && slot.profile === run.profile && slot.arm === run.arm
+      && slot.replicate === run.replicate
       && run.pairings.length > 0 && new Set(run.pairings).size === run.pairings.length && run.pairings.every((id) => slot.pairings.includes(id));
   });
 }
@@ -92,7 +96,8 @@ export function validateApproval(
     || approval.runs.some((run) => !known.has(run.taskId))
     || new Set(approval.runs.map((run) => run.runId)).size !== approval.runs.length
     || !(approval.replannedStopped ?? []).every(({ runId }, index, listed) => approval.runs.some((run) => run.runId === runId) && listed.findIndex((other) => other.runId === runId) === index)
-    || !runsAreCanonical(approval.runs, current.tasks)
+    || Math.max(...approval.runs.map((run) => run.replicate ?? 1)) !== (approval.replicates ?? 1)
+    || !runsAreCanonical(approval.runs, current.tasks, approval.replicates ?? 1)
     || (current.routes !== undefined && sortedRoutes(approval.routes) !== sortedRoutes(current.routes));
   if (changed) throw new Error("approval_binding_changed");
   return approval;

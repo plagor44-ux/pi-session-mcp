@@ -1,0 +1,218 @@
+{
+  "approved": true,
+  "approvedAt": "2026-10-21T18:53:08Z",
+  "budgetUsd": 10,
+  "sourceCommit": "c9da9cb118deea423e8828e1809a4fadd8d03c45",
+  "tasksDigest": "sha256:644f302133c66f701a646fffe0629ae76d1d8c3ba2f34e83a1cc0aedc22bee3a",
+  "matrixDigest": "sha256:50c45951bf6e3e35249d934192d16146a6065d8197465df6d493ffef91409895",
+  "ledgerId": "fecfbbca-0b08-493c-95a1-3303775bc7d7",
+  "runs": [
+    {
+      "runId": "007-i-go-app-dms-code-A-r1",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 7,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "008-i-go-app-dms-code-pi-lens-r1",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 8,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "009-i-pyng-authz-code-pi-lens-r1",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 9,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "010-i-pyng-authz-code-A-r1",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 10,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "011-i-pyng-pdf-code-A-r1",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 11,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "012-i-pyng-pdf-code-pi-lens-r1",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 12,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 1
+    },
+    {
+      "runId": "042-i-go-app-dms-code-pi-lens-r2",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 42,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "043-i-go-app-dms-code-A-r2",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 43,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "044-i-pyng-authz-code-A-r2",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 44,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "045-i-pyng-authz-code-pi-lens-r2",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 45,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "046-i-pyng-pdf-code-pi-lens-r2",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 46,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "047-i-pyng-pdf-code-A-r2",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 47,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 2
+    },
+    {
+      "runId": "077-i-go-app-dms-code-A-r3",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 77,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    },
+    {
+      "runId": "078-i-go-app-dms-code-pi-lens-r3",
+      "taskId": "i-go-app-dms",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 78,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    },
+    {
+      "runId": "079-i-pyng-authz-code-pi-lens-r3",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 79,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    },
+    {
+      "runId": "080-i-pyng-authz-code-A-r3",
+      "taskId": "i-pyng-authz",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 80,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    },
+    {
+      "runId": "081-i-pyng-pdf-code-A-r3",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "A",
+      "ordinal": 81,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    },
+    {
+      "runId": "082-i-pyng-pdf-code-pi-lens-r3",
+      "taskId": "i-pyng-pdf",
+      "profile": "code",
+      "arm": "pi-lens",
+      "ordinal": 82,
+      "pairings": [
+        "pl-code"
+      ],
+      "replicate": 3
+    }
+  ],
+  "replicates": 3,
+  "routes": [
+    {
+      "profile": "code",
+      "provider": "openai",
+      "model": "gpt-6.1-sol",
+      "thinkingLevel": "medium"
+    }
+  ]
+}

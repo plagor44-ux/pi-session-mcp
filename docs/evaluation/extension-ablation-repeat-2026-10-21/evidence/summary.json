@@ -1,0 +1,263 @@
+{
+  "pairings": [
+    {
+      "id": "pl-code-deepseek",
+      "tasks": [],
+      "cacheReadShare": {
+        "a": 0,
+        "b": 0
+      },
+      "kind": "implementation",
+      "a": {
+        "accepted": 0,
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "b": {
+        "accepted": 0,
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "complete": false,
+      "recommendation": "not-run"
+    },
+    {
+      "id": "pl-code",
+      "tasks": [
+        "i-pyng-authz",
+        "i-pyng-pdf",
+        "i-go-app-dms"
+      ],
+      "cacheReadShare": {
+        "a": 0.9430711877106904,
+        "b": 0.9426705607505408
+      },
+      "replicated": {
+        "replicates": 3,
+        "perTask": [
+          {
+            "taskId": "i-pyng-authz",
+            "a": {
+              "scored": 3,
+              "accepted": 2,
+              "solved": true
+            },
+            "b": {
+              "scored": 3,
+              "accepted": 3,
+              "solved": true
+            },
+            "counted": true
+          },
+          {
+            "taskId": "i-pyng-pdf",
+            "a": {
+              "scored": 3,
+              "accepted": 2,
+              "solved": true
+            },
+            "b": {
+              "scored": 3,
+              "accepted": 2,
+              "solved": true
+            },
+            "counted": true
+          },
+          {
+            "taskId": "i-go-app-dms",
+            "a": {
+              "scored": 3,
+              "accepted": 3,
+              "solved": true
+            },
+            "b": {
+              "scored": 3,
+              "accepted": 3,
+              "solved": true
+            },
+            "counted": true
+          }
+        ],
+        "incompleteTasks": [],
+        "solvedTasks": {
+          "a": 3,
+          "b": 3
+        }
+      },
+      "kind": "implementation",
+      "a": {
+        "accepted": 7,
+        "costUsd": 3.370606,
+        "scored": 9,
+        "unexpectedConnects": 12,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "b": {
+        "accepted": 8,
+        "costUsd": 4.948324400000001,
+        "scored": 9,
+        "unexpectedConnects": 29,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "complete": true,
+      "recommendation": "inconclusive"
+    },
+    {
+      "id": "pl-review-grok",
+      "tasks": [],
+      "cacheReadShare": {
+        "a": 0,
+        "b": 0
+      },
+      "kind": "review",
+      "complete": false,
+      "recommendation": "descriptive",
+      "a": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      },
+      "b": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      }
+    },
+    {
+      "id": "pl-review",
+      "tasks": [],
+      "cacheReadShare": {
+        "a": 0,
+        "b": 0
+      },
+      "kind": "review",
+      "complete": false,
+      "recommendation": "descriptive",
+      "a": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      },
+      "b": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      }
+    },
+    {
+      "id": "co-code",
+      "tasks": [],
+      "cacheReadShare": {
+        "a": 0,
+        "b": 0
+      },
+      "kind": "implementation",
+      "a": {
+        "accepted": 0,
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "b": {
+        "accepted": 0,
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "falseFindingRuns": 0,
+        "verdictMissed": 0
+      },
+      "complete": false,
+      "recommendation": "not-run"
+    },
+    {
+      "id": "co-review",
+      "tasks": [],
+      "cacheReadShare": {
+        "a": 0,
+        "b": 0
+      },
+      "kind": "review",
+      "complete": false,
+      "recommendation": "descriptive",
+      "a": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      },
+      "b": {
+        "costUsd": 0,
+        "scored": 0,
+        "unexpectedConnects": 0,
+        "reviewScored": 0,
+        "criticalHitSum": 0,
+        "criticalTotalSum": 0,
+        "criticalHitMean": 0,
+        "verdictMatched": 0,
+        "recallMean": 0,
+        "falseFindingRuns": 0,
+        "oracleAccepted": 0
+      }
+    }
+  ],
+  "spentUsd": 8.3231724,
+  "budgetSpend": {
+    "observedUsd": 8.3231724,
+    "estimatedUsd": 0
+  },
+  "waveSpend": {
+    "observedUsd": 8.318930400000001,
+    "estimatedUsd": 0
+  },
+  "stopReason": null,
+  "waveStops": []
+}
