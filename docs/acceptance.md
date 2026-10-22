@@ -206,6 +206,21 @@ node scripts/setup-acceptance.mjs \
 rm -rf "$PREFIX" ./pi-session-mcp-<x.y.z>.tgz
 ```
 
+Turn-event delivery: `--events spool` runs the same lifecycle with
+`"events": { "delivery": "spool" }` in the acceptance configuration
+([ADR 0011](adr/0011-turn-events-and-controller-wake.md)).
+- Claude Code commands get a disposable `XDG_RUNTIME_DIR` below the run
+  directory. Codex commands get none, as Codex passes none to its MCP servers.
+- Every Claude Code step also checks the `hook:pi-session-mcp-wake` finding
+  (`hook_add_planned`, `hook_added`, `hook_already_equivalent`,
+  `hook_verified`, `hook_removed`) and the number of wake entries in the
+  scope's settings file.
+- A foreign `PostToolUse` entry is written before the run and must survive it.
+- After each `--verify`, no spool instance directory may remain.
+
+A run passes 228 checks instead of 160. It caught #113 in `0.11.0`:
+`--verify` failed with `mcp_unsupported` on every target.
+
 The CI job and a nightly workflow (`.github/workflows/install-smoke.yml`) run
 `scripts/install-smoke.mjs` against a lockfile-free install: CI against the
 packed tarball of the commit, the nightly job against the published
