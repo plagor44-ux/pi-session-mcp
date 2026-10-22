@@ -2042,50 +2042,74 @@ this release other than the TUI check above.
 
 ### v0.11.1 pre-release acceptance
 
-Before its release, `v0.11.1` passed Level 1, the working-tree Level 2 and the
-packed-tarball Level 2 on its release candidate `dd715d2` on Linux (`x64`), with
-Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code `2.1.308`,
-on 2026-10-22. The patch fixes #113: with delivery enabled and no runtime
-directory, the server now starts with delivery inactive instead of failing,
-and setup's direct verification passes the caller's `XDG_RUNTIME_DIR`.
+`v0.11.1` was accepted on 2026-10-22 on its release candidate `6e7c46b`, on
+Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and
+Claude Code `2.1.308`. It passed:
+- Level 1;
+- Level 2 in the working tree and for the packed tarball, each once with
+  delivery off and once with delivery on;
+- a real Codex start.
+
+The patch fixes #113. With delivery enabled and no runtime directory, the
+server now starts with delivery inactive instead of failing. Setup's direct
+verification passes the caller's `XDG_RUNTIME_DIR`. Level 2 gains a variant
+with delivery enabled.
 
 - Level 1 on the release branch: every command exited with `0`, except Doctor.
   - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
     114 files, 3322 passed and 13 skipped, and no unhandled error.
-  - Skipped tests: four macOS lock tests, one isolated output probe and one
-    red-before concurrency test, as before. The other seven are compiled-program
-    tests of the evaluation prototype in `test/bridge-hooks.test.ts`. They need
-    a `.bridge-eval` build that a fresh checkout does not have, and they do not
-    cover product code.
+  - Six of the skipped tests are the usual ones: four macOS lock tests, one
+    isolated output probe and one red-before concurrency test.
+  - The other seven are compiled-program tests of the evaluation prototype in
+    `test/bridge-hooks.test.ts`. They need a `.bridge-eval` build that a fresh
+    checkout does not have, and they do not cover product code.
   - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
   - `npm pack --dry-run` listed 816 files.
   - Doctor reported `packageVersion` `0.11.1`. It exited with `2` because no
     configuration was set (`config_missing`).
-- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
-  tree: 160 of 160 checks passed. The real client registrations were
-  unchanged, no process remained, the built files were unchanged, and the
-  path-leak check passed.
-- Packed-tarball Level 2: the candidate's tarball (sha256
-  `b6da139d5b697722432b40b6f604f4a9f5d8fa2edb85e6f1db5b30387e33073c`) was
-  installed with `npm install -g --prefix` into a fresh prefix without the
-  lockfile.
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`:
+  - delivery off: 160 of 160 checks passed;
+  - `--events spool`: 228 of 228 checks passed. This covers the wake-hook
+    findings and settings entries of all three Claude Code scopes, a foreign
+    hook that survived, and no spool instance left after `--verify`.
+- Packed-tarball Level 2:
+  - The candidate's tarball (sha256
+    `c00f3cffcb7da3f66f765ba30cdcd18d815bc6f83d9c6b9127a7add629226efa`) was
+    installed with `npm install -g --prefix` into a fresh prefix without the
+    lockfile.
   - Every `@earendil-works` package resolved to `1.3.0`, with a single copy
     each.
   - The install smoke reported `smoke_passed` with version `0.11.1`.
-  - Level 2 against the installed package passed 160 of 160 checks.
-- Delivery on the installed tarball, provider-free, with a configuration that
-  enables delivery:
-  - Codex-like environment (`HOME`, `LANG`, `LOGNAME`, `PATH`, `SHELL`, `USER`
-    and the configuration only): the server started. `pi_capabilities_get`
-    reported `events.delivery: "off"`, and stderr carried one
-    `event_delivery_inactive` warning.
-  - With a private `XDG_RUNTIME_DIR`: the server reported `spool` and left an
-    empty `events` root after stdin EOF.
-- An independent review of the diff found no blocker. Its findings were fixed
-  in the candidate:
-  - a table row in `docs/tool-contracts.md` that did not render;
-  - a test for the inherited runtime directory;
-  - a test that a verify run leaves no instance directory behind.
+  - Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+    `--events spool`.
+  - In every Level 2 run the real client registrations were unchanged, no
+    process remained, the built files were unchanged, and the path-leak check
+    passed.
+- The delivery variant fails on the defect. Against the published `0.11.0`
+  package it reported 220 of 228: `--verify` failed with `mcp_unsupported` on
+  all four targets, in steps 5 and 8.
+- Real Codex start, provider-free:
+  - Setup. `codex exec` ran in a disposable `CODEX_HOME` with a model endpoint
+    that leads nowhere, so no provider was called. The `pi-session-mcp` entry
+    pointed at a wrapper that recorded the environment and the server's stderr,
+    with a configuration that enables delivery.
+  - Environment. Codex passed the server only `HOME`, `PATH` and the
+    registered `PI_SESSION_MCP_CONFIG`, not its own `XDG_RUNTIME_DIR`.
+  - `0.11.0` stopped with `startup_failed` / `event_spool_unavailable` (exit 1).
+  - The candidate started, wrote one `event_delivery_inactive` warning and
+    exited with `0` when Codex ended.
+- Delivery on the installed tarball, in a Codex-like environment:
+  `pi_capabilities_get` reported `events.delivery: "off"`. With a private
+  `XDG_RUNTIME_DIR` it reported `spool` and left an empty `events` root after
+  stdin EOF.
+- Review:
+  - An independent review of the fix found no blocker. Its findings were fixed:
+    a table row in `docs/tool-contracts.md` that did not render, and tests for
+    the inherited runtime directory and for no instance directory left after a
+    verify run.
+  - A side review pointed out that the approved plan included a Level 2 variant
+    with delivery enabled, which the first candidate lacked. It was added before
+    the merge.
 
 Not established for `0.11.1`:
 - the VS Code wake;
@@ -2095,7 +2119,7 @@ Not established for `0.11.1`:
 - macOS delivery.
 
 CI covers macOS 15 and 26. The published-release acceptance follows after
-publication.
+publication, with both Level 2 variants.
 
 ## Sprint 1 correctness checks (2026-10-13)
 
