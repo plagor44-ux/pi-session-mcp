@@ -1916,6 +1916,54 @@ isolated agent directory, Level 3, the automated container writers, and macOS
 on real hardware. CI covers macOS 15 and 26. The published-release
 acceptance follows after publication.
 
+### v0.11.0 pre-release acceptance
+
+Before its release, `v0.11.0` passed Level 1, the working-tree Level 2 and the
+packed-tarball Level 2 on its release candidate `800727e` on Linux (`x64`), with
+Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code `2.1.306`,
+on 2026-10-22. The release adds opt-in turn events and a Claude Code controller
+wake ([ADR 0011](adr/0011-turn-events-and-controller-wake.md), #108, #110).
+
+- A first run of this acceptance failed: Level 2 passed 124 of 160 checks in
+  both modes, because every setup report gained a hook finding even with
+  delivery off. Setup now omits hook findings without news, so its report keeps
+  the 0.10 shape; the run above is the second one.
+- Level 1 on the release branch: every command exited with `0`, except Doctor
+  as noted below.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3324 passed and 6 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities, after
+    the development-only update of `@modelcontextprotocol/inspector` to
+    2.11.0 and the lockfile patches named in the changelog.
+  - `npm pack --dry-run` listed 816 files, including `dist/wake-main.js`.
+  - Doctor reported `packageVersion` `0.11.0` and exited with `2`, as expected
+    for the example configuration (`workspace_missing` for the placeholder
+    workspace, `workspace_mode_unset` for that alias).
+- Level 2 through `scripts/setup-acceptance.mjs` on the candidate's working
+  tree: 160 of 160 checks passed. The real client registrations were
+  unchanged, no process remained, the built files were unchanged, and the
+  path-leak check passed.
+- Packed-tarball Level 2: the candidate's tarball (sha256
+  `0ae2cf934122a544f94019c7040bc1f745d89241f199d3e9635a9d4c450ad5b0`), installed
+  with `npm install -g --prefix` into a fresh prefix without the lockfile,
+  resolved every `@earendil-works` package to `1.3.0` with a single copy each.
+  The install smoke reported `smoke_passed` with version `0.11.0`. Level 2
+  against the installed package passed 160 of 160 checks, with the same results
+  for registrations, processes, build and path leaks.
+- Turn events and the wake were accepted provider-free before the merge of
+  #110: unit, process and compiled-program tests, and a product probe with the
+  installed Claude Code `2.1.306` against a loopback fake model in a network
+  namespace (completion wake, two turns, budget re-arm, delivery off, no wake
+  after a controller close).
+
+Not established for `0.11.0`: the wake in the interactive Claude Code TUI and
+in the VS Code extension (including whether a running session loads a newly
+written hook without a restart or a `/hooks` review), a wrapped container
+writer with delivery enabled under rootless Podman including the isolation
+check of its spool mount, Level 3, macOS delivery (Linux only by design), and
+any real-model run on this candidate. CI covers macOS 15 and 26. The
+published-release acceptance follows after publication.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

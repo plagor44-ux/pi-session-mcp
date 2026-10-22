@@ -228,26 +228,23 @@ The finding has the alias `hook:pi-session-mcp-wake`. Codes per operation:
 - `--dry-run`: `hook_add_planned` and `hook_update_planned` (planned; the update
   replaces an entry that setup wrote for an earlier package path),
   `hook_remove_planned` (planned; delivery is off and setup owns an entry),
-  `hook_already_equivalent` and `hook_not_enabled` (unchanged),
-  `hook_divergent` (divergent).
+  `hook_already_equivalent` (unchanged), `hook_divergent` (divergent).
 - `--apply`: `hook_added`, `hook_updated`, `hook_recovered` (ok; an interrupted
   run was settled and needed no further change) and `hook_removed` (ok; delivery
   is off and an owned entry went), `hook_absent` (ok; the owned entry was
-  already gone and only the record was cleared), `hook_already_equivalent` and
-  `hook_not_enabled` (unchanged), `hook_divergent` (divergent).
+  already gone and only the record was cleared), `hook_already_equivalent`
+  (unchanged), `hook_divergent` (divergent).
 - `--verify`: `hook_verified` (ok); `hook_missing`, `hook_not_equivalent`,
   `hook_not_owned`, `hook_ownership_pending`, `hook_program_missing` and
   `hook_delivery_off` (failed; the entry exists but the configuration disables
-  delivery); `hook_not_enabled` (unchanged).
-- `--rollback` and `--remove`: `hook_removed`, `hook_absent`, `hook_not_owned`
-  (unchanged) and `hook_divergent` (more than one candidate, or an entry that
+  delivery). `hook_not_owned` here means the entry exists but setup does not own it.
+- `--rollback` and `--remove`: `hook_removed`, `hook_absent` and `hook_divergent` (more than one candidate, or an entry that
   is not exactly the one setup wrote; nothing is deleted).
 - Removal of a shared entry (`--apply` with delivery off, `--remove`,
   `--rollback`, or removing a writer): `hook_kept_shared` (unchanged; another
   owned registration in the same local settings still needs the entry, see
   below).
-- Any operation: `hook_not_applicable` (unchanged; a Codex target),
-  `hook_config_unreadable` (failed), `hook_path_unsafe` (failed; the Node or
+- Any operation: `hook_config_unreadable` (failed), `hook_path_unsafe` (failed; the Node or
   package path contains a character that the unquoted command cannot carry),
   `hook_budget_invalid` (failed; the wait budget is not a positive integer),
   `settings_location_invalid`, `settings_unreadable`, `settings_unparseable`,
@@ -257,7 +254,13 @@ The finding has the alias `hook:pi-session-mcp-wake`. Codes per operation:
 
 With delivery off and no entry that setup owns, setup does not read the
 settings file at all, so an unparseable or linked file there changes nothing
-and fails nothing; the finding is `hook_not_enabled` (unchanged).
+and fails nothing.
+
+Findings without news are not reported at all: a Codex target (not
+applicable), delivery off while setup holds no entry (`hook_not_enabled`), and
+`--remove` or `--rollback` without a record (`hook_not_owned`, unchanged). A
+setup report with delivery off and no owned entry therefore has the same
+findings, order and exit code as before the hook existed.
 
 Writer registrations (`pi-coding-<name>`, Claude Code local scope) get the entry
 in `<project>/.claude/settings.local.json` of the operator's project when the
