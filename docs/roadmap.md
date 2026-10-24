@@ -95,6 +95,21 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 7: stabilization and live acceptance (2026-10-24)
+
+Base main `f69c40f`, published 0.11.2
+([Sprint 7](sprints/2026-10-24-s7-stabilization-live-acceptance.md)). A
+maintenance sprint without a contract change or a version bump:
+
+- [#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118): the Linux
+  process table counted a zombie thread-group leader with live threads as gone,
+  so the setup fence could end while those threads still held the lock. In
+  progress in this sprint's pull request.
+- Planning documents reconciled with the delivered 0.11.x releases.
+- Live acceptance of the integrated candidate: the Level 3 cycle, the wake
+  scenarios E1–E6 and a container writer with delivery. Results are recorded in
+  the sprint file; a candidate result is not a result for the published 0.11.2.
+
 ### Sprint 6: ledger and event-bridge evaluation (2026-10-21)
 
 Added at the operator's explicit request of 2026-10-21 as a bounded,
@@ -102,8 +117,8 @@ development-only evaluation
 ([#104](https://github.com/plagor44-ux/pi-session-mcp/issues/104),
 [Sprint 6](sprints/2026-10-21-s6-ledger-event-bridge.md),
 [report](evaluation/ledger-event-bridge-2026-10-21/README.md)). It does not
-replace the isolation priority under #79 and changes no product code or
-contract.
+replace the isolation priority under #79. The evaluation itself changed no
+product code; the bridge implementation that followed shipped in 0.11.0 (below).
 
 - Done: inventory of controller ledger, SDK completion semantics, client wake
   paths and OMO Boulder; a provider-free prototype under `eval/bridge/` (ledger,
@@ -137,19 +152,24 @@ contract.
   With delivery enabled, 0.11.0 refused to start without `XDG_RUNTIME_DIR`,
   which Codex never passes, so a shared configuration broke Codex and setup
   verification. Delivery now stays inactive there (ADR 0011 amendment).
-- Prepared as 0.11.2:
+- Released as 0.11.2 on 2026-10-22 ([#116](https://github.com/plagor44-ux/pi-session-mcp/pull/116);
+  [post-release evidence](acceptance.md#v0112-post-release-evidence) in
+  [#119](https://github.com/plagor44-ux/pi-session-mcp/pull/119)):
   - [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109): processes
     that exited during a `/proc` scan made the Linux setup fence fail at random
     with `ownership_lock_unavailable`, in CI and on busy hosts.
   - [#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117): Pi SDK
     1.4.0.
-  - Not yet decided:
-    [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115), whether
-    Pi's native MCP client should replace this server's `mcpServers` bridge.
+- Decided in [#119](https://github.com/plagor44-ux/pi-session-mcp/pull/119):
+  [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115). The server
+  keeps its own controlled `mcpServers` bridge and guards against Pi's built-in
+  MCP client.
 - Open operator checks: wake in the VS Code extension, whether a running
   session loads a newly written hook without a restart or `/hooks` review, and
   a wrapped container writer with delivery under rootless Podman, including the
-  isolation check of the extra mount. The question channel is still undecided.
+  isolation check of the extra mount; Sprint 7 runs them. The question channel
+  (ADR 0011 item 4) is still undecided; a ledger and a supervisor are not
+  product features.
   The #79 isolation review point of 2026-11-15 stays.
 - Deferred: Codex wake (no documented path), macOS delivery (no
   `XDG_RUNTIME_DIR` and no `/proc/self/fd` by default), a supervisor-only
