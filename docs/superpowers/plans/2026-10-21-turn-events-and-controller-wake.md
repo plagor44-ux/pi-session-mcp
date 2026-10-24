@@ -1,7 +1,19 @@
 # Plan: turn events and Claude Code controller wake (ADR 0011, release 0.11.0)
 
-Status: **proposed, waiting for the maintainer's approval of this plan.**
-Nothing below is implemented. Decision:
+Status as of 2026-10-24: **implemented and released.** The plan was approved and
+implemented for [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108)
+in [#110](https://github.com/plagor44-ux/pi-session-mcp/pull/110) (Linux only)
+and shipped as 0.11.0 on 2026-10-22. Follow-up releases: 0.11.1 (#113, delivery
+stays inactive without `XDG_RUNTIME_DIR`, see the ADR 0011 amendment of
+2026-10-22) and 0.11.2 (#109 and #117, unrelated to this feature). The
+acceptance results are in [Acceptance](../../acceptance.md#v0110-pre-release-acceptance);
+open operator checks are listed in the [roadmap](../../roadmap.md). The text
+below is the plan as approved and is kept unchanged as a historical record; the
+present tense in it describes the plan, not the current state. Its "Out of scope"
+items (question channel, Codex wake, product ledger) remain unbuilt.
+
+Original status line: *proposed, waiting for the maintainer's approval of this
+plan; nothing below is implemented.* Decision:
 [ADR 0011](../../adr/0011-turn-events-and-controller-wake.md) (accepted
 2026-10-21) with the [ADR 0008 amendment](../../adr/0008-coding-profile-isolation.md#amendment-2026-10-21-event-spool-mount).
 Evidence and prototype: `eval/bridge/` and
