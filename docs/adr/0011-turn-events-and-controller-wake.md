@@ -1,7 +1,10 @@
 # ADR 0011: Turn events and controller wake
 
 **Status:** Accepted (2026-10-21, maintainer decision), items 1–3, for
-release 0.11.0. Item 4 (question channel) is not decided. Amends
+release 0.11.0. Item 4 (question channel) is not decided. Status as of
+2026-10-24: items 1-3 are implemented ([#110](https://github.com/plagor44-ux/pi-session-mcp/pull/110)),
+released in 0.11.0 on 2026-10-22 and amended in 0.11.1 (see the amendment at the
+end). Amends
 [ADR 0003](0003-post-mvp-maintenance.md) (in-memory-only boundary, see below)
 and [ADR 0008](0008-coding-profile-isolation.md) (an event spool mount per
 writer). Evidence:

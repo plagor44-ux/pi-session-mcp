@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "events": "spool",
+  "configSha256": "b3a04aaee93fcbd879c4b6bb98eaf4ebd64314af8900820f7babcad57e501771",
+  "workspaceAliases": [
+    "ev-e1",
+    "ev-e5",
+    "ev-e2s",
+    "ev-e2l",
+    "ev-e3",
+    "ev-e3c",
+    "ev-e4a",
+    "ev-e4b"
+  ],
+  "workspaceModes": {
+    "ev-e1": "read-only",
+    "ev-e5": "read-only",
+    "ev-e2s": "host",
+    "ev-e2l": "host",
+    "ev-e3": "host",
+    "ev-e3c": "host",
+    "ev-e4a": "host",
+    "ev-e4b": "host"
+  },
+  "executionProfiles": [
+    {
+      "alias": "explore-fast",
+      "default": true,
+      "permissionProfile": "read-only",
+      "provider": "openai",
+      "model": "gpt-6-luna",
+      "thinkingLevel": "low"
+    },
+    {
+      "alias": "code-deepseek",
+      "default": false,
+      "permissionProfile": "coding",
+      "provider": "deepseek",
+      "model": "deepseek-flash",
+      "thinkingLevel": "high"
+    }
+  ]
+}

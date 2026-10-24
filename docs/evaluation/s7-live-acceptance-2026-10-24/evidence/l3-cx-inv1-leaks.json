@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "transcriptSha256": "6f66f1727463e0817baec62eb5b8b7d1bc9acb4d6705b0966e327475e824d420",
+  "transcriptName": "transcript.jsonl",
+  "format": "codex",
+  "lines": 55,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 12,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 12,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_get": 1,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 5,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 5,
+    "piSessionCalls": 6
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 3,
+      "runningPolls": 1,
+      "terminalReads": 2,
+      "finalState": "completed",
+      "durationMs": 19707
+    },
+    {
+      "session": "s1",
+      "turn": "t2",
+      "piTurnGetCalls": 2,
+      "runningPolls": 1,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 13007
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "cx-analysis",
+      "profile": "explore-fast",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "eventTypes": {
+      "thread.started": 1,
+      "turn.started": 1,
+      "item.completed": 28,
+      "item.started": 24,
+      "turn.completed": 1
+    },
+    "toolUses": {
+      "agent_message": 4,
+      "mcp:pi_capabilities_get": 1,
+      "command_execution": 12,
+      "mcp:pi_session_start": 1,
+      "mcp:pi_session_get": 1,
+      "mcp:pi_session_prompt": 2,
+      "mcp:pi_turn_get": 5,
+      "mcp:pi_session_close": 1,
+      "mcp:pi_session_list": 1
+    },
+    "usage": {
+      "input_tokens": 356662,
+      "cached_input_tokens": 334208,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1768,
+      "reasoning_output_tokens": 45
+    },
+    "modelRequests": "not exposed by codex exec --json"
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

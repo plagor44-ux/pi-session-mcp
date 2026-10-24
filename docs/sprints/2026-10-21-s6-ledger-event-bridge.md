@@ -87,3 +87,34 @@ See the [evaluation report](../evaluation/ledger-event-bridge-2026-10-21/README.
   implementation is
   [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108), gated by
   approval of its plan.
+
+## Closure (status as of 2026-10-24)
+
+The sections above record the evaluation as it ran on 2026-10-21 and are not
+rewritten. What happened afterwards, kept apart:
+
+1. **The evaluation and its recommendation (2026-10-21).** The pre-registered
+   product rule was not met (requests 7/8 and 8/8, mixed uncached input and
+   cost). The evaluation recommended deferring ADR 0011: keep the current
+   procedure, no ledger, no supervisor. It measured one clear gain, reaction
+   time (about 2 s against 10-21 s). The sprint changed no product code.
+2. **The later maintainer decision (2026-10-21).** The maintainer accepted
+   [ADR 0011](../adr/0011-turn-events-and-controller-wake.md) items 1-3 for
+   controller reaction time, knowingly against the gate and the recommendation.
+   Item 4 (structured question channel) is not decided.
+3. **What shipped (outside this sprint).** The completion bridge only: opt-in
+   spool delivery plus a setup-installed Claude Code wake hook, implemented in
+   [#110](https://github.com/plagor44-ux/pi-session-mcp/pull/110) for
+   [#108](https://github.com/plagor44-ux/pi-session-mcp/issues/108) and released
+   as 0.11.0 on 2026-10-22 (Linux only). Fixes: 0.11.1
+   ([#113](https://github.com/plagor44-ux/pi-session-mcp/issues/113), delivery
+   stays inactive without `XDG_RUNTIME_DIR`) and 0.11.2 (#109 and #117, not part
+   of this feature). A file ledger and a supervisor are not product features;
+   `eval/bridge/` stays an evaluation prototype. The token and cost saving for
+   long turns remains unmeasured.
+
+The isolation work under #79 kept its priority and its review point of
+2026-11-15. Operator checks that are still open (wake in the VS Code extension,
+whether a running session loads a newly installed hook, a wrapped container
+writer with delivery under rootless Podman including the extra-mount isolation
+check) are tracked in the [roadmap](../roadmap.md), not in this sprint.

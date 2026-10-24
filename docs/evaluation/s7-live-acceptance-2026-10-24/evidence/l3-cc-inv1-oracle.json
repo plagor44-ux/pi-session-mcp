@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "oracle": "analysis",
+  "pass": true,
+  "checks": [
+    {
+      "id": "sessionOnAlias",
+      "pass": true,
+      "detail": "a session on the analysis alias exists"
+    },
+    {
+      "id": "firstTurnCompleted",
+      "pass": true
+    },
+    {
+      "id": "answer1Parsed",
+      "pass": true
+    },
+    {
+      "id": "answer1RetryLimit",
+      "pass": true
+    },
+    {
+      "id": "answer1DefinedIn",
+      "pass": true
+    },
+    {
+      "id": "answer1CallChain",
+      "pass": true
+    },
+    {
+      "id": "secondTurnInSameSession",
+      "pass": true
+    },
+    {
+      "id": "secondTurnCompleted",
+      "pass": true
+    },
+    {
+      "id": "answer2OtherReader",
+      "pass": true
+    },
+    {
+      "id": "answer2File",
+      "pass": true
+    },
+    {
+      "id": "answer2ReadmeValue",
+      "pass": true
+    },
+    {
+      "id": "answer2ReadmeMismatch",
+      "pass": true
+    },
+    {
+      "id": "firstTurnViewStable",
+      "pass": true,
+      "detail": "2 terminal reads of turn 1"
+    }
+  ]
+}

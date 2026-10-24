@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "transcriptSha256": "14c4fb73eb7152313d9062810599f6d7f22cf30ea13713696b341aebfe51737b",
+  "transcriptName": "transcript.jsonl",
+  "format": "codex",
+  "lines": 37,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 12,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 12,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 2,
+      "pi_session_abort": 1,
+      "pi_session_close": 2,
+      "pi_session_list": 2,
+      "pi_session_get": 1
+    },
+    "piTurnGetTotal": 2,
+    "piSessionCalls": 9
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 2,
+      "runningPolls": 1,
+      "terminalReads": 1,
+      "finalState": "aborted",
+      "durationMs": 20024
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "cx-abort",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": [
+        "ok"
+      ]
+    },
+    {
+      "session": "s2",
+      "workspace": "cx-abort",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "eventTypes": {
+      "thread.started": 1,
+      "turn.started": 1,
+      "item.completed": 18,
+      "item.started": 16,
+      "turn.completed": 1
+    },
+    "toolUses": {
+      "agent_message": 2,
+      "command_execution": 4,
+      "mcp:pi_capabilities_get": 1,
+      "mcp:pi_session_start": 2,
+      "mcp:pi_session_prompt": 1,
+      "mcp:pi_turn_get": 2,
+      "mcp:pi_session_abort": 1,
+      "mcp:pi_session_close": 2,
+      "mcp:pi_session_list": 2,
+      "mcp:pi_session_get": 1
+    },
+    "usage": {
+      "input_tokens": 167977,
+      "cached_input_tokens": 135296,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 892,
+      "reasoning_output_tokens": 30
+    },
+    "modelRequests": "not exposed by codex exec --json"
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

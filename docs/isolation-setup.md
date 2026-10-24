@@ -158,7 +158,18 @@ server stay until a later launch prunes them after 24 hours. The hook
 validates each event strictly, caps size and count and follows no link, and the
 controller never takes a state from a wake. The release acceptance for a writer
 with delivery enabled must show the missing access and the forged-event
-behavior in addition to the checks above; no such live result is recorded yet.
+behavior in addition to the checks above. The contained acceptance harness does
+not check the spool mount. The first record, on a candidate rather than a
+release, is the
+[Sprint 7 evidence](evaluation/s7-live-acceptance-2026-10-24/README.md#container-writer-with-delivery)
+of 2026-10-24. It shows the missing access and the hook's handling of crafted
+files, both without a provider. A forged event during a real controller turn
+is still not recorded.
+
+To inspect a running writer container with `podman exec`, use the same
+`XDG_RUNTIME_DIR` as the client that started it. Rootless Podman keeps its
+runtime state there, and with another value `exec` reports that the container
+does not exist.
 
 ## Credentials and residual risks
 

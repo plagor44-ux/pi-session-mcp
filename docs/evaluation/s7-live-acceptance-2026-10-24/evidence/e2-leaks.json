@@ -1,0 +1,205 @@
+{
+  "schema": 1,
+  "transcriptSha256": "21cf15a22360132f1e447a594fb548d7b2236f273bc3c2e35271ad45470a1ccb",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 42,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 10,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 10,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 2,
+      "pi_session_close": 2,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 2,
+    "piSessionCalls": 7
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 14236
+    },
+    {
+      "session": "s2",
+      "turn": "t2",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 77084
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "ev-e2s",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    },
+    {
+      "session": "s2",
+      "workspace": "ev-e2l",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 10,
+    "resultEvents": 3,
+    "bashToolUses": 0,
+    "toolUses": {
+      "Skill": 1,
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 2,
+      "pi_session_close": 2,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.14104590000000003
+  },
+  "wakes": {
+    "distinct": 2,
+    "occurrences": 4,
+    "rows": [
+      {
+        "line": 20,
+        "tMs": 22502,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t1",
+        "state": "completed"
+      },
+      {
+        "line": 20,
+        "tMs": 22502,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t1",
+        "state": "completed"
+      },
+      {
+        "line": 28,
+        "tMs": 86062,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t2",
+        "state": "completed"
+      },
+      {
+        "line": 28,
+        "tMs": 86062,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t2",
+        "state": "completed"
+      }
+    ]
+  },
+  "wakeRounds": [
+    {
+      "waiterExitLine": 20,
+      "waiterExitMs": 22502,
+      "requestLine": 22,
+      "requestMs": 24607,
+      "delayMs": 2105,
+      "delivery": "own_request"
+    },
+    {
+      "waiterExitLine": 28,
+      "waiterExitMs": 86062,
+      "requestLine": 30,
+      "requestMs": 88266,
+      "delayMs": 2204,
+      "delivery": "own_request"
+    }
+  ],
+  "hookEvents": [
+    {
+      "line": 13,
+      "tMs": 8242,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 16,
+      "tMs": 8951,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 20,
+      "tMs": 22502,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "error",
+      "exitCode": 2
+    },
+    {
+      "line": 23,
+      "tMs": 24612,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 25,
+      "tMs": 24676,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "success",
+      "exitCode": 0
+    },
+    {
+      "line": 28,
+      "tMs": 86062,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "error",
+      "exitCode": 2
+    },
+    {
+      "line": 31,
+      "tMs": 88269,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 33,
+      "tMs": 88332,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "success",
+      "exitCode": 0
+    }
+  ]
+}

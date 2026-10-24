@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "transcriptSha256": "40e844106670fd3b04e4f6c8f25c86abcf15a5cd6985d6f604606359025a135d",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 39,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 10,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 10,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "pi_session_abort": 1,
+      "pi_session_close": 2,
+      "pi_turn_get": 1,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 1,
+    "piSessionCalls": 8
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "aborted",
+      "durationMs": 22140
+    },
+    {
+      "session": "s2",
+      "turn": "t2",
+      "piTurnGetCalls": 0,
+      "runningPolls": 0,
+      "terminalReads": 0,
+      "finalState": null,
+      "durationMs": null
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "ev-e4a",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": [
+        "ok"
+      ]
+    },
+    {
+      "session": "s2",
+      "workspace": "ev-e4b",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 10,
+    "resultEvents": 2,
+    "bashToolUses": 0,
+    "toolUses": {
+      "Skill": 1,
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "pi_session_abort": 1,
+      "pi_session_close": 2,
+      "pi_turn_get": 1,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.139688
+  },
+  "wakes": {
+    "distinct": 1,
+    "occurrences": 2,
+    "rows": [
+      {
+        "line": 22,
+        "tMs": 29267,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t1",
+        "state": "aborted"
+      },
+      {
+        "line": 22,
+        "tMs": 29267,
+        "eventType": "system",
+        "subtype": "hook_response",
+        "kind": "terminal",
+        "turn": "t1",
+        "state": "aborted"
+      }
+    ]
+  },
+  "wakeRounds": [
+    {
+      "waiterExitLine": 22,
+      "waiterExitMs": 29267,
+      "requestLine": 28,
+      "requestMs": 31505,
+      "delayMs": 2238,
+      "delivery": "with_tool_result"
+    }
+  ],
+  "hookEvents": [
+    {
+      "line": 12,
+      "tMs": 7101,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 15,
+      "tMs": 7493,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 22,
+      "tMs": 29267,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "error",
+      "exitCode": 2
+    },
+    {
+      "line": 25,
+      "tMs": 29762,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "success",
+      "exitCode": 0
+    },
+    {
+      "line": 30,
+      "tMs": 32126,
+      "subtype": "hook_started",
+      "hookEvent": "PostToolUse",
+      "outcome": null,
+      "exitCode": null
+    },
+    {
+      "line": 32,
+      "tMs": 32189,
+      "subtype": "hook_response",
+      "hookEvent": "PostToolUse",
+      "outcome": "success",
+      "exitCode": 0
+    }
+  ]
+}

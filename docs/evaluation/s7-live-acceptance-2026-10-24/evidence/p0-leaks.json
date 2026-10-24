@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "transcriptSha256": "1928bcf4930f81a57af1c1b2eb6855e6bf5ecb4058c0be05af43169aabd46511",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 29,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 10,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 10,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 2,
+      "pi_session_close": 2,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 2,
+    "piSessionCalls": 7
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 2569
+    },
+    {
+      "session": "s2",
+      "turn": "t2",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 587
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "pre-analysis",
+      "profile": "explore-fast",
+      "closed": true,
+      "aborts": []
+    },
+    {
+      "session": "s2",
+      "workspace": "pre-code",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 8,
+    "resultEvents": 1,
+    "bashToolUses": 1,
+    "toolUses": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 2,
+      "Bash": 1,
+      "pi_turn_get": 2,
+      "pi_session_close": 2,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.0599541
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

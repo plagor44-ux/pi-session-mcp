@@ -1,0 +1,5 @@
+changed: src/shipping.js
+changed: test/shipping.test.js
+CHANGED=2
+OUTSIDE=0
+RESULT=PASS

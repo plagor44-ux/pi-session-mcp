@@ -1,0 +1,8 @@
+server mode: instance dir present after ~2 s; initialize answered: 1
+events-listing in container: inst-X 
+baseline, no event: rc=2 after 6063 ms msg=[pi-session-mcp: no event for turn <id> within the wait budget; it may still be running. Read it once with pi_turn_get to re-arm.]
+malformed: junk name, invalid JSON, 2000 bytes, symlinked event file, extra key, unknown state, event in a subdirectory: rc=2 after 6067 ms msg=[pi-session-mcp: no event for turn <id> within the wait budget; it may still be running. Read it once with pi_turn_get to re-arm.]
+well-formed via=close for the turn (session already closed): rc=0 after 68 ms msg=[]
+forged well-formed completed event for the turn: rc=0 after 61 ms msg=[]
+second waiter after that event was claimed: rc=0 after 61 ms msg=[]
+after server exit: containers=0 events-dir-entries=1

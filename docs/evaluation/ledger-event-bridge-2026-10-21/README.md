@@ -11,6 +11,15 @@ comparative run, commit `569c89f`), [design](design.md), [inventory](inventory.m
 (source and documentation facts), [live plan](live-plan.md) (not approved) and
 the probe evidence in [`probe/`](probe/).
 
+Status as of 2026-10-24: this report is the evaluation as of 2026-10-21 and is
+not rewritten. "The current procedure stays" and the recommendation not to build
+the bridge describe the evaluation's verdict. The maintainer then accepted ADR
+0011 items 1-3 anyway, and the completion bridge (spool delivery and a
+setup-installed Claude Code wake hook) shipped in 0.11.0 on 2026-10-22, with
+fixes in 0.11.1 and 0.11.2. The question channel is undecided; a file ledger and
+a supervisor are not product features. See the
+[Sprint 6 closure](../../sprints/2026-10-21-s6-ledger-event-bridge.md#closure-status-as-of-2026-10-24).
+
 Each claim names its evidence level: L0 source or docs, L1 unit test, L2 host
 event, L3 client wake with a scripted fake model, L4 real controller model.
 Everything up to L3 is provider-free. **L4 was reached for two approved
