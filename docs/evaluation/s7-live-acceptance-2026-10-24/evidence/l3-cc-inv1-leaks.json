@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "transcriptSha256": "2fb47cf2ac0be5d28bc20e26a4981c1003cd00c7f8427c32f376b61e873035d6",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 47,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 10,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 10,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 4,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 4,
+    "piSessionCalls": 5
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 3,
+      "runningPolls": 1,
+      "terminalReads": 2,
+      "finalState": "completed",
+      "durationMs": 13486
+    },
+    {
+      "session": "s1",
+      "turn": "t2",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 6009
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "cc-analysis",
+      "profile": "explore-fast",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 14,
+    "resultEvents": 1,
+    "bashToolUses": 5,
+    "toolUses": {
+      "Skill": 1,
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 2,
+      "Bash": 5,
+      "pi_turn_get": 4,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.2848098
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

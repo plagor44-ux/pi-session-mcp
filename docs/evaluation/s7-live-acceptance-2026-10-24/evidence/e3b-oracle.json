@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "oracle": "events",
+  "pass": false,
+  "checks": [
+    {
+      "id": "capabilitiesFirst",
+      "pass": true
+    },
+    {
+      "id": "clientExitedCleanly",
+      "pass": true
+    },
+    {
+      "id": "noOpenSessionAtEnd",
+      "pass": true
+    },
+    {
+      "id": "everyStartedSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "noSpoolInstanceLeft",
+      "pass": true,
+      "detail": "0 instance directories"
+    },
+    {
+      "id": "deliveryIsSpool",
+      "pass": true
+    },
+    {
+      "id": "sessionOn_ev-e3",
+      "pass": true
+    },
+    {
+      "id": "ev-e3:turnCompleted",
+      "pass": true
+    },
+    {
+      "id": "ev-e3:reportedCheckId",
+      "pass": true
+    },
+    {
+      "id": "ev-e3:turnLastedAtLeast90PercentOfCheck",
+      "pass": true,
+      "detail": "102380 ms for a 100 s check"
+    },
+    {
+      "id": "oneWaiterWake",
+      "pass": false,
+      "detail": "3 waiter exits with code 2"
+    },
+    {
+      "id": "wakeTextNamesTheTurn",
+      "pass": true,
+      "detail": "1 distinct terminal wakes"
+    },
+    {
+      "id": "wakeStartedOwnControllerRequest",
+      "pass": true,
+      "detail": "3 wake rounds"
+    },
+    {
+      "id": "noRunningPolls",
+      "pass": false,
+      "detail": "2 running polls"
+    },
+    {
+      "id": "terminalReadExactlyOnce",
+      "pass": true,
+      "detail": "1 terminal reads"
+    },
+    {
+      "id": "noSleepCommands",
+      "pass": true,
+      "detail": "0 Bash tool uses"
+    }
+  ]
+}

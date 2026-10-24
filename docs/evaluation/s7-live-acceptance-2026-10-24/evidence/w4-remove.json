@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"remove","status":"ok","findings":[{"target":{"client":"writer","scope":"s7wfix","alias":"s7wfix-w1"},"status":"ok","code":"writer_removed"},{"target":{"client":"writer","scope":"s7wfix","alias":"s7wfix-w1"},"status":"ok","code":"hook_removed"}],"exitCode":0}

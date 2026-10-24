@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"remove","status":"ok","findings":[{"target":{"client":"claude-code","scope":"project","alias":"pi-session-mcp"},"status":"ok","code":"removed"},{"target":{"client":"claude-code","scope":"project","alias":"pi-session-orchestration"},"status":"ok","code":"skill_removed"}],"exitCode":0}

@@ -1,0 +1,16 @@
+instance-dir: absent
+events-listing: 
+writers-root-in-container: s7wfix-w1|
+own-writer-dir-in-container: clone|
+decoy-namespace: ls: cannot access '<home>/.local/state/pi-session-mcp/writers/s7decoy-w9': No such file or directory| decoy-canary-found: 0|
+host-home-listing: .local 
+host-ssh: ls: cannot access '<home>/.ssh': No such file or directory|  runtime-dir: ls: cannot access '<run>/xdg': No such file or directory|  host-state-ownership: cat: <home>/.local/state/pi-session
+write /pi: touch: cannot touch '/pi/x': Read-only file system|  write release: touch: cannot touch '/opt/pi-session-mcp/x': Read-only file system|  write config: touch: cannot touch '/pi/config/x': Read-only file system|  write root: touch: cannot touch '/x': Read-only file system|
+mountinfo /pi/events entries: 1|
+baseline (no event): rc=0 after 2062 ms msg=[]
+malformed placed: junk name, invalid JSON, 2000 bytes, symlinked event, extra key, symlinked file in a second instance dir
+after malformed: rc=0 after 2066 ms msg=[]
+forged well-formed event for a fake turn: rc=0 after 2066 ms msg=[]
+second waiter for the same claimed event: rc=0 after 2062 ms msg=[]
+after server exit: containers=0 instance-dirs=1 host-events-entries=00009001-turn_terminal.json 00009002-turn_terminal.json 00009003-turn_terminal.json 00009005-turn_terminal.json 00009006-turn_terminal.json 00009007-turn_terminal.json inst-ffffffffffffffff junk.txt 
+decoy removed: yes

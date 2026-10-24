@@ -437,7 +437,15 @@ package path. The settings-file codes are in the
   under a path that fits.
 - Claude Code's managed settings can disable hooks; the controller then polls.
 - Wake in the interactive TUI and in the VS Code extension was not tested in
-  the evaluation behind ADR 0011.
+  the evaluation behind ADR 0011. Later observations, not a test matrix:
+  - the operator confirmed the TUI wake after the 0.11.0 release;
+  - on 2026-10-24 the VS Code extension woke on 0.11.2;
+  - on 2026-10-24 a running stream-json session of Claude Code 2.1.308 used a
+    project hook that setup wrote after the session started.
+
+  Whether a running extension or TUI session does the same is not checked, so
+  step 3 above stays the rule
+  ([Sprint 7 evidence](evaluation/s7-live-acceptance-2026-10-24/README.md)).
 - Container writers need their own spool mount; see
   [Isolation setup](isolation-setup.md#event-spool-mount).
 

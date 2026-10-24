@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "transcriptSha256": "3e4e9cfdfa59a01f7ced240a277d3416e6eadb1f1d1e7d8a2b600627ca890a80",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 16,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 4,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 4,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 0,
+    "piSessionCalls": 3
+  },
+  "errorCodes": {
+    "unknown_workspace": 2
+  },
+  "undocumentedErrorCodes": [],
+  "perTurn": [],
+  "perSession": [],
+  "controller": {
+    "modelRequests": 4,
+    "resultEvents": 1,
+    "bashToolUses": 0,
+    "toolUses": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.1779762
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

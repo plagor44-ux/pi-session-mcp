@@ -103,12 +103,32 @@ maintenance sprint without a contract change or a version bump:
 
 - [#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118): the Linux
   process table counted a zombie thread-group leader with live threads as gone,
-  so the setup fence could end while those threads still held the lock. In
-  progress in this sprint's pull request.
+  so the setup fence could end while those threads still held the lock. Fixed
+  in this sprint's pull request; the issue closes on merge.
 - Planning documents reconciled with the delivered 0.11.x releases.
-- Live acceptance of the integrated candidate: the Level 3 cycle, the wake
-  scenarios E1–E6 and a container writer with delivery. Results are recorded in
-  the sprint file; a candidate result is not a result for the published 0.11.2.
+- Live acceptance of the candidate `6651a47`
+  ([evidence](evaluation/s7-live-acceptance-2026-10-24/README.md)); a candidate
+  result is not a result for the published 0.11.2:
+  - Level 2 passed.
+  - Level 3: 10 of 10 tasks passed. The gate is not met because `npm audit`
+    fails on `undici`, which Pi SDK 1.4.0 pins
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - Wake: setup path, parallel turns, budget wake, abort and close, and the
+    Codex fallback passed. A running CLI session picked up a newly installed
+    hook.
+  - A container writer with delivery passed its delegation, boundary and
+    crafted-event checks; one first-time acceptance failure was not
+    diagnosable ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)).
+- Still open after Sprint 7:
+  - VS Code wake on a candidate build, and hook pickup by a running VS Code
+    session; both need the operator, and the procedure is in the evidence.
+  - A forged event during a real controller turn on a writer.
+  - #120, #121 and #79.
+- Next priority, in this order:
+  1. Decide #120, because without it no release can pass Level 1.
+  2. Merge this fix as a patch candidate.
+  3. Then #121.
+  4. Then the #79 migration decision at the 2026-11-15 review.
 
 ### Sprint 6: ledger and event-bridge evaluation (2026-10-21)
 

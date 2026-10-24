@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"apply","status":"ok","findings":[{"target":{"client":"writer","scope":"host","alias":"control"},"status":"ok","code":"isolation_control_passed"}],"exitCode":0}

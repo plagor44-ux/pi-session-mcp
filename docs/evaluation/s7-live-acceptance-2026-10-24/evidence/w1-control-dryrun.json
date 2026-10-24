@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"dry-run","status":"planned","findings":[{"target":{"client":"writer","scope":"host","alias":"control"},"status":"planned","code":"isolation_control_planned"}],"exitCode":0}
