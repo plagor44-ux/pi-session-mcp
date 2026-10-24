@@ -1,7 +1,7 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { constants } from "node:fs";
-import { open, type FileHandle } from "node:fs/promises";
+import { open, readFile, readdir, writeFile, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -90,7 +90,8 @@ describe("macOS process table", () => {
 });
 
 describe("Linux process table", () => {
-  const stat = (pid: number, group: number | string, state = "S") => `${pid} (node (worker)) ${state} 1 ${group} ${group} 0 -1 4194304`;
+  const stat = (pid: number, group: number | string, state = "S", threads: number | string = 1) =>
+    `${pid} (node (worker)) ${state} 1 ${group} ${group} 0 -1 4194304 0 0 0 0 0 0 0 0 20 0 ${threads}`;
   const errno = (code: string) => Object.assign(new Error(code), { code });
   /** Each pid answers its reads in order; the last answer repeats. */
   const table = (reads: Record<number, readonly (string | Error)[]>, names: readonly string[] = ["self", ...Object.keys(reads)]) => {
@@ -114,10 +115,30 @@ describe("Linux process table", () => {
     expect(await table({ 100: [stat(100, 100)], 200: [stat(200, 200)] }).groupState(200)).toBe("alive");
     expect(await table({ 100: [stat(100, 100)], 201: [stat(201, 200, "Z")] }).groupState(200)).toBe("gone");
   });
+  it("counts an ordinary single-threaded zombie as gone", async () => {
+    expect(await table({ 200: [stat(200, 200, "Z", 1)] }).groupState(200)).toBe("gone");
+  });
+  it("counts a zombie leader with live threads as alive", async () => {
+    expect(await table({ 200: [stat(200, 200, "Z", 2)] }).groupState(200)).toBe("alive");
+  });
+  it.each(["", "invalid", 0, -1, "9007199254740992", "1.5"])("is unknown for a zombie with invalid num_threads %j", async (threads) => {
+    const reads = { 100: [stat(100, 100)], 200: [stat(200, 200, "Z", threads)] };
+    expect(await table(reads).groupState(200)).toBe("unknown");
+    expect(await table(reads).readable()).toBe(true);
+  });
+  it("does not require num_threads for non-zombies or other groups", async () => {
+    expect(await table({ 100: ["100 (node) S 1 100"] }).groupState(200)).toBe("gone");
+    expect(await table({ 200: ["200 (node) S 1 200"] }).groupState(200)).toBe("alive");
+    expect(await table({ 100: ["100 (node) Z 1 100"] }).groupState(200)).toBe("gone");
+  });
+  it("reads group -1 again and counts a zombie leader with live threads as alive", async () => {
+    expect(await table({ 200: [stat(200, -1), stat(200, 200, "Z", 2)] }).groupState(200)).toBe("alive");
+  });
   it.each([
     ["vanished from /proc (ENOENT)", [errno("ENOENT")]],
     ["reaped between open and read (ESRCH)", [errno("ESRCH")]],
-    ["reported with group -1 and then vanished", [stat(200, -1), errno("ESRCH")]],
+    ["reported with group -1 and then vanished (ESRCH)", [stat(200, -1), errno("ESRCH")]],
+    ["reported with group -1 and then vanished (ENOENT)", [stat(200, -1), errno("ENOENT")]],
   ] as const)("counts a process that %s as gone and stays readable", async (_name, reads) => {
     const subject = table({ 100: [stat(100, 100)], 200: reads });
     expect(await subject.groupState(200)).toBe("gone");
@@ -144,6 +165,66 @@ describe("Linux process table", () => {
   it("is unreadable when the caller is missing", async () => {
     expect(await table({ 300: [stat(300, 300)] }).readable()).toBe(false);
   });
+});
+
+describe.skipIf(process.platform !== "linux")("Linux zombie thread-group leader", () => {
+  const available = (command: string, args: readonly string[]) => process.platform === "linux" && spawnSync(command, args, { timeout: 5_000 }).status === 0;
+  const hasTools = available("cc", ["--version"]) && available("flock", ["--version"]);
+  it.skipIf(!hasTools)("keeps a zombie leader alive while a worker holds a flock", async () => {
+    const root = await temporaryRoot("pi-session-mcp-zombie-");
+    const source = join(root, "worker.c");
+    const executable = join(root, "worker");
+    const lock = join(root, "lock");
+    let child: ReturnType<typeof spawn> | undefined;
+    let closed: Promise<unknown> | undefined;
+    try {
+      await writeFile(source, `#include <pthread.h>
+#include <sys/file.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdlib.h>
+static void *worker(void *path) {
+  int fd = open((char *)path, O_CREAT | O_RDWR, 0600);
+  if (fd < 0 || flock(fd, LOCK_EX) != 0) _exit(2);
+  for (;;) pause();
+  return NULL;
+}
+int main(int argc, char **argv) {
+  pthread_t thread;
+  if (argc != 2 || pthread_create(&thread, NULL, worker, argv[1]) != 0) return 2;
+  pthread_exit(NULL);
+}
+`);
+      const compiled = spawnSync("cc", ["-pthread", source, "-o", executable], { timeout: 5_000, encoding: "utf8" });
+      expect(compiled.error).toBeUndefined();
+      expect(compiled.status, compiled.stderr).toBe(0);
+      child = spawn(executable, [lock], { detached: true, stdio: "ignore" });
+      closed = once(child, "close", { signal: AbortSignal.timeout(5_000) });
+      await once(child, "spawn");
+      const pid = child.pid!;
+      const state = (line: string) => line.slice(line.lastIndexOf(") ") + 2).split(" ")[0];
+      // Independent oracle: the leader is Z, but a task still runs and owns the lock.
+      await expect.poll(async () => {
+        const leader = await readFile(`/proc/${pid}/stat`, "utf8");
+        const tasks = await readdir(`/proc/${pid}/task`);
+        const states = await Promise.all(tasks.map(async (tid) => state(await readFile(`/proc/${pid}/task/${tid}/stat`, "utf8"))));
+        return state(leader) === "Z" && states.some((value) => value !== "Z")
+          && spawnSync("flock", ["-n", lock, "true"], { timeout: 1_000 }).status === 1;
+      }, { timeout: 2_000, interval: 10 }).toBe(true);
+      const subject = createProcessTable("linux");
+      expect(await subject.groupState(pid)).toBe("alive");
+      process.kill(-pid, "SIGKILL");
+      await closed;
+      expect(await subject.groupState(pid)).toBe("gone");
+      expect(spawnSync("flock", ["-n", lock, "true"], { timeout: 1_000 }).status).toBe(0);
+    } finally {
+      // Cleanup must not replace the original assertion error; the root goes with removeTemporaryRoots.
+      if (child?.pid) {
+        try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
+      }
+      await closed?.catch(() => undefined);
+    }
+  }, 15_000);
 });
 
 describe.skipIf(!currentSetupPlatform())("live process table", () => {

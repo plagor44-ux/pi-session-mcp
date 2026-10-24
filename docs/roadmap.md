@@ -95,6 +95,41 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 7: stabilization and live acceptance (2026-10-24)
+
+Base main `f69c40f`, published 0.11.2
+([Sprint 7](sprints/2026-10-24-s7-stabilization-live-acceptance.md)). A
+maintenance sprint without a contract change or a version bump:
+
+- [#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118): the Linux
+  process table counted a zombie thread-group leader with live threads as gone,
+  so the setup fence could end while those threads still held the lock. Fixed
+  in this sprint's pull request; the issue closes on merge.
+- Planning documents reconciled with the delivered 0.11.x releases.
+- Live acceptance of the candidate `6651a47`
+  ([evidence](evaluation/s7-live-acceptance-2026-10-24/README.md)); a candidate
+  result is not a result for the published 0.11.2:
+  - Level 2 passed.
+  - Level 3: 10 of 10 tasks passed. The gate is not met because `npm audit`
+    fails on `undici`, which Pi SDK 1.4.0 pins
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - Wake: setup path, parallel turns, budget wake, abort and close, and the
+    Codex fallback passed. A running CLI session picked up a newly installed
+    hook.
+  - A container writer with delivery passed its delegation, boundary and
+    crafted-event checks; one first-time acceptance failure was not
+    diagnosable ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)).
+- Still open after Sprint 7:
+  - VS Code wake on a candidate build, and hook pickup by a running VS Code
+    session; both need the operator, and the procedure is in the evidence.
+  - A forged event during a real controller turn on a writer.
+  - #120, #121 and #79.
+- Next priority, in this order:
+  1. Decide #120, because without it no release can pass Level 1.
+  2. Merge this fix as a patch candidate.
+  3. Then #121.
+  4. Then the #79 migration decision at the 2026-11-15 review.
+
 ### Sprint 6: ledger and event-bridge evaluation (2026-10-21)
 
 Added at the operator's explicit request of 2026-10-21 as a bounded,
@@ -102,8 +137,8 @@ development-only evaluation
 ([#104](https://github.com/plagor44-ux/pi-session-mcp/issues/104),
 [Sprint 6](sprints/2026-10-21-s6-ledger-event-bridge.md),
 [report](evaluation/ledger-event-bridge-2026-10-21/README.md)). It does not
-replace the isolation priority under #79 and changes no product code or
-contract.
+replace the isolation priority under #79. The evaluation itself changed no
+product code; the bridge implementation that followed shipped in 0.11.0 (below).
 
 - Done: inventory of controller ledger, SDK completion semantics, client wake
   paths and OMO Boulder; a provider-free prototype under `eval/bridge/` (ledger,
@@ -137,19 +172,24 @@ contract.
   With delivery enabled, 0.11.0 refused to start without `XDG_RUNTIME_DIR`,
   which Codex never passes, so a shared configuration broke Codex and setup
   verification. Delivery now stays inactive there (ADR 0011 amendment).
-- Prepared as 0.11.2:
+- Released as 0.11.2 on 2026-10-22 ([#116](https://github.com/plagor44-ux/pi-session-mcp/pull/116);
+  [post-release evidence](acceptance.md#v0112-post-release-evidence) in
+  [#119](https://github.com/plagor44-ux/pi-session-mcp/pull/119)):
   - [#109](https://github.com/plagor44-ux/pi-session-mcp/issues/109): processes
     that exited during a `/proc` scan made the Linux setup fence fail at random
     with `ownership_lock_unavailable`, in CI and on busy hosts.
   - [#117](https://github.com/plagor44-ux/pi-session-mcp/issues/117): Pi SDK
     1.4.0.
-  - Not yet decided:
-    [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115), whether
-    Pi's native MCP client should replace this server's `mcpServers` bridge.
+- Decided in [#119](https://github.com/plagor44-ux/pi-session-mcp/pull/119):
+  [#115](https://github.com/plagor44-ux/pi-session-mcp/issues/115). The server
+  keeps its own controlled `mcpServers` bridge and guards against Pi's built-in
+  MCP client.
 - Open operator checks: wake in the VS Code extension, whether a running
   session loads a newly written hook without a restart or `/hooks` review, and
   a wrapped container writer with delivery under rootless Podman, including the
-  isolation check of the extra mount. The question channel is still undecided.
+  isolation check of the extra mount; Sprint 7 runs them. The question channel
+  (ADR 0011 item 4) is still undecided; a ledger and a supervisor are not
+  product features.
   The #79 isolation review point of 2026-11-15 stays.
 - Deferred: Codex wake (no documented path), macOS delivery (no
   `XDG_RUNTIME_DIR` and no `/proc/self/fd` by default), a supervisor-only

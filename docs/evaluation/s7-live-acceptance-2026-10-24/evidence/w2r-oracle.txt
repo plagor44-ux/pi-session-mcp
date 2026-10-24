@@ -1,0 +1,3 @@
+11:27:05 turn seen
+11:27:20 placing failed
+11:27:50 exit-2 count after forged: 0

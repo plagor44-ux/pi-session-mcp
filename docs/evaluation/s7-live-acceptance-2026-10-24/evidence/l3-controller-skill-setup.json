@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"apply","status":"ok","findings":[{"target":{"client":"claude-code","scope":"project","alias":"pi-session-mcp"},"status":"ok","code":"applied"},{"target":{"client":"claude-code","scope":"project","alias":"pi-session-orchestration"},"status":"ok","code":"skill_installed"}],"exitCode":0}

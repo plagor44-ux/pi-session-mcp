@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Fixed: on Linux the setup fence's process table counted a zombie
+  thread-group leader as gone while other threads of its process still ran and
+  held its file descriptors, including the setup lock. A zombie group member
+  now counts as gone only when `/proc/<pid>/stat` reports one thread; more
+  threads count as alive, and an unreadable thread count keeps the fence
+  ([#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118)). The
+  handling of processes that exit during a scan (#109) and the macOS path are
+  unchanged. No MCP contract change.
+- Security: `zod` 4.6.5 → 4.6.7 (direct pin, production install path;
+  GHSA-mrhx-c7xc-m3w5). In the lockfile only, development path: `fast-uri`
+  3.1.8 → 3.1.9 (via MCP Inspector's `ajv`; GHSA-w74x-v6f9-j3xg,
+  GHSA-xhq7-xmqj-769h, GHSA-wjr9-j795-jxcr, GHSA-333x-w4r6-6crp) and the
+  Inspector's `undici` 8.11.2 → 8.12.3. Still open: `undici` 8.10.2 in the
+  production path, pinned exactly by Pi SDK 1.4.0 (GHSA-4qv8-2p9j-2685,
+  GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c), so `npm audit` still reports it.
 - Documentation: Pi's own MCP client (Pi 1.2 and later: `pi mcp add`,
   `~/.pi/agent/mcp.json`, the built-in `mcp` extension) is never loaded in
   embedded sessions. A server registered with it is invisible to workers and

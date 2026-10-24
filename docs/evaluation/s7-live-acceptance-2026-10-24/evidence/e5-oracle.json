@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "oracle": "events",
+  "pass": true,
+  "checks": [
+    {
+      "id": "capabilitiesFirst",
+      "pass": true
+    },
+    {
+      "id": "clientExitedCleanly",
+      "pass": true
+    },
+    {
+      "id": "noOpenSessionAtEnd",
+      "pass": true
+    },
+    {
+      "id": "everyStartedSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "deliveryIsOff",
+      "pass": true
+    },
+    {
+      "id": "sessionOn_ev-e5",
+      "pass": true
+    },
+    {
+      "id": "ev-e5:turnCompleted",
+      "pass": true
+    },
+    {
+      "id": "ev-e5:answerCorrect",
+      "pass": true
+    },
+    {
+      "id": "noWakeSeen",
+      "pass": true
+    },
+    {
+      "id": "serverEnvironmentWasRecorded",
+      "pass": true
+    },
+    {
+      "id": "serverHadNoRuntimeDir",
+      "pass": true
+    },
+    {
+      "id": "inactiveWarningWrittenOnce",
+      "pass": true,
+      "detail": "1 warnings"
+    },
+    {
+      "id": "noStartupFailure",
+      "pass": true
+    }
+  ]
+}

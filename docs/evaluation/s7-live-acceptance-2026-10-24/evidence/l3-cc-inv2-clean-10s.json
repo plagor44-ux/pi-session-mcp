@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "label": "l3-cc-inv2+10s",
+  "clean": true,
+  "counts": {
+    "candidateServers": 0,
+    "wakeWaiters": 0,
+    "setupProcesses": 0,
+    "workerCommands": 0,
+    "clientProcesses": 0,
+    "spoolInstances": 0,
+    "waiterLocks": 0
+  },
+  "claimFilesInformational": 0
+}

@@ -1,0 +1,14 @@
+11:17:16 container seen
+MOUNTS [{"dst":"<home>/.local/state/pi-session-mcp/writers/s7wfix-w1/clone/.git/hooks","rw":false,"src":"writer:/clone/.git/hooks"},{"dst":"/pi/config","rw":false,"src":"writer:/config"},{"dst":"/pi/agent","rw":true,"src":"writer:/agent"},{"dst":"/pi/events","rw":true,"src":"writer:/events"},{"dst":"<home>/.local/state/pi-session-mcp/writers/s7wfix-w1/clone","rw":true,"src":"writer:/clone"},{"dst":"<home>/.local/state/pi-session-mcp/writers/s7wfix-w1/clone/.git/config","rw":false,"src":"writer:/clone/.git/config"},{"dst":"/opt/pi-session-mcp","rw":false,"src":"release"}]
+11:17:16 events-listing: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:16 writers-root-visible: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:16 writer-dir-visible: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:16 decoy-reachable: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:16 host-ssh: Error: OCI runtime error: runc: exec failed: container does not exist|  runtime-claims: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:17 write-pi-root: Error: OCI runtime error: runc: exec failed: container does not exist|  write-release: Error: OCI runtime error: runc: exec failed: container does not exist|  write-config: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:17 events-mountinfo: Error: OCI runtime error: runc: exec failed: container does not exist|
+11:17:22 turn seen; instance dir present: no
+11:17:30 malformed events placed (junk name, invalid JSON, 2000 bytes, symlink)
+11:17:42 waiter exit-2 count before=0 after-malformed=0
+11:17:42 forged well-formed completed event placed for the real turn
+11:18:12 waiter exit-2 count after-forged=0

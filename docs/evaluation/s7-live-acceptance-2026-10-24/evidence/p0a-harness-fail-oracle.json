@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "oracle": "preflight",
+  "pass": false,
+  "checks": [
+    {
+      "id": "readOnlyRouteSessionStarted",
+      "pass": false
+    },
+    {
+      "id": "readOnlyRouteTurnCompleted",
+      "pass": false
+    },
+    {
+      "id": "readOnlyRouteAnsweredPong",
+      "pass": false
+    },
+    {
+      "id": "readOnlyRouteSessionClosed",
+      "pass": false
+    },
+    {
+      "id": "codingRouteSessionStarted",
+      "pass": false
+    },
+    {
+      "id": "codingRouteTurnCompleted",
+      "pass": false
+    },
+    {
+      "id": "codingRouteAnsweredPong",
+      "pass": false
+    },
+    {
+      "id": "codingRouteSessionClosed",
+      "pass": false
+    }
+  ]
+}

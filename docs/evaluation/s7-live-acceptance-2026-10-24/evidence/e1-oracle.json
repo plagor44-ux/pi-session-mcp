@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "oracle": "events",
+  "pass": true,
+  "checks": [
+    {
+      "id": "capabilitiesFirst",
+      "pass": true
+    },
+    {
+      "id": "clientExitedCleanly",
+      "pass": true
+    },
+    {
+      "id": "noOpenSessionAtEnd",
+      "pass": true
+    },
+    {
+      "id": "everyStartedSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "noSpoolInstanceLeft",
+      "pass": true,
+      "detail": "0 instance directories"
+    },
+    {
+      "id": "deliveryIsSpool",
+      "pass": true
+    },
+    {
+      "id": "sessionOn_ev-e1",
+      "pass": true
+    },
+    {
+      "id": "ev-e1:turnCompleted",
+      "pass": true
+    },
+    {
+      "id": "ev-e1:answerCorrect",
+      "pass": true
+    },
+    {
+      "id": "oneWaiterWake",
+      "pass": true,
+      "detail": "1 waiter exits with code 2"
+    },
+    {
+      "id": "wakeTextNamesTheTurn",
+      "pass": true,
+      "detail": "1 distinct terminal wakes"
+    },
+    {
+      "id": "wakeStartedOwnControllerRequest",
+      "pass": true,
+      "detail": "1 wake rounds"
+    },
+    {
+      "id": "noRunningPolls",
+      "pass": true,
+      "detail": "0 running polls"
+    },
+    {
+      "id": "terminalReadExactlyOnce",
+      "pass": true,
+      "detail": "1 terminal reads"
+    },
+    {
+      "id": "noSleepCommands",
+      "pass": true,
+      "detail": "0 Bash tool uses"
+    }
+  ]
+}

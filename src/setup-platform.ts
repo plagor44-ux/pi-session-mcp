@@ -13,7 +13,7 @@ export type SetupPlatform = "linux" | "darwin";
 export type ProcessGroupState = "alive" | "gone" | "unknown";
 export interface ProcessEntry { readonly pid: number; readonly group: number; readonly state: string; }
 export interface ProcessTable {
-  /** "alive" if any non-zombie process has this process group ID. */
+  /** "alive" for a non-zombie group member, or on Linux a zombie leader with other threads. */
   groupState(group: number): Promise<ProcessGroupState>;
   /** True only if a scan is determinate and contains the calling process. */
   readable(): Promise<boolean>;
@@ -56,7 +56,7 @@ export function isTrustedSystemBinary(path: string, statFile: (path: string) => 
 const VANISHED = Symbol("vanished");
 
 /** One stat sample, or VANISHED when the entry is gone (ENOENT) or was reaped between open and read (ESRCH). */
-function sampleLinuxProcess(procfs: LinuxProcfs, pid: number): { readonly group: string; readonly state: string } | typeof VANISHED {
+function sampleLinuxProcess(procfs: LinuxProcfs, pid: number): { readonly group: string; readonly state: string; readonly threads: string | undefined } | typeof VANISHED {
   let line;
   try { line = procfs.readStat(pid).trim(); }
   catch (error) {
@@ -68,7 +68,8 @@ function sampleLinuxProcess(procfs: LinuxProcfs, pid: number): { readonly group:
   const state = line[close + 2];
   if (close < 3 || !state || !/^[A-Za-z]$/.test(state) || line[close + 3] !== " ") throw new Error("process_stat_invalid");
   const fields = line.slice(close + 4).trim().split(/\s+/);
-  return { group: fields[1] ?? "", state };
+  // fields starts at ppid (field 4); num_threads is field 20 in proc(5).
+  return { group: fields[1] ?? "", state, threads: fields[16] };
 }
 
 /**
@@ -78,7 +79,7 @@ function sampleLinuxProcess(procfs: LinuxProcfs, pid: number): { readonly group:
  * only a vanished entry on the second read counts as gone. Any other failure
  * throws and makes the scan indeterminate.
  */
-function readLinuxProcessGroup(procfs: LinuxProcfs, pid: number): { readonly group: number; readonly state: string } | undefined {
+function readLinuxProcessGroup(procfs: LinuxProcfs, pid: number): { readonly group: number; readonly state: string; readonly threads: string | undefined } | undefined {
   let sample = sampleLinuxProcess(procfs, pid);
   if (sample !== VANISHED && sample.group === "-1") {
     sample = sampleLinuxProcess(procfs, pid);
@@ -87,7 +88,7 @@ function readLinuxProcessGroup(procfs: LinuxProcfs, pid: number): { readonly gro
   if (sample === VANISHED) return undefined;
   const group = Number(sample.group);
   if (sample.group === "" || !Number.isSafeInteger(group) || group < 0) throw new Error("process_group_invalid");
-  return { group, state: sample.state };
+  return { group, state: sample.state, threads: sample.threads };
 }
 
 // Numeric /proc entries are process directories; a vanished one is skipped by readLinuxProcessGroup.
@@ -99,7 +100,11 @@ function linuxGroupState(procfs: LinuxProcfs, group: number): ProcessGroupState 
   try {
     for (const pid of linuxProcessIds(procfs)) {
       const sample = readLinuxProcessGroup(procfs, pid);
-      if (sample && sample.group === group && sample.state !== "Z") return "alive";
+      if (!sample || sample.group !== group) continue;
+      if (sample.state !== "Z") return "alive";
+      const threads = /^\d+$/.test(sample.threads ?? "") ? Number(sample.threads) : Number.NaN;
+      if (!Number.isSafeInteger(threads) || threads < 1) throw new Error("process_threads_invalid");
+      if (threads > 1) return "alive";
     }
   } catch { return "unknown"; }
   return "gone";
