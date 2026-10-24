@@ -48,8 +48,10 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   There is no clock-based stale recovery. A transaction guardian inherits that
   locked file description, launches each mutating client command in its own
   process group, and retains the fence across parent death until a determinate
-  process-table scan confirms that no non-zombie group member remains. The
-  scan reads `/proc` on Linux and the trusted system `/bin/ps` on macOS; a
+  process-table scan confirms that no live group member remains. A single-threaded
+  zombie has terminated and holds no descriptors; on Linux a zombie thread-group
+  leader with other threads still running counts as alive. The scan reads `/proc`
+  on Linux and the trusted system `/bin/ps` on macOS; a
   `ps` sample that fails, has an unexpected line or does not list the scanning
   process is indeterminate. On macOS the proof rests on `/bin/ps` on the
   sealed, SIP-protected system volume, together with the uid and mode check

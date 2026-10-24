@@ -20,9 +20,10 @@
   readable `/proc`; macOS requires an `O_EXLOCK` lock on the APFS volume type
   of `/` and the trusted system `/bin/ps`. On both, keep the stable lock inode
   and guardian-held fence until a determinate process-table scan confirms no
-  non-zombie mutating client process-group member remains. A zombie is
-  terminated and holds no file descriptors; this is a termination guarantee,
-  not a PID-reaping guarantee. An indeterminate scan retains the fence.
+  live mutating client process-group member remains. A single-threaded zombie
+  has terminated and holds no descriptors; on Linux a zombie thread-group leader
+  with other threads still running counts as alive. This is a termination
+  guarantee, not a PID-reaping guarantee. An indeterminate scan retains the fence.
 - Verify must include Doctor, registration equality, and a bounded direct MCP
   handshake/tools/list/capabilities check, without starting sessions or using a
   provider. No real mutation or dogfooding may be claimed without evidence.
