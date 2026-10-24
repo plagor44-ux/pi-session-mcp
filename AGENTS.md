@@ -22,7 +22,7 @@
   and guardian-held fence until a determinate process-table scan confirms no
   live mutating client process-group member remains. A single-threaded zombie
   has terminated and holds no descriptors; on Linux a zombie thread-group leader
-  with other threads still running counts as alive. This is a termination
+  whose group still counts other threads (`num_threads` above 1) counts as alive. This is a termination
   guarantee, not a PID-reaping guarantee. An indeterminate scan retains the fence.
 - Verify must include Doctor, registration equality, and a bounded direct MCP
   handshake/tools/list/capabilities check, without starting sessions or using a

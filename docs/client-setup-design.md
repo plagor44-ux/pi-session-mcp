@@ -54,10 +54,14 @@ Mutating public client commands run under a transaction guardian that inherits t
 
 Here “gone” means no group member can still execute: a single-threaded zombie has
 terminated and holds no descriptors, even when its PID awaits an external reaper.
-On Linux a zombie thread-group leader with other threads still running counts as
-alive. This does not promise full PID reaping or termination of descendants that
-independently escape the process group. A stat read other than the expected disappearance
-(`ENOENT`) makes the scan indeterminate and keeps the guardian-held fence. Tests
+On Linux a zombie thread-group leader counts as alive while the kernel still
+counts other threads in its group (`num_threads` above 1), because those threads
+share its descriptors (#118). This does not promise full PID reaping or termination
+of descendants that independently escape the process group. On Linux an entry that
+disappears during the scan (`ENOENT` or `ESRCH`, or process group `-1` followed by
+a disappearance on one more read, #109) is gone; any other failed stat read, and a
+zombie group member whose thread count cannot be read, makes the scan
+indeterminate and keeps the guardian-held fence. Tests
 of descendant termination must assert zombie-or-absence without catching their
 own failed assertion; fence retention is checked separately with a live member
 and an indeterminate scan.

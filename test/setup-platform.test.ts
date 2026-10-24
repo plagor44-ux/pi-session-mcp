@@ -1,8 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { constants } from "node:fs";
-import { mkdtemp, open, readFile, readdir, rm, writeFile, type FileHandle } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { open, readFile, readdir, writeFile, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -169,9 +168,10 @@ describe("Linux process table", () => {
 });
 
 describe.skipIf(process.platform !== "linux")("Linux zombie thread-group leader", () => {
-  const hasCompiler = process.platform === "linux" && spawnSync("cc", ["--version"], { timeout: 1_000 }).status === 0;
-  it.skipIf(!hasCompiler)("keeps a zombie leader alive while a worker holds a flock", async () => {
-    const root = await mkdtemp(join(tmpdir(), "pi-session-mcp-zombie-"));
+  const available = (command: string, args: readonly string[]) => process.platform === "linux" && spawnSync(command, args, { timeout: 5_000 }).status === 0;
+  const hasTools = available("cc", ["--version"]) && available("flock", ["--version"]);
+  it.skipIf(!hasTools)("keeps a zombie leader alive while a worker holds a flock", async () => {
+    const root = await temporaryRoot("pi-session-mcp-zombie-");
     const source = join(root, "worker.c");
     const executable = join(root, "worker");
     const lock = join(root, "lock");
@@ -218,13 +218,11 @@ int main(int argc, char **argv) {
       expect(await subject.groupState(pid)).toBe("gone");
       expect(spawnSync("flock", ["-n", lock, "true"], { timeout: 1_000 }).status).toBe(0);
     } finally {
-      try {
-        if (child?.pid) {
-          try { process.kill(-child.pid, "SIGKILL"); }
-          catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
-        }
-        await closed;
-      } finally { await rm(root, { recursive: true, force: true }); }
+      // Cleanup must not replace the original assertion error; the root goes with removeTemporaryRoots.
+      if (child?.pid) {
+        try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
+      }
+      await closed?.catch(() => undefined);
     }
   }, 15_000);
 });

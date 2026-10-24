@@ -50,7 +50,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   process group, and retains the fence across parent death until a determinate
   process-table scan confirms that no live group member remains. A single-threaded
   zombie has terminated and holds no descriptors; on Linux a zombie thread-group
-  leader with other threads still running counts as alive. The scan reads `/proc`
+  leader whose group still counts other threads counts as alive. The scan reads `/proc`
   on Linux and the trusted system `/bin/ps` on macOS; a
   `ps` sample that fails, has an unexpected line or does not list the scanning
   process is indeterminate. On macOS the proof rests on `/bin/ps` on the

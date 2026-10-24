@@ -36,7 +36,7 @@ the documentation calls it CI-tested.
 | Concern | Linux mechanism | Location |
 | --- | --- | --- |
 | Kernel lock | util-linux `flock -E 75 -w N 3` locks the open file description that the parent opened; the guardian inherits it as fd 3 | `src/setup-process.ts` `acquireSetupGuardian` |
-| Process-group proof | `/proc/<pid>/stat` scan; `Z` entries do not count as live | `src/setup-process.ts` `processGroupState`, `src/setup-command-guardian.ts` `groupState`, `processTableReadable` |
+| Process-group proof | `/proc/<pid>/stat` scan; a `Z` entry does not count as live unless its `num_threads` is above 1 (#118) | `src/setup-process.ts` `processGroupState`, `src/setup-command-guardian.ts` `groupState`, `processTableReadable` |
 | Filesystem | `statfs().type` allowlist of Linux magic numbers | `src/setup-ownership.ts` `SUPPORTED_LOCAL_FILESYSTEMS` |
 | Platform gates | `process.platform !== "linux"` | `src/setup-main.ts`, `src/setup-process.ts` (runner, guardian), `src/setup-ownership.ts` |
 
@@ -63,7 +63,7 @@ export function currentSetupPlatform(platform?: NodeJS.Platform): SetupPlatform 
 
 export type ProcessGroupState = "alive" | "gone" | "unknown";
 export interface ProcessTable {
-  /** "alive" if any non-zombie process has this process group ID. */
+  /** "alive" for a non-zombie group member, or on Linux a zombie leader with other threads. */
   groupState(group: number): Promise<ProcessGroupState>;
   /** True only if a scan is trustworthy and contains the calling process. */
   readable(): Promise<boolean>;
