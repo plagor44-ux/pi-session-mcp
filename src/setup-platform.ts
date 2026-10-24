@@ -102,7 +102,7 @@ function linuxGroupState(procfs: LinuxProcfs, group: number): ProcessGroupState 
       const sample = readLinuxProcessGroup(procfs, pid);
       if (!sample || sample.group !== group) continue;
       if (sample.state !== "Z") return "alive";
-      const threads = Number(sample.threads);
+      const threads = /^\d+$/.test(sample.threads ?? "") ? Number(sample.threads) : Number.NaN;
       if (!Number.isSafeInteger(threads) || threads < 1) throw new Error("process_threads_invalid");
       if (threads > 1) return "alive";
     }
