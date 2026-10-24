@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "oracle": "abort-late",
+  "pass": true,
+  "checks": [
+    {
+      "id": "noLateFile",
+      "pass": true
+    },
+    {
+      "id": "noLeftoverWorkerProcess",
+      "pass": true,
+      "detail": "0 processes"
+    }
+  ]
+}

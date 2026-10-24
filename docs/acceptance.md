@@ -2265,6 +2265,35 @@ Not established for `0.11.2`:
 - a wrapped container writer with delivery enabled;
 - macOS delivery.
 
+### Sprint 7 candidate acceptance (2026-10-24)
+
+Candidate for #118: commit `6651a47`, package version string unchanged at
+`0.11.2`, Pi SDK `1.4.0`. This is not an acceptance of the published `0.11.2`.
+Details, bindings and every failed attempt are in the
+[evidence record](evaluation/s7-live-acceptance-2026-10-24/README.md).
+
+- Level 1: all commands exit 0 except `npm audit`, which reports `undici`
+  8.10.2 pinned by the Pi SDK
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+- Level 2: working tree and packed tarball, 160 of 160 checks with delivery off
+  and 228 of 228 with `--events spool`.
+- Level 3 with Claude Code 2.1.308 and Codex 0.162.1, worker routes
+  `explore-fast` and `code-deepseek`: 10 of 10 tasks passed with every
+  independent check. The gate is not met, only because Level 1 is not green.
+- Wake scenarios, targeted and not part of Level 3:
+  - passed: setup path (E1), two parallel turns (E2), budget wake with a manual
+    hook (E3b), abort and close (E4), the Codex fallback without a runtime
+    directory (E5);
+  - a running stream-json CLI session picked up a hook that setup installed
+    after it started.
+- VS Code: a wake was observed only on the published `0.11.2` in the
+  integrator's own extension session.
+- Container writer with delivery: delegation, wake, collect, finish and remove
+  passed, and the boundary and crafted-event checks passed provider-free. The
+  first acceptance failed once without a diagnosable cause
+  ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)). A forged
+  event during a real controller turn was not run.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)

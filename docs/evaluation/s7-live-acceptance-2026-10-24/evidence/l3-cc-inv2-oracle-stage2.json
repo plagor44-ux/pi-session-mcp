@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "oracle": "code",
+  "pass": true,
+  "checks": [
+    {
+      "id": "visibleTestsPass",
+      "pass": true,
+      "detail": "pass 8, fail 0"
+    },
+    {
+      "id": "hiddenTestsPass",
+      "pass": true,
+      "detail": "pass 53, fail 0"
+    },
+    {
+      "id": "changesWithinAllowedList",
+      "pass": true,
+      "detail": "2 changed, 0 outside the list"
+    },
+    {
+      "id": "zonesUnchanged",
+      "pass": true
+    },
+    {
+      "id": "gitRefsUnchanged",
+      "pass": true
+    },
+    {
+      "id": "workerAddedExpressTest",
+      "pass": true,
+      "detail": "test file mentions express and has at least 5 tests"
+    }
+  ]
+}

@@ -127,3 +127,47 @@ affected acceptance.
 
 Planned on 2026-10-24. Results are added below as they are taken; failed runs
 stay on record.
+
+### Results (2026-10-24)
+
+Evidence: [Sprint 7 live acceptance](../evaluation/s7-live-acceptance-2026-10-24/README.md).
+Candidate `6651a47`; the package version string stays `0.11.2`.
+
+| Item | Outcome |
+| --- | --- |
+| #118 reproduction on `f69c40f` | reproduced: `groupState` reported `gone` while an independent oracle saw a live thread with four descriptors and the kernel `flock` still held |
+| #118 fix and tests | implemented; the new tests fail on `f69c40f` (9 failures, the live test among them) and pass on the candidate; the same oracle reports `alive` while the lock is held and `gone` after exit |
+| Independent review | two reviews of the integrated state (Claude Opus 5.5 subagent, Pi `review-grok`): no blocking finding; the Low findings and one nit were fixed |
+| Level 1 | green except `npm audit`: `undici` 8.10.2 pinned by Pi SDK 1.4.0 ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)); `zod` and the development-path advisories were patched |
+| Level 2 | passed: working tree and packed tarball, delivery off (160/160) and spool (228/228) |
+| Level 3 | 10 of 10 tasks passed with every oracle check; gate not met only because Level 1 is not green (#120) |
+| E1 setup path wake | passed |
+| E2 parallel turns | passed |
+| E3b budget wake (manual hook) | passed |
+| E4 abort and close | passed against the pre-registered criteria; one stricter kit-oracle check failed and is recorded |
+| E5 Codex fallback | passed |
+| E6 VS Code | the wake was observed in the integrator's VS Code extension session on the published 0.11.2 only; the candidate was not loaded there; hook pickup by a running VS Code session not checked (procedure in the evidence) |
+| E6b hook pickup, CLI stream-json | picked up without restart |
+| Container writer with delivery | provisioning needed a second apply after one undiagnosable `writer_acceptance_failed` ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)); delegation, wake, collect, review, finish and remove passed; boundary and crafted-event checks passed provider-free; the forged event during a real controller turn was not run (harness defect, rerun and start limit used) |
+
+Delegations for development and review, counted apart from the acceptance
+matrix:
+
+| Task | Route | Result |
+| --- | --- | --- |
+| A: #118 fix and tests | Pi `code` (openai gpt-6.1-sol) on the full clone `pi-session-mcp-w1`, a host writer: the alias has mode `unset`, as all 29 configured aliases do | completed in one turn; diff reviewed and cherry-picked |
+| B: documentation reconciliation | Claude subagent (Sonnet 5.5) in a separate worktree | four files; cherry-picked; roadmap and #79 text applied by the integrator |
+| C: acceptance kit | Claude subagent (Sonnet 5.5), scratch directory | kit with self-test; one runbook defect (preflight configuration) found live |
+| D: review | Claude reviewer (Opus 5.5) and Pi `review-grok` (xai grok-4.7) | no blocking finding |
+
+Not done in this sprint: a structured question channel (ADR 0011 item 4).
+Completion wakes are a product feature since 0.11.0; structured questions were
+only examined in the Sprint 6 prototype; a public answer channel stays
+undecided. A human elicitation is not an autonomous answer of the controller,
+and a second prompt to a session with a running turn is refused
+(`session_running`), so it is no answer channel either. This sprint found no
+new demand that would justify an issue.
+
+Known gap outside #118: the acceptance harness
+`scripts/multi-session-acceptance.mjs` still treats every `Z` process as
+terminated in its own leftover check; it is not part of the setup fence.

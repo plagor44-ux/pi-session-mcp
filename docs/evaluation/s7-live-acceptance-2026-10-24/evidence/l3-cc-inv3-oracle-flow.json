@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "oracle": "abort",
+  "pass": true,
+  "checks": [
+    {
+      "id": "sessionStartedOnAlias",
+      "pass": true
+    },
+    {
+      "id": "promptAccepted",
+      "pass": true
+    },
+    {
+      "id": "abortCalled",
+      "pass": true
+    },
+    {
+      "id": "everyAbortOk",
+      "pass": true,
+      "detail": "ok"
+    },
+    {
+      "id": "noAbortOnOtherSession",
+      "pass": true
+    },
+    {
+      "id": "turnSeenAborted",
+      "pass": true
+    },
+    {
+      "id": "abortBeforeAbortedRead",
+      "pass": true
+    },
+    {
+      "id": "sessionClosedAfterAbort",
+      "pass": true
+    },
+    {
+      "id": "listEmptyAfterClose",
+      "pass": true
+    },
+    {
+      "id": "freshSessionIdle",
+      "pass": true
+    },
+    {
+      "id": "freshSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "finalListEmpty",
+      "pass": true
+    },
+    {
+      "id": "abortDelayRecorded",
+      "pass": true,
+      "detail": "19461 ms between prompt result and abort result"
+    }
+  ]
+}

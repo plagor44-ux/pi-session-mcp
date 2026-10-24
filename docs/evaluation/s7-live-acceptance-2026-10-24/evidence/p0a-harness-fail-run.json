@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "label": "p0",
+  "mode": "plain",
+  "startedAt": "2026-10-24T10:47:15.392Z",
+  "durationMs": 11338,
+  "exitCode": 0,
+  "exitSignal": null,
+  "timedOut": false,
+  "harnessAborted": null,
+  "endReason": "exited",
+  "stdinEndedAtMs": null,
+  "lines": 16,
+  "parseErrors": 0,
+  "resultEvents": 1,
+  "sessionsStarted": 0,
+  "sessionsClosedOk": 0,
+  "openSessionsAtEnd": 0,
+  "promptsAccepted": 0,
+  "messagesSent": [
+    {
+      "kind": "first",
+      "atMs": 0
+    }
+  ],
+  "gate": {
+    "configured": false,
+    "fired": false,
+    "atMs": null,
+    "cmdExit": null
+  },
+  "groupAliveAfterExit": false
+}

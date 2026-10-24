@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "transcriptSha256": "7a2b81ae12a0a9ea770842ce8e69685bbc723f53f13687b620f49614d2fa9ed9",
+  "transcriptName": "transcript.jsonl",
+  "format": "codex",
+  "lines": 22,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 6,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 6,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 1,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 1,
+    "piSessionCalls": 4
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 11525
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "ev-e5",
+      "profile": "explore-fast",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "eventTypes": {
+      "thread.started": 1,
+      "turn.started": 1,
+      "item.completed": 11,
+      "item.started": 8,
+      "turn.completed": 1
+    },
+    "toolUses": {
+      "agent_message": 3,
+      "command_execution": 2,
+      "mcp:pi_capabilities_get": 1,
+      "mcp:pi_session_start": 1,
+      "mcp:pi_session_prompt": 1,
+      "mcp:pi_turn_get": 1,
+      "mcp:pi_session_close": 1,
+      "mcp:pi_session_list": 1
+    },
+    "usage": {
+      "input_tokens": 138771,
+      "cached_input_tokens": 122880,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 691,
+      "reasoning_output_tokens": 12
+    },
+    "modelRequests": "not exposed by codex exec --json"
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "transcriptSha256": "50e82f02a5a6ad7b777187098b772cac956c2643710733870a9672d5de96ca9a",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 39,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 8,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 8,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 2,
+      "pi_turn_get": 2,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "piTurnGetTotal": 2,
+    "piSessionCalls": 5
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 6692
+    },
+    {
+      "session": "s1",
+      "turn": "t2",
+      "piTurnGetCalls": 1,
+      "runningPolls": 0,
+      "terminalReads": 1,
+      "finalState": "completed",
+      "durationMs": 11401
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "cc-code",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 13,
+    "resultEvents": 1,
+    "bashToolUses": 5,
+    "toolUses": {
+      "Skill": 1,
+      "pi_capabilities_get": 1,
+      "pi_session_start": 1,
+      "pi_session_prompt": 2,
+      "Bash": 5,
+      "pi_turn_get": 2,
+      "pi_session_close": 1,
+      "pi_session_list": 1
+    },
+    "costUsdLast": 0.1674329
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

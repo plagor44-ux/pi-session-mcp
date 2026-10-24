@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "transcriptSha256": "511e53bef89161e3ef048a3ac252cbc3b25bfa835e7133e5072d8a7795752084",
+  "transcriptName": "transcript.jsonl",
+  "format": "claude",
+  "lines": 39,
+  "parseErrors": 0,
+  "hasTimes": true,
+  "scannedToolResults": 11,
+  "hitCount": 0,
+  "hits": [],
+  "assistantTextMentions": {},
+  "calls": {
+    "total": 11,
+    "byTool": {
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 2,
+      "pi_session_abort": 1,
+      "pi_session_close": 2,
+      "pi_session_list": 2
+    },
+    "piTurnGetTotal": 2,
+    "piSessionCalls": 8
+  },
+  "errorCodes": {},
+  "undocumentedErrorCodes": [],
+  "perTurn": [
+    {
+      "session": "s1",
+      "turn": "t1",
+      "piTurnGetCalls": 2,
+      "runningPolls": 1,
+      "terminalReads": 1,
+      "finalState": "aborted",
+      "durationMs": 19465
+    }
+  ],
+  "perSession": [
+    {
+      "session": "s1",
+      "workspace": "cc-abort",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": [
+        "ok"
+      ]
+    },
+    {
+      "session": "s2",
+      "workspace": "cc-abort",
+      "profile": "code-deepseek",
+      "closed": true,
+      "aborts": []
+    }
+  ],
+  "controller": {
+    "modelRequests": 13,
+    "resultEvents": 1,
+    "bashToolUses": 2,
+    "toolUses": {
+      "Skill": 1,
+      "pi_capabilities_get": 1,
+      "pi_session_start": 2,
+      "pi_session_prompt": 1,
+      "Bash": 2,
+      "pi_turn_get": 2,
+      "pi_session_abort": 1,
+      "pi_session_close": 2,
+      "pi_session_list": 2
+    },
+    "costUsdLast": 0.15411030000000003
+  },
+  "wakes": {
+    "distinct": 0,
+    "occurrences": 0,
+    "rows": []
+  },
+  "wakeRounds": [],
+  "hookEvents": []
+}

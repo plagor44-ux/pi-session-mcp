@@ -1,0 +1,4 @@
+changed: src/shipping.js
+CHANGED=1
+OUTSIDE=0
+RESULT=PASS

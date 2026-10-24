@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "packageName": "pi-session-mcp",
+  "packageVersion": "0.11.2",
+  "distMainSha256": "eebfe6ff59cfadec385ce90b58e6083c236cc83b5f18115c3368f20b80151fc4",
+  "distTreeSha256": "00ce08b967edf57671a7f7d75aa6dd57ef543897914eb301a699dc51ec603102",
+  "distFiles": 123,
+  "versions": {
+    "node": "v26.11.1",
+    "npm": "12.2.1",
+    "claude": "2.1.308 (Claude Code)",
+    "codex": "codex-cli 0.162.1"
+  },
+  "platform": "linux-x64",
+  "source": {
+    "commit": "6651a47096ad515c8075b374fd5775ee965e6067",
+    "cleanTree": true,
+    "tag": null
+  }
+}

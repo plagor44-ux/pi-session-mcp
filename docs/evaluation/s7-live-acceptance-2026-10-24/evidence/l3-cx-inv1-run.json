@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "label": "l3-cx-inv1",
+  "mode": "plain",
+  "startedAt": "2026-10-24T10:54:07.181Z",
+  "durationMs": 72100,
+  "exitCode": 0,
+  "exitSignal": null,
+  "timedOut": false,
+  "harnessAborted": null,
+  "endReason": "exited",
+  "stdinEndedAtMs": null,
+  "lines": 55,
+  "parseErrors": 0,
+  "resultEvents": 0,
+  "sessionsStarted": 1,
+  "sessionsClosedOk": 1,
+  "openSessionsAtEnd": 0,
+  "promptsAccepted": 2,
+  "messagesSent": [
+    {
+      "kind": "first",
+      "atMs": 0
+    }
+  ],
+  "gate": {
+    "configured": false,
+    "fired": false,
+    "atMs": null,
+    "cmdExit": null
+  },
+  "groupAliveAfterExit": false
+}

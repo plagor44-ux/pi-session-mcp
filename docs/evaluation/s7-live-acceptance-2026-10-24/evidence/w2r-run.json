@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "label": "w2r",
+  "mode": "claude-stream",
+  "startedAt": "2026-10-24T11:26:57.329Z",
+  "durationMs": 92115,
+  "exitCode": 0,
+  "exitSignal": null,
+  "timedOut": false,
+  "harnessAborted": null,
+  "endReason": "all_sessions_closed",
+  "stdinEndedAtMs": 91846,
+  "lines": 23,
+  "parseErrors": 0,
+  "resultEvents": 2,
+  "sessionsStarted": 1,
+  "sessionsClosedOk": 1,
+  "openSessionsAtEnd": 0,
+  "promptsAccepted": 1,
+  "messagesSent": [
+    {
+      "kind": "first",
+      "atMs": 0
+    }
+  ],
+  "gate": {
+    "configured": false,
+    "fired": false,
+    "atMs": null,
+    "cmdExit": null
+  },
+  "groupAliveAfterExit": false
+}

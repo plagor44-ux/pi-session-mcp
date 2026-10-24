@@ -1,0 +1,1 @@
+{"schemaVersion":1,"operation":"apply","status":"ok","findings":[{"target":{"client":"writer","scope":"s7wfix","alias":"s7wfix-w1"},"status":"ok","code":"writer_reset"}],"exitCode":0}

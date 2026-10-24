@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "oracle": "events",
+  "pass": false,
+  "checks": [
+    {
+      "id": "capabilitiesFirst",
+      "pass": true
+    },
+    {
+      "id": "clientExitedCleanly",
+      "pass": true
+    },
+    {
+      "id": "noOpenSessionAtEnd",
+      "pass": true
+    },
+    {
+      "id": "everyStartedSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "noSpoolInstanceLeft",
+      "pass": true,
+      "detail": "0 instance directories"
+    },
+    {
+      "id": "deliveryIsSpool",
+      "pass": true
+    },
+    {
+      "id": "bothSessionsStarted",
+      "pass": true
+    },
+    {
+      "id": "abortPathAbortedOk",
+      "pass": true
+    },
+    {
+      "id": "oneWaiterWake",
+      "pass": true,
+      "detail": "1 waiter exits with code 2 (the abort; the close must not wake)"
+    },
+    {
+      "id": "abortWakeNamesTheAbortedTurn",
+      "pass": true
+    },
+    {
+      "id": "wakeStartedOwnControllerRequest",
+      "pass": false,
+      "detail": "1 wake rounds"
+    },
+    {
+      "id": "closePathClosedWhileRunning",
+      "pass": true
+    },
+    {
+      "id": "closePathCausedNoWake",
+      "pass": true
+    },
+    {
+      "id": "noRunningPollsOnAbortedTurn",
+      "pass": true
+    },
+    {
+      "id": "finalListEmpty",
+      "pass": true
+    }
+  ]
+}

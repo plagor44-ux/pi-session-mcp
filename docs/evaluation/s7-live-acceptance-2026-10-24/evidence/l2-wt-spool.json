@@ -1,0 +1,1334 @@
+{
+  "label": "wt-6651a47-spool",
+  "events": "spool",
+  "timestamp": "2026-10-24T10:28:11.219Z",
+  "clients": [
+    "codex",
+    "claude-code"
+  ],
+  "versions": {
+    "node": "v26.11.1",
+    "platform": "linux",
+    "arch": "x64",
+    "codex": "codex-cli 0.162.1",
+    "codexOutputLines": 1,
+    "claude": "2.1.308 (Claude Code)",
+    "claudeOutputLines": 1
+  },
+  "setupBuildMainSha256": "eebfe6ff59cfadec385ce90b58e6083c236cc83b5f18115c3368f20b80151fc4",
+  "buildUnchanged": true,
+  "targets": [
+    {
+      "target": "codex:user:pi-session-mcp",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "default",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 2,
+          "operation": "--dry-run",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 3,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 4,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillCode": "skill_already_equivalent",
+            "skillStatus": "unchanged",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillStatus": "unchanged",
+            "skillCode": "skill_already_equivalent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 5,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 6,
+          "operation": "--rollback",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true,
+          "registrationAbsentAfter": true
+        },
+        {
+          "step": 7,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 8,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 9,
+          "operation": "--remove",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 2,
+            "targetMatches": true,
+            "hookStatus": null,
+            "hookCode": null,
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true
+        }
+      ],
+      "postconditions": {
+        "registrationAbsent": true,
+        "skillAbsent": true,
+        "foreignSkillUnchanged": true,
+        "sentinelPresent": true,
+        "ownershipRecordsEmpty": true,
+        "ownershipDirMode0700": true,
+        "ownershipFileMode0600": true
+      }
+    },
+    {
+      "target": "claude-code:user:pi-session-mcp",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "default",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 2,
+          "operation": "--dry-run",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 3,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 4,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillCode": "skill_already_equivalent",
+            "skillStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookStatus": "unchanged",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillStatus": "unchanged",
+            "skillCode": "skill_already_equivalent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 5,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 6,
+          "operation": "--rollback",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true,
+          "registrationAbsentAfter": true
+        },
+        {
+          "step": 7,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 8,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 9,
+          "operation": "--remove",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true
+        }
+      ],
+      "postconditions": {
+        "registrationAbsent": true,
+        "skillAbsent": true,
+        "foreignSkillUnchanged": true,
+        "sentinelPresent": true,
+        "wakeEntryAbsent": true,
+        "foreignHookUnchanged": true,
+        "ownershipRecordsEmpty": true,
+        "ownershipDirMode0700": true,
+        "ownershipFileMode0600": true
+      }
+    },
+    {
+      "target": "claude-code:project:pi-session-mcp",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "default",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 2,
+          "operation": "--dry-run",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 3,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 4,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillCode": "skill_already_equivalent",
+            "skillStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookStatus": "unchanged",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillStatus": "unchanged",
+            "skillCode": "skill_already_equivalent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 5,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 6,
+          "operation": "--rollback",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true,
+          "registrationAbsentAfter": true
+        },
+        {
+          "step": 7,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 8,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 9,
+          "operation": "--remove",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true
+        }
+      ],
+      "postconditions": {
+        "registrationAbsent": true,
+        "skillAbsent": true,
+        "foreignSkillUnchanged": true,
+        "sentinelPresent": true,
+        "wakeEntryAbsent": true,
+        "foreignHookUnchanged": true,
+        "ownershipRecordsEmpty": true,
+        "ownershipDirMode0700": true,
+        "ownershipFileMode0600": true
+      }
+    },
+    {
+      "target": "claude-code:local:pi-session-mcp",
+      "steps": [
+        {
+          "step": 1,
+          "operation": "default",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 2,
+          "operation": "--dry-run",
+          "expected": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillCode": "skill_absent",
+            "skillStatus": "absent",
+            "hookCode": "hook_add_planned",
+            "hookStatus": "planned",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "planned",
+            "status": "absent",
+            "code": "absent",
+            "skillStatus": "absent",
+            "skillCode": "skill_absent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "planned",
+            "hookCode": "hook_add_planned",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "clientStateUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 3,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 4,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillCode": "skill_already_equivalent",
+            "skillStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookStatus": "unchanged",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "unchanged",
+            "code": "already_equivalent",
+            "skillStatus": "unchanged",
+            "skillCode": "skill_already_equivalent",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "unchanged",
+            "hookCode": "hook_already_equivalent",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 5,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 6,
+          "operation": "--rollback",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "rolled_back",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true,
+          "registrationAbsentAfter": true
+        },
+        {
+          "step": 7,
+          "operation": "--apply",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillCode": "skill_installed",
+            "skillStatus": "ok",
+            "hookCode": "hook_added",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "applied",
+            "skillStatus": "ok",
+            "skillCode": "skill_installed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_added",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "registrationPresentAfter": true,
+          "skillPresentAfter": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 8,
+          "operation": "--verify",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillCode": "skill_verified",
+            "skillStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "mcp_verified",
+            "skillStatus": "ok",
+            "skillCode": "skill_verified",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_verified",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 1,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "noSpoolInstanceLeft": true,
+          "foreignSkillUnchanged": true
+        },
+        {
+          "step": 9,
+          "operation": "--remove",
+          "expected": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillCode": "skill_removed",
+            "skillStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookStatus": "ok",
+            "exit": 0
+          },
+          "observed": {
+            "overall": "ok",
+            "status": "ok",
+            "code": "removed",
+            "skillStatus": "ok",
+            "skillCode": "skill_removed",
+            "skillTargetMatches": true,
+            "exit": 0,
+            "findingCount": 3,
+            "targetMatches": true,
+            "hookStatus": "ok",
+            "hookCode": "hook_removed",
+            "hookTargetMatches": true
+          },
+          "pass": true,
+          "wakeEntriesAfter": 0,
+          "wakeEntryExpected": true,
+          "foreignHookUnchanged": true,
+          "skillAbsentAfter": true,
+          "foreignSkillUnchanged": true
+        }
+      ],
+      "postconditions": {
+        "registrationAbsent": true,
+        "skillAbsent": true,
+        "foreignSkillUnchanged": true,
+        "sentinelPresent": true,
+        "wakeEntryAbsent": true,
+        "foreignHookUnchanged": true,
+        "ownershipRecordsEmpty": true,
+        "ownershipDirMode0700": true,
+        "ownershipFileMode0600": true
+      }
+    }
+  ],
+  "sentinels": [
+    {
+      "client": "codex",
+      "scope": "user",
+      "name": "acceptance-sentinel",
+      "added": true
+    },
+    {
+      "client": "claude-code",
+      "scope": "user",
+      "name": "acceptance-sentinel",
+      "added": true
+    },
+    {
+      "client": "claude-code",
+      "scope": "project",
+      "name": "acceptance-sentinel-project",
+      "added": true
+    },
+    {
+      "client": "claude-code",
+      "scope": "local",
+      "name": "acceptance-sentinel-local",
+      "added": true
+    }
+  ],
+  "finalChecks": [
+    {
+      "client": "codex",
+      "skillsAbsentEverySlot": true,
+      "foreignSkillsUnchanged": true,
+      "registrationAbsentEveryScope": true,
+      "sentinelsPresent": true,
+      "ownershipRecordsEmpty": true,
+      "ownershipDirMode0700": true,
+      "ownershipFileMode0600": true
+    },
+    {
+      "client": "claude-code",
+      "skillsAbsentEverySlot": true,
+      "foreignSkillsUnchanged": true,
+      "registrationAbsentEveryScope": true,
+      "sentinelsPresent": true,
+      "ownershipRecordsEmpty": true,
+      "ownershipDirMode0700": true,
+      "ownershipFileMode0600": true
+    }
+  ],
+  "realRegistrationsUnchanged": true,
+  "processCheck": {
+    "leftoverCount": 0,
+    "pass": true
+  },
+  "pathLeakCheck": {
+    "reportsScanned": 36,
+    "hits": 0,
+    "pass": true
+  },
+  "notes": [],
+  "totalChecks": 228,
+  "failures": 0,
+  "buildFileCount": 149,
+  "disposableDirectoryRemoved": true
+}

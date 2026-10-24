@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "oracle": "events",
+  "pass": true,
+  "checks": [
+    {
+      "id": "capabilitiesFirst",
+      "pass": true
+    },
+    {
+      "id": "clientExitedCleanly",
+      "pass": true
+    },
+    {
+      "id": "noOpenSessionAtEnd",
+      "pass": true
+    },
+    {
+      "id": "everyStartedSessionClosed",
+      "pass": true
+    },
+    {
+      "id": "noSpoolInstanceLeft",
+      "pass": true,
+      "detail": "0 instance directories"
+    },
+    {
+      "id": "deliveryIsSpool",
+      "pass": true
+    },
+    {
+      "id": "sessionOn_ev-e2s",
+      "pass": true
+    },
+    {
+      "id": "ev-e2s:turnCompleted",
+      "pass": true
+    },
+    {
+      "id": "ev-e2s:reportedCheckId",
+      "pass": true
+    },
+    {
+      "id": "ev-e2s:turnLastedAtLeast90PercentOfCheck",
+      "pass": true,
+      "detail": "14236 ms for a 12 s check"
+    },
+    {
+      "id": "sessionOn_ev-e2l",
+      "pass": true
+    },
+    {
+      "id": "ev-e2l:turnCompleted",
+      "pass": true
+    },
+    {
+      "id": "ev-e2l:reportedCheckId",
+      "pass": true
+    },
+    {
+      "id": "ev-e2l:turnLastedAtLeast90PercentOfCheck",
+      "pass": true,
+      "detail": "77084 ms for a 75 s check"
+    },
+    {
+      "id": "bothPromptsBeforeFirstRead",
+      "pass": true
+    },
+    {
+      "id": "twoWaiterWakes",
+      "pass": true,
+      "detail": "2 waiter exits with code 2"
+    },
+    {
+      "id": "twoTerminalWakesNamingTheTwoTurns",
+      "pass": true
+    },
+    {
+      "id": "shortWakeBeforeLongWake",
+      "pass": true
+    },
+    {
+      "id": "shortTurnReadBeforeLongTurnRead",
+      "pass": true
+    },
+    {
+      "id": "wakeRoundsStartedControllerRequests",
+      "pass": true,
+      "detail": "2 wake rounds"
+    },
+    {
+      "id": "noRunningPolls",
+      "pass": true,
+      "detail": "0 running polls"
+    },
+    {
+      "id": "eachTurnReadOnce",
+      "pass": true
+    },
+    {
+      "id": "noSleepCommands",
+      "pass": true
+    },
+    {
+      "id": "durationsClearlyDifferent",
+      "pass": true,
+      "detail": "short 14236 ms, long 77084 ms"
+    }
+  ]
+}
