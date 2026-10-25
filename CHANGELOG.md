@@ -12,6 +12,15 @@
   ([#125](https://github.com/plagor44-ux/pi-session-mcp/issues/125)). Also
   gave the multi-session acceptance test's temporary-root cleanup an explicit
   120 s hook timeout, which it exceeded on macOS CI. No MCP contract change.
+- Fixed: the first acceptance of every newly provisioned writer failed with
+  `acceptance_harness_failed` (`digests.preexisting_changed`) when event
+  delivery was on, and a repeated `--apply` passed. The writer's spool directory
+  was created at its first launch, which is the acceptance harness's own
+  launch, so the harness saw a new entry in the writer root. Provisioning now
+  creates the directory (0700) when delivery is on. This is the cause behind
+  [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121); writers
+  provisioned by an earlier release keep needing one repeated `--apply`
+  ([#126](https://github.com/plagor44-ux/pi-session-mcp/issues/126)).
 
 ## 0.11.3 — 2026-10-25
 

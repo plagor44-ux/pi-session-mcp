@@ -1,11 +1,12 @@
-import { lstat, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { loadConfig } from "../src/config.js";
-import { inspectWork, provisionWriter, removeWriter, renderContainedConfig, type WriterContext } from "../src/writer-lifecycle.js";
+import { ensureWriterEventsDirectory } from "../src/writer-boundary.js";
+import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerEventDeliveryEnabled, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -187,4 +188,47 @@ it("never follows a symlinked spool directory when removing", async () => {
   await symlink(outside, f.paths.events);
   expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
   expect(await readFile(join(outside, "keep"), "utf8")).toBe("keep");
+});
+
+const withSpool = { ...rawConfig, events: { delivery: "spool" } };
+const rootNames = async (root: string) => (await readdir(root)).sort();
+it("creates the private spool directory at provisioning when delivery is on, so launch does not change the writer root", async () => {
+  const f = await fixture();
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: withSpool })).toEqual({ code: "writer_provisioned", status: "ok" });
+  const stat = await lstat(f.paths.events);
+  expect(stat.isDirectory()).toBe(true);
+  expect(stat.mode & 0o777).toBe(0o700);
+  expect(stat.uid).toBe(process.getuid!());
+  const before = await rootNames(f.paths.root);
+  expect(before).toContain("events");
+  // The launch-time step (acceptance harness digests the writer root around it) finds the directory and adds no name.
+  expect(await ensureWriterEventsDirectory(f.ctx.home, "repo-w1", process.getuid!())).toBe(f.paths.events);
+  expect(await rootNames(f.paths.root)).toEqual(before);
+  expect((await lstat(f.paths.events)).mode & 0o777).toBe(0o700);
+});
+it("does not create the spool directory when delivery is off or disabled, matching the absent boundary mount", async () => {
+  for (const raw of [rawConfig, { ...rawConfig, events: { delivery: "off" } }]) {
+    const f = await fixture();
+    await provisionWriter(f.ctx, { index: 1, settings, rawConfig: raw });
+    await expect(lstat(f.paths.events)).rejects.toMatchObject({ code: "ENOENT" });
+  }
+});
+it("recreates the spool directory when an interrupted provisioning restarts", async () => {
+  const f = await fixture();
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig: withSpool });
+  await writeWriterState(f.ctx.home, "repo-w1", { ...(await readWriterState(f.ctx.home, "repo-w1"))!, phase: "provisioning" });
+  await writeFile(join(f.paths.events, "stale"), "stale");
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: withSpool })).toMatchObject({ code: "writer_provisioned" });
+  expect(await readdir(f.paths.events)).toEqual([]);
+  expect((await lstat(f.paths.events)).mode & 0o777).toBe(0o700);
+});
+it("keeps the spool directory stable across reset and recreate", async () => {
+  const f = await fixture();
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig: withSpool });
+  const before = await rootNames(f.paths.root), inode = (await lstat(f.paths.events)).ino;
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_reset" });
+  expect(await rootNames(f.paths.root)).toEqual(before);
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_recreated" });
+  expect(await rootNames(f.paths.root)).toEqual(before);
+  expect((await lstat(f.paths.events)).ino).toBe(inode);
 });
