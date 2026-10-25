@@ -104,7 +104,11 @@ describe("writer setup reconciliation", () => {
     await writeFile(f.configPath, JSON.stringify({ ...host, events: { delivery: "spool" } }));
     await changeWriterMode(f.configPath, mode, f.deps);
     expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
-    for (const [, input] of f.life.provisionWriter.mock.calls) expect(input.rawConfig).toMatchObject({ events: { delivery: "spool" } });
+    for (const [, input] of f.life.provisionWriter.mock.calls) {
+      expect(input.rawConfig).toMatchObject({ events: { delivery: "spool" } });
+      // The host configuration's override directory, so provisioning can refuse overridden skills (#135).
+      expect(input.overrideDirectory).toBe(join(f.home, "skills"));
+    }
   });
   it("does not remove when the API caller requests a dry run", async () => {
     const f = await fixture();

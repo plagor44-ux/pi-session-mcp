@@ -24,7 +24,8 @@ macOS containment remains unaccepted and keeps the
   configured workspace aliases, coding profiles and `PI_SESSION_MCP_CONFIG`.
   See [Installation](installation.md).
 - Profiles supported in the boundary: non-default coding, no Cursor provider,
-  no extensions or external MCP grants, only builtin skills. Each container
+  no extensions or external MCP grants, only shipped builtin skills without an
+  operator override (overrides do not reach the writer). Each container
   gets the synthetic default `boundary-read-only`; name coding profiles explicitly.
 - Review setup's dry-run before applying. Image `node` resolves a built-in digest
   pin and can be pulled on apply if absent; an operator-supplied image must be

@@ -53,9 +53,14 @@ export function resolveLibrarySkill(name: string, roots: LibraryRoots): LibraryS
   if (!SKILL_NAME_PATTERN.test(name)) return undefined;
   const override = join(roots.overrideDirectory, name);
   if (isRegularFile(join(override, "SKILL.md"))) return Object.freeze({ name, source: "override", directory: override });
-  const shipped = join(shippedSkillsDirectory(roots.packageRoot), name);
-  if (isRegularFile(join(shipped, "SKILL.md"))) return Object.freeze({ name, source: "shipped", directory: shipped });
-  return undefined;
+  return shippedLibrarySkill(name, roots.packageRoot);
+}
+
+/** The shipped skill of that name, whatever overrides exist; undefined when the package ships none. */
+export function shippedLibrarySkill(name: string, packageRoot?: string): LibrarySkill | undefined {
+  if (!SKILL_NAME_PATTERN.test(name)) return undefined;
+  const shipped = join(shippedSkillsDirectory(packageRoot), name);
+  return isRegularFile(join(shipped, "SKILL.md")) ? Object.freeze({ name, source: "shipped", directory: shipped }) : undefined;
 }
 
 /** The `SKILL.md` a `builtin:<name>` catalog value stands for; a missing skill keeps the shipped location. */

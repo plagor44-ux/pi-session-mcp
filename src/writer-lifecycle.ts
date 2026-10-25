@@ -6,6 +6,7 @@ import type { ContainerSettings } from "./execution-modes.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
+import { resolveLibrarySkill, shippedLibrarySkill } from "./skill-library.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
 
@@ -31,7 +32,12 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function renderContainedConfig(alias: string, clonePath: string, rawConfig: unknown, selected: readonly string[]) {
+/**
+ * `overrideDirectory` is the operator's skill override directory of the host configuration. The boundary has none, so a
+ * `builtin:` skill resolves there only to the shipped skill: one without a shipped skill, or one the operator overrides,
+ * would fail to load or be replaced silently, and is refused instead (#135).
+ */
+export function renderContainedConfig(alias: string, clonePath: string, rawConfig: unknown, selected: readonly string[], overrideDirectory?: string) {
   if (selected.length === 0 || selected.includes("boundary-read-only")) throw new LifecycleError("container_profile_unsupported");
   const raw = record(rawConfig), profiles = record(raw.executionProfiles);
   const skillCatalog: Record<string, string> = {};
@@ -45,7 +51,11 @@ export function renderContainedConfig(alias: string, clonePath: string, rawConfi
       for (const skill of profile.skills) {
         const catalog = record(raw.skillCatalog);
         const value = typeof skill === "string" && Object.hasOwn(catalog, skill) ? catalog[skill] : undefined;
-        if (typeof value !== "string" || builtinSkillName(value) === undefined) throw new LifecycleError("container_profile_unsupported");
+        const builtin = typeof value === "string" ? builtinSkillName(value) : undefined;
+        if (builtin === undefined || shippedLibrarySkill(builtin) === undefined
+          || (overrideDirectory !== undefined && resolveLibrarySkill(builtin, { overrideDirectory })?.source === "override")) {
+          throw new LifecycleError("container_profile_unsupported");
+        }
         Object.defineProperty(skillCatalog, skill, { value, enumerable: true, configurable: true, writable: true });
       }
     }
@@ -118,7 +128,7 @@ async function jsonFile(path: string, value: unknown): Promise<void> {
 }
 
 export async function provisionWriter(ctx: WriterContext, input: {
-  index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown;
+  index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown; overrideDirectory?: string;
 }): Promise<WriterOutcome> {
   try {
     const { index, settings } = input;
@@ -128,7 +138,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
       if (!(error instanceof WriterStateError) || error.code !== "writer_state_invalid") throw error;
       restart = true;
     }
-    const config = renderContainedConfig(ctx.alias, paths.clone, input.rawConfig, settings.profiles);
+    const config = renderContainedConfig(ctx.alias, paths.clone, input.rawConfig, settings.profiles, input.overrideDirectory);
     const selected = settings.profiles.map((alias) => config.executionProfiles[alias]!);
     const providers = selected.filter((profile, i, all) => all.findIndex((other) => other.provider === profile.provider) === i)
       .map(({ provider, model }) => ({ provider, model }));

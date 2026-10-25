@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: a coding profile for a container repository could select a `builtin:`
+  skill that the writer cannot resolve the same way as the host. Operator
+  overrides never reach the writer, so a customized `pi-session-implementation`
+  was replaced silently by the shipped text, and a name that exists only as an
+  override failed the session start with `skill_load_failed`. Setup now refuses
+  such a profile with `container_profile_unsupported`: a selected `builtin:`
+  skill must be shipped by the package and must have no override
+  ([#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)).
+
 ## 0.11.5 — 2026-10-25
 
 Patch release for the Sprint 8 upgrade defects
