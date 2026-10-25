@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
+import { acceptanceCurrent, acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
 import { acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { wrapperDigest } from "../src/writer-wrapper.js";
@@ -14,7 +14,7 @@ async function fixture(exitCode = 0, classification = "not_limited") {
   const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
   await writeWriterState(home, "repo-w1", state);
   await writeFile(paths.wrapper, "wrapper");
-  const run = vi.fn(async (command: string, args: readonly string[], signal?: AbortSignal) => {
+  const run = vi.fn(async (command: string, args: readonly string[], signal?: AbortSignal, _options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => {
     expect(signal).toBeInstanceOf(AbortSignal);
     if (command === "podman") return { exitCode: 0, stdout: args[0] === "info" ? "true" : "5.4.0", stderr: "" };
     if (command === "git") { await mkdir(args.at(-1)!, { recursive: true }); return { exitCode: 0, stdout: "", stderr: "" }; }
@@ -157,7 +157,7 @@ it("records an absent report when the harness exits 2 without writing --out", as
   harnessWith(async () => ({ exitCode: 2 }));
   expect(await acceptWriter(ctx, "repo-w1")).toEqual({ status: "failed", code: "acceptance_harness_failed" });
   expect(await failure()).toEqual({ schemaVersion: 1, at: expect.any(String), code: "acceptance_harness_failed",
-    harness: { exitCode: 2, report: "absent", verdict: null, network: null, failedChecks: [], inconclusiveChecks: [] } });
+    harness: { exitCode: 2, report: "absent", verdict: null, network: null, failedChecks: [], inconclusiveChecks: [], changedDigestGroups: [] } });
   expect(await phase(ctx.home)).toBe("not_ready");
 });
 it.each([["not json"], ["[1,2]"], ["null"], ['"text"']])("records an invalid report (%s)", async (content) => {
@@ -187,7 +187,7 @@ it("drops unsafe strings from the record", async () => {
   });
   expect((await acceptWriter(ctx, "repo-w1")).code).toBe("acceptance_harness_failed");
   const record = await failure();
-  expect(record.harness).toEqual({ exitCode: 1, report: "present", verdict: null, network: null, failedChecks: ["ok_check"], inconclusiveChecks: [] });
+  expect(record.harness).toEqual({ exitCode: 1, report: "present", verdict: null, network: null, failedChecks: ["ok_check"], inconclusiveChecks: [], changedDigestGroups: [] });
   expect(JSON.stringify(record)).not.toContain("/home");
 });
 it("returns acceptance_fingerprint_changed when the wrapper changes during the run", async () => {
@@ -229,4 +229,60 @@ it.each([["absent"], ["invalid"]])("fails the isolation control on a %s report",
   harnessWith(async (out) => { if (kind === "invalid") await writeFile(out, "{"); return { exitCode: 2 }; });
   expect(await runIsolationControl(ctx)).toEqual({ status: "failed", code: "isolation_control_failed" });
   expect(JSON.parse(await readFile(controlStatePath(ctx.home), "utf8")).verdict).toBe("fail");
+});
+
+// Expired host token during acceptance (#131).
+it("launches the harness without a credential refresh, so an expired host token cannot change the agent directory", async () => {
+  const { ctx, run, harnessWith, failure } = await armed();
+  let refreshed = false;
+  harnessWith(async (out) => {
+    const env = run.mock.calls.at(-1)![3]?.env;
+    // Stands in for the writer launch refreshing the host's Pi store inside the digest window.
+    refreshed = env?.PI_WRITER_NO_CREDENTIAL_REFRESH !== "1";
+    await writeFile(out, JSON.stringify(refreshed
+      ? { verdict: "fail", network: { classification: "limited" }, failed_checks: ["digests.preexisting_changed", "digests.preexisting_changed_after_probe"],
+        digests: { groups: [{ id: "agent_dir", unchanged: false }, { id: "workspace_root", unchanged: true }] } }
+      : { verdict: "pass", network: { classification: "limited" } }));
+    return { exitCode: refreshed ? 1 : 0 };
+  });
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("writer_accepted");
+  expect(refreshed).toBe(false);
+  await expect(failure()).rejects.toThrow();
+});
+it("records the ids of the changed digest groups, and nothing else of them", async () => {
+  const { ctx, harnessWith, failure } = await armed();
+  harnessWith(async (out) => {
+    await writeFile(out, JSON.stringify({ verdict: "fail", network: { classification: "limited" }, failed_checks: ["digests.preexisting_changed"],
+      digests: { groups: [{ id: "agent_dir", unchanged: false, before: "0123456789ab", after: "ba9876543210" }, { id: "startup_files", unchanged: true }, { id: "/home/x", unchanged: false }, { unchanged: false }] } }));
+    return { exitCode: 1 };
+  });
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("acceptance_harness_failed");
+  const record = await failure();
+  expect(record.harness.changedDigestGroups).toEqual(["agent_dir"]);
+  expect(JSON.stringify(record)).not.toMatch(/0123456789ab|\/home/);
+});
+
+// Re-acceptance after an upgrade or another changed binding (#130).
+it("reports an acceptance as current only while its binding and image hold, and unknown without Podman", async () => {
+  const { ctx, paths, run } = await armed();
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("writer_accepted");
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("current");
+  const state = (await readWriterState(ctx.home, "repo-w1"))!;
+  // A stale fingerprint keeps the ready phase, as a package upgrade does.
+  await writeWriterState(ctx.home, "repo-w1", { ...state, acceptance: { ...state.acceptance!, fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: "0.0.0", imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache }) } });
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  await writeWriterState(ctx.home, "repo-w1", state);
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("current");
+  const original = run.getMockImplementation()!;
+  run.mockImplementation(async (command, args, signal) => command === "podman" && args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  run.mockImplementation(async (command, args, signal) => command === "podman" && args[0] === "image" ? { exitCode: 125, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("unknown");
+  run.mockImplementation(async (command, args, signal) => command === "podman" ? { exitCode: 1, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("unknown");
+  expect((await readWriterState(ctx.home, "repo-w1"))?.phase).toBe("ready");
+  run.mockImplementation(original);
+  await writeFile(paths.state, "{");
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
 });
