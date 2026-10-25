@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Fixed: a failed writer acceptance ended as one undiagnosable
+  `writer_acceptance_failed`. It now returns `writer_state_invalid`,
+  `podman_unavailable`, `acceptance_harness_failed` (including a harness that
+  exits without writing its report) or `acceptance_fingerprint_changed`, and
+  writes a path-free `acceptance-failure.json` into the writer's state
+  directory, removed by the next successful acceptance. The setup report codes
+  changed; `writer_acceptance_failed` remains only for unexpected errors
+  ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)). No MCP
+  contract change.
 - Fixed: on Linux the setup fence's process table counted a zombie
   thread-group leader as gone while other threads of its process still ran and
   held its file descriptors, including the setup lock. A zombie group member
