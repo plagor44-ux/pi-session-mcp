@@ -2404,6 +2404,97 @@ Not established for `0.11.4`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.5 post-release evidence
+
+The published-release acceptance of `v0.11.5` ran on 2026-10-25 from 22:13 to
+22:16 UTC on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.310`. Level 2 passed for the tag and for the
+installed npm package, each with delivery off and with `--events spool`.
+Level 1 was not repeated on the tag clone: the release commit is the merge of
+the release branch, whose trees equal the accepted candidate `b86006d` and its
+acceptance record.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.5` (tag object
+`aec134a205dce6b3e733768b90cd2cea4ead7a12`) peels to
+`a8f63975a025a250b2dea61b187692d985e7d7b3`, the merge of #133, and
+`git describe --tags --exact-match` reports `v0.11.5`. CI passed on the merge
+commit (run `40236438166`) and on the tag (run `40237547917`).
+
+Package publication, a release fact and not an acceptance level:
+- `pi-session-mcp@0.11.5` was published from a fresh clone of the tag with
+  `npm stage publish` and the maintainer's approval. The first staging attempt
+  failed with `E401` because the npm login had expired; nothing was staged.
+- The registry serves shasum `ff827c7ad8fb8f6d380783be750217b6c9f9a0fe` and
+  integrity
+  `sha512-4sm0INgLO73N871To0MrCnq2cH9R9RVYfeEaGzlpSkWaPk5MEgZsqYFlJw95KT2HAYsUUkAjIXUNs0JNreDH9w==`
+  with 958 files. Both equal the staged package and a local `npm pack` of the
+  tag clone after `npm ci`, `npm run build` and `npm run build:cli`.
+- Doctor on the tag clone reported `packageVersion` `0.11.5`. It exited with
+  `2` because no configuration was set (`config_missing`).
+- The GitHub release `v0.11.5` was published at 22:12:37 UTC.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile. Every `@earendil-works` package resolved to
+  `1.4.0`. The install smoke reported `smoke_passed` with version `0.11.5`.
+  Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+- The clone and the prefix were removed.
+
+Operator upgrade of the workstation from `0.11.4` to `0.11.5` on 2026-10-25,
+following [Installation](installation.md#container-writers):
+- Both client targets were removed with `0.11.4`, the package was installed
+  with `npm install -g`, and Doctor reported `packageVersion` `0.11.5`.
+- The first `--repo pi-session-mcp --mode container ... --apply` failed with
+  `doctor_failed`. Doctor reported `extension_version_mismatch` for the two
+  Cursor profiles, which this repository does not select: Pi had updated the
+  unpinned `npm:pi-cursor-sdk` from `0.5.3` to `0.5.4` earlier that day
+  ([#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137)). After
+  `pi install npm:pi-cursor-sdk@0.5.3` the step reported `writer_accepted` for
+  both ready pilot writers, without `--remove` and without a failure record,
+  and `writer_registered` and `hook_already_equivalent` unchanged. This is the
+  first upgrade that needed no removal
+  ([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)). Whether a
+  host token was expired at that moment was not checked, so the case of #131
+  itself was not reproduced.
+- Both client targets were applied again and verified (`mcp_verified`,
+  `skill_verified`, `hook_verified` for Claude Code), and
+  `--writer <name> --verify` reported `mcp_verified` for both writers. Doctor
+  then reported no error, only `workspace_mode_unset` and `workspace_gitfile`
+  warnings for repositories not yet migrated.
+- A second run of the same steps changed nothing: the acceptance was current,
+  so no harness ran, and every registration, skill and hook was unchanged.
+- The server `second-machine`, which has no writers, was upgraded the same
+  way for its two client targets. Doctor reported no error, and both targets
+  verified.
+
+Pilot delegation on the upgraded writers:
+- Both writers were reset onto `a8f6397`. Each received one coding task with
+  profile `code-deepseek`: a failing test for a newly found defect
+  ([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134) on
+  `pi-session-mcp-w1`, [#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)
+  on `pi-session-mcp-w2`). The turns completed in 45 and 25 seconds; the
+  controller was woken by turn events and did not poll. Usage was not
+  reported, so the cost is unknown.
+- The controller collected both writers, inspected the imported refs, and ran
+  both tests itself on `a8f6397`: exactly the two new tests failed, at their
+  intended assertions, 58 other tests passed, and the typecheck passed. Both
+  writers were finished and returned to ready on `a8f6397`.
+- The first coding starts failed with `local_authentication_missing`: the
+  reset had run after the writer servers started and had replaced their
+  projected credentials. A client reconnect of the writer servers resolved it
+  ([#136](https://github.com/plagor44-ux/pi-session-mcp/issues/136)).
+
+Not established for `0.11.5`:
+- any live run on Level 3;
+- the acceptance of a writer while a host token is expired (#131);
+- the VS Code wake;
+- macOS delivery.
+
 ### v0.11.4 post-release evidence
 
 The published-release acceptance of `v0.11.4` ran on 2026-10-25 from 19:51 to
