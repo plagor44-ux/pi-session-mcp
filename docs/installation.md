@@ -61,7 +61,7 @@ the same arguments.
 - Codex CLI or Claude Code. `setup` does not pin client versions. It accepts a
   client whose public `mcp` command output matches the expected contract and
   reports `unsupported` otherwise. The contract was last recorded with Codex CLI
-  `0.162.1` and Claude Code `2.1.296`. Manual registration, described in the
+  `0.162.1` and Claude Code `2.1.310`. Manual registration, described in the
   [client setup reference](client-setup.md), works independently of `setup`.
 - For real prompts: local Pi authentication and a provider/model pair that Pi
   knows. Doctor is offline. Container apply may pull the built-in pinned image
