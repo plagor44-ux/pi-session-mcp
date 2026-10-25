@@ -1,7 +1,8 @@
-import { safeRunner, versionFromOutput } from "./command.js";
+import { CLAUDE_DID_YOU_MEAN_SUFFIX, safeRunner, versionFromOutput } from "./command.js";
 import type { ClientAdapter, ClientCapabilities, ClientRegistration, ClientScope, CommandRunner, RegistrationIntent, RegistrationPlan } from "./types.js";
 
 const NAME = "pi-session-mcp" as const;
+const ABSENT = new RegExp(`^No MCP server named "pi-session-mcp"\\.(?:(?:\\s+Configured servers:.*)|(?:\\s+Run \u0060claude mcp add\u0060 to add one\\.)|(?:${CLAUDE_DID_YOU_MEAN_SUFFIX}))?\\s*$`, "i");
 function scopeArgs(scope: ClientScope): string[] { return ["-s", scope]; }
 function inspectText(text: string, intent: RegistrationIntent): { state: ClientRegistration["state"]; expected: boolean } {
   const bounded = text.slice(0, 32_768);
@@ -23,7 +24,7 @@ export function createClaudeCodeAdapter(input: { readonly runner: CommandRunner 
   return {
     client: "claude-code",
     async discover(): Promise<ClientCapabilities> { const versionResult = await runner.run("claude", ["--version"]); const v = versionResult.exitCode === 0 ? versionFromOutput("claude-code", versionResult.stdout) : undefined; const probe = await runner.run("claude", ["mcp", "--help"]); const supported = probe.exitCode === 0 && ["get", "add", "remove"].every((command) => new RegExp(`\\b${command}\\b`).test(probe.stdout)); return { client: "claude-code", version: v ?? "unknown", supportsJson: false, supportsAdd: supported, supportsRemove: supported, scopes: supported ? ["user", "project", "local"] : [] }; },
-    async inspect(scope, intent): Promise<ClientRegistration> { const r = await runner.run("claude", ["mcp", "get", NAME]); const absent = /^No MCP server named \"pi-session-mcp\"\.(?:(?:\s+Configured servers:.*)|(?:\s+Run `claude mcp add` to add one\.))?\s*$/i.test(r.stderr.trim()); const x = r.exitCode === 0 ? inspectText(r.stdout, intent) : absent ? { state: "absent" as const, expected: false } : { state: "unsupported" as const, expected: false }; return { client: "claude-code", scope, name: NAME, state: x.state, command: x.expected ? "node" : "unknown", hasExpectedConfig: x.expected, supported: x.state !== "unsupported" }; },
+    async inspect(scope, intent): Promise<ClientRegistration> { const r = await runner.run("claude", ["mcp", "get", NAME]); const absent = ABSENT.test(r.stderr.trim()); const x = r.exitCode === 0 ? inspectText(r.stdout, intent) : absent ? { state: "absent" as const, expected: false } : { state: "unsupported" as const, expected: false }; return { client: "claude-code", scope, name: NAME, state: x.state, command: x.expected ? "node" : "unknown", hasExpectedConfig: x.expected, supported: x.state !== "unsupported" }; },
     async plan(intent): Promise<RegistrationPlan> { const r = await this.inspect(intent.scope, intent); return { client: "claude-code", scope: intent.scope, state: r.state, operation: r.state === "absent" ? "add" : "none", reason: r.state === "absent" ? "missing" : r.state === "equivalent" ? "already_registered" : r.state }; },
     async add(intent, execution): Promise<void> { const r = await (execution?.runner ?? runner).run("claude", ["mcp", "add", NAME, "-s", intent.scope, "-e", `PI_SESSION_MCP_CONFIG=${intent.configPath}`, "--", intent.nodePath, intent.entryPath], execution?.signal); if (r.exitCode !== 0) throw new Error("client registration failed"); },
     async remove(scope, execution): Promise<void> { const r = await (execution?.runner ?? runner).run("claude", ["mcp", "remove", NAME, ...scopeArgs(scope)], execution?.signal); if (r.exitCode !== 0) throw new Error("client removal failed"); },

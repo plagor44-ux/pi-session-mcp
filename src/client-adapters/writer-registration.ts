@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { safeRunner } from "./command.js";
+import { CLAUDE_DID_YOU_MEAN_SUFFIX, safeRunner } from "./command.js";
 import type { ClientName, CommandExecution, CommandRunner, RegistrationState } from "./types.js";
 import type { OwnershipAccess, OwnershipRecord, OwnershipStore } from "../setup-ownership.js";
 import { WRITER_NAME_PATTERN } from "../writer-state.js";
@@ -64,7 +64,7 @@ export function createWriterRegistrationAdapter(input: CommandRunner): WriterReg
       // Interpolate only a validated, regex-escaped registration name.
       const name = intent.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const absent = claude
-        ? new RegExp(`^No MCP server named "${name}"\\.(?:(?:\\s+Configured servers:.*)|(?:\\s+Run \u0060claude mcp add\u0060 to add one\\.))?\\s*$`, "i")
+        ? new RegExp(`^No MCP server named "${name}"\\.(?:(?:\\s+Configured servers:.*)|(?:\\s+Run \u0060claude mcp add\u0060 to add one\\.)|(?:${CLAUDE_DID_YOU_MEAN_SUFFIX}))?\\s*$`, "i")
         : new RegExp(`^Error: No MCP server named '${name}' found\\.\\s*$`, "i");
       return absent.test(result.stderr.trim()) ? "absent" : "unsupported";
     },

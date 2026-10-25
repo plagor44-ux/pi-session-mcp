@@ -21,6 +21,13 @@
   [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121); writers
   provisioned by an earlier release keep needing one repeated `--apply`
   ([#126](https://github.com/plagor44-ux/pi-session-mcp/issues/126)).
+- Fixed: with Claude Code 2.1.310, setup reported `client_unsupported` for the
+  second and every further writer of a repository, because `claude mcp get`
+  now appends `Did you mean "<name>"? Run \`claude mcp list\` to see all.` to
+  the absent message when a similar server is configured. Both Claude Code
+  adapters accept this bounded suffix; any other text stays unsupported. Added
+  the Claude Code 2.1.310 client contract fixture
+  ([#127](https://github.com/plagor44-ux/pi-session-mcp/issues/127)).
 
 ## 0.11.3 — 2026-10-25
 

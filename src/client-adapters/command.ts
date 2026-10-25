@@ -10,6 +10,13 @@ export const MAX_OUTPUT_BYTES = 32_768;
  */
 export type ClientName = "codex" | "claude-code";
 
+/**
+ * Regular-expression source of the suggestion suffix that Claude Code 2.1.310 appends to the absent message
+ * when a similar server name exists. The suggested name is bounded to the characters of a registration name,
+ * so quotes, whitespace, newlines and any other text keep the message unsupported.
+ */
+export const CLAUDE_DID_YOU_MEAN_SUFFIX = String.raw`\s+Did you mean "[A-Za-z0-9][A-Za-z0-9_-]{0,127}"\? Run \u0060claude mcp list\u0060 to see all\.`;
+
 export function boundedResult(result: CommandResult): CommandResult {
   const truncate = (value: string): string => {
     const bytes = Buffer.from(value, "utf8");
