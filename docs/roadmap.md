@@ -95,6 +95,23 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 8: migration to container writers (2026-10-25)
+
+Base main `19d0d4f`
+([Sprint 8](sprints/2026-10-24-s8-writer-migration.md), tracking
+[#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79)):
+
+- Decided on 2026-10-25: productive coding moves to container writers, repository
+  by repository, with the pilot on pi-session-mcp.
+- Done: [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121), a
+  failed writer acceptance now names its cause
+  ([#123](https://github.com/plagor44-ux/pi-session-mcp/pull/123)).
+- Prepared as 0.11.3: the #118 and #121 fixes and the `zod` patch. The
+  maintainer decided on 2026-10-25 to release with the open `undici` finding
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)) stated in
+  the release record, so that the writers run on a published version.
+- Next: release 0.11.3, then the pilot.
+
 ### Sprint 7: stabilization and live acceptance (2026-10-24)
 
 Base main `f69c40f`, published 0.11.2

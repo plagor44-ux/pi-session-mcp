@@ -2294,6 +2294,60 @@ Details, bindings and every failed attempt are in the
   ([#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121)). A forged
   event during a real controller turn was not run.
 
+### v0.11.3 pre-release acceptance
+
+`v0.11.3` was accepted on 2026-10-25 from 08:28 to 08:33 UTC on its release
+candidate `30ddeaf`, on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.310`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships the #118 and #121 fixes and the `zod` patch from Sprint 7. It
+does not change the MCP contract; the setup report codes of a failed writer
+acceptance changed (#121).
+
+- Level 1 on the release branch: every command exited with `0`, except
+  `npm audit` and Doctor.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3366 passed and 13 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1`. Both name only
+    `undici` 8.10.2 (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472,
+    GHSA-xjj6-f33q-929c) and `@earendil-works/pi-coding-agent` 1.4.0, which
+    pins it ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+    The release precondition of 0 vulnerabilities is therefore not met. The
+    maintainer decided on 2026-10-25 to release with this finding stated.
+  - `npm pack --dry-run` listed 958 files.
+  - Doctor reported `packageVersion` `0.11.3`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+- Packed-tarball Level 2:
+  - The candidate's tarball (sha256
+    `3beb43f0448f0f2c8334207bbee0fa33427cadf1164ab91f58d68b1685da953d`) was
+    installed with `npm install -g --prefix` into a fresh prefix without the
+    lockfile.
+  - Every `@earendil-works` package resolved to `1.4.0`, with a single copy
+    each.
+  - The install smoke reported `smoke_passed` with version `0.11.3`.
+  - Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+    `--events spool`.
+- In every Level 2 run the real client registrations were unchanged, no
+  process remained, the built files were unchanged, and the path-leak check
+  passed. The tarball and the prefix were removed.
+- #118 and #121 were reviewed independently before their merge
+  ([#122](https://github.com/plagor44-ux/pi-session-mcp/pull/122),
+  [#123](https://github.com/plagor44-ux/pi-session-mcp/pull/123)).
+
+Not established for `0.11.3`:
+- any live run of the released package (Level 3 or a real model);
+- a real container writer acceptance with the new #121 codes; the Sprint 8
+  pilot runs it on the published release;
+- the VS Code wake;
+- macOS delivery.
+
+CI covers macOS 15 and 26. The published-release acceptance follows after
+publication, with both Level 2 variants.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
