@@ -121,8 +121,18 @@ Base main `19d0d4f`
 - Prepared as 0.11.4: the #125, #126 and #127 fixes
   ([#128](https://github.com/plagor44-ux/pi-session-mcp/pull/128)), again with
   the open `undici` finding by maintainer decision.
-- Next: release 0.11.4, upgrade, re-accept both pilot writers and register the
-  second one for Claude Code, then one real coding delegation per writer.
+- Released 0.11.4 on 2026-10-25. The upgrade from 0.11.3 exposed two defects:
+  `--repo ... --apply` did not accept the ready writers again
+  ([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)), so both
+  were removed and provisioned again, and one acceptance failed because the
+  writer launch refreshed an expired host token inside the harness
+  ([#131](https://github.com/plagor44-ux/pi-session-mcp/issues/131)); a
+  repeated `--apply` accepted it.
+- Prepared as 0.11.5: the #130 and #131 fixes
+  ([#132](https://github.com/plagor44-ux/pi-session-mcp/pull/132)).
+- Next: release 0.11.5, upgrade and re-accept both pilot writers with
+  `--repo ... --apply` (the first upgrade that needs no removal), then one real
+  coding delegation per writer.
 
 ### Sprint 7: stabilization and live acceptance (2026-10-24)
 
