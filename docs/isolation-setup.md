@@ -24,7 +24,8 @@ macOS containment remains unaccepted and keeps the
   configured workspace aliases, coding profiles and `PI_SESSION_MCP_CONFIG`.
   See [Installation](installation.md).
 - Profiles supported in the boundary: non-default coding, no Cursor provider,
-  no extensions or external MCP grants, only builtin skills. Each container
+  no extensions or external MCP grants, only shipped builtin skills without an
+  operator override (overrides do not reach the writer). Each container
   gets the synthetic default `boundary-read-only`; name coding profiles explicitly.
 - Review setup's dry-run before applying. Image `node` resolves a built-in digest
   pin and can be pulled on apply if absent; an operator-supplied image must be
@@ -67,7 +68,29 @@ Without apply it plans only. Writers remain not ready until the control passes
 and their contained harness passes. Failed control invalidates the host control
 record. Contained acceptance records network classification as limited or not
 limited; both can pass. Readiness fingerprints bind wrapper, package version,
-image ID, Podman version, network and cache. A changed binding must be accepted
+image ID, Podman version, network and cache.
+
+Before the acceptance, `--repo <alias> ... --apply` checks each kept writer
+against the settings and configuration it would be provisioned from now: the
+image ID (resolved locally, never pulled), lifecycle, network, cache, profile
+list and providers in its state, and the whole rendered writer configuration
+with each selected profile's model, thinking level and skills and the event
+delivery. A difference reports `writer_settings_changed` and leaves the writer
+and its registrations as they are
+([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). The same
+holds for the other findings of this check: `podman_unavailable` when Podman
+cannot be asked, `image_unavailable` when Podman answers but cannot resolve the
+image, and `container_profile_unsupported` when a selected coding profile is
+no longer supported in the boundary, for example because it now selects an
+overridden or unshipped `builtin:` skill. The dry run runs the same check, so
+it also asks Podman. To adopt new settings, collect the writer's work,
+`--writer <name> --remove` it and run the provisioning command again; for
+`container_profile_unsupported` first change the profile or remove the
+override. The key order of the profile objects does not count as a change, and
+an explicit `events: { "delivery": "off" }` counts the same as no `events`
+field.
+
+A changed binding must be accepted
 again: `--repo <alias> ... --apply` accepts every kept writer whose acceptance is
 not current (the same predicate as Doctor's `writer_not_ready`: not ready, a
 stale fingerprint, or a missing image), not only writers whose phase is not
