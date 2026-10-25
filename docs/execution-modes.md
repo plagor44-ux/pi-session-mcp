@@ -243,7 +243,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_finish_planned` | Finish planned only |
 | `writer_provisioned` | Clone/config/wrapper prepared, not yet accepted |
 | `writer_unchanged` | Provisioned settings already match |
-| `writer_settings_changed` | Existing writer settings differ; no silent replacement |
+| `writer_settings_changed` | Existing writer settings or its rendered configuration differ from the current ones; no silent replacement, no acceptance and no registration change ([Isolation setup](isolation-setup.md)) |
 | `writer_registered` | Registration added or already equivalent |
 | `writer_reconcile_failed` | Unexpected reconciliation failure |
 | `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
