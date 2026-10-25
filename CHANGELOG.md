@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.11.4 — 2026-10-25
+
+Patch release for the Sprint 8 pilot defects
+[#125](https://github.com/plagor44-ux/pi-session-mcp/issues/125),
+[#126](https://github.com/plagor44-ux/pi-session-mcp/issues/126) and
+[#127](https://github.com/plagor44-ux/pi-session-mcp/issues/127). `npm audit`
+still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)); this
+release ships with that finding by maintainer decision.
+
 - Fixed: `setup --verify` and `setup --writer <name> --verify` killed the
   launched server with SIGKILL 100 ms after stdin EOF and SIGTERM. A server
   that needed longer to shut down its registry and close its event spool was

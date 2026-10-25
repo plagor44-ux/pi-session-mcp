@@ -110,7 +110,19 @@ Base main `19d0d4f`
   maintainer decided on 2026-10-25 to release with the open `undici` finding
   ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)) stated in
   the release record, so that the writers run on a published version.
-- Next: release 0.11.3, then the pilot.
+- Released 0.11.3 on 2026-10-25.
+- Pilot started on 2026-10-25 on the workstation: host alias
+  `pi-session-mcp-w1` retired, isolation control passed, mode `container` with
+  two writers. The first `--apply` failed the acceptance of both writers
+  ([#126](https://github.com/plagor44-ux/pi-session-mcp/issues/126), the cause
+  behind #121), the repeated one accepted them. Claude Code 2.1.310 blocked the
+  second writer's Claude Code registration
+  ([#127](https://github.com/plagor44-ux/pi-session-mcp/issues/127)).
+- Prepared as 0.11.4: the #125, #126 and #127 fixes
+  ([#128](https://github.com/plagor44-ux/pi-session-mcp/pull/128)), again with
+  the open `undici` finding by maintainer decision.
+- Next: release 0.11.4, upgrade, re-accept both pilot writers and register the
+  second one for Claude Code, then one real coding delegation per writer.
 
 ### Sprint 7: stabilization and live acceptance (2026-10-24)
 
