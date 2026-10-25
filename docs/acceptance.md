@@ -2404,6 +2404,113 @@ Not established for `0.11.4`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.4 post-release evidence
+
+The published-release acceptance of `v0.11.4` ran on 2026-10-25 from 19:51 to
+19:54 UTC on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.310`. Level 2 passed for the tag and for the
+installed npm package, each with delivery off and with `--events spool`.
+Level 1 was not repeated on the tag clone: the release commit is the merge of
+the accepted candidate `643f1f9` and its acceptance record.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.4` (tag object
+`6f4f6ef4691a7c33fc5a716e0c3a1120ccfe3f30`) peels to
+`44f56c97c5db7f9c2da3d7b4ab6708862f115afb`, the merge of #129, and
+`git describe --tags --exact-match` reports `v0.11.4`. CI passed on the merge
+commit (run `40203160814`) and on the tag (run `40203565432`).
+
+Package publication, a release fact and not an acceptance level:
+- `pi-session-mcp@0.11.4` was published from a fresh clone of the tag with
+  `npm stage publish` and the maintainer's approval.
+- The registry serves shasum `4113de558e2ca0fe10dba52a94a03d250b893683` and
+  integrity
+  `sha512-TF6aHpd7wFvWYNY6acOhl9oczwTdTZO+r9BNzhSc+PHZNc32BF8+YdWI3fvdZdzuIl8F9dHlF4wxACipkhXAqQ==`.
+  Both equal a local `npm pack` of the tag clone after `npm ci`,
+  `npm run build` and `npm run build:cli`.
+- Doctor on the tag clone reported `packageVersion` `0.11.4`. It exited with
+  `2` because no configuration was set (`config_missing`).
+- The GitHub release `v0.11.4` was created at 14:53:40 UTC.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile. Every `@earendil-works` package resolved to
+  `1.4.0`. The install smoke reported `smoke_passed` with version `0.11.4`.
+  Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+- The clone and the prefix were removed.
+
+Operator upgrade: the workstation was upgraded from `0.11.3` to `0.11.4` on
+2026-10-25. Both pilot writers then stayed `writer_not_ready`
+([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)) and were
+removed and provisioned again; one acceptance failed once
+([#131](https://github.com/plagor44-ux/pi-session-mcp/issues/131)). The issues
+record the details; 0.11.5 fixes both.
+
+Not established for `0.11.4`:
+- any live run of the released package (Level 3 or a real model);
+- the VS Code wake;
+- macOS delivery.
+
+### v0.11.5 pre-release acceptance
+
+`v0.11.5` was accepted on 2026-10-25 from 19:47 to 19:51 UTC on its release
+candidate `b86006d`, on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.310`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships the Sprint 8 upgrade fixes #130 and #131
+([#132](https://github.com/plagor44-ux/pi-session-mcp/pull/132)). It does not
+change the MCP contract. Setup reports the existing code `podman_unavailable`
+for a kept writer whose acceptance cannot be checked, and the acceptance
+failure record gains the field `changedDigestGroups`.
+
+- Level 1 on a fresh clone of the candidate: every command exited with `0`,
+  except `npm audit` and Doctor; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3405 passed and 13 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` finding (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472,
+    GHSA-xjj6-f33q-929c) through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 958 files.
+  - Doctor reported `packageVersion` `0.11.5`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+- Packed-tarball Level 2:
+  - The candidate's tarball (sha256
+    `a058d735a38824de1ef2354967e9a365fce7f536163c5573fe6aec31fdb1dd5a`) was
+    installed with `npm install -g --prefix` into a fresh prefix without the
+    lockfile.
+  - Every `@earendil-works` package resolved to `1.4.0`.
+  - The install smoke reported `smoke_passed` with version `0.11.5`.
+  - Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+    `--events spool`.
+- In every Level 2 run the real client registrations were unchanged, no
+  process remained, the built files were unchanged, and the path-leak check
+  passed. The tarball and the prefix were removed.
+- No client contract was recorded: the clients are the versions of the
+  `0.11.4` record.
+- #130 and #131 were reviewed independently in
+  [#132](https://github.com/plagor44-ux/pi-session-mcp/pull/132); the review
+  follow-ups are part of the candidate.
+
+Not established for `0.11.5`:
+- any live run of the released package (Level 3 or a real model);
+- the re-acceptance of a ready writer after an upgrade on a real writer
+  (#130) and an acceptance with an expired host token (#131); the Sprint 8
+  pilot runs both on the published release;
+- the VS Code wake;
+- macOS delivery.
+
+CI covers macOS 15 and 26. The published-release acceptance follows after
+publication, with both Level 2 variants.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
