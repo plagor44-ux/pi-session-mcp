@@ -143,13 +143,16 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
     const outcome = await life.provisionWriter(ctx, { index: Number(name.slice(name.lastIndexOf("-w") + 2)), settings: entry.container!, rawConfig, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
     add(name, outcome); if (outcome.status === "failed") failedProvision.add(name);
   }
+  const unchecked = new Set<string>();
   for (const name of planned.keep) {
     if (failedProvision.has(name)) continue;
-    const state = await readWriterState(ctx.home, name);
-    if (state?.phase !== "ready") add(name, await accept.acceptWriter(ctx, name));
+    // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
+    const current = await accept.acceptanceCurrent(ctx, name);
+    if (current === "stale") add(name, await accept.acceptWriter(ctx, name));
+    else if (current === "unknown") { unchecked.add(name); add(name, { status: "failed", code: "podman_unavailable" }); }
   }
   for (const name of planned.keep) {
-    if (failedProvision.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
+    if (failedProvision.has(name) || unchecked.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
     for (const client of request.codex ? ["claude-code", "codex"] as const : ["claude-code"] as const) {
       const expected = intent(ctx, name, client), before = await adapter.inspect(expected);
       try { await registerWriter(ownership, adapter, expected); add(name, { status: before === "equivalent" ? "unchanged" : "ok", code: "writer_registered" }); }

@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
-import { currentAcceptanceFingerprint, readWriterState, writerName, writerPaths, type WriterState } from "./writer-state.js";
+import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -365,8 +365,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           state = await readWriterState(home, name);
           if (state?.phase === "ready" && state.acceptance) {
             runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)();
-            ready = !!runtime.podmanVersion && state.acceptance.fingerprint === await currentAcceptanceFingerprint(paths.wrapper, state, runtime.podmanVersion)
-              && await runtime.imageExists(state.imageId);
+            ready = await writerAcceptanceCurrent(paths.wrapper, state, runtime);
           }
         } catch { /* Unreadable state or runtime is not ready. */ }
         checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));

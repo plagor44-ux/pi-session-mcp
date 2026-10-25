@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
+import { acceptanceCurrent, acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
 import { acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { wrapperDigest } from "../src/writer-wrapper.js";
@@ -262,3 +262,27 @@ it("records the ids of the changed digest groups, and nothing else of them", asy
   expect(JSON.stringify(record)).not.toMatch(/0123456789ab|\/home/);
 });
 
+// Re-acceptance after an upgrade or another changed binding (#130).
+it("reports an acceptance as current only while its binding and image hold, and unknown without Podman", async () => {
+  const { ctx, paths, run } = await armed();
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("writer_accepted");
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("current");
+  const state = (await readWriterState(ctx.home, "repo-w1"))!;
+  // A stale fingerprint keeps the ready phase, as a package upgrade does.
+  await writeWriterState(ctx.home, "repo-w1", { ...state, acceptance: { ...state.acceptance!, fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: "0.0.0", imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache }) } });
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  await writeWriterState(ctx.home, "repo-w1", state);
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("current");
+  const original = run.getMockImplementation()!;
+  run.mockImplementation(async (command, args, signal) => command === "podman" && args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+  run.mockImplementation(async (command, args, signal) => command === "podman" && args[0] === "image" ? { exitCode: 125, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("unknown");
+  run.mockImplementation(async (command, args, signal) => command === "podman" ? { exitCode: 1, stdout: "", stderr: "" } : original(command, args, signal));
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("unknown");
+  expect((await readWriterState(ctx.home, "repo-w1"))?.phase).toBe("ready");
+  run.mockImplementation(original);
+  await writeFile(paths.state, "{");
+  expect(await acceptanceCurrent(ctx, "repo-w1")).toBe("stale");
+});

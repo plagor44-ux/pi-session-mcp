@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { podmanInfo } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
-import { currentAcceptanceFingerprint, readWriterState, writerPaths, writersRoot, writeWriterState, WriterStateError } from "./writer-state.js";
+import { currentAcceptanceFingerprint, readWriterState, writerAcceptanceCurrent, writerPaths, writersRoot, writeWriterState, WriterStateError } from "./writer-state.js";
 
 export function controlStatePath(home: string): string {
   return join(home, ".local", "state", "pi-session-mcp", "isolation-control.json");
@@ -80,6 +80,28 @@ export async function runIsolationControl(ctx: WriterContext): Promise<WriterOut
     await record("fail").catch(() => {}); // Invalidate again even when an earlier step threw.
     return failed("isolation_control_failed");
   }
+}
+/**
+ * Whether setup may keep the writer's acceptance. `stale` covers every doubtful state (not ready, unreadable state, a
+ * changed binding, a missing image) and means accept again. `unknown` means Podman could not be asked or failed: acceptance
+ * would downgrade a ready writer before it found that out, so setup leaves the writer as it is.
+ */
+export async function acceptanceCurrent(ctx: WriterContext, name: string): Promise<"current" | "stale" | "unknown"> {
+  let state;
+  try { state = await readWriterState(ctx.home, name); } catch { return "stale"; }
+  if (state?.phase !== "ready" || !state.acceptance) return "stale";
+  const info = await podmanInfo(ctx.runner);
+  if (!info.usable || !info.version) return "unknown";
+  let asked = true;
+  const imageExists = async (id: string): Promise<boolean> => {
+    const { exitCode } = await ctx.runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000));
+    if (exitCode !== 0 && exitCode !== 1) asked = false; // Only exit 1 means missing; anything else is a Podman error.
+    return exitCode === 0;
+  };
+  try {
+    const current = await writerAcceptanceCurrent(writerPaths(ctx.home, name).wrapper, state, { podmanVersion: info.version, imageExists });
+    return current ? "current" : asked ? "stale" : "unknown";
+  } catch { return "stale"; }
 }
 export async function acceptWriter(ctx: WriterContext, name: string): Promise<WriterOutcome> {
   let paths: ReturnType<typeof writerPaths> | undefined; // Set once the writer state is accepted; failures after it leave a record.

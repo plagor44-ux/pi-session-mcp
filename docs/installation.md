@@ -721,6 +721,29 @@ pi-session-mcp-setup --apply --target claude-code:user:pi-session-mcp
 pi-session-mcp-setup --verify --target claude-code:user:pi-session-mcp
 ```
 
+### Container writers
+
+Writer acceptance binds the package version, so every container writer is
+`writer_not_ready` after an upgrade, and Doctor blocks `--apply` for the client
+targets until they are accepted again. With container writers, run the
+repository step between the install and the client targets:
+
+1. Install the new package (`npm install -g` or the release checkout above).
+2. For each repository in mode `container`, repeat its provisioning command
+   with `--apply`, for example
+   `pi-session-mcp-setup --repo <alias> --mode container ... --apply`. It
+   accepts every writer again whose acceptance is not current and keeps its
+   clone and the work in it. Close the coding sessions on those writers
+   first: acceptance briefly places canaries in the clone.
+3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
+   for each writer.
+
+Releases up to 0.11.4 accepted only writers whose phase was not ready, so a
+ready writer stayed `writer_not_ready` after the upgrade
+([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)). With such a
+release on the new side, collect the writer's work, `--writer <name> --remove`
+it, and provision it again.
+
 ### Release checkout
 
 Install the new release next to the old one, move the registrations, and

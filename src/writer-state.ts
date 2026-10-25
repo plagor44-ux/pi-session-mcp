@@ -160,6 +160,16 @@ export async function currentAcceptanceFingerprint(wrapper: string, state: Write
     imageId: state.imageId, podmanVersion, network: state.network, cache: state.cache, ...(eventDelivery ? { eventDelivery } : {}) });
 }
 
+/**
+ * Doctor's `writer_not_ready` predicate, shared with setup: a ready phase alone survives a package
+ * upgrade or another changed binding, so setup accepts such a writer again (#130).
+ */
+export async function writerAcceptanceCurrent(wrapper: string, state: WriterState, runtime: { podmanVersion?: string; imageExists: (id: string) => Promise<boolean> }): Promise<boolean> {
+  return state.phase === "ready" && !!state.acceptance && !!runtime.podmanVersion
+    && state.acceptance.fingerprint === await currentAcceptanceFingerprint(wrapper, state, runtime.podmanVersion)
+    && await runtime.imageExists(state.imageId);
+}
+
 export function acceptanceFingerprint(input: {
   wrapperDigest: string;
   packageVersion: string;
