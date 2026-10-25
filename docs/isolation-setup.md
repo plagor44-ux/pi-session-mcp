@@ -76,13 +76,19 @@ image ID (resolved locally, never pulled), lifecycle, network, cache, profile
 list and providers in its state, and the whole rendered writer configuration
 with each selected profile's model, thinking level and skills and the event
 delivery. A difference reports `writer_settings_changed` and leaves the writer
-and its registrations as they are; an image that cannot be resolved reports
-`image_unavailable`, and a coding profile the writer can no longer use reports
-`container_profile_unsupported`
-([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). The dry run
-reports the same. To adopt new settings, collect the writer's work,
-`--writer <name> --remove` it and run the provisioning command again. The key
-order of the profile objects does not count as a change.
+and its registrations as they are
+([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). The same
+holds for the other findings of this check: `podman_unavailable` when Podman
+cannot be asked, `image_unavailable` when Podman answers but cannot resolve the
+image, and `container_profile_unsupported` when a selected coding profile is
+no longer supported in the boundary, for example because it now selects an
+overridden or unshipped `builtin:` skill. The dry run runs the same check, so
+it also asks Podman. To adopt new settings, collect the writer's work,
+`--writer <name> --remove` it and run the provisioning command again; for
+`container_profile_unsupported` first change the profile or remove the
+override. The key order of the profile objects does not count as a change, and
+an explicit `events: { "delivery": "off" }` counts the same as no `events`
+field.
 
 A changed binding must be accepted
 again: `--repo <alias> ... --apply` accepts every kept writer whose acceptance is
