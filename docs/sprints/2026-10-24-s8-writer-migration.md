@@ -66,7 +66,7 @@ every provider.
 
 | Repository | Mode of the main alias | Writers | Image | Profiles in the boundary |
 | --- | --- | --- | --- | --- |
-| pi-session-mcp (pilot) | `container` | 2 | `node` | `code`, `code-deepseek`, `code-glm`, `code-mistral` |
+| pi-session-mcp (pilot) | `container` | 2 | `node` | `code`, `code-deepseek`, `code-glm`, `code-mistral`, `code-grok` |
 | workflow-artifact-copilot | `container` | 4 | `node` | as above |
 | Thoth | `container` | 4 | operator image: Go 1.27.3 and Node, `--cache go` | as above |
 | smartpaper-capture | `container` | 3 | operator image: Python 3.12, `uv`, Node | as above |
@@ -173,7 +173,10 @@ repeated `--apply` is allowed. A second failure stops that repository.
 2. **Images:** built in this sprint; Containerfiles live in `homelab-infra`.
 3. **omp-control:** out of scope for this sprint.
 4. **Profiles in the boundary:** `code`, `code-deepseek`, `code-glm`,
-   `code-mistral`. `code-cursor` is dropped for coding.
+   `code-mistral` and the new `code-grok` (provider `xai`, `grok-4.7`, high),
+   so xAI keeps a coding route without Cursor. `code-grok` was added to the
+   operator configuration on both machines on 2026-10-25 and passed Doctor and
+   a provider round trip on 0.11.2 there. `code-cursor` is dropped for coding.
 5. **Codex:** writers are registered for Claude Code and Codex.
 6. **Server `linuslinuxserver`:** the operator installs rootless Podman; the
    server gets container writers too (step 6).
