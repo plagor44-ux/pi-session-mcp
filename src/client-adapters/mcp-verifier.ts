@@ -6,9 +6,10 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-metadata.js";
 export const MCP_VERIFY_TIMEOUT_MS = 5_000;
 export const MCP_MAX_FRAME_BYTES = 65_536;
 /**
- * Upper bound for stopping the launched server once verification has ended. It starts after the
- * verification deadline, so a verification takes at most `timeoutMs` plus `min(timeoutMs, this)`.
- * It must exceed the launcher's worst-case `kill()` (shutdown grace plus 2 s of cleanup polling).
+ * Upper bound for stopping the launched server once verification has ended. It starts when the
+ * exchange ends, so a verification takes at most `timeoutMs` plus `min(timeoutMs, this)`. It covers
+ * the launchers' usual worst-case `kill()` (shutdown grace plus about 2 s of cleanup polling); a slower
+ * `kill()`, possible with slow `/bin/ps` calls on macOS, reports `failed`.
  */
 export const MCP_KILL_BUDGET_MS = 5_000;
 

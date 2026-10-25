@@ -19,9 +19,10 @@ const GUARDIAN_START_TIMEOUT = 5_000;
  * How long the verified server may take to exit after stdin EOF and SIGTERM before it is killed. A
  * server that shuts down its registry and closes its event spool removes its spool instance
  * directory on the way out; SIGKILL earlier leaves a stale `inst-*` directory behind (#125). A
- * server that exits sooner is not waited for. Worst case for `kill()`: this grace, then up to 1 s for
- * the child to close and up to 1 s for its process group to disappear, which `MCP_KILL_BUDGET_MS`
- * in the verifier covers.
+ * server that exits sooner is not waited for. Both MCP launchers use it. After the grace, `kill()`
+ * waits up to 1 s for the child to close and polls its process group for about 1 s; on macOS one
+ * `/bin/ps` call of that poll may take up to 2 s. A `kill()` that outlasts `MCP_KILL_BUDGET_MS` makes
+ * the verification fail closed.
  */
 export const MCP_SERVER_SHUTDOWN_GRACE_MS = 2_000;
 
@@ -117,7 +118,9 @@ export function createCommandMcpStdioLauncher(command: readonly [string, ...stri
         signal.removeEventListener("abort", abort);
         child.stdin.end();
         terminateProcessGroup(child, "SIGTERM");
-        await delay(100);
+        // Same shutdown grace as the host server (#125): the writer's server closes its spool on the way out.
+        const graceDeadline = Date.now() + MCP_SERVER_SHUTDOWN_GRACE_MS;
+        while (!closed && Date.now() < graceDeadline) await delay(10);
         terminateProcessGroup(child, "SIGKILL");
         const table = await currentProcessTable(), deadline = Date.now() + 1_000;
         while (table && child.pid !== undefined && Date.now() < deadline) {
