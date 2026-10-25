@@ -22,7 +22,8 @@ const skillHeaderDriver = join(fixtureDir, "skill-header-driver.mjs");
 // The harness reads /proc and refuses to run elsewhere, so its supervision and run paths are tested on Linux only.
 const notLinux = process.platform !== "linux";
 
-afterAll(removeTemporaryRoots);
+// Removing the temporary roots can exceed the default 10 s hook timeout on slow macOS runners (#125).
+afterAll(removeTemporaryRoots, 120_000);
 
 // Safety net: a launch that a test expects to be refused must never reach a real client or a model. Stand-ins
 // named `claude` and `codex` come first on PATH for the whole file; tests that need a working client put their own before them.

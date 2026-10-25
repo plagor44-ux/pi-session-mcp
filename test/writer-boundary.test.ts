@@ -251,7 +251,7 @@ describe.runIf(process.platform === "linux")("writer spool directory (Linux)", (
     await Promise.all(Array.from({ length: EVENTS_CLEANUP_MAX_ENTRIES }, (_, i) => writeFile(join(ownAt, `f${i}`), "")));
     await ensureWriterEventsDirectory(at.home, "repo-w1", uid);
     expect(await readdir(ownAt)).toEqual([]);
-  });
+  }, 60_000); // Creates and sweeps about 20,000 files; exceeds the default 5 s under full-suite load (#125).
 
   /** A directory outside the spool that a swapped link points at; it must come out of every race untouched. */
   async function victim(): Promise<{ dir: string; snapshot: () => Promise<string> }> {
