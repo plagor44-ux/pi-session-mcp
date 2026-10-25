@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- Fixed: `setup --verify` and `setup --writer <name> --verify` killed the
+  launched server with SIGKILL 100 ms after stdin EOF and SIGTERM. A server
+  that needed longer to shut down its registry and close its event spool was
+  killed first and could leave a stale `inst-*` directory under
+  `$XDG_RUNTIME_DIR/pi-session-mcp/events` or the writer's spool directory.
+  Both launchers now wait for the server to exit for up to 2 s before SIGKILL,
+  and the verifier allows up to 5 s (`min(timeout, 5 s)`, after the MCP
+  exchange ends) for stopping the server. A server that exits sooner is not waited for
+  ([#125](https://github.com/plagor44-ux/pi-session-mcp/issues/125)). Also
+  gave the multi-session acceptance test's temporary-root cleanup an explicit
+  120 s hook timeout, which it exceeded on macOS CI, and the bulk spool-cleanup
+  test a 60 s timeout. No MCP contract change.
+- Fixed: the first acceptance of every newly provisioned writer failed with
+  `acceptance_harness_failed` (`digests.preexisting_changed`) when event
+  delivery was on, and a repeated `--apply` passed. The writer's spool directory
+  was created at its first launch, which is the acceptance harness's own
+  launch, so the harness saw a new entry in the writer root. Provisioning now
+  creates the directory (0700) when delivery is on. This is the cause behind
+  [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121); writers
+  provisioned by an earlier release keep needing one repeated `--apply`
+  ([#126](https://github.com/plagor44-ux/pi-session-mcp/issues/126)).
+- Fixed: with Claude Code 2.1.310, setup reported `client_unsupported` for the
+  second and every further writer of a repository, because `claude mcp get`
+  now appends `Did you mean "<name>"? Run \`claude mcp list\` to see all.` to
+  the absent message when a similar server is configured. The same message made
+  `--remove` of one writer fail with `post_remove_mismatch` while a sibling
+  writer stayed registered. Both Claude Code adapters accept this suffix with
+  any quoted suggestion of up to 256 characters without quotes or line breaks
+  (Claude also suggests plugin servers and connectors); any other text stays
+  unsupported. Added the Claude Code 2.1.310 client contract fixture
+  ([#127](https://github.com/plagor44-ux/pi-session-mcp/issues/127)).
+
 ## 0.11.3 — 2026-10-25
 
 Patch release for [#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118) and
