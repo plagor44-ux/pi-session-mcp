@@ -12,10 +12,12 @@ export type ClientName = "codex" | "claude-code";
 
 /**
  * Regular-expression source of the suggestion suffix that Claude Code 2.1.310 appends to the absent message
- * when a similar server name exists. The suggested name is bounded to the characters of a registration name,
- * so quotes, whitespace, newlines and any other text keep the message unsupported.
+ * when a similar server name exists. Claude suggests from all its servers, including plugin servers
+ * (`plugin:<plugin>:<server>`) and connectors with spaces or dots, so the suggestion is any quoted text
+ * without a quote or line break, at most 256 characters. The message head pins the queried name exactly;
+ * the suggestion never decides which registration is absent.
  */
-export const CLAUDE_DID_YOU_MEAN_SUFFIX = String.raw`\s+Did you mean "[A-Za-z0-9][A-Za-z0-9_-]{0,127}"\? Run \u0060claude mcp list\u0060 to see all\.`;
+export const CLAUDE_DID_YOU_MEAN_SUFFIX = String.raw`\s+Did you mean "[^"\r\n]{1,256}"\? Run \u0060claude mcp list\u0060 to see all\.`;
 
 export function boundedResult(result: CommandResult): CommandResult {
   const truncate = (value: string): string => {

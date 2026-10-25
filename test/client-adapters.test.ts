@@ -215,14 +215,15 @@ describe("client adapters", () => {
   it("recognizes Claude Code 2.1.310's bounded 'Did you mean' absent message", async () => {
     expect(await claudeAbsentState('No MCP server named "pi-session-mcp". ' + didYouMean('"pi-session-mcp-w1"'))).toBe("absent");
     expect(await claudeAbsentState('No MCP server named "pi-session-mcp". ' + didYouMean('"pi_coding-Other_1"') + "\n")).toBe("absent");
+    expect(await claudeAbsentState('No MCP server named "pi-session-mcp". ' + didYouMean('"plugin:engineering:notion"'))).toBe("absent");
+    expect(await claudeAbsentState('No MCP server named "pi-session-mcp". ' + didYouMean('"claude.ai Google Drive"'))).toBe("absent");
   });
   it.each([
     ["an unquoted suggestion", 'No MCP server named "pi-session-mcp". ' + didYouMean("pi-session-mcp-w1")],
     ["a suggestion with an embedded quote", 'No MCP server named "pi-session-mcp". ' + didYouMean('"pi-session"-mcp"')],
     ["a suggestion with a newline", 'No MCP server named "pi-session-mcp". Did you mean "pi-session\nmcp"? Run `claude mcp list` to see all.'],
-    ["a suggestion with a space", 'No MCP server named "pi-session-mcp". ' + didYouMean('"pi session"')],
     ["an empty suggestion", 'No MCP server named "pi-session-mcp". ' + didYouMean('""')],
-    ["an over-long suggestion", 'No MCP server named "pi-session-mcp". ' + didYouMean(`"${"a".repeat(129)}"`)],
+    ["an over-long suggestion", 'No MCP server named "pi-session-mcp". ' + didYouMean(`"${"a".repeat(257)}"`)],
     ["trailing text", 'No MCP server named "pi-session-mcp". ' + didYouMean('"pi-session-mcp-w1"') + " Extra."],
     ["a second line", 'No MCP server named "pi-session-mcp". ' + didYouMean('"pi-session-mcp-w1"') + "\nmore"],
     ["another hint", 'No MCP server named "pi-session-mcp". Did you mean "pi-session-mcp-w1"? Run `rm -rf` to see all.'],
