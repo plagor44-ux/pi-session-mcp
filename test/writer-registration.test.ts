@@ -151,6 +151,7 @@ describe("Claude Code 'Did you mean' absent message", () => {
   }
   it("treats the bounded suggestion suffix as absent and lets a further writer register", async () => {
     expect(await stateFor((name) => `No MCP server named "${name}". ${hint('"pi-coding-demo-w0"')}`)).toBe("absent");
+    expect(await stateFor((name) => `No MCP server named "${name}". ${hint('"plugin:engineering:notion"')}`)).toBe("absent");
     const f = await fixture();
     let registered = false;
     const run = vi.fn(async (_command: string, args: readonly string[]) => {
