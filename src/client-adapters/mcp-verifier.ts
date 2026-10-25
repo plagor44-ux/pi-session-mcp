@@ -5,6 +5,12 @@ import { PACKAGE_NAME, PACKAGE_VERSION } from "../package-metadata.js";
 
 export const MCP_VERIFY_TIMEOUT_MS = 5_000;
 export const MCP_MAX_FRAME_BYTES = 65_536;
+/**
+ * Upper bound for stopping the launched server once verification has ended. It starts after the
+ * verification deadline, so a verification takes at most `timeoutMs` plus `min(timeoutMs, this)`.
+ * It must exceed the launcher's worst-case `kill()` (shutdown grace plus 2 s of cleanup polling).
+ */
+export const MCP_KILL_BUDGET_MS = 5_000;
 
 export interface McpStdioProcess {
   write(frame: string): void | Promise<void>;
@@ -173,7 +179,7 @@ export async function verifyMcpCapabilities(options: McpVerifierOptions): Promis
   }
   controller.abort();
   if (process) {
-    try { await beforeDeadline(Promise.resolve(process.kill()), Date.now() + Math.min(timeout, 1_000)); }
+    try { await beforeDeadline(Promise.resolve(process.kill()), Date.now() + Math.min(timeout, MCP_KILL_BUDGET_MS)); }
     catch { return { ...outcome, status: "failed" }; }
   }
   return outcome;
