@@ -734,7 +734,14 @@ repository step between the install and the client targets:
    `pi-session-mcp-setup --repo <alias> --mode container ... --apply`. It
    accepts every writer again whose acceptance is not current and keeps its
    clone and the work in it. Close the coding sessions on those writers
-   first: acceptance briefly places canaries in the clone.
+   first: acceptance briefly places canaries in the clone. Use the same
+   settings as before: a writer whose settings or coding profiles changed is
+   reported as `writer_settings_changed` and left as it is, and one whose
+   coding profile selects an overridden or unshipped `builtin:` skill as
+   `container_profile_unsupported`. Such a writer stays `writer_not_ready`
+   until you change the profile or remove the override, or collect it,
+   `--writer <name> --remove` it and provision it again
+   ([Isolation setup](isolation-setup.md)).
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
    for each writer.
 

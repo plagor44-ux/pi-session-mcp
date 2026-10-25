@@ -6,7 +6,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { loadConfig } from "../src/config.js";
 import { ensureWriterEventsDirectory } from "../src/writer-boundary.js";
-import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
+import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, writerSettingsDrift, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerEventDeliveryEnabled, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -30,7 +30,9 @@ async function fixture(remote = "git@github.com:o/r.git") {
       if (args.includes("rev-parse")) stdout = `${commit}\n`;
       if (args.includes("get-url")) stdout = remote;
       if (args.includes("bundle")) await writeFile(join(paths.bundles, "base.bundle"), "bundle", { mode: 0o600 });
-    } else if (args[0] === "image") {
+    } else if (args[0] === "info") stdout = "true";
+    else if (args[0] === "version") stdout = "5.4.0";
+    else if (args[0] === "image") {
       if (unavailable) return { exitCode: 1, stdout: "", stderr: "" };
       stdout = imageId;
     } else if (args[0] === "run") {
@@ -74,6 +76,25 @@ it("rejects unsupported raw profiles, missing profiles and non-builtin catalog s
     expect(() => renderContainedConfig("repo", "/clone", { executionProfiles: { code: { ...profile, ...extra } }, skillCatalog: { local: "./x/SKILL.md" } }, ["code"])).toThrow("container_profile_unsupported");
   }
   for (const raw of [null, {}, { executionProfiles: {} }]) expect(() => renderContainedConfig("repo", "/clone", raw, ["missing"])).toThrow("container_profile_unsupported");
+});
+it("refuses a builtin skill no writer can resolve, while a shipped one stays accepted (#135)", () => {
+  const unknown = { executionProfiles: { code: { ...profile, skills: ["lib"] } }, skillCatalog: { lib: "builtin:no-such-shipped-skill" } };
+  expect(() => renderContainedConfig("repo", "/clone", unknown, ["code"])).toThrow("container_profile_unsupported");
+  const shipped = { ...unknown, skillCatalog: { lib: "builtin:pi-session-implementation" } };
+  expect(() => renderContainedConfig("repo", "/clone", shipped, ["code"])).not.toThrow();
+});
+it("refuses a builtin skill the operator overrides, because no override reaches the writer (#135)", async () => {
+  const overrides = await temporaryRoot("pi-writer-overrides-");
+  const override = async (name: string) => {
+    await mkdir(join(overrides, name), { recursive: true });
+    await writeFile(join(overrides, name, "SKILL.md"), `---\nname: ${name}\ndescription: Operator copy.\n---\n`);
+  };
+  const raw = { executionProfiles: { code: { ...profile, skills: ["impl"] } }, skillCatalog: { impl: "builtin:pi-session-implementation", review: "builtin:pi-session-review" } };
+  // An override of a skill that no selected coding profile chooses changes nothing.
+  await override("pi-session-review");
+  expect(renderContainedConfig("repo", "/clone", raw, ["code"], overrides).skillCatalog).toEqual({ impl: "builtin:pi-session-implementation" });
+  await override("pi-session-implementation");
+  expect(() => renderContainedConfig("repo", "/clone", raw, ["code"], overrides)).toThrow("container_profile_unsupported");
 });
 it("renders verbatim selected raw profiles and a loadable synthetic read-only default", async () => {
   const selected = { ...profile, skills: ["impl"] };
@@ -169,6 +190,34 @@ it("reports a delivery change on a provisioned writer as a settings change", asy
   await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents });
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents })).toEqual({ code: "writer_unchanged", status: "unchanged" });
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+});
+it("checks a provisioned writer against the settings and configuration it would be provisioned from now (#134)", async () => {
+  const f = await fixture();
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toBeUndefined();
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toBeUndefined();
+  const reordered = { ...rawConfig, executionProfiles: { other: { ...profile, model: "second" }, code: Object.fromEntries(Object.entries(profile).reverse()) } };
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig: reordered })).toBeUndefined();
+  // The second profile shares its provider with the first, so only the rendered configuration shows this change.
+  const changed = { ...rawConfig, executionProfiles: { ...rawConfig.executionProfiles, other: { ...profile, model: "second", thinkingLevel: "low" } } };
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, cache: "go" }, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  f.unavailable(); f.calls.length = 0;
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "image_unavailable", status: "failed" });
+  expect(f.calls.some((call) => call.args[0] === "pull")).toBe(false);
+  const down: CommandRunner = { run: async () => ({ exitCode: 125, stdout: "", stderr: "" }) };
+  expect(await writerSettingsDrift({ ...f.ctx, runner: down }, { index: 1, settings, rawConfig })).toEqual({ code: "podman_unavailable", status: "failed" });
+});
+it("never matches a writer whose stored configuration is missing or a link (#134)", async () => {
+  const f = await fixture(), stored = join(f.paths.config, "pi-session-mcp.json");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  const copy = join(f.paths.root, "copy.json");
+  await writeFile(copy, await readFile(stored, "utf8"));
+  await fsPromises.rm(stored);
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  await symlink(copy, stored);
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
 });
 it("removes the writer's spool directory together with its state directory and nothing else", async () => {
   const f = await fixture(), other = writerPaths(f.ctx.home, "repo-w2");

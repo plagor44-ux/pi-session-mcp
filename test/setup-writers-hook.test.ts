@@ -41,6 +41,8 @@ async function fixture(options: { delivery: boolean; aliases?: readonly string[]
     }),
     inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false })),
     removeWriter: vi.fn(async () => ({ status: "ok" as const, code: "writer_removed" })),
+    // These writers carry only the delivery field as their configuration; the settings check has its own tests.
+    writerSettingsDrift: vi.fn(async () => undefined),
   } satisfies typeof lifecycle;
   const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => {
     const alias = name.slice(0, name.lastIndexOf("-w")); const index = Number(name.slice(name.lastIndexOf("-w") + 2));
