@@ -30,7 +30,9 @@ async function fixture(remote = "git@github.com:o/r.git") {
       if (args.includes("rev-parse")) stdout = `${commit}\n`;
       if (args.includes("get-url")) stdout = remote;
       if (args.includes("bundle")) await writeFile(join(paths.bundles, "base.bundle"), "bundle", { mode: 0o600 });
-    } else if (args[0] === "image") {
+    } else if (args[0] === "info") stdout = "true";
+    else if (args[0] === "version") stdout = "5.4.0";
+    else if (args[0] === "image") {
       if (unavailable) return { exitCode: 1, stdout: "", stderr: "" };
       stdout = imageId;
     } else if (args[0] === "run") {
@@ -204,6 +206,18 @@ it("checks a provisioned writer against the settings and configuration it would 
   f.unavailable(); f.calls.length = 0;
   expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "image_unavailable", status: "failed" });
   expect(f.calls.some((call) => call.args[0] === "pull")).toBe(false);
+  const down: CommandRunner = { run: async () => ({ exitCode: 125, stdout: "", stderr: "" }) };
+  expect(await writerSettingsDrift({ ...f.ctx, runner: down }, { index: 1, settings, rawConfig })).toEqual({ code: "podman_unavailable", status: "failed" });
+});
+it("never matches a writer whose stored configuration is missing or a link (#134)", async () => {
+  const f = await fixture(), stored = join(f.paths.config, "pi-session-mcp.json");
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  const copy = join(f.paths.root, "copy.json");
+  await writeFile(copy, await readFile(stored, "utf8"));
+  await fsPromises.rm(stored);
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  await symlink(copy, stored);
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
 });
 it("removes the writer's spool directory together with its state directory and nothing else", async () => {
   const f = await fixture(), other = writerPaths(f.ctx.home, "repo-w2");

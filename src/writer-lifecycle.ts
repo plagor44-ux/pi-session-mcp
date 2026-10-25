@@ -8,7 +8,7 @@ import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { resolveLibrarySkill, shippedLibrarySkill } from "./skill-library.js";
-import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
+import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, podmanInfo, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
 
 export interface WriterContext {
@@ -160,19 +160,28 @@ async function sameSettings(paths: ReturnType<typeof writerPaths>, existing: Wri
   return stored !== undefined && existing.imageId === now.imageId && existing.lifecycle === settings.lifecycle
     && existing.network === settings.network && existing.cache === settings.cache
     && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
-    && JSON.stringify(existing.providers) === JSON.stringify(now.providers) && canonical(stored) === canonical(now.config);
+    && JSON.stringify(existing.providers) === JSON.stringify(now.providers) && canonical(withoutDeliveryOff(stored)) === canonical(withoutDeliveryOff(now.config));
+}
+/** `events: { delivery: "off" }` means the same as no `events` field, which writers of releases before 0.11.0 carry. */
+function withoutDeliveryOff(config: unknown): unknown {
+  if (config === null || typeof config !== "object" || Array.isArray(config)) return config;
+  const { events, ...rest } = config as Record<string, unknown>;
+  return canonical(events) === canonical({ delivery: "off" }) ? rest : config;
 }
 /**
  * Reconcile's check of a kept writer (#134): `undefined` while the writer matches the settings and configuration it
- * would be provisioned from now, or has no provisioned state; otherwise the finding, usually `writer_settings_changed`.
- * The image is resolved locally and never pulled, so an image that cannot be resolved reports `image_unavailable`.
+ * would be provisioned from now; otherwise the finding, usually `writer_settings_changed`. A writer without
+ * provisioned state is only rendered, so the dry run shows a profile that provisioning would refuse. The image is
+ * resolved locally and never pulled: `podman_unavailable` when Podman cannot be asked, `image_unavailable` when it
+ * answers but cannot resolve the image.
  */
 export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionInput & { index: number }): Promise<WriterOutcome | undefined> {
   try {
     const name = writerName(ctx.alias, input.index), paths = writerPaths(ctx.home, name);
     const existing = await readWriterState(ctx.home, name);
-    if (!existing || existing.phase === "provisioning") return undefined;
     const { config, providers } = rendered(ctx.alias, paths, input);
+    if (!existing || existing.phase === "provisioning") return undefined;
+    if (!(await podmanInfo(ctx.runner)).usable) return { status: "failed", code: "podman_unavailable" };
     const imageId = await resolveImage(ctx.runner, input.settings.image, false);
     return await sameSettings(paths, existing, input.settings, { config, providers, imageId }) ? undefined : { status: "failed", code: "writer_settings_changed" };
   } catch (error) { return failure(error); }

@@ -9,9 +9,11 @@
   now checks every kept writer first against the settings and the configuration
   it would be provisioned from now and reports `writer_settings_changed`
   without accepting the writer or changing its registrations. The image is
-  resolved locally only and never pulled; an image that cannot be resolved
-  reports `image_unavailable`. The dry run reports the same findings. Key order
-  in the profile objects does not count as a change
+  resolved locally only and never pulled: Podman that cannot be asked reports
+  `podman_unavailable`, an image it cannot resolve `image_unavailable`. The dry
+  run runs the same check, so it now asks Podman too. Key order in the profile
+  objects does not count as a change, and an explicit `events.delivery` of
+  `"off"` counts the same as no `events` field
   ([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)).
 
 - Fixed: a coding profile for a container repository could select a `builtin:`
@@ -20,7 +22,10 @@
   was replaced silently by the shipped text, and a name that exists only as an
   override failed the session start with `skill_load_failed`. Setup now refuses
   such a profile with `container_profile_unsupported`: a selected `builtin:`
-  skill must be shipped by the package and must have no override
+  skill must be shipped by the package and must have no override. For an
+  existing writer reconcile reports the same code and leaves the writer as it
+  is, so after an upgrade it stays `writer_not_ready` until the profile changes,
+  the override is removed, or the writer is removed and provisioned again
   ([#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)).
 
 ## 0.11.5 — 2026-10-25

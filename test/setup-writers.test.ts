@@ -39,6 +39,7 @@ async function fixture() {
     inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false })),
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
     finishWriter: vi.fn(async () => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
+    writerSettingsDrift: vi.fn(lifecycle.writerSettingsDrift),
   } satisfies typeof lifecycle;
   const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...state(index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }),
     acceptanceCurrent: vi.fn(async (_ctx: lifecycle.WriterContext, name: string) => ((await readWriterState(home, name))?.phase === "ready" ? "current" : "stale") as "current" | "stale" | "unknown") };
@@ -47,12 +48,13 @@ async function fixture() {
     add: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`register:${intent.client}:${intent.name}`); registered.add(intent.client + intent.name); }),
     remove: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`unregister:${intent.client}:${intent.name}`); registered.delete(intent.client + intent.name); }),
   };
-  // Podman as the settings check asks it: a full image ID resolves to itself, the built-in node image to the state's ID.
-  const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "image" ? podmanImage(args.at(-1)!) : "", stderr: "" })) };
+  // Podman as the settings check asks it: usable, a full image ID resolves to itself, the built-in node image to the state's ID.
+  const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
   const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
   return { home, configPath, calls, life, accept, deps, adapter, runner };
 }
 const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : state(1).imageId;
+const podmanAnswer = (args: readonly string[]): string => args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
   it.each(["linux", "darwin"] as const)("sanitizes invalid aliases on %s", async (platform) => {
@@ -150,7 +152,7 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
-    f.accept.acceptWriter.mockClear();
+    f.accept.acceptWriter.mockClear(); f.adapter.add.mockClear();
     const host = JSON.parse(await readFile(f.configPath, "utf8")) as { executionProfiles: { code: { model: string } } };
     host.executionProfiles.code.model = "changed-model";
     await writeFile(f.configPath, JSON.stringify(host));
@@ -159,13 +161,25 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).not.toBe(0);
     expect(f.accept.acceptWriter).not.toHaveBeenCalled();
     expect(output.findings).not.toContainEqual(expect.objectContaining({ code: "writer_registered", target: expect.objectContaining({ alias: "x-w1" }) }));
+    // The existing registrations stay: nothing is added and nothing removed for a held writer.
+    expect(f.adapter.add).not.toHaveBeenCalled();
+    expect(f.adapter.remove).not.toHaveBeenCalled();
   });
-  type Host = { executionProfiles: { code: Record<string, unknown> }; skillCatalog?: Record<string, string> };
+  it("checks only writers it did not provision in the same run (#134)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.life.writerSettingsDrift).not.toHaveBeenCalled();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.life.writerSettingsDrift.mock.calls.map(([, input]) => input.index)).toEqual([1, 2]);
+  });
+  type Host = { executionProfiles: Record<string, Record<string, unknown>>; skillCatalog?: Record<string, string>; events?: unknown };
   const editHost = async (configPath: string, edit: (host: Host) => Host) => writeFile(configPath, JSON.stringify(edit(JSON.parse(await readFile(configPath, "utf8")) as Host)));
   it.each([
     ["thinking level", (host: Host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, thinkingLevel: "high" } } }), mode],
     ["image", (host: Host) => host, { ...mode, container: { ...mode.container, image: "c".repeat(64) } }],
     ["network", (host: Host) => host, { ...mode, container: { ...mode.container, network: "none" as const } }],
+    ["event delivery", (host: Host) => ({ ...host, events: { delivery: "spool" } }), mode],
+    ["profile list", (host: Host) => ({ ...host, executionProfiles: { ...host.executionProfiles, other: { ...host.executionProfiles.code, model: "second" } } }), { ...mode, container: { ...mode.container, profiles: ["code", "other"] } }],
   ])("reports a changed %s of a ready writer without accepting or registering it (#134)", async (_label, edit, next) => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
@@ -181,20 +195,27 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
-    await editHost(f.configPath, (host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: Object.fromEntries(Object.entries(host.executionProfiles.code).reverse()) } }));
+    await editHost(f.configPath, (host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: Object.fromEntries(Object.entries(host.executionProfiles.code!).reverse()) } }));
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual([]);
     expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.status)).toEqual(["unchanged", "unchanged"]);
+    // An explicit delivery "off" means the same as no events field.
+    await editHost(f.configPath, (host) => ({ ...host, events: { delivery: "off" } }));
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.calls).toEqual([]);
   });
-  it("leaves a ready writer as it is when its image cannot be resolved locally, and never pulls (#134)", async () => {
+  it.each([
+    ["Podman cannot be asked", "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
+    ["the image cannot be resolved locally", "image_unavailable", (args: readonly string[]) => args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : { exitCode: 0, stdout: podmanAnswer(args), stderr: "" }],
+  ])("leaves a ready writer as it is when %s, and never pulls (#134)", async (_label, code, answer) => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0; f.runner.run.mockClear();
-    f.runner.run.mockImplementation(async () => ({ exitCode: 125, stdout: "", stderr: "" }));
+    f.runner.run.mockImplementation(async (_command, args) => answer(args));
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).not.toBe(0);
-    expect(output.findings.filter((finding) => finding.code === "image_unavailable").map((finding) => finding.status)).toEqual(["failed", "failed"]);
+    expect(output.findings.filter((finding) => finding.code === code).map((finding) => finding.status)).toEqual(["failed", "failed"]);
     expect(f.calls).toEqual([]);
     expect((await readWriterState(f.home, "x-w1"))?.phase).toBe("ready");
     expect(f.runner.run.mock.calls.some(([, args]) => args[0] === "pull")).toBe(false);
@@ -222,6 +243,14 @@ describe("writer setup reconciliation", () => {
     expect(output.findings.some((finding) => finding.code === "writer_planned")).toBe(false);
     expect(f.calls).toEqual([]);
     expect(await readFile(writerPaths(f.home, "x-w1").state, "utf8")).toBe(before);
+  });
+  it("shows in the dry run that a new writer's profile would be refused, as apply would (#135)", async () => {
+    const f = await fixture();
+    await editHost(f.configPath, (host) => ({ ...host, skillCatalog: { impl: "builtin:no-such-shipped-skill" }, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, skills: ["impl"] } } }));
+    const output = await changeWriterMode(f.configPath, { ...mode, apply: false }, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(output.findings.filter((finding) => finding.code === "container_profile_unsupported").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
+    expect(f.calls).toEqual([]);
   });
   it("accepts a ready writer again when its acceptance is no longer current, as after a package upgrade (#130)", async () => {
     const f = await fixture();
