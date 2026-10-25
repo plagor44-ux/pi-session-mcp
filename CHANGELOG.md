@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.11.5 — 2026-10-25
+
+Patch release for the Sprint 8 upgrade defects
+[#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130) and
+[#131](https://github.com/plagor44-ux/pi-session-mcp/issues/131), found when
+the pilot writers were upgraded to 0.11.4. `npm audit` still reports `undici`
+8.10.2, pinned by Pi SDK 1.4.0
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 - Fixed: after a package upgrade, `setup --repo <alias> ... --apply` reported
   `writer_registered` for container writers but did not accept them again, so
   Doctor kept reporting `writer_not_ready` and blocked the client targets.
