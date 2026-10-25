@@ -15,6 +15,15 @@ const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX = 65_536;
 const ABORT_GROUP_CLEANUP_TIMEOUT = 2_000;
 const GUARDIAN_START_TIMEOUT = 5_000;
+/**
+ * How long the verified server may take to exit after stdin EOF and SIGTERM before it is killed. A
+ * server that shuts down its registry and closes its event spool removes its spool instance
+ * directory on the way out; SIGKILL earlier leaves a stale `inst-*` directory behind (#125). A
+ * server that exits sooner is not waited for. Worst case for `kill()`: this grace, then up to 1 s for
+ * the child to close and up to 1 s for its process group to disappear, which `MCP_KILL_BUDGET_MS`
+ * in the verifier covers.
+ */
+export const MCP_SERVER_SHUTDOWN_GRACE_MS = 2_000;
 
 type SetupPlatformModule = typeof import("./setup-platform.js");
 let platformModule: Promise<SetupPlatformModule> | undefined;
@@ -125,6 +134,8 @@ export interface McpLauncherOptions {
   readonly nodePath: string; readonly entryPath: string; readonly configPath: string; readonly timeoutMs?: number; readonly maxFrameBytes?: number;
   /** Overrides the inherited `XDG_RUNTIME_DIR`; an empty string passes none. A seam for tests. */
   readonly runtimeDir?: string;
+  /** Overrides `MCP_SERVER_SHUTDOWN_GRACE_MS`. A seam for tests. */
+  readonly shutdownGraceMs?: number;
 }
 /**
  * Starts the local MCP server with only the controlled configuration environment, plus the runtime
@@ -147,8 +158,9 @@ export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: Ab
     const waitForClose = async (milliseconds: number): Promise<boolean> => {
       if (closed) return true;
       return new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(closed), milliseconds);
-        child.once("close", () => { clearTimeout(timer); resolve(true); });
+        const onClose = (): void => { clearTimeout(timer); resolve(true); };
+        const timer = setTimeout(() => { child.off("close", onClose); resolve(closed); }, milliseconds);
+        child.once("close", onClose);
       });
     };
     return {
@@ -169,7 +181,8 @@ export function createMcpStdioLauncher(options: McpLauncherOptions): (signal: Ab
         signal.removeEventListener("abort", abort);
         if (!closed) child.stdin.end();
         terminateProcessGroup(child, "SIGTERM");
-        await delay(100);
+        // Let the server finish its own shutdown (#125); SIGKILL only what is still running after the grace.
+        await waitForClose(options.shutdownGraceMs ?? MCP_SERVER_SHUTDOWN_GRACE_MS);
         terminateProcessGroup(child, "SIGKILL");
         const childClosed = await waitForClose(1_000);
         const group = child.pid;

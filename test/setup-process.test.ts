@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
-import { createCommandMcpStdioLauncher, createProcessRunner } from "../src/setup-process.js";
+import { createCommandMcpStdioLauncher, createMcpStdioLauncher, createProcessRunner } from "../src/setup-process.js";
 import { currentSetupPlatform } from "../src/setup-platform.js";
 import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, readProcStatText, signalFixtureProcess, stopFixtureProcess, processState, waitForPidFile, waitForProcessTerminated } from "./process-fixture.js";
 
@@ -371,5 +371,51 @@ describe("setup process runner platform gate", () => {
       expect(result).toEqual({ exitCode: 126, stdout: "", stderr: "" });
       expect(existsSync(marker)).toBe(false);
     } finally { vi.restoreAllMocks(); }
+  });
+});
+
+describe.skipIf(!currentSetupPlatform())("verified MCP server shutdown grace (#125)", () => {
+  async function serverScript(body: string): Promise<{ entry: string; marker: string; config: string }> {
+    const root = await temporaryRoot("pi-session-mcp-shutdown-grace-");
+    const entry = join(root, "server.cjs");
+    const marker = join(root, "cleaned-up");
+    await writeFile(entry, body.replaceAll("MARKER", JSON.stringify(marker)));
+    return { entry, marker, config: join(root, "config.json") };
+  }
+
+  it("lets a server that needs longer than the old 100 ms finish its shutdown before any SIGKILL", async () => {
+    // Stand-in for a server that removes its spool instance directory only after a slow registry shutdown.
+    const { entry, marker, config } = await serverScript([
+      "let stopping = false;",
+      "const stop = () => { if (stopping) return; stopping = true; setTimeout(() => { require('node:fs').writeFileSync(MARKER, 'done'); process.exit(0); }, 400); };",
+      "process.on('SIGTERM', stop); process.stdin.on('end', stop); process.stdin.resume(); console.log('ready');",
+    ].join("\n"));
+    const child = await createMcpStdioLauncher({ nodePath: execPath, entryPath: entry, configPath: config })(new AbortController().signal);
+    await child.read(); // Signals are only handled once the script has installed its handlers.
+    await child.kill();
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  it("returns as soon as the server exits, without waiting out the grace", async () => {
+    const { entry, config } = await serverScript("process.on('SIGTERM', () => process.exit(0)); process.stdin.on('end', () => process.exit(0)); process.stdin.resume(); console.log('ready');");
+    const child = await createMcpStdioLauncher({ nodePath: execPath, entryPath: entry, configPath: config, shutdownGraceMs: 10_000 })(new AbortController().signal);
+    await child.read(); // Signals are only handled once the script has installed its handlers.
+    const started = Date.now();
+    await child.kill();
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("still SIGKILLs a server that ignores termination once the grace has passed", async () => {
+    const { entry, marker, config } = await serverScript("process.on('SIGTERM', () => {}); process.stdin.on('data', () => {}); console.log('ready'); setInterval(() => {}, 1000); setTimeout(() => require('node:fs').writeFileSync(MARKER, 'survived'), 3000);");
+    const grace = 300;
+    const child = await createMcpStdioLauncher({ nodePath: execPath, entryPath: entry, configPath: config, shutdownGraceMs: grace })(new AbortController().signal);
+    await child.read(); // Signals are only handled once the script has installed its handlers.
+    const started = Date.now();
+    await child.kill();
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(grace - 50);
+    expect(elapsed).toBeLessThan(grace + 2_500);
+    await new Promise((resolve) => setTimeout(resolve, 3_200));
+    expect(existsSync(marker)).toBe(false);
   });
 });
