@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -114,6 +114,35 @@ it("returns writer_state_invalid for missing state or a foreign alias, without a
   await rm(paths.state);
   expect(await acceptWriter(ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_state_invalid" });
   await expect(stat(paths.acceptanceFailure)).rejects.toThrow();
+});
+it("returns the state error code for a malformed or unreadable state, without a record", async () => {
+  const { ctx, paths } = await armed();
+  await writeFile(paths.state, "{");
+  expect(await acceptWriter(ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_state_invalid" });
+  await rm(paths.state); await mkdir(paths.state);
+  expect(await acceptWriter(ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_state_invalid" });
+  await rm(paths.state, { recursive: true }); await writeFile(paths.state, "{}", { mode: 0o000 });
+  expect(await acceptWriter(ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_state_unreadable" });
+  await expect(stat(paths.acceptanceFailure)).rejects.toThrow();
+});
+it("downgrades a ready writer and drops its acceptance when a new acceptance fails", async () => {
+  const { ctx, harnessWith } = await armed();
+  const ready = await readWriterState(ctx.home, "repo-w1");
+  await writeWriterState(ctx.home, "repo-w1", { ...ready!, phase: "ready", acceptance: { fingerprint: "sha256:old", verdict: "pass", network: "limited", at: "then" } });
+  harnessWith(async () => ({ exitCode: 1 }));
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("acceptance_harness_failed");
+  const state = await readWriterState(ctx.home, "repo-w1");
+  expect(state?.phase).toBe("not_ready");
+  expect(state?.acceptance).toBeUndefined();
+});
+it("does not follow a link placed at the record's path", async () => {
+  const { ctx, paths, harnessWith } = await armed();
+  const target = join(ctx.home, "elsewhere.json");
+  await writeFile(target, "untouched");
+  await symlink(target, paths.acceptanceFailure);
+  harnessWith(async () => ({ exitCode: 2 }));
+  expect((await acceptWriter(ctx, "repo-w1")).code).toBe("acceptance_harness_failed");
+  expect(await readFile(target, "utf8")).toBe("untouched");
 });
 it("returns podman_unavailable and records it without a harness section", async () => {
   const { ctx, run, failure } = await armed();

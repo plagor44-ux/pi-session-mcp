@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { podmanInfo } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
@@ -44,7 +45,9 @@ async function recordFailure(root: string, file: string, code: string, result?: 
   try {
     await mkdir(root, { recursive: true, mode: 0o700 });
     const body = { schemaVersion: 1, at: new Date().toISOString(), code, ...(result ? { harness: harnessSummary(result) } : {}) };
-    await writeFile(file, JSON.stringify(body, null, 2) + "\n", { mode: 0o600 });
+    // Never follow a link placed at the record's path, and keep 0600 on an existing file.
+    const handle = await open(file, constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW, 0o600);
+    try { await handle.chmod(0o600); await handle.writeFile(JSON.stringify(body, null, 2) + "\n"); } finally { await handle.close(); }
   } catch { /* Diagnostics only. */ }
 }
 export async function runIsolationControl(ctx: WriterContext): Promise<WriterOutcome> {
