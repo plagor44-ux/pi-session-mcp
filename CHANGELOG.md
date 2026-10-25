@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Fixed: `setup --repo <alias> --mode container ... --apply` kept an existing
+  writer silently on its old settings when the image, network, cache, profile
+  list or a selected coding profile (model, thinking level, skills) or the
+  event delivery had changed, and reported only `writer_registered`. Reconcile
+  now checks every kept writer first against the settings and the configuration
+  it would be provisioned from now and reports `writer_settings_changed`
+  without accepting the writer or changing its registrations. The image is
+  resolved locally only and never pulled; an image that cannot be resolved
+  reports `image_unavailable`. The dry run reports the same findings. Key order
+  in the profile objects does not count as a change
+  ([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)).
+
 - Fixed: a coding profile for a container repository could select a `builtin:`
   skill that the writer cannot resolve the same way as the host. Operator
   overrides never reach the writer, so a customized `pi-session-implementation`

@@ -145,16 +145,22 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
     const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
     add(name, outcome); if (outcome.status === "failed") failedProvision.add(name);
   }
-  const unchecked = new Set<string>();
+  // Writers left exactly as they are: neither accepted nor registered in this run.
+  const held = new Set<string>();
   for (const name of planned.keep) {
     if (failedProvision.has(name)) continue;
+    if (!planned.missing.includes(name)) {
+      // Settings first: a writer that no longer matches its configuration is not accepted or registered again (#134).
+      const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
+      if (drift) { held.add(name); add(name, drift); continue; }
+    }
     // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
     const current = await accept.acceptanceCurrent(ctx, name);
     if (current === "stale") add(name, await accept.acceptWriter(ctx, name));
-    else if (current === "unknown") { unchecked.add(name); add(name, { status: "failed", code: "podman_unavailable" }); }
+    else if (current === "unknown") { held.add(name); add(name, { status: "failed", code: "podman_unavailable" }); }
   }
   for (const name of planned.keep) {
-    if (failedProvision.has(name) || unchecked.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
+    if (failedProvision.has(name) || held.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
     for (const client of request.codex ? ["claude-code", "codex"] as const : ["claude-code"] as const) {
       const expected = intent(ctx, name, client), before = await adapter.inspect(expected);
       try { await registerWriter(ownership, adapter, expected); add(name, { status: before === "equivalent" ? "unchanged" : "ok", code: "writer_registered" }); }
@@ -215,11 +221,18 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
         try {
           if (request.apply) writers = await reconcileUnlocked(configPath, request.alias, { discard: request.discard ?? false, codex: request.codex ?? false, ...(request.baseRef ? { baseRef: request.baseRef } : {}) }, deps);
           else {
-            const ctx = await context(request.alias, deps), planned = await plan(ctx, proposed);
-            const hostDelivery = (await loadConfig(configPath)).eventDelivery === "spool", hooks: SetupFinding[] = [];
+            const ctx = await context(request.alias, deps), planned = await plan(ctx, proposed), { life } = services(deps);
+            const hostDelivery = (await loadConfig(configPath)).eventDelivery === "spool", hooks: SetupFinding[] = [], kept: SetupFinding[] = [];
+            const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
+            for (const name of planned.keep) {
+              // The same settings check as apply, so a drifted writer shows before anything is applied (#134).
+              const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: proposed.container!, rawConfig, overrideDirectory });
+              kept.push({ target: targetFor(request.alias, name), ...(drift ?? { status: "planned" as const, code: "writer_planned" }) });
+            }
             for (const name of planned.keep) { const hook = await writerHook(ctx, name, deps, "dry-run", await writerDelivery(ctx, name, hostDelivery)); if (hook) hooks.push({ target: targetFor(request.alias, name), ...hook }); }
             for (const name of planned.surplus) { const hook = await writerHook(ctx, name, deps, "dry-run", false); if (hook) hooks.push({ target: targetFor(request.alias, name), ...hook }); }
-            writers = result("dry-run", [...planned.keep.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_planned" })), ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], hooks.some((hook) => hook.status === "failed" || hook.status === "divergent") ? "failed" : "planned");
+            const refused = [...kept, ...hooks].some((finding) => finding.status === "failed" || finding.status === "divergent");
+            writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], refused ? "failed" : "planned");
           }
         } catch { writers = failed("writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");

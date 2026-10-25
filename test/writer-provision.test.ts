@@ -6,7 +6,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { loadConfig } from "../src/config.js";
 import { ensureWriterEventsDirectory } from "../src/writer-boundary.js";
-import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
+import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, writerSettingsDrift, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerEventDeliveryEnabled, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -188,6 +188,22 @@ it("reports a delivery change on a provisioned writer as a settings change", asy
   await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents });
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig: withEvents })).toEqual({ code: "writer_unchanged", status: "unchanged" });
   expect(await provisionWriter(g.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+});
+it("checks a provisioned writer against the settings and configuration it would be provisioned from now (#134)", async () => {
+  const f = await fixture();
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toBeUndefined();
+  await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toBeUndefined();
+  const reordered = { ...rawConfig, executionProfiles: { other: { ...profile, model: "second" }, code: Object.fromEntries(Object.entries(profile).reverse()) } };
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig: reordered })).toBeUndefined();
+  // The second profile shares its provider with the first, so only the rendered configuration shows this change.
+  const changed = { ...rawConfig, executionProfiles: { ...rawConfig.executionProfiles, other: { ...profile, model: "second", thinkingLevel: "low" } } };
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, cache: "go" }, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  f.unavailable(); f.calls.length = 0;
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "image_unavailable", status: "failed" });
+  expect(f.calls.some((call) => call.args[0] === "pull")).toBe(false);
 });
 it("removes the writer's spool directory together with its state directory and nothing else", async () => {
   const f = await fixture(), other = writerPaths(f.ctx.home, "repo-w2");

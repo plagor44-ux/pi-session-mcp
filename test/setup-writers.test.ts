@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore } from "../src/setup-ownership.js";
@@ -27,7 +27,15 @@ async function fixture() {
   const ownership = new MemoryOwnershipStore();
   const registered = new Set<string>();
   const life = { ...lifecycle,
-    provisionWriter: vi.fn(async (_ctx, input) => { calls.push(`provision${input.index}`); await writeWriterState(home, `x-w${input.index}`, state(input.index)); await writeFile(writerPaths(home, `x-w${input.index}`).wrapper, "wrapper"); return { status: "ok" as const, code: "writer_provisioned" }; }),
+    provisionWriter: vi.fn(async (_ctx, input) => {
+      calls.push(`provision${input.index}`);
+      const paths = writerPaths(home, `x-w${input.index}`);
+      await writeWriterState(home, `x-w${input.index}`, state(input.index)); await writeFile(paths.wrapper, "wrapper");
+      // The real rendered configuration, so the settings check of reconcile compares against what provisioning wrote.
+      await mkdir(paths.config, { recursive: true });
+      await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(lifecycle.renderContainedConfig("x", paths.clone, input.rawConfig, input.settings.profiles, input.overrideDirectory)));
+      return { status: "ok" as const, code: "writer_provisioned" };
+    }),
     inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false })),
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
     finishWriter: vi.fn(async () => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
@@ -39,9 +47,12 @@ async function fixture() {
     add: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`register:${intent.client}:${intent.name}`); registered.add(intent.client + intent.name); }),
     remove: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`unregister:${intent.client}:${intent.name}`); registered.delete(intent.client + intent.name); }),
   };
-  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
-  return { home, configPath, calls, life, accept, deps, adapter };
+  // Podman as the settings check asks it: a full image ID resolves to itself, the built-in node image to the state's ID.
+  const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "image" ? podmanImage(args.at(-1)!) : "", stderr: "" })) };
+  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
+  return { home, configPath, calls, life, accept, deps, adapter, runner };
 }
+const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : state(1).imageId;
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
   it.each(["linux", "darwin"] as const)("sanitizes invalid aliases on %s", async (platform) => {
@@ -135,6 +146,83 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
     expect(output.findings.some((finding) => finding.code === "controllers_restart_required")).toBe(false);
   });
+  it("reports settings drift instead of keeping a ready writer whose coding profile model changed (#134)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    f.accept.acceptWriter.mockClear();
+    const host = JSON.parse(await readFile(f.configPath, "utf8")) as { executionProfiles: { code: { model: string } } };
+    host.executionProfiles.code.model = "changed-model";
+    await writeFile(f.configPath, JSON.stringify(host));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "writer_settings_changed", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(output.exitCode).not.toBe(0);
+    expect(f.accept.acceptWriter).not.toHaveBeenCalled();
+    expect(output.findings).not.toContainEqual(expect.objectContaining({ code: "writer_registered", target: expect.objectContaining({ alias: "x-w1" }) }));
+  });
+  type Host = { executionProfiles: { code: Record<string, unknown> }; skillCatalog?: Record<string, string> };
+  const editHost = async (configPath: string, edit: (host: Host) => Host) => writeFile(configPath, JSON.stringify(edit(JSON.parse(await readFile(configPath, "utf8")) as Host)));
+  it.each([
+    ["thinking level", (host: Host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, thinkingLevel: "high" } } }), mode],
+    ["image", (host: Host) => host, { ...mode, container: { ...mode.container, image: "c".repeat(64) } }],
+    ["network", (host: Host) => host, { ...mode, container: { ...mode.container, network: "none" as const } }],
+  ])("reports a changed %s of a ready writer without accepting or registering it (#134)", async (_label, edit, next) => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    await editHost(f.configPath, edit);
+    const output = await changeWriterMode(f.configPath, next, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(output.findings.filter((finding) => finding.code === "writer_settings_changed").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
+    expect(f.calls).toEqual([]);
+    expect(output.findings.some((finding) => finding.code === "writer_registered")).toBe(false);
+  });
+  it("does not count a changed key order of the host profiles as a settings change (#134)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    await editHost(f.configPath, (host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: Object.fromEntries(Object.entries(host.executionProfiles.code).reverse()) } }));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(f.calls).toEqual([]);
+    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.status)).toEqual(["unchanged", "unchanged"]);
+  });
+  it("leaves a ready writer as it is when its image cannot be resolved locally, and never pulls (#134)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0; f.runner.run.mockClear();
+    f.runner.run.mockImplementation(async () => ({ exitCode: 125, stdout: "", stderr: "" }));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(output.findings.filter((finding) => finding.code === "image_unavailable").map((finding) => finding.status)).toEqual(["failed", "failed"]);
+    expect(f.calls).toEqual([]);
+    expect((await readWriterState(f.home, "x-w1"))?.phase).toBe("ready");
+    expect(f.runner.run.mock.calls.some(([, args]) => args[0] === "pull")).toBe(false);
+  });
+  it("reports an override created after provisioning for a writer whose coding profile selects that skill (#134, #135)", async () => {
+    const f = await fixture();
+    await editHost(f.configPath, (host) => ({ ...host, skillCatalog: { impl: "builtin:pi-session-implementation" }, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, skills: ["impl"] } } }));
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    await mkdir(join(f.home, "skills", "pi-session-implementation"), { recursive: true });
+    await writeFile(join(f.home, "skills", "pi-session-implementation", "SKILL.md"), "---\nname: pi-session-implementation\ndescription: Operator copy.\n---\n");
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings.filter((finding) => finding.code === "container_profile_unsupported").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
+    expect(f.calls).toEqual([]);
+  });
+  it("shows the settings change in the dry run without changing anything (#134)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    await editHost(f.configPath, (host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, model: "changed-model" } } }));
+    const before = await readFile(writerPaths(f.home, "x-w1").state, "utf8");
+    const output = await changeWriterMode(f.configPath, { ...mode, apply: false }, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(output.findings.filter((finding) => finding.code === "writer_settings_changed").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
+    expect(output.findings.some((finding) => finding.code === "writer_planned")).toBe(false);
+    expect(f.calls).toEqual([]);
+    expect(await readFile(writerPaths(f.home, "x-w1").state, "utf8")).toBe(before);
+  });
   it("accepts a ready writer again when its acceptance is no longer current, as after a package upgrade (#130)", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
@@ -163,7 +251,7 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
-    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : "5.4.0", stderr: "" })) };
+    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : args[0] === "image" ? podmanImage(args.at(-1)!) : "5.4.0", stderr: "" })) };
     const upgraded = (version: string) => acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: version, imageId: state(1).imageId, podmanVersion: "5.4.0", network: "pasta", cache: "none" });
     for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "ready", acceptance: { fingerprint: upgraded(index === 1 ? "0.0.0" : PACKAGE_VERSION), verdict: "pass", network: "limited", at: "then" } });
     const output = await changeWriterMode(f.configPath, mode, { ...f.deps, runner, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });

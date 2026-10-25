@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { chmod, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
@@ -8,7 +9,7 @@ import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
 import { resolveLibrarySkill, shippedLibrarySkill } from "./skill-library.js";
 import { BOUNDARY_GIT, BoundaryError, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, resolveImage, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
-import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
+import { readWriterState, writerName, writerPaths, writeWriterState, WriterStateError, type WriterState } from "./writer-state.js";
 
 export interface WriterContext {
   home: string;
@@ -127,6 +128,56 @@ async function jsonFile(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600, flag: "wx" });
 }
 
+type ProvisionInput = { settings: ContainerSettings; rawConfig: unknown; overrideDirectory?: string };
+function rendered(alias: string, paths: ReturnType<typeof writerPaths>, input: ProvisionInput) {
+  const config = renderContainedConfig(alias, paths.clone, input.rawConfig, input.settings.profiles, input.overrideDirectory);
+  const selected = input.settings.profiles.map((profile) => config.executionProfiles[profile]!);
+  const providers = selected.filter((profile, i, all) => all.findIndex((other) => other.provider === profile.provider) === i)
+    .map(({ provider, model }) => ({ provider, model }));
+  return { config, providers };
+}
+/** Key order carries no meaning in the operator's raw profile objects, so it never counts as a change. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => item !== null && typeof item === "object" && !Array.isArray(item)
+    ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+    : item);
+}
+async function storedConfig(paths: ReturnType<typeof writerPaths>): Promise<unknown> {
+  try {
+    const handle = await open(join(paths.config, "pi-session-mcp.json"), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try { return (await handle.stat()).isFile() ? JSON.parse(await handle.readFile("utf8")) as unknown : undefined; }
+    finally { await handle.close(); }
+  } catch { return undefined; }
+}
+/**
+ * Whether a provisioned writer still matches what provisioning would write now: its state's settings and the whole
+ * rendered configuration (profiles with model, thinking level and skills, event delivery). A missing or unreadable
+ * configuration never matches.
+ */
+async function sameSettings(paths: ReturnType<typeof writerPaths>, existing: WriterState, settings: ContainerSettings,
+  now: { config: unknown; providers: WriterState["providers"]; imageId: string }): Promise<boolean> {
+  const stored = await storedConfig(paths);
+  return stored !== undefined && existing.imageId === now.imageId && existing.lifecycle === settings.lifecycle
+    && existing.network === settings.network && existing.cache === settings.cache
+    && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
+    && JSON.stringify(existing.providers) === JSON.stringify(now.providers) && canonical(stored) === canonical(now.config);
+}
+/**
+ * Reconcile's check of a kept writer (#134): `undefined` while the writer matches the settings and configuration it
+ * would be provisioned from now, or has no provisioned state; otherwise the finding, usually `writer_settings_changed`.
+ * The image is resolved locally and never pulled, so an image that cannot be resolved reports `image_unavailable`.
+ */
+export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionInput & { index: number }): Promise<WriterOutcome | undefined> {
+  try {
+    const name = writerName(ctx.alias, input.index), paths = writerPaths(ctx.home, name);
+    const existing = await readWriterState(ctx.home, name);
+    if (!existing || existing.phase === "provisioning") return undefined;
+    const { config, providers } = rendered(ctx.alias, paths, input);
+    const imageId = await resolveImage(ctx.runner, input.settings.image, false);
+    return await sameSettings(paths, existing, input.settings, { config, providers, imageId }) ? undefined : { status: "failed", code: "writer_settings_changed" };
+  } catch (error) { return failure(error); }
+}
+
 export async function provisionWriter(ctx: WriterContext, input: {
   index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown; overrideDirectory?: string;
 }): Promise<WriterOutcome> {
@@ -138,20 +189,14 @@ export async function provisionWriter(ctx: WriterContext, input: {
       if (!(error instanceof WriterStateError) || error.code !== "writer_state_invalid") throw error;
       restart = true;
     }
-    const config = renderContainedConfig(ctx.alias, paths.clone, input.rawConfig, settings.profiles, input.overrideDirectory);
-    const selected = settings.profiles.map((alias) => config.executionProfiles[alias]!);
-    const providers = selected.filter((profile, i, all) => all.findIndex((other) => other.provider === profile.provider) === i)
-      .map(({ provider, model }) => ({ provider, model }));
+    const { config, providers } = rendered(ctx.alias, paths, input);
     const base = await resolveBase(ctx, input.baseRef);
     const { ref, short, commit } = base;
     const imageId = await resolveImage(ctx.runner, settings.image, true);
     const remote = await git(ctx, ["remote", "get-url", "origin"], true);
     if (remote && /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]*@/.test(remote)) throw new LifecycleError("remote_url_refused");
     if (existing && existing.phase !== "provisioning") {
-      const equal = existing.imageId === imageId && existing.lifecycle === settings.lifecycle && existing.network === settings.network
-        && existing.cache === settings.cache && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
-        && JSON.stringify(existing.providers) === JSON.stringify(providers)
-        && await writerEventDeliveryEnabled(paths.config) === (config.events?.delivery === "spool")
+      const equal = await sameSettings(paths, existing, settings, { config, providers, imageId })
         && (input.baseRef === undefined || (existing.base.ref === `refs/heads/${short}` && existing.base.commit === commit));
       return { code: equal ? "writer_unchanged" : "writer_settings_changed", status: equal ? "unchanged" : "failed" };
     }
