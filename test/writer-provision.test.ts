@@ -201,6 +201,8 @@ it("creates the private spool directory at provisioning when delivery is on, so 
   expect(stat.uid).toBe(process.getuid!());
   const before = await rootNames(f.paths.root);
   expect(before).toContain("events");
+  // The launch-time step needs /proc/self/fd; writers are Linux-only.
+  if (process.platform !== "linux") return;
   // The launch-time step (acceptance harness digests the writer root around it) finds the directory and adds no name.
   expect(await ensureWriterEventsDirectory(f.ctx.home, "repo-w1", process.getuid!())).toBe(f.paths.events);
   expect(await rootNames(f.paths.root)).toEqual(before);
