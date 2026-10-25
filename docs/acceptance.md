@@ -2348,6 +2348,62 @@ Not established for `0.11.3`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.4 pre-release acceptance
+
+`v0.11.4` was accepted on 2026-10-25 from 14:15 to 14:24 UTC on its release
+candidate `643f1f9`, on Linux (`x64`) with Node.js `26.11.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.310`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships the Sprint 8 pilot fixes #125, #126 and #127
+([#128](https://github.com/plagor44-ux/pi-session-mcp/pull/128)). It does not
+change the MCP contract or any setup report code.
+
+- Level 1 on the release branch: every command exited with `0`, except
+  `npm audit` and Doctor; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3398 passed and 13 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` finding (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472,
+    GHSA-xjj6-f33q-929c) through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). The
+    maintainer decided on 2026-10-25 to release with this finding stated.
+  - `npm pack --dry-run` listed 958 files.
+  - Doctor reported `packageVersion` `0.11.4`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+  The same two runs had passed on the #128 head `b84160b` before its merge.
+- Packed-tarball Level 2:
+  - The candidate's tarball (sha256
+    `58d2ed277ad3cbea9bab96af9de18a4c7d305cd6b35c0ac8af6207b936e15504`) was
+    installed with `npm install -g --prefix` into a fresh prefix without the
+    lockfile.
+  - Every `@earendil-works` package resolved to `1.4.0`.
+  - The install smoke reported `smoke_passed` with version `0.11.4`.
+  - Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+    `--events spool`.
+- In every Level 2 run the real client registrations were unchanged, no
+  process remained, the built files were unchanged, and the path-leak check
+  passed. The tarball and the prefix were removed.
+- The Claude Code 2.1.310 contract was recorded in a disposable home
+  (`test/fixtures/client-contracts/claude-code-2.1.310.json`); only the version
+  line differs from 2.1.296.
+- #125, #126 and #127 were reviewed independently before their merge
+  ([#128](https://github.com/plagor44-ux/pi-session-mcp/pull/128)).
+
+Not established for `0.11.4`:
+- any live run of the released package (Level 3 or a real model);
+- a container writer provisioned and accepted by this release in a single
+  `--apply` (#126 on a real writer) and the second writer's Claude Code
+  registration (#127); the Sprint 8 pilot runs both on the published release;
+- the VS Code wake;
+- macOS delivery.
+
+CI covers macOS 15 and 26. The published-release acceptance follows after
+publication, with both Level 2 variants.
+
 ## Sprint 1 correctness checks (2026-10-13)
 
 These checks belong to [#59](https://github.com/plagor44-ux/pi-session-mcp/issues/59)
