@@ -141,3 +141,40 @@ describe("writer registrations", () => {
     expect(f.run).toHaveBeenCalledWith("codex", ["mcp", "remove", f.intent.name], undefined, undefined);
   });
 });
+
+describe("Claude Code 'Did you mean' absent message", () => {
+  const hint = (suggestion: string) => `Did you mean ${suggestion}? Run \`claude mcp list\` to see all.`;
+  async function stateFor(stderr: (name: string) => string) {
+    const f = await fixture();
+    const run = vi.fn(async () => ({ exitCode: 1, stdout: "", stderr: stderr(f.intent.name) }));
+    return createWriterRegistrationAdapter({ run }).inspect(f.intent);
+  }
+  it("treats the bounded suggestion suffix as absent and lets a further writer register", async () => {
+    expect(await stateFor((name) => `No MCP server named "${name}". ${hint('"pi-coding-demo-w0"')}`)).toBe("absent");
+    const f = await fixture();
+    let registered = false;
+    const run = vi.fn(async (_command: string, args: readonly string[]) => {
+      if (args[1] === "add") { registered = true; return { exitCode: 0, stdout: "", stderr: "" }; }
+      if (!registered) return { exitCode: 1, stdout: "", stderr: `No MCP server named "${f.intent.name}". ${hint('"pi-coding-demo-w0"')}\n` };
+      return { exitCode: 0, stderr: "", stdout: `${f.intent.name}:\n  Scope: Local config\n  Type: stdio\n  Command: ${f.intent.wrapperPath}\n  Args:\n` };
+    });
+    await registerWriter(f.ownership, createWriterRegistrationAdapter({ run }), f.intent);
+    expect((await f.ownership.get({ client: "claude-code", scope: "local", alias: f.intent.name }))?.phase).toBe("owned");
+  });
+  it.each([
+    ["an unquoted suggestion", hint("pi-coding-demo-w0")],
+    ["a suggestion with an embedded quote", hint('"pi-coding"-demo-w0"')],
+    ["a suggestion with a newline", 'Did you mean "pi-coding\ndemo-w0"? Run `claude mcp list` to see all.'],
+    ["an empty suggestion", hint('""')],
+    ["trailing text", hint('"pi-coding-demo-w0"') + " Extra."],
+    ["a second line", hint('"pi-coding-demo-w0"') + "\nmore"],
+    ["another hint", 'Did you mean "pi-coding-demo-w0"? Run `rm -rf` to see all.'],
+  ])("keeps %s unsupported and fails registration closed", async (_label, suffix) => {
+    expect(await stateFor((name) => `No MCP server named "${name}". ${suffix}`)).toBe("unsupported");
+  });
+  it("does not apply the suffix to Codex, whose absent message is unchanged", async () => {
+    const f = await fixture("codex");
+    const run = vi.fn(async () => ({ exitCode: 1, stdout: "", stderr: `Error: No MCP server named '${f.intent.name}' found. ${hint('"x"')}` }));
+    expect(await createWriterRegistrationAdapter({ run }).inspect(f.intent)).toBe("unsupported");
+  });
+});
