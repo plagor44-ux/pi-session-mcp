@@ -4,7 +4,7 @@
 
 - Fixed: a failed writer acceptance ended as one undiagnosable
   `writer_acceptance_failed`. It now returns `writer_state_invalid`,
-  `podman_unavailable`, `acceptance_harness_failed` (including a harness that
+  `writer_state_unreadable`, `podman_unavailable`, `acceptance_harness_failed` (including a harness that
   exits without writing its report) or `acceptance_fingerprint_changed`, and
   writes a path-free `acceptance-failure.json` into the writer's state
   directory, removed by the next successful acceptance. The setup report codes

@@ -286,7 +286,11 @@ A failed acceptance that got past the writer state check also writes
 harness ran, its exit code, whether the report was `present`, `absent` or
 `invalid`, the verdict, the network classification and the names of failed and
 inconclusive checks. Only short token-shaped strings are copied, so the record
-is path-free and secret-free. The next successful acceptance removes it.
+is path-free and secret-free. The next successful acceptance removes it. It
+describes the last acceptance that got past the state check: a later failure
+with `isolation_control_required`, `writer_state_invalid` or
+`writer_state_unreadable` leaves an older record in place, so compare its `at`
+time with the run.
 
 ## Restart rule
 
