@@ -1,11 +1,12 @@
-# Sprint 8: migrate productive coding to container writers (proposed)
+# Sprint 8: migrate productive coding to container writers
 
 Planning basis: main `47b8d26` (Sprint 7 merged), installed release 0.11.2.
-Tracking: [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79).
+Tracking: [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79),
+prerequisite [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121).
 
-Status: **proposed**, waiting for the maintainer's choices in
-[Decisions needed](#decisions-needed). Nothing below has been changed on any
-machine.
+Status: **planned**. The maintainer made the choices on 2026-10-25; see
+[Decisions](#decisions-2026-10-25). Nothing below has been changed on any
+machine yet.
 
 ## Mandate
 
@@ -14,10 +15,13 @@ automated container writers ([ADR 0008](../adr/0008-coding-profile-isolation.md)
 [ADR 0009](../adr/0009-execution-modes.md)). The host worktree writers will be
 retired. This sprint plans and carries out that migration per repository. It
 changes operator configuration, not product code, unless a migration step
-exposes a defect.
+exposes a defect. The one planned product change is the diagnosability of a
+failed writer acceptance (#121), because every writer of the migration passes
+through that acceptance.
 
-Out of scope: product features, macOS writers, Codex wake, and a writer
-lifecycle the release does not ship.
+Out of scope: product features other than #121, macOS writers, Codex wake, a
+writer lifecycle the release does not ship, and `bun-app` (its alias stays
+as it is until a later decision).
 
 ## Inventory (workstation, 2026-10-24)
 
@@ -43,11 +47,22 @@ Second machine: `second-machine` has 9 aliases, among them `node-app-w1`–`node
 and no `events` setting. **Podman is not installed there**, so container
 writers cannot run on it without a privileged installation.
 
-## Proposed target
+## Target
 
 Read-only profiles stay allowed in every mode. Main aliases and review aliases
 therefore stay usable for analysis and review on the host server. Coding moves
 to writers `<alias>-w<n>`, registered as `pi-coding-<alias>-w<n>`.
+
+A writer is not bound to a provider: every writer carries all profiles of its
+boundary, and the controller names the profile when it starts a session. A
+writer admits one open coding session at a time, so the writer count is the
+number of parallel coding sessions per repository. Every writer is one more
+project-local MCP registration with the full tool list, so counts can be raised
+later (up to 16) with another `--apply` rather than provisioned ahead of need.
+
+All writers use lifecycle `persistent` (finish collects, then resets the clone
+to its baseline) and network `pasta`; `none` would cut the boundary off from
+every provider.
 
 | Repository | Mode of the main alias | Writers | Image | Profiles in the boundary |
 | --- | --- | --- | --- | --- |
@@ -56,15 +71,13 @@ to writers `<alias>-w<n>`, registered as `pi-coding-<alias>-w<n>`.
 | go-app | `container` | 4 | operator image: Go 1.27.3 and Node, `--cache go` | as above |
 | py-app | `container` | 3 | operator image: Python 3.12, `uv`, Node | as above |
 | pynode-app | `container` | 4 | operator image: Python 3.12, `uv`, Node | as above |
-| bun-app | `container` or `read-only` | 1 | operator image: `bun`, Node | as above |
 
 Review aliases `go-app-rev` and `pyapp-rev` become mode `read-only`. After a
 repository's writers are ready, its host writer aliases are removed from the
 configuration, and their worktrees are retired by the existing worktree-closing
 rule (commits checked into the integration branch, detached on `main`, branch
-deleted). `code-cursor` cannot run in a boundary (Cursor provider and
-extension), so it stays a host-only route on `read-only` or host-mode
-aliases, or is dropped for coding.
+deleted). `code-cursor` is dropped for coding: ADR 0009 does not admit the
+Cursor provider in a boundary. `review-cursor` stays a read-only route.
 
 Writer names collide with today's host alias names: `go-app-w1` is a host
 worktree today and would also be the first go-app writer. Each repository's
@@ -74,38 +87,44 @@ its writers.
 ## Operator images
 
 Setup does not build images; it accepts a local image ID. The sprint adds one
-Containerfile per toolchain with pinned base digests, built with rootless
-`podman build`:
+Containerfile per toolchain with pinned base digests to `private-infra`, built
+with rootless `podman build` on each machine that runs writers:
 
 - `node-go`: Node 22 and Go 1.27.3 (go-app);
 - `node-python-uv`: Node 22, Python 3.12 and `uv` (py-app,
-  pynode-app);
-- `node-bun`: Node 22 and `bun` (bun-app).
+  pynode-app).
 
 Each image needs Node, Git, bash, ssh and coreutils for the acceptance
 harness. A new image ID requires the provisioning command again and a new
-acceptance.
+acceptance. The toolchain versions in `private-infra` must follow the
+repositories' `go.mod` and Python requirements; a version bump there is a new
+image and a new acceptance.
 
 ## Changes to the operator workflow
 
 - Writer registrations are project-local in Claude Code: the writer tools are
-  visible only to a controller started in that repository's checkout. Codex
-  sees writers only if they are registered with `--client codex`.
+  visible only to a controller started in that repository's checkout. Every
+  writer is also registered for Codex with `--client codex`, so both
+  controllers keep coding access.
 - Results come back through `--collect --apply` as
   `refs/remotes/writer-<name>/<branch>` in the operator checkout, and a writer
   is reused only after `--finish --apply`. This replaces cherry-picking from
   host worktrees.
 - `~/.claude/rules/pi-routing.md` and `orchestration.md` must name the writer
   registrations instead of the worktree aliases. The rule that both machines
-  have identical profile aliases stays; the workspace part diverges if the
-  server keeps host or read-only modes.
+  have identical profile aliases stays.
 - After every release upgrade, each writer must be accepted again, because
-  acceptance binds the package version. 0.11.3 (the Pi SDK update for #120)
-  therefore adds one provider-free acceptance run per writer and does not
-  block the migration.
+  acceptance binds the package version. The next release (with #118, #121 and
+  whatever resolves #120) therefore adds one provider-free acceptance run per
+  writer and does not block the migration.
 
 ## Order and gates
 
+0. #121: a failed writer acceptance reports which check failed, under distinct
+   codes, and keeps a sanitized report in the writer's private state.
+   - Gate: tests for every failure path, Level 1 except the known #120
+     finding, independent review. Shipped in the same pull request as this
+     plan; the pilot runs from that build.
 1. Pilot: `pi-session-mcp`, built-in image, 2 writers.
    - Gate: control, provisioning, acceptance and `--verify` pass.
    - Gate: one real coding delegation per writer, collected, reviewed and
@@ -118,11 +137,14 @@ acceptance.
 4. go-app: first collect and review all `go-app-alpha` work and remove the
    manual writer as documented, then provision. Retire `go-app-w1`–`go-app-w7`.
    `go-app-rev` becomes `read-only`.
-5. py-app, then pynode-app, then bun-app, each with its
-   retirement step.
-6. Update the routing rules and both machines' configuration. Record the
-   outcome on #79 and close it if every repository is migrated or explicitly
-   left on another mode.
+5. py-app, then pynode-app, each with its retirement step.
+6. `second-machine`: the operator installs rootless Podman (a privileged
+   step). Then the same isolation control, image builds and provisioning as on
+   the workstation, starting with `node-app`; retire the
+   server's `node-app-w1`–`node-app-w4`.
+7. Update the routing rules and both machines' configuration. Record the
+   outcome on #79 and close it if every repository in scope is migrated;
+   `bun-app` is recorded as deferred.
 
 Every step is one repository at a time, with a rollback: collect the writers'
 work, `--remove` them, and set the mode back to `host` with
@@ -142,21 +164,17 @@ restarted afterwards.
 - Doctor reports no `unset` warning for the repository.
 
 Known risk: [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121).
-A first acceptance can fail once without a diagnosable cause. One repeated
-`--apply` is allowed. A second failure stops that repository.
+A first acceptance can fail once. With step 0 the failure names its cause; one
+repeated `--apply` is allowed. A second failure stops that repository.
 
-## Decisions needed
+## Decisions (2026-10-25)
 
-1. **Writer counts** per repository (proposal above: 2, 4, 4, 3, 4, 1).
-2. **Images:** build the three operator images in this sprint? Which
-   Containerfiles go into which repository (for example private-infra)?
-3. **bun-app:** `container` with a `bun` image, or `read-only`?
-4. **Profiles in the boundary:** `code`, `code-deepseek`, `code-glm` and
-   `code-mistral`? Does `code-cursor` remain a host route for some
-   repositories (which then stay `host`), or is it dropped for coding?
-5. **Codex:** also register writers for Codex (`--client codex`)?
-6. **Server `second-machine`:** install rootless Podman there (a privileged
-   step for the operator), or set its aliases to `read-only` (coding only on
-   the workstation), or keep host coding there with an explicit
-   `--accept-host-writes`?
-7. **Network:** keep `pasta` (not limited) for all writers?
+1. **Writer counts:** 2, 4, 4, 3, 4 as in the target table.
+2. **Images:** built in this sprint; Containerfiles live in `private-infra`.
+3. **bun-app:** out of scope for this sprint.
+4. **Profiles in the boundary:** `code`, `code-deepseek`, `code-glm`,
+   `code-mistral`. `code-cursor` is dropped for coding.
+5. **Codex:** writers are registered for Claude Code and Codex.
+6. **Server `second-machine`:** the operator installs rootless Podman; the
+   server gets container writers too (step 6).
+7. **Network:** `pasta` for all writers. Lifecycle: `persistent`.
