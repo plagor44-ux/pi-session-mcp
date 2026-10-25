@@ -70,6 +70,11 @@ limited; both can pass. Readiness fingerprints bind wrapper, package version,
 image ID, Podman version, network and cache. A changed binding must be accepted
 again. Doctor is offline and cannot substitute for acceptance.
 
+The harness launches the writer with `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, as
+direct verify does: acceptance makes no provider request, and a host login
+warm-up for an expiring token would change the host's Pi agent directory inside
+the harness's digest window and fail `digests.preexisting_changed`.
+
 The harness checks launch binding, file writes outside the clone, host credential
 visibility, detached-process persistence, child environment names and network.
 Canaries have per-run names; it never intentionally replaces pre-existing files,
@@ -81,7 +86,7 @@ evidence linked above; do not claim a live provider test from provider-free acce
 
 **Health-check warning:** `claude mcp get` starts the registered server briefly,
 so inspecting a writer starts its container. Setup inspect and verify use that
-command too. Direct verify sets `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
+command too. Direct verify and acceptance set `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
 starts sessions nor uses a provider nor touches credentials in its direct launch.
 The client's separate health-check subprocess is not given that override by setup.
 
