@@ -69,6 +69,7 @@ export function writerPaths(home: string, name: string) {
   return {
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
     config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
+    acceptanceFailure: join(root, "acceptance-failure.json"),
   };
 }
 
