@@ -418,4 +418,16 @@ describe.skipIf(!currentSetupPlatform())("verified MCP server shutdown grace (#1
     await new Promise((resolve) => setTimeout(resolve, 3_200));
     expect(existsSync(marker)).toBe(false);
   });
+
+  it("gives a writer wrapper's server the same grace before any SIGKILL", async () => {
+    const { entry, marker } = await serverScript([
+      "let stopping = false;",
+      "const stop = () => { if (stopping) return; stopping = true; setTimeout(() => { require('node:fs').writeFileSync(MARKER, 'done'); process.exit(0); }, 400); };",
+      "process.on('SIGTERM', stop); process.stdin.on('end', stop); process.stdin.resume(); console.log('ready');",
+    ].join("\n"));
+    const child = await createCommandMcpStdioLauncher([execPath, entry], {})(new AbortController().signal);
+    await child.read(); // Signals are only handled once the script has installed its handlers.
+    await child.kill();
+    expect(existsSync(marker)).toBe(true);
+  });
 });

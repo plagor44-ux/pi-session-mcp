@@ -2,13 +2,14 @@
 
 ## Unreleased
 
-- Fixed: `setup --verify` killed the launched server with SIGKILL 100 ms after
-  stdin EOF and SIGTERM. A server that needed longer to shut down its registry
-  and close its event spool was killed first and could leave a stale `inst-*`
-  directory under `$XDG_RUNTIME_DIR/pi-session-mcp/events`. The launcher now
-  waits for the server to exit for up to 2 s before SIGKILL, and the verifier
-  allows up to 5 s (`min(timeout, 5 s)`, after the verification deadline) for
-  stopping the server. A server that exits sooner is not waited for
+- Fixed: `setup --verify` and `setup --writer <name> --verify` killed the
+  launched server with SIGKILL 100 ms after stdin EOF and SIGTERM. A server
+  that needed longer to shut down its registry and close its event spool was
+  killed first and could leave a stale `inst-*` directory under
+  `$XDG_RUNTIME_DIR/pi-session-mcp/events` or the writer's spool directory.
+  Both launchers now wait for the server to exit for up to 2 s before SIGKILL,
+  and the verifier allows up to 5 s (`min(timeout, 5 s)`, after the MCP
+  exchange ends) for stopping the server. A server that exits sooner is not waited for
   ([#125](https://github.com/plagor44-ux/pi-session-mcp/issues/125)). Also
   gave the multi-session acceptance test's temporary-root cleanup an explicit
   120 s hook timeout, which it exceeded on macOS CI. No MCP contract change.
