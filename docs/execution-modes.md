@@ -270,12 +270,23 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `isolation_control_required` | Passing host control record required before writer acceptance |
 | `isolation_control_passed` | Uncontained control detected expected escapes and cleaned up |
 | `isolation_control_failed` | Control failed; previous passing record invalidated |
-| `writer_acceptance_failed` | Contained harness/fingerprint validation failed |
+| `podman_unavailable` | Acceptance could not use Podman (not usable or no version) |
+| `acceptance_harness_failed` | The contained harness exited non-zero, wrote no or an invalid report, did not report `pass`, or did not classify the network as `limited` or `not_limited` |
+| `acceptance_fingerprint_changed` | The acceptance fingerprint changed while the harness ran; the writer stays `not_ready` |
+| `writer_acceptance_failed` | Unexpected error during acceptance (catch-all) |
 | `writer_accepted` | Contained provider-free acceptance passed and readiness recorded |
 | `mcp_verified` | Bounded direct MCP verification passed |
 | `mcp_failed` | Direct MCP verification failed |
 | `mcp_unsupported` | Direct MCP output does not match the expected contract |
 | `mcp_timeout` | Direct MCP verification exceeded its deadline |
+
+A failed acceptance that got past the writer state check also writes
+`~/.local/state/pi-session-mcp/writers/<name>/acceptance-failure.json` (mode
+`0600`). It holds the schema version, the time, the returned code and, when the
+harness ran, its exit code, whether the report was `present`, `absent` or
+`invalid`, the verdict, the network classification and the names of failed and
+inconclusive checks. Only short token-shaped strings are copied, so the record
+is path-free and secret-free. The next successful acceptance removes it.
 
 ## Restart rule
 
