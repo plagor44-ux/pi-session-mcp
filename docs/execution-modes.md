@@ -94,8 +94,10 @@ supports dry-run and apply, not verify/rollback/remove. Container settings are
 rebuilt from supplied values and defaults, not merged with the prior entry:
 supply the full intended settings, including profiles, on each mode request.
 Selected profiles must have `default: false`, permission `coding`, no extensions
-or external MCP grants, and only builtin skill-catalog entries. Setup rejects
-unsupported profiles rather than silently weakening them.
+or external MCP grants, and only builtin skill-catalog entries for skills that
+the package ships and that no operator override replaces, because overrides do
+not reach the writer ([Skills](skills.md#builtinname-in-the-catalog)). Setup
+rejects unsupported profiles rather than silently weakening them.
 
 ## Writer storage, launch and readiness
 

@@ -75,6 +75,25 @@ it("rejects unsupported raw profiles, missing profiles and non-builtin catalog s
   }
   for (const raw of [null, {}, { executionProfiles: {} }]) expect(() => renderContainedConfig("repo", "/clone", raw, ["missing"])).toThrow("container_profile_unsupported");
 });
+it("refuses a builtin skill no writer can resolve, while a shipped one stays accepted (#135)", () => {
+  const unknown = { executionProfiles: { code: { ...profile, skills: ["lib"] } }, skillCatalog: { lib: "builtin:no-such-shipped-skill" } };
+  expect(() => renderContainedConfig("repo", "/clone", unknown, ["code"])).toThrow("container_profile_unsupported");
+  const shipped = { ...unknown, skillCatalog: { lib: "builtin:pi-session-implementation" } };
+  expect(() => renderContainedConfig("repo", "/clone", shipped, ["code"])).not.toThrow();
+});
+it("refuses a builtin skill the operator overrides, because no override reaches the writer (#135)", async () => {
+  const overrides = await temporaryRoot("pi-writer-overrides-");
+  const override = async (name: string) => {
+    await mkdir(join(overrides, name), { recursive: true });
+    await writeFile(join(overrides, name, "SKILL.md"), `---\nname: ${name}\ndescription: Operator copy.\n---\n`);
+  };
+  const raw = { executionProfiles: { code: { ...profile, skills: ["impl"] } }, skillCatalog: { impl: "builtin:pi-session-implementation", review: "builtin:pi-session-review" } };
+  // An override of a skill that no selected coding profile chooses changes nothing.
+  await override("pi-session-review");
+  expect(renderContainedConfig("repo", "/clone", raw, ["code"], overrides).skillCatalog).toEqual({ impl: "builtin:pi-session-implementation" });
+  await override("pi-session-implementation");
+  expect(() => renderContainedConfig("repo", "/clone", raw, ["code"], overrides)).toThrow("container_profile_unsupported");
+});
 it("renders verbatim selected raw profiles and a loadable synthetic read-only default", async () => {
   const selected = { ...profile, skills: ["impl"] };
   const raw = { ...rawConfig, executionProfiles: { code: selected, unused: { ...profile, extensions: [] } }, skillCatalog: { impl: "builtin:pi-session-implementation", unused: "./x/SKILL.md" } };

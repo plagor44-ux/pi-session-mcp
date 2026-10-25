@@ -128,6 +128,16 @@ Edits to a skill file that already resolves reach new sessions, as described
 under [snapshot semantics](#snapshot-semantics). Deleting a resolved override
 leaves the catalog pointing at a missing file until the restart.
 
+A container writer has no override directory: inside its boundary
+`builtin:<name>` can only resolve to the shipped skill. Setup therefore refuses
+a coding profile for a container repository with `container_profile_unsupported`
+when it selects a `builtin:` skill that the package does not ship, or one that
+has an override, instead of letting the writer load the shipped text in place of
+yours or fail at session start
+([#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)). An override
+of a skill that no selected coding profile chooses does not matter to the
+writer. Keep customized skills on profiles that run on the host.
+
 The shipped example configuration registers the two worker skills with
 `builtin:`. After you copy the example, its skill entries need no path edits.
 

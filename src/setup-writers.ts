@@ -17,6 +17,7 @@ import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
 import { IMAGE_PULL_TIMEOUT_MS } from "./writer-boundary.js";
 import * as lifecycle from "./writer-lifecycle.js";
 import * as acceptance from "./writer-acceptance.js";
+import { skillOverrideDirectory } from "./skill-library.js";
 import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 
 export type WriterOperation = "collect" | "reset" | "recreate" | "finish" | "remove" | "verify";
@@ -118,6 +119,7 @@ async function remove(ctx: lifecycle.WriterContext, name: string, discard: boole
   if (hook) extras.push(hook);
   return life.removeWriter(ctx, name, { discard });
 }
+const writerIndex = (name: string): number => Number(name.slice(name.lastIndexOf("-w") + 2));
 async function plan(ctx: lifecycle.WriterContext, entry: WorkspaceModeEntry) {
   const keep: string[] = [], missing: string[] = [], surplus: string[] = [];
   for (let index = 1; index <= 16; index++) {
@@ -137,10 +139,10 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   const add = (name: string, outcome: lifecycle.WriterOutcome): void => { findings.push({ target: targetFor(alias, name), ...outcome }); };
   await doctorGate(ctx, deps);
   await preflight(ctx, planned.surplus, request.discard, deps);
-  const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8"));
+  const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
   const failedProvision = new Set<string>();
   for (const name of planned.missing) {
-    const outcome = await life.provisionWriter(ctx, { index: Number(name.slice(name.lastIndexOf("-w") + 2)), settings: entry.container!, rawConfig, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
+    const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
     add(name, outcome); if (outcome.status === "failed") failedProvision.add(name);
   }
   const unchecked = new Set<string>();
