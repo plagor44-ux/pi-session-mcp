@@ -127,8 +127,11 @@ alias stays container and never dispatches coding automatically.
 
 State phases are provisioning, not_ready and ready. Acceptance binds wrapper
 bytes, package version, image ID, Podman version, network and cache settings.
-Changed bindings require renewed acceptance. Existing non-provisioning writers
-with changed provisioning settings are refused, not silently replaced. Review
+Changed bindings require renewed acceptance, which the next `--repo <alias>
+--apply` runs for every kept writer whose acceptance is not current, a ready
+phase included (after a package upgrade, for example). Existing
+non-provisioning writers with changed provisioning settings are refused, not
+silently replaced. Review
 and collect work before removing/reprovisioning them. Restart/reconnect affected
 controllers after successful changes; setup never restarts them.
 
@@ -285,7 +288,9 @@ A failed acceptance that got past the writer state check also writes
 `0600`). It holds the schema version, the time, the returned code and, when the
 harness ran, its exit code, whether the report was `present`, `absent` or
 `invalid`, the verdict, the network classification and the names of failed and
-inconclusive checks. Only short token-shaped strings are copied, so the record
+inconclusive checks, and the ids of the digest groups that changed during the
+probe (`changedDigestGroups`, for example `agent_dir`). Only short token-shaped
+strings are copied, so the record
 is path-free and secret-free. The next successful acceptance removes it. It
 describes the last acceptance that got past the state check: a later failure
 with `isolation_control_required`, `writer_state_invalid` or

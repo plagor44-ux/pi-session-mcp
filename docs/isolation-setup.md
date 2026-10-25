@@ -68,7 +68,21 @@ and their contained harness passes. Failed control invalidates the host control
 record. Contained acceptance records network classification as limited or not
 limited; both can pass. Readiness fingerprints bind wrapper, package version,
 image ID, Podman version, network and cache. A changed binding must be accepted
-again. Doctor is offline and cannot substitute for acceptance.
+again: `--repo <alias> ... --apply` accepts every kept writer whose acceptance is
+not current (the same predicate as Doctor's `writer_not_ready`: not ready, a
+stale fingerprint, or a missing image), not only writers whose phase is not
+ready. When Podman cannot be asked or fails at that point, setup leaves a ready
+writer as it is, skips its registration step and reports `podman_unavailable`,
+rather than downgrading it. A missing image is detected, but acceptance cannot
+pass without it: `--writer <name> --recreate --apply` provisions the writer
+again. Acceptance briefly places canaries and a `.git/commondir` file in the
+writer's clone and removes them, so run it while no session uses the writer.
+Doctor is offline and cannot substitute for acceptance.
+
+The harness launches the writer with `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, as
+direct verify does: acceptance makes no provider request, and a host login
+warm-up for an expiring token would change the host's Pi agent directory inside
+the harness's digest window and fail `digests.preexisting_changed`.
 
 The harness checks launch binding, file writes outside the clone, host credential
 visibility, detached-process persistence, child environment names and network.
@@ -81,7 +95,7 @@ evidence linked above; do not claim a live provider test from provider-free acce
 
 **Health-check warning:** `claude mcp get` starts the registered server briefly,
 so inspecting a writer starts its container. Setup inspect and verify use that
-command too. Direct verify sets `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
+command too. Direct verify and acceptance set `PI_WRITER_NO_CREDENTIAL_REFRESH=1` and neither
 starts sessions nor uses a provider nor touches credentials in its direct launch.
 The client's separate health-check subprocess is not given that override by setup.
 

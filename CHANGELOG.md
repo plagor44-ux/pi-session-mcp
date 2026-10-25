@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+- Fixed: after a package upgrade, `setup --repo <alias> ... --apply` reported
+  `writer_registered` for container writers but did not accept them again, so
+  Doctor kept reporting `writer_not_ready` and blocked the client targets.
+  Reconciliation now accepts every kept writer whose acceptance is not current,
+  using Doctor's `writer_not_ready` predicate (not ready, a stale fingerprint or
+  a missing image), instead of only writers whose phase is not ready. A writer
+  whose re-acceptance fails is not registered again; an existing registration
+  stays and refuses with `writer_not_ready` until the writer is accepted. When
+  Podman cannot be asked or fails, a ready writer is left as it is and setup
+  reports `podman_unavailable`. `docs/installation.md#upgrade` describes the
+  order for operators with container writers
+  ([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)).
+- Fixed: writer acceptance failed with `acceptance_harness_failed`
+  (`digests.preexisting_changed`) when a selected host OAuth token was expired
+  or about to expire, because the writer launch inside the harness refreshed it
+  in the host's Pi agent directory. The harness now launches the writer with
+  `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, as direct verify does; acceptance makes
+  no provider request. `acceptance-failure.json` also records the ids of the
+  changed digest groups (`changedDigestGroups`), without digests or paths
+  ([#131](https://github.com/plagor44-ux/pi-session-mcp/issues/131)).
+
 ## 0.11.4 — 2026-10-25
 
 Patch release for the Sprint 8 pilot defects

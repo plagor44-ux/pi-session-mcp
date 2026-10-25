@@ -5,7 +5,7 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore, type OwnershipRecord } from "../src/setup-ownership.js";
 import { buildWakeEntry, FileSetupHookInstaller, localHookNeededByOthers, WAKE_HOOK_ALIAS } from "../src/setup-hooks.js";
 import { changeWriterMode, runWriterOperation, type WriterSetupDependencies } from "../src/setup-writers.js";
-import { writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { readWriterState, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
 import * as lifecycle from "../src/writer-lifecycle.js";
 import * as acceptance from "../src/writer-acceptance.js";
 
@@ -45,7 +45,7 @@ async function fixture(options: { delivery: boolean; aliases?: readonly string[]
   const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => {
     const alias = name.slice(0, name.lastIndexOf("-w")); const index = Number(name.slice(name.lastIndexOf("-w") + 2));
     await writeWriterState(home, name, { ...state(alias, index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" };
-  }) };
+  }), acceptanceCurrent: vi.fn(async (_ctx: lifecycle.WriterContext, name: string) => ((await readWriterState(home, name))?.phase === "ready" ? "current" : "stale") as "current" | "stale" | "unknown") };
   const adapter = {
     inspect: vi.fn(async (intent: { client: string; name: string }) => registered.has(intent.client + intent.name) ? "equivalent" as const : "absent" as const),
     add: vi.fn(async (intent: { client: string; name: string }) => { registered.add(intent.client + intent.name); }),
