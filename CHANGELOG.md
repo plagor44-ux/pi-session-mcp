@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.11.3 — 2026-10-25
+
+Patch release for [#118](https://github.com/plagor44-ux/pi-session-mcp/issues/118) and
+[#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121). `npm audit`
+still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)); this
+release ships with that finding by maintainer decision.
+
 - Fixed: a failed writer acceptance ended as one undiagnosable
   `writer_acceptance_failed`. It now returns `writer_state_invalid`,
   `writer_state_unreadable`, `podman_unavailable`, `acceptance_harness_failed` (including a harness that
