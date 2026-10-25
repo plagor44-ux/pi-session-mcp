@@ -95,6 +95,27 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 9: writer settings drift and override skills (2026-10-25)
+
+Base main `a8f6397`, published 0.11.5. Fixes that make `--repo ... --apply` the
+reliable way to tell whether a writer still matches its configuration before
+more repositories move to container writers:
+
+- [#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134): reconcile
+  and its dry run report `writer_settings_changed` for a kept writer whose
+  settings or coding profiles changed, instead of keeping it silently.
+- [#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135): a container
+  coding profile may select only shipped `builtin:` skills without an operator
+  override, because overrides do not reach the writer.
+- Open for this sprint: [#136](https://github.com/plagor44-ux/pi-session-mcp/issues/136)
+  (reset or finish under a running writer server) and
+  [#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137) (unpinned Pi
+  extensions and the repository step's Doctor gate).
+- Proposals, not in this sprint: a guided, interactive setup in the agent
+  harness that works out the execution profiles together with the operator;
+  copying operator overrides into a writer; adopting a changed image while
+  keeping the writer's clone.
+
 ### Sprint 8: migration to container writers (2026-10-25)
 
 Base main `19d0d4f`
@@ -130,9 +151,20 @@ Base main `19d0d4f`
   repeated `--apply` accepted it.
 - Prepared as 0.11.5: the #130 and #131 fixes
   ([#132](https://github.com/plagor44-ux/pi-session-mcp/pull/132)).
-- Next: release 0.11.5, upgrade and re-accept both pilot writers with
-  `--repo ... --apply` (the first upgrade that needs no removal), then one real
-  coding delegation per writer.
+- Released 0.11.5 on 2026-10-25
+  ([#133](https://github.com/plagor44-ux/pi-session-mcp/pull/133)), again with
+  the open `undici` finding by maintainer decision. The workstation upgrade
+  accepted both ready pilot writers in one `--repo ... --apply` without
+  removal. An unpinned Pi package update blocked that step first
+  ([#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137)).
+- Pilot delegation on 2026-10-25: one coding task per writer with
+  `code-deepseek`, each a failing test for a newly found defect
+  ([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134),
+  [#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)), verified
+  by the controller, collected and finished. A reset of a writer with a running
+  server cleared that server's credentials
+  ([#136](https://github.com/plagor44-ux/pi-session-mcp/issues/136)).
+- Next: the remaining repositories, after Sprint 9.
 
 ### Sprint 7: stabilization and live acceptance (2026-10-24)
 
