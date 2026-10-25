@@ -68,7 +68,16 @@ and their contained harness passes. Failed control invalidates the host control
 record. Contained acceptance records network classification as limited or not
 limited; both can pass. Readiness fingerprints bind wrapper, package version,
 image ID, Podman version, network and cache. A changed binding must be accepted
-again. Doctor is offline and cannot substitute for acceptance.
+again: `--repo <alias> ... --apply` accepts every kept writer whose acceptance is
+not current (the same predicate as Doctor's `writer_not_ready`: not ready, a
+stale fingerprint, or a missing image), not only writers whose phase is not
+ready. When Podman cannot be asked or fails at that point, setup leaves a ready
+writer as it is, skips its registration step and reports `podman_unavailable`,
+rather than downgrading it. A missing image is detected, but acceptance cannot
+pass without it: `--writer <name> --recreate --apply` provisions the writer
+again. Acceptance briefly places canaries and a `.git/commondir` file in the
+writer's clone and removes them, so run it while no session uses the writer.
+Doctor is offline and cannot substitute for acceptance.
 
 The harness launches the writer with `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, as
 direct verify does: acceptance makes no provider request, and a host login

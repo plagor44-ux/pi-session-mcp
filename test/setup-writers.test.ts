@@ -3,7 +3,9 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore } from "../src/setup-ownership.js";
-import { writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, readWriterState, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { wrapperDigest } from "../src/writer-wrapper.js";
+import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import * as lifecycle from "../src/writer-lifecycle.js";
 import * as acceptance from "../src/writer-acceptance.js";
 import { changeWriterMode, type WriterSetupDependencies } from "../src/setup-writers.js";
@@ -30,7 +32,8 @@ async function fixture() {
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
     finishWriter: vi.fn(async () => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
   } satisfies typeof lifecycle;
-  const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...state(index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }) };
+  const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...state(index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }),
+    acceptanceCurrent: vi.fn(async (_ctx: lifecycle.WriterContext, name: string) => ((await readWriterState(home, name))?.phase === "ready" ? "current" : "stale") as "current" | "stale" | "unknown") };
   const adapter = {
     inspect: vi.fn(async (intent: { client: string; name: string }) => registered.has(intent.client + intent.name) ? "equivalent" as const : "absent" as const),
     add: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`register:${intent.client}:${intent.name}`); registered.add(intent.client + intent.name); }),
@@ -127,6 +130,52 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual([]);
     expect(output.findings.some((finding) => finding.code === "controllers_restart_required")).toBe(false);
+  });
+  it("accepts a ready writer again when its acceptance is no longer current, as after a package upgrade (#130)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    // Both writers stay ready, but the recorded acceptance of x-w1 no longer matches the binding.
+    f.accept.acceptanceCurrent.mockImplementation(async (_ctx, name) => name === "x-w1" ? "stale" : "current");
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(f.calls).toEqual(["accept:x-w1"]);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_accepted", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.status)).toEqual(["unchanged", "unchanged"]);
+  });
+  it("leaves a ready writer as it is when Podman cannot be asked, and reports it", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    f.accept.acceptanceCurrent.mockImplementation(async (_ctx, name) => name === "x-w1" ? "unknown" : "current");
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(f.calls).toEqual([]);
+    expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "podman_unavailable", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect((await readWriterState(f.home, "x-w1"))?.phase).toBe("ready");
+    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.target.alias)).toEqual(["x-w2"]);
+  });
+  it("accepts a ready writer again after a package upgrade, judged by the real predicate", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : "5.4.0", stderr: "" })) };
+    const upgraded = (version: string) => acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: version, imageId: state(1).imageId, podmanVersion: "5.4.0", network: "pasta", cache: "none" });
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "ready", acceptance: { fingerprint: upgraded(index === 1 ? "0.0.0" : PACKAGE_VERSION), verdict: "pass", network: "limited", at: "then" } });
+    const output = await changeWriterMode(f.configPath, mode, { ...f.deps, runner, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });
+    expect(output.exitCode).toBe(0);
+    expect(f.calls).toEqual(["accept:x-w1"]);
+  });
+  it("does not register a writer again when its re-acceptance fails, and keeps the existing registration", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.accept.acceptanceCurrent.mockImplementation(async (_ctx, name) => name === "x-w1" ? "stale" : "current");
+    f.accept.acceptWriter.mockImplementation(async (_ctx, name) => { await writeWriterState(f.home, name, { ...state(1), phase: "not_ready" }); return { status: "failed", code: "acceptance_harness_failed" }; });
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).not.toBe(0);
+    expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "acceptance_harness_failed", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.target.alias)).toEqual(["x-w2"]);
+    expect(f.adapter.remove).not.toHaveBeenCalled();
   });
   it("reports the existing global lock code without running mutations", async () => {
     const f = await fixture();

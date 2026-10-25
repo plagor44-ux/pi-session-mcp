@@ -127,8 +127,11 @@ alias stays container and never dispatches coding automatically.
 
 State phases are provisioning, not_ready and ready. Acceptance binds wrapper
 bytes, package version, image ID, Podman version, network and cache settings.
-Changed bindings require renewed acceptance. Existing non-provisioning writers
-with changed provisioning settings are refused, not silently replaced. Review
+Changed bindings require renewed acceptance, which the next `--repo <alias>
+--apply` runs for every kept writer whose acceptance is not current, a ready
+phase included (after a package upgrade, for example). Existing
+non-provisioning writers with changed provisioning settings are refused, not
+silently replaced. Review
 and collect work before removing/reprovisioning them. Restart/reconnect affected
 controllers after successful changes; setup never restarts them.
 
