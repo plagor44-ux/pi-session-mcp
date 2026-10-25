@@ -12,7 +12,8 @@
   exchange ends) for stopping the server. A server that exits sooner is not waited for
   ([#125](https://github.com/plagor44-ux/pi-session-mcp/issues/125)). Also
   gave the multi-session acceptance test's temporary-root cleanup an explicit
-  120 s hook timeout, which it exceeded on macOS CI. No MCP contract change.
+  120 s hook timeout, which it exceeded on macOS CI, and the bulk spool-cleanup
+  test a 60 s timeout. No MCP contract change.
 - Fixed: the first acceptance of every newly provisioned writer failed with
   `acceptance_harness_failed` (`digests.preexisting_changed`) when event
   delivery was on, and a repeated `--apply` passed. The writer's spool directory
