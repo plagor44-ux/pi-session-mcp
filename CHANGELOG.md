@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.11.8 — 2026-10-26
+
+Patch release for [#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148):
+installations with two or more container repositories could not complete an
+upgrade. It also carries the fixes of 0.11.7, which such installations could
+not install. The MCP contract is unchanged. `npm audit` still reports
+`undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 - Fixed: after an upgrade, the repository step of one container repository no
   longer fails with `doctor_failed` because the writers of another container
   repository are still `writer_not_ready`. With two or more container
