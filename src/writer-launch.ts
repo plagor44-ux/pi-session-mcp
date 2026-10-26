@@ -8,13 +8,12 @@ import { isEntryPoint } from "./entry-point.js";
 import { serveRefusal } from "./refusal-server.js";
 import { createProcessRunner } from "./setup-process.js";
 import { ensureWriterEventsDirectory, podmanInfo, serveArgs } from "./writer-boundary.js";
-import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
+import { expiresWithin, type HostCredentialRefresh, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostCredential, selectedOAuthProviders, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
 import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerEventDeliveryEnabled, writerPaths } from "./writer-state.js";
 export { currentAcceptanceFingerprint } from "./writer-state.js";
 export { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
 export interface LaunchDependencies {
   home: string;
-  nodePath: string;
   releaseRoot: string;
   runner: CommandRunner;
   spawnPodman(args: string[]): ChildProcess;
@@ -22,6 +21,8 @@ export interface LaunchDependencies {
   /** The user id that must own the event spool directory; defaults to the process user. */
   uid?: () => number;
   now(): number;
+  /** Warms up one host OAuth credential through Pi's locked store; defaults to the SDK refresh, tests inject a fake. */
+  warmupHostCredential?: (input: HostCredentialRefresh) => Promise<void>;
   setInterval(callback: () => void, ms: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
 }
@@ -68,10 +69,12 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   const refresh = async () => {
     const host = await readHost();
     if (expiresWithin(host, names, REFRESH_THRESHOLD_MINUTES, deps.now())) {
-      try {
-        const warmupConfig = await ensureWarmupConfig(deps.home, providers);
-        if (warmupConfig) await refreshHostLogin({ nodePath: deps.nodePath, releaseRoot: deps.releaseRoot, warmupConfig, timeoutMs: 20_000 });
-      } catch { /* Copy even when host refresh fails. */ }
+      const warmup = deps.warmupHostCredential ?? refreshHostCredential;
+      const authPath = join(deps.home, ".pi", "agent", "auth.json");
+      // In parallel, so the whole warm-up stays bounded at 20 s; Pi's locked store writes the file, never this launcher.
+      // A failed refresh is ignored: the copy below still runs.
+      await Promise.allSettled(selectedOAuthProviders(host, names).map((provider) =>
+        warmup({ authPath, provider, minOAuthValidityMs: REFRESH_THRESHOLD_MINUTES * 60_000, timeoutMs: 20_000 })));
     }
     await writeBoundaryCredentials(paths.agent, selectBoundaryCredentials(await readHost(), names));
   };
@@ -107,7 +110,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
   void launchEntry(process.argv.slice(2), {
-    home: homedir(), nodePath: process.execPath, releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+    home: homedir(), releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
     runner: createProcessRunner(), spawnPodman: (args) => spawn("podman", args, { stdio: "inherit" }),
     env: process.env, now: Date.now, setInterval, clearInterval,
   }).then((code) => { process.exitCode = code; });

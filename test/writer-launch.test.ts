@@ -12,13 +12,13 @@ import { serveArgs } from "../src/writer-boundary.js";
 import { serveRefusal } from "../src/refusal-server.js";
 import * as credentials from "../src/writer-credentials.js";
 vi.mock("../src/refusal-server.js", () => ({ serveRefusal: vi.fn() }));
-vi.mock("../src/writer-credentials.js", async (original) => ({ ...await original<typeof credentials>(), refreshHostLogin: vi.fn(), ensureWarmupConfig: vi.fn(), writeBoundaryCredentials: vi.fn() }));
+vi.mock("../src/writer-credentials.js", async (original) => ({ ...await original<typeof credentials>(), refreshHostCredential: vi.fn(), writeBoundaryCredentials: vi.fn() }));
 let home: string, child: ChildProcess, deps: LaunchDependencies, tick: () => void;
 const state: WriterState = { schemaVersion: 1, alias: "x", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [{ provider: "openai", model: "m" }], network: "none", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
 beforeEach(async () => {
   vi.clearAllMocks(); home = await mkdtemp(join(tmpdir(), "launch-"));
   child = new EventEmitter() as ChildProcess; child.kill = vi.fn(() => true);
-  deps = { home, nodePath: process.execPath, releaseRoot: "/release", env: { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }, now: () => 1_800_000_000_000,
+  deps = { home, releaseRoot: "/release", env: { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }, now: () => 1_800_000_000_000,
     runner: { run: vi.fn(async (_cmd, args) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : "5.0.0", stderr: "" })) },
     spawnPodman: vi.fn(() => { setImmediate(() => child.emit("close", 7)); return child; }),
     setInterval: vi.fn((fn) => { tick = fn; return setInterval(() => {}, 100000); }), clearInterval: vi.fn(clearInterval) };
@@ -65,7 +65,7 @@ it("refuses missing, provisioning and stale accepted states", async () => {
 it("runs accepted servers with identical boundary args and skips credentials when disabled", async () => {
   await save(true); expect(await launch(["x-w1"], deps)).toBe(7);
   expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
-  expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled(); expect(credentials.refreshHostLogin).not.toHaveBeenCalled();
+  expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled(); expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
 });
 it("invalidates acceptance when current wrapper bytes change", async () => {
   await save(true); await writeFile(writerPaths(home, "x-w1").wrapper, "changed");
@@ -109,23 +109,82 @@ it("logs a sanitized periodic refresh failure and retries on the next tick", asy
   expect(deps.clearInterval).toHaveBeenCalled();
 });
 it("reads fresh credentials, copies after failed refresh, skips overlapping ticks and clears on exit", async () => {
-  await save(); deps.env = {}; vi.mocked(credentials.ensureWarmupConfig).mockResolvedValue("warmup");
+  await save(); deps.env = {};
   const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
   await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: 1, access: "first" } }));
-  vi.mocked(credentials.refreshHostLogin).mockRejectedValueOnce(new Error("failed"));
+  vi.mocked(credentials.refreshHostCredential).mockRejectedValueOnce(new Error("failed"));
   vi.mocked(deps.spawnPodman).mockReturnValue(child);
   const running = launch(["x-w1", "node", "-", "cfg"], deps);
   await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  expect(credentials.refreshHostCredential).toHaveBeenCalledWith({ authPath: join(home, ".pi", "agent", "auth.json"), provider: "openai", minOAuthValidityMs: 600_000, timeoutMs: 20_000 });
   expect(credentials.writeBoundaryCredentials).toHaveBeenCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "oauth", expires: 1, access: "first", refresh: "" } });
   await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "api_key", key: "fresh" } }));
   tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
   expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "api_key", key: "fresh" } });
   await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: 1 } }));
-  vi.mocked(credentials.refreshHostLogin).mockImplementation(() => new Promise(() => {}));
-  tick(); await vi.waitFor(() => expect(credentials.refreshHostLogin).toHaveBeenCalledTimes(2));
+  vi.mocked(credentials.refreshHostCredential).mockImplementation(() => new Promise(() => {}));
+  tick(); await vi.waitFor(() => expect(credentials.refreshHostCredential).toHaveBeenCalledTimes(2));
   for (let i = 0; i < 5; i++) tick();
-  expect(credentials.refreshHostLogin).toHaveBeenCalledTimes(2);
+  expect(credentials.refreshHostCredential).toHaveBeenCalledTimes(2);
   child.emit("close", 0); await running; expect(deps.clearInterval).toHaveBeenCalled();
+});
+it("refreshes an OAuth token 8 minutes from expiry with the threshold validity and copies the refreshed credentials", async () => {
+  await save(); deps.env = {};
+  const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
+  const now = deps.now();
+  await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: now + 8 * 60_000, access: "old" } }));
+  const warmup = vi.fn(async () => {
+    await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: now + 60 * 60_000, access: "new" } }));
+  });
+  deps.warmupHostCredential = warmup;
+  vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const running = launch(["x-w1", "node", "-", "cfg"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  expect(warmup).toHaveBeenCalledWith({ authPath: join(home, ".pi", "agent", "auth.json"), provider: "openai", minOAuthValidityMs: 600_000, timeoutMs: 20_000 });
+  expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
+  expect(credentials.writeBoundaryCredentials).toHaveBeenCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "oauth", expires: now + 60 * 60_000, access: "new", refresh: "" } });
+  child.emit("close", 0); await running;
+});
+it("copies an OAuth token 20 minutes from expiry without refreshing it", async () => {
+  await save(); deps.env = {};
+  const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
+  const now = deps.now();
+  await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: now + 20 * 60_000, access: "token" } }));
+  vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const running = launch(["x-w1", "node", "-", "cfg"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
+  expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
+  expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "oauth", expires: now + 20 * 60_000, access: "token", refresh: "" } });
+  child.emit("close", 0); await running;
+});
+it("never refreshes API-key providers", async () => {
+  await save(); deps.env = {};
+  const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
+  await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "api_key", key: "key" } }));
+  vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const running = launch(["x-w1", "node", "-", "cfg"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
+  expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
+  expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "api_key", key: "key" } });
+  child.emit("close", 0); await running;
+});
+it("still copies the host credentials without new logging when the refresh fails", async () => {
+  await save(); deps.env = {};
+  const { mkdir } = await import("node:fs/promises"); const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
+  const now = deps.now();
+  await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: now + 8 * 60_000, access: "old" } }));
+  vi.mocked(credentials.refreshHostCredential).mockRejectedValueOnce(new Error("refresh failed: /private/path secret-token"));
+  const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const running = launch(["x-w1", "node", "-", "cfg"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  expect(credentials.refreshHostCredential).toHaveBeenCalledTimes(1);
+  expect(credentials.writeBoundaryCredentials).toHaveBeenCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "oauth", expires: now + 8 * 60_000, access: "old", refresh: "" } });
+  // Only the existing sanitized writer_refresh_failed warning may ever be logged, and only when the copy itself fails.
+  expect(stderr).not.toHaveBeenCalled();
+  child.emit("close", 0); await running;
 });
 
 const uid = process.getuid!();

@@ -97,7 +97,7 @@ Selected profiles must have `default: false`, permission `coding`, no extensions
 or external MCP grants, and only builtin skill-catalog entries for skills that
 the package ships and that no operator override replaces, because overrides do
 not reach the writer ([Skills](skills.md#builtinname-in-the-catalog)). Setup
-rejects unsupported profiles rather than silently weakening them.
+rejects unsupported profiles rather than silently weakening them. Doctor checks each selected container profile offline with the same rendering rules and reports `container_profile_refused` before provisioning, or a workspace error if the original configuration cannot be read.
 
 ## Writer storage, launch and readiness
 
@@ -143,13 +143,14 @@ too. Do not mistake inspection for a purely offline read. Doctor alone is offlin
 it starts no writer, session or provider request and reads no credentials.
 
 The launcher copies only selected providers from the host Pi auth store at launch
-and checks every **60 seconds**. It runs host login warmup only when selected
-OAuth credentials expire within **2 minutes** or have expired (an invalid/missing
-expiry is treated as needing refresh). Measured warmup behavior refreshes only
-expired or almost expired tokens; it is not an unconditional token rotation.
-Warmup starts/closes a read-only host session through Pi's locked store without
-a model request, then the launcher re-copies boundary credentials even if warmup
-failed. API-key entries are copied, not refreshed; Cursor credentials are excluded.
+and checks every **60 seconds**. It refreshes a selected OAuth credential on the
+host only when it expires within **10 minutes** or has expired (an invalid/missing
+expiry is treated as needing refresh). The refresh asks the Pi SDK for ten minutes
+of remaining validity through Pi's own locked store without a model request and
+is bounded at 20 seconds; tokens farther from expiry are left alone, so it is not
+an unconditional token rotation. The launcher then re-copies boundary credentials
+even if the refresh failed. API-key entries are copied, not refreshed; Cursor
+credentials are excluded.
 
 ## Collect, finish and reuse
 
@@ -195,9 +196,9 @@ Only reset accepts `--base`; finish does not accept discard.
 **Verify and registration health checks:** setup's registration inspect in apply,
 verify and remove uses `claude mcp get`, which health-checks a registered server
 through its normal writer launcher. That start may re-copy the boundary
-credentials. Only if a selected OAuth token expires within **2 minutes** (or is
+credentials. Only if a selected OAuth token expires within **10 minutes** (or is
 already expired; invalid/missing expiry is treated as needing refresh) may it
-run host login warmup through **Pi's own locked store**. The client CLI cannot
+refresh the host credential through **Pi's own locked store**. The client CLI cannot
 be given a different environment for that health check. Verify's own direct MCP
 handshake uses `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, touching no credential in
 that launch and making no session or provider request. **Setup itself never

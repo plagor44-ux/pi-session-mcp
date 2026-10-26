@@ -94,9 +94,11 @@ class DoctorGateError extends Error {
   constructor(readonly findings: readonly SetupFinding[]) { super("doctor_failed"); }
 }
 async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetupDependencies): Promise<void> {
-  const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, loadConfig: () => loadConfig(deps.configPath) });
+  const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
   const ownSubjects = new Set([ctx.alias, ...Array.from({ length: 16 }, (_, index) => writerName(ctx.alias, index + 1))]);
-  const blocking = doctor.checks.filter((check) => check.severity === "error" && !ownSubjects.has(check.subject));
+  // A refused profile of this repository is its own finding: collect, finish and the profile change that fixes it must stay possible (#141).
+  const own = (check: { id: string; subject: string }) => ownSubjects.has(check.subject) || (check.id === "container_profile_refused" && check.subject.startsWith(`${ctx.alias}:`));
+  const blocking = doctor.checks.filter((check) => check.severity === "error" && !own(check));
   if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } })));
 }
 /** The alias that leads a Doctor subject: `<profile>:<package>` and writer names report their alias part; global checks have none. */
@@ -273,7 +275,7 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
     return await locked(deps, async () => {
       const ctx = await context(alias, deps), { life, ownership, adapter } = services(deps);
       if (operation === "verify") {
-        const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, loadConfig: () => loadConfig(deps.configPath) });
+        const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
         if (doctor.checks.some((check) => check.severity === "error" && (check.subject === name || GLOBAL_ERRORS.has(check.id)))) return done({ status: "failed", code: "doctor_failed" });
         for (const client of ["claude-code", "codex"] as const) {
           const expected = intent(ctx, name, client);

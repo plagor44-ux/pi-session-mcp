@@ -214,12 +214,12 @@ does not exist.
 ## Credentials and residual risks
 
 The launcher checks on launch and every **60 seconds**. Only when a selected
-OAuth token expires within **2 minutes** or is expired does it invoke host login
-warmup (invalid/missing expiry also triggers it). Warmup refreshes expired or
-almost expired tokens, not every valid token on every interval. It uses Pi's
-locked host store via read-only session creation/close without a model request,
-then the launcher re-copies the selected credentials. Boundary refresh tokens
-are empty; API-key entries are copied unchanged, not refreshed.
+OAuth token expires within **10 minutes** or is expired does it refresh the host
+credential (invalid/missing expiry also triggers it). The refresh asks the Pi
+SDK for that much remaining validity through Pi's own locked host store,
+without a model request, and is bounded at 20 seconds; the launcher then
+copies the selected credentials even if the refresh failed. Boundary refresh
+tokens are empty; API-key entries are copied unchanged, not refreshed.
 
 The boundary still holds provider credentials: an **access token**, or the
 **API key** for API-key providers. The worker can read and use them. Network

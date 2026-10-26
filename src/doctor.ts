@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
+import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
@@ -22,7 +23,7 @@ export type DoctorCheckId =
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
-  | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
+  | "container_profile_refused" | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "event_spool_root";
@@ -62,7 +63,11 @@ export interface DoctorDependencies {
   readonly packageRoot?: string;
   readonly nodeVersion?: string;
   readonly fileSystem?: DoctorFileSystem;
-  readonly loadConfig?: () => Promise<AppConfig>;
+  /** Explicit configuration path, otherwise captured once from PI_SESSION_MCP_CONFIG. */
+  readonly configPath?: string;
+  readonly loadConfig?: (path?: string) => Promise<AppConfig>;
+  /** Original configuration, before skill resolution; read only for selected container profiles. */
+  readonly loadRawConfig?: () => Promise<unknown>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
   /** Offline rootless Podman probe; called only when a workspace uses container mode. */
   readonly containerRuntime?: () => Promise<boolean>;
@@ -93,7 +98,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -315,7 +320,8 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     else checks.push(ok("version_mismatch", "package version"));
   }
   let config: AppConfig | undefined;
-  try { config = await (dependencies.loadConfig ?? (() => loadConfig()))(); checks.push(ok("config_invalid", "configuration")); }
+  const configPath = dependencies.configPath ?? process.env.PI_SESSION_MCP_CONFIG;
+  try { config = await (dependencies.loadConfig ?? loadConfig)(configPath); checks.push(ok("config_invalid", "configuration")); }
   catch (error) {
     if (isMissing(error)) checks.push(failure("config_missing", "configuration", "create PI_SESSION_MCP_CONFIG configuration"));
     else if (isUnreadable(error)) checks.push(failure("config_unreadable", "configuration", "grant configuration read access"));
@@ -357,8 +363,28 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   }
   if (config) {
     let runtime: Awaited<ReturnType<typeof defaultWriterRuntime>> | undefined;
+    let rawConfig: unknown, rawConfigLoaded = false, rawConfigReadable = false;
+    let availableBuiltinSkills: ReadonlySet<string> = new Set();
     for (const [alias, entry] of config.workspaceModes) {
       if (entry.mode !== "container" || !entry.container) continue;
+      if (!rawConfigLoaded) {
+        rawConfigLoaded = true;
+        try {
+          rawConfig = await (dependencies.loadRawConfig ?? (async () => {
+            if (!configPath) throw new Error("configuration path unavailable");
+            return JSON.parse(await fs.readFile(configPath, "utf8")) as unknown;
+          }))();
+          availableBuiltinSkills = containedBuiltinSkills(rawConfig, config.skillOverrideDirectory);
+          rawConfigReadable = true;
+        } catch { /* An unavailable raw configuration cannot establish profile acceptance. */ }
+      }
+      if (!rawConfigReadable) {
+        checks.push(failure("container_profile_refused", alias, "selected profiles could not be checked; restore configuration read access and rerun Doctor"));
+      } else {
+        const refused = entry.container.profiles.filter((profile) => containedProfileRefused(rawConfig, profile, availableBuiltinSkills));
+        for (const profile of refused) checks.push(failure("container_profile_refused", `${alias}:${profile}`, "use a non-default coding profile without extensions or MCP grants and with only shipped, non-overridden builtin skills, or drop it from the repository's profiles"));
+        if (refused.length === 0) checks.push(ok("container_profile_refused", alias));
+      }
       for (let index = 1; index <= entry.container.writers; index++) {
         const name = writerName(alias, index), home = dependencies.home ?? homedir(), paths = writerPaths(home, name);
         const remediation = `run pi-session-mcp-setup --repo ${alias} --apply, or --writer ${name} --recreate --apply`;
