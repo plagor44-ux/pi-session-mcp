@@ -324,7 +324,7 @@ contract decision before any minor-release work.
 | R05 / R09 ten-task Level 3 cycle | None (acceptance) | verified: accepted, 10 of 10 tasks |
 | R06 new Codex abort run | None (acceptance) | verified |
 | R07 Codex discovery of the setup-installed skill | None (acceptance) | verified |
-| R10 / R11 current macOS Level 2 and smoke | None | verified for Claude Code on 2026-10-16 (release 0.8.3, real Mac); a one-client live check with Claude Code passed the same day; Codex on macOS, the two-client Level 3 gate, lock contention and interruption not established; see [Acceptance](acceptance.md#macos-acceptance-on-real-hardware-2026-10-16) |
+| R10 / R11 current macOS Level 2 and smoke | None | verified for Claude Code on 2026-10-16 (release 0.8.3, real Mac) and again on 2026-10-26 (release 0.11.6: Level 2 with and without turn-event delivery, lock contention, interruption, install smoke and a live check with a stdio driver); Codex on macOS, the two-client Level 3 gate, Claude Code as controller of a live run on 0.11.x and Intel Macs not established; see [Acceptance](acceptance.md#macos-acceptance-on-real-hardware-2026-10-26) |
 | R22 ChatGPT project instructions | None (outside this repository) | blocked on an operator action; current proposal in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#appendix-proposed-chatgpt-project-instructions-r22) |
 
 Status words: planned, in progress, implemented (code exists), verified (named
