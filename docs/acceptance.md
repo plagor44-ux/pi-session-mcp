@@ -2457,6 +2457,68 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.11.8 post-release evidence
+
+The published-release acceptance of `v0.11.8` ran on 2026-10-26 from 22:40 to
+22:44 UTC on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.311`. Level 2 passed for the tag and for the
+installed npm package, each with delivery off and with `--events spool`.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.8` (tag object
+`edd69951e582f5a078b410189a49c9be46921b6f`) peels to
+`fda4130e93da5ccdeb66eb795e3cd593acc00a17`, the merge of #149, and
+`git describe --tags --exact-match` reports `v0.11.8`. CI passed on the merge
+commit (run `40412553947`) and on the tag.
+
+Package publication, a release fact and not an acceptance level:
+- `pi-session-mcp@0.11.8` was staged by the maintainer with `npm stage
+  publish` from a fresh clone of the tag and approved with the account's
+  second factor. The registry serves shasum
+  `b9f27b5de1fb33b980e7e923e2d46d48ddc74273` and integrity
+  `sha512-0h2kuqFERAPe5JZElwBmRsX8bewp9PlU/ftWlumXRS83cqwefaBFiMZbBCnNLyAeJRFjgDvTSpLrCX13SjQkcA==`
+  with 967 files, equal to `npm pack --dry-run` of the tag clone.
+- The GitHub release `v0.11.8` was published by the maintainer.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed into a temporary prefix; every `@earendil-works`
+  package resolved to `1.4.0`; the install smoke reported `smoke_passed` with
+  version `0.11.8`; 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the leak check passed.
+
+Operator upgrade of the workstation from `0.11.6` to `0.11.8`, the first
+upgrade with two container repositories:
+- Both client targets were removed with `0.11.6`, `0.11.8` was installed, and
+  Doctor reported `packageVersion` `0.11.8`, `container_profile_refused` `ok`
+  for both repositories, and `writer_not_ready` for all six writers.
+- `--repo pi-session-mcp --mode container ... --apply` passed while the four
+  `node-app` writers were still not ready (#148):
+  `writer_accepted` for both writers, registrations and hooks unchanged. The
+  `node-app` step then reported `writer_accepted` for all
+  four writers.
+- Doctor reported no error. Both client targets were applied and verified
+  (`mcp_verified`, `skill_verified`, `hook_verified` for Claude Code), and
+  `--writer <name> --verify` reported `mcp_verified` and `hook_verified` for
+  all six writers.
+- A Claude Code session in the `node-app` checkout had its
+  four writer servers connected during these steps. Whether it had open
+  coding sessions at the time of the acceptance was not checked.
+
+Live check of #142, aborted:
+- A turn with profile `code` (provider `openai`) on the upgraded
+  `pi-session-mcp-w1` started at 22:44:38 UTC to run shell sleeps until after
+  the host token's expiry at 23:35:09 UTC, across the window in which 0.11.6
+  writers failed. It was aborted at 23:11:38 by maintainer decision, before
+  the wrapper's refresh point at ten minutes before expiry. It made model
+  requests for 27 minutes without a failure, which says nothing about the
+  window itself. #142 stays verified by code and tests only.
+
+Not established for `0.11.8`: a live confirmation of #142; a real coding turn
+on each `node-app` writer; Level 3.
+
 ### v0.11.8 pre-release acceptance
 
 `v0.11.8` was accepted on 2026-10-26 from 22:15 to 22:20 UTC on its release
