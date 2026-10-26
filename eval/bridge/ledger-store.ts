@@ -47,6 +47,11 @@ export class LedgerStore {
     return value as RunLedger;
   }
 
+  /** Read a consistent snapshot under the same lock as writers; never creates a ledger directory. */
+  async readLocked(): Promise<RunLedger> {
+    return this.#locked(() => this.read());
+  }
+
   async apply(events: readonly LedgerEvent[], options: ApplyOptions = {}): Promise<ApplyStoreResult> {
     return this.#locked(async () => {
       const current = await this.read();
