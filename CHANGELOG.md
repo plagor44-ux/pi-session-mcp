@@ -44,11 +44,6 @@ reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
   Container writers use the new worker skills after the upgrade and a
   `--repo <alias> ... --apply`; until then the new controller asks once more
   for a report in the new format.
-- Development: a provider-free `claude plugin eval` suite for the
-  orchestration skill under `eval/controller-skill/`, and a probe showing that
-  worker sessions keep Pi's default system prompt
-  (`docs/evaluation/worker-system-prompt-2026-10-26/`).
-
 - Fixed: `setup --repo <alias> --mode container ... --apply` kept an existing
   writer silently on its old settings when the image, network, cache, profile
   list or a selected coding profile (model, thinking level, skills) or the
@@ -74,6 +69,10 @@ reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
   is, so after an upgrade it stays `writer_not_ready` until the profile changes,
   the override is removed, or the writer is removed and provisioned again
   ([#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135)).
+- Development: a provider-free `claude plugin eval` suite for the
+  orchestration skill under `eval/controller-skill/`, and a probe showing that
+  worker sessions keep Pi's default system prompt
+  (`docs/evaluation/worker-system-prompt-2026-10-26/`).
 
 ## 0.11.5 — 2026-10-25
 

@@ -100,7 +100,7 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
 Base main `e6fc87c`, published 0.11.5. The operator's orchestration concept of
 2026-10-25 (candidates K1–K11) is assessed against the repository and planned
 in the [Sprint 10 file](sprints/2026-10-26-s10-orchestration-reliability.md).
-Planned, nothing implemented:
+Items 1 and 2 are implemented on the consolidated branch and its pull request (status in the Sprint 10 file's progress log); items 3 and 4 are planned:
 
 1. Sprint 9 close-out: #136, #137 and the #135 record.
 2. Sprint 10, controller reliability: a provider-free probe of the worker

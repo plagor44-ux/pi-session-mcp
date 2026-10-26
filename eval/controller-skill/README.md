@@ -70,10 +70,10 @@ The skill change adds the `STATUS` report contract, the early-stop rule and rout
 | `start-error-no-retry` | 3/3 | 3/3 |
 | `close-on-failure` | 3/3 | 3/3 |
 | `verify-worker-claim` | 3/3 (2/3 with the old mock) | 2/3 |
-| `early-stop` | 3/3 | 3/3 |
+| `early-stop` | 3/3 | 3/3 (re-run with a `STATUS: DONE` report that only announces work: 3/3 on both skills) |
 | `unstructured-report` | 0/3 | 3/3 |
 
-Three runs per case cannot separate 2/3 from 3/3; `verify-worker-claim` varied in both arms. The measurable effect is the report contract. Total eval spend for the baselines, debugging runs and this comparison: about USD 18, Claude tokens only.
+Three runs per case cannot separate 2/3 from 3/3; `verify-worker-claim` varied in both arms. The measurable effect is the report contract; the early-stop rule makes explicit what the old skill already did. Total eval spend for the baselines, debugging runs and this comparison: about USD 18, Claude tokens only.
 
 ## How to Run
 

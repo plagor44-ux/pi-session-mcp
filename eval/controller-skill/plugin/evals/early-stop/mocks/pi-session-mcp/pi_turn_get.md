@@ -7,7 +7,7 @@
     "startedAt": "2026-10-26T10:00:00Z",
     "updatedAt": "2026-10-26T10:00:25Z",
     "completedAt": "2026-10-26T10:00:25Z",
-    "assistantText": "I'll start by looking at the code structure.",
+    "assistantText": "STATUS: DONE\nResult: I'll start by looking at the code structure.",
     "truncated": false
   }
 }
