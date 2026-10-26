@@ -238,8 +238,14 @@ After taking over the result and closing its coding session, run
 It collects then resets (persistent) or recreates (ephemeral). If any branch name
 was refused, collection is incomplete and finish stops. Rename inside the writer
 or have the operator explicitly resolve loss with `--reset --discard --apply`.
-Guard checks re-read the baseline file: reset takes effect without restarting
-the server. Mode policy changes still require controller/server restart.
+After an applied finish, reset or recreate, setup reports
+`writer_reconnect_required`: it clears the credentials the running writer
+server projected at launch, so reconnect that writer's MCP server (Claude Code
+`/mcp` reconnect, Codex restart the session) before the next coding start,
+which otherwise fails with `local_authentication_missing`.
+Guard checks re-read the baseline file, so the new baseline takes effect
+without restarting the server; only the credentials need the reconnect. Mode
+policy changes still require controller/server restart.
 
 For hand-made **`psm-alpha` and `go-app-alpha`**:
 
