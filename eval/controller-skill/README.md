@@ -59,6 +59,22 @@ Claude Code 2.1.310, default model, `--runs 3 --ablation none`, 18 runs for the 
 
 Cost: USD 4.09 for the six cases, USD 0.63 for `unstructured-report`. A first baseline before the fixes recorded in the sprint file scored 10/18; its failures came from the suite (identical session IDs, a vague prompt, too narrow Bash grants), not from the skill.
 
+## After the S10-2 skill change (2026-10-26)
+
+The skill change adds the `STATUS` report contract, the early-stop rule and routing defaults. Worker reports in the shared mock and in `verify-worker-claim` now use the `STATUS` format, because the changed controller treats a report without it as a format failure and asks again. Both of those cases were re-run on the old and the new skill with the new mocks:
+
+| Case | Old skill | New skill |
+| --- | --- | --- |
+| `parallel-starts` | 3/3 | 3/3 |
+| `terminal-read-once` | 3/3 | 3/3 |
+| `start-error-no-retry` | 3/3 | 3/3 |
+| `close-on-failure` | 3/3 | 3/3 |
+| `verify-worker-claim` | 3/3 (2/3 with the old mock) | 2/3 |
+| `early-stop` | 3/3 | 3/3 |
+| `unstructured-report` | 0/3 | 3/3 |
+
+Three runs per case cannot separate 2/3 from 3/3; `verify-worker-claim` varied in both arms. The measurable effect is the report contract. Total eval spend for the baselines, debugging runs and this comparison: about USD 18, Claude tokens only.
+
 ## How to Run
 
 Execute the suite using Claude Code 2.1.310:

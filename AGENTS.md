@@ -1,5 +1,15 @@
 # Project rules
 
+## Commands
+
+- Install: `npm ci`. Type check: `npm run typecheck`. Build: `npm run build`.
+- Tests: `npm test` (Vitest); one file with `npx vitest run test/<name>.test.ts`.
+- Run the targeted tests for the files you change, then `npm test`. Inside a
+  container writer a few lock and hook tests can time out; report them by
+  file and test name instead of changing them.
+
+## Rules
+
 - Use Node.js 22.19.0 or newer, TypeScript strict mode, ESM, and `.js` suffixes in relative imports.
 - Pin every direct production and development dependency exactly; do not use range prefixes.
 - Keep stdout exclusively for MCP stdio frames. Diagnostic logs go to stderr, are structured, and contain neither secrets nor complete prompts.

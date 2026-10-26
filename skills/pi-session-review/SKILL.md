@@ -51,11 +51,12 @@ Order findings by severity. If you find nothing, say what you checked and what y
 
 ## Final report
 
-1. Target reviewed.
-2. Verdict: blocking findings exist, only non-blocking findings, or no findings. Base it on your evidence.
-3. Verified findings.
-4. Risks and hypotheses.
-5. Checks run and checks not run.
+1. Status: the first line is `STATUS:` with `DONE` when you reviewed the whole target, `NEEDS_CONTEXT` when the target is missing or ambiguous (state the question), or `BLOCKED` when you could not review it (name the blocker).
+2. Target reviewed.
+3. Verdict: exactly one of `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`. Base it on your evidence.
+4. Verified findings.
+5. Risks and hypotheses.
+6. Checks run and checks not run.
 
 Keep the report concise:
 
