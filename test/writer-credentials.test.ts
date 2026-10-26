@@ -96,4 +96,17 @@ describe("host credential refresh", () => {
     )).rejects.toThrow();
     expect(Date.now() - started).toBeLessThan(2_000);
   });
+  it("loads the real SDK without writing to stdout or to an auth file that holds nothing to refresh", async () => {
+    // The wrapper's stdout is the client's MCP channel; the default runtime must stay silent there (#142).
+    const root = await temporary();
+    const authPath = join(root, "auth.json");
+    const bytes = JSON.stringify({ deepseek: { type: "api_key", key: "API_KEY" } });
+    await writeFile(authPath, bytes, { mode: 0o600 });
+    const stdout = vi.spyOn(process.stdout, "write");
+    try {
+      await refreshHostCredential({ authPath, provider: "openai", minOAuthValidityMs: 600_000, timeoutMs: 20_000 }).catch(() => undefined);
+      expect(stdout).not.toHaveBeenCalled();
+    } finally { stdout.mockRestore(); }
+    expect(await readFile(authPath, "utf8")).toBe(bytes);
+  });
 });
