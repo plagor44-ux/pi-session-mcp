@@ -16,6 +16,9 @@ macOS containment remains unaccepted and keeps the
 ## Prerequisites
 
 - Linux with usable **rootless** Podman, Node.js 22.19.0 or newer and Git.
+  macOS is not supported: the setup reports `platform_unsupported` even with a
+  Podman machine (evaluation in
+  [#144](https://github.com/plagor44-ux/pi-session-mcp/issues/144)).
   Follow your distribution's packaging and the
   [Podman rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md).
   User namespaces and subordinate UID/GID ranges must be configured. Do not
