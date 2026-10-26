@@ -399,7 +399,7 @@ describe("writer setup reconciliation", () => {
     expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
   });
 
-  it("still blocks on another repository's dirty writer and on a malformed writer subject", async () => {
+  it("still blocks on other error checks with writer subjects and on a malformed writer subject", async () => {
     const f = await fixture();
     for (const check of [
       { id: "writer_dirty" as const, severity: "error" as const, subject: "other-w1" },

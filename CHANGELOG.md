@@ -7,7 +7,9 @@
   repository are still `writer_not_ready`. With two or more container
   repositories no repository step could pass, and the client targets stayed
   unregistered ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)).
-  Upgrades from 0.11.6 or earlier to 0.11.7 are affected; skip 0.11.7.
+  Every release before this one has the gap; it shows once two or more
+  repositories use container mode. Upgrade such an installation straight to
+  this release.
 
 ## 0.11.7 — 2026-10-26
 
