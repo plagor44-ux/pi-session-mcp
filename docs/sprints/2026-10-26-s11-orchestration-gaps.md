@@ -125,6 +125,25 @@ Recorded as work lands on the branch.
   section 8 of the controller skill, and section 11 explains how a fresh
   session continues from collected work. Every code task of this sprint had
   one cross-family review.
+- Final independent review of the whole branch (Claude `reviewer`): verdict
+  `BLOCKING` on one medium finding, fixed on the branch: the setup Doctor gate
+  treated `container_profile_refused` for the repository's own profile
+  (`<alias>:<profile>`) as a foreign error, which would block collect, finish
+  and the very profile change that fixes it. The gate now counts that check as
+  the repository's own; tests cover both directions. Low findings fixed: the
+  wrapper refreshes several OAuth providers in parallel under one 20 s bound
+  instead of one after another; a test runs the real SDK refresh path on an
+  auth file without OAuth entries and asserts no stdout write and unchanged
+  bytes; the changelog no longer claims a live confirmation; the review count
+  in the skill was corrected. Recorded as limits: an OAuth provider defined
+  only in Pi's `models.json` is probably unknown to the refresh runtime
+  (`modelsPath: null`), unverified; the evaluation hooks read under the
+  ledger lock, so a hook killed at its timeout can leave a stale lock.
+- Open maintainer decision: #142 uses `ModelRuntime` from the package root
+  outside `PiSessionAdapter`, for the credential refresh only and without a
+  session. AGENTS.md says to keep Pi behind `PiSessionAdapter`; either confirm
+  this as a narrow exception or ask for the refresh to move behind the
+  adapter.
 - #136 hypothesis (a running writer server recovers after a reset without a
   reconnect): a start 47 s after a reset succeeded without a reconnect; a start
   about 30 s after another reset failed with `local_authentication_missing`.
