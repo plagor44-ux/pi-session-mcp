@@ -92,6 +92,13 @@ Before you close a task or integrate anything:
 - compare the result with the scope you wrote down,
 - reject or send back work that is outside the change area or unverified.
 
+Review every code task before you integrate it:
+
+- Use a read-only profile of another model family than the author's, on the collected commit. Ask for a first line `VERDICT:` with exactly one of `BLOCKING`, `NON_BLOCKING_ONLY` or `CLEAN`, then findings with severity, file and line, and the concrete failure scenario.
+- A finding is a claim. Check each one against the code before you act on it.
+- Fix rounds: at most three, as follow-ups in the author's session, or in a fresh session on the collected commit once that session is closed. After the third round, decide yourself: take the fix over, or reject the task.
+- Evidence for this stage is small: of three cross-family reviews in Sprint 11, one found a defect that the passing tests and the author had missed, and all three found low-severity latent defects.
+
 You integrate. Workers never integrate each other's changes. Resolve conflicts between workers yourself.
 
 ## 9. Follow-ups, failures and aborts
@@ -116,7 +123,8 @@ After taking over the result and closing its coding session, before the next tas
 
 1. Run `pi-session-mcp-setup --writer <name> --collect --apply` from the operator environment. Review the collected refs in the operator's checkout: `refs/remotes/writer-<name>/<branch>`, with uncommitted work as `<branch>-wip`. They are untrusted until reviewed. Integrate only verified work yourself.
 2. Run `pi-session-mcp-setup --writer <name> --finish --apply`. It collects again, then resets a persistent writer or recreates an ephemeral writer. Do not reuse it until this succeeds. A refused branch name makes collection incomplete and finish stops: ask the operator to resolve it by renaming inside the boundary or explicitly discarding with `--reset --discard --apply`. Setup reports `writer_reconnect_required` after an applied reset, finish or recreate: reconnect that writer's MCP server first (Claude Code: `/mcp` reconnect; Codex: restart the session), otherwise the next coding start can fail with the local-authentication error listed in [references/start-errors.md](references/start-errors.md). Reconnect also after a failed reset, finish or recreate, because it may already have replaced the credentials.
-3. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
+3. A coding start needs the writer's clone at its baseline, even after a complete collection; otherwise it fails with the controller-action code for uncollected work in [references/start-errors.md](references/start-errors.md). To let a fresh session continue from collected work, for example after a failed turn or for a review fix round, create a local branch at the collected ref and run `pi-session-mcp-setup --writer <name> --reset --base <branch> --apply`, then reconnect as above. Reset several writers before one reconnect.
+4. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
 
 ## Limits to remember
 
