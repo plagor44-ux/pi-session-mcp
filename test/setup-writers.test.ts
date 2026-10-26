@@ -315,6 +315,7 @@ describe("writer setup reconciliation", () => {
       { id: "workspace_missing", severity: "error", subject: "other" },
       { id: "extension_version_mismatch", severity: "error", subject: "safe:fixture-ext" },
       { id: "build_missing", severity: "error", subject: "/secret/path" },
+      { id: "config_invalid", severity: "error", subject: "configuration" },
       { id: "writer_not_ready", severity: "error", subject: "x-w1" },
       { id: "extension_unpinned", severity: "warning", subject: "other" },
     ] });
@@ -322,11 +323,12 @@ describe("writer setup reconciliation", () => {
     const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
       : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
     expect(output.exitCode).toBe(1);
-    expect(output.findings.map((finding) => finding.code)).toEqual(["doctor_failed", "workspace_missing", "extension_version_mismatch", "build_missing"]);
+    expect(output.findings.map((finding) => finding.code)).toEqual(["doctor_failed", "workspace_missing", "extension_version_mismatch", "build_missing", "config_invalid"]);
     expect(output.findings.slice(1)).toEqual([
       { status: "failed", code: "workspace_missing", target: { client: "doctor", scope: "check", alias: "other" } },
       { status: "failed", code: "extension_version_mismatch", target: { client: "doctor", scope: "check", alias: "safe" } },
       { status: "failed", code: "build_missing", target: { client: "doctor", scope: "check", alias: "invalid" } },
+      { status: "failed", code: "config_invalid", target: { client: "doctor", scope: "check", alias: "invalid" } },
     ]);
     expect(JSON.stringify(output)).not.toContain("/secret/path");
     expect(f.calls).toEqual([]);

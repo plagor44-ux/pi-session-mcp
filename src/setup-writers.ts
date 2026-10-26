@@ -97,10 +97,11 @@ async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetupDepende
   const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, loadConfig: () => loadConfig(deps.configPath) });
   const ownSubjects = new Set([ctx.alias, ...Array.from({ length: 16 }, (_, index) => writerName(ctx.alias, index + 1))]);
   const blocking = doctor.checks.filter((check) => check.severity === "error" && !ownSubjects.has(check.subject));
-  if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.subject) } })));
+  if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } })));
 }
-/** The alias that leads a Doctor subject: `<profile>:<package>` and writer names report their alias part. */
-function gateAlias(subject: string): string {
+/** The alias that leads a Doctor subject: `<profile>:<package>` and writer names report their alias part; global checks have none. */
+function gateAlias(id: string, subject: string): string {
+  if (GLOBAL_ERRORS.has(id)) return "invalid";
   const head = subject.split(":")[0] ?? "";
   return safeAlias(WRITER_NAME_PATTERN.test(head) ? head.slice(0, head.lastIndexOf("-w")) : head);
 }
