@@ -22,6 +22,8 @@ import { assertClean, clientVersion } from "./claude-probe.js";
 // millisecond offsets, states and labels. No prompt, answer or assistant text, no absolute path, no key.
 const SERVER_NAME = "pi-session-mcp", PFX = `mcp__${SERVER_NAME}__`, MODEL = "claude-sonnet-5-5", DUMMY_KEY = "sk-ant-synthetic-loopback-dummy-0000";
 const CANARY_PROMPT = "CANARY_PROMPT_product_probe_91bd";
+/** The first (and only) user message of the main conversation; every main request still carries it in its history. */
+const SEED_USER_TEXT = `${CANARY_PROMPT} start the scripted worker and wait for its event`;
 const MAX_REQUESTS = 40, BODY_CAP = 4 * 1024 * 1024;
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -37,7 +39,7 @@ interface Out { act: Act; ok: boolean; note?: string; done?: boolean }
 interface Wake { kind: "terminal" | "budget"; sessionId: string; turnId: string; state?: string }
 interface ParsedReq {
   role: "main" | "auxiliary"; requestClass: string | null; results: Array<{ name: string; json: unknown }>; wakes: Wake[];
-  markerFresh: boolean; markerTotal: number; markerPlaces: string[];
+  markerFresh: boolean; markerTotal: number; markerPlaces: string[]; toolNames: string[];
 }
 interface Ctx { req: ParsedReq; kv: Record<string, string | undefined>; handled: Set<string> }
 type Step = (ctx: Ctx) => Out;
@@ -93,7 +95,38 @@ export function parseRequest(body: unknown, role: "main" | "auxiliary", requestC
     }
   });
   const markerTotal = (JSON.stringify(body ?? null).match(MARKER) ?? []).length;
-  return { role, requestClass, results, wakes, markerFresh, markerTotal, markerPlaces };
+  const toolNames = isObject(body) && Array.isArray(body.tools) ? body.tools.flatMap((tool) => (isObject(tool) && typeof tool.name === "string" ? [tool.name] : [])) : [];
+  return { role, requestClass, results, wakes, markerFresh, markerTotal, markerPlaces, toolNames };
+}
+
+// ---------------------------------------------------------------- subagent classification (K7)
+// Claude Code's Agent/Task tool runs a nested conversation inside the same client process; whether it shares the
+// parent's MCP connection is exactly what K7 measures. Its Messages API requests carry no documented marker, so the
+// fake recognizes them from the request alone, by the FIRST rule that fires (the matched rule is recorded):
+//   exit_tool      the tool list contains the subagent-only exit tool (ExitAgentTool / ExitTaskTool);
+//   system_marker  the system prompt carries the subagent marker sentence "You are an agent for Claude Code";
+//   request_class  the client's own x-claude-code-request-class header names an agent class (not a main class);
+//   fresh_history  the request offers this product's tools but its history lacks the seed user message that every
+//                  request of the main conversation still carries, and it has no Agent/Task spawner tool.
+export type SubagentRule = "exit_tool" | "system_marker" | "request_class" | "fresh_history";
+export interface SubagentScope { subagent: boolean; rule: SubagentRule | null }
+const EXIT_TOOL_PATTERN = /^Exit(Agent|Task)Tool$/;
+const AGENT_SPAWNER_TOOLS = new Set(["Agent", "Task", "AgentTool", "TaskTool"]);
+const SUBAGENT_SYSTEM_MARKER = /you are an agent for claude code/i;
+const MAIN_REQUEST_CLASSES = new Set(["main", "repl_main_thread"]);
+
+export function classifySubagentRequest(requestClass: string | null, body: unknown, seedUserText: string): SubagentScope {
+  const b = isObject(body) ? body : {};
+  const toolNames = Array.isArray(b.tools) ? b.tools.flatMap((tool) => (isObject(tool) && typeof tool.name === "string" ? [tool.name] : [])) : [];
+  if (toolNames.some((name) => EXIT_TOOL_PATTERN.test(name))) return { subagent: true, rule: "exit_tool" };
+  const systemText = typeof b.system === "string" ? b.system
+    : Array.isArray(b.system) ? b.system.flatMap((part) => (isObject(part) && typeof part.text === "string" ? [part.text] : [])).join("") : "";
+  if (SUBAGENT_SYSTEM_MARKER.test(systemText)) return { subagent: true, rule: "system_marker" };
+  if (requestClass !== null && !MAIN_REQUEST_CLASSES.has(requestClass) && /agent|subagent|task/i.test(requestClass)) return { subagent: true, rule: "request_class" };
+  const history = JSON.stringify(Array.isArray(b.messages) ? b.messages : []);
+  if (seedUserText !== "" && !history.includes(seedUserText) && toolNames.some((name) => name.startsWith(PFX)) && !toolNames.some((name) => AGENT_SPAWNER_TOOLS.has(name)))
+    return { subagent: true, rule: "fresh_history" };
+  return { subagent: false, rule: null };
 }
 
 const CAPS = (): Out => callOut("pi_capabilities_get", {});
@@ -104,6 +137,11 @@ const START = (c: Ctx, expectedDelivery: string): Out => {
 };
 const learnSession = (ctx: Ctx, tag = "sid"): string | undefined => { const id = result(ctx, "pi_session_start")?.session?.id; if (typeof id === "string") ctx.kv[tag] = id; return typeof id === "string" ? id : undefined; };
 const learnTurn = (ctx: Ctx, tag = "tid"): string | undefined => { const id = result(ctx, "pi_session_prompt")?.turn?.turnId; if (typeof id === "string") ctx.kv[tag] = id; return typeof id === "string" ? id : undefined; };
+// K7 fact extraction from one request's fresh tool results (identifiers stay in memory; only the projection's booleans are recorded).
+const mcpResultOf = (req: ParsedReq, tool: string): Record<string, any> | undefined => { const hit = req.results.find((r) => r.name === `${PFX}${tool}`); return isObject(hit?.json) ? hit.json as Record<string, any> : undefined; };
+const k7StartedSessionId = (req: ParsedReq): string | null => { const id = mcpResultOf(req, "pi_session_start")?.session?.id; return typeof id === "string" ? id : null; };
+const k7PromptedTurnId = (req: ParsedReq): string | null => { const id = mcpResultOf(req, "pi_session_prompt")?.turn?.turnId; return typeof id === "string" ? id : null; };
+const k7ListedSessionIds = (req: ParsedReq): string[] | null => { const sessions = mcpResultOf(req, "pi_session_list")?.sessions; return Array.isArray(sessions) ? sessions.flatMap((s) => (isObject(s) && typeof s.id === "string" ? [s.id] : [])) : null; };
 
 function startAndPrompt(expectedDelivery: string): Step[] {
   return [
@@ -137,6 +175,12 @@ type Finish = { kind: "script_done"; extraMs: number };
 export interface Scenario {
   id: string; title: string; delivery: "spool" | "off"; hookBudgetMs: number; sessions: Array<{ steps: Array<Record<string, unknown>> }>;
   script: Step[]; finish: Finish; maxMs: number; expect: string;
+  /** Script for requests the fake classifies as subagent (Agent/Task tool) conversations; the scenario then measures sharing and wake target. */
+  subagent?: Step[];
+  /** "none" keeps the client's built-in tools disabled (--tools ""); "default" leaves them on so the Agent/Task tool exists. */
+  clientTools?: "none" | "default";
+  /** Add the probe's read-only observation hook entry (same matcher) after the product installer ran. */
+  observerHook?: boolean;
 }
 const complete = (afterMs: number) => ({ steps: [{ sleepMs: afterMs }, { complete: "scripted-result" }] });
 const readTurn = (w: Wake, expectedState: string, c: Ctx): Out => callOut("pi_turn_get", { sessionId: w.sessionId, turnId: w.turnId }, w.turnId === c.kv.tid && w.state === expectedState, w.state === expectedState ? undefined : "wake_mismatch");
@@ -164,6 +208,32 @@ const closeRunningTail: Step[] = [
   (c) => { learnTurn(c); return callOut("pi_session_close", { sessionId: c.kv.sid ?? "missing" }, c.kv.tid !== undefined); },
   (c) => textOut("Closed the session; nothing to wait for.", result(c, "pi_session_close")?.ok === true, undefined, true),
 ];
+// K7: the scripted main model calls the Agent/Task tool; the scripted subagent starts and prompts one session (the
+// scripted worker completes it after 4 s), the main model lists sessions after the subagent returns, and the probe then
+// waits a bounded window for the wake. Record-only: the answers are the result, not a pass condition.
+const SUBAGENT_PROMPT = "Start one pi-session-mcp session in workspace fixture with execution profile scripted, call pi_session_prompt on it once, then reply with one short sentence.";
+const agentSpawnerTool = (ctx: Ctx): string | undefined => {
+  const name = ctx.req.toolNames.find((tool) => AGENT_SPAWNER_TOOLS.has(tool));
+  return name !== undefined ? (safeLabel(name) ?? undefined) : undefined;
+};
+const exitTool = (ctx: Ctx): string | undefined => ctx.req.toolNames.find((name) => EXIT_TOOL_PATTERN.test(name));
+const k7Main: Step[] = [
+  (c) => { const name = agentSpawnerTool(c); return name
+    ? { act: { call: { name, input: { description: "pi-session probe", prompt: SUBAGENT_PROMPT } } }, ok: true }
+    : textOut("No subagent tool is available.", false, "no_agent_tool"); },
+  () => callOut("pi_session_list", {}),
+  (c) => textOut("Listed the sessions.", result(c, "pi_session_list") !== undefined, undefined, true),
+];
+const k7Sub: Step[] = [
+  () => callOut("pi_session_start", { workspace: "fixture", executionProfile: "scripted" }),
+  (c) => { const sid = learnSession(c, "subSid"); return callOut("pi_session_prompt", { sessionId: sid ?? "missing", prompt: `${CANARY_PROMPT} subagent worker task` }, sid !== undefined); },
+  (c) => {
+    const turn = learnTurn(c, "subTid");
+    const exit = exitTool(c);
+    // The subagent ends through its exit tool when the client gives it one; a short text otherwise.
+    return exit ? { act: { call: { name: exit, input: {} } }, ok: turn !== undefined } : textOut("Session started and prompted.", turn !== undefined, undefined, true);
+  },
+];
 export const SCENARIOS: Scenario[] = [
   { id: "P1", title: "completion wake with spool delivery", delivery: "spool", hookBudgetMs: 120_000, sessions: [complete(3000)],
     script: lastDone([...startAndPrompt("spool"), ...completionTail("tid", "sid")]), finish: { kind: "script_done", extraMs: 3500 }, maxMs: 30_000,
@@ -186,7 +256,52 @@ export const SCENARIOS: Scenario[] = [
   { id: "P6", title: "close of a running turn: no wake", delivery: "spool", hookBudgetMs: 120_000, sessions: [{ steps: [{ hang: true }] }],
     script: [...startAndPrompt("spool").slice(0, 3), ...closeRunningTail], finish: { kind: "script_done", extraMs: 5500 }, maxMs: 30_000,
     expect: "the close writes one aborted terminal event (via close); the armed hook ends silently (exit 0), no wake request appears within 5 s after the event and no claim is created; the controller ends its turn and the probe ends stdin" },
+  { id: "K7", title: "subagent session sharing and wake target (record only)", delivery: "spool", hookBudgetMs: 120_000, sessions: [complete(4000)],
+    subagent: k7Sub, clientTools: "default", observerHook: true, script: k7Main, finish: { kind: "script_done", extraMs: 10_000 }, maxMs: 45_000,
+    expect: "record only: the subagent conversation is recognized and scripts pi_session_start then pi_session_prompt (turn completes after 4 s); the main conversation calls pi_session_list after the subagent returns; the wake's target conversation, the request that carries the reminder and the hook input's agent_id are recorded" },
 ];
+
+// ---------------------------------------------------------------- K7 result projection (allowlisted, path-free)
+export interface K7RequestFact {
+  ordinal: number; scope: "main" | "subagent" | "auxiliary"; role: "main" | "auxiliary"; rule: SubagentRule | null; wakeKind: string | null;
+  listedSessionIds: string[] | null; startedSessionId: string | null; promptedTurnId: string | null;
+}
+export interface K7ObserverFact { tool: string; hasAgentId: boolean; hasAgentType: boolean }
+export interface K7Facts { requests: K7RequestFact[]; observer: K7ObserverFact[] }
+export interface K7Result {
+  q1_main_lists_subagent_session: boolean; subagent_session_started: boolean; subagent_prompted: boolean;
+  q2_wake_target: "main" | "subagent" | "auxiliary" | "none"; q2_wake_kind: string | null;
+  q2_wake_request_ordinal: number | null; q2_wake_request_scope: "main" | "subagent" | "auxiliary" | null; q2_wake_request_role: "main" | "auxiliary" | null;
+  q2_hook_input_agent_id: boolean; q2_hook_input_agent_type: boolean; hook_observer_entries: number; hook_observer_prompt_entries: number;
+  subagent_requests: number; subagent_rules: Record<string, number>; main_list_count: number | null;
+}
+/** Pure projection of the K7 observations: booleans, counts, ordinals and labels only (no identifier, no path, no text). */
+export function projectK7(facts: K7Facts): K7Result {
+  const subagent = facts.requests.filter((r) => r.scope === "subagent");
+  const startedSessionId = subagent.map((r) => r.startedSessionId).find((id) => id !== null) ?? null;
+  const listRequest = facts.requests.find((r) => r.scope === "main" && r.listedSessionIds !== null);
+  const wakeRequest = facts.requests.find((r) => r.wakeKind !== null);
+  const promptObserver = facts.observer.filter((e) => e.tool.endsWith("pi_session_prompt"));
+  const subagent_rules: Record<string, number> = {};
+  for (const r of subagent) if (r.rule !== null) subagent_rules[r.rule] = (subagent_rules[r.rule] ?? 0) + 1;
+  return {
+    q1_main_lists_subagent_session: startedSessionId !== null && listRequest?.listedSessionIds?.includes(startedSessionId) === true,
+    subagent_session_started: startedSessionId !== null,
+    subagent_prompted: subagent.some((r) => r.promptedTurnId !== null),
+    q2_wake_target: wakeRequest ? wakeRequest.scope : "none",
+    q2_wake_kind: wakeRequest?.wakeKind ?? null,
+    q2_wake_request_ordinal: wakeRequest?.ordinal ?? null,
+    q2_wake_request_scope: wakeRequest?.scope ?? null,
+    q2_wake_request_role: wakeRequest?.role ?? null,
+    q2_hook_input_agent_id: promptObserver.some((e) => e.hasAgentId),
+    q2_hook_input_agent_type: promptObserver.some((e) => e.hasAgentType),
+    hook_observer_entries: facts.observer.length,
+    hook_observer_prompt_entries: promptObserver.length,
+    subagent_requests: subagent.length,
+    subagent_rules,
+    main_list_count: listRequest ? listRequest.listedSessionIds!.length : null,
+  };
+}
 
 // ---------------------------------------------------------------- helpers
 export interface LeftoverProcess { pid: number; kind: string }
@@ -256,7 +371,8 @@ async function inspectSettings(file: string, budgetMs: number): Promise<Record<s
 
 // ---------------------------------------------------------------- one scenario
 interface ReqRec {
-  i: number; t_ms: number; role: string; request_class: string | null; marker_in_fresh: boolean; marker_places: string[]; marker_total: number; wake_kind: string | null;
+  i: number; t_ms: number; role: string; request_class: string | null; scope: "main" | "subagent" | "auxiliary"; subagent_rule: SubagentRule | null;
+  marker_in_fresh: boolean; marker_places: string[]; marker_total: number; wake_kind: string | null;
   wake_delivery: "own_request" | "with_tool_result" | null; scripted: string; step: number | null; step_ok: boolean | null; note: string | null; wake_ref: { kind: string; turn: string | null; state: string | null } | null;
 }
 async function runScenario(sc: Scenario, version: string): Promise<{ row: Record<string, unknown>; root: string }> {
@@ -274,6 +390,8 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
     return map.get(id)!;
   };
   const st = { stepIndex: 0, scriptDone: false, invalid: false, httpUnexpected: 0, toolCalls: 0, exitCode: null as number | null, exitSignal: null as string | null, exitAt: null as number | null, exited: false, stdinEndedAt: null as number | null };
+  const sub = { stepIndex: 0 }; // the subagent script's own step cursor (K7); kv and handled are shared with the main script
+  const k7Facts: K7RequestFact[] = [];
   const wallStart = Date.now();
   const rel = (): number => Date.now() - wallStart;
   const stream = { lines: 0, json_errors: 0, types: {} as Record<string, number>, system_subtypes: {} as Record<string, number>, results: [] as Array<Record<string, unknown>>,
@@ -314,6 +432,21 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
     setup.settings_after_setup = await inspectSettings(settingsFile, sc.hookBudgetMs);
     setup.settings_bytes_unchanged = (await readFile(settingsFile, "utf8")) === seedBytes;
 
+    // K7 only: a probe-owned observation entry with the product's matcher, added AFTER the product installer ran, so the
+    // product's own entry stays exactly as setup wrote it. The observer receives the same PostToolUse input JSON as the
+    // product waiter (dist/wake-main.js) and records allowlisted facts only: the tool name and the presence of agent_id.
+    const observerLog = join(root, "hook-observe.log");
+    let observerAdded = false;
+    if (sc.observerHook) {
+      const doc: unknown = JSON.parse(await readFile(settingsFile, "utf8").catch(() => "null"));
+      const hooks = isObject(doc) && isObject(doc.hooks) ? doc.hooks : undefined;
+      if (hooks !== undefined && Array.isArray(hooks.PostToolUse)) {
+        hooks.PostToolUse.push({ matcher: WAKE_MATCHER, hooks: [{ type: "command", command: `${process.execPath} ${join(buildDir, "k7-hook-observe.js")} ${observerLog}`, timeout: 10, async: true }] });
+        await writeFile(settingsFile, `${JSON.stringify(doc, null, 2)}\n`, { mode: 0o600 });
+        observerAdded = true;
+      }
+    }
+
     // ---- fake Messages API
     fake = createServer(async (request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1"), method = request.method ?? "";
@@ -329,11 +462,28 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
         const body = JSON.parse(raw.toString("utf8")) as unknown, klass = classifyRequest(request.headers, body);
         if (request.headers["x-api-key"] !== DUMMY_KEY || request.headers.authorization !== undefined) st.invalid = true;
         const parsed = parseRequest(body, klass.role, klass.request_class);
+        const scope = classifySubagentRequest(klass.request_class, body, SEED_USER_TEXT);
+        const recScope: ReqRec["scope"] = scope.subagent ? "subagent" : klass.role === "main" ? "main" : "auxiliary";
         const first = parsed.wakes[0];
-        const rec: ReqRec = { i: requests.length + 1, t_ms: rel(), role: klass.role, request_class: klass.request_class, marker_in_fresh: parsed.markerFresh, marker_places: parsed.markerPlaces, marker_total: parsed.markerTotal,
+        const rec: ReqRec = { i: requests.length + 1, t_ms: rel(), role: klass.role, request_class: klass.request_class, scope: recScope, subagent_rule: scope.rule,
+          marker_in_fresh: parsed.markerFresh, marker_places: parsed.markerPlaces, marker_total: parsed.markerTotal,
           wake_kind: first?.kind ?? null, wake_delivery: first ? (parsed.results.length > 0 ? "with_tool_result" : "own_request") : null, scripted: "text", step: null, step_ok: null, note: null,
           wake_ref: first ? { kind: first.kind, turn: ord("turn", first.turnId), state: first.state ?? null } : null };
         requests.push(rec);
+        if (sc.subagent) k7Facts.push({ ordinal: rec.i, scope: recScope, role: klass.role, rule: scope.rule, wakeKind: first?.kind ?? null,
+          listedSessionIds: k7ListedSessionIds(parsed), startedSessionId: k7StartedSessionId(parsed), promptedTurnId: k7PromptedTurnId(parsed) });
+        if (scope.subagent && sc.subagent && requests.length <= MAX_REQUESTS) {
+          const ctx: Ctx = { req: parsed, kv, handled };
+          const index = sub.stepIndex++;
+          const out = index < sc.subagent.length ? sc.subagent[index]!(ctx) : fallback(ctx);
+          rec.step = index; rec.step_ok = out.ok; rec.note = out.note ?? null;
+          ord("session", kv.subSid); ord("turn", kv.subTid);
+          if ("call" in out.act) {
+            rec.scripted = `tool_use:${out.act.call.name.startsWith(PFX) ? out.act.call.name.slice(PFX.length) : safeLabel(out.act.call.name) ?? "other"}`; st.toolCalls++;
+            writeMessagesResponse(response, rec.i, { id: `toolu_probe_${rec.i}`, name: out.act.call.name, input: out.act.call.input });
+          } else writeMessagesResponse(response, rec.i);
+          return;
+        }
         if (klass.role !== "main" || requests.filter((r) => r.role === "main").length > MAX_REQUESTS) { writeMessagesResponse(response, rec.i); return; }
         const ctx: Ctx = { req: parsed, kv, handled };
         const index = st.stepIndex++, out = index < sc.script.length ? sc.script[index]!(ctx) : fallback(ctx);
@@ -342,7 +492,7 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
         for (const id of [kv.tid, kv.tidA, kv.tidB]) ord("turn", id);
         if (out.done === true) st.scriptDone = true;
         if ("call" in out.act) {
-          rec.scripted = `tool_use:${out.act.call.name.slice(PFX.length)}`; st.toolCalls++;
+          rec.scripted = `tool_use:${out.act.call.name.startsWith(PFX) ? out.act.call.name.slice(PFX.length) : safeLabel(out.act.call.name) ?? "other"}`; st.toolCalls++;
           const call: SyntheticCall = { id: `toolu_probe_${rec.i}`, name: out.act.call.name, input: out.act.call.input };
           writeMessagesResponse(response, rec.i, call);
         } else writeMessagesResponse(response, rec.i);
@@ -359,8 +509,10 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
       ANTHROPIC_API_KEY: DUMMY_KEY, ANTHROPIC_BASE_URL: `http://127.0.0.1:${address.port}`, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_TELEMETRY: "1",
       DISABLE_ERROR_REPORTING: "1", DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1", ENABLE_TOOL_SEARCH: "false",
     };
+    // K7 needs the client's built-in tools on so the Agent/Task tool exists (every other scenario keeps them off with --tools "").
+    const allowedTools = [...tools, ...(sc.clientTools === "default" ? ["Agent", "Task"] : [])];
     const argv = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-hook-events", "--strict-mcp-config", "--mcp-config", mcpConfig,
-      "--allowedTools", tools.join(","), "--model", MODEL, "--no-session-persistence", "--tools", ""];
+      "--allowedTools", allowedTools.join(","), "--model", MODEL, "--no-session-persistence", ...(sc.clientTools === "default" ? [] : ["--tools", ""])];
     const spawned = spawn("claude", argv, { cwd: workspace, env, stdio: ["pipe", "pipe", "ignore"], detached: true });
     child = spawned;
     const closed = new Promise<void>((resolve) => spawned.once("close", (code, sig) => { st.exitCode = code; st.exitSignal = sig; st.exitAt = rel(); st.exited = true; resolve(); }));
@@ -386,7 +538,7 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
         if (type === "result") stream.results.push({ t_ms: rel(), subtype: safeLabel(event.subtype), is_error: typeof event.is_error === "boolean" ? event.is_error : null, num_turns: typeof event.num_turns === "number" ? event.num_turns : null });
       }
     });
-    spawned.stdin!.write(`${JSON.stringify({ type: "user", message: { role: "user", content: `${CANARY_PROMPT} start the scripted worker and wait for its event` } })}\n`);
+    spawned.stdin!.write(`${JSON.stringify({ type: "user", message: { role: "user", content: SEED_USER_TEXT } })}\n`);
 
     // ---- drive until the script is done (plus a settle time that exposes duplicate wakes), always bounded
     const deadline = Date.now() + sc.maxMs;
@@ -421,6 +573,14 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
     });
     const counters = JSON.parse(await readFile(counterFile, "utf8").catch(() => "null")) as unknown;
     collected.counters = isObject(counters) ? counters : null;
+    if (sc.subagent) {
+      const observed = (await readFile(observerLog, "utf8").catch(() => "")).split("\n").filter(Boolean)
+        .flatMap((line) => { try { const v = JSON.parse(line) as unknown; return isObject(v) ? [v] : []; } catch { return []; } });
+      collected.subagent = { hook_observer_added: observerAdded, ...projectK7({
+        requests: k7Facts,
+        observer: observed.map((v) => ({ tool: safeLabel(v.tool) ?? "other", hasAgentId: v.agent_id === true, hasAgentType: v.agent_type === true })),
+      }) };
+    }
     const eventsDir = eventsRoot(clientEnvForPaths), claimsDir = claimsRoot(clientEnvForPaths);
     const remainingInstances = eventsDir ? (await readdir(eventsDir).catch(() => [] as string[])).filter((n) => n.startsWith("inst-")).length : null;
     const rootStat = eventsDir ? await lstat(eventsDir).catch(() => undefined) : undefined;
@@ -503,6 +663,15 @@ async function runScenario(sc: Scenario, version: string): Promise<{ row: Record
     no_spool_directory: spoolInfo.events_root_existed === false && spoolInfo.events_root_present_at_end === false && spoolInfo.instance_dirs_max === 0 && spoolInfo.claims_dir_seen === false && spoolInfo.claims_dir_present_at_end === false,
     no_wake: wakes === 0 && requests.every((r) => !r.marker_in_fresh), no_turn_read: (counters.tools?.pi_turn_get ?? 0) === 0, worker_was_prompted: (counters.tools?.pi_session_prompt ?? 0) === 1,
   });
+  if (sc.id === "K7") {
+    const k7 = collected.subagent as Partial<K7Result> | undefined;
+    Object.assign(checks, {
+      recorded_only: true,
+      subagent_conversation_seen: (k7?.subagent_requests ?? 0) >= 1,
+      subagent_session_started: k7?.subagent_session_started === true,
+      main_list_called: k7?.main_list_count !== null && k7?.main_list_count !== undefined,
+    });
+  }
   return { row: { ...base, checks, passed_expectation: Object.values(checks).every(Boolean) }, root };
 }
 

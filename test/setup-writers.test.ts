@@ -363,6 +363,29 @@ describe("writer setup reconciliation", () => {
     expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
   });
 
+  it.each(["repository", "writer"])("does not block a %s step on a refused profile of its own repository (#141)", async (step) => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [{ id: "container_profile_refused", severity: "error", subject: "x:code" }] });
+    const deps = { ...f.deps, doctor };
+    const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
+      : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
+    expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
+  });
+
+  it("blocks on a refused profile of another repository and on other checks with a matching prefix", async () => {
+    const f = await fixture();
+    for (const check of [
+      { id: "container_profile_refused" as const, severity: "error" as const, subject: "other:code" },
+      { id: "extension_version_mismatch" as const, severity: "error" as const, subject: "x:fixture-ext" },
+    ]) {
+      f.calls.length = 0;
+      const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [check] });
+      const output = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, { ...f.deps, doctor });
+      expect(output.findings[0]?.code).toBe("doctor_failed");
+      expect(f.calls).toEqual([]);
+    }
+  });
+
   it("bypasses Doctor errors only for its own alias and writers", async () => {
     const f = await fixture();
     const doctor = vi.fn(async () => ({ schemaVersion: 1 as const, ok: false, exitCode: 2 as const, checks: [{ id: "workspace_missing" as const, severity: "error" as const, subject: "x" }] }));

@@ -1,0 +1,463 @@
+{
+  "tooling": {
+    "client_version": "2.1.310 (Claude Code)",
+    "node": "26.12.1"
+  },
+  "scenario": "K7",
+  "title": "subagent session sharing and wake target (record only)",
+  "delivery": "spool",
+  "hook_budget_ms": 120000,
+  "expectation": "record only: the subagent conversation is recognized and scripts pi_session_start then pi_session_prompt (turn completes after 4 s); the main conversation calls pi_session_list after the subagent returns; the wake's target conversation, the request that carries the reminder and the hook input's agent_id are recorded",
+  "exit_code": 0,
+  "exit_signal": null,
+  "timed_out": false,
+  "exit_at_ms": 10640,
+  "stdin_ended_at_ms": 10575,
+  "harness_invalid": false,
+  "http_unexpected": 0,
+  "setup": {
+    "dry_run": {
+      "status": "planned",
+      "code": "hook_add_planned"
+    },
+    "dry_run_wrote_nothing": true,
+    "apply": {
+      "status": "ok",
+      "code": "hook_added"
+    },
+    "verify": {
+      "status": "ok",
+      "code": "hook_verified"
+    },
+    "reapply": {
+      "status": "unchanged",
+      "code": "hook_already_equivalent"
+    },
+    "settings_after_setup": {
+      "file_present": true,
+      "parseable": true,
+      "wake_entries": 1,
+      "post_tool_use_entries": 2,
+      "other_entry_preserved": true,
+      "other_keys_preserved": true,
+      "matcher_is_product": true,
+      "async_rewake": true,
+      "type_command": true,
+      "command_uses_exec_path": true,
+      "command_program_is_package_dist": true,
+      "command_budget_matches": true,
+      "timeout_covers_budget": true
+    },
+    "settings_bytes_unchanged": false,
+    "settings_after_run": {
+      "file_present": true,
+      "parseable": true,
+      "wake_entries": 1,
+      "post_tool_use_entries": 3,
+      "other_entry_preserved": true,
+      "other_keys_preserved": true,
+      "matcher_is_product": true,
+      "async_rewake": true,
+      "type_command": true,
+      "command_uses_exec_path": true,
+      "command_program_is_package_dist": true,
+      "command_budget_matches": true,
+      "timeout_covers_budget": true
+    }
+  },
+  "caps_delivery_seen_by_client": null,
+  "requests": {
+    "total": 9,
+    "main": 9,
+    "auxiliary": 0,
+    "list": [
+      {
+        "i": 1,
+        "t_ms": 338,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:Agent",
+        "step": 0,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 2,
+        "t_ms": 366,
+        "role": "main",
+        "request_class": null,
+        "scope": "subagent",
+        "subagent_rule": "system_marker",
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_start",
+        "step": 0,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 3,
+        "t_ms": 411,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_list",
+        "step": 1,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 4,
+        "t_ms": 412,
+        "role": "main",
+        "request_class": null,
+        "scope": "subagent",
+        "subagent_rule": "system_marker",
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "tool_use:pi_session_prompt",
+        "step": 1,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 5,
+        "t_ms": 433,
+        "role": "main",
+        "request_class": null,
+        "scope": "subagent",
+        "subagent_rule": "system_marker",
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 2,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 6,
+        "t_ms": 460,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 2,
+        "step_ok": true,
+        "note": null,
+        "wake_ref": null
+      },
+      {
+        "i": 7,
+        "t_ms": 474,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 0,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 3,
+        "step_ok": true,
+        "note": "fallback_text",
+        "wake_ref": null
+      },
+      {
+        "i": 8,
+        "t_ms": 4449,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": true,
+        "marker_places": [
+          "fresh_user_minus0:text_block"
+        ],
+        "marker_total": 1,
+        "wake_kind": "terminal",
+        "wake_delivery": "own_request",
+        "scripted": "tool_use:pi_turn_get",
+        "step": 4,
+        "step_ok": true,
+        "note": "fallback_get",
+        "wake_ref": {
+          "kind": "terminal",
+          "turn": "t1",
+          "state": "completed"
+        }
+      },
+      {
+        "i": 9,
+        "t_ms": 4467,
+        "role": "main",
+        "request_class": null,
+        "scope": "main",
+        "subagent_rule": null,
+        "marker_in_fresh": false,
+        "marker_places": [],
+        "marker_total": 1,
+        "wake_kind": null,
+        "wake_delivery": null,
+        "scripted": "text",
+        "step": 5,
+        "step_ok": true,
+        "note": "fallback_text",
+        "wake_ref": null
+      }
+    ],
+    "scripted_tool_calls": 5
+  },
+  "wakes": {
+    "requests": 1,
+    "by_kind": {
+      "terminal": 1
+    },
+    "by_delivery": {
+      "own_request": 1
+    },
+    "kinds_in_order": [
+      "terminal"
+    ],
+    "missing": 0,
+    "duplicate": 0,
+    "delays_ms": [
+      23
+    ]
+  },
+  "stream": {
+    "lines": 35,
+    "json_errors": 0,
+    "types": {
+      "system": 18,
+      "assistant": 9,
+      "user": 5,
+      "result": 3
+    },
+    "system_subtypes": {
+      "init": 3,
+      "background_tasks_changed": 2,
+      "task_started": 1,
+      "task_progress": 2,
+      "hook_started": 4,
+      "task_updated": 1,
+      "task_notification": 1,
+      "hook_response": 4
+    },
+    "results": [
+      {
+        "t_ms": 463,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 3
+      },
+      {
+        "t_ms": 478,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 1
+      },
+      {
+        "t_ms": 4470,
+        "subtype": "success",
+        "is_error": false,
+        "num_turns": 2
+      }
+    ],
+    "hook_events": [
+      {
+        "t_ms": 426,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 426,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_session_prompt",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 460,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_session_prompt",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 4434,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_session_prompt",
+        "outcome": "error",
+        "exit_code": 2
+      },
+      {
+        "t_ms": 4457,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_turn_get",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 4457,
+        "subtype": "hook_started",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_turn_get",
+        "outcome": null,
+        "exit_code": null
+      },
+      {
+        "t_ms": 4482,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_turn_get",
+        "outcome": "success",
+        "exit_code": 0
+      },
+      {
+        "t_ms": 4525,
+        "subtype": "hook_response",
+        "hook_event": "PostToolUse",
+        "hook_name": "PostToolUse:mcp__pi-session-mcp__pi_turn_get",
+        "outcome": "success",
+        "exit_code": 0
+      }
+    ],
+    "mcp_statuses": [
+      "connected"
+    ]
+  },
+  "leftover": {
+    "at_exit": 0,
+    "at_exit_kinds": {},
+    "after_grace": 0,
+    "after_grace_kinds": {},
+    "group_alive_after_exit": false
+  },
+  "temp_removed": true,
+  "step_failures": 0,
+  "per_event": [
+    {
+      "seq": 1,
+      "state": "completed",
+      "via": "registry",
+      "at_ms": 4426,
+      "wakes": 1,
+      "delay_ms": 23
+    }
+  ],
+  "counters": {
+    "tools": {
+      "pi_session_start": 1,
+      "pi_session_list": 1,
+      "pi_session_prompt": 1,
+      "pi_turn_get": 1
+    },
+    "pi_turn_get": {
+      "running": 0,
+      "terminal": 1,
+      "error": 0
+    },
+    "spool_failures": 0,
+    "delivery": "spool",
+    "xdg_runtime_dir_set": true,
+    "events_dir_env_set": false,
+    "spool_opened": true,
+    "shutdown": "completed"
+  },
+  "subagent": {
+    "hook_observer_added": true,
+    "q1_main_lists_subagent_session": true,
+    "subagent_session_started": true,
+    "subagent_prompted": true,
+    "q2_wake_target": "main",
+    "q2_wake_kind": "terminal",
+    "q2_wake_request_ordinal": 8,
+    "q2_wake_request_scope": "main",
+    "q2_wake_request_role": "main",
+    "q2_hook_input_agent_id": true,
+    "q2_hook_input_agent_type": true,
+    "hook_observer_entries": 2,
+    "hook_observer_prompt_entries": 1,
+    "subagent_requests": 3,
+    "subagent_rules": {
+      "system_marker": 3
+    },
+    "main_list_count": 1
+  },
+  "spool": {
+    "events_root_existed": true,
+    "events_root_mode_0700": true,
+    "instance_dirs_max": 1,
+    "instance_dirs_after_exit": 0,
+    "events_root_present_at_end": true,
+    "claims_dir_seen": true,
+    "claims_max": 1,
+    "claims_dir_present_at_end": true,
+    "events": [
+      {
+        "instance": "i1",
+        "seq": 1,
+        "at_ms": 4426,
+        "seen_ms": 4435,
+        "kind": "turn_terminal",
+        "state": "completed",
+        "via": "registry",
+        "reason": null,
+        "session": "s1",
+        "turn": "t1"
+      }
+    ]
+  },
+  "checks": {
+    "clean_teardown": true,
+    "mcp_connected": true,
+    "steps_ok": true,
+    "recorded_only": true,
+    "subagent_conversation_seen": true,
+    "subagent_session_started": true,
+    "main_list_called": true
+  },
+  "passed_expectation": true
+}

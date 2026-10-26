@@ -1,7 +1,8 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import type { AppConfig } from "../src/config.js";
+import { loadConfig, type AppConfig } from "../src/config.js";
+import { skillOverrideDirectory } from "../src/skill-library.js";
 import type { WorkspaceMode } from "../src/execution-modes.js";
 import { containerRuntimeUsable } from "../src/container-runtime.js";
 import { renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorDependencies } from "../src/doctor.js";
@@ -84,6 +85,112 @@ describe("Doctor execution modes", () => {
       expect(output).not.toContain("PRIVATE_");
       expect(output).not.toContain("/");
     }
+  });
+});
+
+describe("Doctor container profile acceptance", () => {
+  const profile = { default: false, permissionProfile: "coding", provider: "fake", model: "fake", thinkingLevel: "off" };
+  const raw = { executionProfiles: { code: profile }, skillCatalog: { impl: "builtin:pi-session-implementation" } };
+  async function check(rawConfig: unknown, overrideDirectory?: string, mode: WorkspaceMode = "container", profiles = ["code"]) {
+    const home = await temporaryRoot("doctor-contained-");
+    const deps = dependencies({ repo: mode });
+    const config = await deps.loadConfig!();
+    const loadRawConfig = vi.fn(async () => rawConfig);
+    const result = await runDoctor({ ...deps, home, containerRuntime: async () => true, loadRawConfig,
+      loadConfig: async () => ({ ...config, ...(overrideDirectory === undefined ? {} : { skillOverrideDirectory: overrideDirectory }),
+        workspaceModes: new Map([["repo", { mode, container: { writers: 1, lifecycle: "persistent", profiles, image: "node", network: "none", cache: "none" } }]]) }),
+    });
+    return { result, loadRawConfig, checks: result.checks.filter((entry) => entry.id === "container_profile_refused") };
+  }
+
+  it.each([
+    ["missing profile", { executionProfiles: {} }],
+    ["extensions present", { ...raw, executionProfiles: { code: { ...profile, extensions: [] } } }],
+    ["MCP servers present", { ...raw, executionProfiles: { code: { ...profile, mcpServers: {} } } }],
+    ["default not false", { ...raw, executionProfiles: { code: { ...profile, default: true } } }],
+    ["permission not coding", { ...raw, executionProfiles: { code: { ...profile, permissionProfile: "read-only" } } }],
+    ["skills not an array", { ...raw, executionProfiles: { code: { ...profile, skills: "impl" } } }],
+    ["non-builtin skill", { executionProfiles: { code: { ...profile, skills: ["impl"] } }, skillCatalog: { impl: "/PRIVATE_SKILL/SKILL.md" } }],
+    ["unshipped builtin skill", { executionProfiles: { code: { ...profile, skills: ["impl"] } }, skillCatalog: { impl: "builtin:not-shipped" } }],
+    ["rendered schema invalid", { ...raw, executionProfiles: { code: { ...profile, model: "" } } }],
+  ])("refuses %s offline without leaking configuration", async (_name, input) => {
+    const { result, checks } = await check(input);
+    expect(checks).toEqual([{ id: "container_profile_refused", severity: "error", subject: "repo:code", remediation: expect.any(String) }]);
+    expect(result.exitCode).toBe(2);
+    for (const output of [renderDoctorHuman(result), renderDoctorJson(result)]) {
+      expect(output).not.toContain("PRIVATE_");
+      expect(output).not.toContain("/");
+    }
+  });
+
+  it("refuses operator overrides next to the configuration", async () => {
+    const directory = await temporaryRoot("doctor-contained-override-");
+    const overrides = skillOverrideDirectory(join(directory, "custom-config.json"));
+    await mkdir(join(overrides, "pi-session-implementation"), { recursive: true });
+    await writeFile(join(overrides, "pi-session-implementation", "SKILL.md"), "operator copy");
+    const { checks } = await check({ ...raw, executionProfiles: { code: { ...profile, skills: ["impl"] } } }, overrides);
+    expect(checks).toEqual([expect.objectContaining({ severity: "error", subject: "repo:code" })]);
+  });
+
+  it("emits one ok when all selected profiles pass and ignores unused refused profiles", async () => {
+    const { checks, loadRawConfig } = await check({ ...raw, executionProfiles: {
+      code: profile, skilled: { ...profile, skills: ["impl"] }, unused: { ...profile, extensions: [] },
+    } }, undefined, "container", ["code", "skilled"]);
+    expect(checks).toEqual([{ id: "container_profile_refused", severity: "ok", subject: "repo" }]);
+    expect(loadRawConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports every refused profile without an ok for a partially accepted workspace", async () => {
+    const { checks } = await check(raw, undefined, "container", ["missing", "code", "other"]);
+    expect(checks.map(({ subject, severity }) => ({ subject, severity }))).toEqual([
+      { subject: "repo:missing", severity: "error" }, { subject: "repo:other", severity: "error" },
+    ]);
+  });
+
+  it("does not read raw configuration or emit the check for non-container workspaces", async () => {
+    const { checks, loadRawConfig } = await check(null, undefined, "host");
+    expect(checks).toEqual([]);
+    expect(loadRawConfig).not.toHaveBeenCalled();
+  });
+
+  it("reports unreadable raw configuration once per container workspace without blaming profiles", async () => {
+    const deps = dependencies({ repo: "container", other: "container", host: "host" });
+    const config = await deps.loadConfig!();
+    const readFile = vi.fn(async () => { throw new Error("PRIVATE_SECRET /private/config.json"); });
+    const result = await runDoctor({ ...deps, configPath: "/private/config.json", fileSystem: { ...deps.fileSystem!, readFile }, loadConfig: async () => ({ ...config,
+      workspaceModes: new Map(["repo", "other"].map((alias) => [alias, { mode: "container" as const, container: {
+        writers: 1, lifecycle: "persistent" as const, profiles: ["code", "missing"], image: "node", network: "none" as const, cache: "none" as const,
+      } }])),
+    }) });
+    expect(result.checks.filter((entry) => entry.id === "container_profile_refused")).toEqual(
+      ["other", "repo"].map((subject) => ({ id: "container_profile_refused", severity: "error", subject,
+        remediation: "selected profiles could not be checked; restore configuration read access and rerun Doctor" })),
+    );
+    expect(readFile).toHaveBeenCalledExactlyOnceWith("/private/config.json", "utf8");
+    for (const output of [renderDoctorHuman(result), renderDoctorJson(result)]) {
+      expect(output).not.toContain("PRIVATE_");
+      expect(output).not.toContain("/");
+    }
+  });
+
+  it("reads the original configuration from the configured path without starting a writer", async () => {
+    const directory = await temporaryRoot("doctor-contained-config-");
+    const path = join(directory, "custom-config.json");
+    await writeFile(path, JSON.stringify({ ...raw, workspaces: { repo: directory }, executionProfiles: {
+      code: { ...profile, skills: ["impl"] }, ro: { ...profile, default: true, permissionProfile: "read-only" },
+    } }));
+    await writeFile(join(directory, "execution-modes.json"), JSON.stringify({ schemaVersion: 1, workspaces: {
+      repo: { mode: "container", writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none" },
+    } }));
+    vi.stubEnv("PI_SESSION_MCP_CONFIG", join(directory, "wrong-config.json"));
+    const deps = dependencies({ repo: "container" });
+    // Use real filesystem reads for the raw configuration, not the fixture's placeholder.
+    const { readFile } = await import("node:fs/promises");
+    const result = await runDoctor({ ...deps, home: directory, configPath: path, loadConfig,
+      fileSystem: { ...deps.fileSystem!, readFile }, containerRuntime: async () => true });
+    expect(result.checks.filter((entry) => entry.id === "container_profile_refused")).toEqual([
+      { id: "container_profile_refused", severity: "ok", subject: "repo" },
+    ]);
   });
 });
 

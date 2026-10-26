@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Fixed: Doctor reports `container_profile_refused` for selected coding profiles that container writer provisioning would reject, and reports unreadable configuration without blaming individual profiles (#141).
+- Fixed: writer launches now refresh a selected OAuth credential on the host
+  when it expires within **10 minutes** (was 2), through the Pi SDK's
+  documented `ModelRuntime` on the host's locked credential store, before the
+  SDK inside the writer opens its own five-minute pre-expiry window, in which
+  writer turns could fail; not yet confirmed by a live turn
+  ([#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142)).
+
 ## 0.11.6 — 2026-10-26
 
 Patch release for the Sprint 9 close-out

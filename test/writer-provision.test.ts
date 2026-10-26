@@ -6,7 +6,7 @@ import { afterAll, expect, it, vi } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { loadConfig } from "../src/config.js";
 import { ensureWriterEventsDirectory } from "../src/writer-boundary.js";
-import { inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, writerSettingsDrift, type WriterContext } from "../src/writer-lifecycle.js";
+import { containedBuiltinSkills, containedProfileRefused, inspectWork, provisionWriter, recreateWriter, removeWriter, renderContainedConfig, resetWriter, writerSettingsDrift, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerEventDeliveryEnabled, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -76,6 +76,17 @@ it("rejects unsupported raw profiles, missing profiles and non-builtin catalog s
     expect(() => renderContainedConfig("repo", "/clone", { executionProfiles: { code: { ...profile, ...extra } }, skillCatalog: { local: "./x/SKILL.md" } }, ["code"])).toThrow("container_profile_unsupported");
   }
   for (const raw of [null, {}, { executionProfiles: {} }]) expect(() => renderContainedConfig("repo", "/clone", raw, ["missing"])).toThrow("container_profile_unsupported");
+});
+it("shares profile acceptance between the predicate and contained rendering", () => {
+  for (const [selected, refused] of [[profile, false], [{ ...profile, extensions: [] }, true]] as const) {
+    const raw = { executionProfiles: { code: selected } };
+    const before = JSON.stringify(raw);
+    const availableBuiltinSkills = containedBuiltinSkills(raw);
+    expect(containedProfileRefused(raw, "code", availableBuiltinSkills)).toBe(refused);
+    if (refused) expect(() => renderContainedConfig("repo", "/clone", raw, ["code"])).toThrow("container_profile_unsupported");
+    else expect(renderContainedConfig("repo", "/clone", raw, ["code"]).executionProfiles.code).toEqual(selected);
+    expect(JSON.stringify(raw)).toBe(before);
+  }
 });
 it("refuses a builtin skill no writer can resolve, while a shipped one stays accepted (#135)", () => {
   const unknown = { executionProfiles: { code: { ...profile, skills: ["lib"] } }, skillCatalog: { lib: "builtin:no-such-shipped-skill" } };
