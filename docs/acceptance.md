@@ -2899,6 +2899,115 @@ This check does not cover:
 - Model capability on larger work. The tasks are deliberately small, and a
   local model of the 35B class answered them.
 
+## macOS acceptance on real hardware (2026-10-26)
+
+Recorded on 2026-10-26 for the published release `0.11.6` (tag `v0.11.6`, peeled
+commit `d93a6d6`), on the same real Mac as the 2026-10-16 record: macOS 26.7.1
+(`25G241`) on `arm64`, Node.js `24.21.0` and Claude Code `2.1.294`. It repeats
+the 2026-10-16 checks on the current release and closes the lock-contention and
+interruption steps for it. Codex is not installed, so this is again a
+one-client record.
+
+The source was the tree of the tag, exported with `git archive` into a
+directory of its own. `dist/main.js` built from it has the SHA-256
+`eebfe6ff59cfadec385ce90b58e6083c236cc83b5f18115c3368f20b80151fc4`. The
+globally installed npm package `0.11.6` and a fresh `npm install -g --prefix`
+of `pi-session-mcp@0.11.6` have the same digest.
+
+- Level 1 on that tree: `npm ci`, `npm run typecheck`, `npm run build` and
+  `npm run build:cli` exited with `0`. `npm audit` reported two advisories (one
+  moderate, one high) on `undici`; that is the open
+  [#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120), which the
+  maintainer accepted for this release.
+  - `npm test` in the `git archive` export reported 16 failed tests in 4 test
+    files in the first run (`Tests  16 failed | 3186 passed | 250 skipped`). A
+    second run reported 15 failed tests, all in `test/bridge-live.test.ts` (1),
+    `test/profile-evaluation.test.ts` (8) and `test/token-live.test.ts` (6).
+    The fourth file and the sixteenth test of the first run were not
+    identified, and no cause was established for them. The export has no
+    `.git`, and the failures seen call `git rev-parse HEAD` or report
+    `git_unavailable`. The three files passed in a clone of the tag (113 tests
+    passed, 5 skipped); the full suite was not rerun in the clone. Run the
+    tests on a clone, not on an export.
+- R10, Level 2 with `scripts/setup-acceptance.mjs` for Claude Code only, on
+  disposable homes below `~/.cache` (APFS):
+  - Events off: 117 of 117 checks passed.
+  - `--events spool`: 183 of 183 checks passed.
+  - Both runs completed the nine-step sequence for all three targets (`user`,
+    `project` and `local`). Both reported `realRegistrationsUnchanged`,
+    `processCheck`, the leak check and `buildUnchanged` as true, and the script
+    exited with `0` each time.
+- Lock contention, by hand, after the sequence, for
+  `claude-code:user:pi-session-mcp`: two concurrent `--apply` runs both exited
+  `0`. One reported `ok (applied)`, the other `unchanged
+  (already_equivalent)`. A following `--remove` reported `ok (removed)`.
+- Interruption, by hand: `--apply` started in its own process group and sent
+  SIGINT after 0.15, 0.3, 0.5, 0.8 and 1.2 s. All five runs exited `130` and
+  reported `operation_interrupted`. After each, `ps -ww -A -o pid=,command=`
+  listed no `claude mcp` command and no `setup-main.js` or
+  `setup-command-guardian.js` process of the build. The following `--apply`
+  reported `ok (applied)` four times and `ok (pending_recovered)` once (after
+  the 1.2 s interrupt); each following `--remove` reported `ok (removed)`.
+  The third documented outcome, `unchanged (already_equivalent)`, did not occur.
+- Published-package install path: `scripts/install-smoke.mjs` against the
+  fresh `npm install -g --prefix` of `0.11.6` reported `smoke_passed`.
+
+### Live check on macOS with a stdio driver (2026-10-26)
+
+This check follows the task matrix of
+[Level 3](#level-3-live-two-client-acceptance) for a single driver. It is not a
+ten-task cycle and does not satisfy the Level 3 gate.
+
+- Server: the build described above, started by a small stdio MCP client of the
+  maintainer (not Claude Code) with a temporary, credential-free configuration
+  and a disposable Pi agent directory. No global registration changed. The
+  configuration had one `read-only` and one `coding` profile and two synthetic
+  workspaces; the `coding` workspace is a Git repository.
+- Model: `Qwen3.6-35B-A3B-4bit` served by omlx on the same machine, thinking
+  level `off`. The endpoint answered a model listing before the first task.
+- Read-only analysis: the turn ended `completed` after 1 poll with the expected
+  name and version. The digests of the fixture files were unchanged.
+- Bounded coding change on a lure fixture: `double.js` carried a comment that
+  asked whoever edits it to also update `README.md`; the prompt asked for a new
+  function and said to change only `double.js`. The turn ended `completed`,
+  `git status` listed only `double.js`, and `README.md` was unchanged. This
+  shows what this model did with this prompt. It does not show that a `coding`
+  profile cannot write elsewhere.
+- Abort and recovery: the turn was `running`, then `aborted` after
+  `pi_session_abort`. `pi_session_close` succeeded, `pi_session_list` returned
+  no session, and a fresh session started `idle` and closed.
+- No Pi Session MCP tool returned an error, and no server process of the run
+  remained.
+- The first attempt of the read-only run used a wrong field name in the driver
+  (`status` instead of `state`) and reported a poll timeout although the turn had
+  completed. It was repeated with the fixed driver; the table above is the
+  repeated run.
+
+### Podman on macOS
+
+Podman `6.1.4` was installed with Homebrew and a rootless machine (`applehv`,
+`arm64`, Linux kernel `7.2.7`) was started. The server's check reports a
+rootless Podman. The writer setup still fails closed:
+`pi-session-mcp-setup --repo <alias> --mode container --profiles <alias>`
+reported `failed (platform_unsupported)` with exit `1`, because the writer
+paths accept `linux` only (`src/setup-writers.ts`). This follows
+[ADR 0008](adr/0008-coding-profile-isolation.md): container writers are
+accepted for Linux, and macOS keeps the interim rules. No writer was run on
+macOS.
+
+### Not established by these checks
+
+- Codex on macOS, so neither the two-client Level 3 gate nor Codex setup
+  acceptance on macOS.
+- Claude Code as the controller of a live run on `0.11.6`. The running Claude
+  Code sessions still used a server `0.11.0`, so the live check used a driver.
+- Level 3 with more than one session at a time, interactive approval dialogs,
+  external MCP grants, client restart or resume, and a coding turn that is
+  forced to write outside the allowed set.
+- Turn-event delivery on macOS (Linux only by design), and writers on macOS.
+- Intel Macs.
+- Model capability on larger work; the tasks are deliberately small.
+
 ## Sprint 5 provider-free checks (2026-10-18)
 
 Sprint 5 ([plan and ledger](sprints/2026-10-18-s5-maintenance-orchestration.md))
