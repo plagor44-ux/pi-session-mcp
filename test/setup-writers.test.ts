@@ -332,6 +332,25 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
   });
 
+  it("reports the blocking checks once when the gate blocks after the modes file was written", async () => {
+    const f = await fixture();
+    const doctor = vi.fn<NonNullable<WriterSetupDependencies["doctor"]>>(async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }));
+    doctor.mockResolvedValueOnce({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] });
+    doctor.mockResolvedValue({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
+      { id: "writer_not_ready", severity: "error", subject: "other-w2" },
+      { id: "extension_version_mismatch", severity: "error", subject: "review:fixture-ext" },
+    ] });
+    const output = await changeWriterMode(f.configPath, mode, { ...f.deps, doctor });
+    expect(doctor).toHaveBeenCalledTimes(2);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings.filter((finding) => finding.code === "doctor_failed")).toHaveLength(1);
+    expect(output.findings.filter((finding) => finding.target.client === "doctor")).toEqual([
+      { status: "failed", code: "writer_not_ready", target: { client: "doctor", scope: "check", alias: "other" } },
+      { status: "failed", code: "extension_version_mismatch", target: { client: "doctor", scope: "check", alias: "review" } },
+    ]);
+    expect(f.calls).toEqual([]);
+  });
+
   it.each(["repository", "writer"])("does not block a %s step on its own writer subject", async (step) => {
     const f = await fixture();
     const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [{ id: "writer_not_ready", severity: "error", subject: "x-w1" }] });
