@@ -234,7 +234,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `controllers_restart_required` | Reconnect/restart controllers to load current policy and registrations |
 | `platform_unsupported` | Writer operation requires Linux |
 | `usage_invalid` | Invalid writer name or argument combination |
-| `doctor_failed` | Relevant blocking Doctor checks failed |
+| `doctor_failed` | Relevant blocking Doctor checks failed; repository steps and mutating writer operations also report each blocking check as a separate failed finding with its Doctor check id and target `client: "doctor"`, `scope: "check"`, and as alias the profile or workspace alias that leads the check's subject (the part before `:`), or `"invalid"` when that is not a valid alias |
 | `writer_planned` | Writer would be retained/provisioned |
 | `writer_remove_planned` | Surplus writer would be removed |
 | `writer_collect_planned` | Collection planned only |

@@ -90,10 +90,14 @@ async function writerHook(ctx: lifecycle.WriterContext, name: string, deps: Writ
 async function writerDelivery(ctx: lifecycle.WriterContext, name: string, hostDelivery: boolean): Promise<boolean> {
   return await readWriterState(ctx.home, name) ? writerEventDeliveryEnabled(writerPaths(ctx.home, name).config) : hostDelivery;
 }
+class DoctorGateError extends Error {
+  constructor(readonly findings: readonly SetupFinding[]) { super("doctor_failed"); }
+}
 async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetupDependencies): Promise<void> {
   const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, loadConfig: () => loadConfig(deps.configPath) });
   const ownSubjects = new Set([ctx.alias, ...Array.from({ length: 16 }, (_, index) => writerName(ctx.alias, index + 1))]);
-  if (doctor.checks.some((check) => check.severity === "error" && !ownSubjects.has(check.subject))) throw new Error("doctor_failed");
+  const blocking = doctor.checks.filter((check) => check.severity === "error" && !ownSubjects.has(check.subject));
+  if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: safeAlias(check.subject.split(":")[0] ?? "") } })));
 }
 async function preflight(ctx: lifecycle.WriterContext, names: readonly string[], discard: boolean, deps: WriterSetupDependencies): Promise<void> {
   if (discard) return;
@@ -213,7 +217,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
         proposed = entry;
         const ctx = await context(request.alias, deps), planned = await plan(ctx, entry);
         try { if (request.apply) await doctorGate(ctx, deps); await preflight(ctx, planned.surplus, request.discard ?? false, deps); }
-        catch (error) { return failed(codeFor(error)); }
+        catch (error) { return error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(codeFor(error)); }
         return undefined;
       },
       afterChange: async (modes) => {
@@ -234,7 +238,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
             const refused = [...kept, ...hooks].some((finding) => finding.status === "failed" || finding.status === "divergent");
             writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], refused ? "failed" : "planned");
           }
-        } catch { writers = failed("writer_reconcile_failed"); }
+        } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed("writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
         if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
         return result(operation, findings, writers.exitCode ? "failed" : request.apply ? undefined : "planned");
@@ -278,7 +282,11 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
         if (hook?.status === "failed" || hook?.status === "divergent") return done({ status: "failed", code: hook.code });
         return done({ status: "ok", code: "mcp_verified" }, hook ? [hook] : []);
       }
-      await doctorGate(ctx, deps);
+      try { await doctorGate(ctx, deps); }
+      catch (error) {
+        if (error instanceof DoctorGateError) return result(reportOperation, [...done({ status: "failed", code: error.message }).findings, ...error.findings]);
+        throw error;
+      }
       const extras: WakeHookOutcome[] = [];
       const outcome = operation === "remove" ? await remove(ctx, name, opts.discard, deps, extras)
         : operation === "collect" ? await life.collectWriter(ctx, name)

@@ -309,6 +309,39 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
     expect(lock).toHaveBeenCalledWith(join(f.home, ".local", "state", "pi-session-mcp", "writers"), {});
   });
+  it.each(["repository", "writer"])("names and sanitizes every blocking Doctor check for a %s step", async (step) => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
+      { id: "workspace_missing", severity: "error", subject: "other" },
+      { id: "extension_version_mismatch", severity: "error", subject: "safe:fixture-ext" },
+      { id: "build_missing", severity: "error", subject: "/secret/path" },
+      { id: "writer_not_ready", severity: "error", subject: "x-w1" },
+      { id: "extension_unpinned", severity: "warning", subject: "other" },
+    ] });
+    const deps = { ...f.deps, doctor };
+    const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
+      : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings.map((finding) => finding.code)).toEqual(["doctor_failed", "workspace_missing", "extension_version_mismatch", "build_missing"]);
+    expect(output.findings.slice(1)).toEqual([
+      { status: "failed", code: "workspace_missing", target: { client: "doctor", scope: "check", alias: "other" } },
+      { status: "failed", code: "extension_version_mismatch", target: { client: "doctor", scope: "check", alias: "safe" } },
+      { status: "failed", code: "build_missing", target: { client: "doctor", scope: "check", alias: "invalid" } },
+    ]);
+    expect(JSON.stringify(output)).not.toContain("/secret/path");
+    expect(f.calls).toEqual([]);
+  });
+
+  it.each(["repository", "writer"])("does not block a %s step on its own writer subject", async (step) => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [{ id: "writer_not_ready", severity: "error", subject: "x-w1" }] });
+    const deps = { ...f.deps, doctor };
+    const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
+      : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
+  });
+
   it("bypasses Doctor errors only for its own alias and writers", async () => {
     const f = await fixture();
     const doctor = vi.fn(async () => ({ schemaVersion: 1 as const, ok: false, exitCode: 2 as const, checks: [{ id: "workspace_missing" as const, severity: "error" as const, subject: "x" }] }));
