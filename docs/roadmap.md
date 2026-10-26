@@ -112,6 +112,13 @@ one pull request, no release:
 - Recorded: the v0.11.6 post-release acceptance and migration step 2
   (`node-app`, four writers).
 - Decided: D3 no ADR yet; #120 waits for an SDK release.
+- Released afterwards: 0.11.7 (#141, #142, the review stage) on 2026-10-26.
+  Its upgrade on the workstation failed: with two container repositories the
+  repository step's Doctor gate blocked on the other repository's unready
+  writers ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)),
+  and the workstation was rolled back to 0.11.6. 0.11.8 fixed #148 the same
+  day; the workstation was upgraded from 0.11.6 to 0.11.8 and all six writers
+  were accepted again.
 
 ### Sprints 9 close-out and 10: orchestration reliability (2026-10-26, shipped in 0.11.6)
 
