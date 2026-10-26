@@ -159,3 +159,15 @@ Recorded as work lands on the branch.
   workspace (a writer clone, and a temporary worktree under `~/.cache` that a
   gate run had created); the controller did not verify which files they read. That matches the documented
   limit: a read-only profile restricts Pi's tools, not the filesystem.
+
+## After the merge (2026-10-26)
+
+- 0.11.7 was released with #141, #142 and the review stage. The workstation
+  upgrade from 0.11.6 failed on #148 (the repository step's Doctor gate
+  blocked on the other container repository's unready writers) and was rolled
+  back to 0.11.6 without loss: the writers' acceptance was still current for
+  0.11.6.
+- 0.11.8 fixed #148 (one cross-family review, `NON_BLOCKING_ONLY`) and was
+  released the same day. The workstation was upgraded straight from 0.11.6 to
+  0.11.8; all six writers were accepted again and both client targets
+  verified. Records: `docs/acceptance.md`.
