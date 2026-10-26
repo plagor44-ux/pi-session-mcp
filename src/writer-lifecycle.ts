@@ -33,12 +33,40 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+// Snapshot filesystem-dependent builtin availability before applying the pure profile rules.
+export function containedBuiltinSkills(rawConfig: unknown, overrideDirectory?: string): ReadonlySet<string> {
+  const available = new Set<string>();
+  if (rawConfig === null || typeof rawConfig !== "object") return available;
+  const catalog = (rawConfig as Record<string, unknown>).skillCatalog;
+  if (catalog === null || typeof catalog !== "object" || Array.isArray(catalog)) return available;
+  for (const value of Object.values(catalog)) {
+    const builtin = typeof value === "string" ? builtinSkillName(value) : undefined;
+    if (builtin !== undefined && shippedLibrarySkill(builtin) !== undefined
+      && (overrideDirectory === undefined || resolveLibrarySkill(builtin, { overrideDirectory })?.source !== "override")) available.add(builtin);
+  }
+  return available;
+}
+
+// Test one profile against the contained rendering rules without filesystem access or mutation.
+export function containedProfileRefused(rawConfig: unknown, profileName: string, availableBuiltinSkills: ReadonlySet<string>): boolean {
+  try {
+    buildContainedConfig("repo", "/clone", rawConfig, [profileName], availableBuiltinSkills);
+    return false;
+  } catch { return true; }
+}
+
 /**
  * `overrideDirectory` is the operator's skill override directory of the host configuration. The boundary has none, so a
  * `builtin:` skill resolves there only to the shipped skill: one without a shipped skill, or one the operator overrides,
  * would fail to load or be replaced silently, and is refused instead (#135).
  */
 export function renderContainedConfig(alias: string, clonePath: string, rawConfig: unknown, selected: readonly string[], overrideDirectory?: string) {
+  const availableBuiltinSkills = containedBuiltinSkills(rawConfig, overrideDirectory);
+  if (selected.some((name) => containedProfileRefused(rawConfig, name, availableBuiltinSkills))) throw new LifecycleError("container_profile_unsupported");
+  return buildContainedConfig(alias, clonePath, rawConfig, selected, availableBuiltinSkills);
+}
+
+function buildContainedConfig(alias: string, clonePath: string, rawConfig: unknown, selected: readonly string[], availableBuiltinSkills: ReadonlySet<string>) {
   if (selected.length === 0 || selected.includes("boundary-read-only")) throw new LifecycleError("container_profile_unsupported");
   const raw = record(rawConfig), profiles = record(raw.executionProfiles);
   const skillCatalog: Record<string, string> = {};
@@ -53,8 +81,7 @@ export function renderContainedConfig(alias: string, clonePath: string, rawConfi
         const catalog = record(raw.skillCatalog);
         const value = typeof skill === "string" && Object.hasOwn(catalog, skill) ? catalog[skill] : undefined;
         const builtin = typeof value === "string" ? builtinSkillName(value) : undefined;
-        if (builtin === undefined || shippedLibrarySkill(builtin) === undefined
-          || (overrideDirectory !== undefined && resolveLibrarySkill(builtin, { overrideDirectory })?.source === "override")) {
+        if (builtin === undefined || !availableBuiltinSkills.has(builtin)) {
           throw new LifecycleError("container_profile_unsupported");
         }
         Object.defineProperty(skillCatalog, skill, { value, enumerable: true, configurable: true, writable: true });
