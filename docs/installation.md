@@ -746,9 +746,9 @@ repository step between the install and the client targets:
    for each writer.
 
 The repository step does not count another repository's writers that are not
-ready yet, so the repositories can be accepted one after the other. Up to
-0.11.7 it did, and with two or more container repositories no repository step
-could pass after an upgrade
+ready yet, so the repositories can be accepted one after the other. Releases
+before this fix did, so with two or more container repositories no repository
+step could pass after an upgrade to such a release
 ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)). If that
 happens, install the previous version again: its writers are still accepted
 for it.
