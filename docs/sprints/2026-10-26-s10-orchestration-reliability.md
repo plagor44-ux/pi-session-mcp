@@ -153,8 +153,8 @@ controller unless marked otherwise.
   OpenAI, profile `code`) record status line, early stops and follow-ups.
 - Release 0.11.6 is prepared on this branch; the pre-release acceptance on
   `a7781da` passed (record in `docs/acceptance.md`).
-- Decisions taken 2026-10-26: D1 outside the package first, D2 as above, D3
-  not now, D4 #135 closed, D5 the gate stays fail-closed.
+- Decisions taken 2026-10-26: D1 outside the package first, D2 as above, D4
+  #135 closed, D5 the gate stays fail-closed. D3 is still open.
 - Operating findings for the controller skill and the preflight:
   - A writer keeps the base it was last reset to; `--finish` resets to that
     base, not to the current main. Both writers still stood on the 0.11.5
