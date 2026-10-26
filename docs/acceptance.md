@@ -2457,6 +2457,42 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.11.8 pre-release acceptance
+
+`v0.11.8` was accepted on 2026-10-26 from 22:15 to 22:20 UTC on its release
+candidate `76fe69d`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.311`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships #148 on top of 0.11.7. It does not change the MCP contract or
+the setup report schema.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    116 files, 3500 passed and 13 skipped, and no unhandled error.
+  - `npm audit` exited with `1` and names only the known `undici` finding
+    through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 967 files (tarball shasum
+    `ccc9b1c4021cf2a4d02425592ff0b348987718ac`); nothing under `eval/` is
+    packed.
+  - Doctor reported `packageVersion` `0.11.8`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.11.8`.
+- In every Level 2 run the real client registrations and the built files were
+  unchanged, no process remained, and the leak check passed.
+- Review: `review-glm` (another model family than the author) on #148,
+  verdict `NON_BLOCKING_ONLY`; both low findings fixed.
+
+Not established for `0.11.8`: the upgrade of an installation with two
+container repositories (the workstation), which follows the release; Level 3.
+
 ### v0.11.7 post-release evidence
 
 The published-release acceptance of `v0.11.7` ran on 2026-10-26 from 21:38 to
