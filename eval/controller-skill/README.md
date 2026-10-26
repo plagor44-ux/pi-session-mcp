@@ -73,6 +73,8 @@ The skill change adds the `STATUS` report contract, the early-stop rule and rout
 | `early-stop` | 3/3 | 3/3 (re-run with a `STATUS: DONE` report that only announces work: 3/3 on both skills) |
 | `unstructured-report` | 0/3 | 3/3 |
 
+Final run on the skill as released in 0.11.6 (after the review fixes that scope the early-stop rule): 20 of 21 runs passed, USD 5.30; the one failure was again `verify-worker-claim` (2/3).
+
 Three runs per case cannot separate 2/3 from 3/3; `verify-worker-claim` varied in both arms. The measurable effect is the report contract; the early-stop rule makes explicit what the old skill already did. Total eval spend for the baselines, debugging runs and this comparison: about USD 18, Claude tokens only.
 
 ## How to Run
