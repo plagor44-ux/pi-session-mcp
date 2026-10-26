@@ -246,7 +246,9 @@ lock-contention and interruption steps, Level 1, or the tag identity checks
 ### macOS
 
 macOS uses the same isolation, sequence and pass criteria, with the additions
-below. A run for Claude Code is recorded under [Status](#status). macOS is
+below. Runs for Claude Code are recorded under [Status](#status), in
+[2026-10-16](#macos-acceptance-on-real-hardware-2026-10-16) and in
+[2026-10-26](#macos-acceptance-on-real-hardware-2026-10-26). macOS is
 CI-tested, and it has not passed Level 2 for Codex.
 
 - **Environment.** Record:
