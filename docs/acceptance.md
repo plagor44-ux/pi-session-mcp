@@ -2457,6 +2457,58 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.11.7 post-release evidence
+
+The published-release acceptance of `v0.11.7` ran on 2026-10-26 from 21:38 to
+21:42 UTC on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.310`. Level 2 passed for the tag and for the
+installed npm package, each with delivery off and with `--events spool`.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.7` (tag object
+`a1b77bd47e168a3bbb6d06b747f03216a4d9b766`) peels to
+`8d8f5a9eafce01aad70c9b84280c4f3cf0a3ef51`, the merge of #147, and
+`git describe --tags --exact-match` reports `v0.11.7`. CI passed on the merge
+commit (run `40399839639`) and on the tag (run `40400486501`).
+
+Package publication, a release fact and not an acceptance level:
+- `pi-session-mcp@0.11.7` was staged by the maintainer with `npm stage
+  publish` from a fresh clone of the tag and approved with the account's
+  second factor. The registry serves shasum
+  `a1b28db671e55239e96b5b43bafa47d7a6c17b7e` and integrity
+  `sha512-F0rpM7T7zhWTGFBHEUMo5fOldfBOKRyrRnHaKRDVuLhRfzq7qRIbh+o8PIPxS5vUdrshb+TNeWh54FgQlEOj7g==`
+  with 967 files, equal to `npm pack --dry-run` of the tag clone.
+- The GitHub release `v0.11.7` was published by the maintainer.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed into a temporary prefix; every `@earendil-works`
+  package resolved to `1.4.0`; the install smoke reported `smoke_passed` with
+  version `0.11.7`; 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the leak check passed.
+
+Operator upgrade of the workstation, **failed and rolled back**:
+- Both client targets were removed with `0.11.6`, `0.11.7` was installed, and
+  Doctor reported `packageVersion` `0.11.7`, `container_profile_refused` `ok`
+  for both container repositories, and `writer_not_ready` for all six writers,
+  as expected after an upgrade.
+- `--repo pi-session-mcp --mode container ... --apply` failed with
+  `doctor_failed` and four `writer_not_ready` findings for the writers of
+  `workflow-artifact-copilot`; that repository's step failed the same way on
+  the two `pi-session-mcp` writers. With two container repositories no
+  repository step could pass, and Doctor blocks the client targets until the
+  writers are accepted ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)).
+- Rollback: `0.11.6` was installed again. Doctor reported no error: the writers'
+  acceptance was still current for `0.11.6`. Both client targets were applied
+  and verified (`mcp_verified`, `skill_verified`, `hook_verified`), and
+  `--writer <name> --verify` reported `mcp_verified` and `hook_verified` for
+  all six writers.
+
+Not established for `0.11.7`: any use on the workstation; the live check of
+#142; Level 3.
+
 ### v0.11.7 pre-release acceptance
 
 `v0.11.7` was accepted on 2026-10-26 from 20:38 to 20:43 UTC on its release
