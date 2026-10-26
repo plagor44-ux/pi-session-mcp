@@ -97,7 +97,7 @@ Selected profiles must have `default: false`, permission `coding`, no extensions
 or external MCP grants, and only builtin skill-catalog entries for skills that
 the package ships and that no operator override replaces, because overrides do
 not reach the writer ([Skills](skills.md#builtinname-in-the-catalog)). Setup
-rejects unsupported profiles rather than silently weakening them.
+rejects unsupported profiles rather than silently weakening them. Doctor checks each selected container profile offline with the same rendering rules and reports `container_profile_refused` before provisioning, or a workspace error if the original configuration cannot be read.
 
 ## Writer storage, launch and readiness
 

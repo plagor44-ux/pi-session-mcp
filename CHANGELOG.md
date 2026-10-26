@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed: Doctor reports `container_profile_refused` for selected coding profiles that container writer provisioning would reject, and reports unreadable configuration without blaming individual profiles (#141).
+
 ## 0.11.6 — 2026-10-26
 
 Patch release for the Sprint 9 close-out
