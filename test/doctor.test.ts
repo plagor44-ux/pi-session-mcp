@@ -191,6 +191,38 @@ describe("offline doctor", () => {
   };
   const extensionFs = () => fsFor({ files: ["/root/dist/main.js"], dirs: ["/hidden/workspace"] });
 
+  it.each([
+    ["string", { packages: ["npm:fixture-ext"] }],
+    ["object", { packages: [{ source: "npm:fixture-ext" }] }],
+  ])("warns about an unpinned %s entry in Pi settings", async (_kind, settings) => {
+    const fs = extensionFs();
+    const readFile = vi.fn(async (path: string) => path === "/fake-agent/settings.json" ? JSON.stringify(settings) : fs.readFile(path, "utf8"));
+    const result = await runDoctor({ packageRoot: "/root", agentDir: "/fake-agent", fileSystem: { ...fs, readFile }, loadConfig: configWithExtension, resolveExtension: async () => "/extension" });
+    expect(readFile).toHaveBeenCalledWith("/fake-agent/settings.json", "utf8");
+    expect(result.checks).toContainEqual({ id: "extension_unpinned", severity: "warning", subject: "safe:fixture-ext", remediation: "pin it with pi install npm:fixture-ext@1.2.3" });
+    expect(result.ok).toBe(true);
+    expect(result.exitCode).toBe(1);
+  });
+
+  it.each([
+    ["pinned", JSON.stringify({ packages: ["npm:fixture-ext@1.2.3", { source: "npm:fixture-ext@1.2.3" }] })],
+    ["unconfigured", JSON.stringify({ packages: ["npm:other-ext"] })],
+    ["no packages", "{}"],
+    ["invalid", "not JSON"],
+    ["missing", "ENOENT"],
+    ["unreadable", "EACCES"],
+  ])("does not warn for %s settings", async (_kind, content) => {
+    const fs = extensionFs();
+    const readFile = async (path: string) => {
+      if (path !== "/fake-agent/settings.json") return fs.readFile(path, "utf8");
+      if (["ENOENT", "EACCES"].includes(content)) throw Object.assign(new Error("unavailable"), { code: content });
+      return content;
+    };
+    const result = await runDoctor({ packageRoot: "/root", agentDir: "/fake-agent", fileSystem: { ...extensionFs(), readFile }, loadConfig: configWithExtension, resolveExtension: async () => "/extension" });
+    expect(result.checks.some((check) => check.id === "extension_unpinned")).toBe(false);
+    expect(result.ok).toBe(true);
+  });
+
   it("reports installed pinned extensions as ok", async () => {
     const resolveExtension = vi.fn(async () => "/hidden/extension");
     const result = await runDoctor({ packageRoot: "/root", fileSystem: extensionFs(), loadConfig: configWithExtension, resolveExtension });

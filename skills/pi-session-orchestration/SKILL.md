@@ -23,7 +23,8 @@ Write down before you start a worker:
 - dependencies on other tasks,
 - workspace alias,
 - the change area (files or directories) the worker may touch,
-- the checks you expect it to run.
+- the checks you expect it to run,
+- the report you expect back (see section 5).
 
 Split work so tasks do not overlap. If two tasks need the same files, run them one after the other.
 
@@ -38,6 +39,7 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 - Each automated writer has the synthetic default profile `boundary-read-only`. Name the coding `executionProfile` explicitly; omitting it does not start coding.
 - A session's workspace and profile are fixed at start. Never try to switch them; start a new session instead.
 - The profile's tools set the limit. A skill grants no rights. If no listed profile can do the task, stop and report that instead of picking a more powerful one than needed.
+- Route by task type. As a default with small evidence (a few runs per profile on synthetic and maintenance tasks): give a fully specified, mechanical task to the cheapest coding profile that passed comparable tasks, a task that needs judgement or design to a stronger coding profile, and a review to a read-only profile of a different model family than the author's. Change the default when your own results disagree.
 
 ## 4. Keep a ledger
 
@@ -49,6 +51,8 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 - A prompt call returns a running turn at once. Do not block on one task while others sit unstarted.
 - A session accepts one running turn. A second prompt on a running session fails with `session_running`.
 - Put the full task in the prompt: goal, base commit, change area, checks, expected report. Add nothing the task does not ask for. The worker cannot see your conversation.
+- Ask for a report whose first line is `STATUS:` with exactly one of `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`, followed by the fields you need, for code at least branch, commits, changed files, each check with its exit code, and concerns.
+- Tell the worker to stop with `BLOCKED` when its workspace is not at the base, and not to fetch or change the base itself.
 
 ## 6. Wait for results
 
@@ -74,6 +78,9 @@ Keep an internal ledger with one row per task: task, workspace alias, profile al
 - `updatedAt` on a running turn is the time of the last observed public SDK activity: assistant message start, streaming updates and end, and tool execution start, update and end. Streaming is activity, not evidence of finished or useful work. Work without a public event stays invisible, for example inside an extension's own agent loop or in a long tool call without updates. A stamp that has not moved is therefore no proof of a hang. Judge by your time budget and by the workspace.
 - `completed`, `failed` and `aborted` are terminal and immutable. On the first terminal read, record `state`, `assistantText` and `truncated` in the ledger. In normal operation do not fetch that turn again. A deliberate re-fetch for a contract or invariance check is a separate exception; label it as such.
 - `completed` is a technical state: the turn ended and returned text. It does not mean the task succeeded. Read `assistantText` and check `truncated`.
+- Check the report before you verify anything. A report without a valid `STATUS` line or without the fields you asked for is a format failure: send one follow-up in the same session that asks only for the report in the agreed format.
+- Act on the status. `NEEDS_CONTEXT`: answer the question in a follow-up in the same session. `BLOCKED`: resolve the blocker or report it; do not send the same prompt again. `DONE_WITH_CONCERNS`: read the concerns before you verify. `DONE`: verify as in section 8. A status is a claim, never evidence.
+- On an implementation task, treat a quick finish without work as an early stop, not as a result: a `completed` turn that ended soon after its prompt (for example within a minute), whose report is missing, has no valid status or claims `DONE`, and that names no commit or changed file. Judge a container writer by its report; you collect only after closing the session. Send exactly one follow-up in the same session that restates the goal and asks the worker to do the work and report. If that turn also ends without a change, count the task as failed and continue as in section 9. A valid `BLOCKED` or `NEEDS_CONTEXT` is never an early stop, and a quick review is not one either.
 - Never accept a worker report as proof. A worker saying the tests pass is a claim, not evidence.
 
 ## 8. Take over and verify
@@ -108,7 +115,7 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 After taking over the result and closing its coding session, before the next task:
 
 1. Run `pi-session-mcp-setup --writer <name> --collect --apply` from the operator environment. Review the collected refs in the operator's checkout: `refs/remotes/writer-<name>/<branch>`, with uncommitted work as `<branch>-wip`. They are untrusted until reviewed. Integrate only verified work yourself.
-2. Run `pi-session-mcp-setup --writer <name> --finish --apply`. It collects again, then resets a persistent writer or recreates an ephemeral writer. Do not reuse it until this succeeds. A refused branch name makes collection incomplete and finish stops: ask the operator to resolve it by renaming inside the boundary or explicitly discarding with `--reset --discard --apply`.
+2. Run `pi-session-mcp-setup --writer <name> --finish --apply`. It collects again, then resets a persistent writer or recreates an ephemeral writer. Do not reuse it until this succeeds. A refused branch name makes collection incomplete and finish stops: ask the operator to resolve it by renaming inside the boundary or explicitly discarding with `--reset --discard --apply`. Setup reports `writer_reconnect_required` after an applied reset, finish or recreate: reconnect that writer's MCP server first (Claude Code: `/mcp` reconnect; Codex: restart the session), otherwise the next coding start can fail with the local-authentication error listed in [references/start-errors.md](references/start-errors.md). Reconnect also after a failed reset, finish or recreate, because it may already have replaced the credentials.
 3. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
 
 ## Limits to remember

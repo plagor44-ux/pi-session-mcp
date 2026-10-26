@@ -10,3 +10,4 @@ coverage/
 /.bridge-eval/
 /eval/results/
 /.vitest/
+eval/controller-skill/plugin/evals/results/
