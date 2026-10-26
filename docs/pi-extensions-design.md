@@ -374,14 +374,18 @@ validates it. `capabilitiesSchema` and
 
 ### Doctor
 
-Doctor gains two checks after the workspace checks, one per profile and
+Doctor includes these checks after the workspace checks, one per profile and
 extension, with the subject `<profile>:<package name>`:
 
 - `extension_missing` (error) when the resolver finds no installed package;
 - `extension_version_mismatch` (error) when the installed manifest version
-  differs, or the manifest is unreadable.
+  differs, or the manifest is unreadable;
+- `extension_unpinned` (warning) when Pi's agent `settings.json` lists the
+  configured extension as `npm:<name>` (a string or an object's `source`). Pin
+  it with `pi install npm:<name>@<version>`. Missing, unreadable, or invalid
+  settings are ignored by this advisory check.
 
-Doctor reads manifests only; it never imports extension code. It stays
+Doctor reads manifests and settings only; it never imports extension code. It stays
 offline. `setup --verify` includes Doctor and therefore these checks.
 
 ### Diagnostics
