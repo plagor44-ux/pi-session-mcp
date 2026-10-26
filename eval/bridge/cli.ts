@@ -84,7 +84,7 @@ async function mainLive(rest: string[]): Promise<number> {
 }
 
 // ---------------------------------------------------------------- product-probe (provider-free acceptance of the product's turn events and wake hook, ADR 0011)
-const PRODUCT_USAGE = "usage: cli.js product-probe --out <absolute dir> [--only P1,P2,P3,P4,P6]";
+const PRODUCT_USAGE = "usage: cli.js product-probe --out <absolute dir> [--only P1,P2,P3,P4,P6,K7]";
 interface ProductParsed { out: string; only?: string[]; inside: boolean }
 function parseProduct(rest: string[]): ProductParsed | undefined {
   let out: string | undefined, only: string[] | undefined, inside = false;
