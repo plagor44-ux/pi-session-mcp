@@ -339,7 +339,7 @@ describe("writer setup reconciliation", () => {
     const doctor = vi.fn<NonNullable<WriterSetupDependencies["doctor"]>>(async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }));
     doctor.mockResolvedValueOnce({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] });
     doctor.mockResolvedValue({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
-      { id: "writer_not_ready", severity: "error", subject: "other-w2" },
+      { id: "writer_dirty", severity: "error", subject: "other-w2" },
       { id: "extension_version_mismatch", severity: "error", subject: "review:fixture-ext" },
     ] });
     const output = await changeWriterMode(f.configPath, mode, { ...f.deps, doctor });
@@ -347,7 +347,7 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(1);
     expect(output.findings.filter((finding) => finding.code === "doctor_failed")).toHaveLength(1);
     expect(output.findings.filter((finding) => finding.target.client === "doctor")).toEqual([
-      { status: "failed", code: "writer_not_ready", target: { client: "doctor", scope: "check", alias: "other" } },
+      { status: "failed", code: "writer_dirty", target: { client: "doctor", scope: "check", alias: "other" } },
       { status: "failed", code: "extension_version_mismatch", target: { client: "doctor", scope: "check", alias: "review" } },
     ]);
     expect(f.calls).toEqual([]);
@@ -377,6 +377,33 @@ describe("writer setup reconciliation", () => {
     for (const check of [
       { id: "container_profile_refused" as const, severity: "error" as const, subject: "other:code" },
       { id: "extension_version_mismatch" as const, severity: "error" as const, subject: "x:fixture-ext" },
+    ]) {
+      f.calls.length = 0;
+      const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [check] });
+      const output = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, { ...f.deps, doctor });
+      expect(output.findings[0]?.code).toBe("doctor_failed");
+      expect(f.calls).toEqual([]);
+    }
+  });
+
+  it.each(["repository", "writer"])("does not block a %s step on another repository's writers that are not ready after an upgrade (#148)", async (step) => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
+      { id: "writer_not_ready", severity: "error", subject: "x-w1" },
+      { id: "writer_not_ready", severity: "error", subject: "other-w1" },
+      { id: "writer_not_ready", severity: "error", subject: "other-w2" },
+    ] });
+    const deps = { ...f.deps, doctor };
+    const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
+      : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
+    expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
+  });
+
+  it("still blocks on another repository's dirty writer and on a malformed writer subject", async () => {
+    const f = await fixture();
+    for (const check of [
+      { id: "writer_dirty" as const, severity: "error" as const, subject: "other-w1" },
+      { id: "writer_not_ready" as const, severity: "error" as const, subject: "not a writer" },
     ]) {
       f.calls.length = 0;
       const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [check] });

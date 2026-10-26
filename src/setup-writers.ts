@@ -97,7 +97,11 @@ async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetupDepende
   const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
   const ownSubjects = new Set([ctx.alias, ...Array.from({ length: 16 }, (_, index) => writerName(ctx.alias, index + 1))]);
   // A refused profile of this repository is its own finding: collect, finish and the profile change that fixes it must stay possible (#141).
-  const own = (check: { id: string; subject: string }) => ownSubjects.has(check.subject) || (check.id === "container_profile_refused" && check.subject.startsWith(`${ctx.alias}:`));
+  // Another repository's writer that is not ready is untouched by this step and expected after an upgrade; counting it would deadlock
+  // the repository steps of two container repositories (#148).
+  const own = (check: { id: string; subject: string }) => ownSubjects.has(check.subject)
+    || (check.id === "container_profile_refused" && check.subject.startsWith(`${ctx.alias}:`))
+    || (check.id === "writer_not_ready" && WRITER_NAME_PATTERN.test(check.subject));
   const blocking = doctor.checks.filter((check) => check.severity === "error" && !own(check));
   if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } })));
 }

@@ -745,6 +745,14 @@ repository step between the install and the client targets:
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
    for each writer.
 
+The repository step does not count another repository's writers that are not
+ready yet, so the repositories can be accepted one after the other. Up to
+0.11.7 it did, and with two or more container repositories no repository step
+could pass after an upgrade
+([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)). If that
+happens, install the previous version again: its writers are still accepted
+for it.
+
 Releases up to 0.11.4 accepted only writers whose phase was not ready, so a
 ready writer stayed `writer_not_ready` after the upgrade
 ([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)). With such a
