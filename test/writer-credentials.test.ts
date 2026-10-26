@@ -1,10 +1,8 @@
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { ensureWarmupConfig, expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostLogin, selectBoundaryCredentials, writeBoundaryCredentials } from "../src/writer-credentials.js";
-import { writersRoot } from "../src/writer-state.js";
-import { configSchema } from "../src/config.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { expiresWithin, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostCredential, selectBoundaryCredentials, selectedOAuthProviders, writeBoundaryCredentials } from "../src/writer-credentials.js";
 
 const roots: string[] = [];
 async function temporary() {
@@ -29,6 +27,11 @@ describe("boundary credentials", () => {
     expect(selectBoundaryCredentials(host, ["anthropic"])).toEqual({ anthropic: host.anthropic });
     expect(JSON.stringify(host)).toBe(before);
     for (const invalid of [undefined, null, "not json", [], 42]) expect(selectBoundaryCredentials(invalid, ["openai"])).toEqual({});
+  });
+
+  it("names the selected providers that hold an OAuth credential", () => {
+    expect(selectedOAuthProviders(host, ["openai", "anthropic", "cursor", "other", "missing"])).toEqual(["openai"]);
+    expect(selectedOAuthProviders("not json", ["openai"])).toEqual([]);
   });
 
   it("writes auth.json atomically at 0600 without changing host bytes or mtime", async () => {
@@ -59,94 +62,38 @@ describe("boundary credentials", () => {
     expect(expiresWithin({ openai: { type: "oauth", expires: now + 120_001 } }, ["openai"], 2, now)).toBe(false);
     expect(expiresWithin(host, ["anthropic", "cursor", "missing"], 2, now)).toBe(false);
     expect(expiresWithin("not json", ["openai"], 2, now)).toBe(false);
-    expect(REFRESH_THRESHOLD_MINUTES).toBe(2);
     expect(REFRESH_INTERVAL_MS).toBe(60_000);
   });
 
-  it("writes only state-selected OAuth profiles and a private empty workspace", async () => {
-    const home = await temporary();
-    await mkdir(join(home, ".pi", "agent"), { recursive: true });
-    await writeFile(join(home, ".pi", "agent", "auth.json"), JSON.stringify({ ...host, second: { type: "oauth" } }));
-    const path = await ensureWarmupConfig(home, [
-      { provider: "anthropic", model: "key-model" }, { provider: "second", model: "second-model" },
-      { provider: "openai", model: "state-model" }, { provider: "cursor", model: "cursor-model" },
-    ]);
-    expect(path).toBe(join(writersRoot(home), ".warmup", "config.json"));
-    const config = JSON.parse(await readFile(path!, "utf8"));
-    expect(configSchema.safeParse(config).success).toBe(true);
-    expect(Object.values(config.executionProfiles)).toEqual([
-      { provider: "second", model: "second-model", permissionProfile: "read-only", thinkingLevel: "off", default: true },
-      { provider: "openai", model: "state-model", permissionProfile: "read-only", thinkingLevel: "off", default: false },
-    ]);
-    expect(config.workspaces).toEqual({ warmup: join(writersRoot(home), ".warmup", "empty") });
-    expect((await stat(config.workspaces.warmup)).mode & 0o777).toBe(0o700);
-    expect((await stat(path!)).mode & 0o777).toBe(0o600);
-  });
-
-  it("writes nothing when no selected OAuth credentials exist, including a missing host file", async () => {
-    const home = await temporary();
-    expect(await ensureWarmupConfig(home, [{ provider: "openai", model: "model" }])).toBeUndefined();
-    await expect(stat(writersRoot(home))).rejects.toMatchObject({ code: "ENOENT" });
-    await mkdir(join(home, ".pi", "agent"), { recursive: true });
-    await writeFile(join(home, ".pi", "agent", "auth.json"), JSON.stringify(host));
-    expect(await ensureWarmupConfig(home, [{ provider: "anthropic", model: "model" }])).toBeUndefined();
-    await expect(stat(writersRoot(home))).rejects.toMatchObject({ code: "ENOENT" });
+  it("keeps the threshold above the SDK's five-minute OAuth window plus one interval", () => {
+    // The Pi SDK refreshes only inside its own five-minute window (its documented
+    // default minimum validity); the host warm-up must fire earlier than that.
+    expect(REFRESH_THRESHOLD_MINUTES).toBe(10);
+    expect(REFRESH_THRESHOLD_MINUTES * 60_000).toBeGreaterThan(5 * 60_000 + REFRESH_INTERVAL_MS);
   });
 });
 
-async function fakeServer(source: string) {
-  const root = await temporary();
-  await mkdir(join(root, "dist"));
-  await writeFile(join(root, "dist", "main.js"), source);
-  return root;
-}
-
-describe("host login warmup", () => {
-  it("only initializes, starts and closes a session using the supplied config", async () => {
-    const root = await fakeServer(`
-      const fs = require('node:fs');
-      const readline = require('node:readline');
-      readline.createInterface({ input: process.stdin }).on('line', line => {
-        const m = JSON.parse(line);
-        fs.appendFileSync(process.env.PI_SESSION_MCP_CONFIG, line + '\\n');
-        if (m.id) process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result:m.id===2?{structuredContent:{session:{id:'session-1'}}}:{}})+'\\n');
-      });
-    `);
-    const config = join(root, "frames");
-    await refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: config, timeoutMs: 2000 });
-    const frames = (await readFile(config, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
-    expect(frames.map((frame) => frame.params?.name ?? frame.method)).toEqual([
-      "initialize", "notifications/initialized", "pi_session_start", "pi_session_close",
-    ]);
-    expect(frames[2].params.arguments).toEqual({ workspace: "warmup" });
-    expect(frames[3].params.arguments).toEqual({ sessionId: "session-1" });
+describe("host credential refresh", () => {
+  it("asks the SDK for the requested validity and never writes the file itself", async () => {
+    const home = await temporary();
+    const getAuth = vi.fn(async (_provider: string, _overrides?: { minOAuthValidityMs?: number; signal?: AbortSignal }) => undefined);
+    await refreshHostCredential(
+      { authPath: join(home, ".pi", "agent", "auth.json"), provider: "openai", minOAuthValidityMs: 600_000, timeoutMs: 20_000 },
+      async () => ({ getAuth }),
+    );
+    expect(getAuth).toHaveBeenCalledTimes(1);
+    expect(getAuth.mock.calls[0]![0]).toBe("openai");
+    expect(getAuth.mock.calls[0]![1]).toMatchObject({ minOAuthValidityMs: 600_000, signal: expect.any(AbortSignal) });
+    await expect(stat(join(home, ".pi", "agent", "auth.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("terminates an unresponsive server within the timeout", async () => {
-    const root = await fakeServer("setInterval(() => {}, 1000);");
-    await expect(refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: "unused", timeoutMs: 100 })).rejects.toThrow("warmup");
-  });
-
-  it("kills a server that traps SIGTERM after the grace period", async () => {
-    const root = await fakeServer("process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);");
+  it("returns within the timeout when the SDK does not answer", async () => {
+    const home = await temporary();
     const started = Date.now();
-    await expect(refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: "unused", timeoutMs: 500 })).rejects.toThrow("warmup");
-    expect(Date.now() - started).toBeGreaterThanOrEqual(2500);
-    expect(Date.now() - started).toBeLessThan(4500);
-  });
-
-  it("rejects tool errors without sending a model request", async () => {
-    const root = await fakeServer(`
-      const readline = require('node:readline');
-      readline.createInterface({ input: process.stdin }).on('line', line => {
-        const m = JSON.parse(line);
-        if (m.id) process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result:m.id===2?{isError:true}:{}})+'\\n');
-      });
-    `);
-    await expect(refreshHostLogin({ nodePath: process.execPath, releaseRoot: root, warmupConfig: "unused", timeoutMs: 2000 })).rejects.toThrow("warmup");
-  });
-
-  it("handles spawn failures", async () => {
-    await expect(refreshHostLogin({ nodePath: "/nonexistent/node", releaseRoot: "unused", warmupConfig: "unused", timeoutMs: 100 })).rejects.toThrow("warmup");
+    await expect(refreshHostCredential(
+      { authPath: join(home, "auth.json"), provider: "openai", minOAuthValidityMs: 600_000, timeoutMs: 100 },
+      async () => ({ getAuth: () => new Promise(() => {}) }),
+    )).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(2_000);
   });
 });
