@@ -95,6 +95,30 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Next: orchestration reliability (planned 2026-10-26)
+
+Base main `e6fc87c`, published 0.11.5. The operator's orchestration concept of
+2026-10-25 (candidates K1–K11) is assessed against the repository and planned
+in the [Sprint 10 file](sprints/2026-10-26-s10-orchestration-reliability.md).
+Items 1 and 2 are implemented on the consolidated branch and its pull request (status in the Sprint 10 file's progress log); items 3 and 4 are planned:
+
+1. Sprint 9 close-out: #136, #137 and the #135 record.
+2. Sprint 10, controller reliability: a provider-free probe of the worker
+   system prompt (`phase-0-system-prompt-disabled` in `src/sdk-pi-adapter.ts`),
+   a `claude plugin eval` suite for the controller skill (K1), then one skill
+   change for the report contract, the early-stop rule and routing defaults
+   (K2, K4, K6), measured before and after.
+   Items 1 and 2 travel on one branch and one pull request with one patch
+   release, 0.11.6.
+3. Sprint 11: file ledger with a compaction hook and a verification `Stop`
+   gate (K3, K9) after maintainer decision D1, the wake gaps (K8) and a
+   provider-free subagent probe (K7).
+4. In parallel: Sprint 8 migration steps 2–7, one repository at a time.
+
+A review stage with a capped fix loop (K5) runs as process from Sprint 10 on.
+The guided profile setup (K10, #139) and a worker report extension (K11) stay
+proposals; K11 needs an ADR.
+
 ### Sprint 9: writer settings drift and override skills (2026-10-25)
 
 Base main `a8f6397`, published 0.11.5. Fixes that make `--repo ... --apply` the
@@ -111,6 +135,8 @@ more repositories move to container writers:
   (reset or finish under a running writer server) and
   [#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137) (unpinned Pi
   extensions and the repository step's Doctor gate).
+- #135 stays open after PR #138 although its fail-closed part shipped; the
+  close-out records that and asks decision D4.
 - Proposals, not in this sprint: a guided, interactive setup in the agent
   harness that works out the execution profiles together with the operator;
   copying operator overrides into a writer; adopting a changed image while
@@ -362,6 +388,9 @@ in-memory state and one trusted local peer.
 | OS isolation | Trigger fired on 2026-10-15 (coding profiles wrote on non-disposable repositories); decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and ADR 0008, interim rules in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules); profiles/skills are not an OS sandbox |
 | pi_turn_wait | Measured high polling cost per turn with pauses or tool/approval cost; 5–7 polls per invocation is insufficient evidence |
 | Question channel for worker questions (ADR 0011 item 4, undecided) | Demonstrated demand, its own decision, contract tests and a minor release |
+| Worker result channel or report extension (K11) | Sprint 10 shows that the report contract in the skills is not enough; an ADR on either an extension allowance in the writer boundary or a result field in the MCP contract, and a minor release |
+| `Stop` gate on open sessions, MCP elicitation for worker questions, pi-goal-x, pi-subagents, the `subagent`, `structured-output.ts` and `git-checkpoint.ts` examples | Not planned: each collides with the wake, reaches the human instead of the model, continues outside the turn or loses its result (operator concept of 2026-10-25, consistent with #91 and ADR 0011) |
+| pi-lens on coding profiles | Not planned: no benefit in two ablation waves, 1.47 times the cost |
 | Persistence/resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |

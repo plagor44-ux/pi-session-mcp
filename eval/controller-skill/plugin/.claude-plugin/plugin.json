@@ -1,0 +1,5 @@
+{
+  "name": "pi-session-orchestration-eval",
+  "version": "0.0.0",
+  "description": "Eval-only wrapper around the pi-session-orchestration controller skill"
+}

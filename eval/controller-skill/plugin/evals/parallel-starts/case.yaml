@@ -1,0 +1,37 @@
+schema_version: "1.1"
+name: parallel-starts
+description: Two independent tasks dispatched in parallel before waiting on any turn
+tags:
+  - controller-skill
+runs: 3
+execution:
+  max_turns: 20
+  timeout_seconds: 300
+  allowed_tools:
+    - Read
+    - Skill
+  prompt: |
+    We have two independent tasks to run concurrently on base commit abc0000:
+    - TASK-A: Add a --json flag in workspace demo-w1
+    - TASK-B: Fix a typo in docs in workspace demo-w2
+
+    Please delegate both tasks to worker sessions via pi-session-mcp.
+graders:
+  - type: tool_used
+    name: discover-capabilities
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_capabilities_get
+    min: 1
+    arm: both
+  - type: tool_used
+    name: start-both-sessions
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_start
+    min: 2
+    arm: both
+  - type: tool_order
+    name: dispatch-task-b-before-first-turn-wait
+    before:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+      input_match: "TASK-B"
+    after:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_turn_get
+    arm: both

@@ -1,0 +1,27 @@
+schema_version: "1.1"
+name: early-stop
+description: Worker completes prematurely after 25s with no changes, triggering a follow-up prompt
+tags:
+  - controller-skill
+runs: 3
+execution:
+  max_turns: 20
+  timeout_seconds: 300
+  allowed_tools:
+    - Read
+    - Skill
+  prompt: |
+    Please delegate the following task to a worker session via pi-session-mcp:
+    Implement the retry mechanism in workspace demo-w1 starting from base commit abc0000.
+graders:
+  - type: tool_used
+    name: follow-up-prompt-on-early-stop
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    min: 2
+    max: 2
+    arm: both
+  - type: tool_used
+    name: same-session-no-new-start
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_start
+    max: 1
+    arm: both

@@ -23,7 +23,7 @@ export type DoctorCheckId =
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
   | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
-  | "extension_missing" | "extension_version_mismatch"
+  | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "event_spool_root";
 
@@ -56,6 +56,8 @@ export interface DoctorFileSystem {
 }
 export interface DoctorDependencies {
   readonly home?: string;
+  /** Pi's agent directory; defaults to the SDK's `getAgentDir()`. */
+  readonly agentDir?: string;
   readonly writerRuntime?: () => Promise<{ podmanVersion?: string; imageExists: (id: string) => Promise<boolean> }>;
   readonly packageRoot?: string;
   readonly nodeVersion?: string;
@@ -91,7 +93,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -382,11 +384,28 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     }
   }
   if (config) {
+    // This advisory check needs positive evidence, like the gitfile check: unreadable or
+    // malformed optional settings are ignored, while installed-manifest checks still run.
+    const unpinned = new Set<string>();
+    if ([...config.executionProfiles.values()].some((profile) => profile.extensions?.length)) {
+      try {
+        // Load the SDK only here, like the extension resolver, so a broken install cannot stop Doctor from loading.
+        const agentDir = dependencies.agentDir ?? (await import("@earendil-works/pi-coding-agent")).getAgentDir();
+        const settings: unknown = JSON.parse((await fs.readFile(join(agentDir, "settings.json"), "utf8")).replace(/^\uFEFF/, ""));
+        if (typeof settings === "object" && settings !== null && "packages" in settings && Array.isArray(settings.packages)) {
+          for (const entry of settings.packages) {
+            const source: unknown = typeof entry === "object" && entry !== null && "source" in entry ? entry.source : entry;
+            if (typeof source === "string") unpinned.add(source);
+          }
+        }
+      } catch { /* Optional settings cannot establish an unpinned entry. */ }
+    }
     const resolveExtension = dependencies.resolveExtension
       ?? (async (extension: ExtensionSpec) => (await import("./pi-extensions.js")).resolvePiExtension(extension));
     for (const [alias, profile] of [...config.executionProfiles].sort(([a], [b]) => a.localeCompare(b))) {
       for (const extension of profile.extensions ?? []) {
         const subject = `${alias}:${extension.name}`;
+        if (unpinned.has(`npm:${extension.name}`)) checks.push(warning("extension_unpinned", subject, `pin it with pi install npm:${extension.name}@${extension.version}`));
         try {
           await resolveExtension(extension);
           checks.push(ok("extension_missing", subject), ok("extension_version_mismatch", subject));

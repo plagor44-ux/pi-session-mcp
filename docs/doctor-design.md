@@ -41,6 +41,7 @@ and owners are:
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
+| `extension_unpinned` | Warning. Pi's agent settings list a configured pinned extension without a version, as a string or object's `source`; pin it with `pi install npm:<name>@<version>`. Missing, unreadable, or invalid settings are ignored | `<profile>:<package>` |
 | `skill_missing` | The `SKILL.md` file that a profile's selected skill alias names does not exist; a `builtin:<name>` value that matches no override and no shipped skill resolves to the shipped location and is reported here | `<profile>:<skill-alias>` |
 | `skill_unreadable` | A selected skill path is not a regular file, is larger than 256 KiB, or cannot be read | `<profile>:<skill-alias>` |
 | `skill_duplicate` | Two selected skill aliases of one profile resolve to the same canonical file | `<profile>:<skill-alias>` |

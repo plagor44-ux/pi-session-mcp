@@ -1,0 +1,26 @@
+schema_version: "1.1"
+name: close-on-failure
+description: Failed turn results in closing the session and at most one retry in a fresh session
+tags:
+  - controller-skill
+runs: 3
+execution:
+  max_turns: 20
+  timeout_seconds: 300
+  allowed_tools:
+    - Read
+    - Skill
+  prompt: |
+    Please delegate the following task to a worker session via pi-session-mcp:
+    Refactor the cache eviction handler in workspace demo-w1 starting from base commit abc0000.
+graders:
+  - type: tool_used
+    name: close-session-on-failure
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_close
+    min: 1
+    arm: both
+  - type: tool_used
+    name: at-most-one-retry
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_start
+    max: 2
+    arm: both

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pi-session-mcp": {
+      "command": "/bin/false",
+      "args": []
+    }
+  }
+}

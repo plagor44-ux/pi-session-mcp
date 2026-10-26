@@ -1,0 +1,33 @@
+schema_version: "1.1"
+name: unstructured-report
+description: A finished turn whose report names no status, commit, changed files or checks is sent back for the agreed report before anything is accepted
+tags:
+  - controller-skill
+runs: 3
+execution:
+  max_turns: 20
+  timeout_seconds: 300
+  allowed_tools:
+    - Read
+    - Skill
+  prompt: |
+    Please delegate the following task to a worker session via pi-session-mcp:
+    Make the config parser in src/config.ts reject duplicate keys, in workspace demo-w1 on base commit abc0000. Change only src/config.ts and its test; run npm test.
+graders:
+  - type: tool_used
+    name: asks-for-the-report-in-the-same-session
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    min: 2
+    max: 2
+    arm: both
+  - type: tool_used
+    name: no-new-session-for-the-report
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_start
+    max: 1
+    arm: both
+  - type: tool_used
+    name: prompts-ask-for-a-status-line
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    input_match: "STATUS"
+    min: 1
+    arm: both

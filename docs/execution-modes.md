@@ -234,7 +234,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `controllers_restart_required` | Reconnect/restart controllers to load current policy and registrations |
 | `platform_unsupported` | Writer operation requires Linux |
 | `usage_invalid` | Invalid writer name or argument combination |
-| `doctor_failed` | Relevant blocking Doctor checks failed |
+| `doctor_failed` | Relevant blocking Doctor checks failed; repository steps and mutating writer operations also report each blocking check as a separate failed finding with its Doctor check id and target `client: "doctor"`, `scope: "check"`, and as alias the profile or workspace alias that leads the check's subject (the part before `:`, and for a writer name its alias), or `"invalid"` for a global check or when that is not a valid alias |
 | `writer_planned` | Writer would be retained/provisioned |
 | `writer_remove_planned` | Surplus writer would be removed |
 | `writer_collect_planned` | Collection planned only |
@@ -268,6 +268,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_reset` | Persistent clone reset and verified |
 | `writer_recreate_failed` | Recreated clone is not at baseline |
 | `writer_recreated` | Clone/agent recreated and verified |
+| `writer_reconnect_required` | Writer credentials were cleared; reconnect the writer's MCP server before the next coding start |
 | `writer_removed` | Writer state deleted after registration cleanup |
 | `ownership_unavailable` | Existing registration lacks ownership proof; removal refused |
 | `registration_not_equivalent` | Verify found absent/divergent/unsupported required registration |

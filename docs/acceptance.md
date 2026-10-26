@@ -2404,6 +2404,57 @@ Not established for `0.11.4`:
 CI covers macOS 15 and 26. The published-release acceptance follows after
 publication, with both Level 2 variants.
 
+### v0.11.6 pre-release acceptance
+
+`v0.11.6` was accepted on 2026-10-26 from 10:00 to 10:03 UTC on its release
+candidate `a7781da`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.310`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships the Sprint 9 close-out (#134, #135, #136, #137) and the
+Sprint 10 skill changes on one branch. It does not change the MCP contract.
+Setup gains the finding code `writer_reconnect_required` and, when the Doctor
+gate blocks, findings with target `client: "doctor"`; Doctor gains the warning
+`extension_unpinned`. The setup report keeps `schemaVersion` 1.
+
+- Level 1 in the candidate checkout after `npm ci`: every command exited with
+  `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    114 files, 3439 passed and 13 skipped, and no unhandled error.
+  - `npm audit` exited with `1` and names only the known `undici` finding
+    (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c) through
+    `@earendil-works/pi-coding-agent` 1.4.0, still the latest SDK release
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 961 files (tarball shasum
+    `5eb2b382fc1b45880fc67952f4f86af42e162eae`); nothing under `eval/` is
+    packed.
+  - Doctor reported `packageVersion` `0.11.6`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+- Packed-tarball Level 2, installed with `npm install -g --prefix` into a
+  fresh prefix: 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every Level 2 run the real client registrations and the built files were
+  unchanged. The tarball and the prefix were removed.
+- An earlier run of the same checks on candidate `4bbd4ff` passed as well; the
+  final independent review's follow-ups came after it, so this record binds to
+  `a7781da`.
+- Reviews: `review-glm` (Pi, another model family) on #136 and #137, and a
+  final independent review of the whole diff; their follow-ups are part of the
+  candidate.
+- The controller skill was measured with the provider-free eval suite under
+  `eval/controller-skill/` (20 of 21 runs on the final skill).
+
+Not established for `0.11.6`:
+- any live run of the released package (Level 3 or a real model);
+- the new worker skills inside a container writer, which needs the upgrade and
+  a `--repo <alias> ... --apply` on the published release;
+- whether a running writer server recovers by itself after a reset through the
+  wrapper's periodic credential copy (#136);
+- the VS Code wake; macOS delivery.
+
 ### v0.11.5 post-release evidence
 
 The published-release acceptance of `v0.11.5` ran on 2026-10-25 from 22:13 to
