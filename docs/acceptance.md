@@ -2455,6 +2455,67 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.11.6 post-release evidence
+
+The published-release acceptance of `v0.11.6` ran on 2026-10-26 from 18:45 to
+18:50 UTC on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`, Codex CLI
+`0.162.1` and Claude Code `2.1.310`. Level 2 passed for the tag and for the
+installed npm package, each with delivery off and with `--events spool`.
+Level 1 was not repeated on the tag clone: the release commit is the merge of
+PR #140, whose tree the pre-release record above accepted.
+
+Tag binding: a fresh clone of the annotated tag `v0.11.6` (tag object
+`8e05631b2982e505648f186cf06e7b88247be0b3`) peels to
+`d93a6d68f90c6cb1ba46187ac7da348738ce5924`, the merge of #140, and
+`git describe --tags --exact-match` reports `v0.11.6`. CI passed on the merge
+commit and on the tag.
+
+Package publication, a release fact and not an acceptance level:
+- The registry serves shasum `cfd8cfad18a6f36b8c9270d4211e717ea6575d77` and
+  integrity
+  `sha512-xtGskVrlcOz/vCe6X/BOV4NN5Ofbn2coMt7BJUGvweeqsflOTOY8DfOQGP5STaZYE91udeZBenLe1qJ9W8GAyQ==`
+  with 961 files. Both equal `npm pack --dry-run` of the tag clone after
+  `npm ci`, `npm run build` and `npm run build:cli`.
+- Doctor on the tag clone reported `packageVersion` `0.11.6`. It exited with
+  `2` because no configuration was set (`config_missing`).
+- The GitHub release `v0.11.6` was published at 11:10:06 UTC.
+
+Real clients without a model (Level 2), with `scripts/setup-acceptance.mjs`:
+- Tag clone: 160 of 160 checks passed with delivery off and 228 of 228 with
+  `--events spool`.
+- npm package: installed with `npm install -g --prefix` into a temporary
+  prefix without the lockfile. Every `@earendil-works` package resolved to
+  `1.4.0`. The install smoke reported `smoke_passed` with version `0.11.6`.
+  Level 2 passed 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- In every run the real client registrations were unchanged, no process
+  remained, the built files were unchanged, and the path-leak check passed.
+- The clone and the prefix were removed.
+
+Workstation state on 2026-10-26, recorded during Sprint 11:
+- The host server and both pilot writers report `0.11.6` and delivery `spool`
+  through `pi_capabilities_get`; `--writer <name> --verify` reported
+  `mcp_verified` and `hook_verified` for both writers.
+- The worker skills that the writers load come from the read-only release
+  mount of the installed package; its `pi-session-implementation` skill is
+  identical to the one on `main` and carries the status tokens (S10-4). Both
+  Sprint 11 worker reports that completed began with a valid `STATUS:` line;
+  their prompts also asked for that line, so this does not show on its own
+  that the skill was read.
+- Migration step 2: `node-app` was provisioned with four
+  writers on `0.11.6`. The host isolation control passed, and all four writers
+  reported `writer_accepted` on the first `--apply`, registered for Claude Code
+  and Codex with the wake hook.
+- Two coding turns with an OAuth provider failed together in the minutes
+  before the host token expired
+  ([#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142)).
+
+Not established for `0.11.6`:
+- any live run on Level 3;
+- a real coding turn on each `node-app` writer, which needs a
+  controller started in that repository's checkout;
+- the VS Code wake; macOS delivery.
+
 ### v0.11.5 post-release evidence
 
 The published-release acceptance of `v0.11.5` ran on 2026-10-25 from 22:13 to

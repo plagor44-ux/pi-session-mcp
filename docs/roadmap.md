@@ -95,7 +95,25 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
-### Next: orchestration reliability (planned 2026-10-26)
+### Sprint 11: orchestration gaps (2026-10-26)
+
+Base main `d93a6d6`, published 0.11.6
+([Sprint 11](sprints/2026-10-26-s11-orchestration-gaps.md)). One branch and
+one pull request, no release:
+
+- [#141](https://github.com/plagor44-ux/pi-session-mcp/issues/141): Doctor
+  reports coding profiles a container writer would refuse (from #139).
+- [#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142): writers
+  refresh the host's OAuth credential ten minutes before expiry, before the
+  SDK's own five-minute window, which failed writer turns.
+- K3 and K9 as evaluation hooks outside the package (D1), K5 in the controller
+  skill, K7 answered by a provider-free probe, K8 closed without a product
+  change.
+- Recorded: the v0.11.6 post-release acceptance and migration step 2
+  (`node-app`, four writers).
+- Decided: D3 no ADR yet; #120 waits for an SDK release.
+
+### Sprints 9 close-out and 10: orchestration reliability (2026-10-26, shipped in 0.11.6)
 
 Base main `e6fc87c`, published 0.11.5. The operator's orchestration concept of
 2026-10-25 (candidates K1–K11) is assessed against the repository and planned
