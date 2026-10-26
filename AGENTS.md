@@ -15,6 +15,9 @@
 - Keep stdout exclusively for MCP stdio frames. Diagnostic logs go to stderr, are structured, and contain neither secrets nor complete prompts.
 - Accept workspaces only through configured aliases. Never add a tool argument that accepts an arbitrary `cwd`.
 - Keep Pi behind `PiSessionAdapter`; tests must use a fake and must not need provider credentials.
+  One maintainer-approved exception (2026-10-26, #142): the writer wrapper
+  refreshes host OAuth credentials through the package-root `ModelRuntime`
+  (`getAuth` only, no session, injectable in tests). Do not widen it.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be
