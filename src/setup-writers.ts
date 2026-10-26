@@ -250,7 +250,13 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
   const reportOperation: SetupOperation = operation === "verify" ? "verify" : opts.apply ? operation === "remove" ? "remove" : "apply" : "dry-run";
   if (!WRITER_NAME_PATTERN.test(name)) return result(reportOperation, [{ target: { client: "invalid", scope: "invalid", alias: "invalid" }, status: "failed", code: "usage_invalid" }], "failed", 64);
   const alias = name.slice(0, name.lastIndexOf("-w")), target = targetFor(alias, name);
-  const done = (outcome: lifecycle.WriterOutcome, hooks: readonly WakeHookOutcome[] = []) => result(reportOperation, [{ target, ...outcome }, ...hooks.map((hook) => ({ target, ...hook }))], outcome.status === "planned" ? "planned" : undefined);
+  // A reset, recreate or finish clears the writer's projected credentials; its running server keeps stale ones until reconnected (#136).
+  const reconnectRequired = (outcome: lifecycle.WriterOutcome): boolean => opts.apply && outcome.status === "ok" && (operation === "reset" || operation === "recreate" || operation === "finish");
+  const done = (outcome: lifecycle.WriterOutcome, hooks: readonly WakeHookOutcome[] = []) => result(reportOperation, [
+    { target, ...outcome },
+    ...hooks.map((hook) => ({ target, ...hook })),
+    ...(reconnectRequired(outcome) ? [{ target, status: "ok" as const, code: "writer_reconnect_required" }] : []),
+  ], outcome.status === "planned" ? "planned" : undefined);
   if ((deps.platform ?? process.platform) !== "linux") return done({ status: "failed", code: "platform_unsupported" });
   try {
     if (!opts.apply && operation !== "verify") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }

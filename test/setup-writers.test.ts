@@ -38,7 +38,10 @@ async function fixture() {
     }),
     inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false })),
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
-    finishWriter: vi.fn(async () => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
+    finishWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
+    collectWriter: vi.fn(async (): Promise<lifecycle.CollectOutcome> => ({ status: "ok" as const, code: "writer_collected", refs: [], refused: 0, findings: [] })),
+    resetWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => ({ status: "ok" as const, code: "writer_reset" })),
+    recreateWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => ({ status: "ok" as const, code: "writer_recreated" })),
     writerSettingsDrift: vi.fn(lifecycle.writerSettingsDrift),
   } satisfies typeof lifecycle;
   const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...state(index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }),
@@ -356,6 +359,22 @@ describe("writer setup reconciliation", () => {
     f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true });
     expect((await runWriterOperation("x-w1", "remove", { apply: true, discard: false }, f.deps)).findings[0]?.code).toBe("writer_uncollected");
     expect(f.life.removeWriter).not.toHaveBeenCalled();
+  });
+  it.each(["reset", "recreate", "finish"] as const)("asks for the writer's servers to reconnect after an applied %s", async (operation) => {
+    const f = await fixture();
+    const output = await runWriterOperation("x-w1", operation, { apply: true, discard: false }, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "ok", code: "writer_reconnect_required" });
+  });
+  it("does not ask for a reconnect after a failed reset, a dry run or a collect", async () => {
+    const f = await fixture();
+    f.life.resetWriter.mockResolvedValueOnce({ status: "failed", code: "writer_reset_failed" });
+    const failed = await runWriterOperation("x-w1", "reset", { apply: true, discard: false }, f.deps);
+    expect(failed.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
+    const dry = await runWriterOperation("x-w1", "reset", { apply: false, discard: false }, f.deps);
+    expect(dry.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
+    const collected = await runWriterOperation("x-w1", "collect", { apply: true, discard: false }, f.deps);
+    expect(collected.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
   });
   it.each(["divergent", "unsupported", "equivalent"] as const)("checks unowned present Codex registrations (%s)", async (codexState) => {
     const f = await fixture();

@@ -268,6 +268,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_reset` | Persistent clone reset and verified |
 | `writer_recreate_failed` | Recreated clone is not at baseline |
 | `writer_recreated` | Clone/agent recreated and verified |
+| `writer_reconnect_required` | Writer credentials were cleared; reconnect the writer's MCP server before the next coding start |
 | `writer_removed` | Writer state deleted after registration cleanup |
 | `ownership_unavailable` | Existing registration lacks ownership proof; removal refused |
 | `registration_not_equivalent` | Verify found absent/divergent/unsupported required registration |
