@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+## 0.11.6 — 2026-10-26
+
+Patch release for the Sprint 9 close-out
+([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134),
+[#135](https://github.com/plagor44-ux/pi-session-mcp/issues/135),
+[#136](https://github.com/plagor44-ux/pi-session-mcp/issues/136),
+[#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137)) and the
+Sprint 10 skill changes. The MCP contract is unchanged. `npm audit` still
+reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+- Fixed: `setup --writer <name> --reset`, `--finish` and `--recreate` rewrite
+  the writer's projected credentials, so a running writer server could fail
+  its next coding start with `local_authentication_missing` until the client
+  reconnected it. After an applied, successful reset, finish or recreate, setup
+  now reports `writer_reconnect_required`, and the orchestration skill and
+  `docs/isolation-setup.md` name the reconnect
+  ([#136](https://github.com/plagor44-ux/pi-session-mcp/issues/136)).
+- Added: Doctor warns with `extension_unpinned` when an extension that an
+  execution profile pins as `npm:<name>@<version>` is listed in Pi's agent
+  `settings.json` without a version, as a string or as an object's `source`.
+  Pi can update such a package by itself, which then fails Doctor with
+  `extension_version_mismatch`. Missing or unreadable settings are ignored, and
+  Doctor loads the Pi SDK only for this check
+  ([#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137)).
+- Changed: when the Doctor gate blocks `setup --repo <alias> --mode container
+  ... --apply` or a mutating `--writer` operation, setup reports one failed
+  finding per blocking check next to `doctor_failed`, with the Doctor check id
+  as its code and the profile or workspace alias of its subject. The gate's
+  tolerance is unchanged: an error in a profile that the repository does not
+  select still blocks
+  ([#137](https://github.com/plagor44-ux/pi-session-mcp/issues/137)).
+- Changed: the shipped skills carry a report contract. The orchestration skill
+  asks workers for a first line `STATUS:` with `DONE`, `DONE_WITH_CONCERNS`,
+  `NEEDS_CONTEXT` or `BLOCKED`, checks the report format before verifying,
+  acts on each status, follows up once on a turn that finished quickly without
+  a change, and routes tasks by type with the evidence level stated. The
+  implementation and review skills emit the status line, stop with `BLOCKED`
+  on a wrong base instead of fetching, and do not end a turn on a plan alone.
+  Container writers use the new worker skills after the upgrade and a
+  `--repo <alias> ... --apply`; until then the new controller asks once more
+  for a report in the new format.
+- Development: a provider-free `claude plugin eval` suite for the
+  orchestration skill under `eval/controller-skill/`, and a probe showing that
+  worker sessions keep Pi's default system prompt
+  (`docs/evaluation/worker-system-prompt-2026-10-26/`).
+
 - Fixed: `setup --repo <alias> --mode container ... --apply` kept an existing
   writer silently on its old settings when the image, network, cache, profile
   list or a selected coding profile (model, thinking level, skills) or the
