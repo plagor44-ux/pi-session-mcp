@@ -427,6 +427,10 @@ describe("writer setup reconciliation", () => {
     expect(dry.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
     const collected = await runWriterOperation("x-w1", "collect", { apply: true, discard: false }, f.deps);
     expect(collected.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
+    f.life.finishWriter.mockResolvedValueOnce({ status: "failed", code: "writer_collect_incomplete" });
+    const unfinished = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, f.deps);
+    expect(unfinished.exitCode).toBe(1);
+    expect(unfinished.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
   });
   it.each(["divergent", "unsupported", "equivalent"] as const)("checks unowned present Codex registrations (%s)", async (codexState) => {
     const f = await fixture();
