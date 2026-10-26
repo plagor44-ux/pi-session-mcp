@@ -77,6 +77,8 @@ Final run on the skill as released in 0.11.6 (after the review fixes that scope 
 
 Three runs per case cannot separate 2/3 from 3/3; `verify-worker-claim` varied in both arms. The measurable effect is the report contract; the early-stop rule makes explicit what the old skill already did. Total eval spend for the baselines, debugging runs and this comparison: about USD 18, Claude tokens only.
 
+Sprint 11 regression check (2026-10-26) after adding the review stage (section 8) and the note on continuing from collected work (section 11): one run per case, 7 of 7 passed, USD 1.78. No case exercises the review stage itself, so this shows only that the existing behaviour is unchanged.
+
 ## How to Run
 
 Execute the suite using Claude Code 2.1.310:
