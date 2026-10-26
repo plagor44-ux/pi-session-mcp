@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.11.7 — 2026-10-26
+
+Patch release for Sprint 11
+([#141](https://github.com/plagor44-ux/pi-session-mcp/issues/141),
+[#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142)) and the
+controller skill's review stage. The MCP contract is unchanged. `npm audit`
+still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Writers
+must be accepted again after the upgrade, as after every release.
+
 - Fixed: Doctor reports `container_profile_refused` for selected coding profiles that container writer provisioning would reject, and reports unreadable configuration without blaming individual profiles (#141).
 - Fixed: writer launches now refresh a selected OAuth credential on the host
   when it expires within **10 minutes** (was 2), through the Pi SDK's
@@ -9,6 +19,13 @@
   SDK inside the writer opens its own five-minute pre-expiry window, in which
   writer turns could fail; not yet confirmed by a live turn
   ([#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142)).
+  Several OAuth providers are refreshed in parallel under one 20 s bound.
+- Fixed: the setup Doctor gate counts `container_profile_refused` for the
+  repository's own profile as the repository's own finding, so collect, finish
+  and the profile change that fixes it are not blocked by it (#141).
+- Changed: the orchestration skill asks for a cross-family read-only review of
+  every code task, with a verdict line and at most three fix rounds, and
+  explains how a fresh session continues from collected writer work.
 
 ## 0.11.6 — 2026-10-26
 

@@ -2457,6 +2457,54 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.11.7 pre-release acceptance
+
+`v0.11.7` was accepted on 2026-10-26 from 20:38 to 20:43 UTC on its release
+candidate `9f53548`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.310`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`.
+
+The patch ships #141, #142 and the controller skill's review stage from
+Sprint 11. It does not change the MCP contract. Doctor gains the check
+`container_profile_refused`; the setup report keeps `schemaVersion` 1. The
+writer wrapper refreshes host OAuth credentials through `ModelRuntime`, an
+exception to "Keep Pi behind `PiSessionAdapter`" that the maintainer approved
+and AGENTS.md records.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    116 files, 3497 passed and 13 skipped, and no unhandled error.
+  - `npm audit` exited with `1` and names only the known `undici` finding
+    (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c) through
+    `@earendil-works/pi-coding-agent` 1.4.0, still the latest SDK release
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 967 files (tarball shasum
+    `f1b9d4a4faeaa6b19941348f6259e5e2d27d57e1`); nothing under `eval/` is
+    packed.
+  - Doctor reported `packageVersion` `0.11.7`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree, through `scripts/setup-acceptance.mjs`: 160 of
+  160 checks passed with delivery off and 228 of 228 with `--events spool`.
+- Packed-tarball Level 2, installed with `npm install -g --prefix` into a
+  fresh prefix: 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`. The install smoke reported `smoke_passed` with version
+  `0.11.7`.
+- In every Level 2 run the real client registrations and the built files were
+  unchanged, no process remained, and the path-leak check passed. The
+  worktree, the tarball and the prefix were removed.
+- Reviews: one cross-family Pi review per Sprint 11 code task and a final
+  independent review of the whole Sprint 11 diff (PR #146); their findings are
+  fixed or recorded in the Sprint 11 file.
+
+Not established for `0.11.7`:
+- any live run of the released package (Level 3 or a real model);
+- a live turn that confirms #142: the Sprint 11 check fell outside the failure
+  window;
+- the acceptance of the upgraded writers, which follows the release;
+- the VS Code wake; macOS delivery.
+
 ### v0.11.6 post-release evidence
 
 The published-release acceptance of `v0.11.6` ran on 2026-10-26 from 18:45 to
