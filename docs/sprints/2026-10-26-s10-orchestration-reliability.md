@@ -113,6 +113,52 @@ follow-up in the same session, rounds 4–5 in a fresh session with a stronger
 coding profile, then a recorded decision. Record per task: findings only the
 review found, rounds, cost or "unknown".
 
+## Progress log
+
+Recorded as work lands on the branch; statements are verified by the
+controller unless marked otherwise.
+
+- S9-1 #136 and S9-2 #137: implemented by `pi-session-mcp-w2` (`code-deepseek`)
+  and `pi-session-mcp-w1` (`code`), reviewed by `review-glm`
+  (verdict non-blocking only; four low findings, three fixed on the branch,
+  the fourth is within the intended "applied and successful" scope). Controller
+  review changes: the Doctor loads the Pi SDK lazily, and gate findings report
+  the alias of `<profile>:<package>` and writer subjects. Full suite green on
+  the host (114 files).
+- Unverified hypothesis from the review: the writer wrapper rewrites the
+  projected credentials every 60 s, so after a reset a running server may
+  recover without a reconnect; after a recreate the server's mounts point at
+  replaced directories. The docs therefore say a start "can" fail.
+- S10-0: workers keep Pi's default system prompt; the placeholder has no
+  effect ([probe](../evaluation/worker-system-prompt-2026-10-26/README.md)).
+  No A/B needed.
+- S10-1: suite under `eval/controller-skill/`, built by agy, checked and
+  completed by the controller (real tool definitions as `_tools.json`). A
+  one-run smoke passed at USD 0.17.
+- S10-1 baseline: the first run scored 10/18; all failures traced to suite
+  defects (identical session IDs, a vague prompt, too narrow Bash grants).
+  After the fixes 17/18 on six cases. The current skill already sends a
+  follow-up after an early stop, so K4 mostly makes that rule explicit.
+- S10-2: the status contract, early-stop rule and routing defaults are in the
+  three skills, plus build and test commands in `AGENTS.md`. The new
+  `unstructured-report` case went from 0/3 to 3/3; all other cases stayed
+  within run-to-run noise ([eval README](../../eval/controller-skill/README.md)).
+  Rollout note: until writers run the new worker skills, the new controller
+  treats their reports as a format failure and asks once more.
+- Operating findings for the controller skill and the preflight:
+  - A writer keeps the base it was last reset to; `--finish` resets to that
+    base, not to the current main. Both writers still stood on the 0.11.5
+    release commit. The preflight must compare each writer's base with the
+    intended base and use `--reset --base <branch> --apply` when they differ.
+  - A worker that finds a wrong base must stop; one worker fetched
+    `origin/main` inside the boundary instead. The brief now says "do not fetch
+    or change the base yourself".
+  - The full suite times out in 8 lock and hook tests inside the writer
+    containers but passes on the host; worker reports of those failures are
+    environmental until shown otherwise.
+  - `pi-session-mcp-setup` needs `PI_SESSION_MCP_CONFIG` set explicitly in the
+    controller's shell, otherwise it reports `config_required`.
+
 ## Sprint 11: ledger, gates and wake gaps
 
 Entry: decision D1 and the Sprint 10 results.
@@ -191,3 +237,4 @@ is verified; otherwise they wait for the next consolidated branch.
 | D2 | Live budget for S10-3 (3 tasks × 3 runs × 2 arms) | Set a cap before S10-3 starts. |
 | D3 | K11: open an ADR for a worker result channel? | Not before the Sprint 10 numbers show that K2 is not enough. |
 | D4 | #135: close, or keep open for override copying? | Close and open a separate proposal issue if wanted. |
+| D5 | #137: should the repository step's Doctor gate ignore errors that concern only profiles the repository does not select? The fix on this branch warns earlier and names the blocking checks but keeps the tolerance, so a version mismatch in an unrelated profile still blocks `--repo … --apply`. | Keep fail-closed for 0.11.6; operators pin Pi extensions exactly. Revisit if the warning does not prevent a repeat. |
