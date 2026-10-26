@@ -71,11 +71,10 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
     if (expiresWithin(host, names, REFRESH_THRESHOLD_MINUTES, deps.now())) {
       const warmup = deps.warmupHostCredential ?? refreshHostCredential;
       const authPath = join(deps.home, ".pi", "agent", "auth.json");
-      for (const provider of selectedOAuthProviders(host, names)) {
-        // Bounded at 20 s per provider; Pi's locked store writes the file, never this launcher.
-        try { await warmup({ authPath, provider, minOAuthValidityMs: REFRESH_THRESHOLD_MINUTES * 60_000, timeoutMs: 20_000 }); }
-        catch { /* Copy even when the host refresh fails. */ }
-      }
+      // In parallel, so the whole warm-up stays bounded at 20 s; Pi's locked store writes the file, never this launcher.
+      // A failed refresh is ignored: the copy below still runs.
+      await Promise.allSettled(selectedOAuthProviders(host, names).map((provider) =>
+        warmup({ authPath, provider, minOAuthValidityMs: REFRESH_THRESHOLD_MINUTES * 60_000, timeoutMs: 20_000 })));
     }
     await writeBoundaryCredentials(paths.agent, selectBoundaryCredentials(await readHost(), names));
   };
