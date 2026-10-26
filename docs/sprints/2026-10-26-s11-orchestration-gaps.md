@@ -139,11 +139,10 @@ Recorded as work lands on the branch.
   only in Pi's `models.json` is probably unknown to the refresh runtime
   (`modelsPath: null`), unverified; the evaluation hooks read under the
   ledger lock, so a hook killed at its timeout can leave a stale lock.
-- Open maintainer decision: #142 uses `ModelRuntime` from the package root
-  outside `PiSessionAdapter`, for the credential refresh only and without a
-  session. AGENTS.md says to keep Pi behind `PiSessionAdapter`; either confirm
-  this as a narrow exception or ask for the refresh to move behind the
-  adapter.
+- Maintainer decision (2026-10-26, after the merge of #146): #142's use of
+  `ModelRuntime` from the package root outside `PiSessionAdapter`, for the
+  credential refresh only and without a session, is confirmed as a narrow
+  exception and recorded in AGENTS.md. Released as 0.11.7.
 - #136 hypothesis (a running writer server recovers after a reset without a
   reconnect): a start 47 s after a reset succeeded without a reconnect; a start
   about 30 s after another reset failed with `local_authentication_missing`.
