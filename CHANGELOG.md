@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Fixed: after an upgrade, the repository step of one container repository no
+  longer fails with `doctor_failed` because the writers of another container
+  repository are still `writer_not_ready`. With two or more container
+  repositories no repository step could pass, and the client targets stayed
+  unregistered ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)).
+  Upgrades from 0.11.6 or earlier to 0.11.7 are affected; skip 0.11.7.
+
 ## 0.11.7 — 2026-10-26
 
 Patch release for Sprint 11
