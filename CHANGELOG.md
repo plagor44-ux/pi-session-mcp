@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.11.9 — 2026-10-27
+
+Documentation-only release. The published `docs/` of 0.9.0 to 0.11.8 contained
+references to the maintainer's private environment; they are removed, and those
+versions are withdrawn from npm. Code, MCP contract and behavior are unchanged
+from 0.11.8.
+
 ## 0.11.8 — 2026-10-26
 
 Patch release for [#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148):
