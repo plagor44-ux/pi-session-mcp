@@ -2240,7 +2240,7 @@ describe("bubblewrap containment (R46)", () => {
 
   it("picks a real host-home entry that the plan does not bind back and requires it absent inside", async () => {
     const home = await temporaryRoot("ablation-home-");
-    for (const name of [".hidden", "Projekte", "Documents", "Music"]) await mkdir(join(home, name));
+    for (const name of [".hidden", "src", "Documents", "Music"]) await mkdir(join(home, name));
     const seen: string[][] = [];
     const run = async (file: string, args: readonly string[]) => { seen.push([file, ...args]); return probe({ ...good, entry: "ENOENT" })(file, args); };
     // "Documents" sorts first but holds a bind (the repository below it), and hidden entries are never picked.

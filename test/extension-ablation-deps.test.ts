@@ -342,7 +342,7 @@ describe("preparing the dependencies of a task (R68)", () => {
       await symlink(join(root, "elsewhere", "impl-1"), taskDir);
     }],
     ["dependency_mount_invalid", "a mounts directory that is a link to a tree with a source checkout", async (root, taskDir) => {
-      // The scenario of the review: `mounts -> ~/Projekte` with a repository (and its .git) where the mount path leads.
+      // The scenario of the review: `mounts -> ~/src` with a repository (and its .git) where the mount path leads.
       await mkdir(join(root, "projects", "backend", ".venv", ".git"), { recursive: true });
       await rm(join(taskDir, "mounts"), { recursive: true });
       await symlink(join(root, "projects"), join(taskDir, "mounts"));
