@@ -32,7 +32,7 @@ export const writerStateSchema = z.object({
     model: z.string().min(1).max(200),
   }).strict()).refine((providers) => new Set(providers.map(({ provider }) => provider)).size === providers.length).readonly(),
   network: z.enum(["pasta", "none"]),
-  cache: z.enum(["none", "go"]),
+  cache: z.enum(["none", "go", "uv"]),
   imageId: hex64,
   base: z.object({ ref: z.string(), commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict(),
   acceptance: z.object({
@@ -68,7 +68,7 @@ export function writerPaths(home: string, name: string) {
   const root = join(writersRoot(home), name);
   return {
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
     acceptanceFailure: join(root, "acceptance-failure.json"),
   };
 }

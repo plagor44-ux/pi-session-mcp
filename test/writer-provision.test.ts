@@ -66,6 +66,29 @@ it("provisions privately from the checkout bundle with ordered state and provide
   expect(f.calls.filter((call) => call.command === "podman" && call.args[0] === "run").every((call) => call.signal !== undefined)).toBe(true);
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_unchanged", status: "unchanged" });
 });
+it("creates only the private cache directory of the selected kind", async () => {
+  const uv = await fixture();
+  expect(await provisionWriter(uv.ctx, { index: 1, settings: { ...settings, cache: "uv" }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  expect((await lstat(uv.paths.uv)).mode & 0o777).toBe(0o700);
+  await expect(lstat(uv.paths.go)).rejects.toMatchObject({ code: "ENOENT" });
+  const go = await fixture();
+  expect(await provisionWriter(go.ctx, { index: 1, settings: { ...settings, cache: "go" }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  expect((await lstat(go.paths.go)).mode & 0o777).toBe(0o700);
+  await expect(lstat(go.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
+  const none = await fixture();
+  expect(await provisionWriter(none.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  await expect(lstat(none.paths.go)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(none.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("keeps the uv cache across recreate and drops it with the writer", async () => {
+  const f = await fixture();
+  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, cache: "uv" }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  await writeFile(join(f.paths.uv, "keep"), "keep");
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_recreated" });
+  expect(await readFile(join(f.paths.uv, "keep"), "utf8")).toBe("keep");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_removed" });
+  await expect(lstat(f.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
+});
 it("refuses URL userinfo before writing, but allows scp syntax", async () => {
   const f = await fixture("https://user:tok@host/x.git");
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toMatchObject({ code: "remote_url_refused", status: "failed" });
@@ -214,6 +237,7 @@ it("checks a provisioned writer against the settings and configuration it would 
   expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig: changed })).toEqual({ code: "writer_settings_changed", status: "failed" });
   expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, cache: "go" }, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, cache: "uv" }, rawConfig })).toEqual({ code: "writer_settings_changed", status: "failed" });
   f.unavailable(); f.calls.length = 0;
   expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "image_unavailable", status: "failed" });
   expect(f.calls.some((call) => call.args[0] === "pull")).toBe(false);

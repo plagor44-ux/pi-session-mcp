@@ -42,8 +42,14 @@ it("builds the restricted serving boundary with explicit environment and Git pro
   args.forEach((arg, index) => { if (arg === "-e") expect(args[index + 1]).toContain("="); });
   expect(args.slice(-3)).toEqual([imageId, "node", "/opt/pi-session-mcp/dist/main.js"]);
   expect(args).not.toContain(`${paths.go}:/pi/go:rw`);
+  expect(args).not.toContain(`${paths.uv}:/pi/uv:rw`);
   const go = serveArgs(paths, { ...state, cache: "go", network: "none" }, [], "/release");
   for (const value of [`${paths.go}:/pi/go:rw`, "GOPATH=/pi/go", "GOCACHE=/pi/go/cache", "GOTOOLCHAIN=local", "--network=none"]) expect(go).toContain(value);
+  expect(go).not.toContain(`${paths.uv}:/pi/uv:rw`);
+  const uv = serveArgs(paths, { ...state, cache: "uv", network: "none" }, [], "/release");
+  for (const value of [`${paths.uv}:/pi/uv:rw`, "UV_CACHE_DIR=/pi/uv/cache", "npm_config_cache=/pi/uv/npm", "--network=none"]) expect(uv).toContain(value);
+  expect(uv).not.toContain(`${paths.go}:/pi/go:rw`);
+  expect(uv).not.toContain("GOPATH=/pi/go");
 });
 
 const baseArgs = (): string[] => [
@@ -82,6 +88,9 @@ it("adds exactly one dedicated spool mount and its environment variable when del
   const go = serveArgs(paths, { ...state, cache: "go" }, serve, "/release", dir);
   expect(go).toEqual([...baseArgs(), "-v", `${dir}:/pi/events:rw`, "-e", "PI_SESSION_MCP_EVENTS_DIR=/pi/events",
     "-v", `${paths.go}:/pi/go:rw`, "-e", "GOPATH=/pi/go", "-e", "GOCACHE=/pi/go/cache", "-e", "GOTOOLCHAIN=local", imageId, ...serve]);
+  const uv = serveArgs(paths, { ...state, cache: "uv" }, serve, "/release", dir);
+  expect(uv).toEqual([...baseArgs(), "-v", `${dir}:/pi/events:rw`, "-e", "PI_SESSION_MCP_EVENTS_DIR=/pi/events",
+    "-v", `${paths.uv}:/pi/uv:rw`, "-e", "UV_CACHE_DIR=/pi/uv/cache", "-e", "npm_config_cache=/pi/uv/npm", imageId, ...serve]);
 });
 
 const uid = process.getuid!();

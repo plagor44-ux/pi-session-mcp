@@ -53,6 +53,11 @@ describe("resolveExecutionModes", () => {
     expect(() => (loaded as Map<string, unknown>).set("a", {})).toThrow();
   });
 
+  it.each(["none", "go", "uv"] as const)("accepts the explicit cache kind %s", (cache) => {
+    const raw = modes({ a: { mode: "container", profiles: ["code"], cache } });
+    expect(resolveExecutionModes(raw, aliases, profiles).get("a")?.container?.cache).toBe(cache);
+  });
+
   it.each(["node", "a".repeat(64)])("accepts image %s", (image) => {
     expect(resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"], image } }), aliases, profiles).get("a")?.container?.image).toBe(image);
   });

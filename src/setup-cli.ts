@@ -87,7 +87,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
           if (value !== "pasta" && value !== "none") throw new Error("network_invalid");
           container.network = value; break;
         case "--cache":
-          if (value !== "none" && value !== "go") throw new Error("cache_invalid");
+          if (value !== "none" && value !== "go" && value !== "uv") throw new Error("cache_invalid");
           container.cache = value; break;
       }
       continue;

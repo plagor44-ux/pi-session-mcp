@@ -80,6 +80,12 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("go");
   });
+  it("records the uv and npm cache in a container entry", async () => {
+    const { config, path } = await fixture();
+    const input = request({ mode: "container", container: { profiles: ["code"], cache: "uv" }, apply: true });
+    expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("uv");
+  });
   it("chooses container only when usable and never falls back to host", async () => {
     const { config } = await fixture();
     const input: ModeRequest = { alias: "a", acceptHostWrites: false, apply: false, container: { profiles: ["code"] } };
