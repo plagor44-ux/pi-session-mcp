@@ -18,6 +18,7 @@ async function fixture() {
   const ready = async () => {
     await mkdir(join(paths.clone, ".git/refs/heads"), { recursive: true });
     await mkdir(paths.bundles); await writeFile(paths.wrapper, "wrapper");
+    await writeFile(join(paths.clone, ".git/config"), '[USER]\nName = Worker\nEMAIL = worker@invalid\n');
     await writeFile(join(paths.clone, ".git/HEAD"), "ref: refs/heads/main\n");
     await writeFile(join(paths.clone, ".git/refs/heads/main"), state.base.commit + "\n");
     state.acceptance = { fingerprint: await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0"), verdict: "pass", network: "not_limited", at: "now" };
@@ -29,6 +30,11 @@ it.each(["absent", "invalid"])("reports only readiness for %s state", async (kin
   const { paths, check, ready } = await fixture();
   if (kind === "invalid") { await ready(); await writeFile(paths.state, "{}"); }
   expect(await check()).toEqual([expect.objectContaining({ id: "writer_not_ready", severity: "error", subject: "repo-w1" })]);
+});
+it.each(["", "[user]\nname = Worker\n", "x".repeat(65_537)])("warns offline for missing or unsafe identity", async (config) => {
+  const { paths, check, ready } = await fixture(); await ready();
+  await writeFile(join(paths.clone, ".git/config"), config);
+  expect(await check()).toContainEqual(expect.objectContaining({ id: "writer_git_identity_missing", severity: "warning", subject: "repo-w1" }));
 });
 it("detects wrapper drift", async () => {
   const { paths, check, ready } = await fixture(); await ready();

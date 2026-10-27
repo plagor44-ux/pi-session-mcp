@@ -15,7 +15,7 @@ const commit = "b".repeat(40), tree = "c".repeat(40), imageId = "a".repeat(64);
 const profile = { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "high" };
 const rawConfig = { workspaces: { repo: "/host" }, executionProfiles: { code: profile, other: { ...profile, model: "second" } } };
 const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none" } as const;
-async function fixture(remote = "git@github.com:o/r.git") {
+async function fixture(remote = "git@github.com:o/r.git", identity: readonly string[] = []) {
   const home = await temporaryRoot("pi-writer-provision-");
   const paths = writerPaths(home, "repo-w1");
   const calls: { command: string; args: readonly string[]; signal: AbortSignal | undefined }[] = [];
@@ -26,6 +26,7 @@ async function fixture(remote = "git@github.com:o/r.git") {
     let stdout = "";
     if (command === "git") {
       expect(args.slice(0, 4)).toEqual(["-c", "core.hooksPath=/dev/null", "-C", join(home, "source")]);
+      if (args.includes("--get")) stdout = `${identity[args.includes("user.name") ? 0 : 1] ?? ""}\n`;
       if (args.includes("symbolic-ref")) stdout = "refs/remotes/origin/main\n";
       if (args.includes("rev-parse")) stdout = `${commit}\n`;
       if (args.includes("get-url")) stdout = remote;
@@ -55,7 +56,7 @@ it("provisions privately from the checkout bundle with ordered state and provide
   expect(state.phase).toBe("not_ready");
   expect(state.base).toEqual({ ref: "refs/heads/main", commit });
   const cloneCall = f.calls.find((call) => call.args.some((arg) => arg.includes("clone --no-hardlinks")))!;
-  expect(cloneCall.args.slice(-5)).toEqual([f.paths.clone, "main", commit, "git@github.com:o/r.git", "refs/remotes/origin/main"]);
+  expect(cloneCall.args.slice(-7)).toEqual([f.paths.clone, "main", commit, "git@github.com:o/r.git", "refs/remotes/origin/main", "", ""]);
   expect(cloneCall.args.some((arg) => arg.includes('fetch --no-tags /bundles/base.bundle "$5"'))).toBe(true);
   expect(state.providers).toEqual([{ provider: "example", model: "model" }]);
   expect(JSON.parse(await readFile(join(f.paths.config, "writer-guard.json"), "utf8"))).toMatchObject({ baseCommit: commit });
@@ -88,6 +89,14 @@ it("keeps the uv cache across recreate and drops it with the writer", async () =
   expect(await readFile(join(f.paths.uv, "keep"), "utf8")).toBe("keep");
   expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_removed" });
   await expect(lstat(f.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
+});
+it.each([["Worker", "worker@invalid", true], ["Worker", "", false], ["Bad\nName", "worker@invalid", false], ["x".repeat(257), "worker@invalid", false], ["-x", "worker@invalid", false], ["Worker", "--file=/x", false]] as const)("mirrors only a complete valid identity (%s, %s)", async (name, email, mirrored) => {
+  const f = await fixture(undefined, [name, email]);
+  expect((await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).status).toBe("ok");
+  const call = f.calls.find((c) => c.args.some((a) => a.includes("clone --no-hardlinks")))!;
+  expect(call.args.slice(-2)).toEqual(mirrored ? [name, email] : ["", ""]);
+  expect(call.args.join("\n")).toContain('config user.name "$6"');
+  expect(call.args.join("\n")).toContain("config --unset-all user.email || :");
 });
 it("refuses URL userinfo before writing, but allows scp syntax", async () => {
   const f = await fixture("https://user:tok@host/x.git");
