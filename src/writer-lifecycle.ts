@@ -109,7 +109,7 @@ async function git(ctx: WriterContext, args: readonly string[], optional = false
     if (optional) return undefined;
     throw new LifecycleError("writer_base_unavailable");
   }
-  return args[0] === "config" ? result.stdout.replace(/\r?\n$/, "") : result.stdout.trim();
+  return args[0] === "config" ? result.stdout.replace(/\n$/, "") : result.stdout.trim();
 }
 async function operatorIdentity(ctx: WriterContext): Promise<readonly string[]> {
   const name = await git(ctx, ["config", "--get", "user.name"], true);
@@ -144,14 +144,15 @@ async function resolveBase(ctx: WriterContext, requested?: string) {
   if (!commit || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit)) throw new LifecycleError("writer_base_unavailable");
   return { ref, short, commit };
 }
-async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, ref: string): Promise<void> {
+async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, ref: string, commit: string, tags: ContainerSettings["tags"]): Promise<void> {
+  const reachable = tags === "reachable" ? (await git(ctx, ["tag", "--merged", commit]))?.split("\n").filter(Boolean).map((tag) => `refs/tags/${tag}`) ?? [] : [];
   await rm(join(paths.bundles, "base.bundle"), { force: true });
-  await git(ctx, ["bundle", "create", join(paths.bundles, "base.bundle"), ref]);
+  await git(ctx, ["bundle", "create", join(paths.bundles, "base.bundle"), ref, ...reachable]);
   await chmod(join(paths.bundles, "base.bundle"), 0o600);
 }
-async function cloneFromBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, imageId: string, base: { ref: string; short: string; commit: string }, remote: string | undefined): Promise<void> {
+async function cloneFromBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, imageId: string, base: { ref: string; short: string; commit: string }, remote: string | undefined, tags: ContainerSettings["tags"]): Promise<void> {
   // Clone only auto-fetches refs/heads; fetch the exact bundled ref before checkout.
-  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\n${BOUNDARY_GIT} clone --no-hardlinks /bundles/base.bundle "$1"\ncd "$1"\n${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle "$5"\n${BOUNDARY_GIT} checkout -B "$2" "$3"\nif [ -n "$4" ]; then ${BOUNDARY_GIT} remote set-url origin "$4"; else ${BOUNDARY_GIT} remote remove origin; fi\n${identityScript(6, 7)}`;
+  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\n${BOUNDARY_GIT} clone --no-hardlinks /bundles/base.bundle "$1"\ncd "$1"\n${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle "$5"\n${BOUNDARY_GIT} checkout -B "$2" "$3"\nif [ -n "$4" ]; then ${BOUNDARY_GIT} remote set-url origin "$4"; else ${BOUNDARY_GIT} remote remove origin; fi\n${identityScript(6, 7)}\n${tags === "reachable" ? `${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle '+refs/tags/*:refs/tags/*'` : ""}`;
   const clone = await ctx.runner.run("podman", throwawayArgs(paths, imageId, { clone: "rw", bundles: true }, script, [paths.clone, base.short, base.commit, remote ?? "", base.ref, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (clone.exitCode !== 0) throw new LifecycleError("writer_clone_failed");
   await verifyCloneLayout(paths.clone);
@@ -194,7 +195,7 @@ async function sameSettings(paths: ReturnType<typeof writerPaths>, existing: Wri
   now: { config: unknown; providers: WriterState["providers"]; imageId: string }): Promise<boolean> {
   const stored = await storedConfig(paths);
   return stored !== undefined && existing.imageId === now.imageId && existing.lifecycle === settings.lifecycle
-    && existing.network === settings.network && existing.cache === settings.cache
+    && existing.network === settings.network && existing.cache === settings.cache && existing.tags === settings.tags
     && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
     && JSON.stringify(existing.providers) === JSON.stringify(now.providers) && canonical(withoutDeliveryOff(stored)) === canonical(withoutDeliveryOff(now.config));
 }
@@ -258,12 +259,12 @@ export async function provisionWriter(ctx: WriterContext, input: {
     for (const path of [paths.root, paths.clone, paths.config, paths.agent, paths.bundles, ...spool, ...cache]) await privateDirectory(path);
     const state: WriterState = {
       schemaVersion: 1, alias: ctx.alias, index, phase: "provisioning", lifecycle: settings.lifecycle,
-      profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, imageId,
+      profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, tags: settings.tags, imageId,
       base: { ref: `refs/heads/${short}`, commit },
     };
     await writeWriterState(ctx.home, name, state);
-    await baseBundle(ctx, paths, ref);
-    await cloneFromBundle(ctx, paths, imageId, base, remote);
+    await baseBundle(ctx, paths, ref, commit, settings.tags);
+    await cloneFromBundle(ctx, paths, imageId, base, remote, settings.tags);
     await jsonFile(join(paths.config, "pi-session-mcp.json"), config);
     await jsonFile(join(paths.config, "execution-modes.json"), { schemaVersion: 1, workspaces: { [ctx.alias]: { mode: "host", acceptHostWrites: true } } });
     await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: commit });
@@ -310,7 +311,7 @@ async function writerBase(ctx: WriterContext, name: string, state: WriterState, 
   // State normalizes remote branches to local heads. The original source ref remains
   // in the single-ref base bundle, including when no corresponding host head exists.
   const heads = await git(ctx, ["bundle", "list-heads", join(writerPaths(ctx.home, name).bundles, "base.bundle")], true);
-  const match = /^(?:[0-9a-f]{40}|[0-9a-f]{64}) (refs\/(?:heads\/.+|remotes\/[^/]+\/.+))$/.exec(heads ?? "");
+  const match = /^(?:[0-9a-f]{40}|[0-9a-f]{64}) (refs\/(?:heads\/.+|remotes\/[^/]+\/.+))$/m.exec(heads ?? "");
   const source = match?.[1];
   if (source && isSafeRefName(source) && shortBranch(source) === shortBranch(state.base.ref)) return resolveBase(ctx, source);
   return resolveBase(ctx, state.base.ref);
@@ -406,7 +407,7 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
   const paths = writerPaths(ctx.home, name);
   const remote = await git(ctx, ["remote", "get-url", "origin"], true);
   if (remote && /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]*@/.test(remote)) throw new LifecycleError("remote_url_refused");
-  await baseBundle(ctx, paths, base.ref);
+  await baseBundle(ctx, paths, base.ref, base.commit, state.tags);
   const { collected: _collected, ...retained } = state;
   const next = { ...retained, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
   await writeWriterState(ctx.home, name, { ...next, phase: "provisioning" });
@@ -414,7 +415,7 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
     await rm(path, { recursive: true, force: true });
     await privateDirectory(path);
   }
-  await cloneFromBundle(ctx, paths, state.imageId, base, remote);
+  await cloneFromBundle(ctx, paths, state.imageId, base, remote, state.tags);
   await refreshPrivateFiles(ctx, name, next);
   await writeWriterState(ctx.home, name, next);
   if (!(await inspectWork(ctx, name)).baseline) throw new LifecycleError("writer_recreate_failed");
@@ -435,10 +436,12 @@ export async function resetWriter(ctx: WriterContext, name: string, opts: { disc
     await requireCollected(ctx, name, state, opts.discard);
     const paths = writerPaths(ctx.home, name);
     await verifyCloneLayout(paths.clone);
-    await baseBundle(ctx, paths, base.ref);
+    await baseBundle(ctx, paths, base.ref, base.commit, state.tags);
     const script = `set -eu
 export GIT_CONFIG_NOSYSTEM=1
 ${BOUNDARY_GIT} checkout -f --detach
+${BOUNDARY_GIT} for-each-ref --format='%(refname)' refs/tags | while read -r ref; do ${BOUNDARY_GIT} update-ref -d "$ref"; done
+${state.tags === "reachable" ? `${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle '+refs/tags/*:refs/tags/*'` : ""}
 ${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle "+$1:$1"
 ${BOUNDARY_GIT} checkout -f -B "$2" "$3"
 ${BOUNDARY_GIT} reset --hard "$3"

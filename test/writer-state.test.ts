@@ -17,7 +17,7 @@ afterAll(removeTemporaryRoots);
 
 const state: WriterState = {
   schemaVersion: 1, alias: "pi-session-mcp", index: 2, phase: "ready",
-  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none",
+  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none", tags: "none",
   providers: [{ provider: "example-provider", model: "example-model" }],
   imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) },
   acceptance: { fingerprint: `sha256:${"c".repeat(64)}`, verdict: "pass", network: "limited", at: "2026-01-01T00:00:00Z" },
@@ -25,6 +25,18 @@ const state: WriterState = {
 };
 const name = "pi-session-mcp-w2";
 
+it("defaults legacy state tags without changing acceptance", async () => {
+  const home = await temporaryRoot("writer-tags-");
+  await writeWriterState(home, name, state);
+  const path = writerPaths(home, name).state;
+  const { tags: _tags, ...legacy } = state;
+  await writeFile(path, JSON.stringify(legacy));
+  expect((await readWriterState(home, name))!.tags).toBe("none");
+  const wrapper = writerPaths(home, name).wrapper;
+  await writeFile(wrapper, "wrapper");
+  expect(await currentAcceptanceFingerprint(wrapper, state, "5.4.0"))
+    .toBe(await currentAcceptanceFingerprint(wrapper, { ...state, tags: "reachable" }, "5.4.0"));
+});
 it("derives validated writer names and registrations", () => {
   expect(writerName("pi-session-mcp", 2)).toBe(name);
   expect(writerName("a".repeat(64), 16)).toMatch(WRITER_NAME_PATTERN);

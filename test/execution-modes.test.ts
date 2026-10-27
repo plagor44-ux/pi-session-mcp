@@ -37,7 +37,7 @@ describe("resolveExecutionModes", () => {
   it("resolves container defaults", () => {
     const loaded = resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"] } }), aliases, profiles);
     expect(loaded.get("a")).toEqual({ mode: "container", container: {
-      writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta", cache: "none",
+      writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta", cache: "none", tags: "none",
     } });
     expect(loaded.get("b")).toEqual({ mode: "unset" });
   });
@@ -46,7 +46,7 @@ describe("resolveExecutionModes", () => {
     const raw = modes({ a: { mode: "container", profiles: ["code"], writers: 16, lifecycle: "ephemeral", image: "a".repeat(64), network: "none", cache: "go" } });
     const loaded = resolveExecutionModes(raw, aliases, profiles);
     const entry = loaded.get("a")!;
-    expect(entry.container).toEqual({ writers: 16, lifecycle: "ephemeral", profiles: ["code"], image: "a".repeat(64), network: "none", cache: "go" });
+    expect(entry.container).toEqual({ writers: 16, lifecycle: "ephemeral", profiles: ["code"], image: "a".repeat(64), network: "none", cache: "go", tags: "none" });
     expect(Object.isFrozen(entry)).toBe(true);
     expect(Object.isFrozen(entry.container)).toBe(true);
     expect(Object.isFrozen(entry.container?.profiles)).toBe(true);
@@ -73,6 +73,7 @@ describe("resolveExecutionModes", () => {
     ["false host acknowledgment", modes({ a: { mode: "host", acceptHostWrites: false } })],
     ["missing profiles", modes({ a: { mode: "container" } })],
     ...["latest", "a".repeat(65), "A".repeat(64)].map((image) => [`invalid image ${image}`, modes({ a: { mode: "container", profiles: ["code"], image } })] as const),
+    ["invalid tags", modes({ a: { mode: "container", profiles: ["code"], tags: "all" } })],
     ["invalid cache", modes({ a: { mode: "container", profiles: ["code"], cache: "all" } })],
     ["empty profiles", modes({ a: { mode: "container", profiles: [] } })],
     ["unknown profile", modes({ a: { mode: "container", profiles: ["SECRET_SENTINEL"] } })],

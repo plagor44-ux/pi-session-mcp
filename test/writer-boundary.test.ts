@@ -21,7 +21,7 @@ const paths = writerPaths("/home/example", "repo-w1");
 const imageId = "a".repeat(64);
 const state: WriterState = {
   schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent",
-  profiles: ["code"], providers: [], network: "pasta", cache: "none", imageId,
+  profiles: ["code"], providers: [], network: "pasta", cache: "none", tags: "none", imageId,
   base: { ref: "refs/heads/main", commit: "b".repeat(40) },
 };
 const ok = (stdout: string): CommandResult => ({ exitCode: 0, stdout, stderr: "" });
@@ -348,7 +348,7 @@ async function clone() {
   const root = await temporaryRoot("pi-writer-boundary-");
   await mkdir(join(root, ".git", "hooks"), { recursive: true });
   await writeFile(join(root, ".git", "hooks", "pre-commit.sample"), "sample");
-  await writeFile(join(root, ".git", "config"), "[core]\n");
+  await writeFile(join(root, ".git", "config"), "[core]\n[user]\nname = Worker\nemail = worker@invalid\n");
   return root;
 }
 it("accepts a regular .git directory with sample hooks", async () => {

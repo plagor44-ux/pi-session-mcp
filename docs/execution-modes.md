@@ -82,6 +82,7 @@ read-only throwaway containers: no network access and nothing written.
 | `--profiles a,b` | Required non-empty coding-profile aliases; no Cursor provider |
 | `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags |
 | `--network <value>` | `pasta` (default, not limited) or `none` |
+| `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
 | `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, or `uv` for its private uv and npm cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | Also register writers with Codex (user scope); Claude Code local registration is the default |
@@ -353,6 +354,15 @@ This records `cache: "uv"` and mounts a private per-writer directory at
 No other uv or npm variables are set, so download and network policy stay the
 image's. The directory is per writer: it is never shared between writers and
 never a host cache mount. Setup does not install uv or npm for you.
+
+### Base tags (opt-in)
+
+Container writers default to `tags: "none"`. Pass `--tags reachable` to bundle
+only operator-checkout tags merged into the selected base commit. Repeat this
+flag on later mode requests to retain it. Reset deletes every clone tag before
+importing the selected base tags; tags created by workers are never collected
+and do not change the collected-work digest. Changing the tag setting requires
+reprovisioning for settings drift, but does not change boundary acceptance.
 
 See [Isolation setup](isolation-setup.md) for boundary prerequisites and what
 setup automates, and the historical manual acceptance evidence linked there.

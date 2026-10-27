@@ -14,7 +14,7 @@ afterAll(removeTemporaryRoots);
 const commit = "b".repeat(40), tree = "c".repeat(40), imageId = "a".repeat(64);
 const profile = { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "high" };
 const rawConfig = { workspaces: { repo: "/host" }, executionProfiles: { code: profile, other: { ...profile, model: "second" } } };
-const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none" } as const;
+const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none", tags: "none" } as const;
 async function fixture(remote = "git@github.com:o/r.git", identity: readonly string[] = []) {
   const home = await temporaryRoot("pi-writer-provision-");
   const paths = writerPaths(home, "repo-w1");
@@ -26,6 +26,7 @@ async function fixture(remote = "git@github.com:o/r.git", identity: readonly str
     let stdout = "";
     if (command === "git") {
       expect(args.slice(0, 4)).toEqual(["-c", "core.hooksPath=/dev/null", "-C", join(home, "source")]);
+      if (args.includes("--merged")) stdout = "v1\n";
       if (args.includes("--get")) stdout = `${identity[args.includes("user.name") ? 0 : 1] ?? ""}\n`;
       if (args.includes("symbolic-ref")) stdout = "refs/remotes/origin/main\n";
       if (args.includes("rev-parse")) stdout = `${commit}\n`;
@@ -97,6 +98,19 @@ it.each([["Worker", "worker@invalid", true], ["Worker", "", false], ["Bad\nName"
   expect(call.args.slice(-2)).toEqual(mirrored ? [name, email] : ["", ""]);
   expect(call.args.join("\n")).toContain('config user.name "$6"');
   expect(call.args.join("\n")).toContain("config --unset-all user.email || :");
+});
+it.each(["none", "reachable"] as const)("bundles and explicitly fetches tags only with %s", async (tags) => {
+  const f = await fixture();
+  expect((await provisionWriter(f.ctx, { index: 1, settings: { ...settings, tags }, rawConfig })).status).toBe("ok");
+  const bundle = f.calls.find((c) => c.command === "git" && c.args.includes("create"))!;
+  expect(bundle.args.includes("refs/tags/v1")).toBe(tags === "reachable");
+  const clone = f.calls.find((c) => c.args.some((a) => a.includes("clone --no-hardlinks")))!;
+  expect(clone.args.join("\n").includes("+refs/tags/*:refs/tags/*")).toBe(tags === "reachable");
+  expect((await resetWriter(f.ctx, "repo-w1", { discard: true })).status).toBe("ok");
+  const reset = f.calls.find((c) => c.args.some((a) => a.includes("stash clear")))!;
+  expect(reset.args.join("\n")).toContain("refs/tags | while read -r ref; do");
+  expect(reset.args.join("\n").includes("+refs/tags/*:refs/tags/*")).toBe(tags === "reachable");
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, tags: tags === "none" ? "reachable" : "none" }, rawConfig })).toMatchObject({ code: "writer_settings_changed" });
 });
 it("refuses URL userinfo before writing, but allows scp syntax", async () => {
   const f = await fixture("https://user:tok@host/x.git");

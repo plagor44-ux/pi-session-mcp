@@ -13,6 +13,23 @@ It does not automatically accept another image, wrapper, Podman version or write
 macOS containment remains unaccepted and keeps the
 [Sprint 4 interim rules](sprints/2026-10-15-s4-decision.md#interim-operating-rules).
 
+## Commit identity and base tags
+
+Provisioning, recreation and reset copy the operator checkout's effective
+`user.name` and `user.email` into the clone's local Git config. Both must be
+1–256 characters without control characters and must not start with `-`; if
+either is absent or invalid, both clone values are unset. Missing identity does
+not block setup, but commits need it: set both values in the operator checkout,
+then reset the writer.
+Doctor reports `writer_git_identity_missing` without exposing either value.
+Identity is not stored in writer state or boundary acceptance.
+
+Tags default to `none`. Add `--tags reachable` to a container mode request to
+include tags merged into the selected base commit. Reset always deletes all
+clone tags, then imports the selected base tags when enabled. Worker-created
+tags are not collected work and do not affect the collected digest. The setting
+participates in settings drift, not the acceptance fingerprint.
+
 ## Prerequisites
 
 - Linux with usable **rootless** Podman, Node.js 22.19.0 or newer and Git.

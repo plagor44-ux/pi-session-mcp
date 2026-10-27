@@ -13,6 +13,7 @@ export interface ContainerSettings {
   readonly image: string;
   readonly network: "pasta" | "none";
   readonly cache: "none" | "go" | "uv";
+  readonly tags: "none" | "reachable";
 }
 
 export interface WorkspaceModeEntry {
@@ -37,6 +38,7 @@ const entrySchema = z.discriminatedUnion("mode", [
     image: z.union([z.literal("node"), z.string().regex(/^[0-9a-f]{64}$/)]).default("node"),
     network: z.enum(["pasta", "none"]).default("pasta"),
     cache: z.enum(["none", "go", "uv"]).default("none"),
+    tags: z.enum(["none", "reachable"]).default("none"),
   }).strict(),
 ]);
 

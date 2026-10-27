@@ -14,7 +14,7 @@ import * as credentials from "../src/writer-credentials.js";
 vi.mock("../src/refusal-server.js", () => ({ serveRefusal: vi.fn() }));
 vi.mock("../src/writer-credentials.js", async (original) => ({ ...await original<typeof credentials>(), refreshHostCredential: vi.fn(), writeBoundaryCredentials: vi.fn() }));
 let home: string, child: ChildProcess, deps: LaunchDependencies, tick: () => void;
-const state: WriterState = { schemaVersion: 1, alias: "x", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [{ provider: "openai", model: "m" }], network: "none", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
+const state: WriterState = { schemaVersion: 1, alias: "x", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [{ provider: "openai", model: "m" }], network: "none", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
 beforeEach(async () => {
   vi.clearAllMocks(); home = await mkdtemp(join(tmpdir(), "launch-"));
   child = new EventEmitter() as ChildProcess; child.kill = vi.fn(() => true);

@@ -33,6 +33,7 @@ export const writerStateSchema = z.object({
   }).strict()).refine((providers) => new Set(providers.map(({ provider }) => provider)).size === providers.length).readonly(),
   network: z.enum(["pasta", "none"]),
   cache: z.enum(["none", "go", "uv"]),
+  tags: z.enum(["none", "reachable"]).default("none"),
   imageId: hex64,
   base: z.object({ ref: z.string(), commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict(),
   acceptance: z.object({

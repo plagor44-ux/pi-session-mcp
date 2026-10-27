@@ -62,7 +62,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       customizeSkill = value;
       continue;
     }
-    if (["--repo", "--mode", "--accept-host-writes", "--writers", "--lifecycle", "--profiles", "--image", "--network", "--cache"].includes(argument!)) {
+    if (["--repo", "--mode", "--accept-host-writes", "--writers", "--lifecycle", "--profiles", "--image", "--network", "--cache", "--tags"].includes(argument!)) {
       if (modeFlags.has(argument!)) throw new Error("repo_argument_repeated");
       modeFlags.add(argument!);
       if (argument === "--accept-host-writes") { acceptHostWrites = true; continue; }
@@ -86,6 +86,9 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
         case "--network":
           if (value !== "pasta" && value !== "none") throw new Error("network_invalid");
           container.network = value; break;
+        case "--tags":
+          if (value !== "none" && value !== "reachable") throw new Error("tags_invalid");
+          container.tags = value; break;
         case "--cache":
           if (value !== "none" && value !== "go" && value !== "uv") throw new Error("cache_invalid");
           container.cache = value; break;
