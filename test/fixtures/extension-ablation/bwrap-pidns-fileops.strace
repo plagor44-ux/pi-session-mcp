@@ -140,10 +140,10 @@
 3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
-3376433 mkdirat(7</newroot/home/user>, "Projekte", 0700) = 0
+3376433 mkdirat(7</newroot/home/user>, "src", 0700) = 0
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
-3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
-3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = 0
+3376433 openat2(5</newroot>, "/home/user/src", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/src>
+3376433 mkdirat(8</newroot/home/user/src>, "pi-session-mcp", 0700) = 0
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/home/user/src/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/src/pi-session-mcp>
 3376433 mkdirat(7</newroot/home/user/src/pi-session-mcp>, "node_modules", 0755) = 0
@@ -161,10 +161,10 @@
 3376433 mkdirat(8</newroot/home>, "user", 0700) = -1 EEXIST (File exists)
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/home/user", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user>
-3376433 mkdirat(7</newroot/home/user>, "Projekte", 0700) = -1 EEXIST (File exists)
+3376433 mkdirat(7</newroot/home/user>, "src", 0700) = -1 EEXIST (File exists)
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
-3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
-3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = -1 EEXIST (File exists)
+3376433 openat2(5</newroot>, "/home/user/src", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/src>
+3376433 mkdirat(8</newroot/home/user/src>, "pi-session-mcp", 0700) = -1 EEXIST (File exists)
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/home/user/src/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/src/pi-session-mcp>
 3376433 mkdirat(7</newroot/home/user/src/pi-session-mcp>, "skills", 0755) = 0
