@@ -212,7 +212,7 @@ then registers their wrappers. First explicitly authorize the host isolation
 control (`--isolation-control --repo <alias> --apply`): it writes real canaries
 below $HOME and removes them. Without a passing control writers remain not ready.
 See [Isolation setup](isolation-setup.md) for prerequisites, residual credential
-and network risks, and migration of `psm-alpha` and `thoth-alpha`.
+and network risks, and migration of `psm-alpha` and `go-app-alpha`.
 Missing entries retain host behavior as `unset` for compatibility and warn in
 Doctor when a coding profile exists.
 

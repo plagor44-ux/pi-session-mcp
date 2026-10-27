@@ -101,15 +101,15 @@ On the published 0.11.8, without a product change
 ([progress](sprints/2026-10-24-s8-writer-migration.md#progress-2026-10-27)):
 
 - Step 3: operator images `node-go` (Go 1.27.3) and `node-python-uv`
-  (Python 3.12.16, uv 0.13.6) in homelab-infra, checked under the writer's
+  (Python 3.12.16, uv 0.13.6), built outside this repository, checked under the writer's
   run flags against real builds of the target repositories.
-- Step 4: Thoth runs on four container writers with `--cache go`; the manual
-  writer `thoth-alpha` and the host aliases `thoth-w1`–`thoth-w7` are retired,
-  `thoth-rev` is `read-only`.
-- The server `linuslinuxserver` was upgraded to 0.11.8.
+- Step 4: go-app runs on four container writers with `--cache go`; the manual
+  writer `go-app-alpha` and the host aliases `go-app-w1`–`go-app-w7` are retired,
+  `go-app-rev` is `read-only`.
+- The server the second machine was upgraded to 0.11.8.
 - New: [#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151), a
   persistent uv cache for Python writers. Step 5 must also decide on
-  smartpaper-ng's tests that need a local Postgres.
+  pynode-app's tests that need a local Postgres.
 
 ### Sprint 11: orchestration gaps (2026-10-26)
 
@@ -126,7 +126,7 @@ one pull request, no release:
   skill, K7 answered by a provider-free probe, K8 closed without a product
   change.
 - Recorded: the v0.11.6 post-release acceptance and migration step 2
-  (`workflow-artifact-copilot`, four writers).
+  (`node-app`, four writers).
 - Decided: D3 no ADR yet; #120 waits for an SDK release.
 - Released afterwards: 0.11.7 (#141, #142, the review stage) on 2026-10-26.
   Its upgrade on the workstation failed: with two container repositories the
@@ -341,7 +341,7 @@ means its named checks passed with evidence. The implemented items shipped in
 
 | Issue | Scope | Owner | Depends on | Status |
 | --- | --- | --- | --- | --- |
-| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008; execution policy, ADR 0009 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `thoth-alpha` (contained and live), both registered in Claude Code's local scope; Plan A per-repository modes (#98) and Plan B automated container writers with near-expiry credential refresh (#99) ship in 0.9.0; no live rollout or new live writer acceptance claimed yet; remaining host routes/repositories need operator choices, review point 2026-11-15 |
+| [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) | Isolation decision, ADR 0008; execution policy, ADR 0009 | maintainer | — | accepted for Linux; [Linux acceptance](evaluation/isolation-acceptance-2026-10-18/README.md) passed on 2026-10-18 for writers `psm-alpha` and `go-app-alpha` (contained and live), both registered in Claude Code's local scope; Plan A per-repository modes (#98) and Plan B automated container writers with near-expiry credential refresh (#99) ship in 0.9.0; no live rollout or new live writer acceptance claimed yet; remaining host routes/repositories need operator choices, review point 2026-11-15 |
 | [#81](https://github.com/plagor44-ux/pi-session-mcp/issues/81) | Doctor `workspace_gitfile` warning | Sprint 5 | — | implemented; provider-free tests |
 | [#86](https://github.com/plagor44-ux/pi-session-mcp/issues/86) | Orchestration skill: consume once, cadence, start-error reference | Sprint 5 | — | implemented; live effect unmeasured (#93) |
 | [#87](https://github.com/plagor44-ux/pi-session-mcp/issues/87) | Concise worker reports | Sprint 5 | — | implemented; live effect unmeasured; untested by the A/B unless worker skills are selected |

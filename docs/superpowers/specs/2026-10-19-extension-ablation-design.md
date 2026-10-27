@@ -419,10 +419,10 @@ the text above, they win.
   from the production environment.
 - **Task curation rulings (R70-R72).** R70: a task's `repo` is the recorded
   workspace alias (worktree aliases included), so `renderPrompt` rewrites the
-  recorded paths to the clone. R71: the Thoth implementation oracle adds
+  recorded paths to the clone. R71: the go-app implementation oracle adds
   `grep -qF` setup steps for the issue rows the prompt requires, because the
   repository's own checker only proves the callsite keys. R72: the
-  `i-spng-authz` `scopeIgnore` lists the cache prefixes under package
+  `i-task-6` `scopeIgnore` lists the cache prefixes under package
   directories that exist at the base commit. The cost is that a worker that
   creates a new `__pycache__` (or similar) elsewhere scores out of scope.
   Dependency mount points are not listed, because the harness keeps them empty
@@ -469,17 +469,16 @@ the text above, they win.
   that needs judgment is dropped). Cost: possibly fewer review tasks. The part
   about false findings is superseded by R78: they are report-only, and the
   verdict gate rejects the approvals.
-- **`i-thoth-inv3` is dropped and `i-spng-pdf` replaces it (R75).** The recorded
-  first turn of `i-thoth-inv3` exceeded the 15-minute run timeout. The
-  replacement is the mail PDF renderer task in smartpaper-ng (base `203cfc07`,
-  worktree `spng-stab-b`), whose oracle deselects implementation-coupled tests
+- **`i-task-dropped` is dropped and `i-task-7` replaces it (R75).** The recorded
+  first turn of `i-task-dropped` exceeded the 15-minute run timeout. The
+  replacement is a rendering task in the Python/Node repository, whose oracle deselects implementation-coupled tests
   with `-k` and passes base-fail/solution-pass with a base-lock venv. Cost: a
   replacement whose recorded first turn needed a test-only follow-up.
-- **`i-spng-pdf` allows `backend/tests/` (R76).** The prompt allows a new
+- **`i-task-7` allows `backend/tests/` (R76).** The prompt allows a new
   renderer test file, so `allowedPaths` adds the directory prefix
   `backend/tests/` (accepted by the schema since R77). Cost: edits to other test
   files are allowed too; the oracle restores its own test file.
-- **`i-spng-pdf` oracle command (R79).** It pins `-c pyproject.toml` (a
+- **`i-task-7` oracle command (R79).** It pins `-c pyproject.toml` (a
   `pytest.ini` under the allowed test prefix cannot override the configuration)
   and runs with a short `TMPDIR=/tmp` (sandbox-private) so the AF_UNIX timeout
   test is kept; only the two tests that assert the internal code
@@ -489,7 +488,7 @@ the text above, they win.
   found that the first patterns missed real non-approving formats and that one
   was super-linear, the reviewer's tested variants were adopted: wider authz
   and chat patterns, direct phrases for psm, bounded `[^\w\n]{0,N}` instead of
-  `\W*`/`\s*`, and the `*+spoof` anchors of the thoth task dropped. The 101
+  `\W*`/`\s*`, and the `*+spoof` anchors of the go-app task dropped. The 101
   controls, the reviewer's probes, a held-out set and an adversarial timing suite
   (the reviewer's inputs plus generic classes) are re-run, with 50 ms per
   pattern at 64 KiB as the bound; the timing claim in the README and setup notes
@@ -593,7 +592,7 @@ the text above, they win.
   could already do with pipes and loopback.
 - **Abstract sockets that the trace itself bound are internal (R88).** A wave
   stopped on abstract-socket connects that the task's own code created: the
-  smartpaper-ng PDF renderer's parent/child IPC (`@mail-pdf-<hex>`, run by the
+  pynode-app PDF renderer's parent/child IPC (`@mail-pdf-<hex>`, run by the
   task's tests) and the docker CLI's plugin socket (`@docker_cli_<hex>`). The
   sandbox shares the host's network namespace, so an abstract name is a real
   reach in general, and the audit could not tell who had created a name because

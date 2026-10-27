@@ -85,21 +85,21 @@ the extension) or B (with it; pi-lens in all scored runs).
 
 | Run | Task | Profile | Arm | Accepted | Terminal | Duration | Messages | Catalog cost (USD) | Score |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 001 | `i-thoth-dms` | `code-deepseek` | A | yes | completed | 7:40 | 95 | 0.152 | accepted |
-| 002 | `i-thoth-dms` | `code-deepseek` | B | yes | completed | 8:54 | 79 | 0.135 | accepted |
-| 003 | `i-spng-authz` | `code-deepseek` | B | yes | completed | 5:06 | 49 | 0.064 | accepted |
-| 004 | `i-spng-authz` | `code-deepseek` | A | yes | completed | 3:38 | 30 | 0.052 | accepted |
-| 005 | `i-spng-pdf` | `code-deepseek` | A | yes | completed | 9:06 | 52 | 0.074 | accepted |
-| 006 | `i-spng-pdf` | `code-deepseek` | B | no | timeout (provider error `other`) | 14:01 | 45 | 0.076 | no oracle score |
-| 007 | `i-thoth-dms` | `code` | A | no | timeout | 14:00 | 29 | 0.908 | no oracle score |
-| 008 | `i-thoth-dms` | `code` | B | yes | completed | 13:48 | 27 | 0.867 | accepted |
-| 009 | `i-spng-authz` | `code` | B | yes | completed | 5:59 | 26 | 0.307 | accepted |
-| 010 | `i-spng-authz` | `code` | A | yes | completed | 4:43 | 25 | 0.263 | accepted |
-| 011 | `i-spng-pdf` | `code` | A | yes | completed | 6:54 | 18 | 0.183 | accepted |
-| 012 | `i-spng-pdf` | `code` | B | no | completed | 0:45 | 4 | 0.058 | tests failed |
+| 001 | `i-task-5` | `code-deepseek` | A | yes | completed | 7:40 | 95 | 0.152 | accepted |
+| 002 | `i-task-5` | `code-deepseek` | B | yes | completed | 8:54 | 79 | 0.135 | accepted |
+| 003 | `i-task-6` | `code-deepseek` | B | yes | completed | 5:06 | 49 | 0.064 | accepted |
+| 004 | `i-task-6` | `code-deepseek` | A | yes | completed | 3:38 | 30 | 0.052 | accepted |
+| 005 | `i-task-7` | `code-deepseek` | A | yes | completed | 9:06 | 52 | 0.074 | accepted |
+| 006 | `i-task-7` | `code-deepseek` | B | no | timeout (provider error `other`) | 14:01 | 45 | 0.076 | no oracle score |
+| 007 | `i-task-5` | `code` | A | no | timeout | 14:00 | 29 | 0.908 | no oracle score |
+| 008 | `i-task-5` | `code` | B | yes | completed | 13:48 | 27 | 0.867 | accepted |
+| 009 | `i-task-6` | `code` | B | yes | completed | 5:59 | 26 | 0.307 | accepted |
+| 010 | `i-task-6` | `code` | A | yes | completed | 4:43 | 25 | 0.263 | accepted |
+| 011 | `i-task-7` | `code` | A | yes | completed | 6:54 | 18 | 0.183 | accepted |
+| 012 | `i-task-7` | `code` | B | no | completed | 0:45 | 4 | 0.058 | tests failed |
 | 013 | `r-psm-smoke` | `review-grok` | A | no | completed | 13:19 | 24 | 1.089 | critical 1/2, verdict missed, recall 0.4 |
 | 014 | `r-psm-smoke` | `review-grok` | B | no | completed | 11:52 | 24 | 1.043 | critical 2/2, verdict missed, recall 0.6 |
-| 015 | `r-thoth-gates` | `review-grok` | B | yes | completed | 11:02 | 64 | 2.661 | critical 1/1, verdict matched, recall 0.6 |
+| 015 | `r-task-2` | `review-grok` | B | yes | completed | 11:02 | 64 | 2.661 | critical 1/1, verdict matched, recall 0.6 |
 
 "Accepted" for review runs (013 to 015) is what the keyword oracle computed; it
 is information, not an outcome (ruling R83). Run 015 has no arm A counterpart:
@@ -130,8 +130,8 @@ run 016).
 
 Runs 016 to 035 have the outcome `not_run`:
 
-- 13 review runs: 016 to 020 (`review-grok` on `r-thoth-gates` arm A,
-  `r-spng-authz` and `r-spng-chat`) and 021 to 028 (`review`, all four review
+- 13 review runs: 016 to 020 (`review-grok` on `r-task-2` arm A,
+  `r-task-3` and `r-task-4`) and 021 to 028 (`review`, all four review
   tasks, both arms).
 - 3 `co-code` runs: 029 to 031 (`pi-cache-optimizer` arm B on the three
   implementation tasks).
@@ -156,16 +156,16 @@ the paired runs (`cacheReadShare` in `summary.json`).
 ### pl-code-deepseek: do-not-enable
 
 A accepted 3 of 3, B accepted 2 of 3. The only difference is B's timeout on
-`i-spng-pdf` (run 006, terminal `timeout`, provider error `other`, 14:01). Cost
+`i-task-7` (run 006, terminal `timeout`, provider error `other`, 14:01). Cost
 is the same (USD 0.277 against 0.275) and so is the cache-read share. Under the
 pre-registered rule this is do-not-enable, but it rests on one timeout in one
 run.
 
 ### pl-code: enable (pre-registered rule)
 
-A accepted 2 of 3, B accepted 2 of 3. B was better on `i-thoth-dms`, where A
+A accepted 2 of 3, B accepted 2 of 3. B was better on `i-task-5`, where A
 timed out (run 007) and B completed and was accepted (run 008, 13:48). B was
-worse on `i-spng-pdf`, where it gave up after 4 messages and 0:45 (run 012,
+worse on `i-task-7`, where it gave up after 4 messages and 0:45 (run 012,
 tests failed) while A was accepted (run 011). B cost USD 1.233 against 1.355 for
 A. Both the "enable" verdict and the tie in acceptance hinge on a single timeout
 and a single early stop. A repeat with more than one run per task is needed
@@ -182,7 +182,7 @@ on `review-grok`:
 | B (pi-lens) | 2 of 2 | no | 0.6 | 0 | 1.043 | 83.5% |
 
 Neither arm matched the verdict, so the oracle did not accept either run. Run
-015 (`r-thoth-gates`, `review-grok`, arm B only) hit its one critical finding
+015 (`r-task-2`, `review-grok`, arm B only) hit its one critical finding
 (1 of 1), matched the verdict, had recall 0.6 and cost USD 2.661; it has no
 counterpart and is not part of any pairing total. `pl-review` and `co-review`
 have no scored runs.
@@ -221,7 +221,7 @@ address only. No other run shows an unexpected connect.
 
 Destinations seen in the records:
 
-- `127.0.0.1` port 5544: the smartpaper-ng test Postgres port, reachable because
+- `127.0.0.1` port 5544: the pynode-app test Postgres port, reachable because
   the sandbox shares the host network namespace.
 - Fastly addresses on port 443 (`151.101.0.223`, `151.101.64.223`,
   `151.101.128.223`, `151.101.192.223` and four `2a04:4e42:...::223` IPv6
@@ -231,7 +231,7 @@ Destinations seen in the records:
 
 Both occur in both arms. No destination is specific to an extension. Outside
 writes, unresolved writes and unresolved egress are 0 in every scored run. Denied
-write attempts are 0 except in three `i-spng-pdf` runs: 1,722 in run 005, 2,097
+write attempts are 0 except in three `i-task-7` runs: 1,722 in run 005, 2,097
 in run 006 and 1,050 in run 011. These are writes the kernel refused (`EROFS`,
 read-only mounts). The dependency venv mount lies under the scope root, so
 refused writes there are not counted as denied; the counted attempts are at
@@ -251,7 +251,7 @@ from the kept `strace` line and fixed before the next wave:
    had no diagnostics yet (R84 came after) but stopped the same run on the same
    single event, so the cause is the same, evidenced in wave 2. Fixed by R87:
    sockets there are internal to the sandbox.
-2. Wave 3, run 005: six abstract-socket connects, five to the smartpaper-ng PDF
+2. Wave 3, run 005: six abstract-socket connects, five to the pynode-app PDF
    renderer's own IPC (`@mail-pdf-<hex>`) and one to the docker CLI's plugin
    socket (`@docker_cli_<hex>`), all created by the task's own code. Fixed by
    R88: abstract sockets that the trace itself bound are internal.
@@ -307,22 +307,21 @@ the wave.
 ## Tasks (pre-registered)
 
 Pre-registered before any measured run. Values come from `tasks.json` in this
-folder. Prompts are not tracked; they live under the ignored `eval/results/`, and
-`tasks.json` carries each prompt's hash.
+folder. Prompts are not tracked. The tasks file and the raw evidence of the private-repository
+tasks are not published; this table keeps only public identifiers.
 
 | id | kind | repo alias | base commit | source session | verdict gate | oracle summary |
 | --- | --- | --- | --- | --- | --- | --- |
 | `r-psm-smoke` | review | `pi-session-mcp` | `bdfb95de` | `9299a6ff` | yes | 5 findings, 2 critical, 2 false findings |
-| `r-thoth-gates` | review | `thoth` | `8ed36fdd` | `35c08c30` | yes | 5 findings, 1 critical, 1 false finding |
-| `r-spng-authz` | review | `spng-stab-int` | `a264c1a5` | `e6711afa` | yes | 7 findings, 3 critical, 2 false findings |
-| `r-spng-chat` | review | `spng-stab-int` | `ae3b5e71` | `d050dadd` | yes | 5 findings, 2 critical, 2 false findings |
-| `i-thoth-dms` | implementation | `thoth-w3` | `ab470131` | `0e6508fd` | n/a | repo inventory checker for dms plus issue-row checks |
-| `i-spng-authz` | implementation | `spng-stab-int` | `8ac3b47b` | `92563767` | n/a | pytest of `tests/test_authz_core.py` from the solution commit, offline venv |
-| `i-spng-pdf` | implementation | `spng-stab-b` | `203cfc07` | `0c770e50` | n/a | pytest of `tests/test_mail_pdf_diagnostics.py` from the solution commit, two tests that assert an internal code name deselected, offline venv |
+| `r-task-2` | review | `go-app` | private | private | yes | 5 findings, 1 critical, 1 false finding |
+| `r-task-3` | review | `pynode-app-stab-int` | private | private | yes | 7 findings, 3 critical, 2 false findings |
+| `r-task-4` | review | `pynode-app-stab-int` | private | private | yes | 5 findings, 2 critical, 2 false findings |
+| `i-task-5` | implementation | `go-app-w3` | private | private | n/a | repository check script plus content checks |
+| `i-task-6` | implementation | `pynode-app-stab-int` | private | private | n/a | pytest of one test file from the solution commit, offline venv |
+| `i-task-7` | implementation | `pynode-app-stab-b` | private | private | n/a | pytest of one test file from the solution commit, two tests deselected, offline venv |
 
-`i-thoth-inv3` was dropped: its recorded first turn took 15 min 6 s, over the
-15-minute run timeout. It was replaced by `i-spng-pdf` (the smartpaper-ng mail
-PDF renderer), whose recorded first turn took 2 min 56 s.
+A third Go-repository task was dropped: its recorded first turn took 15 min 6 s, over the
+15-minute run timeout. It was replaced by `i-task-7` (a rendering task in the Python/Node repository), whose recorded first turn took 2 min 56 s.
 
 ## Selection (pre-registered)
 
@@ -337,9 +336,9 @@ Selection rules, from the spec:
 Implementation oracles fail at the base commit and pass with the original
 solution, with scope clean.
 
-Correlation: `r-spng-authz`, `i-spng-authz` and `i-spng-pdf` come from the same
-product repository, and `r-spng-authz` and `i-spng-authz` touch the same code.
-`r-thoth-gates` and `i-thoth-dms` share one repository.
+Correlation: `r-task-3`, `i-task-6` and `i-task-7` come from the same
+product repository, and `r-task-3` and `i-task-6` touch the same code.
+`r-task-2` and `i-task-5` share one repository.
 
 ## Review oracle (pre-registered)
 
@@ -378,13 +377,13 @@ differential fuzz against the old code).
 - The matcher is keyword-based and blind to negation.
 - A non-approving review that denies a critical finding in the oracle's own
   positive claim wording can still be accepted; this was seen in probes for
-  `r-psm-smoke`, `r-spng-authz`, `r-spng-chat` and `r-thoth-gates`.
-  `r-thoth-gates` has a single critical finding and its prompt asks for a
+  `r-psm-smoke`, `r-task-3`, `r-task-4` and `r-task-2`.
+  `r-task-2` has a single critical finding and its prompt asks for a
   "checks with no finding" section, which makes this more likely there.
-- `r-thoth-gates` counts "APPROVE WITH CHANGES" and "Approved with corrections"
+- `r-task-2` counts "APPROVE WITH CHANGES" and "Approved with corrections"
   as non-approving, and plain "APPROVE" and "APPROVE WITH NITS" as approving.
 - False findings fire on natural denials, which is why they are report-only.
-- The `i-spng-pdf` oracle no longer checks the rule that an unknown child status
+- The `i-task-7` oracle no longer checks the rule that an unknown child status
   is never success: the deselected tests assert an internal code name that the
   prompt leaves open.
 
@@ -392,7 +391,7 @@ differential fuzz against the old code).
 
 Initial estimate: 35 runs. At USD 1.00 per run the projection is USD 35.
 `--trim` within USD 10 keeps only `pl-code-deepseek` (6 runs on the three
-implementation tasks `i-thoth-dms`, `i-spng-authz` and `i-spng-pdf`). The
+implementation tasks `i-task-5`, `i-task-6` and `i-task-7`). The
 calibration in Task 11 replaces the estimate for the profiles it observes;
 unobserved profiles keep the USD 1.00 estimate until calibrated.
 

@@ -20,7 +20,7 @@ failed writer acceptance (#121), because every writer of the migration passes
 through that acceptance.
 
 Out of scope: product features other than #121, macOS writers, Codex wake, a
-writer lifecycle the release does not ship, and `omp-control` (its alias stays
+writer lifecycle the release does not ship, and `bun-app` (its alias stays
 as it is until a later decision).
 
 ## Inventory (workstation, 2026-10-24)
@@ -31,19 +31,19 @@ allowed everywhere. Every worker worktree is clean and detached.
 | Repository | Main alias | Host writer aliases today | Review alias | Toolchain needed |
 | --- | --- | --- | --- | --- |
 | pi-session-mcp | `pi-session-mcp` | `pi-session-mcp-w1` (full clone) | — | Node ≥ 22.19, npm |
-| workflow-artifact-copilot | `workflow-artifact-copilot` | `wac-w1`–`wac-w4` (worktrees) | — | Node ≥ 22.13, npm |
-| Thoth | `thoth` | `thoth-w1`–`thoth-w7` (worktrees); manual container writer `thoth-alpha` | `thoth-rev` | Go 1.27.3 (`go.mod`), Node |
-| smartpaper-capture | `smartpaper-capture` | `spcap-w1`–`spcap-w3` (worktrees) | `spcap-rev` | Python ≥ 3.12 with `uv` |
-| smartpaper-ng | `smartpaper-ng` | `spng-stab-a`–`spng-stab-e`, `spng-stab-int` (worktrees) | — | Python ≥ 3.12 with `uv` (backend), Node with npm (frontend) |
-| omp-control | `omp-control` | — | — | `bun` |
+| node-app | `node-app` | `node-app-w1`–`node-app-w4` (worktrees) | — | Node ≥ 22.13, npm |
+| go-app | `go-app` | `go-app-w1`–`go-app-w7` (worktrees); manual container writer `go-app-alpha` | `go-app-rev` | Go 1.27.3 (`go.mod`), Node |
+| py-app | `py-app` | `py-app-w1`–`py-app-w3` (worktrees) | `py-app-rev` | Python ≥ 3.12 with `uv` |
+| pynode-app | `pynode-app` | `pynode-app-stab-a`–`pynode-app-stab-e`, `pynode-app-stab-int` (worktrees) | — | Python ≥ 3.12 with `uv` (backend), Node with npm (frontend) |
+| bun-app | `bun-app` | — | — | `bun` |
 
 The built-in writer image (`--image node`, a pinned digest) provides
 Node.js 22.23.3, Python 3.11 and Git. It has no Go, no `uv` and no `bun`.
-The operator image of `thoth-alpha` provides Go 1.26.9, which cannot build a
+The operator image of `go-app-alpha` provides Go 1.26.9, which cannot build a
 module that requires Go 1.27.3 under `GOTOOLCHAIN=local`. Repository sizes
 (12–36 MB of Git data each) make disk space a non-issue for full clones.
 
-Second machine: `linuslinuxserver` has 9 aliases, among them `wac-w1`–`wac-w4`,
+Second machine: the second machine has 9 aliases, among them `node-app-w1`–`node-app-w4`,
 and no `events` setting. **Podman is not installed there**, so container
 writers cannot run on it without a privileged installation.
 
@@ -67,36 +67,37 @@ every provider.
 | Repository | Mode of the main alias | Writers | Image | Profiles in the boundary |
 | --- | --- | --- | --- | --- |
 | pi-session-mcp (pilot) | `container` | 2 | `node` | `code`, `code-deepseek`, `code-glm`, `code-mistral`, `code-grok` |
-| workflow-artifact-copilot | `container` | 4 | `node` | as above |
-| Thoth | `container` | 4 | operator image: Go 1.27.3 and Node, `--cache go` | as above |
-| smartpaper-capture | `container` | 3 | operator image: Python 3.12, `uv`, Node | as above |
-| smartpaper-ng | `container` | 4 | operator image: Python 3.12, `uv`, Node | as above |
+| node-app | `container` | 4 | `node` | as above |
+| go-app | `container` | 4 | operator image: Go 1.27.3 and Node, `--cache go` | as above |
+| py-app | `container` | 3 | operator image: Python 3.12, `uv`, Node | as above |
+| pynode-app | `container` | 4 | operator image: Python 3.12, `uv`, Node | as above |
 
-Review aliases `thoth-rev` and `spcap-rev` become mode `read-only`. After a
+Review aliases `go-app-rev` and `py-app-rev` become mode `read-only`. After a
 repository's writers are ready, its host writer aliases are removed from the
 configuration, and their worktrees are retired by the existing worktree-closing
 rule (commits checked into the integration branch, detached on `main`, branch
 deleted). `code-cursor` is dropped for coding: ADR 0009 does not admit the
 Cursor provider in a boundary. `review-cursor` stays a read-only route.
 
-Writer names collide with today's host alias names: `thoth-w1` is a host
-worktree today and would also be the first Thoth writer. Each repository's
+Writer names collide with today's host alias names: `go-app-w1` is a host
+worktree today and would also be the first go-app writer. Each repository's
 host writer aliases are therefore removed in the same change that provisions
 its writers.
 
 ## Operator images
 
 Setup does not build images; it accepts a local image ID. The sprint adds one
-Containerfile per toolchain with pinned base digests to `homelab-infra`, built
+Containerfile per toolchain with pinned base digests to the operator's private
+infrastructure repository, built
 with rootless `podman build` on each machine that runs writers:
 
-- `node-go`: Node 22 and Go 1.27.3 (Thoth);
-- `node-python-uv`: Node 22, Python 3.12 and `uv` (smartpaper-capture,
-  smartpaper-ng).
+- `node-go`: Node 22 and Go 1.27.3 (go-app);
+- `node-python-uv`: Node 22, Python 3.12 and `uv` (py-app,
+  pynode-app).
 
 Each image needs Node, Git, bash, ssh and coreutils for the acceptance
 harness. A new image ID requires the provisioning command again and a new
-acceptance. The toolchain versions in `homelab-infra` must follow the
+acceptance. The toolchain versions in those Containerfiles must follow the
 repositories' `go.mod` and Python requirements; a version bump there is a new
 image and a new acceptance.
 
@@ -130,21 +131,21 @@ image and a new acceptance.
    - Gate: one real coding delegation per writer, collected, reviewed and
      finished.
    - Gate: the host writer alias `pi-session-mcp-w1` is retired.
-2. `workflow-artifact-copilot`, built-in image; retire `wac-w1`–`wac-w4` on
+2. `node-app`, built-in image; retire `node-app-w1`–`node-app-w4` on
    the workstation.
 3. Build and check the operator images (the toolchain version inside each
    image, and the acceptance harness).
-4. Thoth: first collect and review all `thoth-alpha` work and remove the
-   manual writer as documented, then provision. Retire `thoth-w1`–`thoth-w7`.
-   `thoth-rev` becomes `read-only`.
-5. smartpaper-capture, then smartpaper-ng, each with its retirement step.
-6. `linuslinuxserver`: the operator installs rootless Podman (a privileged
+4. go-app: first collect and review all `go-app-alpha` work and remove the
+   manual writer as documented, then provision. Retire `go-app-w1`–`go-app-w7`.
+   `go-app-rev` becomes `read-only`.
+5. py-app, then pynode-app, each with its retirement step.
+6. the second machine: the operator installs rootless Podman (a privileged
    step). Then the same isolation control, image builds and provisioning as on
-   the workstation, starting with `workflow-artifact-copilot`; retire the
-   server's `wac-w1`–`wac-w4`.
+   the workstation, starting with `node-app`; retire the
+   server's `node-app-w1`–`node-app-w4`.
 7. Update the routing rules and both machines' configuration. Record the
    outcome on #79 and close it if every repository in scope is migrated;
-   `omp-control` is recorded as deferred.
+   `bun-app` is recorded as deferred.
 
 Every step is one repository at a time, with a rollback: collect the writers'
 work, `--remove` them, and set the mode back to `host` with
@@ -170,64 +171,65 @@ repeated `--apply` is allowed. A second failure stops that repository.
 ## Decisions (2026-10-25)
 
 1. **Writer counts:** 2, 4, 4, 3, 4 as in the target table.
-2. **Images:** built in this sprint; Containerfiles live in `homelab-infra`.
-3. **omp-control:** out of scope for this sprint.
+2. **Images:** built in this sprint; Containerfiles live in the operator's
+   private infrastructure repository.
+3. **bun-app:** out of scope for this sprint.
 4. **Profiles in the boundary:** `code`, `code-deepseek`, `code-glm`,
    `code-mistral` and the new `code-grok` (provider `xai`, `grok-4.7`, high),
    so xAI keeps a coding route without Cursor. `code-grok` was added to the
    operator configuration on both machines on 2026-10-25 and passed Doctor and
    a provider round trip on 0.11.2 there. `code-cursor` is dropped for coding.
 5. **Codex:** writers are registered for Claude Code and Codex.
-6. **Server `linuslinuxserver`:** the operator installs rootless Podman; the
+6. **Server the second machine:** the operator installs rootless Podman; the
    server gets container writers too (step 6).
 7. **Network:** `pasta` for all writers. Lifecycle: `persistent`.
 
 ## Progress (2026-10-27)
 
-Step 3, operator images: done. homelab-infra PR #478 (merged) adds
-`tools/pi-writer-images/` with two Containerfiles on the same pinned Node base
+Step 3, operator images: done. The operator's private infrastructure repository
+now holds two Containerfiles on the same pinned Node base
 as the built-in image, a check script and a README.
 
 | Image | Repositories | Toolchain | Image ID on the workstation |
 | --- | --- | --- | --- |
-| `node-go` | Thoth | Go 1.27.3 (official SHA-256 checked) | `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f` |
-| `node-python-uv` | smartpaper-capture, smartpaper-ng | Python 3.12.16, uv 0.13.6 (digest-pinned) | `eb2746450f5669ac8d01dbd9779f9e0833a2843b7ce9ad246e4ba80625466770` |
+| `node-go` | go-app | Go 1.27.3 (official SHA-256 checked) | `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f` |
+| `node-python-uv` | py-app, pynode-app | Python 3.12.16, uv 0.13.6 (digest-pinned) | `eb2746450f5669ac8d01dbd9779f9e0833a2843b7ce9ad246e4ba80625466770` |
 
 - Under the writer's run flags (`--userns=keep-id --read-only --cap-drop=all`,
   tmpfs `/tmp` 512 MB and `/pi/home` 64 MB) on throwaway clones: `go build ./...`
-  in Thoth with `GOTOOLCHAIN=local`; `uv sync --frozen` in smartpaper-capture
-  and in smartpaper-ng's backend; `npm ci` and `npm run build` in its frontend.
+  in go-app with `GOTOOLCHAIN=local`; `uv sync --frozen` in py-app
+  and in pynode-app's backend; `npm ci` and `npm run build` in its frontend.
 - One independent review, `NON_BLOCKING_ONLY`; its findings were fixed or
   recorded as limits.
 - Limits that bear on step 5:
-  - after the smartpaper-ng backend sync the uv cache holds about 483 MB of the
+  - after the pynode-app backend sync the uv cache holds about 483 MB of the
     512 MB `/tmp`, and it is empty after every container start
     ([#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151) proposes
     a `--cache uv`);
-  - smartpaper-ng's backend tests need a test Postgres on `127.0.0.1:5544`,
+  - pynode-app's backend tests need a test Postgres on `127.0.0.1:5544`,
     which a writer does not have, and the image has no `tesseract`. A
-    smartpaper-ng writer can build but not run those tests. Step 5 has to
+    pynode-app writer can build but not run those tests. Step 5 has to
     decide whether that is acceptable.
 
-Step 4, Thoth: done on `0.11.8` (record in
+Step 4, go-app: done on `0.11.8` (record in
 [Acceptance](../acceptance.md#v0118-post-release-evidence)). Four writers
-`thoth-w1`–`thoth-w4` with the `node-go` image and `--cache go`; `thoth-alpha`
-unregistered and archived; host aliases `thoth-w1`–`thoth-w7` removed;
-`thoth-rev` is `read-only`. Process slip: while checking `thoth-alpha` for
+`go-app-w1`–`go-app-w4` with the `node-go` image and `--cache go`; `go-app-alpha`
+unregistered and archived; host aliases `go-app-w1`–`go-app-w7` removed;
+`go-app-rev` is `read-only`. Process slip: while checking `go-app-alpha` for
 unintegrated work, the controller ran host Git (`status`, `fetch`,
 `update-ref`) in its clone, against the rule in
 [Isolation setup](../isolation-setup.md#review-finish-and-migration). Its Git
 configuration and hooks were then inspected without Git: unchanged since
 2026-10-18, sample hooks only. The clone is archived with the writer state.
 
-Also on 2026-10-27: the server `linuslinuxserver` was upgraded to `0.11.8`
+Also on 2026-10-27: the server the second machine was upgraded to `0.11.8`
 (no writers there yet).
 
 Open:
-- one real coding turn per Thoth and `workflow-artifact-copilot` writer, from a
+- one real coding turn per go-app and `node-app` writer, from a
   controller started in that repository's checkout;
-- step 5 (smartpaper-capture, smartpaper-ng) with the `node-python-uv` image,
+- step 5 (py-app, pynode-app) with the `node-python-uv` image,
   after the decision on the test limits above;
-- step 6 needs rootless Podman on `linuslinuxserver` (operator, privileged);
+- step 6 needs rootless Podman on the second machine (operator, privileged);
 - step 7: routing rules and the #79 record;
 - the #79 review point on 2026-11-15.

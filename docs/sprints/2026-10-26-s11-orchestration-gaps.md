@@ -28,7 +28,7 @@ not state with evidence.
 | T5 | K7: provider-free probe whether a subagent's sessions and wakes reach the right context | after T1, `pi-session-mcp-w1` | `eval/bridge/` |
 | T6 | K5 written into the controller skill with this sprint's review numbers | controller | `skills/pi-session-orchestration/` |
 | T7 | [#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142): container writers fail OAuth turns in the five minutes before the token expires; warm up the host login before the SDK's window | after T1 or T4, a writer with `code` | `src/writer-credentials.ts`, `src/writer-launch.ts`, tests, docs |
-| M2 | Migration step 2: `workflow-artifact-copilot`, four writers, retire `wac-w1`–`wac-w4` | controller and operator | operator configuration |
+| M2 | Migration step 2: `node-app`, four writers, retire `node-app-w1`–`node-app-w4` | controller and operator | operator configuration |
 | L4 | One live pair with a turn of several minutes and the wake | controller | evaluation record |
 
 K5 runs on every code task: review by `review-glm` for code by `code`, rounds
@@ -149,9 +149,9 @@ Recorded as work lands on the branch.
   This fits the wrapper's 60 s credential copy but is two observations, not a
   proof; the skill keeps the reconnect.
 - Migration step 2 (M2): host isolation control passed; four
-  `workflow-artifact-copilot` writers provisioned and accepted on the first
+  `node-app` writers provisioned and accepted on the first
   `--apply`, registered for Claude Code and Codex with the wake hook; the host
-  aliases `wac-w1`–`wac-w4` were removed from the configuration (Doctor then
+  aliases `node-app-w1`–`node-app-w4` were removed from the configuration (Doctor then
   reported no warning for the repository) and their worktrees set clean and
   detached on `main`. A real coding turn per writer is open: it needs a
   controller started in that repository's checkout.

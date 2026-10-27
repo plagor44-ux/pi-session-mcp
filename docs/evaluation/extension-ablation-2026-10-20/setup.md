@@ -86,16 +86,16 @@ Active tools per pairing (sorted, from the private report):
 ## Dry load with the final tasks (Task 10 Step 5)
 
 Commit 1c228ad (dependency mounts, ruling R68; base-only clone history, ruling
-R69) with the final tasks file `docs/evaluation/extension-ablation-2026-10-20/tasks.json`.
+R69) with the final tasks file (not published).
 
-Dependencies: task `i-spng-authz` declares `backend/.venv` with lockfile
-`backend/uv.lock`. The deps directory `$EVAL/deps/i-spng-authz` holds:
+Dependencies: task `i-task-6` declares `backend/.venv` with lockfile
+`backend/uv.lock`. The deps directory `$EVAL/deps/i-task-6` holds:
 
 - `mounts/backend/.venv`, built with `uv sync --frozen --offline
   --no-install-project` (`UV_PROJECT_ENVIRONMENT`) from a temporary checkout at
   the base commit, which was removed afterwards.
 - `lock/backend/uv.lock`, SHA-256
-  `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca`, equal to
+  `(recorded, not published)`, equal to
   the base commit's lockfile.
 - `runtime/`, a copy of uv's CPython 3.12.13, which the venv's interpreter link
   points to.
@@ -104,30 +104,30 @@ No network was used (local uv cache).
 
 | Run | Tasks loaded | Purpose |
 | --- | --- | --- |
-| 1 | The full tasks file; the dry load loads one task per pairing (`r-psm-smoke` for review pairings, `i-thoth-dms` for implementation pairings) | All six pairings with the final file |
-| 2 | A subset with `r-spng-authz` and `i-spng-authz` | Also loads the smartpaper-ng worktree and the real venv mount |
+| 1 | The full tasks file; the dry load loads one task per pairing (`r-psm-smoke` for review pairings, `i-task-5` for implementation pairings) | All six pairings with the final file |
+| 2 | A subset with `r-task-3` and `i-task-6` | Also loads the pynode-app worktree and the real venv mount |
 
 Both runs: every pairing ok, no clone writes, no inet connects, no unexpected
 connects, no outside or unresolved writes, no denied writes, no `io_uring`
 setups. Active tool lists are as in the earlier section.
 
 Result: no extension writes into a clone, so no task gets a `scopeIgnore` entry
-from the dry load. `i-spng-authz` carries 29 `scopeIgnore` prefixes for the
+from the dry load. `i-task-6` carries 29 `scopeIgnore` prefixes for the
 worker's own test caches (pytest and ruff caches, `__pycache__` directories
 present at the base commit), ruling R72.
 
 ## Final tasks (after the oracle rework)
 
-- Dependencies now also exist for `i-spng-pdf`, with the same layout as
-  `i-spng-authz` and built offline the same way. The lockfile SHA-256 is
-  `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca`; the two
+- Dependencies now also exist for `i-task-7`, with the same layout as
+  `i-task-6` and built offline the same way. The lockfile SHA-256 is
+  `(recorded, not published)`; the two
   base commits share the lockfile.
 - Dry loads at commit a054cf3 with `--deps`: the full tasks file and a subset
-  (`r-spng-chat`, `i-spng-pdf`). Every pairing ok, no clone writes, no connects.
+  (`r-task-4`, `i-task-7`). Every pairing ok, no clone writes, no connects.
   The later commits changed only oracle fields and validation, which the dry
   load does not exercise.
 - Oracle checks inside the real sandbox (bwrap with the dependency binds, the
-  production oracle code, no strace): `i-spng-authz` and `i-spng-pdf` are not
+  production oracle code, no strace): `i-task-6` and `i-task-7` are not
   accepted at the base commit and accepted with the solution, with nothing out
   of scope.
 - Sandbox environment additions (ruling R73): six offline variables for Go, uv
