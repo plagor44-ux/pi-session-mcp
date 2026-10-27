@@ -2516,8 +2516,39 @@ Live check of #142, aborted:
   requests for 27 minutes without a failure, which says nothing about the
   window itself. #142 stays verified by code and tests only.
 
+Operator upgrade of the server `second-machine` from `0.11.6` to `0.11.8`
+on 2026-10-27. The server has no writers, and no Pi Session MCP server
+process was running there:
+- Both client targets (`claude-code:user:pi-session-mcp`,
+  `codex:user:pi-session-mcp`) verified with `0.11.6`, were removed, and
+  `0.11.8` was installed with Node 24 first in `PATH`. npm reported that it
+  skipped the install scripts of `@google/genai` and `protobufjs`
+  (`allow-scripts`).
+- Doctor reported no error. Both targets were applied and verified
+  (`mcp_verified`, `skill_verified`).
+
+Migration step 4 (go-app) on `0.11.8`, workstation, 2026-10-27:
+- The manual writer `go-app-alpha` had no work outside `main` and an empty
+  bundle directory. Its local Claude Code registration was removed (it had no
+  Codex registration), and its wrapper and state directory were moved to an
+  archive outside the writer root; deleting them is left to the operator.
+- The host aliases `go-app-w1`–`go-app-w7` were removed from the configuration.
+  Their worktrees were clean and detached on a commit of `main`.
+- The host isolation control for `go-app` passed. `--repo go-app --mode container`
+  with four writers, profiles `code`, `code-deepseek`, `code-glm`,
+  `code-mistral` and `code-grok`, the operator image `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f`
+  (`node-go`, Node 22.23.3 and Go 1.27.3, built from private-infra
+  `tools/pi-writer-images/`), `--cache go`, network `pasta`, lifecycle
+  `persistent` and `--client codex` reported `writer_accepted` for all four
+  writers on the first `--apply`, `writer_registered` for Claude Code and
+  Codex, and the wake hook.
+- `go-app-rev` was set to mode `read-only`. `--writer go-app-w<n> --verify`
+  reported `mcp_verified` and `hook_verified` for all four writers. Doctor
+  reported no error; for go-app only the `workspace_gitfile` warning of the
+  read-only alias `go-app-rev` remains.
+
 Not established for `0.11.8`: a live confirmation of #142; a real coding turn
-on each `node-app` writer; Level 3.
+on each `node-app` and go-app writer; Level 3.
 
 ### v0.11.8 pre-release acceptance
 

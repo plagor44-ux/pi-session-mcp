@@ -95,6 +95,22 @@ Updated 2026-10-18. Base main `612fbcb976d4563ea597e87be56123055b782c1a`
   including operator-supplied Go images and the `--cache go` selection. New live acceptance and
   rollout are not claimed; each writer must pass its readiness gates.
 
+### Sprint 8 migration, steps 3 and 4 (2026-10-27)
+
+On the published 0.11.8, without a product change
+([progress](sprints/2026-10-24-s8-writer-migration.md#progress-2026-10-27)):
+
+- Step 3: operator images `node-go` (Go 1.27.3) and `node-python-uv`
+  (Python 3.12.16, uv 0.13.6) in private-infra, checked under the writer's
+  run flags against real builds of the target repositories.
+- Step 4: go-app runs on four container writers with `--cache go`; the manual
+  writer `go-app-alpha` and the host aliases `go-app-w1`–`go-app-w7` are retired,
+  `go-app-rev` is `read-only`.
+- The server `second-machine` was upgraded to 0.11.8.
+- New: [#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151), a
+  persistent uv cache for Python writers. Step 5 must also decide on
+  pynode-app's tests that need a local Postgres.
+
 ### Sprint 11: orchestration gaps (2026-10-26)
 
 Base main `d93a6d6`, published 0.11.6

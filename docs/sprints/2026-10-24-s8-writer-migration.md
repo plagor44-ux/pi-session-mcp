@@ -181,3 +181,53 @@ repeated `--apply` is allowed. A second failure stops that repository.
 6. **Server `second-machine`:** the operator installs rootless Podman; the
    server gets container writers too (step 6).
 7. **Network:** `pasta` for all writers. Lifecycle: `persistent`.
+
+## Progress (2026-10-27)
+
+Step 3, operator images: done. private-infra PR #478 (merged) adds
+`tools/pi-writer-images/` with two Containerfiles on the same pinned Node base
+as the built-in image, a check script and a README.
+
+| Image | Repositories | Toolchain | Image ID on the workstation |
+| --- | --- | --- | --- |
+| `node-go` | go-app | Go 1.27.3 (official SHA-256 checked) | `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f` |
+| `node-python-uv` | py-app, pynode-app | Python 3.12.16, uv 0.13.6 (digest-pinned) | `eb2746450f5669ac8d01dbd9779f9e0833a2843b7ce9ad246e4ba80625466770` |
+
+- Under the writer's run flags (`--userns=keep-id --read-only --cap-drop=all`,
+  tmpfs `/tmp` 512 MB and `/pi/home` 64 MB) on throwaway clones: `go build ./...`
+  in go-app with `GOTOOLCHAIN=local`; `uv sync --frozen` in py-app
+  and in pynode-app's backend; `npm ci` and `npm run build` in its frontend.
+- One independent review, `NON_BLOCKING_ONLY`; its findings were fixed or
+  recorded as limits.
+- Limits that bear on step 5:
+  - after the pynode-app backend sync the uv cache holds about 483 MB of the
+    512 MB `/tmp`, and it is empty after every container start
+    ([#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151) proposes
+    a `--cache uv`);
+  - pynode-app's backend tests need a test Postgres on `127.0.0.1:5544`,
+    which a writer does not have, and the image has no `tesseract`. A
+    pynode-app writer can build but not run those tests. Step 5 has to
+    decide whether that is acceptable.
+
+Step 4, go-app: done on `0.11.8` (record in
+[Acceptance](../acceptance.md#v0118-post-release-evidence)). Four writers
+`go-app-w1`–`go-app-w4` with the `node-go` image and `--cache go`; `go-app-alpha`
+unregistered and archived; host aliases `go-app-w1`–`go-app-w7` removed;
+`go-app-rev` is `read-only`. Process slip: while checking `go-app-alpha` for
+unintegrated work, the controller ran host Git (`status`, `fetch`,
+`update-ref`) in its clone, against the rule in
+[Isolation setup](../isolation-setup.md#review-finish-and-migration). Its Git
+configuration and hooks were then inspected without Git: unchanged since
+2026-10-18, sample hooks only. The clone is archived with the writer state.
+
+Also on 2026-10-27: the server `second-machine` was upgraded to `0.11.8`
+(no writers there yet).
+
+Open:
+- one real coding turn per go-app and `node-app` writer, from a
+  controller started in that repository's checkout;
+- step 5 (py-app, pynode-app) with the `node-python-uv` image,
+  after the decision on the test limits above;
+- step 6 needs rootless Podman on `second-machine` (operator, privileged);
+- step 7: routing rules and the #79 record;
+- the #79 review point on 2026-11-15.
