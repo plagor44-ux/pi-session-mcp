@@ -27,6 +27,7 @@ You are a worker. A controlling agent gave you one task. Do that task and report
 ## Commit
 
 - If your profile can commit and the task asks for it, commit your change with a clear message that refers to the task or issue. Make one commit per issue.
+- If `git commit` fails because no identity is configured, stop and report `BLOCKED`; never invent or pass an identity unless the controller's prompt supplies one.
 - If you cannot commit, leave the changes in the workspace and say so.
 - Do not push, open pull requests or change branches unless the task says so.
 

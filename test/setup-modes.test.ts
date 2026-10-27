@@ -72,13 +72,19 @@ describe("setup execution modes", () => {
     expect(await changeExecutionMode(config, input, probe(false))).toMatchObject({ exitCode: 1, findings: [{ code: "container_runtime_unavailable" }] });
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none" });
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none", tags: "none" });
   });
   it("records the Go toolchain cache in a container entry", async () => {
     const { config, path } = await fixture();
     const input = request({ mode: "container", container: { profiles: ["code"], cache: "go" }, apply: true });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("go");
+  });
+  it("records the uv and npm cache in a container entry", async () => {
+    const { config, path } = await fixture();
+    const input = request({ mode: "container", container: { profiles: ["code"], cache: "uv" }, apply: true });
+    expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("uv");
   });
   it("chooses container only when usable and never falls back to host", async () => {
     const { config } = await fixture();

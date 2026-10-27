@@ -23,7 +23,7 @@ export type DoctorCheckId =
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
-  | "container_profile_refused" | "writer_not_ready" | "writer_dirty" | "writer_uncollected_bundle"
+  | "container_profile_refused" | "writer_not_ready" | "writer_dirty" | "writer_git_identity_missing" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "event_spool_root";
@@ -98,7 +98,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_not_ready", "writer_dirty", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_not_ready", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -228,6 +228,30 @@ async function defaultWriterRuntime() {
     try { return (await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000))).exitCode === 0; }
     catch { return false; }
   } };
+}
+
+async function writerGitIdentity(clone: string): Promise<boolean> {
+  try {
+    const handle = await open(join(clone, ".git", "config"), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const info = await handle.stat();
+      if (!info.isFile() || info.size > 65_536) return false;
+      const buffer = Buffer.alloc(65_536);
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if ((await handle.stat()).size > 65_536) return false;
+      let user = false, name = false, email = false;
+      for (const line of buffer.subarray(0, bytesRead).toString("utf8").split("\n")) {
+        const section = /^\s*\[([^\]]+)\]/.exec(line);
+        if (section) { user = section[1]!.trim().toLowerCase() === "user"; continue; }
+        if (!user) continue;
+        const key = /^\s*(name|email)\s*=\s*(.*?)\s*$/i.exec(line);
+        if (!key || !key[2] || /^(?:""|[#;])/.test(key[2])) continue;
+        if (key[1]!.toLowerCase() === "name") name = true;
+        else email = true;
+      }
+      return name && email;
+    } finally { await handle.close(); }
+  } catch { return false; }
 }
 
 async function writerDirty(clone: string, state: WriterState): Promise<boolean> {
@@ -405,6 +429,8 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           if (!(await lstat(paths.bundles)).isDirectory()) bundles = true;
           else bundles = (await readdir(paths.bundles)).some((file) => file !== "base.bundle");
         } catch (error) { bundles = !isMissing(error); }
+        checks.push(await writerGitIdentity(paths.clone) ? ok("writer_git_identity_missing", name)
+          : warning("writer_git_identity_missing", name, "set user.name and user.email in the operator checkout, then reset the writer"));
         checks.push(bundles ? warning("writer_uncollected_bundle", name, "collect or review outstanding writer bundles") : ok("writer_uncollected_bundle", name));
       }
     }

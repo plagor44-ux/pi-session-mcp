@@ -13,6 +13,23 @@ It does not automatically accept another image, wrapper, Podman version or write
 macOS containment remains unaccepted and keeps the
 [Sprint 4 interim rules](sprints/2026-10-15-s4-decision.md#interim-operating-rules).
 
+## Commit identity and base tags
+
+Provisioning, recreation and reset copy the operator checkout's effective
+`user.name` and `user.email` into the clone's local Git config. Both must be
+1–256 characters without control characters and must not start with `-`; if
+either is absent or invalid, both clone values are unset. Missing identity does
+not block setup, but commits need it: set both values in the operator checkout,
+then reset the writer.
+Doctor reports `writer_git_identity_missing` without exposing either value.
+Identity is not stored in writer state or boundary acceptance.
+
+Tags default to `none`. Add `--tags reachable` to a container mode request to
+include tags merged into the selected base commit. Reset always deletes all
+clone tags, then imports the selected base tags when enabled. Worker-created
+tags are not collected work and do not affect the collected digest. The setting
+participates in settings drift, not the acceptance fingerprint.
+
 ## Prerequisites
 
 - Linux with usable **rootless** Podman, Node.js 22.19.0 or newer and Git.
@@ -42,7 +59,7 @@ macOS containment remains unaccepted and keeps the
 | Workspace | Separate full clone per writer, created via a base bundle; no hardlinks or shared linked-worktree metadata |
 | Wrapper | Generated stdio-only launcher bound to the release and writer name; no daemon between client connections |
 | Boundary | Rootless keep-id, read-only root, capability drop, no-new-privileges, tmpfs home and /tmp; clone read-write with hooks/config overmounted read-only |
-| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go cache, optional event spool directory ([below](#event-spool-mount)) |
+| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go or uv/npm cache, optional event spool directory ([below](#event-spool-mount)) |
 | Configuration | One workspace, selected coding profiles and a synthetic read-only default; internal acknowledged host mode permits writes only in the contained clone |
 | Credentials | Selected provider entries only; OAuth refresh token emptied, API keys retained; no host SSH/Git/client credentials intentionally mounted |
 | Acceptance | Explicit uncontained host control, then provider-free contained harness per writer; fingerprint gates readiness |
@@ -267,6 +284,13 @@ The Go-toolchain writer uses an operator-supplied local **image ID** with
 Mode requests rebuild options from supplied values/defaults: repeat the image
 and cache flags each time. The Go mount is `/pi/go`, with GOPATH, GOCACHE and
 `GOTOOLCHAIN=local`; setup does not build the operator's toolchain image.
+
+A Python writer using uv and npm uses `--image <image-id> --cache uv`, which
+records `cache: "uv"` and mounts a private per-writer directory at `/pi/uv`
+with `UV_CACHE_DIR=/pi/uv/cache` and `npm_config_cache=/pi/uv/npm`. No other uv
+or npm variables are set. The cache belongs to one writer: it is never shared
+between writers and never a host cache mount, and setup does not install uv
+or npm for you.
 
 See [Execution modes](execution-modes.md#migration-from-manual-writers) for
 migration limitations and [Doctor](doctor-design.md) for offline writer checks.

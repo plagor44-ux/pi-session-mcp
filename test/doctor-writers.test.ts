@@ -12,12 +12,13 @@ async function fixture() {
   const home = await mkdtemp(join(tmpdir(), "doctor-writer-")); roots.push(home);
   const paths = writerPaths(home, "repo-w1");
   const config: AppConfig = { workspaces: new Map([["repo", home]]), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "ro", eventDelivery: "off", skillOverrideDirectory: join(home, "skills"), configuration: { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" } };
-  const configured = { ...config, workspaceModes: new Map([["repo", { mode: "container" as const, container: { writers: 1, lifecycle: "persistent" as const, profiles: ["coding"], image: "node", network: "pasta" as const, cache: "none" as const } }]]) };
-  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
+  const configured = { ...config, workspaceModes: new Map([["repo", { mode: "container" as const, container: { writers: 1, lifecycle: "persistent" as const, profiles: ["coding"], image: "node", network: "pasta" as const, cache: "none" as const, tags: "none" as const } }]]) };
+  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
   const check = async (version = "5.4.0", image = true) => (await runDoctor({ home, loadConfig: async () => configured, containerRuntime: async () => true, writerRuntime: async () => ({ podmanVersion: version, imageExists: async () => image }) })).checks.filter((c) => c.id.startsWith("writer_"));
   const ready = async () => {
     await mkdir(join(paths.clone, ".git/refs/heads"), { recursive: true });
     await mkdir(paths.bundles); await writeFile(paths.wrapper, "wrapper");
+    await writeFile(join(paths.clone, ".git/config"), '[USER]\nName = Worker\nEMAIL = worker@invalid\n');
     await writeFile(join(paths.clone, ".git/HEAD"), "ref: refs/heads/main\n");
     await writeFile(join(paths.clone, ".git/refs/heads/main"), state.base.commit + "\n");
     state.acceptance = { fingerprint: await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0"), verdict: "pass", network: "not_limited", at: "now" };
@@ -29,6 +30,11 @@ it.each(["absent", "invalid"])("reports only readiness for %s state", async (kin
   const { paths, check, ready } = await fixture();
   if (kind === "invalid") { await ready(); await writeFile(paths.state, "{}"); }
   expect(await check()).toEqual([expect.objectContaining({ id: "writer_not_ready", severity: "error", subject: "repo-w1" })]);
+});
+it.each(["", "[user]\nname = Worker\n", "x".repeat(65_537)])("warns offline for missing or unsafe identity", async (config) => {
+  const { paths, check, ready } = await fixture(); await ready();
+  await writeFile(join(paths.clone, ".git/config"), config);
+  expect(await check()).toContainEqual(expect.objectContaining({ id: "writer_git_identity_missing", severity: "warning", subject: "repo-w1" }));
 });
 it("detects wrapper drift", async () => {
   const { paths, check, ready } = await fixture(); await ready();

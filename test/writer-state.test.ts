@@ -17,7 +17,7 @@ afterAll(removeTemporaryRoots);
 
 const state: WriterState = {
   schemaVersion: 1, alias: "pi-session-mcp", index: 2, phase: "ready",
-  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none",
+  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none", tags: "none",
   providers: [{ provider: "example-provider", model: "example-model" }],
   imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) },
   acceptance: { fingerprint: `sha256:${"c".repeat(64)}`, verdict: "pass", network: "limited", at: "2026-01-01T00:00:00Z" },
@@ -25,6 +25,18 @@ const state: WriterState = {
 };
 const name = "pi-session-mcp-w2";
 
+it("defaults legacy state tags without changing acceptance", async () => {
+  const home = await temporaryRoot("writer-tags-");
+  await writeWriterState(home, name, state);
+  const path = writerPaths(home, name).state;
+  const { tags: _tags, ...legacy } = state;
+  await writeFile(path, JSON.stringify(legacy));
+  expect((await readWriterState(home, name))!.tags).toBe("none");
+  const wrapper = writerPaths(home, name).wrapper;
+  await writeFile(wrapper, "wrapper");
+  expect(await currentAcceptanceFingerprint(wrapper, state, "5.4.0"))
+    .toBe(await currentAcceptanceFingerprint(wrapper, { ...state, tags: "reachable" }, "5.4.0"));
+});
 it("derives validated writer names and registrations", () => {
   expect(writerName("pi-session-mcp", 2)).toBe(name);
   expect(writerName("a".repeat(64), 16)).toMatch(WRITER_NAME_PATTERN);
@@ -44,8 +56,17 @@ it("derives the private writer layout", () => {
   expect(writersRoot(home)).toBe(join(home, ".local/state/pi-session-mcp/writers"));
   expect(writerPaths(home, name)).toEqual({
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"),
   });
+});
+
+it("round-trips every configured cache kind", async () => {
+  const home = await temporaryRoot("pi-writer-state-");
+  for (const cache of ["none", "go", "uv"] as const) {
+    await writeWriterState(home, name, { ...state, cache });
+    expect((await readWriterState(home, name))?.cache).toBe(cache);
+  }
+  await expect(writeWriterState(home, name, { ...state, cache: "other" } as unknown as WriterState)).rejects.toThrow();
 });
 
 it("round-trips and atomically replaces private state without temporary leftovers", async () => {
@@ -144,6 +165,7 @@ it("fingerprints canonical key-sorted JSON and includes Podman version", () => {
   expect(acceptanceFingerprint(input)).toBe(`sha256:${createHash("sha256").update(canonical).digest("hex")}`);
   expect(acceptanceFingerprint(input)).toBe(acceptanceFingerprint(reordered));
   expect(acceptanceFingerprint(input)).not.toBe(acceptanceFingerprint({ ...input, podmanVersion: "5.1.0" }));
+  expect(new Set(["none", "go", "uv"].map((cache) => acceptanceFingerprint({ ...input, cache }))).size).toBe(3);
 });
 
 it.each([

@@ -38,6 +38,7 @@ and owners are:
 | `container_runtime_unavailable` | A workspace has mode `container` and the local rootless Podman probe fails | validated workspace alias |
 | `container_profile_refused` | A selected container coding profile cannot be rendered: missing profile, extensions or MCP grants, non-false default, non-coding permission, invalid skills, non-builtin/unshipped/operator-overridden skills, or schema-invalid rendered configuration (error); one ok per workspace when all selected profiles pass; one workspace error saying selected profiles could not be checked if the original configuration cannot be read | workspace alias:profile alias on refusal; workspace alias on success or unreadable configuration |
 | `writer_not_ready` | State is missing or invalid, phase is not ready, acceptance fingerprint is stale, or the local image is absent (error) | validated writer name |
+| `writer_git_identity_missing` | Clone Git config lacks a readable user name and email (warning); set both in the operator checkout, then reset the writer | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning) | validated writer name |
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |

@@ -37,7 +37,7 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
   const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none" }, rawConfig })).toMatchObject({ status: "ok" });
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;

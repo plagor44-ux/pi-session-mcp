@@ -11,7 +11,7 @@ import * as acceptance from "../src/writer-acceptance.js";
 
 afterAll(removeTemporaryRoots);
 
-const state = (alias: string, index: number): WriterState => ({ schemaVersion: 1, alias, index, phase: "not_ready", lifecycle: "persistent", profiles: ["code"], providers: [{ provider: "example", model: "model" }], network: "pasta", cache: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } });
+const state = (alias: string, index: number): WriterState => ({ schemaVersion: 1, alias, index, phase: "not_ready", lifecycle: "persistent", profiles: ["code"], providers: [{ provider: "example", model: "model" }], network: "pasta", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } });
 const txid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 /** Writers in a temporary home; the operator's project is a directory of its own and the only place a hook is written. */
