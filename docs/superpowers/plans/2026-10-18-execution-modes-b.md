@@ -502,6 +502,6 @@ Errors never print to stdout.
   - SKILL.md mentions `--finish`;
   - `start-errors.md` classifies `writer_uncollected`, `writer_busy`, `writer_not_ready` and `container_runtime_unavailable` exactly once each.
 - [ ] **Step 2: Run and verify it fails.**
-- [ ] **Step 3: Write the documentation.** Each new finding and Doctor code appears once in a table with its meaning. The migration covers `psm-alpha` and `thoth-alpha`. Residual risks (provider credentials in the boundary, network `pasta` not limited) are restated.
+- [ ] **Step 3: Write the documentation.** Each new finding and Doctor code appears once in a table with its meaning. The migration covers `psm-alpha` and `go-app-alpha`. Residual risks (provider credentials in the boundary, network `pasta` not limited) are restated.
 - [ ] **Step 4: Run** `npx vitest run` (full suite on the host), `npm run typecheck`, `npm run build && npm run build:cli`, `npm run eval:schemas -- --check`, and the relative link check. Expected: all pass, with the Podman tests either passing or reporting their skip reason.
 - [ ] **Step 5: Commit.** `docs: document container writers and the controller finish step`

@@ -79,7 +79,7 @@ describe("allowedPaths entries (R77)", () => {
   });
 
   it("parses the pre-registered tasks file", () => {
-    const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("../docs/evaluation/extension-ablation-2026-10-20/tasks.json", import.meta.url)), "utf8")) as { id: string; oracle: { kind: string; verdict?: unknown } }[];
+    const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/extension-ablation/tasks.sanitized.json", import.meta.url)), "utf8")) as { id: string; oracle: { kind: string; verdict?: unknown } }[];
     // Every review oracle carries a verdict pattern (R78); the file is parsed as committed.
     expect(tasks.filter((task) => task.oracle.kind === "review" && task.oracle.verdict === undefined).map((task) => task.id)).toEqual([]);
     expect(tasks.some((task) => task.oracle.kind === "review")).toBe(true);

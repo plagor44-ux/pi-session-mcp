@@ -312,13 +312,13 @@ The writer baseline guard is the deliberate re-read exception, not general reloa
 
 ## Migration from manual writers
 
-For **`psm-alpha`** and **`thoth-alpha`**, collect/review all work first through
+For **`psm-alpha`** and **`go-app-alpha`**, collect/review all work first through
 the old boundary's bundle route. Automated setup does not adopt their manual
 state, wrappers or names.
 
 1. In each writer's original project remove its manual local registration:
    `claude mcp remove pi-coding-<name> -s local` (substitute `psm-alpha` or
-   `thoth-alpha`). Remove any separately configured Codex registration too.
+   `go-app-alpha`). Remove any separately configured Codex registration too.
 2. After preserving work, remove that manual wrapper and state directory.
    Do not delete the operator's source checkout or another writer's files.
 3. Configure the desired coding profiles, pass the explicit host isolation
@@ -327,7 +327,7 @@ state, wrappers or names.
    New names derive from the configured repository alias, not the old manual name.
 4. Restart/reconnect controllers and verify the new writer registrations before use.
 
-For the Go-toolchain writer **`thoth-alpha`**, supply an **operator-supplied
+For the Go-toolchain writer **`go-app-alpha`**, supply an **operator-supplied
 local image ID** containing Node, Git and the Go toolchain, plus `--cache go`:
 
 ```sh

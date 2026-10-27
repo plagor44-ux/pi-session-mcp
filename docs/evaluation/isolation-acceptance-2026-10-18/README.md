@@ -1,4 +1,4 @@
-# ADR 0008 Linux acceptance, 2026-10-18: writers `psm-alpha` and `thoth-alpha`
+# ADR 0008 Linux acceptance, 2026-10-18: writers `psm-alpha` and `go-app-alpha`
 
 Setup under test, following [Isolation setup](../../isolation-setup.md): rootless
 Podman 6.1.4 (overlay, netavark), image `docker.io/library/node` pinned at
@@ -69,14 +69,13 @@ clones came from the remote, and the host `auth.json` is only read.
   running sessions use. The wrapper then copies the fresh access token with an
   empty refresh token. The wrapper change was followed by new contained runs.
 - **`psm-alpha`** after the change: [contained.json](contained.json) `pass`.
-- **`thoth-alpha`** (Go repository): image built from the pinned Node image plus
-  Go 1.26.9 with its official checksum ([Containerfile](thoth-alpha/Containerfile)),
-  pinned by image ID with `--pull=never`; a writable `$STATE/go` for the module
-  and build cache. [Contained](thoth-alpha/contained.json): `pass`.
-  [Live](thoth-alpha/live.json): `pass`, the same pattern as `psm-alpha`.
-  [Wrapper](thoth-alpha/wrapper.sh).
+- **`go-app-alpha`** (Go repository): image built from the pinned Node image plus
+  Go 1.26.9 with its official checksum, pinned by image ID with `--pull=never`;
+  a writable `$STATE/go` for the module and build cache. Contained: `pass`.
+  Live: `pass`, the same pattern as `psm-alpha`. Its raw records are not
+  published because they name a private repository.
 - **Registrations:** `pi-coding-psm-alpha` (this repository) and
-  `pi-coding-thoth-alpha` (Thoth) in Claude Code's `local` scope only. A running
+  `pi-coding-go-app-alpha` (a private Go repository) in Claude Code's `local` scope only. A running
   session sees a new server after `/mcp` reconnects. Codex has no
   project-local scope, so no Codex registration was added.
 

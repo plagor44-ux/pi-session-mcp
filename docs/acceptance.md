@@ -1701,7 +1701,7 @@ with Node.js `26.11.1`, npm `12.2.1`, Codex CLI `0.162.1` and Claude Code
 Not established for `0.9.0`: a live run of the automated container writers
 (the explicit host isolation control run, provisioning with contained
 acceptance, a coding session through a generated writer registration, and
-`--finish`), the migration of the manual writers `psm-alpha` and `thoth-alpha`,
+`--finish`), the migration of the manual writers `psm-alpha` and `go-app-alpha`,
 the ten-task Level 3 cycle, and macOS on real hardware for this release. The
 writer lifecycle is Linux-only; on macOS the release keeps `host` and
 `read-only` mode selection. The published-release acceptance follows after
@@ -1868,7 +1868,7 @@ profile, sent one short prompt that asked for a fixed one-word reply, polled
 the turn to `completed` and closed the session. All ten configured profiles
 passed on the workstation and on the server, including the two profiles with
 the `pi-cursor-sdk@0.5.3` extension; on the workstation the two manual
-container writers `psm-alpha` and `thoth-alpha`, which mount the installed
+container writers `psm-alpha` and `go-app-alpha`, which mount the installed
 package, passed for their `code` and `review` profiles. No workspace or
 writer clone changed. This is the first provider use on Pi SDK `1.3.0`; it
 says nothing about task quality, Level 3 or the automated container writers.
@@ -2495,15 +2495,15 @@ upgrade with two container repositories:
   Doctor reported `packageVersion` `0.11.8`, `container_profile_refused` `ok`
   for both repositories, and `writer_not_ready` for all six writers.
 - `--repo pi-session-mcp --mode container ... --apply` passed while the four
-  `workflow-artifact-copilot` writers were still not ready (#148):
+  `node-app` writers were still not ready (#148):
   `writer_accepted` for both writers, registrations and hooks unchanged. The
-  `workflow-artifact-copilot` step then reported `writer_accepted` for all
+  `node-app` step then reported `writer_accepted` for all
   four writers.
 - Doctor reported no error. Both client targets were applied and verified
   (`mcp_verified`, `skill_verified`, `hook_verified` for Claude Code), and
   `--writer <name> --verify` reported `mcp_verified` and `hook_verified` for
   all six writers.
-- A Claude Code session in the `workflow-artifact-copilot` checkout had its
+- A Claude Code session in the `node-app` checkout had its
   four writer servers connected during these steps. Whether it had open
   coding sessions at the time of the acceptance was not checked.
 
@@ -2516,7 +2516,7 @@ Live check of #142, aborted:
   requests for 27 minutes without a failure, which says nothing about the
   window itself. #142 stays verified by code and tests only.
 
-Operator upgrade of the server `linuslinuxserver` from `0.11.6` to `0.11.8`
+Operator upgrade of the server the second machine from `0.11.6` to `0.11.8`
 on 2026-10-27. The server has no writers, and no Pi Session MCP server
 process was running there:
 - Both client targets (`claude-code:user:pi-session-mcp`,
@@ -2527,28 +2527,28 @@ process was running there:
 - Doctor reported no error. Both targets were applied and verified
   (`mcp_verified`, `skill_verified`).
 
-Migration step 4 (Thoth) on `0.11.8`, workstation, 2026-10-27:
-- The manual writer `thoth-alpha` had no work outside `main` and an empty
+Migration step 4 (go-app) on `0.11.8`, workstation, 2026-10-27:
+- The manual writer `go-app-alpha` had no work outside `main` and an empty
   bundle directory. Its local Claude Code registration was removed (it had no
   Codex registration), and its wrapper and state directory were moved to an
   archive outside the writer root; deleting them is left to the operator.
-- The host aliases `thoth-w1`–`thoth-w7` were removed from the configuration.
+- The host aliases `go-app-w1`–`go-app-w7` were removed from the configuration.
   Their worktrees were clean and detached on a commit of `main`.
-- The host isolation control for `thoth` passed. `--repo thoth --mode container`
+- The host isolation control for `go-app` passed. `--repo go-app --mode container`
   with four writers, profiles `code`, `code-deepseek`, `code-glm`,
   `code-mistral` and `code-grok`, the operator image `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f`
-  (`node-go`, Node 22.23.3 and Go 1.27.3, built from homelab-infra
-  `tools/pi-writer-images/`), `--cache go`, network `pasta`, lifecycle
+  (`node-go`, Node 22.23.3 and Go 1.27.3, an operator image built outside
+  this repository), `--cache go`, network `pasta`, lifecycle
   `persistent` and `--client codex` reported `writer_accepted` for all four
   writers on the first `--apply`, `writer_registered` for Claude Code and
   Codex, and the wake hook.
-- `thoth-rev` was set to mode `read-only`. `--writer thoth-w<n> --verify`
+- `go-app-rev` was set to mode `read-only`. `--writer go-app-w<n> --verify`
   reported `mcp_verified` and `hook_verified` for all four writers. Doctor
-  reported no error; for Thoth only the `workspace_gitfile` warning of the
-  read-only alias `thoth-rev` remains.
+  reported no error; for go-app only the `workspace_gitfile` warning of the
+  read-only alias `go-app-rev` remains.
 
 Not established for `0.11.8`: a live confirmation of #142; a real coding turn
-on each `workflow-artifact-copilot` and Thoth writer; Level 3.
+on each `node-app` and go-app writer; Level 3.
 
 ### v0.11.8 pre-release acceptance
 
@@ -2625,7 +2625,7 @@ Operator upgrade of the workstation, **failed and rolled back**:
   as expected after an upgrade.
 - `--repo pi-session-mcp --mode container ... --apply` failed with
   `doctor_failed` and four `writer_not_ready` findings for the writers of
-  `workflow-artifact-copilot`; that repository's step failed the same way on
+  `node-app`; that repository's step failed the same way on
   the two `pi-session-mcp` writers. With two container repositories no
   repository step could pass, and Doctor blocks the client targets until the
   writers are accepted ([#148](https://github.com/plagor44-ux/pi-session-mcp/issues/148)).
@@ -2733,7 +2733,7 @@ Workstation state on 2026-10-26, recorded during Sprint 11:
   Sprint 11 worker reports that completed began with a valid `STATUS:` line;
   their prompts also asked for that line, so this does not show on its own
   that the skill was read.
-- Migration step 2: `workflow-artifact-copilot` was provisioned with four
+- Migration step 2: `node-app` was provisioned with four
   writers on `0.11.6`. The host isolation control passed, and all four writers
   reported `writer_accepted` on the first `--apply`, registered for Claude Code
   and Codex with the wake hook.
@@ -2743,7 +2743,7 @@ Workstation state on 2026-10-26, recorded during Sprint 11:
 
 Not established for `0.11.6`:
 - any live run on Level 3;
-- a real coding turn on each `workflow-artifact-copilot` writer, which needs a
+- a real coding turn on each `node-app` writer, which needs a
   controller started in that repository's checkout;
 - the VS Code wake; macOS delivery.
 
@@ -2811,7 +2811,7 @@ following [Installation](installation.md#container-writers):
   warnings for repositories not yet migrated.
 - A second run of the same steps changed nothing: the acceptance was current,
   so no harness ran, and every registration, skill and hook was unchanged.
-- The server `linuslinuxserver`, which has no writers, was upgraded the same
+- The server the second machine, which has no writers, was upgraded the same
   way for its two client targets. Doctor reported no error, and both targets
   verified.
 

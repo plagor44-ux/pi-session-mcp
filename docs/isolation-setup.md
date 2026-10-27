@@ -7,7 +7,7 @@ This is the operator reference for what **setup now automates** under
 readiness, finding codes and migration. Automation is implemented, not a claim
 of new live acceptance or a release.
 
-The historical Linux manual acceptance for `psm-alpha` and `thoth-alpha` is
+The historical Linux manual acceptance for `psm-alpha` and `go-app-alpha` is
 preserved in [the 2026-10-18 evidence](evaluation/isolation-acceptance-2026-10-18/README.md).
 It does not automatically accept another image, wrapper, Podman version or writer.
 macOS containment remains unaccepted and keeps the
@@ -252,7 +252,7 @@ Guard checks re-read the baseline file, so the new baseline takes effect
 without restarting the server; only the credentials need the reconnect. Mode
 policy changes still require controller/server restart.
 
-For hand-made **`psm-alpha` and `thoth-alpha`**:
+For hand-made **`psm-alpha` and `go-app-alpha`**:
 
 1. Preserve and review any work through their old bundle route.
 2. In each original project remove the manual registration with

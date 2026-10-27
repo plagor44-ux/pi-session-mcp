@@ -117,7 +117,7 @@ This decision does not itself bump the package version or authorize publication.
    health-checks the registration and briefly starts the container; setup's
    inspect/verify do this too. That client health-check subprocess does not
    receive the direct launch's credential-refresh override from setup.
-8. **Migration, not adoption.** Collect manual `psm-alpha`/`thoth-alpha` work,
+8. **Migration, not adoption.** Collect manual `psm-alpha`/`go-app-alpha` work,
    remove their local registration in its project, remove wrapper/state, then
    provision by configured alias with `--repo … --mode container --profiles …
    --apply`. Go requires an operator-supplied image ID and `cache: go` settings;

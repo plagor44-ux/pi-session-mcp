@@ -140,7 +140,7 @@ These answer the builder check of 2026-10-18; each is the integrator's call.
   reconnect.
 - **Verify:** uses a wrapper mode without the credential refresh, so verify never
   touches host credentials.
-- **Existing hand-made writers** (`psm-alpha`, `thoth-alpha`) are not adopted
+- **Existing hand-made writers** (`psm-alpha`, `go-app-alpha`) are not adopted
   automatically; the migration is documented (remove, then let setup create).
   Writer names: `<repo alias>-w<n>`, state below
   `~/.local/state/pi-session-mcp/writers/<name>`.

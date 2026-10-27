@@ -38,7 +38,7 @@
         {
           "id": "workspace_not_directory",
           "severity": "ok",
-          "subject": "omp-control"
+          "subject": "bun-app"
         },
         {
           "id": "workspace_not_directory",
@@ -48,22 +48,22 @@
         {
           "id": "workspace_not_directory",
           "severity": "ok",
-          "subject": "smartpaper-ng"
+          "subject": "pynode-app"
         },
         {
           "id": "workspace_not_directory",
           "severity": "ok",
-          "subject": "thoth"
+          "subject": "go-app"
         },
         {
           "id": "workspace_not_directory",
           "severity": "ok",
-          "subject": "workflow-artifact-copilot"
+          "subject": "node-app"
         },
         {
           "id": "workspace_unreadable",
           "severity": "ok",
-          "subject": "omp-control"
+          "subject": "bun-app"
         },
         {
           "id": "workspace_unreadable",
@@ -73,22 +73,22 @@
         {
           "id": "workspace_unreadable",
           "severity": "ok",
-          "subject": "smartpaper-ng"
+          "subject": "pynode-app"
         },
         {
           "id": "workspace_unreadable",
           "severity": "ok",
-          "subject": "thoth"
+          "subject": "go-app"
         },
         {
           "id": "workspace_unreadable",
           "severity": "ok",
-          "subject": "workflow-artifact-copilot"
+          "subject": "node-app"
         },
         {
           "id": "workspace_not_writable",
           "severity": "ok",
-          "subject": "omp-control"
+          "subject": "bun-app"
         },
         {
           "id": "workspace_not_writable",
@@ -98,17 +98,17 @@
         {
           "id": "workspace_not_writable",
           "severity": "ok",
-          "subject": "smartpaper-ng"
+          "subject": "pynode-app"
         },
         {
           "id": "workspace_not_writable",
           "severity": "ok",
-          "subject": "thoth"
+          "subject": "go-app"
         },
         {
           "id": "workspace_not_writable",
           "severity": "ok",
-          "subject": "workflow-artifact-copilot"
+          "subject": "node-app"
         },
         {
           "id": "extension_missing",
