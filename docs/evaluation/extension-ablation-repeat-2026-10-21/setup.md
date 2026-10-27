@@ -33,7 +33,7 @@ and `bwrap` present.
 
 ## Dependencies
 
-`i-pyng-authz` and `i-pyng-pdf` declare `backend/.venv` with lockfile
+`i-task-6` and `i-task-7` declare `backend/.venv` with lockfile
 `backend/uv.lock` (ruling R68). Both directories under `$EVAL/deps/` were
 rebuilt with the R68 layout, offline from the local uv cache with
 `uv sync --frozen --offline --no-install-project`, from temporary checkouts at
@@ -41,8 +41,8 @@ the respective base commits that were removed afterwards:
 
 | Task | Lock copy SHA-256 | Git blob id |
 | --- | --- | --- |
-| `i-pyng-authz` | `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca` | `66e4439f6a5ee8d4adc09eafae26478b730740da` |
-| `i-pyng-pdf` | `b436e02f3e4de9ace1016a66b9997630fb7042d5ca071b2db6d307080f2737ca` | `66e4439f6a5ee8d4adc09eafae26478b730740da` |
+| `i-task-6` | recorded, not published | recorded, not published |
+| `i-task-7` | recorded, not published | recorded, not published |
 
 Both equal the base commits' lockfile and the first wave's (2026-10-21) lock copies.
 `runtime/` holds the copy of uv's CPython that the venv's interpreter link
@@ -64,6 +64,6 @@ no `--pairings` filter, so it loads all six pairings, `pl-code` among them.
   `project_report`, `read`, `read_enclosing`, `read_symbol`, `symbol_search`,
   `write`.
 
-The dry load loads `i-go-app-dms` for implementation pairings, which declares no
+The dry load loads `i-task-5` for implementation pairings, which declares no
 dependencies; the venv mounts are checked before the wave runs and again in
-every run of the two pyng tasks.
+every run of the two pynode-app tasks.

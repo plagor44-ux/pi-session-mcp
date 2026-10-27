@@ -1,0 +1,7054 @@
+[
+  {
+    "id": "r-task-1",
+    "kind": "review",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/r-task-1.txt",
+    "promptHash": "sha256:5ae142b2da8ba5c7baa9273da52e6a1089171eef6f27690cc236d3f8a101f5c7",
+    "sourceSession": "00000000-0000-4000-8000-000000000001",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "verdict": {
+        "pattern": "(?:\\bverdict\\b[^\\w\\n]{0,6}|^[^\\w\\n]{0,6}(?:overall[^\\w\\n]{1,4})?)(?:(?:an?|\\d|two|three) )?(?:(?:blocking )?blockers?[^\\w\\n]{1,4})?(?:changes?[_ ](?:required|requested|needed)|request(?:ed)? changes?|needs? (?:changes|fixes|work)|not (?:ready|approved|mergeable)|(?:do|must|should) not merge|reject(?:ed)?(?![^\\w\\n]{0,3}[a-z])|blocked|no-go|fix(?:es)? (?:first|before)|merge only after|must be fixed|(?:blockers?|blocking \\w+) (?:exists?|present|remain))(?![^\\w\\n]{0,4}(?:none|no\\b))"
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term1",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term18",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term19",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term20",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term21",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term22",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term28",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term29",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term30",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term2"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term3"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term5"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term6"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term7"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term8"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term9"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term10"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term11"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term12"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term13"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term14"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term15"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term16"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term17"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term23"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term24"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term25"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term26"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term31",
+                "term27"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term32",
+                "term33"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term32",
+                "term34"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term32",
+                "term35"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term49",
+                "term50"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term36",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term41",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term54",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term42",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term43",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term44",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term45",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term46",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term47",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term48",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term55",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term56",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term57",
+                "term53"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term37"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term38"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term39"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term40"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term51"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term52"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term58",
+                "term53"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term59",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term59",
+                "term60"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term61",
+                "term4"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term62",
+                "term63"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term64",
+                "term63"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term65"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term66",
+                "term67"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term68",
+                "term67"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term69"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term70"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term71"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term72"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term73"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term74"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term75"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term76"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term77"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term78"
+              ]
+            },
+            {
+              "file": "src/module-2.ts",
+              "terms": [
+                "term79"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "N1",
+          "anchors": [
+            {
+              "file": "src/module-3.yml",
+              "terms": [
+                "term80",
+                "term81"
+              ]
+            },
+            {
+              "file": "src/module-3.yml",
+              "terms": [
+                "term82"
+              ]
+            },
+            {
+              "file": "src/module-3.yml",
+              "terms": [
+                "term83"
+              ]
+            },
+            {
+              "file": "src/module-3.yml",
+              "terms": [
+                "term84"
+              ]
+            },
+            {
+              "file": "src/module-3.yml",
+              "terms": [
+                "term85"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "N2",
+          "anchors": [
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term86",
+                "term87"
+              ]
+            },
+            {
+              "file": "src/module-1.mjs",
+              "terms": [
+                "term88",
+                "term87"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-task-2",
+    "kind": "review",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/r-task-2.txt",
+    "promptHash": "sha256:3df074e333930e7c7dabfea48a7d8b4d879936f9447b51fc8aad7eb4848ca5be",
+    "sourceSession": "00000000-0000-4000-8000-000000000002",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "verdict": {
+        "pattern": "(?:\\bverdict\\b[^\\w]{0,12}(?:\\([^)\\n]{0,40}\\)[^\\w]{0,6})?|^[^\\w\\n]{0,6}(?:(?:overall|final|recommendation|conclusion|result|decision)[^\\w\\n]{1,4})?)(?:approved?[ ,_-]{1,3}with[ ,_-]{1,3}(?:required |mandatory |the following )?(?:changes|corrections|fixes|revisions)|reject(?:ed)?(?![^\\w\\n]{0,3}[a-z])|do not approve|not approved|request(?:ed)? changes)"
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term89",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term89",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term89",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term89",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term94",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term94",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term94",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term94",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term95",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term95",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term95",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term95",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term96",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term96",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term96",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term96",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term97",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term97",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term97",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term97",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term89",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term89",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term89",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term89",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term94",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term94",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term94",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term94",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term95",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term95",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term95",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term95",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term96",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term96",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term96",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term96",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term97",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term97",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term97",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term97",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term89",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term89",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term89",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term89",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term94",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term94",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term94",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term94",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term95",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term95",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term95",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term95",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term96",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term96",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term96",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term96",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term97",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term97",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term97",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term97",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term89",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term89",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term89",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term89",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term94",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term94",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term94",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term94",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term95",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term95",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term95",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term95",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term96",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term96",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term96",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term96",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term97",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term97",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term97",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term97",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term98",
+                "term99"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term98",
+                "term99"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term98",
+                "term99"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term100",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term108",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term109",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term110",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term100",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term108",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term109",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term110",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term100",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term108",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term109",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term110",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term100",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term108",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term109",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term101"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term103"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term104"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term105"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term106"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term110",
+                "term107"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term98"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term112"
+              ]
+            },
+            {
+              "file": "src/module-4.go",
+              "terms": [
+                "term111",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term98"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term112"
+              ]
+            },
+            {
+              "file": "src/module-5.go",
+              "terms": [
+                "term111",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term98"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term112"
+              ]
+            },
+            {
+              "file": "src/module-6.go",
+              "terms": [
+                "term111",
+                "term93"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term98"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term102"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term90"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term91"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term92"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term112"
+              ]
+            },
+            {
+              "file": "src/module-7.go",
+              "terms": [
+                "term111",
+                "term93"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-8.go",
+              "terms": [
+                "term113"
+              ]
+            },
+            {
+              "file": "src/module-9.go",
+              "terms": [
+                "term113"
+              ]
+            },
+            {
+              "file": "src/module-8.go",
+              "terms": [
+                "term114"
+              ]
+            },
+            {
+              "file": "src/module-8.go",
+              "terms": [
+                "term115"
+              ]
+            },
+            {
+              "file": "src/module-9.go",
+              "terms": [
+                "term116"
+              ]
+            },
+            {
+              "file": "src/module-8.go",
+              "terms": [
+                "term117"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-10.go",
+              "terms": [
+                "term118"
+              ]
+            },
+            {
+              "file": "src/module-10.go",
+              "terms": [
+                "term119"
+              ]
+            },
+            {
+              "file": "src/module-10.go",
+              "terms": [
+                "term120"
+              ]
+            },
+            {
+              "file": "src/module-10.go",
+              "terms": [
+                "term121"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-11.md",
+              "terms": [
+                "term122"
+              ]
+            },
+            {
+              "file": "src/module-11.md",
+              "terms": [
+                "term123",
+                "term124"
+              ]
+            },
+            {
+              "file": "src/module-11.md",
+              "terms": [
+                "term123",
+                "term125"
+              ]
+            },
+            {
+              "file": "src/module-11.md",
+              "terms": [
+                "term123",
+                "term126"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-12.go",
+              "terms": [
+                "term127",
+                "term128"
+              ]
+            },
+            {
+              "file": "src/module-12.go",
+              "terms": [
+                "term127",
+                "term129"
+              ]
+            },
+            {
+              "file": "src/module-13.go",
+              "terms": [
+                "term127",
+                "term128"
+              ]
+            },
+            {
+              "file": "src/module-12.go",
+              "terms": [
+                "term130",
+                "term131"
+              ]
+            },
+            {
+              "file": "src/module-13.go",
+              "terms": [
+                "term130",
+                "term131"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "N1",
+          "anchors": [
+            {
+              "file": "src/module-14.go",
+              "terms": [
+                "term132"
+              ]
+            },
+            {
+              "file": "src/module-14.go",
+              "terms": [
+                "term133"
+              ]
+            },
+            {
+              "file": "src/module-14.go",
+              "terms": [
+                "term134",
+                "term135"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-task-3",
+    "kind": "review",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/r-task-3.txt",
+    "promptHash": "sha256:400b9b607bb970dcfe1ef753aad9674bbf7c4447451a9798b260516f5a0d4953",
+    "sourceSession": "00000000-0000-4000-8000-000000000003",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "verdict": {
+        "pattern": "(?<!\\b(?:no|not|without|zero) (?:\\w+ )?)\\b(?:blockers?|blocking (?:issues?|findings?))(?: present)?[^\\w\\n]{0,6}(?:yes|[1-9]\\d*|exists?|remains?)\\b|\\b(?:there (?:is|are) |yes[^\\w\\n]{1,4})(?:(?:an?|[1-9]\\d*|one|two|three|several) )?blockers?\\b(?!\\?)|(?:[(\\[]|\\bseverity[^\\w\\n]{0,4})blockers?\\b|[ \\t][\u2014\u2013-][ \\t]blockers?[ \\t]*$|^[^\\w\\n]{0,10}(?:\\d{1,3}[.)] ?)?[^\\w\\n]{0,6}blockers?\\b(?![^\\w\\n]{0,4}(?:none|no\\b|0\\b|found|check))[^\\w\\n:]{1,6}\\w|\\|[ \\t]*blockers?[ \\t]*\\|(?! *(?:none|no|0)\\b)"
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term136",
+                "term137"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term138",
+                "term139"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term140"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term142"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term143"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term144"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term145"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term146"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term147"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term148"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term149"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term150"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term151"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term152"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term153"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term154"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term155"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term156"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term157"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term158"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term159"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term160"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term161"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term162"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term163"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term141",
+                "term164"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term167"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term168"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term169"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term170"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term171"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term172"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term173"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term167"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term168"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term169"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term170"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term171"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term172"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term165",
+                "term166",
+                "term173"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term175"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term176"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term177"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term178"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term179"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term180"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term182"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term183"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term184"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term185"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term186"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term187"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term188"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term189"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term190"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term191"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term192"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term193"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term194"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term195"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term196"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term197"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term198"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term199"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term200"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term201"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term202"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term203"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term45"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term204"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term46"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term205"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term181",
+                "term206"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term207",
+                "term208"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term207",
+                "term209"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term210",
+                "term211"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term210",
+                "term211"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term210",
+                "term212"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term213",
+                "term214"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term215",
+                "term214"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term216",
+                "term214"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term213",
+                "term214"
+              ]
+            },
+            {
+              "file": "src/module-16.py",
+              "terms": [
+                "term217",
+                "term214"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F6",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-17.py",
+              "terms": [
+                "term218"
+              ]
+            },
+            {
+              "file": "src/module-17.py",
+              "terms": [
+                "term219",
+                "term220"
+              ]
+            },
+            {
+              "file": "src/module-17.py",
+              "terms": [
+                "term219",
+                "term221"
+              ]
+            },
+            {
+              "file": "src/module-17.py",
+              "terms": [
+                "term219",
+                "term222"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F7",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-18.py",
+              "terms": [
+                "term223"
+              ]
+            },
+            {
+              "file": "src/module-18.py",
+              "terms": [
+                "term224"
+              ]
+            },
+            {
+              "file": "src/module-18.py",
+              "terms": [
+                "term225"
+              ]
+            },
+            {
+              "file": "src/module-18.py",
+              "terms": [
+                "term226"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "N1",
+          "anchors": [
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term227",
+                "term228"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term227",
+                "term229"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term227",
+                "term230"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term227",
+                "term231"
+              ]
+            },
+            {
+              "file": "src/module-15.py",
+              "terms": [
+                "term174",
+                "term232",
+                "term228"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "N2",
+          "anchors": [
+            {
+              "file": "src/module-19.json",
+              "terms": [
+                "term233"
+              ]
+            },
+            {
+              "file": "src/module-19.json",
+              "terms": [
+                "term234"
+              ]
+            },
+            {
+              "file": "src/module-19.json",
+              "terms": [
+                "term235"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "r-task-4",
+    "kind": "review",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/r-task-4.txt",
+    "promptHash": "sha256:aded229eb7d4ce228bf9db32c09679ac0a12cead087001843b5be5e8321e7c4c",
+    "sourceSession": "00000000-0000-4000-8000-000000000004",
+    "allowedPaths": [],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "review",
+      "verdict": {
+        "pattern": "^[^\\w\\n]{0,10}(?:[^\\n:]{1,60}[:\u2014\u2013-][^\\w\\n]{0,6})?request[_ -]changes\\b"
+      },
+      "findings": [
+        {
+          "id": "F1",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term237"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term238"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term239"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term240"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term241"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term242"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term243"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term248"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term249"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term250"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term251"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term252"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term43"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term253"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term254"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term255"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term236",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term245",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term89",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term246",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term256"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term257"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term258"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term259"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term260"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term261"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term262"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term263"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term264"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term247",
+                "term265"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term266"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term267"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term209"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term268"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term269"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term244",
+                "term270"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F2",
+          "critical": true,
+          "anchors": [
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term272"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term273"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term274"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term275"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term276"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term277"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term278"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term279"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term272"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term273"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term274"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term275"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term276"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term277"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term278"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term279"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term272"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term273"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term274"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term275"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term276"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term277"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term278"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term279"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term272"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term273"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term274"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term275"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term276"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term277"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term278"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term279"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term272"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term273"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term274"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term275"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term276"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term277"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term278"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term279"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term284"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term285"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term286"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term287"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term288"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term289"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term290"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term271",
+                "term291"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term284"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term285"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term286"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term287"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term288"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term289"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term290"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term280",
+                "term291"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term284"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term285"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term286"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term287"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term288"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term289"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term290"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term281",
+                "term291"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term284"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term285"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term286"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term287"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term288"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term289"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term290"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term282",
+                "term291"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term284"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term285"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term286"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term287"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term288"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term289"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term290"
+              ]
+            },
+            {
+              "file": "src/module-21.css",
+              "terms": [
+                "term283",
+                "term291"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F3",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-22.js",
+              "terms": [
+                "term292"
+              ]
+            },
+            {
+              "file": "src/module-22.js",
+              "terms": [
+                "term293",
+                "term294"
+              ]
+            },
+            {
+              "file": "src/module-22.js",
+              "terms": [
+                "term295"
+              ]
+            },
+            {
+              "file": "src/module-22.js",
+              "terms": [
+                "term296",
+                "term297"
+              ]
+            },
+            {
+              "file": "src/module-22.js",
+              "terms": [
+                "term298"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term292"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term293",
+                "term294"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term295"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term296",
+                "term297"
+              ]
+            },
+            {
+              "file": "src/module-20.js",
+              "terms": [
+                "term298"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F4",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-23.mjs",
+              "terms": [
+                "term299"
+              ]
+            },
+            {
+              "file": "src/module-23.mjs",
+              "terms": [
+                "term300"
+              ]
+            },
+            {
+              "file": "src/module-24.mjs",
+              "terms": [
+                "term293"
+              ]
+            },
+            {
+              "file": "src/module-24.mjs",
+              "terms": [
+                "term301",
+                "term302"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "F5",
+          "critical": false,
+          "anchors": [
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term303",
+                "term304"
+              ]
+            },
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term305"
+              ]
+            },
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term306",
+                "term307",
+                "term308"
+              ]
+            }
+          ]
+        }
+      ],
+      "falseFindings": [
+        {
+          "id": "N1",
+          "anchors": [
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term309"
+              ]
+            },
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term310"
+              ]
+            },
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term311"
+              ]
+            },
+            {
+              "file": "src/module-25.jsx",
+              "terms": [
+                "term312"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "N2",
+          "anchors": [
+            {
+              "file": "src/module-26.jsx",
+              "terms": [
+                "term313"
+              ]
+            },
+            {
+              "file": "src/module-26.jsx",
+              "terms": [
+                "term314"
+              ]
+            },
+            {
+              "file": "src/module-26.jsx",
+              "terms": [
+                "term315"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "i-task-5",
+    "kind": "implementation",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/i-task-5.txt",
+    "promptHash": "sha256:ac36875e262728561a33f72ea9a4220aa8d4a0eff1b8365ba004582089a2ac1a",
+    "sourceSession": "00000000-0000-4000-8000-000000000005",
+    "allowedPaths": [
+      "src/module-27.md"
+    ],
+    "scopeIgnore": [],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "timeoutMs": 120000,
+      "setup": [
+        [
+          "true"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "i-task-6",
+    "kind": "implementation",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/i-task-6.txt",
+    "promptHash": "sha256:51a0c8387bf3560ba620d0e3a7ee3fa777aac68f710a1f57870e663e37f897d1",
+    "sourceSession": "00000000-0000-4000-8000-000000000006",
+    "allowedPaths": [
+      "src/module-16.py",
+      "src/module-15.py",
+      "src/module-19.json",
+      "src/module-17.py",
+      "src/module-18.py"
+    ],
+    "scopeIgnore": [
+      "dir-28/",
+      "dir-29/",
+      "dir-30/",
+      "dir-31/",
+      "dir-32/",
+      "dir-33/",
+      "dir-34/",
+      "dir-35/",
+      "dir-36/",
+      "dir-37/",
+      "dir-38/",
+      "dir-39/",
+      "dir-40/",
+      "dir-41/",
+      "dir-42/",
+      "dir-43/",
+      "dir-44/",
+      "dir-45/",
+      "dir-46/",
+      "dir-47/",
+      "dir-48/",
+      "dir-49/",
+      "dir-50/",
+      "dir-51/",
+      "dir-52/",
+      "dir-53/",
+      "dir-54/",
+      "dir-55/",
+      "dir-56/"
+    ],
+    "dependencies": [
+      {
+        "path": "node_modules",
+        "lockfile": "package-lock.json"
+      }
+    ],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "timeoutMs": 300000,
+      "setup": [
+        [
+          "true"
+        ]
+      ]
+    }
+  },
+  {
+    "id": "i-task-7",
+    "kind": "implementation",
+    "repo": "example-repo",
+    "baseCommit": "0000000000000000000000000000000000000000",
+    "promptRef": "eval/results/sanitized/prompts/i-task-7.txt",
+    "promptHash": "sha256:abb53b31ba7d5390003cd0d4b8355ebabbffee4a06ae6e6ffd9dc16089cec51b",
+    "sourceSession": "00000000-0000-4000-8000-000000000007",
+    "allowedPaths": [
+      "src/module-57.py",
+      "dir-58/",
+      "src/module-59.py"
+    ],
+    "scopeIgnore": [
+      "dir-28/",
+      "dir-29/",
+      "dir-30/",
+      "dir-31/",
+      "dir-32/",
+      "dir-33/",
+      "dir-34/",
+      "dir-35/",
+      "dir-36/",
+      "dir-37/",
+      "dir-38/",
+      "dir-39/",
+      "dir-40/",
+      "dir-41/",
+      "dir-42/",
+      "dir-43/",
+      "dir-44/",
+      "dir-45/",
+      "dir-46/",
+      "dir-47/",
+      "dir-48/",
+      "dir-49/",
+      "dir-50/",
+      "dir-51/",
+      "dir-52/",
+      "dir-53/",
+      "dir-54/",
+      "dir-55/",
+      "dir-56/"
+    ],
+    "dependencies": [
+      {
+        "path": "node_modules",
+        "lockfile": "package-lock.json"
+      }
+    ],
+    "oracle": {
+      "kind": "implementation",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "timeoutMs": 300000,
+      "setup": [
+        [
+          "true"
+        ]
+      ]
+    }
+  }
+]

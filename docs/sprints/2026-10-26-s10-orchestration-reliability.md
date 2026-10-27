@@ -14,7 +14,7 @@ implemented or that any gate passed.
   #135 is still open; its remaining proposal (copying operator overrides into a
   writer) is explicitly out of the sprint. #136 and #137 are open.
 - The Sprint 8 migration stopped after the pilot; steps 2–7 (the remaining
-  repositories and `second-machine`) wait for Sprint 9.
+  repositories and the second machine) wait for Sprint 9.
 - Open product decisions: #79 review point 2026-11-15, #120 (`undici` in Pi
   SDK 1.4.0), ADR 0011 item 4 (question channel).
 - Route availability on 2026-10-26 (operator routing notes): the xAI profiles

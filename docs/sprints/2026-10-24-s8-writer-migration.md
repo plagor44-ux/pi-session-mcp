@@ -33,8 +33,8 @@ allowed everywhere. Every worker worktree is clean and detached.
 | pi-session-mcp | `pi-session-mcp` | `pi-session-mcp-w1` (full clone) | — | Node ≥ 22.19, npm |
 | node-app | `node-app` | `node-app-w1`–`node-app-w4` (worktrees) | — | Node ≥ 22.13, npm |
 | go-app | `go-app` | `go-app-w1`–`go-app-w7` (worktrees); manual container writer `go-app-alpha` | `go-app-rev` | Go 1.27.3 (`go.mod`), Node |
-| py-app | `py-app` | `pyapp-w1`–`pyapp-w3` (worktrees) | `pyapp-rev` | Python ≥ 3.12 with `uv` |
-| pynode-app | `pynode-app` | `pyng-stab-a`–`pyng-stab-e`, `pyng-stab-int` (worktrees) | — | Python ≥ 3.12 with `uv` (backend), Node with npm (frontend) |
+| py-app | `py-app` | `py-app-w1`–`py-app-w3` (worktrees) | `py-app-rev` | Python ≥ 3.12 with `uv` |
+| pynode-app | `pynode-app` | `pynode-app-stab-a`–`pynode-app-stab-e`, `pynode-app-stab-int` (worktrees) | — | Python ≥ 3.12 with `uv` (backend), Node with npm (frontend) |
 | bun-app | `bun-app` | — | — | `bun` |
 
 The built-in writer image (`--image node`, a pinned digest) provides
@@ -43,7 +43,7 @@ The operator image of `go-app-alpha` provides Go 1.26.9, which cannot build a
 module that requires Go 1.27.3 under `GOTOOLCHAIN=local`. Repository sizes
 (12–36 MB of Git data each) make disk space a non-issue for full clones.
 
-Second machine: `second-machine` has 9 aliases, among them `node-app-w1`–`node-app-w4`,
+Second machine: the second machine has 9 aliases, among them `node-app-w1`–`node-app-w4`,
 and no `events` setting. **Podman is not installed there**, so container
 writers cannot run on it without a privileged installation.
 
@@ -72,7 +72,7 @@ every provider.
 | py-app | `container` | 3 | operator image: Python 3.12, `uv`, Node | as above |
 | pynode-app | `container` | 4 | operator image: Python 3.12, `uv`, Node | as above |
 
-Review aliases `go-app-rev` and `pyapp-rev` become mode `read-only`. After a
+Review aliases `go-app-rev` and `py-app-rev` become mode `read-only`. After a
 repository's writers are ready, its host writer aliases are removed from the
 configuration, and their worktrees are retired by the existing worktree-closing
 rule (commits checked into the integration branch, detached on `main`, branch
@@ -87,7 +87,8 @@ its writers.
 ## Operator images
 
 Setup does not build images; it accepts a local image ID. The sprint adds one
-Containerfile per toolchain with pinned base digests to `private-infra`, built
+Containerfile per toolchain with pinned base digests to the operator's private
+infrastructure repository, built
 with rootless `podman build` on each machine that runs writers:
 
 - `node-go`: Node 22 and Go 1.27.3 (go-app);
@@ -96,7 +97,7 @@ with rootless `podman build` on each machine that runs writers:
 
 Each image needs Node, Git, bash, ssh and coreutils for the acceptance
 harness. A new image ID requires the provisioning command again and a new
-acceptance. The toolchain versions in `private-infra` must follow the
+acceptance. The toolchain versions in those Containerfiles must follow the
 repositories' `go.mod` and Python requirements; a version bump there is a new
 image and a new acceptance.
 
@@ -138,7 +139,7 @@ image and a new acceptance.
    manual writer as documented, then provision. Retire `go-app-w1`–`go-app-w7`.
    `go-app-rev` becomes `read-only`.
 5. py-app, then pynode-app, each with its retirement step.
-6. `second-machine`: the operator installs rootless Podman (a privileged
+6. the second machine: the operator installs rootless Podman (a privileged
    step). Then the same isolation control, image builds and provisioning as on
    the workstation, starting with `node-app`; retire the
    server's `node-app-w1`–`node-app-w4`.
@@ -170,7 +171,8 @@ repeated `--apply` is allowed. A second failure stops that repository.
 ## Decisions (2026-10-25)
 
 1. **Writer counts:** 2, 4, 4, 3, 4 as in the target table.
-2. **Images:** built in this sprint; Containerfiles live in `private-infra`.
+2. **Images:** built in this sprint; Containerfiles live in the operator's
+   private infrastructure repository.
 3. **bun-app:** out of scope for this sprint.
 4. **Profiles in the boundary:** `code`, `code-deepseek`, `code-glm`,
    `code-mistral` and the new `code-grok` (provider `xai`, `grok-4.7`, high),
@@ -178,14 +180,14 @@ repeated `--apply` is allowed. A second failure stops that repository.
    operator configuration on both machines on 2026-10-25 and passed Doctor and
    a provider round trip on 0.11.2 there. `code-cursor` is dropped for coding.
 5. **Codex:** writers are registered for Claude Code and Codex.
-6. **Server `second-machine`:** the operator installs rootless Podman; the
+6. **Server the second machine:** the operator installs rootless Podman; the
    server gets container writers too (step 6).
 7. **Network:** `pasta` for all writers. Lifecycle: `persistent`.
 
 ## Progress (2026-10-27)
 
-Step 3, operator images: done. private-infra PR #478 (merged) adds
-`tools/pi-writer-images/` with two Containerfiles on the same pinned Node base
+Step 3, operator images: done. The operator's private infrastructure repository
+now holds two Containerfiles on the same pinned Node base
 as the built-in image, a check script and a README.
 
 | Image | Repositories | Toolchain | Image ID on the workstation |
@@ -220,7 +222,7 @@ unintegrated work, the controller ran host Git (`status`, `fetch`,
 configuration and hooks were then inspected without Git: unchanged since
 2026-10-18, sample hooks only. The clone is archived with the writer state.
 
-Also on 2026-10-27: the server `second-machine` was upgraded to `0.11.8`
+Also on 2026-10-27: the server the second machine was upgraded to `0.11.8`
 (no writers there yet).
 
 Open:
@@ -228,6 +230,6 @@ Open:
   controller started in that repository's checkout;
 - step 5 (py-app, pynode-app) with the `node-python-uv` image,
   after the decision on the test limits above;
-- step 6 needs rootless Podman on `second-machine` (operator, privileged);
+- step 6 needs rootless Podman on the second machine (operator, privileged);
 - step 7: routing rules and the #79 record;
 - the #79 review point on 2026-11-15.

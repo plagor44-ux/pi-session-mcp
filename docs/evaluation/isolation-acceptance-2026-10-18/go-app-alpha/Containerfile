@@ -1,5 +1,0 @@
-FROM docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d
-RUN curl -fsSLo /tmp/go.tgz https://go.dev/dl/go1.26.9.linux-amd64.tar.gz \
- && echo "42d158b4d8f7b61ac0a830567c940a86098fb7aac52e467a5ebec03ef5cc2f8d  /tmp/go.tgz" | sha256sum -c - \
- && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz
-ENV PATH=/usr/local/go/bin:$PATH

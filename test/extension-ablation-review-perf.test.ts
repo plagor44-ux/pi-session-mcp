@@ -80,7 +80,7 @@ describe("linear path tokens and path-only lines keep their results (R82)", () =
 });
 
 describe("scoreReview on adversarial 64 KiB texts (R82)", () => {
-  const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("../docs/evaluation/extension-ablation-2026-10-20/tasks.json", import.meta.url)), "utf8")) as unknown;
+  const tasks = JSON.parse(readFileSync(fileURLToPath(new URL("./fixtures/extension-ablation/tasks.sanitized.json", import.meta.url)), "utf8")) as unknown;
   const oracles = taskSpecSchema.array().parse(tasks).flatMap((task) => (task.oracle.kind === "review" ? [{ id: task.id, oracle: task.oracle as ReviewOracle }] : []));
   const N = 64 * 1024;
   const NL = "\n";
