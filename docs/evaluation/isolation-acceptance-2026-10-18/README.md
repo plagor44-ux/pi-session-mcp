@@ -70,13 +70,12 @@ clones came from the remote, and the host `auth.json` is only read.
   empty refresh token. The wrapper change was followed by new contained runs.
 - **`psm-alpha`** after the change: [contained.json](contained.json) `pass`.
 - **`go-app-alpha`** (Go repository): image built from the pinned Node image plus
-  Go 1.26.9 with its official checksum ([Containerfile](go-app-alpha/Containerfile)),
-  pinned by image ID with `--pull=never`; a writable `$STATE/go` for the module
-  and build cache. [Contained](go-app-alpha/contained.json): `pass`.
-  [Live](go-app-alpha/live.json): `pass`, the same pattern as `psm-alpha`.
-  [Wrapper](go-app-alpha/wrapper.sh).
+  Go 1.26.9 with its official checksum, pinned by image ID with `--pull=never`;
+  a writable `$STATE/go` for the module and build cache. Contained: `pass`.
+  Live: `pass`, the same pattern as `psm-alpha`. Its raw records are not
+  published because they name a private repository.
 - **Registrations:** `pi-coding-psm-alpha` (this repository) and
-  `pi-coding-go-app-alpha` (go-app) in Claude Code's `local` scope only. A running
+  `pi-coding-go-app-alpha` (a private Go repository) in Claude Code's `local` scope only. A running
   session sees a new server after `/mcp` reconnects. Codex has no
   project-local scope, so no Codex registration was added.
 

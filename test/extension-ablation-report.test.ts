@@ -8,13 +8,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
-import { z } from "zod";
 import { parseArgs } from "../eval/extensions/cli.js";
 import { PersistedLedger } from "../eval/extensions/ledger-file.js";
 import { PAIRINGS } from "../eval/extensions/matrix.js";
-import { approvalSchema, validateApproval } from "../eval/extensions/approval.js";
-import { readRuns, recommend, summarize, writeEvidence, type SummaryRecord } from "../eval/extensions/report.js";
-import { taskSpecSchema } from "../eval/extensions/schemas.js";
+import { recommend, summarize, writeEvidence, type SummaryRecord } from "../eval/extensions/report.js";
 import { hash } from "../eval/profiles/files.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -840,37 +837,5 @@ describe("replicates in the evidence files (R90)", () => {
     rmSync(file);
     await expect(write(other)).rejects.toThrow("run_record_invalid");
     expect(existsSync(other.evidenceDir)).toBe(false);
-  });
-
-  describe("the committed 2026-10-20 evidence", () => {
-    const dir = join(dirname(fileURLToPath(import.meta.url)), "..", "docs", "evaluation", "extension-ablation-2026-10-20");
-    const evidence = join(dir, "evidence");
-
-    it("still parses: run records and approvals carry no replicate and keep their run ids", async () => {
-      const runs = await readRuns(evidence);
-      expect(runs.length).toBeGreaterThan(0);
-      for (const { record: found } of runs) {
-        expect(found.replicate).toBeUndefined();
-        expect(found.runId).not.toMatch(/-r\d$/);
-      }
-      const approvals = readdirSync(join(evidence, "approvals")).filter((name) => name.endsWith(".json"));
-      expect(approvals.length).toBeGreaterThan(0);
-      for (const name of approvals) {
-        const approval = approvalSchema.parse(JSON.parse(readFileSync(join(evidence, "approvals", name), "utf8")));
-        expect(approval.replicates).toBeUndefined();
-        expect(approval.runs.every((r) => r.replicate === undefined)).toBe(true);
-      }
-    });
-
-    it("still binds to its tasks and reports the same pairings", async () => {
-      const tasks = z.array(taskSpecSchema).parse(JSON.parse(readFileSync(join(dir, "tasks.json"), "utf8")));
-      for (const name of readdirSync(join(evidence, "approvals")).filter((n) => n.endsWith(".json"))) {
-        const raw = JSON.parse(readFileSync(join(evidence, "approvals", name), "utf8"));
-        expect(() => validateApproval(raw, { sourceCommit: raw.sourceCommit, tasks })).not.toThrow();
-      }
-      const stored = JSON.parse(readFileSync(join(evidence, "summary.json"), "utf8")) as { pairings: unknown };
-      const records = (await readRuns(evidence)).map((r) => r.record);
-      expect(JSON.parse(JSON.stringify(summarize(records).pairings))).toEqual(stored.pairings);
-    });
   });
 });

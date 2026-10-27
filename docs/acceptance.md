@@ -2516,7 +2516,7 @@ Live check of #142, aborted:
   requests for 27 minutes without a failure, which says nothing about the
   window itself. #142 stays verified by code and tests only.
 
-Operator upgrade of the server `second-machine` from `0.11.6` to `0.11.8`
+Operator upgrade of the server the second machine from `0.11.6` to `0.11.8`
 on 2026-10-27. The server has no writers, and no Pi Session MCP server
 process was running there:
 - Both client targets (`claude-code:user:pi-session-mcp`,
@@ -2537,8 +2537,8 @@ Migration step 4 (go-app) on `0.11.8`, workstation, 2026-10-27:
 - The host isolation control for `go-app` passed. `--repo go-app --mode container`
   with four writers, profiles `code`, `code-deepseek`, `code-glm`,
   `code-mistral` and `code-grok`, the operator image `fe14e8543500969bca13782b5e9aa43d7a2bb989e67f705e65fbf6d48034d91f`
-  (`node-go`, Node 22.23.3 and Go 1.27.3, built from private-infra
-  `tools/pi-writer-images/`), `--cache go`, network `pasta`, lifecycle
+  (`node-go`, Node 22.23.3 and Go 1.27.3, an operator image built outside
+  this repository), `--cache go`, network `pasta`, lifecycle
   `persistent` and `--client codex` reported `writer_accepted` for all four
   writers on the first `--apply`, `writer_registered` for Claude Code and
   Codex, and the wake hook.
@@ -2811,7 +2811,7 @@ following [Installation](installation.md#container-writers):
   warnings for repositories not yet migrated.
 - A second run of the same steps changed nothing: the acceptance was current,
   so no harness ran, and every registration, skill and hook was unchanged.
-- The server `second-machine`, which has no writers, was upgraded the same
+- The server the second machine, which has no writers, was upgraded the same
   way for its two client targets. Doctor reported no error, and both targets
   verified.
 
