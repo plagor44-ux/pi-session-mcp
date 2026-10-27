@@ -145,7 +145,8 @@ async function resolveBase(ctx: WriterContext, requested?: string) {
   return { ref, short, commit };
 }
 async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, ref: string, commit: string, tags: ContainerSettings["tags"]): Promise<void> {
-  const reachable = tags === "reachable" ? (await git(ctx, ["tag", "--merged", commit]))?.split("\n").filter(Boolean).map((tag) => `refs/tags/${tag}`) ?? [] : [];
+  // for-each-ref prints one full ref per line; `git tag` honours column.ui/column.tag and can print several per line.
+  const reachable = tags === "reachable" ? (await git(ctx, ["for-each-ref", "--format=%(refname)", "--merged", commit, "refs/tags"]))?.split("\n").filter((ref) => ref.startsWith("refs/tags/")) ?? [] : [];
   await rm(join(paths.bundles, "base.bundle"), { force: true });
   await git(ctx, ["bundle", "create", join(paths.bundles, "base.bundle"), ref, ...reachable]);
   await chmod(join(paths.bundles, "base.bundle"), 0o600);

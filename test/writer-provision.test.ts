@@ -26,7 +26,7 @@ async function fixture(remote = "git@github.com:o/r.git", identity: readonly str
     let stdout = "";
     if (command === "git") {
       expect(args.slice(0, 4)).toEqual(["-c", "core.hooksPath=/dev/null", "-C", join(home, "source")]);
-      if (args.includes("--merged")) stdout = "v1\n";
+      if (args.includes("--merged")) stdout = args.includes("for-each-ref") && args.includes("--format=%(refname)") ? "refs/tags/v1\nrefs/tags/v2\n" : "v1  v2\n";
       if (args.includes("--get")) stdout = `${identity[args.includes("user.name") ? 0 : 1] ?? ""}\n`;
       if (args.includes("symbolic-ref")) stdout = "refs/remotes/origin/main\n";
       if (args.includes("rev-parse")) stdout = `${commit}\n`;
@@ -104,6 +104,8 @@ it.each(["none", "reachable"] as const)("bundles and explicitly fetches tags onl
   expect((await provisionWriter(f.ctx, { index: 1, settings: { ...settings, tags }, rawConfig })).status).toBe("ok");
   const bundle = f.calls.find((c) => c.command === "git" && c.args.includes("create"))!;
   expect(bundle.args.includes("refs/tags/v1")).toBe(tags === "reachable");
+  expect(bundle.args.includes("refs/tags/v2")).toBe(tags === "reachable");
+  expect(bundle.args.some((arg) => arg.includes(" "))).toBe(false);
   const clone = f.calls.find((c) => c.args.some((a) => a.includes("clone --no-hardlinks")))!;
   expect(clone.args.join("\n").includes("+refs/tags/*:refs/tags/*")).toBe(tags === "reachable");
   expect((await resetWriter(f.ctx, "repo-w1", { discard: true })).status).toBe("ok");
