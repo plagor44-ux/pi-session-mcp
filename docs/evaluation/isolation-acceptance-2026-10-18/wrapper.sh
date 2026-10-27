@@ -1,6 +1,6 @@
 #!/bin/sh
 # Coding-only pi-session-mcp boundary for writer psm-alpha (ADR 0008 option 1). Stdout is reserved for MCP frames.
-STATE="$HOME/pi-writers/psm-alpha"
+STATE="$HOME/writer-state/psm-alpha"
 CLONE="$STATE/clone"
 RELEASE="$HOME/.local/lib/node_modules/pi-session-mcp"
 IMAGE="docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d"

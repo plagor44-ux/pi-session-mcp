@@ -131,7 +131,7 @@
 3376433 openat(7</newroot/home>, "user", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user>
 3376433 mount("tmpfs", "/proc/self/fd/5", "tmpfs", MS_NOSUID|MS_NODEV, "mode=0755") = 0
 3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
-3376433 openat2(5</oldroot>, "/home/user/Projekte/pi-session-mcp/node_modules", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/Projekte/pi-session-mcp/node_modules>
+3376433 openat2(5</oldroot>, "/home/user/src/pi-session-mcp/node_modules", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/src/pi-session-mcp/node_modules>
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
 3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
@@ -145,14 +145,14 @@
 3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
 3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = 0
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
-3376433 openat2(5</newroot>, "/home/user/Projekte/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/Projekte/pi-session-mcp>
-3376433 mkdirat(7</newroot/home/user/Projekte/pi-session-mcp>, "node_modules", 0755) = 0
-3376433 openat(7</newroot/home/user/Projekte/pi-session-mcp>, "node_modules", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/Projekte/pi-session-mcp/node_modules>
+3376433 openat2(5</newroot>, "/home/user/src/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/src/pi-session-mcp>
+3376433 mkdirat(7</newroot/home/user/src/pi-session-mcp>, "node_modules", 0755) = 0
+3376433 openat(7</newroot/home/user/src/pi-session-mcp>, "node_modules", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/src/pi-session-mcp/node_modules>
 3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
-3376433 openat(AT_FDCWD</>, "/newroot/home/user/Projekte/pi-session-mcp/node_modules", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/Projekte/pi-session-mcp/node_modules>
-3376433 mount_setattr(8</newroot/home/user/Projekte/pi-session-mcp/node_modules>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/src/pi-session-mcp/node_modules", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/src/pi-session-mcp/node_modules>
+3376433 mount_setattr(8</newroot/home/user/src/pi-session-mcp/node_modules>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
 3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
-3376433 openat2(5</oldroot>, "/home/user/Projekte/pi-session-mcp/skills", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/Projekte/pi-session-mcp/skills>
+3376433 openat2(5</oldroot>, "/home/user/src/pi-session-mcp/skills", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/src/pi-session-mcp/skills>
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
 3376433 openat2(5</newroot>, "/", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot>
 3376433 mkdirat(7</newroot>, "home", 0700) = -1 EEXIST (File exists)
@@ -166,12 +166,12 @@
 3376433 openat2(5</newroot>, "/home/user/Projekte", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 8</newroot/home/user/Projekte>
 3376433 mkdirat(8</newroot/home/user/Projekte>, "pi-session-mcp", 0700) = -1 EEXIST (File exists)
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>
-3376433 openat2(5</newroot>, "/home/user/Projekte/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/Projekte/pi-session-mcp>
-3376433 mkdirat(7</newroot/home/user/Projekte/pi-session-mcp>, "skills", 0755) = 0
-3376433 openat(7</newroot/home/user/Projekte/pi-session-mcp>, "skills", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/Projekte/pi-session-mcp/skills>
+3376433 openat2(5</newroot>, "/home/user/src/pi-session-mcp", {flags=O_RDONLY|O_CLOEXEC|O_PATH|O_DIRECTORY, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 7</newroot/home/user/src/pi-session-mcp>
+3376433 mkdirat(7</newroot/home/user/src/pi-session-mcp>, "skills", 0755) = 0
+3376433 openat(7</newroot/home/user/src/pi-session-mcp>, "skills", O_RDONLY|O_NOFOLLOW|O_CLOEXEC|O_PATH) = 5</newroot/home/user/src/pi-session-mcp/skills>
 3376433 mount("/proc/self/fd/6", "/proc/self/fd/5", NULL, MS_BIND|MS_REC|MS_SILENT, NULL) = 0
-3376433 openat(AT_FDCWD</>, "/newroot/home/user/Projekte/pi-session-mcp/skills", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/Projekte/pi-session-mcp/skills>
-3376433 mount_setattr(8</newroot/home/user/Projekte/pi-session-mcp/skills>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
+3376433 openat(AT_FDCWD</>, "/newroot/home/user/src/pi-session-mcp/skills", O_RDONLY|O_CLOEXEC|O_PATH) = 8</newroot/home/user/src/pi-session-mcp/skills>
+3376433 mount_setattr(8</newroot/home/user/src/pi-session-mcp/skills>, "", AT_EMPTY_PATH|AT_RECURSIVE, {attr_set=MOUNT_ATTR_RDONLY|MOUNT_ATTR_NOSUID|MOUNT_ATTR_NODEV, attr_clr=0, propagation=0 /* MS_??? */, userns_fd=0}, 32) = 0
 3376433 openat(AT_FDCWD</>, "/oldroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</oldroot>
 3376433 openat2(5</oldroot>, "/home/user/.local/bin", {flags=O_RDONLY|O_PATH, resolve=RESOLVE_NO_MAGICLINKS|RESOLVE_IN_ROOT}, 24) = 6</oldroot/home/user/.local/bin>
 3376433 openat(AT_FDCWD</>, "/newroot", O_RDONLY|O_NOCTTY|O_CLOEXEC|O_PATH) = 5</newroot>

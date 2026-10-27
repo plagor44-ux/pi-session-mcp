@@ -11,7 +11,7 @@ try {
   if (expires - Date.now() / 1000 > Number(process.env.PI_WRITER_WARMUP_MINUTES ?? 20) * 60) process.exit(0);
 } catch { process.exit(0); }
 const server = spawn(process.execPath, [join(home, ".local/lib/node_modules/pi-session-mcp/dist/main.js")], {
-  stdio: ["pipe", "pipe", "ignore"], env: { ...process.env, PI_SESSION_MCP_CONFIG: join(home, "pi-writers/auth-warmup.json") },
+  stdio: ["pipe", "pipe", "ignore"], env: { ...process.env, PI_SESSION_MCP_CONFIG: join(home, "writer-state/auth-warmup.json") },
 });
 const timer = setTimeout(() => server.kill("SIGTERM"), 20_000);
 let buffer = "";
