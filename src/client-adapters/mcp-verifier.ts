@@ -1,3 +1,4 @@
+import { isShortBranchName } from "../execution-modes.js";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "../extension-spec.js";
 import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS } from "../session-tools.js";
 import { MAX_PROFILE_SKILLS } from "../skill-catalog.js";
@@ -105,8 +106,13 @@ function validCapabilities(value: unknown): boolean {
   if (!workspaces.every((workspace) => {
     if (!workspace || typeof workspace !== "object") return false;
     const record = workspace as Record<string, unknown>;
-    return exactKeys(record, ["alias", "mode"]) && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
-      && typeof record.mode === "string" && ["unset", "host", "container", "read-only"].includes(record.mode);
+    return exactKeys(record, record.mode === "container" ? ["alias", "mode", "writers", "defaultBase"] : ["alias", "mode"])
+      && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
+      && typeof record.mode === "string" && ["unset", "host", "container", "read-only"].includes(record.mode)
+      && (record.mode !== "container" || (
+        typeof record.writers === "number" && Number.isInteger(record.writers) && record.writers >= 1 && record.writers <= 16
+        && (record.defaultBase === null || (typeof record.defaultBase === "string" && isShortBranchName(record.defaultBase)))
+      ));
   })) return false;
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
