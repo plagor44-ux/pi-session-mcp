@@ -26,7 +26,11 @@ paths inside the allowed read roots:
 
 - the session's workspace root, and
 - the directory of each selected skill file, because the model loads skills
-  with `read` and they live outside the workspace.
+  with `read` and they live outside the workspace. If that directory equals or
+  contains the operator's home directory, the configuration file's directory
+  or the Pi agent directory (`~/.pi`), only the skill file itself is a root,
+  so a catalog entry such as `./SKILL.md` next to the configuration does not
+  expose the configuration.
 
 The server replaces the SDK's built-in definitions with definitions built from
 the root exports `createReadToolDefinition`, `createGrepToolDefinition`,
@@ -70,12 +74,13 @@ Such a profile also gets `bash`, built with `createBashToolDefinition(cwd,
 `BashOperations.exec`. Each command runs as
 `/usr/bin/bwrap <fixed arguments> -- /usr/bin/bash -c <command>`:
 
-- `--unshare-all` (no network), `--disable-userns`, `--die-with-parent`,
+- `--unshare-all` (no network), `--unshare-user` (which bubblewrap requires
+  for `--disable-userns`), `--disable-userns`, `--die-with-parent`,
   `--new-session`, `--clearenv` with
   `PATH=/usr/local/bin:/usr/bin:/bin` and `HOME=/tmp/home`;
 - `/usr` and `/etc` read-only; `/bin`, `/lib`, `/lib64` and `/sbin` recreated
   as the host's merged-`/usr` symlinks or bound read-only; `--dev /dev`,
-  `--proc /proc`, a tmpfs `/tmp`; no other host path, so the operator's home
+  `--proc /proc`, a tmpfs `/tmp` limited to 512 MiB; no other host path, so the operator's home
   is not visible;
 - the workspace at its host path as an overlay with a temporary upper layer
   (`--overlay-src <workspace> --tmp-overlay <workspace>`): writes succeed
@@ -89,13 +94,18 @@ Such a profile also gets `bash`, built with `createBashToolDefinition(cwd,
   nothing extra is bound and Git commands fail inside the sandbox. The read
   tools stay confined to the workspace either way.
 
+A command without a `timeout` argument gets a default of 600 seconds; on
+timeout or abort the server kills bubblewrap, and the PID namespace takes every
+process of the sandbox with it.
+
 The bubblewrap path is fixed and must be a trusted system binary (root-owned,
 not group- or world-writable); there is no `PATH` lookup. The tool's own
 environment, the controller's environment and `PI_*` session variables never
 reach the command.
 
 Fail closed: before a session with `shell: "sandboxed"` starts, the server runs
-`/usr/bin/true` through the same sandbox. If the binary is untrusted or the probe
+`/usr/bin/true` through the same sandbox for the session's workspace, bounded
+and cancelled with the start request. If the binary is untrusted or the probe
 fails, `pi_session_start` fails with the new code `sandbox_unavailable`, class
 `needs_operator`. A command whose sandbox cannot start fails as that command;
 there is never an unsandboxed fallback.
@@ -110,11 +120,14 @@ outside the workspace and the skill directories.
 
 ### Doctor and capabilities
 
-Doctor stays offline. For each profile with `shell: "sandboxed"` it reports
-`sandbox_unavailable` as an error when the trusted bubblewrap binary is
-missing or the probe with the session's fixed arguments fails, for example
-because the installed version lacks the overlay options or because
-unprivileged user namespaces are disabled or restricted by AppArmor (see [ADR 0008](0008-coding-profile-isolation.md)). For each
+Doctor stays offline. When any profile has `shell: "sandboxed"`, it probes
+each configured workspace with the session's fixed arguments, including a
+linked worktree's main Git directory, and reports `sandbox_unavailable` as an
+error when the trusted bubblewrap binary is missing or a probe fails, for
+example because the installed version lacks the overlay options, unprivileged
+user namespaces are disabled or restricted by AppArmor (see
+[ADR 0008](0008-coding-profile-isolation.md)), or the workspace's filesystem
+cannot be an overlay lower layer. For each
 workspace with an unusable gitfile pointer, it warns with
 `workspace_git_unavailable` when any profile has a sandboxed shell.
 
@@ -148,6 +161,16 @@ not itself bump the version or authorize publication.
   from the distribution are.
 - Lock-dependent tests that need a supported local filesystem can fail on the
   overlay (seen with `test/setup-modes.test.ts` in the #169 probe).
+- The sandbox has no memory, process-count or overlay upper-layer limits.
+  A prompt-injected worker can exhaust memory or processes of the operator's
+  user until the command times out, as a host-mode coding session already
+  can. Limits through a cgroup scope are a possible follow-up.
+- When `bash` truncates long output, the SDK stores the full output in the
+  host's temporary directory and names that file. Confined `read` refuses it
+  and the sandbox's `/tmp` is a fresh tmpfs, so only the truncated output is
+  available; workers should narrow their commands instead.
+- `ls` omits entries that are symlinks pointing outside the read roots,
+  without a notice.
 - The confinement checks a path when the call starts. A concurrent writer in
   the same workspace, for example a host-mode coding session, could swap a
   checked directory for a symlink before `rg` or `fd` opens it. Read-only
