@@ -28,6 +28,8 @@ function fixture() {
     dispose: () => { state.disposed++; },
     // The real loader the adapter built, so the admission check reads the actual skill catalog.
     get resourceLoader() { return state.options?.resourceLoader; },
+    // Like the SDK: a custom tool's name resolves to the definition the session was created with.
+    getToolDefinition: (name: string) => state.options?.customTools?.find((tool) => tool.name === name),
   } as unknown as AgentSession;
   const options = {
     modelRuntimeFactory: async () => runtime,
@@ -60,9 +62,9 @@ describe("MCP config and SDK adapter wiring (provider-free)", () => {
   it("registers and explicitly activates granted tools before returning a handle", async () => {
     const f = fixture(); const handle = await create(new SdkPiSessionAdapter(f.options));
     assert.deepEqual(f.state.options!.tools, [...PROFILE_TOOLS["read-only"], "mcp_knowledge_search"]);
-    assert.deepEqual(f.state.options!.customTools!.map((tool) => tool.name), ["mcp_knowledge_search"]);
+    assert.deepEqual(f.state.options!.customTools!.map((tool) => tool.name), [...PROFILE_TOOLS["read-only"], "mcp_knowledge_search"]);
     assert.equal(f.state.options!.resourceLoader!.getExtensions().extensions.length, 0);
-    const result = await f.state.options!.customTools![0]!.execute("call", {}, undefined, undefined, {} as never);
+    const result = await f.state.options!.customTools!.find((tool) => tool.name === "mcp_knowledge_search")!.execute("call", {}, undefined, undefined, {} as never);
     assert.deepEqual(result.content, [{ type: "text", text: "found" }]);
     await handle.dispose(); assert.equal(f.state.closed, 1); assert.equal(f.state.disposed, 1);
     await handle.dispose(); assert.equal(f.state.closed, 1); assert.equal(f.state.disposed, 1);
@@ -78,7 +80,8 @@ describe("MCP config and SDK adapter wiring (provider-free)", () => {
   it("leaves an unconfigured session unchanged and creates no external client", async () => {
     const f = fixture(); const { mcpServers: _servers, ...ordinary } = profile;
     const handle = await create(new SdkPiSessionAdapter(f.options), ordinary);
-    assert.equal(f.state.connections, 0); assert.equal(f.state.options!.customTools, undefined);
+    assert.equal(f.state.connections, 0);
+    assert.deepEqual(f.state.options!.customTools!.map((tool) => tool.name), PROFILE_TOOLS["read-only"]);
     assert.deepEqual(f.state.options!.tools, PROFILE_TOOLS["read-only"]); await handle.dispose();
   });
   it("fails closed if the SDK omits or adds an active tool", async () => {

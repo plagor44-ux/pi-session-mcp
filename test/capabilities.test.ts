@@ -41,11 +41,11 @@ describe("configuration capability projection", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: ["zeta_lookup", "alpha_lookup"], skills: [],
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: ["zeta_lookup", "alpha_lookup"], shell: "none", skills: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: [], skills: ["zeta-review", "alpha-docs"],
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: [], shell: "none", skills: ["zeta-review", "alpha-docs"],
         },
       ],
     });
@@ -58,6 +58,14 @@ describe("configuration capability projection", () => {
       new Map(), configuration, new Map([["a", { mode: "container", container: { writers: 2, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta", cache: "none", tags: "none", clean: "untracked" } }]]),
     );
     expect(capabilities.workspaces).toEqual([{ alias: "a", mode: "container", writers: 2, defaultBase: null }, { alias: "b", mode: "unset" }]);
+  });
+
+  it("reports the configured shell of every profile, none by default", () => {
+    const profile = (alias: string, shell?: "sandboxed"): ConfiguredExecutionProfile => ({
+      alias, default: alias === "a", permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off", ...(shell === undefined ? {} : { shell }),
+    });
+    const capabilities = projectCapabilities(new Map(), new Map([["a", profile("a")], ["b", profile("b", "sandboxed")]]), configuration);
+    expect(capabilities.executionProfiles.map((entry) => [entry.alias, entry.shell])).toEqual([["a", "none"], ["b", "sandboxed"]]);
   });
 
   it("reports the event delivery it is given", () => {
@@ -76,7 +84,7 @@ describe("configuration capability projection", () => {
 
     expect(second).toEqual(first);
     expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "workspaces", "executionProfiles"]);
-    expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"]);
+    expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills"]);
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");
   });

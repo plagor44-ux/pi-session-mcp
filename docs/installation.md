@@ -58,6 +58,20 @@ the same arguments.
   `~/.local/state/pi-session-mcp` on the same filesystem type as `/`, which is
   APFS. A home directory on HFS+, exFAT, a network volume or any other
   filesystem fails closed.
+- Optional, Linux only, for the sandboxed shell of a read-only profile
+  (`"shell": "sandboxed"`, [ADR 0013](adr/0013-hardened-read-only-profiles.md)):
+  [bubblewrap](https://github.com/containers/bubblewrap) at `/usr/bin/bwrap`,
+  root-owned and not group- or world-writable, with the options
+  `--overlay-src`, `--tmp-overlay` and `--disable-userns`. It runs unprivileged and
+  needs unprivileged user namespaces (kernel setting, and on some distributions an
+  AppArmor profile that allows the user namespace for `bwrap`; see
+  [ADR 0008](adr/0008-coding-profile-isolation.md)). Doctor probes every
+  configured workspace and reports `sandbox_unavailable` as an error per
+  workspace when it does not work (the workspace's filesystem must be able to be
+  an overlay lower layer). The sandbox shows only
+  `/usr`, `/etc` and the workspace: toolchains installed under the home
+  directory or `/opt` (nvm, `~/.local`) are not available, Node.js and Git from
+  the distribution are.
 - Codex CLI or Claude Code. `setup` does not pin client versions. It accepts a
   client whose public `mcp` command output matches the expected contract and
   reports `unsupported` otherwise. The contract was last recorded with Codex CLI
@@ -169,6 +183,15 @@ Rules:
   `azure`; a profile that names the old key must be changed.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
+- A `read-only` profile may add `"shell": "sandboxed"` to get a `bash` tool
+  that runs every command in a bubblewrap sandbox without network, with the
+  workspace as a temporary overlay (see the requirements above). It is Linux
+  only and cannot be combined with `grantedExtensionTools`; the start fails
+  with `sandbox_unavailable` when the sandbox does not work. Without the field
+  the profile has no shell.
+- The `read`, `grep`, `find` and `ls` tools of every `read-only` profile accept
+  only paths inside the workspace and the directories of the profile's selected
+  skill files; there is no field to change that.
 - A profile may load Pi extensions that Pi has installed, through
   `extensions`: a list of at most 8 entries of the form
   `npm:<name>@<exact version>`, each package once. Ranges, tags, `git:`

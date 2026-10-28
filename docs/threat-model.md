@@ -6,6 +6,54 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 
 ## Threats and mitigations
 
+- **Read-only file disclosure and the sandboxed shell ([ADR 0013](adr/0013-hardened-read-only-profiles.md)):**
+  read-only sessions run in the host server process. `read`, `grep`, `find` and
+  `ls` of every read-only profile therefore accept only paths inside the
+  workspace and the directories of the selected skill files, so Pi credentials
+  and other files the operator can read stay unreachable even for a
+  prompt-injected worker. Each call is checked twice: the `path` argument is
+  resolved and canonicalized with `realpath` before the SDK tool runs
+  (arguments the SDK would rewrite, such as a leading `@` or `~`, a `file:`
+  URL, Unicode spaces or NUL, are refused so both resolve the same path), and
+  the `*Operations` hooks of `read`, `grep` and `ls` check the absolute path
+  again. `rg` and `fd` do not follow symlinks during traversal. A profile with
+  `shell: "sandboxed"` also gets `bash`, run as `/usr/bin/bwrap` (fixed path,
+  root-owned and not group- or world-writable, no `PATH` lookup) with
+  `--unshare-all`, `--disable-userns`, a cleared environment, no network, `/usr`
+  and `/etc` read-only, a tmpfs `/tmp`, and the workspace (and, for a linked
+  worktree whose pointers are consistent, the main repository's Git directory)
+  as a temporary overlay whose writes vanish with the command. The operator's
+  home, `PI_*` variables and the server's environment never reach the command.
+  The shell fails closed: an untrusted binary or a failing probe is
+  `sandbox_unavailable`, and a command whose sandbox cannot start fails; there
+  is no unsandboxed fallback. It is not allowed together with granted extension
+  tools, which may write.
+  - **Residual:** the confinement checks a path when the call starts, so a
+    concurrent writer in the same workspace (for example a host-mode coding
+    session) could swap a checked directory for a symlink before `rg` or `fd`
+    opens it; read-only workers cannot create symlinks themselves. Extension
+    hooks and granted extension tools run in the server process with the
+    operator's rights and are not confined; the confinement covers the built-in
+    tools only. The sandbox exposes `/etc` and the distribution's `/usr` and an
+    overlay of the workspace and, for worktrees, of the repository's Git
+    directory, including their configuration. Lock-dependent tests that need a
+    supported local filesystem can fail on the overlay. macOS, a VM backend and
+    network allowlists inside the sandbox are out of scope. The sandbox has no
+    memory, process-count or overlay upper-layer limits (only `/tmp` is limited to
+    512 MiB and a command defaults to a 600 second timeout), so a prompt-injected
+    worker can exhaust memory or processes of the operator's user until the
+    command ends, as a host-mode coding session already can. When `bash`
+    truncates long output the SDK names a full-output file in the host's
+    temporary directory; confined `read` refuses it and the sandbox's `/tmp` is a
+    fresh tmpfs, so only the truncated output is available. `ls` omits entries
+    that are symlinks pointing outside the read roots, without a notice. A skill
+    directory that equals or contains the operator's home, the configuration
+    directory or `~/.pi` contributes only the skill file as a read root. On
+    timeout or abort the server kills bubblewrap and the PID namespace takes every
+    process of the sandbox with it. The start probe is cancelled with the start
+    request. A granted research
+    tool with free-form input (search, documentation lookup) is a possible
+    outbound channel for workspace content; prefer query-style tools.
 - **Unsafe diagnostics:** Doctor is a separate offline CLI with no MCP, Pi,
   provider, credential, or network dependency. Its human/JSON output is
   sanitized and its stable exit statuses are 0 (healthy), 1 (warning), 2

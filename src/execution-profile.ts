@@ -5,6 +5,7 @@ import type { SkillSelection } from "./skill-catalog.js";
 export const ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 
 export type PermissionProfile = "read-only" | "coding";
+export type ShellMode = "sandboxed";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 /** A profile as it appears in the strictly validated application config. */
@@ -18,6 +19,8 @@ export interface ConfiguredExecutionProfile {
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
   readonly grantedExtensionTools?: readonly string[];
+  /** `sandboxed` adds a bubblewrap-confined `bash` to a read-only profile (ADR 0013); absent means no shell. */
+  readonly shell?: ShellMode;
   /** The selected catalog skills in configured order; absent when the profile selects none. */
   readonly skills?: readonly SkillSelection[];
 }
@@ -32,6 +35,7 @@ export interface ResolvedExecutionProfile {
   readonly mcpServers?: McpServers;
   readonly extensions?: readonly ExtensionSpec[];
   readonly grantedExtensionTools?: readonly string[];
+  readonly shell?: ShellMode;
   readonly skills?: readonly SkillSelection[];
 }
 
@@ -45,6 +49,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
     ...(profile.mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(profile.mcpServers) }),
     ...(profile.extensions === undefined ? {} : { extensions: profile.extensions }),
     ...(profile.grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...profile.grantedExtensionTools]) }),
+    ...(profile.shell === undefined ? {} : { shell: profile.shell }),
     ...(profile.skills === undefined ? {} : { skills: profile.skills }),
   });
 }

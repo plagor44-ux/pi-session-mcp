@@ -2,9 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ModelRuntime, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionRuntime, AgentSessionServices, CreateAgentSessionRuntimeFactory } from "@earendil-works/pi-coding-agent";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { ConfigError } from "../src/config.js";
+import type { SandboxChild, SandboxDependencies } from "../src/sandbox-shell.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 import type { McpConnection } from "../src/mcp-session-tools.js";
 import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
@@ -14,6 +17,10 @@ import { AUTH_OPERATION_TIMEOUT_MS, SESSION_CREATION_TIMEOUT_MS, createPhase0Res
 import type { ExtensionSdk } from "../src/sdk-pi-adapter.js";
 
 afterAll(removeTemporaryRoots);
+
+/** A real directory: read-only sessions resolve their confined read roots from the session directory. */
+let WORKSPACE_DIR: string;
+beforeAll(async () => { WORKSPACE_DIR = await temporaryRoot("sdk-adapter-workspace-"); });
 
 const profile: ResolvedExecutionProfile = Object.freeze({
   alias: "safe-readonly",
@@ -69,8 +76,16 @@ function sessionFixture(options: { provider?: string; model?: string; thinkingLe
   return { session, dispose };
 }
 
+/** Like the SDK, the session resolves a custom tool's name to the definition it was created with. */
+function exposeCustomTools(session: AgentSession, options: { customTools?: readonly { name: string }[] }): void {
+  Object.assign(session as object, { getToolDefinition: (name: string) => options.customTools?.find((tool) => tool.name === name) });
+}
+
 function createSessionFixture(session: AgentSession) {
-  return vi.fn(async (_options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => ({ session } as unknown as CreateAgentSessionResult));
+  return vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+    exposeCustomTools(session, options);
+    return { session } as unknown as CreateAgentSessionResult;
+  });
 }
 
 function deferred<T>() {
@@ -242,9 +257,12 @@ describe("SdkPiSessionAdapter deterministic selection", () => {
       const fixture = runtimeFixture();
       const pending = deferred<CreateAgentSessionResult>();
       const late = sessionFixture();
-      const createSession = vi.fn(() => pending.promise);
+      const started = deferred<void>();
+      const createSession = vi.fn(() => { started.resolve(); return pending.promise; });
       const result = create(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }));
       const expectation = expect(result).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+      // Resolving the confined read roots uses real file system I/O, which fake timers do not drive.
+      await started.promise;
       await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
       await expectation;
       pending.resolve({ session: late.session } as CreateAgentSessionResult);
@@ -260,8 +278,10 @@ describe("SdkPiSessionAdapter deterministic selection", () => {
     try {
       const fixture = runtimeFixture();
       const pending = deferred<CreateAgentSessionResult>();
-      const result = create(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: () => pending.promise }));
+      const started = deferred<void>();
+      const result = create(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: () => { started.resolve(); return pending.promise; } }));
       const expectation = expect(result).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+      await started.promise;
       await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
       await expectation;
       pending.reject(new Error("private late creation detail"));
@@ -599,13 +619,14 @@ function extensionHarness(options: {
   diagnosticError?: boolean;
   activeTools?: string[];
   withMcp?: boolean;
+  shell?: "sandboxed";
 } = {}) {
   const permissionProfile = options.permissionProfile ?? "read-only";
   const extensionTools = options.extensionTools ?? [["fixture_tool"]];
   const mcpNames = options.withMcp ? ["mcp_knowledge_search"] : [];
   const expectedTools = permissionProfile === "coding"
     ? [...PROFILE_TOOLS.coding, ...mcpNames, ...extensionTools.flat()]
-    : [...PROFILE_TOOLS["read-only"], ...mcpNames];
+    : [...PROFILE_TOOLS["read-only"], ...(options.shell === undefined ? [] : ["bash"]), ...mcpNames];
   // The same mutable maps back every `getExtensions()` call, so a fake bind can register tools.
   const toolMaps = extensionTools.map((names) => new Map<string, unknown>(names.map((name) => [name, {}])));
   const mcpClosed = vi.fn();
@@ -618,7 +639,7 @@ function extensionHarness(options: {
   const bindExtensions = vi.fn(async (_bindings: { mode?: string; onError?: (error: unknown) => void }) => undefined);
   Object.assign(session as object, { bindExtensions, getActiveToolNames: vi.fn(() => options.activeTools ?? expectedTools) });
   const services = {
-    cwd: "/hidden/workspace", agentDir: "/hidden/workspace", modelRuntime: fixture.runtime, settingsManager: {},
+    cwd: WORKSPACE_DIR, agentDir: WORKSPACE_DIR, modelRuntime: fixture.runtime, settingsManager: {},
     diagnostics: options.diagnosticError ? [{ type: "error", message: "hidden" }] : [],
     resourceLoader: {
       ...emptyResourceFixture(),
@@ -631,7 +652,10 @@ function extensionHarness(options: {
   const runtimeDispose = vi.fn(async () => undefined);
   const sessionRuntime = { session, dispose: runtimeDispose } as unknown as AgentSessionRuntime;
   const createServices = vi.fn(async (_options: unknown) => services);
-  const createSessionFromServices = vi.fn(async (_options: unknown) => ({ session }) as unknown as CreateAgentSessionResult);
+  const createSessionFromServices = vi.fn(async (sessionOptions: unknown) => {
+    exposeCustomTools(session, sessionOptions as { customTools?: readonly { name: string }[] });
+    return { session } as unknown as CreateAgentSessionResult;
+  });
   const createRuntime = vi.fn(async (factory: CreateAgentSessionRuntimeFactory, runtimeOptions: Parameters<CreateAgentSessionRuntimeFactory>[0]) => {
     await factory(runtimeOptions);
     return sessionRuntime;
@@ -645,18 +669,285 @@ function extensionHarness(options: {
     extensionSdk: { createServices, createSessionFromServices, createRuntime } as unknown as ExtensionSdk,
     mcpConnectionFactory: () => mcpConnection,
     diagnosticSink: (diagnostic) => { diagnostics.push(diagnostic); },
+    ...(options.shell === undefined ? {} : { sandbox: workingSandbox() }),
   });
   const executionProfile: ResolvedExecutionProfile = {
     ...extensionProfile, permissionProfile,
+    ...(options.shell === undefined ? {} : { shell: options.shell }),
     ...(options.withMcp ? { mcpServers: { knowledge: { command: process.execPath, args: ["/operator/server.mjs"], tools: { search: { name: "search_knowledge", readOnly: true } } } } } : {}),
   };
   return {
-    toolMaps, mcpClosed,
+    toolMaps, mcpClosed, executionProfile,
     adapter, fixture, session, sessionDispose, bindExtensions, services, sessionRuntime, runtimeDispose, createServices,
     createSessionFromServices, createRuntime, resolveExtension, runtimeFactory, createSession, diagnostics, expectedTools,
-    create: (override: ResolvedExecutionProfile = executionProfile) => adapter.create({ cwd: "/hidden/workspace", executionProfile: override }),
+    create: (override: ResolvedExecutionProfile = executionProfile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile: override }),
   };
 }
+
+/** A sandbox whose bubblewrap is trusted and whose probe exits 0, or exits with `probeExit`. */
+function workingSandbox(options: { trusted?: boolean; probeExit?: number; spawnError?: boolean } = {}): SandboxDependencies & { spawned: string[][] } {
+  const spawned: string[][] = [];
+  return {
+    spawned,
+    trusted: () => options.trusted ?? true,
+    rootEntries: () => [],
+    gitCommonDir: async () => undefined,
+    spawn: (_file, args) => {
+      spawned.push([...args]);
+      const emitter = new EventEmitter();
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      setImmediate(() => {
+        stdout.end(); stderr.end();
+        if (options.spawnError) emitter.emit("error", new Error("spawn failed"));
+        else emitter.emit("close", options.probeExit ?? 0, null);
+      });
+      return Object.assign(emitter, { stdout, stderr, kill: () => undefined }) as unknown as SandboxChild;
+    },
+  };
+}
+
+describe("sandboxed shell", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  const shellProfile: ResolvedExecutionProfile = Object.freeze({ ...profile, shell: "sandboxed" });
+  const createIn = (adapter: SdkPiSessionAdapter, executionProfile: ResolvedExecutionProfile = shellProfile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile });
+
+  it("probes the sandbox, then adds the confined bash tool to the custom tools and the allowlist", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox }));
+    expect(sandbox.spawned).toHaveLength(1);
+    expect(sandbox.spawned[0]!.slice(-4)).toEqual(["--chdir", WORKSPACE_DIR, "--", "/usr/bin/true"]);
+    const options = createSession.mock.calls[0]![0];
+    expect(options.tools).toEqual([...PROFILE_TOOLS["read-only"], "bash"]);
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "bash"]);
+  });
+
+  it("does not run the probe or add bash for a profile without a shell and for coding", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    await createIn(adapter, profile);
+    await createIn(adapter, { ...profile, permissionProfile: "coding" });
+    expect(sandbox.spawned).toHaveLength(0);
+    expect(createSession.mock.calls[0]![0].customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
+    expect(createSession.mock.calls[1]![0]).not.toHaveProperty("customTools");
+  });
+
+  it.each([
+    ["an untrusted binary", { trusted: false }],
+    ["a failing probe", { probeExit: 1 }],
+    ["a bubblewrap that cannot start", { spawnError: true }],
+  ] as const)("fails with sandbox_unavailable and creates no session for %s", async (_name, sandboxOptions) => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const createSession = createSessionFixture(session);
+    const diagnostics: SdkPiAdapterDiagnostic[] = [];
+    const connections = vi.fn();
+    const adapter = new SdkPiSessionAdapter({
+      modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox: workingSandbox(sandboxOptions),
+      mcpConnectionFactory: () => { connections(); throw new Error("must not connect"); },
+      diagnosticSink: (value) => { diagnostics.push(value); },
+    });
+    await expect(createIn(adapter, { ...shellProfile, mcpServers: { knowledge: { command: process.execPath, args: ["/x.mjs"], tools: { search: { name: "search_knowledge", readOnly: true } } } } }))
+      .rejects.toMatchObject({ name: "PiSessionCreationError", code: "sandbox_unavailable", message: "Read-only shell sandbox is not available" });
+    expect(createSession).not.toHaveBeenCalled();
+    expect(connections).not.toHaveBeenCalled();
+    expect(diagnostics).toEqual([expect.objectContaining({ stage: "sandbox", code: "sandbox_unavailable", executionProfile: shellProfile.alias })]);
+    expect(JSON.stringify(diagnostics)).not.toContain(WORKSPACE_DIR);
+  });
+
+  it("fails the start when the session resolves another definition for bash", async () => {
+    const fixture = runtimeFixture();
+    const { session, dispose } = sessionFixture();
+    const createSession = vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      Object.assign(session as object, { getToolDefinition: (name: string) => name === "bash" ? { name } : options.customTools?.find((tool) => tool.name === name) });
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox: workingSandbox() })))
+      .rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("activates bash on the extension path and requires the server's bash definition", async () => {
+    const h = extensionHarness({ shell: "sandboxed" });
+    await h.create();
+    const options = h.createSessionFromServices.mock.calls[0]![0] as { tools: string[]; customTools?: { name: string }[] };
+    expect(options.tools).toEqual([...PROFILE_TOOLS["read-only"], "bash"]);
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "bash"]);
+
+    const replaced = extensionHarness({ shell: "sandboxed" });
+    replaced.createSessionFromServices.mockImplementationOnce(async () => {
+      Object.assign(replaced.session as object, { getToolDefinition: (name: string) => name === "bash" ? { name } : undefined });
+      return { session: replaced.session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(replaced.create()).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+  });
+});
+
+describe("protected skill roots and aborted sandbox probes", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  async function skillDirectory(name: string): Promise<string> {
+    const directory = join(await temporaryRoot("sdk-adapter-skill-"), name);
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "SKILL.md"), `---\nname: ${name}\ndescription: Review changes.\n---\nBody.\n`);
+    await writeFile(join(directory, "notes.txt"), "sibling-content");
+    return directory;
+  }
+
+  async function readTool(directory: string, options: { protectedReadPaths?: string[] }) {
+    const fixture = runtimeFixture();
+    const createSession = vi.fn(async (sessionOptions: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      const { session } = sessionFixture();
+      exposeCustomTools(session, sessionOptions);
+      Object.assign(session as object, { resourceLoader: sessionOptions.resourceLoader });
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, ...options });
+    await adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, skills: [{ alias: "review", path: join(directory, "SKILL.md") }] } });
+    return createSession.mock.calls[0]![0].customTools!.find((tool) => tool.name === "read")!;
+  }
+  const readOf = (tool: { execute: (...args: never[]) => Promise<{ content: unknown }> }, path: string) =>
+    (tool.execute as unknown as (...args: unknown[]) => Promise<{ content: unknown }>)("call", { path }, undefined, undefined, undefined);
+
+  it("keeps a normal skill directory as a read root", async () => {
+    const directory = await skillDirectory("review");
+    const read = await readTool(directory, {});
+    await expect(readOf(read as never, join(directory, "notes.txt"))).resolves.toBeDefined();
+  });
+
+  it("limits a skill directory equal to a protected configuration directory to the skill file", async () => {
+    const directory = await skillDirectory("review");
+    const read = await readTool(directory, { protectedReadPaths: [directory] });
+    await expect(readOf(read as never, join(directory, "SKILL.md"))).resolves.toBeDefined();
+    await expect(readOf(read as never, join(directory, "notes.txt"))).rejects.toThrow("Path is outside the allowed read roots");
+  });
+
+  it("limits a skill directory that contains a protected configuration directory", async () => {
+    const directory = await skillDirectory("review");
+    await mkdir(join(directory, "cfg"));
+    const read = await readTool(directory, { protectedReadPaths: [join(directory, "cfg")] });
+    await expect(readOf(read as never, join(directory, "notes.txt"))).rejects.toThrow("Path is outside the allowed read roots");
+  });
+
+  it("fails the start, killing the probe, when the start request is aborted during the probe", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const kill = vi.fn();
+    const spawned = deferred<void>();
+    const sandbox: SandboxDependencies = {
+      trusted: () => true, rootEntries: () => [], gitCommonDir: async () => undefined,
+      spawn: () => (spawned.resolve(), Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill }) as unknown as SandboxChild),
+    };
+    const controller = new AbortController();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    const starting = adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, shell: "sandboxed" }, signal: controller.signal });
+    const failed = expect(starting).rejects.toMatchObject({ code: "sandbox_unavailable" });
+    await spawned.promise;
+    controller.abort();
+    await failed;
+    expect(kill).toHaveBeenCalledWith("SIGKILL");
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("does not run the probe for a start that is already aborted", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    await expect(adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, shell: "sandboxed" }, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: "sandbox_unavailable" });
+    expect(sandbox.spawned).toHaveLength(0);
+    expect(createSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("confined read-only tools", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  const createIn = (adapter: SdkPiSessionAdapter, executionProfile: ResolvedExecutionProfile = profile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile });
+
+  it("passes confined read, grep, find and ls as custom tools of a read-only session", async () => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const createSession = createSessionFixture(session);
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }));
+    const options = createSession.mock.calls[0]![0];
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
+    expect(options.tools).toEqual(PROFILE_TOOLS["read-only"]);
+  });
+
+  it("passes no custom tools to a coding session", async () => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const createSession = createSessionFixture(session);
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }), { ...profile, permissionProfile: "coding" });
+    const options = createSession.mock.calls[0]![0];
+    expect(options).not.toHaveProperty("customTools");
+    expect(options.tools).toEqual(PROFILE_TOOLS.coding);
+  });
+
+  it("puts the confined tools ahead of granted MCP tools", async () => {
+    const h = extensionHarness({ withMcp: true });
+    await h.create({ ...h.executionProfile, extensions: [] });
+    const options = h.createSession.mock.calls[0]![0];
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "mcp_knowledge_search"]);
+  });
+
+  it("passes the confined tools through the extension path of a read-only session only", async () => {
+    const readOnly = extensionHarness();
+    await readOnly.create();
+    expect((readOnly.createSessionFromServices.mock.calls[0]![0] as { customTools?: { name: string }[] }).customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
+    const coding = extensionHarness({ permissionProfile: "coding" });
+    await coding.create();
+    expect(coding.createSessionFromServices.mock.calls[0]![0]).not.toHaveProperty("customTools");
+  });
+
+  it("fails the start when the session resolves another definition for a confined name", async () => {
+    for (const replaced of ["read", "grep", "find", "ls"]) {
+      const fixture = runtimeFixture();
+      const { session, dispose } = sessionFixture();
+      const diagnostics: SdkPiAdapterDiagnostic[] = [];
+      const createSession = vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+        Object.assign(session as object, { getToolDefinition: (name: string) => name === replaced ? { name } : options.customTools?.find((tool) => tool.name === name) });
+        return { session } as unknown as CreateAgentSessionResult;
+      });
+      const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, diagnosticSink: (value) => { diagnostics.push(value); } });
+      await expect(createIn(adapter), replaced).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+      expect(diagnostics).toContainEqual(expect.objectContaining({ stage: "postcheck", code: "pi_session_creation_failed" }));
+      expect(dispose, replaced).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("fails the start when the session cannot report tool definitions", async () => {
+    const fixture = runtimeFixture();
+    const { session, dispose } = sessionFixture();
+    const createSession = vi.fn(async (): Promise<CreateAgentSessionResult> => ({ session }) as unknown as CreateAgentSessionResult);
+    await expect(createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }))).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the extension-path start when the session resolves another definition", async () => {
+    const h = extensionHarness();
+    h.createSessionFromServices.mockImplementationOnce(async () => {
+      Object.assign(h.session as object, { getToolDefinition: (name: string) => ({ name }) });
+      return { session: h.session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(h.create()).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(h.runtimeDispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when the workspace root cannot be resolved", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession });
+    await expect(adapter.create({ cwd: join(WORKSPACE_DIR, "missing"), executionProfile: profile })).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(createSession).not.toHaveBeenCalled();
+  });
+});
 
 describe("SdkPiSessionAdapter allowlisted extensions", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -666,7 +957,7 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     const handle = await h.create();
     expect(h.resolveExtension).toHaveBeenCalledWith(fixtureExtension);
     expect(h.createServices).toHaveBeenCalledWith(expect.objectContaining({
-      cwd: "/hidden/workspace", agentDir: "/hidden/workspace", modelRuntime: h.fixture.runtime,
+      cwd: WORKSPACE_DIR, agentDir: WORKSPACE_DIR, modelRuntime: h.fixture.runtime,
       resourceLoaderOptions: expect.objectContaining({
         noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
         additionalExtensionPaths: ["/hidden/extension/fixture-ext"],
@@ -799,8 +1090,11 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     try {
       const h = extensionHarness();
       const late = deferred<AgentSessionRuntime>();
-      h.createRuntime.mockImplementationOnce(() => late.promise);
+      const started = deferred<void>();
+      h.createRuntime.mockImplementationOnce(() => { started.resolve(); return late.promise; });
       const outcome = expect(h.create()).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+      // Resolving the confined read roots uses real file system I/O, which fake timers do not drive.
+      await started.promise;
       await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);
       await outcome;
       late.resolve(h.sessionRuntime);
@@ -862,8 +1156,11 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     try {
       const h = extensionHarness({ withMcp: true });
       h.runtimeDispose.mockImplementation(() => new Promise<undefined>(() => undefined));
-      h.bindExtensions.mockRejectedValueOnce(new Error("hidden"));
+      const bound = deferred<void>();
+      h.bindExtensions.mockImplementationOnce(async () => { bound.resolve(); throw new Error("hidden"); });
       const outcome = expect(h.create()).rejects.toMatchObject({ code: "extension_load_failed" });
+      // Resolving the confined read roots uses real file system I/O, which fake timers do not drive.
+      await bound.promise;
       await vi.advanceTimersByTimeAsync(0);
       expect(h.mcpClosed).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(SESSION_CREATION_TIMEOUT_MS);

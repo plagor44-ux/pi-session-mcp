@@ -10,6 +10,7 @@ import {
   createAgentSessionFromServices,
   createAgentSessionRuntime,
   createAgentSessionServices,
+  createBashToolDefinition,
   DefaultResourceLoader,
   ModelRuntime,
   type PromptOptions,
@@ -17,7 +18,11 @@ import {
   type Skill,
   SessionManager,
   SettingsManager,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { homedir, userInfo } from "node:os";
+import { join } from "node:path";
+import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import type { ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 import {
@@ -38,7 +43,8 @@ import {
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
-import { composeSessionTools, PROFILE_TOOLS } from "./session-tools.js";
+import { createSandboxedBashOperations, probeSandbox, type SandboxDependencies } from "./sandbox-shell.js";
+import { composeSessionTools, profileTools } from "./session-tools.js";
 
 export { PROFILE_TOOLS } from "./session-tools.js";
 
@@ -52,7 +58,7 @@ export const SESSION_CREATION_TIMEOUT_MS = 10_000;
 export interface SdkPiAdapterDiagnostic {
   readonly level: "error";
   readonly event: "pi_session_creation_failed";
-  readonly stage: "runtime" | "provider" | "model" | "check_auth" | "get_auth" | "availability" | "resource_loader" | "mcp_tools" | "create_session" | "postcheck" | "extension_resolve" | "extension_load" | "extension_bind" | "skill_load";
+  readonly stage: "runtime" | "provider" | "model" | "check_auth" | "get_auth" | "availability" | "resource_loader" | "mcp_tools" | "create_session" | "postcheck" | "extension_resolve" | "extension_load" | "extension_bind" | "skill_load" | "sandbox";
   readonly code: PiSessionCreationErrorCode;
   readonly executionProfile: string;
   readonly provider: string;
@@ -88,6 +94,13 @@ export interface SdkPiSessionAdapterOptions {
   /** Resolves a pinned extension to its installed package directory. */
   readonly resolveExtension?: (extension: ExtensionSpec) => Promise<string>;
   readonly extensionSdk?: ExtensionSdk;
+  /** Host seams of the read-only shell sandbox; tests inject a fake runner. */
+  readonly sandbox?: SandboxDependencies;
+  /**
+   * Directories a skill directory must not expose through the read tools, in addition to the
+   * operator's home and the Pi agent directory (`~/.pi`). The server passes the configuration directory.
+   */
+  readonly protectedReadPaths?: readonly string[];
 }
 
 class AuthDeadlineError extends Error {
@@ -394,6 +407,8 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
   private readonly mcpConnectionFactory: McpConnectionFactory;
   private readonly resolveExtension: (extension: ExtensionSpec) => Promise<string>;
   private readonly extensionSdk: ExtensionSdk;
+  private readonly sandbox: SandboxDependencies;
+  private readonly protectedReadPaths: readonly string[];
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
     this.modelRuntimeFactory = options.modelRuntimeFactory ?? (() => ModelRuntime.create({ refreshOnCreate: false }));
@@ -402,6 +417,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     this.mcpConnectionFactory = options.mcpConnectionFactory ?? createStdioMcpConnection;
     this.resolveExtension = options.resolveExtension ?? ((extension) => resolvePiExtension(extension));
     this.extensionSdk = options.extensionSdk ?? DEFAULT_EXTENSION_SDK;
+    this.sandbox = options.sandbox ?? {};
+    // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
+    const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
+    this.protectedReadPaths = [home, join(home, ".pi"), ...(options.protectedReadPaths ?? [])];
   }
 
   async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {
@@ -425,8 +444,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "resource_loader", "pi_session_creation_failed");
     }
 
+    const confined = await this.confinedTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
-    const tools = [...PROFILE_TOOLS[executionProfile.permissionProfile], ...mcpTools.tools.map((tool) => tool.name)];
+    const tools = [...profileTools(executionProfile.permissionProfile, executionProfile.shell), ...mcpTools.tools.map((tool) => tool.name)];
+    const customTools = [...confined, ...mcpTools.tools];
     let session: AgentSession;
     try {
       ({ session } = await withCreationDeadline(
@@ -440,7 +461,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
           resourceLoader,
           // With an explicit tools list, Pi also needs custom tool names here to activate them.
           tools,
-          ...(mcpTools.tools.length === 0 ? {} : { customTools: mcpTools.tools }),
+          ...(customTools.length === 0 ? {} : { customTools }),
         }),
         (late) => disposeSdkSession(late.session),
       ));
@@ -449,7 +470,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }
     return this.admit(session, executionProfile, tools, mcpTools, () => disposeSdkSession(session),
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills, [], confined);
   }
 
   private async createWithExtensions(
@@ -497,9 +518,11 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_load", "extension_load_failed");
     }
     const model = await this.resolveVerifiedModel(services.modelRuntime, executionProfile);
+    const confined = await this.confinedTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
+    const customTools = [...confined, ...mcpTools.tools];
     const grantedTools = executionProfile.grantedExtensionTools ?? [];
-    const composed = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools, grantedTools);
+    const composed = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools, grantedTools, executionProfile.shell);
     if (!composed.ok) {
       await mcpTools.close();
       throw this.failure(executionProfile, "extension_load", composed.code);
@@ -515,7 +538,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
             model,
             thinkingLevel: executionProfile.thinkingLevel,
             tools,
-            ...(mcpTools.tools.length === 0 ? {} : { customTools: mcpTools.tools }),
+            ...(customTools.length === 0 ? {} : { customTools }),
           })),
           services,
           diagnostics: services.diagnostics,
@@ -548,7 +571,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       // A `session_start` handler may register a tool that replaces a built-in or granted tool.
       // Tools an extension registers later, during a turn, are not re-checked: allowlisted
       // extensions are trusted code.
-      const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services), grantedTools);
+      const recheck = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), registeredExtensionTools(services), grantedTools, executionProfile.shell);
       if (!recheck.ok) throw this.failure(executionProfile, "extension_bind", recheck.code);
       if (recheck.tools.length !== tools.length || recheck.tools.some((name, index) => name !== tools[index])) conflict = true;
     } catch (error) {
@@ -561,7 +584,33 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools, confined);
+  }
+
+  /**
+   * The server's own tool definitions of a read-only session (ADR 0013); none for coding. The workspace
+   * root is the session directory: a root that cannot be resolved fails the start. With a sandboxed shell
+   * the sandbox is probed first, and a profile whose sandbox cannot start never gets a session.
+   */
+  private async confinedTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
+    const { executionProfile } = input;
+    if (executionProfile.permissionProfile !== "read-only") return [];
+    let roots: string[];
+    try {
+      roots = await allowedReadRoots(input.cwd, skills, this.protectedReadPaths);
+    } catch {
+      throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
+    }
+    const tools = createConfinedReadOnlyTools(input.cwd, roots);
+    if (executionProfile.shell === "sandboxed") {
+      // The first root is the real path of the workspace.
+      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
+      tools.push(createBashToolDefinition(input.cwd, {
+        operations: createSandboxedBashOperations(roots[0]!, this.sandbox),
+        exposeSessionEnvironment: false,
+      }) as unknown as ToolDefinition);
+    }
+    return tools;
   }
 
   private async loadSkills(input: { cwd: string; executionProfile: ResolvedExecutionProfile }): Promise<Skill[]> {
@@ -664,9 +713,16 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     toolCheck: "exact" | "subset" = "exact",
     skills: readonly Skill[] = [],
     requiredTools: readonly string[] = [],
+    // The server's own definitions must be the ones the session resolves for their names.
+    ownDefinitions: readonly ToolDefinition[] = [],
   ): Promise<PiSessionHandle> {
     try {
       this.checkResources(session.resourceLoader, skills, executionProfile, "postcheck");
+      for (const definition of ownDefinitions) {
+        if (session.getToolDefinition(definition.name) !== definition) {
+          throw this.failure(executionProfile, "postcheck", "pi_session_creation_failed");
+        }
+      }
       if (session.model?.provider !== executionProfile.provider || session.model.id !== executionProfile.model) {
         throw this.failure(executionProfile, "postcheck", "execution_selection_mismatch");
       }

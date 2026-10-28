@@ -56,6 +56,7 @@ records name the package version and the build they ran on, see
     "thinkingLevel": "medium",
     "extensions": [],
     "grantedExtensionTools": [],
+    "shell": "none",
     "skills": []
   }]
 }
@@ -63,9 +64,9 @@ records name the package version and the build they ran on, see
 
 `events.delivery` is `spool` when the loaded configuration enables turn-event delivery (`"events": { "delivery": "spool" }`) and `off` otherwise. It reports configured intent, except that it is `off` when the server found no spool location at startup (no `PI_SESSION_MCP_EVENTS_DIR` and no absolute `XDG_RUNTIME_DIR`, as under Codex); it makes no claim that the spool directory is writable, and it carries no path.
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, the event delivery setting, configured aliases and workspace modes, and the nine documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, or `read-only`; a missing modes entry is reported as `unset`. Container entries also carry `writers` (configured count, not free capacity) and `defaultBase` (short branch name, or `null` if not yet recorded), not writer names or other writers' branches. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `grantedExtensionTools`, directly after `extensions`, lists the configured extension tool grants in configured order, `[]` when absent. It is configuration intent only, not proof of registration, activation or declaration to the model. `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, the event delivery setting, configured aliases and workspace modes, and the ten documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, or `read-only`; a missing modes entry is reported as `unset`. Container entries also carry `writers` (configured count, not free capacity) and `defaultBase` (short branch name, or `null` if not yet recorded), not writer names or other writers' branches. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `grantedExtensionTools`, directly after `extensions`, lists the configured extension tool grants in configured order, `[]` when absent. It is configuration intent only, not proof of registration, activation or declaration to the model. `shell`, directly after `grantedExtensionTools`, is `none` or `sandboxed` ([ADR 0013](adr/0013-hardened-read-only-profiles.md)). `sandboxed` means the profile is configured to get a `bash` tool that runs each command in a network-less bubblewrap sandbox; it is configuration intent only and no claim that the sandbox works on this host (a failing sandbox surfaces as `sandbox_unavailable` at session start, and Doctor checks it offline). `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
 
-Setup verify accepts and validates `grantedExtensionTools` in its bounded direct
+Setup verify accepts and validates `grantedExtensionTools` and `shell` in its bounded direct
 MCP capabilities check, without starting a session or using a provider.
 **Verifier limit:** at maximum field sizes (8 extension specs of 256 characters,
 32 grants of 64 characters, provider and model of 256 characters each), at most
@@ -110,6 +111,31 @@ tools: registered-but-inactive tools fail closed too. Lazy registration in
 `session_start` or later is unsupported. A grant is the operator's trust
 decision: third-party tools may write, and workspace modes `container` and
 `read-only` do not restrict them. See [ADR 0010](adr/0010-read-only-extension-tools.md).
+
+### Read-only confinement and the sandboxed shell
+
+[ADR 0013](adr/0013-hardened-read-only-profiles.md) confines `read`, `grep`,
+`find` and `ls` of **every** read-only profile to the session's workspace and
+the directories of the profile's selected skill files. A `path` outside them
+(absolute, `..`, `~`, a symlink leading out, a leading `@`, a `file:` URL, a
+Unicode space or NUL) is an ordinary tool error to the model,
+`Path is outside the allowed read roots`, without the path. It is not a start
+or turn error and has no code. Files outside the workspace that earlier
+read-only sessions could read are no longer readable. Coding profiles are
+unchanged.
+
+The optional profile field `shell` takes the single value `"sandboxed"`. It is
+valid only on `read-only` profiles, not together with `grantedExtensionTools`,
+and only on Linux; any other combination prevents startup with
+`invalid_execution_profile_config`. Such a profile also has a `bash` tool. Each
+command runs under `/usr/bin/bwrap` with no network, the workspace as a
+temporary copy-on-write overlay (writes vanish when the command ends), `/usr`
+and `/etc` read-only and no other host path. Before the session starts the
+server runs a probe through the same sandbox; if the binary is untrusted or the
+probe fails, start fails with `sandbox_unavailable` and no session exists. There
+is no unsandboxed fallback. For a linked worktree the main repository's Git
+directory is mounted as a second temporary overlay when its pointers are
+consistent, so `git log` and `git blame` work. The sandbox's `/tmp` is limited to 512 MiB, and a command without a `timeout` argument is killed after 600 seconds.
 
 ## Automated writer boundary (Plan B)
 
@@ -166,6 +192,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
 | `extension_tool_missing` | A granted extension tool is not registered at load or is not active and declared to the model at admission. Fixed message: `Granted Pi extension tool is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
 | `skill_load_failed` | A skill that the profile selects could not be loaded: a missing (also a `builtin:` name that matches no override and no shipped skill), unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
+| `sandbox_unavailable` | A profile with `shell: "sandboxed"` cannot start its shell sandbox: the bubblewrap binary is missing or untrusted, or the probe run for the session's workspace failed or was cancelled with the start request. Fixed message: `Read-only shell sandbox is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `writer_uncollected` | The writer is not at its collected baseline, or its guard/Git state could not be verified; controller must collect and reset it. |
 | `writer_busy` | Controller action: a session or another operation holds the writer; wait for or close it. Setup waits briefly (10 seconds) for the lease, then fails with this code. |

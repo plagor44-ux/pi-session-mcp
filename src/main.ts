@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { stdoutGuard } from "./stdout-guard-install.js";
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
 import { RoutingPiSessionAdapter, WriterRelayAdapter } from "./writer-relay.js";
 import { serveStdio, StdioServerTransport } from "@modelcontextprotocol/server/stdio";
@@ -63,7 +63,11 @@ async function main(): Promise<void> {
       } else spool = TurnEventSpool.open(directory, { diagnostic: writeDiagnostic });
     }
     const events = spool;
-    const hostAdapter = new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic });
+    const hostAdapter = new SdkPiSessionAdapter({
+      diagnosticSink: writeDiagnostic,
+      // The configuration directory must never become readable through a skill directory.
+      ...(process.env.PI_SESSION_MCP_CONFIG === undefined || process.env.PI_SESSION_MCP_CONFIG === "" ? {} : { protectedReadPaths: [dirname(resolve(process.env.PI_SESSION_MCP_CONFIG))] }),
+    });
     const relay = guardPath === undefined;
     const adapter = relay ? new RoutingPiSessionAdapter(hostAdapter, new WriterRelayAdapter({
       home: homedir(), workspaceModes: config.workspaceModes, executionProfiles: config.executionProfiles,

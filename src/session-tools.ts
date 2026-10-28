@@ -1,9 +1,14 @@
-import type { PermissionProfile } from "./execution-profile.js";
+import type { PermissionProfile, ShellMode } from "./execution-profile.js";
 
 export const PROFILE_TOOLS: Readonly<Record<PermissionProfile, readonly string[]>> = {
   "read-only": ["read", "grep", "find", "ls"],
   coding: ["read", "bash", "edit", "write", "grep", "find", "ls"],
 };
+
+/** The built-in tools of a profile: a read-only profile with a sandboxed shell also has `bash`. */
+export function profileTools(permissionProfile: PermissionProfile, shell?: ShellMode): readonly string[] {
+  return permissionProfile === "read-only" && shell === "sandboxed" ? [...PROFILE_TOOLS["read-only"], "bash"] : PROFILE_TOOLS[permissionProfile];
+}
 
 export const MAX_GRANTED_EXTENSION_TOOLS = 32;
 
@@ -43,6 +48,7 @@ export function composeSessionTools(
   mcpToolNames: readonly string[],
   extensionToolNames: readonly (readonly string[])[],
   grantedExtensionTools: readonly string[] = [],
+  shell?: ShellMode,
 ): ComposedSessionTools {
   const reserved = new Set([...PROFILE_TOOLS.coding, ...PROFILE_TOOLS["read-only"], ...mcpToolNames]);
   const extensionTools: string[] = [];
@@ -56,5 +62,5 @@ export function composeSessionTools(
   if (permissionProfile === "read-only" && grantedExtensionTools.some((name) => !extensionTools.includes(name))) {
     return { ok: false, code: "extension_tool_missing" };
   }
-  return { ok: true, tools: [...PROFILE_TOOLS[permissionProfile], ...mcpToolNames, ...(permissionProfile === "coding" ? extensionTools : grantedExtensionTools)] };
+  return { ok: true, tools: [...profileTools(permissionProfile, shell), ...mcpToolNames, ...(permissionProfile === "coding" ? extensionTools : grantedExtensionTools)] };
 }

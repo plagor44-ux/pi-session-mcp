@@ -92,13 +92,15 @@ export async function calibrateFilters(repetitions = 5): Promise<FilterMeasureme
     let sessionOrdinal = 0;
     let activeSubscriptions = 0;
     const disposalCounts: number[] = [];
-    const createSession = async (_options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+    const createSession = async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
       const thisSession = ++sessionOrdinal;
       disposalCounts.push(0);
       if (caseName === "late_and_sessions") savedListeners.push(...allListeners);
       const listeners = new Set<(event: { type: string; message?: unknown; result?: unknown }) => void>();
       const session = {
         sessionId: "scripted-sdk-session", model: { provider: "scripted", id: "scripted" }, thinkingLevel: "off",
+        // Like the SDK: a custom tool's name resolves to the definition the session was created with.
+        getToolDefinition: (name: string) => options.customTools?.find((tool) => tool.name === name),
         resourceLoader: { getSkills: () => ({ skills: [], diagnostics: [] }), getPrompts: () => ({ prompts: [], diagnostics: [] }), getThemes: () => ({ themes: [], diagnostics: [] }) },
         subscribe(listener: (event: { type: string; message?: unknown; result?: unknown }) => void) { listeners.add(listener); allListeners.add(listener); activeSubscriptions++; return () => { if (listeners.delete(listener)) activeSubscriptions--; }; },
         async prompt(_prompt: string, options: { preflightResult?: (value: "started") => void }) {

@@ -29,7 +29,7 @@ export function projectCapabilities(
       }),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
-      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, skills }) => ({
+      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, shell, skills }) => ({
         alias,
         default: isDefault,
         permissionProfile,
@@ -38,6 +38,8 @@ export function projectCapabilities(
         thinkingLevel,
         extensions: (extensions ?? []).map((extension) => extension.spec),
         grantedExtensionTools: [...(grantedExtensionTools ?? [])],
+        // Configured intent only: whether the server's probe succeeds is a start-time fact.
+        shell: shell ?? ("none" as const),
         skills: (skills ?? []).map((skill) => skill.alias),
       })),
   };

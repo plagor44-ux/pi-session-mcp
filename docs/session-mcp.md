@@ -137,6 +137,19 @@ made safe by this configuration. Use dedicated credentials and external process
 isolation where stronger boundaries are required. Do not grant a generic tool that
 can dispatch arbitrary unreviewed operations and assume that its name is a boundary.
 
+Granting research tools (search, documentation lookup) to a read-only profile
+uses this same `mcpServers` mechanism with `readOnly: true`. Since every
+read-only profile is confined to its workspace and selected skill directories
+([ADR 0013](adr/0013-hardened-read-only-profiles.md)), such a tool cannot be fed
+files outside them through the model's read tools. Prefer query-style tools
+(search, documentation lookup) over tools that fetch free URLs: a fetch tool
+with free-form input is still a channel for whatever the workspace contains.
+The MCP server itself is trusted local code and is not confined.
+A skill directory that equals or contains the operator's home, the configuration
+file's directory or `~/.pi` is not a read root; only the skill file itself is,
+so a catalog entry such as `./SKILL.md` next to the configuration does not
+expose the configuration.
+
 Only local stdio tools are covered here. HTTP/SSE/OAuth transports, sampling,
 elicitation, roots negotiation, separate resource/prompt APIs and global extension
 loading are not added. MCP tool invocations are marked sequential within Pi's tool

@@ -258,6 +258,65 @@ describe("execution profile extensions", () => {
       .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
   });
 
+  describe("sandboxed shell", () => {
+    const withPlatform = async <T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> => {
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { ...original, value: platform });
+      try { return await run(); } finally { Object.defineProperty(process, "platform", original); }
+    };
+
+    it("accepts shell sandboxed on a read-only profile and carries it into the resolved profile", async () => {
+      await withPlatform("linux", async () => {
+        const config = await loadProfiles({ safe: { ...safe, shell: "sandboxed" } });
+        const profile = config.executionProfiles.get("safe")!;
+        expect(profile.shell).toBe("sandboxed");
+        expect(toResolvedExecutionProfile(profile).shell).toBe("sandboxed");
+      });
+    });
+
+    it("accepts a sandboxed shell together with extensions that grant no tools", async () => {
+      await withPlatform("linux", async () => {
+        const config = await loadProfiles({ safe: { ...safe, shell: "sandboxed", extensions: ["npm:pi-lens@4.4.3"] } });
+        expect(config.executionProfiles.get("safe")?.shell).toBe("sandboxed");
+      });
+    });
+
+    it("keeps profiles without a shell free of the shell key", async () => {
+      const config = await loadProfiles({ safe });
+      const profile = config.executionProfiles.get("safe")!;
+      expect("shell" in profile).toBe(false);
+      expect("shell" in toResolvedExecutionProfile(profile)).toBe(false);
+    });
+
+    it("rejects a sandboxed shell on a coding profile", async () => {
+      await withPlatform("linux", async () => {
+        await expect(loadProfiles({ safe, code: { ...safe, default: false, permissionProfile: "coding", shell: "sandboxed" } }))
+          .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+      });
+    });
+
+    it("rejects a sandboxed shell together with granted extension tools, also an empty grant", async () => {
+      await withPlatform("linux", async () => {
+        for (const grantedExtensionTools of [["symbol_search"], []]) {
+          await expect(loadProfiles({ safe: { ...safe, shell: "sandboxed", extensions: ["npm:pi-lens@4.4.3"], grantedExtensionTools } }))
+            .rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+        }
+      });
+    });
+
+    it.each(["darwin", "win32", "freebsd"] as const)("rejects a sandboxed shell on %s", async (platform) => {
+      await withPlatform(platform, async () => {
+        await expect(loadProfiles({ safe: { ...safe, shell: "sandboxed" } })).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+      });
+    });
+
+    it.each(["none", "bash", "", true, null])("rejects the shell value %j", async (shell) => {
+      await withPlatform("linux", async () => {
+        await expect(loadProfiles({ safe: { ...safe, shell } })).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+      });
+    });
+  });
+
   it.each([
     [["symbol_search", "symbol_search"]],
     [Array.from({ length: 33 }, (_, index) => `tool_${index}`)],
