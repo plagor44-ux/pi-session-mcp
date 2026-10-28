@@ -25,6 +25,20 @@ it("documents literal writer findings and Doctor writer ids", () => {
   for (const removed of ["writer_registered", "registration_not_equivalent", "writer_reconnect_required"]) {
     expect(docs.split("\n").some((line) => line.startsWith(`| \`${removed}\` |`)), removed).toBe(false);
   }
+  for (const term of ["defaultBase", "writer_unavailable", "base_not_applicable", "--reset --base <branch> --apply"]) {
+    expect(docs).toContain(term);
+  }
+  for (const path of ["docs/tool-contracts.md", "skills/pi-session-orchestration/references/start-errors.md"]) {
+    const contract = read(path);
+    for (const term of ["writer_unavailable", "writer_session_lost", "base_not_applicable", "none_ready", "none_at_base", "none_admitted", "busy", "notAtBaseline", "settingsChanged"]) {
+      expect(contract, `${path}: ${term}`).toContain(term);
+    }
+  }
+  for (const path of ["README.md", "docs/execution-modes.md", "docs/isolation-setup.md", "skills/pi-session-orchestration/SKILL.md"]) {
+    const guidance = read(path);
+    expect(guidance, path).not.toContain("writer_reconnect_required");
+    expect(guidance, path).toMatch(/no reconnect/i);
+  }
   const doctorDocs = read("docs/doctor-design.md");
   const ids = new Set([...read("src/doctor.ts").matchAll(/(?:failure|warning|ok)\("(writer_[^"]+)"/g)].map((match) => match[1]!));
   expect(ids.size).toBe(7);
