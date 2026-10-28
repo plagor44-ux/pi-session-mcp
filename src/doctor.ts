@@ -6,6 +6,7 @@ import { createProcessRunner } from "./setup-process.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
+import { LEASE_DIRECTORY } from "./writer-lease.js";
 import { loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -22,8 +23,9 @@ export type DoctorCheckId =
   | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
-  | "workspace_mode_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
-  | "container_profile_refused" | "writer_not_ready" | "writer_dirty" | "writer_git_identity_missing" | "writer_uncollected_bundle"
+  | "workspace_mode_unset" | "workspace_base_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
+  | "container_profile_refused" | "writer_lease_directory" | "writer_not_ready" | "writer_not_migrated" | "writer_off_default_base"
+  | "writer_dirty" | "writer_git_identity_missing" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "event_spool_root";
@@ -79,6 +81,8 @@ export interface DoctorDependencies {
   readonly env?: NodeJS.ProcessEnv;
   /** Metadata of the spool root without following a final symbolic link, `undefined` when absent; used only when event delivery is enabled. */
   readonly eventSpoolRoot?: (path: string) => Promise<EventSpoolRootInfo | undefined>;
+  /** Metadata of the writer lease directory without following a final symbolic link, `undefined` when absent. */
+  readonly writerLeaseRoot?: (path: string) => Promise<EventSpoolRootInfo | undefined>;
   /** Effective user id of the current process; defaults to the real one. */
   readonly uid?: number;
 }
@@ -98,7 +102,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_not_ready", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -187,11 +191,28 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
   } catch { return false; }
 }
 
-async function defaultEventSpoolRoot(path: string): Promise<EventSpoolRootInfo | undefined> {
+async function defaultRootInfo(path: string): Promise<EventSpoolRootInfo | undefined> {
   try {
     const info = await lstat(path);
     return { isDirectory: info.isDirectory(), uid: info.uid, mode: info.mode };
   } catch (error) { if (isMissing(error)) return undefined; throw error; }
+}
+
+/**
+ * Offline check of the host-only writer lease directory. A missing directory is fine because the
+ * first lease creates it. An existing entry must be a real directory of the current user with mode
+ * 0700: the rule `acquireWriterLease` applies before it opens a lease file. Nothing is created,
+ * repaired or read, and no path or lease file name appears in the report.
+ */
+async function writerLeaseCheck(home: string, probe: (path: string) => Promise<EventSpoolRootInfo | undefined>, uid: number | undefined): Promise<DoctorCheck | undefined> {
+  let info: EventSpoolRootInfo | undefined;
+  try { info = await probe(join(home, ...LEASE_DIRECTORY)); }
+  catch { return failure("writer_lease_directory", "writer lease", "grant access to the writer lease directory"); }
+  if (info === undefined) return undefined;
+  if (!info.isDirectory || (uid !== undefined && info.uid !== uid) || (info.mode & 0o7777) !== 0o700) {
+    return failure("writer_lease_directory", "writer lease", "replace the lease entry with a private directory owned by the current user (chmod 700)");
+  }
+  return ok("writer_lease_directory", "writer lease");
 }
 
 /**
@@ -299,6 +320,7 @@ async function writerDirty(clone: string, state: WriterState): Promise<boolean> 
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
   const fs = dependencies.fileSystem ?? defaultFileSystem;
   const root = dependencies.packageRoot ?? process.cwd();
+  const home = dependencies.home ?? homedir();
   const checks: DoctorCheck[] = [];
   let metadata: DoctorPackageMetadata | undefined;
   try {
@@ -389,8 +411,12 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     let runtime: Awaited<ReturnType<typeof defaultWriterRuntime>> | undefined;
     let rawConfig: unknown, rawConfigLoaded = false, rawConfigReadable = false;
     let availableBuiltinSkills: ReadonlySet<string> = new Set();
+    const offDefaultBase = new Map<string, number>();
     for (const [alias, entry] of config.workspaceModes) {
       if (entry.mode !== "container" || !entry.container) continue;
+      checks.push(entry.container.base === undefined
+        ? warning("workspace_base_unset", alias, `record the workspace default base with pi-session-mcp-setup --repo ${alias} --base <branch> --apply`)
+        : ok("workspace_base_unset", alias));
       if (!rawConfigLoaded) {
         rawConfigLoaded = true;
         try {
@@ -410,7 +436,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
         if (refused.length === 0) checks.push(ok("container_profile_refused", alias));
       }
       for (let index = 1; index <= entry.container.writers; index++) {
-        const name = writerName(alias, index), home = dependencies.home ?? homedir(), paths = writerPaths(home, name);
+        const name = writerName(alias, index), paths = writerPaths(home, name);
         const remediation = `run pi-session-mcp-setup --repo ${alias} --apply, or --writer ${name} --recreate --apply`;
         let state: WriterState | undefined, ready = false;
         try {
@@ -422,6 +448,11 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
         } catch { /* Unreadable state or runtime is not ready. */ }
         checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));
         if (!state) continue;
+        checks.push(state.launch === "relay" ? ok("writer_not_migrated", name)
+          : warning("writer_not_migrated", name, `run pi-session-mcp-setup --repo ${alias} --apply to migrate the writer to the relay`));
+        if (entry.container.base !== undefined && ready && state.base.ref !== `refs/heads/${entry.container.base}`) {
+          offDefaultBase.set(alias, (offDefaultBase.get(alias) ?? 0) + 1);
+        }
         checks.push(await writerDirty(paths.clone, state)
           ? warning("writer_dirty", name, "collect writer work before resetting or recreating the writer") : ok("writer_dirty", name));
         let bundles = false;
@@ -433,6 +464,12 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           : warning("writer_git_identity_missing", name, "set user.name and user.email in the operator checkout, then reset the writer"));
         checks.push(bundles ? warning("writer_uncollected_bundle", name, "collect or review outstanding writer bundles") : ok("writer_uncollected_bundle", name));
       }
+    }
+    for (const [alias, entry] of config.workspaceModes) {
+      if (entry.mode !== "container" || !entry.container || entry.container.base === undefined) continue;
+      const count = offDefaultBase.get(alias) ?? 0;
+      checks.push(count === 0 ? ok("writer_off_default_base", alias)
+        : warning("writer_off_default_base", alias, `${count} ${count === 1 ? "writer is" : "writers are"} off the workspace default base; run pi-session-mcp-setup --repo ${alias} --apply to finish them back onto it`));
     }
   }
   if (config) {
@@ -491,7 +528,9 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
-  if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultEventSpoolRoot, dependencies.uid ?? process.getuid?.()));
+  if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
+  const lease = await writerLeaseCheck(home, dependencies.writerLeaseRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.());
+  if (lease) checks.push(lease);
   if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot), dependencies.releasedSkillTrees));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
