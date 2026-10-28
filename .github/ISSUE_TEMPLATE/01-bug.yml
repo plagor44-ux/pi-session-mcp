@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in Pi Session MCP behaves differently from its documentation or contract.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue may be worked on by a coding agent. Write it as a task: say what is wrong, what correct looks like, and how to check it.
+
+        Never include credentials, prompts, transcripts, absolute local paths or raw provider errors. Replace real values with placeholders such as `<alias>` or `<path>`. Suspected vulnerabilities go through [private reporting](https://github.com/plagor44-ux/pi-session-mcp/security/advisories/new), not here.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - MCP server and pi_* tools
+        - Configuration and execution profiles
+        - Read-only confinement and sandboxed shell
+        - Container writers and writer pool
+        - Setup CLI (client registration, hooks, skills)
+        - Doctor
+        - Turn events and wake hook
+        - Bundled skills
+        - Pi SDK and extensions
+        - Documentation
+        - Tests, eval and acceptance scripts
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Pi Session MCP version, Node.js version, OS, client and its version.
+      placeholder: "0.13.0, Node 24.22.0, Linux, Claude Code 2.x"
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened. Paste the sanitized tool result, error code or Doctor/setup report.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What should happen, with the document or contract that says so (for example `docs/tool-contracts.md`, an ADR, AGENTS.md).
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps, the shape of the configuration without real values, and how often it happens.
+      placeholder: |
+        1. Configure a read-only profile with `shell: "sandboxed"` ...
+        2. Call `pi_session_start` with ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements that are true once this is fixed. Include a regression test where possible.
+      placeholder: |
+        - `pi_session_start` returns `<code>` for ...
+        - A test in `test/<name>.test.ts` fails before the fix and passes after it.
+    validations:
+      required: true
+  - type: textarea
+    id: hints
+    attributes:
+      label: Suspected cause and affected files
+      description: Optional. Files, functions or commits you suspect. Mark guesses as guesses.
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Hygiene
+      options:
+        - label: This issue contains no credentials, prompts, transcripts, absolute local paths or raw provider errors.
+          required: true
