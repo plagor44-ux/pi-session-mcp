@@ -59,7 +59,7 @@ describe("resolveExecutionModes", () => {
     expect(executionModesSchema.parse(raw).workspaces.a).toMatchObject({ clean });
   });
 
-  it.each(["none", "go", "uv"] as const)("accepts the explicit cache kind %s", (cache) => {
+  it.each(["none", "go", "uv", "npm"] as const)("accepts the explicit cache kind %s", (cache) => {
     const raw = modes({ a: { mode: "container", profiles: ["code"], cache } });
     expect(resolveExecutionModes(raw, aliases, profiles).get("a")?.container?.cache).toBe(cache);
   });

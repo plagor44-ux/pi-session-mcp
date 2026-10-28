@@ -13,6 +13,11 @@
 
 ### Added
 
+- `--cache npm` mounts a private per-writer npm cache at `/pi/npm` with
+  `npm_config_cache=/pi/npm/cache`, retained across reset, finish and recreate
+  and removed with the writer
+  ([#165](https://github.com/plagor44-ux/pi-session-mcp/issues/165)).
+
 - Added: opt-in container setting `--clean all` removes ignored files from writer
   clones on reset and finish while preserving the default dependency-cache
   behavior and per-writer caches outside the clone

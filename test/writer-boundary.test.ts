@@ -50,6 +50,11 @@ it("builds the restricted serving boundary with explicit environment and Git pro
   for (const value of [`${paths.uv}:/pi/uv:rw`, "UV_CACHE_DIR=/pi/uv/cache", "npm_config_cache=/pi/uv/npm", "--network=none"]) expect(uv).toContain(value);
   expect(uv).not.toContain(`${paths.go}:/pi/go:rw`);
   expect(uv).not.toContain("GOPATH=/pi/go");
+  const npm = serveArgs(paths, { ...state, cache: "npm" }, serve, "/release");
+  expect(npm).toEqual([...baseArgs(), "-v", `${paths.npm}:/pi/npm:rw`, "-e", "npm_config_cache=/pi/npm/cache", imageId, ...serve]);
+  for (const other of [args, go, uv]) expect(other).not.toContain(`${paths.npm}:/pi/npm:rw`);
+  expect(npm).not.toContain(`${paths.uv}:/pi/uv:rw`);
+  expect(npm).not.toContain(`${paths.go}:/pi/go:rw`);
 });
 
 const baseArgs = (): string[] => [

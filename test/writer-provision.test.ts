@@ -68,6 +68,15 @@ it("provisions privately from the checkout bundle with ordered state and provide
   expect(f.calls.filter((call) => call.command === "podman" && call.args[0] === "run").every((call) => call.signal !== undefined)).toBe(true);
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_unchanged", status: "unchanged" });
 });
+it.each(["none", "go", "uv", "npm"] as const)("creates only the private cache directory for %s", async (cache) => {
+  const f = await fixture();
+  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, cache }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))?.cache).toBe(cache);
+  for (const kind of ["go", "uv", "npm"] as const) {
+    if (kind === cache) expect((await lstat(f.paths[kind])).mode & 0o777).toBe(0o700);
+    else await expect(lstat(f.paths[kind])).rejects.toMatchObject({ code: "ENOENT" });
+  }
+});
 it("creates only the private cache directory of the selected kind", async () => {
   const uv = await fixture();
   expect(await provisionWriter(uv.ctx, { index: 1, settings: { ...settings, cache: "uv" }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
@@ -82,14 +91,16 @@ it("creates only the private cache directory of the selected kind", async () => 
   await expect(lstat(none.paths.go)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(lstat(none.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("keeps the uv cache across recreate and drops it with the writer", async () => {
+it.each(["uv", "npm"] as const)("keeps the %s cache across reset/recreate and drops it with the writer", async (cache) => {
   const f = await fixture();
-  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, cache: "uv" }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
-  await writeFile(join(f.paths.uv, "keep"), "keep");
+  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, cache }, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });
+  await writeFile(join(f.paths[cache], "keep"), "keep");
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_reset" });
+  expect(await readFile(join(f.paths[cache], "keep"), "utf8")).toBe("keep");
   expect(await recreateWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_recreated" });
-  expect(await readFile(join(f.paths.uv, "keep"), "utf8")).toBe("keep");
+  expect(await readFile(join(f.paths[cache], "keep"), "utf8")).toBe("keep");
   expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toEqual({ status: "ok", code: "writer_removed" });
-  await expect(lstat(f.paths.uv)).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(lstat(f.paths[cache])).rejects.toMatchObject({ code: "ENOENT" });
 });
 it.each([["Worker", "worker@invalid", true], ["Worker", "", false], ["Bad\nName", "worker@invalid", false], ["x".repeat(257), "worker@invalid", false], ["-x", "worker@invalid", false], ["Worker", "--file=/x", false]] as const)("mirrors only a complete valid identity (%s, %s)", async (name, email, mirrored) => {
   const f = await fixture(undefined, [name, email]);

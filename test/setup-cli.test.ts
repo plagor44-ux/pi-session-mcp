@@ -28,7 +28,7 @@ describe("setup CLI", () => {
     it.each(["none", "reachable"])("passes tags %s into container settings", (tags) => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--tags", tags]).repo?.container?.tags).toBe(tags);
     });
-    it.each(["none", "go", "uv"])("passes the selected cache %s into container settings", (cache) => {
+    it.each(["none", "go", "uv", "npm"])("passes the selected cache %s into container settings", (cache) => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cache", cache]).repo?.container?.cache).toBe(cache);
     });
     it.each([

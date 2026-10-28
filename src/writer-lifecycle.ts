@@ -269,7 +269,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     // With spool delivery the spool directory exists from provisioning on: launch would otherwise add it to the
     // writer root, a host directory the acceptance harness digests around its own first launch.
     const spool = config.events?.delivery === "spool" ? [paths.events] : [];
-    const cache = settings.cache === "go" ? [paths.go] : settings.cache === "uv" ? [paths.uv] : [];
+    const cache = settings.cache === "none" ? [] : [paths[settings.cache]];
     for (const path of [paths.root, paths.clone, paths.config, paths.agent, paths.bundles, ...spool, ...cache]) await privateDirectory(path);
     const state: WriterState = {
       schemaVersion: 1, alias: ctx.alias, index, phase: "provisioning", lifecycle: settings.lifecycle,

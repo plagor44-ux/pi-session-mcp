@@ -92,11 +92,11 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("go");
   });
-  it("records the uv and npm cache in a container entry", async () => {
+  it.each(["uv", "npm"] as const)("records the %s cache in a container entry", async (cache) => {
     const { config, path } = await fixture();
-    const input = request({ mode: "container", container: { profiles: ["code"], cache: "uv" }, apply: true });
+    const input = request({ mode: "container", container: { profiles: ["code"], cache }, apply: true });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("uv");
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe(cache);
   });
   it("setup records --base dev for a container request", async () => {
     const { config, path } = await fixture();

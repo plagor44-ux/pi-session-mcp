@@ -53,6 +53,10 @@ export function serveArgs(paths: WriterPaths, state: WriterState, command: reado
     "-v", `${paths.uv}:/pi/uv:rw`,
     "-e", "UV_CACHE_DIR=/pi/uv/cache", "-e", "npm_config_cache=/pi/uv/npm",
   );
+  if (state.cache === "npm") args.push(
+    "-v", `${paths.npm}:/pi/npm:rw`,
+    "-e", "npm_config_cache=/pi/npm/cache",
+  );
   return [...args, state.imageId, ...command];
 }
 

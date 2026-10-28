@@ -87,7 +87,7 @@ clone.
 | `--network <value>` | `pasta` (default, not limited) or `none` |
 | `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
 | `--clean <untracked\|all>` | `untracked` (default) keeps ignored files; `all` also removes ignored files on reset and finish |
-| `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, or `uv` for its private uv and npm cache |
+| `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, `uv` for its private uv and npm cache, or `npm` for its private npm-only cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | No writer effect; coding uses the host registration for either client |
 | `--discard` | Explicitly allow loss of uncollected surplus writers on mode/count changes |
@@ -376,6 +376,15 @@ No other uv or npm variables are set, so download and network policy stay the
 image's. The directory is per writer: it is never shared between writers and
 never a host cache mount. Setup does not install uv or npm for you.
 
+### npm cache (opt-in)
+
+For a Node writer, pass `--cache npm` to mount a private per-writer directory
+at `/pi/npm` with `npm_config_cache=/pi/npm/cache`. This records `cache: "npm"`;
+no other npm variables are set and setup does not install npm. The directory
+is never shared between writers or mounted from a host package cache. It
+survives reset, finish and recreate, and is removed with the writer. Repeat
+`--cache npm` on later container mode requests to retain it.
+
 ### Base tags (opt-in)
 
 Container writers default to `tags: "none"`. Pass `--tags reachable` to bundle
@@ -392,7 +401,7 @@ Container writers default to `clean: "untracked"`, keeping ignored files such as
 writer's finish (an ephemeral writer's finish recreates the clone). Pass
 `--clean all` on a container mode request to remove them with `git clean -ffdx`.
 Repeat this flag on later mode requests to retain it. Per-writer caches at
-`/pi/go` and `/pi/uv` live outside the clone and stay untouched.
+`/pi/go`, `/pi/uv` and `/pi/npm` live outside the clone and stay untouched.
 Changing the setting requires reprovisioning for settings drift: collect work,
 run `--writer <name> --remove`, then run the provisioning command again with
 the desired `--clean` value. It does not change boundary acceptance.

@@ -93,7 +93,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
           if (value !== "untracked" && value !== "all") throw new Error("clean_invalid");
           container.clean = value; break;
         case "--cache":
-          if (value !== "none" && value !== "go" && value !== "uv") throw new Error("cache_invalid");
+          if (value !== "none" && value !== "go" && value !== "uv" && value !== "npm") throw new Error("cache_invalid");
           container.cache = value; break;
       }
       continue;
