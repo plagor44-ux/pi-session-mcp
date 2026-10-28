@@ -30,7 +30,7 @@ It is not the right tool when:
 
 ## Status
 
-The package version is **0.12.1**.
+The package version is **0.13.0**.
 
 [Per-repository execution modes](docs/execution-modes.md) make host writes explicit and block coding on read-only aliases. On container workspaces, the one host `pi-session-mcp` registration leases a rootless-Podman writer per coding session on Linux; no per-writer registrations or tool prefixes are needed ([ADR 0012](docs/adr/0012-leased-writer-pool.md)). Setup provisions, accepts, collects and resets the pool. Starts normally use the workspace default base; fix rounds can pass a short branch `base`. Start/get report `writer` and `base` for collection, and capabilities report configured `writers` and `defaultBase`. Reset, finish and recreate need no reconnect; finish returns the writer to the default base. See the [container upgrade runbook](docs/installation.md#container-writers).
 
