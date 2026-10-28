@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.12.1 — 2026-10-28
+
+Patch release for
+[#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160). The MCP
+contract is unchanged. `npm audit` still reports `undici` 8.10.2, pinned by Pi
+SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+- Fixed: `setup --verify` of a client target failed with `mcp_failed` on every
+  installation with a `container` workspace. The verifier did not accept the
+  `writers` and `defaultBase` fields that 0.12.0 added to such workspaces in
+  `pi_capabilities_get`. It now accepts exactly these fields on container
+  workspaces, with `writers` from 1 to 16 and `defaultBase` `null` or a short
+  branch name, and still rejects them on every other mode. A new test verifies
+  the real server with container workspaces, which Level 2 does not configure
+  ([#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160)).
+- Changed: the upgrade runbook names the reset after migration. Migration keeps
+  each clone, so writers migrated from an older release lack the commit
+  identity until they are reset or finished.
+- Tests: the Doctor mode-order test no longer reads the host's writer lease
+  directory, which made it fail after a 0.12.0 migration.
+
 ## 0.12.0 — 2026-10-28
 
 Minor release under ADR 0003 for

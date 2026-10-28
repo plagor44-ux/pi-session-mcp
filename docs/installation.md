@@ -756,6 +756,15 @@ repository step between the install and the client targets:
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
    for each writer. Reconnect the host `pi-session-mcp` server after migration
    and client setup. Later reset, finish and recreate need no reconnect.
+   On 0.12.0, client-target verify fails with `mcp_failed` once a container
+   workspace exists
+   ([#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160)); 0.12.1
+   fixes it.
+4. Migration keeps each clone, so a writer migrated from a release before
+   0.12.0 has no commit identity yet, and Doctor reports
+   `writer_git_identity_missing`. Collect any work, then
+   `--writer <name> --reset --apply` (or `--finish --apply`) each writer;
+   reset copies the operator checkout's identity into the clone.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases
