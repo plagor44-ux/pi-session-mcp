@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- An apply of `pi-session-mcp-setup --repo <alias> --mode container ...` with
+  drifted settings is now refused before the mode is written: each kept writer
+  with a difference reports `writer_settings_changed`, the modes file stays
+  unchanged and no writer is touched, so the recorded mode never drifts from
+  what the writers run
+  ([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163)).
+
+### Added
+
 - Added: opt-in container setting `--clean all` removes ignored files from writer
   clones on reset and finish while preserving the default dependency-cache
   behavior and per-writer caches outside the clone

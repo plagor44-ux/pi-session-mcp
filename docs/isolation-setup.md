@@ -106,7 +106,12 @@ list and providers in its state, and the whole rendered writer configuration
 with each selected profile's model, thinking level and skills and the event
 delivery. A difference reports `writer_settings_changed` and leaves the writer
 as it is
-([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). The same
+([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). On
+apply the check runs before the mode is written, so a kept writer with a
+difference refuses the mode change itself: the modes file stays unchanged
+and no writer is touched
+([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163));
+reconciliation repeats the check under each writer's lease. The same
 holds for the other findings of this check: `podman_unavailable` when Podman
 cannot be asked, `image_unavailable` when Podman answers but cannot resolve the
 image, and `container_profile_unsupported` when a selected coding profile is

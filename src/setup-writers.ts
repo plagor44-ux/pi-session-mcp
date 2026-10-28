@@ -317,6 +317,21 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
                 throw error;
               }
             }
+            // Settings drift before the write, so a kept writer with changed settings refuses the mode
+            // change itself and the modes file never records a mode no writer matches (#163). Read-only like
+            // the dry run, which fences nothing; reconcile re-checks under its fence. Missing writers have
+            // no settings yet.
+            if (entry.mode === "container") {
+              const { life } = services(deps);
+              const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
+              const drifted: SetupFinding[] = [];
+              for (const name of planned.keep) {
+                if (planned.missing.includes(name)) continue;
+                const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
+                if (drift) drifted.push({ target: targetFor(request.alias, name), ...drift });
+              }
+              if (drifted.length) return result(operation, drifted);
+            }
           } else await preflight(ctx, planned.surplus, request.discard ?? false, deps);
         }
         catch (error) { return error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(codeFor(error)); }
