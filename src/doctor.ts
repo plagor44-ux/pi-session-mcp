@@ -469,7 +469,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       if (entry.mode !== "container" || !entry.container || entry.container.base === undefined) continue;
       const count = offDefaultBase.get(alias) ?? 0;
       checks.push(count === 0 ? ok("writer_off_default_base", alias)
-        : warning("writer_off_default_base", alias, `${count} ${count === 1 ? "writer is" : "writers are"} off the workspace default base; run pi-session-mcp-setup --repo ${alias} --apply to finish them back onto it`));
+        : warning("writer_off_default_base", alias, `${count} ${count === 1 ? "writer is" : "writers are"} off the workspace default base; finish each with pi-session-mcp-setup --writer <name> --finish --apply once its work is collected`));
     }
   }
   if (config) {
