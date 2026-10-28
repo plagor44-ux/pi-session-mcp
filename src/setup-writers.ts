@@ -223,7 +223,13 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
   } catch (error) { return failed(codeFor(error)); }
   const action = async () => {
     let proposed: WorkspaceModeEntry;
-    return changeExecutionMode(configPath, request, {
+    // Record the base as provisioning resolves it, so a refused or remote-tracking form never reaches the modes file.
+    let recorded: ModeRequest = request;
+    if (request.baseRef !== undefined) {
+      try { recorded = { ...request, baseRef: await services(deps).life.baseBranchName(await context(request.alias, deps), request.baseRef) }; }
+      catch (error) { return failed(codeFor(error)); }
+    }
+    return changeExecutionMode(configPath, recorded, {
       ...modeDependencies,
       beforeWrite: async (entry) => {
         proposed = entry;

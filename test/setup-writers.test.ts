@@ -114,6 +114,22 @@ describe("writer setup reconciliation", () => {
     expect(JSON.stringify(output)).not.toContain("SECRET");
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
   });
+  it("records --base as provisioning resolves it", async () => {
+    const f = await fixture();
+    const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
+    expect((await changeWriterMode(f.configPath, { ...mode, baseRef: "refs/remotes/origin/dev" }, { ...f.deps, lifecycle: life })).exitCode).toBe(0);
+    expect(life.baseBranchName).toHaveBeenCalledWith(expect.anything(), "refs/remotes/origin/dev");
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
+    expect(f.life.provisionWriter.mock.calls[0]?.[1]).toMatchObject({ baseRef: "refs/remotes/origin/dev" });
+  });
+  it("refuses an unresolvable --base before the modes file changes", async () => {
+    const f = await fixture();
+    const life = { ...f.life, baseBranchName: vi.fn(async () => { throw new Error("base_ref_invalid"); }) };
+    const output = await changeWriterMode(f.configPath, { ...mode, baseRef: "origin/dev" }, { ...f.deps, lifecycle: life });
+    expect(output.findings).toEqual([{ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "base_ref_invalid" }]);
+    await expect(readFile(executionModesPath(f.configPath), "utf8")).rejects.toThrow();
+    expect(f.life.provisionWriter).not.toHaveBeenCalled();
+  });
   it("hands the host configuration's event delivery field to writer provisioning", async () => {
     const f = await fixture();
     const host = JSON.parse(await readFile(f.configPath, "utf8")) as object;
