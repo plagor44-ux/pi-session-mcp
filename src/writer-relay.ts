@@ -177,7 +177,7 @@ class RelayHandle implements PiSessionHandle {
       await new Promise(resolve => setTimeout(resolve, this.pollIntervalMs));
       if (this.active !== active || this.isLost() || this.disposed) return;
       try {
-        const { turn } = await this.connection.call("pi_turn_get", { turnId: active.turnId }, turnSuccessSchema);
+        const { turn } = await this.connection.call("pi_turn_get", { sessionId: this.sdkSessionId, turnId: active.turnId }, turnSuccessSchema);
         // An abort may have settled this turn and a new prompt may already be running.
         if (this.active === active) this.observe(turn);
       } catch { this.lose(); }
@@ -193,7 +193,7 @@ class RelayHandle implements PiSessionHandle {
         if (!active || this.active !== active) return;
         // A lost prompt response has no turn ID. It cannot be safely resumed.
         if (!active.turnId) throw new Error("Writer turn unknown");
-        const { turn } = await this.connection.call("pi_turn_get", { turnId: active.turnId }, turnSuccessSchema, RELAY_CALL_TIMEOUT_MS, signal);
+        const { turn } = await this.connection.call("pi_turn_get", { sessionId: this.sdkSessionId, turnId: active.turnId }, turnSuccessSchema, RELAY_CALL_TIMEOUT_MS, signal);
         if (turn.state === "running") throw new Error("Writer abort incomplete");
         if (this.active === active) this.observe(turn);
       }, RELAY_ABORT_DEADLINE_MS);
@@ -214,7 +214,8 @@ export class WriterRelayAdapter implements PiSessionAdapter {
   async create(input: Parameters<PiSessionAdapter["create"]>[0]): Promise<PiSessionHandle> {
     if (process.platform !== "linux") throw new WriterUnavailableError("none_ready");
     const now = this.options.now ?? Date.now, end = now() + RELAY_START_BUDGET_MS;
-    const remaining = () => Math.max(0, Math.min(RELAY_CALL_TIMEOUT_MS, end - now()));
+    const left = () => Math.max(0, end - now());
+    const remaining = () => Math.min(RELAY_CALL_TIMEOUT_MS, left());
     const settings = this.options.workspaceModes.get(input.workspace)?.container;
     const ready = [];
     for (let i = 1; i <= (settings?.writers ?? 0); i++) {
@@ -231,11 +232,12 @@ export class WriterRelayAdapter implements PiSessionAdapter {
     const factory = this.options.spawn ?? { spawn: (wrapper: string, environment: Record<string, string>) => new ChildStdioTransport(wrapper, environment) };
     for (const candidate of candidates) {
       input.signal?.throwIfAborted();
-      if (remaining() <= 0) break;
+      if (left() <= 0) break;
       let connection: Connection | undefined, sessionId: string | undefined, admitted = false;
       try {
         connection = new Connection(factory.spawn(writerPaths(this.options.home, candidate.name).wrapper, env));
-        await connection.connect(remaining(), input.signal);
+        // The handshake waits for credential warm-up and the container start: it may use the whole budget.
+        await connection.connect(left(), input.signal);
         await connection.discover(remaining(), input.signal);
         const capabilities = await connection.call("pi_capabilities_get", {}, capabilitiesSchema, remaining(), input.signal);
         const inner = capabilities.executionProfiles.find(profile => profile.alias === input.executionProfile.alias);
