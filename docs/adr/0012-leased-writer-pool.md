@@ -169,7 +169,9 @@ base.
   starts before the profile is known.
 - If no candidate is admitted, the start fails with `writer_unavailable`, a
   content-free reason and content-free counts. `none_ready`: no writer of the
-  workspace is ready with current acceptance. `none_at_base`: ready writers
+  workspace is ready, migrated and has a recorded acceptance (whether that
+  acceptance is still current is decided by the launcher, which refuses a
+  stale one). `none_at_base`: ready writers
   exist, none on the requested base. `none_admitted`: candidates existed and
   each refused; the counts `busy`, `notAtBaseline` and `settingsChanged` say
   why.
@@ -180,7 +182,8 @@ base.
 - A container start has its own end-to-end budget (initial value 60 s, to be
   measured), split into launch and credential warm-up, MCP handshake,
   validated `pi_capabilities_get`, and inner `pi_session_start`. Every step has
-  a bound below the remaining budget, and cancellation of the outer start is
+  a bound below the remaining budget (cleanup of a refused candidate has its
+  own bound on top), and cancellation of the outer start is
   propagated.
 - The launcher's refusal server answers the handshake and lists tools, then
   returns refusal codes. Readiness is therefore decided by the validated
@@ -204,8 +207,8 @@ base.
 - **Abort.** The relay sends `pi_session_abort`, then reads the inner turn and
   settles the outer turn with the inner turn's actual terminal state: a turn
   that completed before the abort stays `completed`. A failed or timed-out
-  abort keeps the session quarantined until the inner state is known or the
-  session is closed.
+  abort marks the session lost (see 8): further prompts are refused, get and
+  close keep working.
 - Inner responses are untrusted data: schema-validated, size-bounded and never
   passed through as raw frames.
 
@@ -264,9 +267,12 @@ The wake hook matches the host tool names only.
   share one base branch, that branch is recorded; otherwise migration requires
   an explicit `--base` and stops with `workspace_base_ambiguous` without it.
 - `wrapper.sh` stays as the launch entry point at its stable path. Wrappers
-  embed an absolute release root, so migration rewrites every writer's wrapper
-  for the new release under the ownership rules before the writer is marked
-  `launch: "relay"`; any remaining legacy registration then also runs the new,
+  embed an absolute release root, so migration rewrites the wrapper of every
+  writer it migrates for the new release before the writer is marked
+  `launch: "relay"`. A writer held back by settings drift or a divergent
+  registration keeps its wrapper unchanged; it stays out of the pool, and its
+  retained registration must not be used until the operator resolves it. With
+  a release installed at the same path, such a wrapper already runs the new,
   fenced launcher. Acceptance keeps binding the wrapper, release version and
   launch settings. Because the launch arguments
   change (container name, no spool mount for relayed sessions), every writer is
