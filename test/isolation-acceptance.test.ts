@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, fstatSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
@@ -41,6 +41,22 @@ function controlReport(overrides: Record<string, any> = {}): Record<string, any>
     ...overrides,
   });
 }
+
+it("forwards the harness lease only to the wrapper as fd 3", async () => {
+  const home = await temporaryRoot("iso-lease-");
+  const workspace = join(home, "clone");
+  mkdirSync(join(workspace, ".git"), { recursive: true });
+  const observed = join(home, "observed.json"), wrapper = join(home, "wrapper.cjs");
+  writeFileSync(wrapper, `const fs=require('node:fs');const s=fs.fstatSync(3);fs.writeFileSync(${JSON.stringify(observed)},JSON.stringify([s.dev,s.ino,process.env.PI_WRITER_LEASE_FD]));process.stdin.resume();`);
+  const fd = openSync(join(home, "lease"), "w+");
+  try {
+    const stat = fstatSync(fd);
+    spawnSync(process.execPath, [scriptPath, "--launch", `${process.execPath} ${wrapper}`, "--workspace", workspace, "--mode", "contained", "--no-remote-checks"], {
+      env: { ...process.env, HOME: home, PI_WRITER_LEASE_FD: "4" }, stdio: ["ignore", "pipe", "pipe", "ignore", fd], timeout: 30_000,
+    });
+    expect(JSON.parse(readFileSync(observed, "utf8"))).toEqual([stat.dev, stat.ino, "3"]);
+  } finally { closeSync(fd); }
+});
 
 describe("argument validation", () => {
   const valid = ["--launch", "node", "--workspace", "/some/clone", "--mode", "contained"];

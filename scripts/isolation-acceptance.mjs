@@ -392,7 +392,13 @@ function prepareSource(runRoot) {
 function runProbe(launch, configuration) {
   return new Promise((resolvePromise, rejectPromise) => {
     const encoded = Buffer.from(JSON.stringify(configuration), "utf8").toString("base64url");
-    const child = spawn(launch[0], [...launch.slice(1), "-", encoded], { stdio: ["pipe", "pipe", "ignore"], env: process.env });
+    const inherited = process.env.PI_WRITER_LEASE_FD;
+    const leaseFd = inherited === undefined ? undefined : Number(inherited);
+    if (inherited !== undefined && (!/^\d+$/.test(inherited) || !Number.isSafeInteger(leaseFd) || leaseFd < 3)) throw new UsageError("invalid writer lease descriptor");
+    const child = spawn(launch[0], [...launch.slice(1), "-", encoded], {
+      stdio: ["pipe", "pipe", "ignore", ...(leaseFd === undefined ? [] : [leaseFd])],
+      env: leaseFd === undefined ? process.env : { ...process.env, PI_WRITER_LEASE_FD: "3" },
+    });
     let stdout = "";
     let overflow = false;
     const timer = setTimeout(() => { child.kill("SIGKILL"); }, LAUNCH_TIMEOUT_MS);

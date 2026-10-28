@@ -1,4 +1,7 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { acquireWriterLease, WriterLeaseError } from "../src/writer-lease.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -52,14 +55,81 @@ async function fixture() {
     remove: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`unregister:${intent.client}:${intent.name}`); registered.delete(intent.client + intent.name); }),
   };
   // Podman as the settings check asks it: usable, a full image ID resolves to itself, the built-in node image to the state's ID.
-  const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
+  const runner = { run: vi.fn(async (_command: string, args: readonly string[], _signal?: AbortSignal, _options?: { inheritFds?: readonly number[] }) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
   const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
   return { home, configPath, calls, life, accept, deps, adapter, runner };
 }
 const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : state(1).imageId;
-const podmanAnswer = (args: readonly string[]): string => args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
+const podmanAnswer = (args: readonly string[]): string => args[0] === "ps" ? "[]" : args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it("collect, reset, recreate, finish, remove and verify fail with writer_busy while another process holds the writer lease", async () => {
+    const f = await fixture();
+    const lease = await acquireWriterLease(f.home, "x-w1", { waitMs: 0 });
+    const child = spawn(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume()"], { stdio: ["pipe", "pipe", "pipe", lease.fd] });
+    await once(child.stdout!, "data");
+    await lease.release();
+    try {
+      const outputs = await Promise.all((["collect", "reset", "recreate", "finish", "remove", "verify"] as const).map((op) => runWriterOperation("x-w1", op, { apply: true, discard: true }, f.deps)));
+      for (const output of outputs) expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_busy", status: "failed" }));
+      expect(f.life.collectWriter).not.toHaveBeenCalled();
+      expect(f.calls).toEqual([]);
+    } finally { const exited = once(child, "exit"); child.stdin!.end(); await exited; }
+  }, 20_000);
+  it("provisions and reconciles under the lease and removes a stale container before writer changes", async () => {
+    const f = await fixture();
+    const provision = f.life.provisionWriter.getMockImplementation()!;
+    f.life.provisionWriter.mockImplementation(async (ctx, input) => {
+      await expect(acquireWriterLease(ctx.home, `x-w${input.index}`, { waitMs: 0 })).rejects.toMatchObject({ code: "writer_busy" });
+      return provision(ctx, input);
+    });
+    const accept = f.accept.acceptWriter.getMockImplementation()!;
+    f.accept.acceptWriter.mockImplementation(async (ctx, name) => {
+      await expect(acquireWriterLease(ctx.home, name, { waitMs: 0 })).rejects.toMatchObject({ code: "writer_busy" });
+      return accept(ctx, name);
+    });
+    let stale = true;
+    f.runner.run.mockImplementation(async (_command, args) => {
+      if (args[0] === "ps") return { exitCode: 0, stdout: stale ? JSON.stringify([{ Id: "a".repeat(64), Names: ["pi-writer-x-w1"] }]) : "[]", stderr: "" };
+      if (args[0] === "rm") { f.calls.push("fence-remove"); stale = false; }
+      return { exitCode: 0, stdout: podmanAnswer(args), stderr: "" };
+    });
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.calls[0]).toBe("fence-remove");
+    for (const [ctx] of f.life.provisionWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    for (const [ctx] of f.accept.acceptWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    for (const [ctx] of f.life.writerSettingsDrift.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    for (const call of f.runner.run.mock.calls) expect(call[3]).toMatchObject({ inheritFds: [expect.any(Number)] });
+  });
+  it.each(["busy", "unavailable", "unexpected", "fence"] as const)("maps %s fence errors and releases an acquired lease", async (failure) => {
+    const f = await fixture(), release = vi.fn(async () => {});
+    const lease = vi.fn(async () => {
+      if (failure === "busy") throw new WriterLeaseError("writer_busy");
+      if (failure === "unavailable") throw new WriterLeaseError("writer_lease_unavailable");
+      if (failure === "unexpected") throw new Error("private failure");
+      return { fd: 42, release };
+    });
+    const output = await runWriterOperation("x-w1", "collect", { apply: true, discard: false }, { ...f.deps, lease, ensureAbsent: async () => { throw new Error("private fence failure"); } });
+    expect(output.findings[0]?.code).toBe(failure === "busy" ? "writer_busy" : failure === "fence" ? "writer_fenced" : "writer_lease_unavailable");
+    expect(lease).toHaveBeenCalledWith(f.home, "x-w1", { waitMs: 10_000 });
+    expect(release).toHaveBeenCalledTimes(failure === "fence" ? 1 : 0);
+    expect(f.life.collectWriter).not.toHaveBeenCalled();
+  });
+  it("dry runs take no writer lease", async () => {
+    const f = await fixture(), lease = vi.fn(acquireWriterLease);
+    await runWriterOperation("x-w1", "reset", { apply: false, discard: false }, { ...f.deps, lease });
+    await changeWriterMode(f.configPath, { ...mode, apply: false }, { ...f.deps, lease });
+    expect(lease).not.toHaveBeenCalled();
+  });
+  it("passes the recorded workspace default base to finish and recreate but not reset", async () => {
+    const f = await fixture();
+    await writeFile(executionModesPath(f.configPath), JSON.stringify({ schemaVersion: 1, workspaces: { x: { mode: "container", profiles: ["code"], base: "main" } } }));
+    for (const op of ["finish", "recreate", "reset"] as const) await runWriterOperation("x-w1", op, { apply: true, discard: true }, f.deps);
+    expect(f.life.finishWriter).toHaveBeenCalledWith(expect.objectContaining({ leaseFd: expect.any(Number) }), "x-w1", { baseRef: "main" });
+    expect(f.life.recreateWriter).toHaveBeenCalledWith(expect.anything(), "x-w1", expect.objectContaining({ baseRef: "main" }));
+    expect(f.life.resetWriter).toHaveBeenCalledWith(expect.anything(), "x-w1", { apply: true, discard: true });
+  });
   it.each(["linux", "darwin"] as const)("sanitizes invalid aliases on %s", async (platform) => {
     const f = await fixture();
     const output = await changeWriterMode(f.configPath, { ...mode, alias: "../x" }, { ...f.deps, platform });
@@ -153,7 +223,7 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).toBe(0);
-    expect(f.calls).toEqual(["provision1", "provision2", "accept:x-w1", "accept:x-w2", "register:claude-code:pi-coding-x-w1", "register:claude-code:pi-coding-x-w2"]);
+    expect(f.calls).toEqual(["provision1", "accept:x-w1", "register:claude-code:pi-coding-x-w1", "provision2", "accept:x-w2", "register:claude-code:pi-coding-x-w2"]);
     expect(output.findings.filter((finding) => finding.code === "controllers_restart_required")).toHaveLength(1);
     expect(JSON.stringify(output)).not.toContain("/");
   });
@@ -226,7 +296,7 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
   });
   it.each([
-    ["Podman cannot be asked", "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
+    ["Podman cannot be asked", "writer_fenced", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
     ["the image cannot be resolved locally", "image_unavailable", (args: readonly string[]) => args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : { exitCode: 0, stdout: podmanAnswer(args), stderr: "" }],
   ])("leaves a ready writer as it is when %s, and never pulls (#134)", async (_label, code, answer) => {
     const f = await fixture();
@@ -300,7 +370,7 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
-    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : args[0] === "image" ? podmanImage(args.at(-1)!) : "5.4.0", stderr: "" })) };
+    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
     const upgraded = (version: string) => acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: version, imageId: state(1).imageId, podmanVersion: "5.4.0", network: "pasta", cache: "none" });
     for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "ready", acceptance: { fingerprint: upgraded(index === 1 ? "0.0.0" : PACKAGE_VERSION), verdict: "pass", network: "limited", at: "then" } });
     const output = await changeWriterMode(f.configPath, mode, { ...f.deps, runner, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });
@@ -481,11 +551,11 @@ describe("writer setup reconciliation", () => {
     expect((await runWriterOperation("x-w1", "remove", { apply: true, discard: false }, f.deps)).findings[0]?.code).toBe("writer_uncollected");
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
-  it.each(["reset", "recreate", "finish"] as const)("asks for the writer's servers to reconnect after an applied %s", async (operation) => {
+  it.each(["reset", "recreate", "finish"] as const)("does not report writer_reconnect_required after an applied %s", async (operation) => {
     const f = await fixture();
     const output = await runWriterOperation("x-w1", operation, { apply: true, discard: false }, f.deps);
     expect(output.exitCode).toBe(0);
-    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "ok", code: "writer_reconnect_required" });
+    expect(output.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
   });
   it("does not ask for a reconnect after a failed reset, a dry run or a collect", async () => {
     const f = await fixture();
@@ -518,7 +588,7 @@ describe("writer setup reconciliation", () => {
       const launch = vi.fn();
       const verify = vi.fn(async () => ({ status: "verified" as const, initialize: true, toolsList: true, capabilitiesGet: true, tools: [] }));
       expect((await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, launch, verify })).exitCode).toBe(0);
-      expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], { HOME: f.home, PATH: "/bin", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }) });
+      expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], { HOME: f.home, PATH: "/bin", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }) }, { inheritFds: [expect.any(Number)] });
     } finally { vi.unstubAllEnvs(); }
   });
   it("verifies only relevant Doctor errors and launches with no credential refresh", async () => {
@@ -529,7 +599,7 @@ describe("writer setup reconciliation", () => {
     const doctor = vi.fn(async () => ({ schemaVersion: 1 as const, ok: false, exitCode: 2 as const, checks: [{ id: "writer_not_ready" as const, severity: "error" as const, subject: "other-w1" }] }));
     const output = await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, launch, verify, doctor });
     expect(output.exitCode).toBe(0);
-    expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], expect.objectContaining({ PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }));
+    expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], expect.objectContaining({ PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3" }), { inheritFds: [expect.any(Number)] });
     expect(f.calls).toEqual([]);
   });
 });

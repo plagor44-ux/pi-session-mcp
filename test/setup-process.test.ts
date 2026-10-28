@@ -39,6 +39,17 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
       expect(JSON.parse((await child.read())!)).toEqual({ refresh: "1" });
     } finally { await child.kill(); }
   });
+  it("passes inherited descriptors to the command MCP launcher at fd 3", async () => {
+    const directory = await temporaryRoot("setup-launch-fd-");
+    const file = await open(join(directory, "lease"), "w+");
+    const stat = await file.stat();
+    try {
+      const launch = createCommandMcpStdioLauncher([execPath, "-e", "const s=require('node:fs').fstatSync(3);process.stdout.write(JSON.stringify([s.dev,s.ino,process.env.PI_WRITER_LEASE_FD])+'\\n');process.stdin.resume()"], { PI_WRITER_LEASE_FD: "3" }, { inheritFds: [file.fd] });
+      const child = await launch(new AbortController().signal);
+      try { expect(JSON.parse((await child.read())!)).toEqual([stat.dev, stat.ino, "3"]); }
+      finally { await child.kill(); }
+    } finally { await file.close(); }
+  });
   it("passes inheritFds at child index 3 and subsequent indices in order", async () => {
     const directory = await temporaryRoot("setup-process-fds-");
     const first = await open(join(directory, "first"), "w+");

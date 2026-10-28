@@ -15,10 +15,15 @@ import { result, type SetupFinding, type SetupOperation, type SetupResult, type 
 import { createWriterRegistrationAdapter, registerWriter, unregisterWriter, type WriterRegistrationIntent, type WriterRegistrationAdapter } from "./client-adapters/writer-registration.js";
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
 import { IMAGE_PULL_TIMEOUT_MS } from "./writer-boundary.js";
+import { acquireWriterLease, WriterLeaseError } from "./writer-lease.js";
+import { ensureWriterAbsent } from "./writer-fence.js";
+
 import * as lifecycle from "./writer-lifecycle.js";
 import * as acceptance from "./writer-acceptance.js";
 import { skillOverrideDirectory } from "./skill-library.js";
 import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
+
+export const SETUP_LEASE_WAIT_MS = 10_000;
 
 export type WriterOperation = "collect" | "reset" | "recreate" | "finish" | "remove" | "verify";
 export interface WriterOptions { apply: boolean; discard: boolean; baseRef?: string; }
@@ -37,12 +42,14 @@ export interface WriterSetupDependencies {
   verify?: typeof verifyMcpCapabilities;
   launch?: typeof createCommandMcpStdioLauncher;
   lock?: typeof acquireOverrideLock;
+  lease?: typeof acquireWriterLease;
+  ensureAbsent?: typeof ensureWriterAbsent;
   containerRuntime?: () => Promise<boolean>;
 }
 const safeAlias = (alias: string): string => ALIAS_PATTERN.test(alias) ? alias : "invalid";
 const targetFor = (alias: string, name: string): SetupTarget => ({ client: "writer", scope: safeAlias(alias), alias: WRITER_NAME_PATTERN.test(name) || (alias === "host" && name === "control") ? name : "invalid" });
 const modesTarget = (alias: string): SetupTarget => ({ client: "modes", scope: "workspace", alias: safeAlias(alias) });
-const codeFor = (error: unknown): string => error instanceof OverrideLockError ? error.code : error instanceof Error && /^[a-z][a-z0-9_]{0,63}$/.test(error.message) ? error.message : "writer_operation_failed";
+const codeFor = (error: unknown): string => error instanceof OverrideLockError || error instanceof WriterLeaseError ? error.code : error instanceof Error && /^[a-z][a-z0-9_]{0,63}$/.test(error.message) ? error.message : "writer_operation_failed";
 function services(deps: WriterSetupDependencies) {
   const home = deps.home ?? homedir();
   const runner = deps.runner ?? createProcessRunner({ timeoutMs: IMAGE_PULL_TIMEOUT_MS, maxOutputBytes: 1_048_576, ...(deps.signal ? { signal: deps.signal } : {}) });
@@ -63,6 +70,16 @@ async function locked<T>(deps: WriterSetupDependencies, action: () => Promise<T>
   await chmod(directory, 0o700);
   const lock = await (deps.lock ?? acquireOverrideLock)(directory, { ...(deps.signal ? { signal: deps.signal } : {}) });
   try { return await action(); } finally { await lock.release(); }
+}
+async function fenced<T>(ctx: lifecycle.WriterContext, name: string, deps: WriterSetupDependencies, action: (ctx: lifecycle.WriterContext) => Promise<T>): Promise<T> {
+  let lease;
+  try { lease = await (deps.lease ?? acquireWriterLease)(ctx.home, name, { waitMs: SETUP_LEASE_WAIT_MS, ...(deps.signal ? { signal: deps.signal } : {}) }); }
+  catch (error) { throw new Error(error instanceof WriterLeaseError && error.code === "writer_busy" ? "writer_busy" : "writer_lease_unavailable"); }
+  try {
+    try { await (deps.ensureAbsent ?? ensureWriterAbsent)(ctx.runner, writerPaths(ctx.home, name), name, { leaseFd: lease.fd }); }
+    catch { throw new Error("writer_fenced"); }
+    return await action({ ...ctx, leaseFd: lease.fd });
+  } finally { await lease.release(); }
 }
 function intent(ctx: lifecycle.WriterContext, name: string, client: "claude-code" | "codex"): WriterRegistrationIntent {
   return { client, name: writerRegistrationName(name), wrapperPath: writerPaths(ctx.home, name).wrapper, projectDir: ctx.checkout };
@@ -154,42 +171,43 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   const planned = await plan(ctx, entry), { life, accept, ownership, adapter } = services(deps);
   const add = (name: string, outcome: lifecycle.WriterOutcome): void => { findings.push({ target: targetFor(alias, name), ...outcome }); };
   await doctorGate(ctx, deps);
-  await preflight(ctx, planned.surplus, request.discard, deps);
+  for (const name of planned.surplus) await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard, deps));
   const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
-  const failedProvision = new Set<string>();
-  for (const name of planned.missing) {
-    const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
-    add(name, outcome); if (outcome.status === "failed") failedProvision.add(name);
-  }
-  // Writers left exactly as they are: neither accepted nor registered in this run.
-  const held = new Set<string>();
+  // Each writer's reconciliation, including first provisioning and acceptance, owns one fence.
   for (const name of planned.keep) {
-    if (failedProvision.has(name)) continue;
-    if (!planned.missing.includes(name)) {
-      // Settings first: a writer that no longer matches its configuration is not accepted or registered again (#134).
-      const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
-      if (drift) { held.add(name); add(name, drift); continue; }
-    }
-    // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
-    const current = await accept.acceptanceCurrent(ctx, name);
-    if (current === "stale") add(name, await accept.acceptWriter(ctx, name));
-    else if (current === "unknown") { held.add(name); add(name, { status: "failed", code: "podman_unavailable" }); }
-  }
-  for (const name of planned.keep) {
-    if (failedProvision.has(name) || held.has(name) || (await readWriterState(ctx.home, name))?.phase !== "ready") continue;
-    for (const client of request.codex ? ["claude-code", "codex"] as const : ["claude-code"] as const) {
-      const expected = intent(ctx, name, client), before = await adapter.inspect(expected);
-      try { await registerWriter(ownership, adapter, expected); add(name, { status: before === "equivalent" ? "unchanged" : "ok", code: "writer_registered" }); }
-      catch (error) { add(name, { status: "failed", code: codeFor(error) }); continue; }
-      if (client === "claude-code") {
-        const hook = await writerHook(ctx, name, deps, "apply", await writerEventDeliveryEnabled(writerPaths(ctx.home, name).config));
-        if (hook) findings.push({ target: targetFor(alias, name), ...hook });
+    try { await fenced(ctx, name, deps, async (ctx) => {
+      if (planned.missing.includes(name)) {
+        const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
+        add(name, outcome); if (outcome.status === "failed") return;
+      } else {
+        // Settings first: a writer that no longer matches its configuration is not accepted or registered again (#134).
+        const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
+        if (drift) { add(name, drift); return; }
       }
+      // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
+      const current = await accept.acceptanceCurrent(ctx, name);
+      if (current === "stale") {
+        const outcome = await accept.acceptWriter(ctx, name);
+        add(name, outcome); if (outcome.status === "failed") return;
+      } else if (current === "unknown") { add(name, { status: "failed", code: "podman_unavailable" }); return; }
+      if ((await readWriterState(ctx.home, name))?.phase !== "ready") return;
+      for (const client of request.codex ? ["claude-code", "codex"] as const : ["claude-code"] as const) {
+        const expected = intent(ctx, name, client), before = await adapter.inspect(expected);
+        try { await registerWriter(ownership, adapter, expected); add(name, { status: before === "equivalent" ? "unchanged" : "ok", code: "writer_registered" }); }
+        catch (error) { add(name, { status: "failed", code: codeFor(error) }); continue; }
+        if (client === "claude-code") {
+          const hook = await writerHook(ctx, name, deps, "apply", await writerEventDeliveryEnabled(writerPaths(ctx.home, name).config));
+          if (hook) findings.push({ target: targetFor(alias, name), ...hook });
+        }
+      }
+    }); } catch (error) {
+      if (!["writer_busy", "writer_fenced", "writer_lease_unavailable"].includes(codeFor(error))) throw error;
+      add(name, { status: "failed", code: codeFor(error) });
     }
   }
   for (const name of planned.surplus) {
     const extras: WakeHookOutcome[] = [];
-    try { add(name, await remove(ctx, name, request.discard, deps, extras)); }
+    try { add(name, await fenced(ctx, name, deps, (leased) => remove(leased, name, request.discard, deps, extras))); }
     catch (error) { add(name, { status: "failed", code: codeFor(error) }); }
     for (const extra of extras) findings.push({ target: targetFor(alias, name), ...extra });
   }
@@ -234,7 +252,12 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
       beforeWrite: async (entry) => {
         proposed = entry;
         const ctx = await context(request.alias, deps), planned = await plan(ctx, entry);
-        try { if (request.apply) await doctorGate(ctx, deps); await preflight(ctx, planned.surplus, request.discard ?? false, deps); }
+        try {
+          if (request.apply) {
+            await doctorGate(ctx, deps);
+            for (const name of planned.surplus) await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard ?? false, deps));
+          } else await preflight(ctx, planned.surplus, request.discard ?? false, deps);
+        }
         catch (error) { return error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(codeFor(error)); }
         return undefined;
       },
@@ -256,7 +279,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
             const refused = [...kept, ...hooks].some((finding) => finding.status === "failed" || finding.status === "divergent");
             writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], refused ? "failed" : "planned");
           }
-        } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed("writer_reconcile_failed"); }
+        } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(["writer_busy", "writer_fenced", "writer_lease_unavailable"].includes(codeFor(error)) ? codeFor(error) : "writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
         if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
         return result(operation, findings, writers.exitCode ? "failed" : request.apply ? undefined : "planned");
@@ -272,18 +295,15 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
   const reportOperation: SetupOperation = operation === "verify" ? "verify" : opts.apply ? operation === "remove" ? "remove" : "apply" : "dry-run";
   if (!WRITER_NAME_PATTERN.test(name)) return result(reportOperation, [{ target: { client: "invalid", scope: "invalid", alias: "invalid" }, status: "failed", code: "usage_invalid" }], "failed", 64);
   const alias = name.slice(0, name.lastIndexOf("-w")), target = targetFor(alias, name);
-  // A reset, recreate or finish clears the writer's projected credentials; its running server keeps stale ones until reconnected (#136).
-  const reconnectRequired = (outcome: lifecycle.WriterOutcome): boolean => opts.apply && outcome.status === "ok" && (operation === "reset" || operation === "recreate" || operation === "finish");
   const done = (outcome: lifecycle.WriterOutcome, hooks: readonly WakeHookOutcome[] = []) => result(reportOperation, [
     { target, ...outcome },
     ...hooks.map((hook) => ({ target, ...hook })),
-    ...(reconnectRequired(outcome) ? [{ target, status: "ok" as const, code: "writer_reconnect_required" }] : []),
   ], outcome.status === "planned" ? "planned" : undefined);
   if ((deps.platform ?? process.platform) !== "linux") return done({ status: "failed", code: "platform_unsupported" });
   try {
     if (!opts.apply && operation !== "verify") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }
-    return await locked(deps, async () => {
-      const ctx = await context(alias, deps), { life, ownership, adapter } = services(deps);
+    return await locked(deps, async () => fenced(await context(alias, deps), name, deps, async (ctx) => {
+      const { life, ownership, adapter } = services(deps);
       if (operation === "verify") {
         const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
         if (doctor.checks.some((check) => check.severity === "error" && (check.subject === name || GLOBAL_ERRORS.has(check.id)))) return done({ status: "failed", code: "doctor_failed" });
@@ -293,7 +313,7 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
           const current = await adapter.inspect(expected);
           if ((client === "claude-code" || owned || current !== "absent") && current !== "equivalent") return done({ status: "failed", code: "registration_not_equivalent" });
         }
-        const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }) });
+        const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }, { inheritFds: [ctx.leaseFd!] }) });
         if (checked.status !== "verified") return done({ status: "failed", code: `mcp_${checked.status}` });
         // The hook is part of the Claude Code registration: verified after it, from the writer's own configuration.
         const hook = await writerHook(ctx, name, deps, "verify", await writerEventDeliveryEnabled(writerPaths(ctx.home, name).config));
@@ -305,14 +325,17 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
         if (error instanceof DoctorGateError) return result(reportOperation, [...done({ status: "failed", code: error.message }).findings, ...error.findings]);
         throw error;
       }
+      const entry = (await loadConfig(deps.configPath)).workspaceModes.get(alias);
+      const baseRef = opts.baseRef ?? entry?.container?.base;
+      const baseOptions = baseRef === undefined ? {} : { baseRef };
       const extras: WakeHookOutcome[] = [];
       const outcome = operation === "remove" ? await remove(ctx, name, opts.discard, deps, extras)
         : operation === "collect" ? await life.collectWriter(ctx, name)
         : operation === "reset" ? await life.resetWriter(ctx, name, opts)
-        : operation === "recreate" ? await life.recreateWriter(ctx, name, opts)
-        : await life.finishWriter(ctx, name);
+        : operation === "recreate" ? await life.recreateWriter(ctx, name, { ...opts, ...baseOptions })
+        : await life.finishWriter(ctx, name, baseOptions);
       return done(outcome, extras);
-    });
+    }));
   } catch (error) { return done({ status: "failed", code: codeFor(error) }); }
 }
 

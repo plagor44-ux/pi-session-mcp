@@ -26,6 +26,15 @@ async function fixture(exitCode = 0, classification = "not_limited") {
   const ctx = { home, releaseRoot: "/release", checkout: "/checkout", alias: "repo", nodePath: process.execPath, runner: { run } };
   return { ctx, paths, run };
 }
+it("passes the lease to every Podman call and launches acceptance with PI_WRITER_LEASE_FD=3", async () => {
+  const { ctx, run } = await fixture();
+  await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict: "control_detected_escapes" }));
+  const leased = { ...ctx, leaseFd: 42 };
+  expect((await acceptWriter(leased, "repo-w1")).status).toBe("ok");
+  expect(await acceptanceCurrent(leased, "repo-w1")).toBe("current");
+  for (const call of run.mock.calls) expect(call[3]).toMatchObject({ inheritFds: [42] });
+  expect(run.mock.calls.find(([cmd]) => cmd === process.execPath)![3]).toMatchObject({ env: { PI_WRITER_LEASE_FD: "3", PI_WRITER_NO_CREDENTIAL_REFRESH: "1" } });
+});
 it("requires control without spawning", async () => {
   const { ctx, run } = await fixture();
   expect((await acceptWriter(ctx, "repo-w1")).code).toBe("isolation_control_required"); expect(run).not.toHaveBeenCalled();

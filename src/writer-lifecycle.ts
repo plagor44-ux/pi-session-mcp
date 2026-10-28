@@ -18,6 +18,12 @@ export interface WriterContext {
   runner: CommandRunner;
   checkout: string;
   alias: string;
+  leaseFd?: number;
+}
+function leasedContext(ctx: WriterContext): WriterContext {
+  if (ctx.leaseFd === undefined) return ctx;
+  const runner = ctx.runner;
+  return { ...ctx, runner: { run: (command, args, signal, options) => runner.run(command, args, signal, { ...options, inheritFds: [ctx.leaseFd!] }) } };
 }
 export type WriterOutcome = { code: string; status: "ok" | "planned" | "unchanged" | "failed" };
 
@@ -104,6 +110,7 @@ function buildContainedConfig(alias: string, clonePath: string, rawConfig: unkno
 
 // CommandRunner has no per-call environment option. Hooks are disabled even for injected runners.
 async function git(ctx: WriterContext, args: readonly string[], optional = false): Promise<string | undefined> {
+  ctx = leasedContext(ctx);
   const result = await ctx.runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", ctx.checkout, ...args], AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) {
     if (optional) return undefined;
@@ -218,6 +225,7 @@ function withoutDeliveryOff(config: unknown): unknown {
  * answers but cannot resolve the image.
  */
 export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionInput & { index: number }): Promise<WriterOutcome | undefined> {
+  ctx = leasedContext(ctx);
   try {
     const name = writerName(ctx.alias, input.index), paths = writerPaths(ctx.home, name);
     const existing = await readWriterState(ctx.home, name);
@@ -232,6 +240,7 @@ export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionIn
 export async function provisionWriter(ctx: WriterContext, input: {
   index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown; overrideDirectory?: string;
 }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const { index, settings } = input;
     const name = writerName(ctx.alias, index), paths = writerPaths(ctx.home, name);
@@ -283,6 +292,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   baseline: boolean; digest: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
 }> {
+  ctx = leasedContext(ctx);
   const state = await readWriterState(ctx.home, name);
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
@@ -339,6 +349,7 @@ export type CollectOutcome = WriterOutcome & {
   findings: readonly { code: "ref_name_refused" }[];
 };
 export async function collectWriter(ctx: WriterContext, name: string): Promise<CollectOutcome> {
+  ctx = leasedContext(ctx);
   const refs: string[] = [], findings: { code: "ref_name_refused" }[] = [];
   try {
     const paths = writerPaths(ctx.home, name);
@@ -426,15 +437,17 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
   if (!(await inspectWork(ctx, name)).baseline) throw new LifecycleError("writer_recreate_failed");
   return { status: "ok", code: "writer_recreated" };
 }
-export async function recreateWriter(ctx: WriterContext, name: string, opts: { discard: boolean }): Promise<WriterOutcome> {
+export async function recreateWriter(ctx: WriterContext, name: string, opts: { discard: boolean; baseRef?: string }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const state = await requiredState(ctx, name);
     await requireCollected(ctx, name, state, opts.discard);
-    return await recreate(ctx, name, state, await writerBase(ctx, name, state));
+    return await recreate(ctx, name, state, await writerBase(ctx, name, state, opts.baseRef));
   } catch (error) { return failure(error); }
 }
 
 export async function resetWriter(ctx: WriterContext, name: string, opts: { discard: boolean; baseRef?: string }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const state = await requiredState(ctx, name);
     const base = await writerBase(ctx, name, state, opts.baseRef);
@@ -471,12 +484,12 @@ ${identityScript(4, 5)}`;
   } catch (error) { return failure(error); }
 }
 
-export async function finishWriter(ctx: WriterContext, name: string): Promise<WriterOutcome> {
+export async function finishWriter(ctx: WriterContext, name: string, opts: { baseRef?: string } = {}): Promise<WriterOutcome> {
   try {
     const state = await requiredState(ctx, name);
     const collected = await collectWriter(ctx, name);
     if (collected.status === "failed") return collected;
-    return state.lifecycle === "ephemeral" ? await recreateWriter(ctx, name, { discard: false }) : await resetWriter(ctx, name, { discard: false });
+    return state.lifecycle === "ephemeral" ? await recreateWriter(ctx, name, { discard: false, ...opts }) : await resetWriter(ctx, name, { discard: false, ...opts });
   } catch (error) { return failure(error); }
 }
 

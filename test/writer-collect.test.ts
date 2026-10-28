@@ -13,10 +13,10 @@ const rawConfig = { executionProfiles: { code: { default: false, permissionProfi
 async function fixture() {
   const home = await temporaryRoot("pi-writer-collect-");
   const paths = writerPaths(home, "repo-w1");
-  const calls: { command: string; args: readonly string[] }[] = [];
+  const calls: { command: string; args: readonly string[]; options?: { inheritFds?: readonly number[] } }[] = [];
   let dirty = true, changed = false, badReset = false, empty = false, collision = false, baseSource = "refs/heads/main", heads = `${commit} refs/heads/feature\n`;
-  const runner: CommandRunner = { async run(command, args) {
-    calls.push({ command, args });
+  const runner: CommandRunner = { async run(command, args, _signal, options) {
+    calls.push({ command, args, ...(options ? { options } : {}) });
     let stdout = "";
     if (command === "git") {
       if (args.includes("symbolic-ref")) stdout = "refs/remotes/origin/main";
@@ -52,6 +52,29 @@ async function provision(f: Awaited<ReturnType<typeof fixture>>) {
   const state = (await readWriterState(f.ctx.home, "repo-w1"))!;
   await writeWriterState(f.ctx.home, "repo-w1", { ...state, acceptance: { fingerprint: "fingerprint", verdict: "pass", network: "limited", at: "now" } });
 }
+it("inherits the lease in all provisioning, collect, reset and recreate Podman and host Git calls", async () => {
+  const f = await fixture(); f.ctx.leaseFd = 42;
+  await provision(f);
+  expect((await collectWriter(f.ctx, "repo-w1")).status).toBe("ok");
+  expect((await resetWriter(f.ctx, "repo-w1", { discard: true })).status).toBe("ok");
+  expect((await recreateWriter(f.ctx, "repo-w1", { discard: true })).status).toBe("ok");
+  expect(f.calls.length).toBeGreaterThan(10);
+  for (const call of f.calls) expect(call.options).toEqual({ inheritFds: [42] });
+});
+it.each(["persistent", "ephemeral"] as const)("finish returns a %s fix writer to the supplied workspace default base", async (lifecycle) => {
+  const f = await fixture(); await provision(f);
+  const state = (await readWriterState(f.ctx.home, "repo-w1"))!;
+  await writeWriterState(f.ctx.home, "repo-w1", { ...state, lifecycle, base: { ...state.base, ref: "refs/heads/fix" } });
+  expect((await finishWriter(f.ctx, "repo-w1", { baseRef: "main" })).status).toBe("ok");
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.base.ref).toBe("refs/heads/main");
+});
+it("reset without --base keeps the writer's current base", async () => {
+  const f = await fixture(); await provision(f);
+  const state = (await readWriterState(f.ctx.home, "repo-w1"))!;
+  await writeWriterState(f.ctx.home, "repo-w1", { ...state, base: { ...state.base, ref: "refs/heads/fix" } });
+  expect((await resetWriter(f.ctx, "repo-w1", { discard: true })).status).toBe("ok");
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.base.ref).toBe("refs/heads/fix");
+});
 it("ignores worker tags in collection and its digest", async () => {
   const f = await fixture(); await provision(f); f.empty();
   await collectWriter(f.ctx, "repo-w1");

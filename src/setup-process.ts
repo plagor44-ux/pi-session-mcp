@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { lstatSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
@@ -90,9 +90,9 @@ export function createProcessRunner(options: ProcessRunnerOptions = {}): Command
 }
 
 /** Generalized bounded stdio transport for a generated writer wrapper. */
-export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv): (signal: AbortSignal) => Promise<McpStdioProcess> {
+export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv, options?: { inheritFds?: readonly number[] }): (signal: AbortSignal) => Promise<McpStdioProcess> {
   return async (signal) => {
-    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe"], env, detached: process.platform !== "win32" });
+    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe", ...(options?.inheritFds ?? [])], env, detached: process.platform !== "win32" }) as ChildProcessWithoutNullStreams;
     let buffer = "", closed = false, overflow = false;
     child.stdout.on("data", (chunk: Buffer) => { if (!overflow) { buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer) > DEFAULT_MAX) { overflow = true; buffer = ""; } } });
     child.stderr.resume();

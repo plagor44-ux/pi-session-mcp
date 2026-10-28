@@ -55,7 +55,7 @@ async function fixture(options: { delivery: boolean; aliases?: readonly string[]
   };
   const releaseRoot = join(root, "release");
   await mkdir(join(releaseRoot, "dist"), { recursive: true }); await writeFile(join(releaseRoot, "dist", "wake-main.js"), "// wake\n");
-  const deps: WriterSetupDependencies = { configPath, home, releaseRoot, platform: "linux", lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
+  const deps: WriterSetupDependencies = { configPath, home, releaseRoot, runner: { run: async () => ({ exitCode: 0, stdout: "[]", stderr: "" }) }, platform: "linux", lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
   const entry = buildWakeEntry({ packageRoot: releaseRoot });
   const settings = (alias = "x") => join(projects[alias]!, ".claude", "settings.local.json");
   const request = (alias = "x", writers = 1, extra: { apply?: boolean; codex?: boolean } = {}) => ({ alias, mode: "container" as const, container: { profiles: ["code"], writers }, apply: extra.apply ?? true, acceptHostWrites: false, ...(extra.codex ? { codex: true } : {}) });
