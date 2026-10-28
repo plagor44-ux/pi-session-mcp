@@ -45,6 +45,7 @@ export const capabilitiesSchema = z.object({
     thinkingLevel: thinkingLevelSchema,
     extensions: z.array(z.string()),
     grantedExtensionTools: z.array(z.string()),
+    shell: z.enum(["none", "sandboxed"]),
     skills: z.array(aliasSchema),
   }).strict()),
 }).strict();

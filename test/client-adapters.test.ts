@@ -14,7 +14,7 @@ import type { CommandRunner } from "../src/client-adapters/index.js";
 const intent = { scope: "user" as const, nodePath: "/usr/bin/node", entryPath: "/srv/pi-session-mcp/dist/main.js", configPath: "/etc/pi-session-mcp.json" };
 const TOOL_NAMES = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"] as const;
 const VERIFIED_CONFIGURATION = { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" };
-const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [], grantedExtensionTools: [], skills: [] };
+const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [], grantedExtensionTools: [], shell: "none", skills: [] };
 const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   ok: true,
   server: { name: "pi-session-mcp", version: PACKAGE_VERSION },
@@ -191,6 +191,9 @@ describe("client adapters", () => {
     ["non-string extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: [1] })],
     ["unpinned extension", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: ["npm:pi-cursor-sdk@latest"] })],
     ["too many extensions", capabilitiesWithProfile({ ...VERIFIED_PROFILE, extensions: extensionSpecs(MAX_PROFILE_EXTENSIONS + 1) })],
+    ["profile without shell", capabilitiesWithProfile({ ...VERIFIED_PROFILE, shell: undefined })],
+    ["unknown shell value", capabilitiesWithProfile({ ...VERIFIED_PROFILE, shell: "bash" })],
+    ["non-string shell", capabilitiesWithProfile({ ...VERIFIED_PROFILE, shell: true })],
     ["profile without skills", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: undefined })],
     ["unknown profile key", capabilitiesWithProfile({ ...VERIFIED_PROFILE, path: "/srv/SKILL.md" })],
     ["non-array skills", capabilitiesWithProfile({ ...VERIFIED_PROFILE, skills: "review" })],
@@ -202,6 +205,10 @@ describe("client adapters", () => {
   ];
   it.each(malformedCapabilities)("rejects %s in the capabilities payload", async (_label, capabilities) => {
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("failed");
+  });
+
+  it("accepts a sandboxed shell in the capabilities payload", async () => {
+    expect((await verifyCapabilityPayload(capabilitiesWithProfile({ ...VERIFIED_PROFILE, shell: "sandboxed" }))).status).toBe("verified");
   });
 
   it("accepts the maximum number of profile extensions", async () => {

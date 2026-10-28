@@ -117,7 +117,7 @@ function validCapabilities(value: unknown): boolean {
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
     const record = profile as Record<string, unknown>;
-    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"])
+    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills"])
       && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
       && typeof record.default === "boolean"
       && (record.permissionProfile === "read-only" || record.permissionProfile === "coding")
@@ -129,6 +129,7 @@ function validCapabilities(value: unknown): boolean {
       && Array.isArray(record.grantedExtensionTools) && record.grantedExtensionTools.length <= MAX_GRANTED_EXTENSION_TOOLS
       && record.grantedExtensionTools.every((name) => typeof name === "string" && isAcceptableExtensionToolName(name))
       && new Set(record.grantedExtensionTools).size === record.grantedExtensionTools.length
+      && (record.shell === "none" || record.shell === "sandboxed")
       && Array.isArray(record.skills) && record.skills.length <= MAX_PROFILE_SKILLS
       && record.skills.every((skill) => typeof skill === "string" && ALIAS_PATTERN.test(skill))
       && new Set(record.skills).size === record.skills.length;

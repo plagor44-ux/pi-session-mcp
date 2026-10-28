@@ -1,8 +1,9 @@
-import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { access, lstat, mkdtemp, open, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
+import { probeSandbox, resolveWorktreeGitDir } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
@@ -28,6 +29,7 @@ export type DoctorCheckId =
   | "writer_dirty" | "writer_git_identity_missing" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
+  | "sandbox_unavailable" | "workspace_git_unavailable"
   | "event_spool_root";
 
 export interface DoctorCheck {
@@ -85,6 +87,10 @@ export interface DoctorDependencies {
   readonly writerLeaseRoot?: (path: string) => Promise<EventSpoolRootInfo | undefined>;
   /** Effective user id of the current process; defaults to the real one. */
   readonly uid?: number;
+  /** Probes the read-only shell sandbox with the session's fixed arguments; called only when a profile selects it. */
+  readonly sandboxProbe?: () => Promise<boolean>;
+  /** The main Git directory of a linked worktree workspace, or `undefined` when the pointer is unusable. */
+  readonly worktreeGitDir?: (workspace: string) => Promise<string | undefined>;
 }
 export interface EventSpoolRootInfo { readonly isDirectory: boolean; readonly uid: number; readonly mode: number }
 
@@ -102,7 +108,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "workspace_git_unavailable", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -189,6 +195,16 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
     const content = await (fs.readPrefix ?? readPrefix)(entry, MAX_GITFILE_BYTES + 1);
     return Buffer.byteLength(content, "utf8") <= MAX_GITFILE_BYTES && /^gitdir:[ \t]*\S/.test(content);
   } catch { return false; }
+}
+
+/** The trusted bubblewrap binary plus a probe run in a temporary empty directory. */
+async function defaultSandboxProbe(): Promise<boolean> {
+  let directory: string | undefined;
+  try {
+    directory = await mkdtemp(join(tmpdir(), "pi-session-mcp-doctor-sandbox-"));
+    return await probeSandbox(directory);
+  } catch { return false; }
+  finally { if (directory !== undefined) await rm(directory, { recursive: true, force: true }).catch(() => undefined); }
 }
 
 async function defaultRootInfo(path: string): Promise<EventSpoolRootInfo | undefined> {
@@ -527,6 +543,28 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
         checks.push(ok("skill_missing", subject), ok("skill_unreadable", subject));
         if (canonical.has(real)) checks.push(failure("skill_duplicate", subject, "select each skill file only once per profile"));
         else { canonical.add(real); checks.push(ok("skill_duplicate", subject)); }
+      }
+    }
+  }
+  if (config) {
+    const sandboxed = [...config.executionProfiles].filter(([, profile]) => profile.shell === "sandboxed").map(([alias]) => alias).sort((a, b) => a.localeCompare(b));
+    if (sandboxed.length > 0) {
+      // One probe serves every profile: the arguments do not depend on the profile.
+      let usable = false;
+      try { usable = await (dependencies.sandboxProbe ?? defaultSandboxProbe)(); } catch { usable = false; }
+      for (const alias of sandboxed) {
+        checks.push(usable
+          ? ok("sandbox_unavailable", alias)
+          : failure("sandbox_unavailable", alias, "install a bubblewrap with --overlay-src, --tmp-overlay and --disable-userns support at /usr/bin/bwrap (root-owned, not group- or world-writable) and allow unprivileged user namespaces; see docs/installation.md"));
+      }
+      // Without a usable worktree pointer Git commands fail inside the sandbox; the read tools are unaffected.
+      for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {
+        if (!(await hasGitfilePointer(fs, path))) continue;
+        let gitDir: string | undefined;
+        try { gitDir = await (dependencies.worktreeGitDir ?? resolveWorktreeGitDir)(path); } catch { gitDir = undefined; }
+        checks.push(gitDir === undefined
+          ? warning("workspace_git_unavailable", alias, "the workspace's gitfile does not point to a linked worktree whose main Git directory is intact, so Git commands fail inside the shell sandbox")
+          : ok("workspace_git_unavailable", alias));
       }
     }
   }

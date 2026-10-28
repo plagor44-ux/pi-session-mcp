@@ -32,6 +32,7 @@ function capabilities(profiles = 1) {
       provider: "p".repeat(256), model: "m".repeat(256), thinkingLevel: "off",
       extensions: Array.from({ length: 8 }, (_, i) => `npm:e${i}${"x".repeat(244)}@1.0.0`),
       grantedExtensionTools: Array.from({ length: 32 }, (_, i) => `t${i}`.padEnd(64, "x")),
+      shell: "sandboxed",
       skills: [],
     })),
   };

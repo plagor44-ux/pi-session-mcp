@@ -166,8 +166,8 @@ describe("MCP contracts", () => {
         workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only"] } } } },
         executionProfiles: {
           items: {
-            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "skills"],
-            properties: { grantedExtensionTools: { type: "array", items: { type: "string" } } },
+            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills"],
+            properties: { grantedExtensionTools: { type: "array", items: { type: "string" } }, shell: { enum: ["none", "sandboxed"] } },
             additionalProperties: false,
           },
         },
@@ -241,11 +241,11 @@ describe("MCP contracts", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], grantedExtensionTools: [], skills: [],
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], grantedExtensionTools: [], shell: "none", skills: [],
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], grantedExtensionTools: [], skills: [],
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], grantedExtensionTools: [], shell: "none", skills: [],
         },
       ],
     });
