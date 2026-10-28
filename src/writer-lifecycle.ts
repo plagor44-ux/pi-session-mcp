@@ -151,8 +151,8 @@ async function resolveBase(ctx: WriterContext, requested?: string) {
   if (!commit || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit)) throw new LifecycleError("writer_base_unavailable");
   return { ref, short, commit };
 }
-/** The short branch name provisioning would record for `requested`, normalized like the writer state. */
-export async function baseBranchName(ctx: WriterContext, requested: string): Promise<string> {
+/** The short branch name provisioning would record for `requested` (or its default base), normalized like the writer state. */
+export async function baseBranchName(ctx: WriterContext, requested?: string): Promise<string> {
   return (await resolveBase(ctx, requested)).short;
 }
 async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, ref: string, commit: string, tags: ContainerSettings["tags"]): Promise<void> {

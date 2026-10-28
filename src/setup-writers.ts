@@ -294,6 +294,11 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
         }
         if (bases.size > 1) return result(operation, [{ target: modesTarget(request.alias), status: "failed", code: "workspace_base_ambiguous" }]);
         if (bases.size === 1) recorded = { ...request, baseRef: [...bases][0]!.replace(/^refs\/heads\//, "") };
+        // First provisioning: record the base it will resolve (origin/HEAD, else main), so default starts find writers.
+        else if (request.mode === "container") {
+          try { recorded = { ...request, baseRef: await services(deps).life.baseBranchName(await context(request.alias, deps)) }; }
+          catch (error) { return failed(codeFor(error)); }
+        }
       }
     }
     return changeExecutionMode(configPath, recorded, {

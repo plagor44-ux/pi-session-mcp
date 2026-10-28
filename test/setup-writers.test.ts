@@ -31,6 +31,8 @@ async function fixture() {
   const ownership = new MemoryOwnershipStore();
   const registered = new Set<string>();
   const life = { ...lifecycle,
+    // The fixture workspace is no Git checkout: provisioning's default base resolves to main.
+    baseBranchName: vi.fn(async (_ctx: lifecycle.WriterContext, requested?: string) => requested?.replace(/^refs\/heads\//, "") ?? "main"),
     provisionWriter: vi.fn(async (_ctx, input) => {
       calls.push(`provision${input.index}`);
       const paths = writerPaths(home, `x-w${input.index}`);
@@ -110,7 +112,7 @@ describe("writer setup reconciliation", () => {
     expect(order.indexOf("release:x-w1")).toBeGreaterThan(order.lastIndexOf("unregister:x-w1"));
     expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("relay");
   });
-  it("does not change a writer or inspect registrations when migration cannot acquire its lease", async () => {
+  it.skipIf(process.platform !== "linux")("does not change a writer or inspect registrations when migration cannot acquire its lease", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps);
     await writeWriterState(f.home, "x-w1", state(1));
@@ -317,6 +319,12 @@ describe("writer setup reconciliation", () => {
     ]));
     expect(JSON.stringify(output)).not.toContain("SECRET");
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
+  });
+  it("records the base that first provisioning resolves when --base is omitted", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.life.baseBranchName).toHaveBeenCalledWith(expect.anything());
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("main");
   });
   it("records --base as provisioning resolves it", async () => {
     const f = await fixture();

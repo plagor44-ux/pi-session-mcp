@@ -32,6 +32,8 @@ async function fixture(options: { delivery: boolean; aliases?: readonly string[]
   const ownership = new MemoryOwnershipStore();
   const registered = new Set<string>();
   const life = { ...lifecycle,
+    // The fixture workspace is no Git checkout: provisioning's default base resolves to main.
+    baseBranchName: vi.fn(async (_ctx: lifecycle.WriterContext, requested?: string) => requested?.replace(/^refs\/heads\//, "") ?? "main"),
     provisionWriter: vi.fn(async (ctx: lifecycle.WriterContext, input: { index: number }) => {
       const name = `${ctx.alias}-w${input.index}`, paths = writerPaths(home, name);
       await writeWriterState(home, name, state(ctx.alias, input.index));
