@@ -14,8 +14,8 @@ mean they are implemented or that their gates passed.
 
 - 2026-10-28: [ADR 0012](adr/0012-leased-writer-pool.md) was accepted and
   implemented in #157: one host registration with a leased container writer
-  pool, base-aware allocation and host-spool events. Not yet released; no new
-  live acceptance is claimed.
+  pool, base-aware allocation and host-spool events. Prepared as minor release
+  0.12.0 together with #151 and #154; no new live acceptance is claimed.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

@@ -2457,6 +2457,53 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.12.0 pre-release acceptance
+
+`v0.12.0` was accepted on 2026-10-28 from 11:40 to 11:45 UTC on its release
+candidate `169f00c`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.312`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record and the roadmap.
+
+The minor release ships ADR 0012 (#157) with #151 and #154. It changes the MCP
+contract as the changelog lists; the setup report keeps `schemaVersion` `1`.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    120 files, 3693 passed and 14 skipped, and no unhandled error.
+  - `npm audit` exited with `1` and names only the known `undici` finding
+    through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 907 files (tarball shasum
+    `764e22c8373934ce339cfd76ea1e56b96006a34d`); nothing under
+    `docs/superpowers/` is packed, and a scan of the packed files for private
+    names, hosts and paths found none.
+  - Doctor reported `packageVersion` `0.12.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.12.0`.
+- In every Level 2 run the real client registrations and the built files were
+  unchanged, no process remained, and the leak check passed.
+- Review: every task of #157 had a cross-family read-only review before it was
+  integrated; the findings were fixed in #158.
+
+Level 2 runs no container writer. The Podman-gated tests in
+`test/writer-lifecycle.podman.test.ts` ran on the candidate with rootless
+Podman and the local Node image, separately from the suite: 4 of 4 passed,
+including the lease descriptor check, the finite-input probe and the release of
+a writer after its relay parent was killed.
+
+Not established for `0.12.0`: the migration of an installed release's container
+repositories, a relayed coding session through the one host registration, the
+live checks of #151 and #154, which follow the release; Level 3. No
+post-release evidence was recorded for `0.11.9`, a documentation-only release,
+beyond its release notes.
+
 ### v0.11.8 post-release evidence
 
 The published-release acceptance of `v0.11.8` ran on 2026-10-26 from 22:40 to
