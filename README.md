@@ -173,6 +173,7 @@ Contract and design:
 - [ADR 0004: setup accepts clients by contract, not by version](docs/adr/0004-client-contract-not-version.md)
 - [ADR 0007: execution profiles select Pi skills from an operator catalog](docs/adr/0007-profile-skill-selection.md)
 - [ADR 0011: turn events and controller wake](docs/adr/0011-turn-events-and-controller-wake.md)
+- [ADR 0012: one registration with a leased writer pool](docs/adr/0012-leased-writer-pool.md)
 
 Maintain:
 
