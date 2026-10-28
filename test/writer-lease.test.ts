@@ -23,7 +23,9 @@ async function holder(home: string): Promise<ChildProcess> {
     process.stdout.write('ready');
     process.stdin.resume();
   `, path], { stdio: ["pipe", "pipe", "pipe"] });
-  await once(child.stdout!, "data");
+  const exit = once(child, "exit").then(([code]) => { throw new Error(`lease holder exited with ${String(code)}`); });
+  await Promise.race([once(child.stdout!, "data"), exit]);
+  exit.catch(() => undefined);
   return child;
 }
 async function stop(child: ChildProcess): Promise<void> {
@@ -45,6 +47,18 @@ describe.skipIf(process.platform !== "linux")("writer lease", () => {
     expect((await stat(path)).ino).toBe(original.ino);
   });
 
+  it("creates exact modes under a restrictive umask", async () => {
+    const home = await temporaryRoot("pi-lease-");
+    // Existing parents, as on a used machine; the umask then narrows only what the lease creates.
+    await mkdir(join(home, ".local", "state", "pi-session-mcp"), { recursive: true, mode: 0o700 });
+    const previous = process.umask(0o277);
+    let lease;
+    try { lease = await acquireWriterLease(home, name, { waitMs: 0 }); } finally { process.umask(previous); }
+    const path = writerLeasePath(home, name);
+    expect((await stat(join(path, ".."))).mode & 0o777).toBe(0o700);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    await lease.release();
+  });
   it("second non-blocking acquire in another process fails with writer_busy", async () => {
     const home = await temporaryRoot("pi-lease-");
     const child = await holder(home);

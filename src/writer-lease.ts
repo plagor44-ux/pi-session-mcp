@@ -1,5 +1,5 @@
 import { close, constants, fstat, type Stats } from "node:fs";
-import { lstat, mkdir, open, type FileHandle } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { flockBinary, lockWithFlock, OverrideLockError } from "./override-lock.js";
@@ -51,11 +51,24 @@ async function prepare(home: string, name: string, options: LeaseSeams, create: 
   const binary = flockBinary(options);
   if (!binary) throw new WriterLeaseError("writer_lease_unavailable");
   const directory = join(home, ...LEASE_DIRECTORY);
-  if (create) await mkdir(directory, { recursive: true, mode: 0o700 });
+  // The umask may narrow the requested modes; a directory this call created gets its exact mode.
+  if (create && await mkdir(directory, { recursive: true, mode: 0o700 }) !== undefined) await chmod(directory, 0o700);
   const info = await lstat(directory);
   if (!info.isDirectory() || info.uid !== process.getuid!() || (info.mode & 0o7777) !== 0o700) throw new WriterLeaseError("writer_lease_unavailable");
   await assertSupportedFilesystem(directory, "linux", options.readStatfs);
   return { path, binary };
+}
+
+/** Creates the file exclusively and sets its exact mode, or opens the existing one; never follows a link. */
+async function openLeaseFile(path: string): Promise<FileHandle> {
+  try {
+    const created = await open(path, constants.O_NOFOLLOW | constants.O_CREAT | constants.O_EXCL | constants.O_RDWR, 0o600);
+    try { await created.chmod(0o600); } catch (error) { await created.close().catch(() => undefined); throw error; }
+    return created;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    return open(path, constants.O_NOFOLLOW | constants.O_RDWR);
+  }
 }
 
 function lease(fd: number, closeDescriptor: () => Promise<unknown>): WriterLease {
@@ -76,7 +89,7 @@ export async function acquireWriterLease(home: string, name: string, options: Le
   try {
     if (!Number.isFinite(options.waitMs) || options.waitMs < 0) throw new WriterLeaseError("writer_lease_unavailable");
     const { path, binary } = await prepare(home, name, options, true);
-    handle = await open(path, constants.O_NOFOLLOW | constants.O_CREAT | constants.O_RDWR, 0o600);
+    handle = await openLeaseFile(path);
     checkFile(await handle.stat());
     await lockWithFlock(binary, handle.fd, options.waitMs, options.signal, options.waitMs === 0);
     await checkPath(path, await handle.stat());
@@ -88,6 +101,12 @@ export async function acquireWriterLease(home: string, name: string, options: Le
   }
 }
 
+/**
+ * Adopts a descriptor a parent passed down while it holds the lease. A fresh open must find the
+ * lock busy before the descriptor is touched; if the holder released in between, the descriptor's
+ * own `flock -n` takes the lock instead, which still leaves exactly one exclusive holder. Adopt the
+ * same descriptor once: `release()` closes that descriptor number.
+ */
 export async function adoptInheritedLease(home: string, name: string, fd: number, options: LeaseSeams = {}): Promise<WriterLease> {
   let probe: FileHandle | undefined;
   try {
