@@ -17,7 +17,9 @@ import {
   type Skill,
   SessionManager,
   SettingsManager,
+  type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import type { ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 import {
@@ -425,8 +427,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "resource_loader", "pi_session_creation_failed");
     }
 
+    const confined = await this.confinedTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
     const tools = [...PROFILE_TOOLS[executionProfile.permissionProfile], ...mcpTools.tools.map((tool) => tool.name)];
+    const customTools = [...confined, ...mcpTools.tools];
     let session: AgentSession;
     try {
       ({ session } = await withCreationDeadline(
@@ -440,7 +444,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
           resourceLoader,
           // With an explicit tools list, Pi also needs custom tool names here to activate them.
           tools,
-          ...(mcpTools.tools.length === 0 ? {} : { customTools: mcpTools.tools }),
+          ...(customTools.length === 0 ? {} : { customTools }),
         }),
         (late) => disposeSdkSession(late.session),
       ));
@@ -449,7 +453,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }
     return this.admit(session, executionProfile, tools, mcpTools, () => disposeSdkSession(session),
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills, [], confined);
   }
 
   private async createWithExtensions(
@@ -497,7 +501,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_load", "extension_load_failed");
     }
     const model = await this.resolveVerifiedModel(services.modelRuntime, executionProfile);
+    const confined = await this.confinedTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
+    const customTools = [...confined, ...mcpTools.tools];
     const grantedTools = executionProfile.grantedExtensionTools ?? [];
     const composed = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools, grantedTools);
     if (!composed.ok) {
@@ -515,7 +521,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
             model,
             thinkingLevel: executionProfile.thinkingLevel,
             tools,
-            ...(mcpTools.tools.length === 0 ? {} : { customTools: mcpTools.tools }),
+            ...(customTools.length === 0 ? {} : { customTools }),
           })),
           services,
           diagnostics: services.diagnostics,
@@ -561,7 +567,20 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools, confined);
+  }
+
+  /**
+   * The workspace-confined read tools of a read-only session (ADR 0013); none for coding. The
+   * workspace root is the session directory. A root that cannot be resolved fails the start.
+   */
+  private async confinedTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
+    if (input.executionProfile.permissionProfile !== "read-only") return [];
+    try {
+      return createConfinedReadOnlyTools(input.cwd, await allowedReadRoots(input.cwd, skills));
+    } catch {
+      throw this.failure(input.executionProfile, "create_session", "pi_session_creation_failed");
+    }
   }
 
   private async loadSkills(input: { cwd: string; executionProfile: ResolvedExecutionProfile }): Promise<Skill[]> {
@@ -664,9 +683,16 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     toolCheck: "exact" | "subset" = "exact",
     skills: readonly Skill[] = [],
     requiredTools: readonly string[] = [],
+    // The server's own definitions must be the ones the session resolves for their names.
+    ownDefinitions: readonly ToolDefinition[] = [],
   ): Promise<PiSessionHandle> {
     try {
       this.checkResources(session.resourceLoader, skills, executionProfile, "postcheck");
+      for (const definition of ownDefinitions) {
+        if (session.getToolDefinition(definition.name) !== definition) {
+          throw this.failure(executionProfile, "postcheck", "pi_session_creation_failed");
+        }
+      }
       if (session.model?.provider !== executionProfile.provider || session.model.id !== executionProfile.model) {
         throw this.failure(executionProfile, "postcheck", "execution_selection_mismatch");
       }
