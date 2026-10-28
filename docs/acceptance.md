@@ -2457,6 +2457,84 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.13.0 post-release evidence
+
+Recorded on 2026-10-28 for the published release `0.13.0`.
+
+Tag binding: a fresh clone of the annotated tag `v0.13.0` (tag object
+`8c2d513ccac17916fdf7cf3fc36b3ccd454138ed`) peels to the merge commit
+`d1c63dac3b996952976aab4b5ad11665e7108fa3` of #171, and
+`git describe --tags --exact-match` reports `v0.13.0`. CI on the merge commit
+(run 40757781881) and on the tag (run 40759098803) passed on the first attempt.
+
+- Level 1 on the tag clone after `npm ci`, from 21:01 to 21:03 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (125 files, 3936 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. Doctor
+  reported `packageVersion` `0.13.0` and exited with `2` because no
+  configuration was set (`config_missing`).
+- `pi-session-mcp@0.13.0` on npm: 916 files, shasum
+  `866d0ecfa3b4e1a71462d291b1776897229f7827`, `gitHead` `4521d39` (the head of
+  #171, whose tree equals the merge commit). `npm pack` of the tag clone gives
+  the same shasum and file count.
+- Published npm package, Level 2 from a fresh prefix, 21:03 to 21:05 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool`; real
+  registrations and built files unchanged, no process left, leak check passed.
+  Clients: Codex CLI `0.162.1` and Claude Code `2.1.312`. The install smoke on
+  the published package reported `smoke_passed` with version `0.13.0`.
+- The GitHub release `v0.13.0` was published the same day.
+
+Operator upgrade of the second machine (Linux) from `0.12.1` to `0.13.0` on
+2026-10-28 from 20:34 UTC, following
+[Installation](installation.md#container-writers), with Node.js `24.22.0`:
+
+- Both client targets were removed with `0.12.1`, then
+  `npm install -g pi-session-mcp@0.13.0`.
+- Four container repositories with 14 writers were migrated by repeating their
+  provisioning commands with unchanged settings and `--apply`: 2, 4, 4
+  (operator image, `--cache go`) and 4 (operator image) writers. Every writer
+  reported `writer_accepted`.
+- `--apply` and `--verify` of both client targets passed (`mcp_verified`), the
+  open point of the pre-release record, and `--writer <name> --verify` passed
+  for all 14 writers. Doctor reported no error.
+
+Operator upgrade of the workstation from `0.12.1` to `0.13.0` on 2026-10-28
+from 20:47 UTC, with the same steps: no writer container ran at the start;
+five container repositories with 18 writers (2, 4, 4 with `--cache go`, 4 with
+base `dev`, 4 with `--cache uv`, three of them with operator images) reported
+`writer_accepted`; client-target `--apply` and `--verify` passed for
+`claude-code:user` and `codex:user` (`mcp_verified`, `skill_verified`, and
+`hook_verified` for the wake hook); `--writer <name> --verify` passed for all
+18 writers. Doctor reported no error.
+
+Live check of `shell: "sandboxed"` on both machines, the open point of the
+pre-release record. Two read-only profiles were added to each configuration,
+copies of the existing review profiles with `"shell": "sandboxed"`, one per
+provider family. Doctor reported `sandbox_unavailable` and
+`workspace_git_unavailable` as `ok`. A stdio driver against the installed
+server started one session per profile on the pi-session-mcp workspace (a plain
+checkout, not a linked worktree) and sent one prompt with five steps. All four
+sessions completed with the same results:
+
+- `git log -1 --format=%h` through `bash` printed the checkout's head commit.
+- `touch sandbox-probe.txt && ls sandbox-probe.txt` succeeded in the sandbox;
+  afterwards the file did not exist on the host and `git status` of the host
+  checkout was clean.
+- `getent hosts example.com || echo NO_NETWORK` printed `NO_NETWORK`.
+- `echo HOME=$HOME` printed `HOME=/tmp/home`.
+- `read` of `/etc/hostname` returned `Path is outside the allowed read roots`.
+
+Finding from these checks: the first workstation edit left out the required
+profile field `default`. Doctor then reported only `config_invalid` with the
+generic remediation and did not name the profile or the field; parsing the file
+with the package's configuration schema named both. With `"default": false`
+added, Doctor reported no error.
+
+Not established for `0.13.0`: the sandbox on a host that restricts unprivileged
+user namespaces; Git inside the sandbox on a linked worktree in live use (the
+bubblewrap-gated tests cover it); the macOS upgrade; Level 3.
+
 ### v0.13.0 pre-release acceptance
 
 `v0.13.0` was accepted on 2026-10-28 from 19:30 to 19:36 UTC on its release
