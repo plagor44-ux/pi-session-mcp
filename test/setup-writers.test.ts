@@ -98,6 +98,8 @@ describe("writer setup reconciliation", () => {
     expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
     f.life.writerSettingsDrift.mockImplementation(lifecycle.writerSettingsDrift);
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect((await readWriterState(f.home, "x-w1"))?.limits).toEqual({ cpus: 1, cpuShares: 256, memory: "512m" });
+    expect((await changeWriterMode(f.configPath, { ...mode, clearLimits: ["cpus", "cpuShares", "memory"] }, f.deps)).exitCode).toBe(0);
     expect(await readWriterState(f.home, "x-w1")).not.toHaveProperty("limits");
     expect(f.accept.acceptWriter).toHaveBeenCalledTimes(2);
   });

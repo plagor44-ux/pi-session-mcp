@@ -24,6 +24,10 @@ describe("setup CLI", () => {
   describe("--repo", () => {
     it("parses optional resource limits", () => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "1.25", "--cpu-shares", "256", "--memory", "512m"]).repo?.container).toMatchObject({ cpus: 1.25, cpuShares: 256, memory: "512m" });
+      const cleared = parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "none", "--cpu-shares", "none", "--memory", "none"]).repo;
+      expect(cleared?.clearLimits).toEqual(["cpus", "cpuShares", "memory"]);
+      expect(cleared?.container).not.toHaveProperty("cpus");
+      expect(() => parseSetupArgs(["--repo", "a", "--mode", "host", "--accept-host-writes", "--cpus", "none"])).toThrow("repo_combination");
     });
     it.each([
       ...["0", "-1", "1024.01", "1.001", "NaN", "1e2", ""].map((value) => ["--cpus", value, "cpus_invalid"]),

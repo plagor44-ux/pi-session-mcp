@@ -87,9 +87,9 @@ clone.
 | `--network <value>` | `pasta` (default, not limited) or `none` |
 | `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
 | `--clean <untracked\|all>` | `untracked` (default) keeps ignored files; `all` also removes ignored files on reset and finish |
-| `--cpus <n>` | Hard CPU cap, > 0 through 1024, at most two decimals; omitted means unlimited |
-| `--cpu-shares <n>` | Relative CPU weight under contention, integer 2–262144; Podman default 1024 |
-| `--memory <size>` | Hard memory cap, 1–9999999 plus lowercase `m` or `g`; omitted means unlimited |
+| `--cpus <n>` | Hard CPU cap, > 0 through 1024, at most two decimals; `none` removes it; unlimited unless set |
+| `--cpu-shares <n>` | Relative CPU weight under contention, integer 2–262144; `none` removes it; Podman default 1024 |
+| `--memory <size>` | Hard memory cap, 1–9999999 plus lowercase `m` or `g`; `none` removes it; unlimited unless set |
 | `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, `uv` for its private uv and npm cache, or `npm` for its private npm-only cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | No writer effect; coding uses the host registration for either client |
@@ -403,8 +403,12 @@ serving container, not throwaway clone/maintenance containers. They update
 existing writer state under its lease without reprovisioning or changing
 boundary acceptance, and take effect at the writer's next launch. Acceptance
 and `--writer <name> --verify` run the serving container under the same
-limits, so a very small cap can make them time out. Repeat the flags on later mode requests: omitting a
-flag removes that limit.
+limits, so a very small cap can make them time out. Unlike the other
+settings, a later mode request that omits a limit flag keeps the recorded
+limit, because limits are outside the settings drift check and would
+otherwise vanish without an error, for example in an upgrade's repeated
+provisioning command. Pass `--cpus none`, `--cpu-shares none` or
+`--memory none` to remove a limit.
 
 ### npm cache (opt-in)
 
