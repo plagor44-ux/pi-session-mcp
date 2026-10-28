@@ -15,7 +15,7 @@ it("derives the fixed container name and label", () => {
   expect(writerLabel("repo-w1")).toBe("pi-session-mcp.writer=repo-w1");
   expect(FENCE_STOP_TIMEOUT_MS).toBe(20_000);
 });
-it("passes when no labelled container and no clone mount exist", async () => {
+it.skipIf(process.platform !== "linux")("passes when no labelled container and no clone mount exist", async () => {
   const run = vi.fn<CommandRunner["run"]>().mockResolvedValue(ok());
   await ensureWriterAbsent({ run }, paths, "repo-w1", { leaseFd: 9 });
   expect(run.mock.calls.map(([cmd, args]) => [cmd, args])).toEqual([
@@ -24,7 +24,7 @@ it("passes when no labelled container and no clone mount exist", async () => {
   ]);
   for (const call of run.mock.calls) expect(call[3]).toEqual({ inheritFds: [9] });
 });
-it("removes labelled and legacy clone containers, deduplicates, polls, and inherits the lease on every call", async () => {
+it.skipIf(process.platform !== "linux")("removes labelled and legacy clone containers, deduplicates, polls, and inherits the lease on every call", async () => {
   const run = vi.fn<CommandRunner["run"]>()
     .mockResolvedValueOnce(ok(found)).mockResolvedValueOnce(ok(JSON.stringify([
       { Id: "abc", Names: ["old"] }, { Id: "legacy", Names: [] },

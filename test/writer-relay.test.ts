@@ -40,7 +40,8 @@ async function change(home: string, index: number, values: Record<string, unknow
   const path = writerPaths(home, `repo-w${index}`).state;
   await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, "utf8")), ...values }));
 }
-describe("writer relay", () => {
+// The relay is Linux-only, like the writer lease and container fence it relies on.
+describe.skipIf(process.platform !== "linux")("writer relay", () => {
   it("starts on the first ready relay writer at the default base and reports placement", async () => {
     const s = await setup(); const handle = await s.start();
     expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });

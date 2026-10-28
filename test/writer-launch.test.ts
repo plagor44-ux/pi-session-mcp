@@ -191,7 +191,7 @@ it("still copies the host credentials without new logging when the refresh fails
   child.emit("close", 0); await running;
 });
 
-it("launches in lease, runtime, fence, events, credentials, spawn, timer order", async () => {
+it.skipIf(process.platform !== "linux")("launches in lease, runtime, fence, events, credentials, spawn, timer order", async () => {
   await save(); await enableDelivery(); deps.env = {};
   const order: string[] = [];
   vi.mocked(deps.lease!.acquire).mockImplementation(async () => {
@@ -259,7 +259,7 @@ it("refuses with writer_fenced and writes no credentials or events when absence 
   expect(await readFile(join(paths.agent, "auth.json"), "utf8")).toBe("unchanged");
   await expect(lstat(paths.events)).rejects.toMatchObject({ code: "ENOENT" });
 });
-it("relay launch omits the events mount; legacy launch keeps it", async () => {
+it.skipIf(process.platform !== "linux")("relay launch omits the events mount; legacy launch keeps it", async () => {
   await save(); await enableDelivery();
   await writeWriterState(home, "x-w1", { ...state, launch: "relay" });
   await launch(["x-w1", "probe"], deps);
@@ -269,7 +269,7 @@ it("relay launch omits the events mount; legacy launch keeps it", async () => {
   await launch(["x-w1", "probe"], deps);
   expect(vi.mocked(deps.spawnPodman).mock.calls[1]![0]).toContain(`${eventsDir()}:/pi/events:rw`);
 });
-it("on host stdin end and child close joins an outstanding refresh before releasing the lease", async () => {
+it.skipIf(process.platform !== "linux")("on host stdin end and child close joins an outstanding refresh before releasing the lease", async () => {
   await save(); deps.env = {}; vi.mocked(deps.spawnPodman).mockReturnValue(child);
   const release = vi.fn(async () => {});
   vi.mocked(deps.lease!.acquire).mockResolvedValue({ fd: 42, release });

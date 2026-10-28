@@ -42,7 +42,7 @@ function controlReport(overrides: Record<string, any> = {}): Record<string, any>
   });
 }
 
-it("forwards the harness lease only to the wrapper as fd 3", async () => {
+it.skipIf(process.platform !== "linux")("forwards the harness lease only to the wrapper as fd 3", async () => {
   const home = await temporaryRoot("iso-lease-");
   const workspace = join(home, "clone");
   mkdirSync(join(workspace, ".git"), { recursive: true });

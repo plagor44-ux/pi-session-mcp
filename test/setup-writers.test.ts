@@ -57,7 +57,9 @@ async function fixture() {
   };
   // Podman as the settings check asks it: usable, a full image ID resolves to itself, the built-in node image to the state's ID.
   const runner = { run: vi.fn(async (_command: string, args: readonly string[], _signal?: AbortSignal, _options?: { inheritFds?: readonly number[] }) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
-  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
+  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })),
+    // The writer lease and container fence are Linux-only; elsewhere these tests exercise setup with stand-ins.
+    ...(process.platform === "linux" ? {} : { lease: vi.fn(async () => ({ fd: 3, release: async () => {} })), ensureAbsent: vi.fn(async () => {}) }) };
   return { home, configPath, calls, life, accept, deps, adapter, runner, ownership, registered };
 }
 const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : state(1).imageId;
@@ -193,7 +195,8 @@ describe("writer setup reconciliation", () => {
     expect(again.findings.some((finding) => finding.code === "workspace_base_ambiguous")).toBe(false);
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
   });
-  it("collect, reset, recreate, finish, remove and verify fail with writer_busy while another process holds the writer lease", async () => {
+  // The real lease and fence are Linux-only.
+  it.skipIf(process.platform !== "linux")("collect, reset, recreate, finish, remove and verify fail with writer_busy while another process holds the writer lease", async () => {
     const f = await fixture();
     const lease = await acquireWriterLease(f.home, "x-w1", { waitMs: 0 });
     const child = spawn(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume()"], { stdio: ["pipe", "pipe", "pipe", lease.fd] });
@@ -206,7 +209,8 @@ describe("writer setup reconciliation", () => {
       expect(f.calls).toEqual([]);
     } finally { const exited = once(child, "exit"); child.stdin!.end(); await exited; }
   }, 20_000);
-  it("provisions and reconciles under the lease and removes a stale container before writer changes", async () => {
+  // The real lease and fence are Linux-only.
+  it.skipIf(process.platform !== "linux")("provisions and reconciles under the lease and removes a stale container before writer changes", async () => {
     const f = await fixture();
     const provision = f.life.provisionWriter.getMockImplementation()!;
     f.life.provisionWriter.mockImplementation(async (ctx, input) => {
@@ -432,7 +436,8 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
   });
   it.each([
-    ["Podman cannot be asked", "writer_fenced", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
+    // On Linux the container fence asks Podman first; elsewhere its stand-in passes and acceptance does.
+    ["Podman cannot be asked", process.platform === "linux" ? "writer_fenced" : "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
     ["the image cannot be resolved locally", "image_unavailable", (args: readonly string[]) => args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : { exitCode: 0, stdout: podmanAnswer(args), stderr: "" }],
   ])("leaves a ready writer as it is when %s, and never pulls (#134)", async (_label, code, answer) => {
     const f = await fixture();
