@@ -27,6 +27,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   let discard = false, codex = false, isolationControl = false;
   const container: { -readonly [K in keyof ContainerSettings]?: ContainerSettings[K] } = {};
   const modeFlags = new Set<string>();
+  const clearLimits: ("cpus" | "cpuShares" | "memory")[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (["--collect", "--reset", "--recreate", "--finish"].includes(argument!)) {
@@ -94,12 +95,15 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
           if (value !== "untracked" && value !== "all") throw new Error("clean_invalid");
           container.clean = value; break;
         case "--cpus":
+          if (value === "none") { clearLimits.push("cpus"); break; }
           if (!value || !/^[0-9]+(?:\.[0-9]{1,2})?$/.test(value) || !cpusSchema.safeParse(Number(value)).success) throw new Error("cpus_invalid");
           container.cpus = Number(value); break;
         case "--cpu-shares":
+          if (value === "none") { clearLimits.push("cpuShares"); break; }
           if (!value || !/^[0-9]+$/.test(value) || !cpuSharesSchema.safeParse(Number(value)).success) throw new Error("cpu_shares_invalid");
           container.cpuShares = Number(value); break;
         case "--memory":
+          if (value === "none") { clearLimits.push("memory"); break; }
           if (!memorySchema.safeParse(value).success) throw new Error("memory_invalid");
           container.memory = value; break;
         case "--cache":
@@ -124,8 +128,8 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   if ((discard || baseRef || codex) && !repo) throw new Error("usage_invalid");
   if (modeFlags.size > 0) {
     if (repo === undefined || targets.length > 0 || customizeSkill !== undefined || (operation !== undefined && operation !== "dry-run" && operation !== "apply")) throw new Error("repo_combination");
-    if ((mode === "host" || mode === "read-only") && Object.keys(container).length > 0) throw new Error("repo_combination");
-    const request: ModeRequest = { alias: repo, acceptHostWrites, apply: operation === "apply", discard, codex, ...(baseRef ? { baseRef } : {}), ...(mode === undefined ? {} : { mode }), ...(Object.keys(container).length === 0 ? {} : { container }) };
+    if ((mode === "host" || mode === "read-only") && (Object.keys(container).length > 0 || clearLimits.length > 0)) throw new Error("repo_combination");
+    const request: ModeRequest = { alias: repo, acceptHostWrites, apply: operation === "apply", discard, codex, ...(baseRef ? { baseRef } : {}), ...(mode === undefined ? {} : { mode }), ...(Object.keys(container).length === 0 ? {} : { container }), ...(clearLimits.length === 0 ? {} : { clearLimits }) };
     return { ...(operation === undefined ? {} : { operation }), targets, json, repo: request };
   }
   if (customizeSkill !== undefined) {

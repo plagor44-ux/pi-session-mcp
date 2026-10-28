@@ -21,6 +21,8 @@ export interface ModeRequest {
   readonly discard?: boolean;
   readonly baseRef?: string;
   readonly codex?: boolean;
+  /** Limits to remove (`--cpus none` and so on); an omitted limit keeps the recorded one (#166). */
+  readonly clearLimits?: readonly ("cpus" | "cpuShares" | "memory")[];
 }
 
 /** A dry run writes nothing; apply serializes the entire read/validate/replace transaction. */
@@ -64,7 +66,13 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
       const previousBase = existing?.mode === "container" ? existing.base : undefined;
       const requestedBase = request.baseRef?.replace(/^refs\/heads\//, "");
       const base = requestedBase ?? previousBase ?? request.container?.base;
-      return { ...request.container, mode, ...(base === undefined ? {} : { base }) };
+      // Limits are outside the settings drift check, so an omitted flag must not drop one silently (#166).
+      const limits = Object.fromEntries((["cpus", "cpuShares", "memory"] as const).flatMap((key) => {
+        if (request.clearLimits?.includes(key)) return [];
+        const value = request.container?.[key] ?? (existing?.mode === "container" ? existing[key] : undefined);
+        return value === undefined ? [] : [[key, value]];
+      }));
+      return { ...request.container, ...limits, mode, ...(base === undefined ? {} : { base }) };
     })() : { mode };
     let proposed;
     try {

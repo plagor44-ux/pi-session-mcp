@@ -270,9 +270,10 @@ or npm for you.
 
 Optional container settings `--cpus`, `--cpu-shares` and `--memory` bound the
 serving container's CPU or memory use. CPU shares are relative weight under
-contention (for example 256 on a host shared with CI); CPU count and memory
-are hard caps. Setup requires the corresponding host cgroup controllers.
-Repeat these flags on later mode requests or their limits are removed;
+contention against sibling cgroups in the operator's user slice only; CPU
+count and memory are hard caps. Setup requires the corresponding host cgroup
+controllers. A later mode request that omits a limit flag keeps the recorded
+limit; `--cpus none`, `--cpu-shares none` and `--memory none` remove it;
 changes update existing writer state without reprovisioning. See
 [Resource limits](execution-modes.md#resource-limits) for ranges and syntax.
 

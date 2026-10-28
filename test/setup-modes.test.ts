@@ -100,12 +100,17 @@ describe("setup execution modes", () => {
       }
     }
   });
-  it("removes limits when a later mode request omits them", async () => {
+  it("keeps limits a later mode request omits and removes them only with none (#166)", async () => {
     const { config, path } = await fixture();
     const deps = { ...probe(true), cgroupControllers: async () => ["cpu", "memory"] };
     expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], cpus: 1, cpuShares: 256, memory: "512m" }, apply: true }), deps)).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toMatchObject({ cpus: 1, cpuShares: 256, memory: "512m" });
     expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), deps)).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toMatchObject({ cpus: 1, cpuShares: 256, memory: "512m" });
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], cpus: 2 }, clearLimits: ["memory"], apply: true }), deps)).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toMatchObject({ cpus: 2, cpuShares: 256 });
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).not.toHaveProperty("memory");
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, clearLimits: ["cpus", "cpuShares"], apply: true }), deps)).exitCode).toBe(0);
     const entry = JSON.parse(await readFile(path, "utf8")).workspaces.a;
     for (const key of ["cpus", "cpuShares", "memory"]) expect(entry).not.toHaveProperty(key);
   });

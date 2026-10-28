@@ -16,7 +16,8 @@
 
 - Optional container resource settings `--cpus`, `--cpu-shares` and `--memory`,
   with host cgroup-controller preflight and fenced in-place writer updates
-  without reprovisioning
+  without reprovisioning. A later mode request that omits a limit keeps it;
+  `none` removes it
   ([#166](https://github.com/plagor44-ux/pi-session-mcp/issues/166)).
 
 - `--cache npm` mounts a private per-writer npm cache at `/pi/npm` with
