@@ -107,6 +107,14 @@ it.each(["mode", "symlink", "owner"] as const)("rejects an unsafe writer lease d
   const overrides = kind === "owner"
     ? { writerLeaseRoot: async () => ({ isDirectory: true, uid: (process.getuid?.() ?? 0) + 1, mode: 0o700 }) }
     : {};
+  const [finding] = (await run(overrides)).checks.filter((check) => check.id === "writer_lease_directory");
+  expect(finding).toEqual({ id: "writer_lease_directory", severity: "error", subject: "writer lease", remediation: expect.any(String) });
+  // A real directory is repaired in place: replacing it would give held leases a new inode.
+  expect(finding!.remediation).toMatch(kind === "symlink" ? /close every writer session/ : /in place.*never move or delete/);
+});
+it("reports an uninspectable writer lease directory as an error", async () => {
+  const { run } = await fixture();
+  const overrides = { writerLeaseRoot: async () => { throw Object.assign(new Error("denied"), { code: "EACCES" }); } };
   expect((await run(overrides)).checks.filter((check) => check.id === "writer_lease_directory")).toEqual([
     { id: "writer_lease_directory", severity: "error", subject: "writer lease", remediation: expect.any(String) },
   ]);

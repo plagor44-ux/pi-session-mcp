@@ -209,8 +209,10 @@ async function writerLeaseCheck(home: string, probe: (path: string) => Promise<E
   try { info = await probe(join(home, ...LEASE_DIRECTORY)); }
   catch { return failure("writer_lease_directory", "writer lease", "grant access to the writer lease directory"); }
   if (info === undefined) return undefined;
-  if (!info.isDirectory || (uid !== undefined && info.uid !== uid) || (info.mode & 0o7777) !== 0o700) {
-    return failure("writer_lease_directory", "writer lease", "replace the lease entry with a private directory owned by the current user (chmod 700)");
+  // Lease files must keep their inodes: a moved or recreated directory would let a second holder in.
+  if (!info.isDirectory) return failure("writer_lease_directory", "writer lease", "close every writer session and setup run, then replace the entry with a private directory owned by the current user");
+  if ((uid !== undefined && info.uid !== uid) || (info.mode & 0o7777) !== 0o700) {
+    return failure("writer_lease_directory", "writer lease", "repair the lease directory in place (owner and chmod 700); never move or delete it or its lock files");
   }
   return ok("writer_lease_directory", "writer lease");
 }
