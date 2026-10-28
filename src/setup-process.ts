@@ -291,7 +291,8 @@ export async function acquireSetupGuardian(lockFd: number, timeoutMs: number, si
 
   const runner: CommandRunner = {
     run(command, args, runSignal, runOptions): Promise<CommandResult> {
-      if (runOptions?.env !== undefined || released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
+      // The guardian child cannot pass descriptors through; refuse instead of dropping a caller's lease.
+      if (runOptions?.env !== undefined || runOptions?.inheritFds !== undefined || released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
       const id = nextId++;
       return new Promise((resolve) => {
         const abort = (): void => { if (child.connected) child.send({ type: "abort", id }, undefined, undefined, () => undefined); };
