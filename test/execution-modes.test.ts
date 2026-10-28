@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "../src/config.js";
 import {
-  codingAllowed, EXECUTION_MODES_FILE, executionModesPath, executionModesSchema,
+  codingAllowed, EXECUTION_MODES_FILE, executionModesPath, executionModesSchema, isShortBranchName,
   loadExecutionModes, resolveExecutionModes,
 } from "../src/execution-modes.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -62,6 +62,13 @@ describe("resolveExecutionModes", () => {
     expect(resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"], image } }), aliases, profiles).get("a")?.container?.image).toBe(image);
   });
 
+  it("accepts base main and dev", () => {
+    for (const base of ["main", "dev"]) {
+      const loaded = resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"], base } }), aliases, profiles);
+      expect(loaded.get("a")?.container?.base).toBe(base);
+    }
+  });
+
   it("accepts acknowledged host and read-only modes", () => {
     expect([...resolveExecutionModes(modes({ a: { mode: "host", acceptHostWrites: true }, b: { mode: "read-only" } }), aliases, profiles)])
       .toEqual([["a", { mode: "host" }], ["b", { mode: "read-only" }]]);
@@ -80,12 +87,20 @@ describe("resolveExecutionModes", () => {
     ["read-only profile", modes({ a: { mode: "container", profiles: ["review"] } })],
     ["cursor profile", modes({ a: { mode: "container", profiles: ["cursor-code"] } })],
     ...[0, 17, 1.5].map((writers) => [`writers ${writers}`, modes({ a: { mode: "container", profiles: ["code"], writers } })] as const),
+    ...["refs/heads/main", "HEAD", "a".repeat(40), "B".repeat(64), "../x", "", `a${"b".repeat(200)}`, "main.lock"]
+      .map((base) => [`base ${base.length > 20 ? `${base.length} characters` : base || "empty"}`, modes({ a: { mode: "container", profiles: ["code"], base } })] as const),
     ["unknown root key", { ...modes({}), SECRET_SENTINEL: true }],
     ["unknown container key", modes({ a: { mode: "container", profiles: ["code"], SECRET_SENTINEL: true } })],
     ["unknown host key", modes({ a: { mode: "host", acceptHostWrites: true, SECRET_SENTINEL: true } })],
     ["unknown read-only key", modes({ a: { mode: "read-only", SECRET_SENTINEL: true } })],
     ["unsupported schema version", { schemaVersion: 2, workspaces: {} }],
   ] satisfies ReadonlyArray<readonly [string, unknown]>)("rejects %s with a sanitized ConfigError", (_name, raw) => { expectInvalid(raw); });
+
+  it("leaves base unset for an existing container entry that has none", () => {
+    const loaded = resolveExecutionModes(modes({ a: { mode: "container", profiles: ["code"] } }), aliases, profiles);
+    expect(loaded.get("a")?.container?.base).toBeUndefined();
+    expect(Object.prototype.hasOwnProperty.call(loaded.get("a")?.container, "base")).toBe(false);
+  });
 
   it("exports the strict file schema with defaults", () => {
     expect(executionModesSchema.parse(modes({ a: { mode: "container", profiles: ["code"] } })).workspaces.a)
@@ -103,6 +118,14 @@ describe("loadExecutionModes", () => {
     const root = await temporaryRoot("pi-session-mcp-modes-");
     expect([...await loadExecutionModes(join(root, "config.json"), aliases, profiles)])
       .toEqual([["a", { mode: "unset" }], ["b", { mode: "unset" }]]);
+  });
+
+  it("loads an existing container entry without a base", async () => {
+    const root = await temporaryRoot("pi-session-mcp-modes-");
+    await writeFile(join(root, EXECUTION_MODES_FILE), JSON.stringify(modes({ a: { mode: "container", profiles: ["code"] } })));
+    const loaded = await loadExecutionModes(join(root, "config.json"), aliases, profiles);
+    expect(loaded.get("a")?.mode).toBe("container");
+    expect(loaded.get("a")?.container?.base).toBeUndefined();
   });
 
   it("rejects invalid JSON with a sanitized ConfigError", async () => {
@@ -130,6 +153,16 @@ describe("loadExecutionModes", () => {
     expect((await loadConfig(path)).workspaceModes.get("a")?.mode).toBe("container");
     await writeFile(join(root, EXECUTION_MODES_FILE), JSON.stringify(modes({ a: { mode: "container", profiles: ["review"] } })));
     await expect(loadConfig(path)).rejects.toMatchObject({ code: "invalid_execution_modes" });
+  });
+});
+
+describe("isShortBranchName", () => {
+  it.each(["main", "dev", "feat/157-t5-default-base", "a".repeat(200)])("accepts %s", (base) => {
+    expect(isShortBranchName(base)).toBe(true);
+  });
+
+  it.each(["HEAD", "refs/heads/main", "a".repeat(40), "A".repeat(64), "../x", "", `a${"b".repeat(200)}`, "main.lock", "x//y", "x/", "/x"])("rejects %s", (base) => {
+    expect(isShortBranchName(base)).toBe(false);
   });
 });
 

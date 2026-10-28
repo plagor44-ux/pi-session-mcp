@@ -86,6 +86,32 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("uv");
   });
+  it("setup records --base dev for a container request", async () => {
+    const { config, path } = await fixture();
+    for (const baseRef of ["dev", "refs/heads/dev"]) {
+      const input = request({ mode: "container", container: { profiles: ["code"] }, baseRef, apply: true });
+      expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
+      expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.base).toBe("dev");
+    }
+  });
+  it("a repeated container request without --base keeps base dev", async () => {
+    const { config, path } = await fixture();
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, baseRef: "dev", apply: true }), probe(true))).exitCode).toBe(0);
+    const repeated = request({ mode: "container", container: { profiles: ["code"], writers: 2 }, apply: true });
+    expect((await changeExecutionMode(config, repeated, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toMatchObject({ base: "dev", writers: 2 });
+  });
+  it("leaves base unset for a container request without --base", async () => {
+    const { config, path } = await fixture();
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).not.toHaveProperty("base");
+  });
+  it("refuses an unsafe --base without writing", async () => {
+    const { config, path } = await fixture();
+    const input = request({ mode: "container", container: { profiles: ["code"] }, baseRef: "refs/heads/../x", apply: true });
+    expect(await changeExecutionMode(config, input, probe(true))).toMatchObject({ exitCode: 1, findings: [{ code: "modes_file_invalid" }] });
+    await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  });
   it("chooses container only when usable and never falls back to host", async () => {
     const { config } = await fixture();
     const input: ModeRequest = { alias: "a", acceptHostWrites: false, apply: false, container: { profiles: ["code"] } };
