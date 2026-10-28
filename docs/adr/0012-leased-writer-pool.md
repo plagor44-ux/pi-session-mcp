@@ -252,7 +252,10 @@ The wake hook matches the host tool names only.
 - The migration step then, per writer and under the fence, confirms that no
   container mounts the clone, removes the `pi-coding-<alias>-w<n>`
   registrations that setup owns, and marks the writer `launch: "relay"` in its
-  state. Removal does not inspect a registration by starting its server. A
+  state. Removal uses the existing ownership-checked unregister path. A
+  client's inspection can health-check the registration and so start its
+  wrapper, but only while setup holds the writer's lease: that launch then
+  serves a `writer_busy` refusal and starts no container. A
   writer whose registration is divergent stays out of the pool and is reported;
   setup never replaces or deletes a divergent registration. Because every
   launch repeats the absence check, a legacy launch that slips through later is
