@@ -185,8 +185,11 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   }
   const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
   // Each writer's reconciliation, including first provisioning and acceptance, owns one fence.
-  // A writer added without --base joins the recorded default base, like finish and recreate, so default starts find it.
-  const baseRef = request.baseRef ?? entry.container?.base;
+  // A writer added without --base joins the recorded default base, so default starts find it. A recorded base that is
+  // the repository default stays unset: provisioning then resolves origin/HEAD, as the first provisioning did.
+  let baseRef = request.baseRef;
+  const recordedBase = entry.container?.base;
+  if (baseRef === undefined && recordedBase !== undefined && recordedBase !== await life.baseBranchName(ctx).catch(() => undefined)) baseRef = recordedBase;
   for (const name of planned.keep) {
     try { await fenced(ctx, name, deps, async (ctx) => {
       if (planned.missing.includes(name)) {

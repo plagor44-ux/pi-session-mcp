@@ -374,6 +374,8 @@ describe("writer setup reconciliation", () => {
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     expect(f.life.baseBranchName).toHaveBeenCalledWith(expect.anything());
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("main");
+    // The recorded base is the repository default, so provisioning still resolves origin/HEAD.
+    for (const [, input] of f.life.provisionWriter.mock.calls) expect(input).not.toHaveProperty("baseRef");
   });
   it("records --base as provisioning resolves it", async () => {
     const f = await fixture();
@@ -385,7 +387,8 @@ describe("writer setup reconciliation", () => {
   });
   it("provisions a writer added without --base on the recorded workspace base", async () => {
     const f = await fixture();
-    const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
+    // The repository default is main; the workspace records dev.
+    const life = { ...f.life, baseBranchName: vi.fn(async (_ctx: lifecycle.WriterContext, requested?: string) => requested === undefined ? "main" : "dev") };
     expect((await changeWriterMode(f.configPath, { ...mode, container: { profiles: ["code"], writers: 1 }, baseRef: "dev" }, { ...f.deps, lifecycle: life })).exitCode).toBe(0);
     f.life.provisionWriter.mockClear();
     // The repeated mode without --base, as an operator adds a writer.
