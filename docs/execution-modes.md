@@ -270,7 +270,9 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_reset` | Persistent clone reset and verified |
 | `writer_recreate_failed` | Recreated clone is not at baseline |
 | `writer_recreated` | Clone/agent recreated and verified |
-| `writer_reconnect_required` | Writer credentials were cleared; reconnect the writer's MCP server before the next coding start |
+| `writer_busy` | Another process holds the writer's lease (a relayed session, a launcher still cleaning up, or another setup run) for longer than the setup wait; retry after it ends |
+| `writer_fenced` | The writer's container fence could not confirm that no container of this writer exists; nothing was changed |
+| `writer_lease_unavailable` | The writer's lease file or directory could not be opened safely (see Doctor `writer_lease_directory`) |
 | `writer_removed` | Writer state deleted after registration cleanup |
 | `ownership_unavailable` | Existing registration lacks ownership proof; removal refused |
 | `registration_not_equivalent` | Verify found absent/divergent/unsupported required registration |
