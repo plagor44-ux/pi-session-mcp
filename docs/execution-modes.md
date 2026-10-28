@@ -87,7 +87,10 @@ clone.
 | `--network <value>` | `pasta` (default, not limited) or `none` |
 | `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
 | `--clean <untracked\|all>` | `untracked` (default) keeps ignored files; `all` also removes ignored files on reset and finish |
-| `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, or `uv` for its private uv and npm cache |
+| `--cpus <n>` | Hard CPU cap, > 0 through 1024, at most two decimals; omitted means unlimited |
+| `--cpu-shares <n>` | Relative CPU weight under contention, integer 2–262144; Podman default 1024 |
+| `--memory <size>` | Hard memory cap, 1–9999999 plus lowercase `m` or `g`; omitted means unlimited |
+| `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, `uv` for its private uv and npm cache, or `npm` for its private npm-only cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | No writer effect; coding uses the host registration for either client |
 | `--discard` | Explicitly allow loss of uncollected surplus writers on mode/count changes |
@@ -256,6 +259,9 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `usage_invalid` | Invalid writer name or argument combination |
 | `doctor_failed` | Relevant blocking Doctor checks failed; repository steps and mutating writer operations also report each blocking check as a separate failed finding with its Doctor check id and target `client: "doctor"`, `scope: "check"`, and as alias the profile or workspace alias that leads the check's subject (the part before `:`, and for a writer name its alias), or `"invalid"` for a global check or when that is not a valid alias |
 | `writer_planned` | Writer would be retained/provisioned |
+| `writer_limits_update_planned` | Existing writer limits would be updated without reprovisioning |
+| `writer_limits_updated` | Existing writer limits updated under its fence |
+| `cgroup_controller_unavailable` | Requested CPU or memory controller is unavailable; mode was not written |
 | `writer_remove_planned` | Surplus writer would be removed |
 | `writer_collect_planned` | Collection planned only |
 | `writer_reset_planned` | Reset planned only |
@@ -263,7 +269,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_finish_planned` | Finish planned only |
 | `writer_provisioned` | Clone/config/wrapper prepared, not yet accepted |
 | `writer_unchanged` | Provisioned settings already match |
-| `writer_settings_changed` | Existing writer settings or its rendered configuration differ from the current ones; no silent replacement, no acceptance and no registration change ([Isolation setup](isolation-setup.md)) |
+| `writer_settings_changed` | Existing writer settings or its rendered configuration differ from the current ones; no silent replacement, no acceptance and no registration change, and an apply is refused before the mode is written ([Isolation setup](isolation-setup.md)) |
 | `registration_divergent` | Writer registration is foreign or differs from its ownership record; it is retained and the writer stays in legacy launch mode |
 | `writer_reconcile_failed` | Unexpected reconciliation failure |
 | `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
@@ -376,6 +382,39 @@ No other uv or npm variables are set, so download and network policy stay the
 image's. The directory is per writer: it is never shared between writers and
 never a host cache mount. Setup does not install uv or npm for you.
 
+### Resource limits
+
+Container writers are unlimited by default. Optional `--cpus <n>` sets a hard
+CPU cap (greater than 0, at most 1024, with at most two decimals).
+`--cpu-shares <n>` sets relative CPU weight under contention (integer 2–262144;
+Podman's default is 1024). The weight only counts against sibling cgroups:
+rootless writers run in the operator's user slice, so `--cpu-shares` makes a
+writer yield to the operator's other containers and processes, not to system
+services such as rootful Docker CI runners in `system.slice`. To protect such
+a service, use the `--cpus` hard cap.
+`--memory <size>` sets a hard memory cap: 1–9999999 followed by lowercase `m`
+or `g`, for example `--memory 512m`.
+
+These are fairness measures, not a security boundary. Setup checks that the
+Podman host exposes the `cpu` controller for either CPU option and the
+`memory` controller for memory; missing controllers refuse the mode change
+with `cgroup_controller_unavailable`, including dry-runs. Limits apply to the
+serving container, not throwaway clone/maintenance containers. They update
+existing writer state under its lease without reprovisioning or changing
+boundary acceptance, and take effect at the writer's next launch. Acceptance
+and `--writer <name> --verify` run the serving container under the same
+limits, so a very small cap can make them time out. Repeat the flags on later mode requests: omitting a
+flag removes that limit.
+
+### npm cache (opt-in)
+
+For a Node writer, pass `--cache npm` to mount a private per-writer directory
+at `/pi/npm` with `npm_config_cache=/pi/npm/cache`. This records `cache: "npm"`;
+no other npm variables are set and setup does not install npm. The directory
+is never shared between writers or mounted from a host package cache. It
+survives reset, finish and recreate, and is removed with the writer. Repeat
+`--cache npm` on later container mode requests to retain it.
+
 ### Base tags (opt-in)
 
 Container writers default to `tags: "none"`. Pass `--tags reachable` to bundle
@@ -392,7 +431,7 @@ Container writers default to `clean: "untracked"`, keeping ignored files such as
 writer's finish (an ephemeral writer's finish recreates the clone). Pass
 `--clean all` on a container mode request to remove them with `git clean -ffdx`.
 Repeat this flag on later mode requests to retain it. Per-writer caches at
-`/pi/go` and `/pi/uv` live outside the clone and stay untouched.
+`/pi/go`, `/pi/uv` and `/pi/npm` live outside the clone and stay untouched.
 Changing the setting requires reprovisioning for settings drift: collect work,
 run `--writer <name> --remove`, then run the provisioning command again with
 the desired `--clean` value. It does not change boundary acceptance.

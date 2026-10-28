@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Fixed
+
+- An apply of `pi-session-mcp-setup --repo <alias> --mode container ...` with
+  drifted settings is now refused before the mode is written: each kept writer
+  with a difference reports `writer_settings_changed`, the modes file stays
+  unchanged and no kept writer is changed (a surplus writer of a smaller count
+  may already have been fenced), so the recorded mode never drifts from
+  what the writers run
+  ([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163)).
+
+### Added
+
+- Optional container resource settings `--cpus`, `--cpu-shares` and `--memory`,
+  with host cgroup-controller preflight and fenced in-place writer updates
+  without reprovisioning
+  ([#166](https://github.com/plagor44-ux/pi-session-mcp/issues/166)).
+
+- `--cache npm` mounts a private per-writer npm cache at `/pi/npm` with
+  `npm_config_cache=/pi/npm/cache`, retained across reset, finish and recreate
+  and removed with the writer
+  ([#165](https://github.com/plagor44-ux/pi-session-mcp/issues/165)).
+
 - Added: opt-in container setting `--clean all` removes ignored files from writer
   clones on reset and finish while preserving the default dependency-cache
   behavior and per-writer caches outside the clone

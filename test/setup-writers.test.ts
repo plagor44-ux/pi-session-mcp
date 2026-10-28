@@ -68,6 +68,47 @@ const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : 
 const podmanAnswer = (args: readonly string[]): string => args[0] === "ps" ? "[]" : args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it("plans and applies limits under the fence without settings drift or reprovisioning", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.runner.run.mockImplementation(async (_command, args) => ({ exitCode: 0, stdout: args[0] === "info" && args.includes("json") ? JSON.stringify({ host: { cgroupControllers: ["cpu", "memory"] } }) : podmanAnswer(args), stderr: "" }));
+    const limited = { ...mode, container: { ...mode.container, cpus: 1, cpuShares: 256, memory: "512m" } };
+    const dry = await changeWriterMode(f.configPath, { ...limited, apply: false }, f.deps);
+    expect(dry.findings.filter((finding) => finding.code === "writer_limits_update_planned")).toHaveLength(2);
+    expect((await readWriterState(f.home, "x-w1"))?.limits).toBeUndefined();
+    const held = new Set<string>();
+    // The pre-write gate (#163) reads drift without a fence; reconcile re-checks each writer under its lease.
+    let unfenced = 0;
+    f.life.writerSettingsDrift.mockImplementation(async (ctx, input) => {
+      if (held.size === 0) unfenced++;
+      else { expect(held.size).toBe(1); expect(ctx.leaseFd).toBe(42); }
+      return lifecycle.writerSettingsDrift(ctx, input);
+    });
+    const output = await changeWriterMode(f.configPath, limited, { ...f.deps, lease: async (_home, name) => {
+      held.add(name);
+      return { fd: 42, release: async () => {
+        expect((await readWriterState(f.home, name))?.limits).toEqual({ cpus: 1, cpuShares: 256, memory: "512m" });
+        held.delete(name);
+      } };
+    }, ensureAbsent: async () => {} });
+    expect(output.exitCode).toBe(0);
+    expect(unfenced).toBe(2);
+    expect(output.findings.filter((finding) => finding.code === "writer_limits_updated")).toHaveLength(2);
+    expect(output.findings.some((finding) => finding.code === "writer_settings_changed")).toBe(false);
+    expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
+    f.life.writerSettingsDrift.mockImplementation(lifecycle.writerSettingsDrift);
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(await readWriterState(f.home, "x-w1")).not.toHaveProperty("limits");
+    expect(f.accept.acceptWriter).toHaveBeenCalledTimes(2);
+  });
+  it.each([false, true])("refuses unavailable cgroup controllers before writing modes (apply=%s)", async (apply) => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const path = executionModesPath(f.configPath), before = await readFile(path, "utf8");
+    const output = await changeWriterMode(f.configPath, { ...mode, apply, container: { ...mode.container, memory: "512m" } }, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "cgroup_controller_unavailable" }));
+    expect(await readFile(path, "utf8")).toBe(before);
+  });
   it("migrates owned registrations under the lease before rebinding and accepting the relay", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps);
@@ -176,12 +217,13 @@ describe("writer setup reconciliation", () => {
   });
   it("records the shared migration base and refuses ambiguous bases before writing modes", async () => {
     const f = await fixture();
-    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
+    // Writers mid-provisioning: the pre-write settings gate has nothing to compare yet, so base recording is what is tested.
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "provisioning", base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.findings).toContainEqual({ target: { client: "modes", scope: "workspace", alias: "x" }, status: "failed", code: "workspace_base_ambiguous" });
     await expect(readFile(executionModesPath(f.configPath))).rejects.toThrow();
     expect(f.life.provisionWriter).not.toHaveBeenCalled();
-    await writeWriterState(f.home, "x-w2", state(2));
+    await writeWriterState(f.home, "x-w2", { ...state(2), phase: "provisioning" });
     await changeWriterMode(f.configPath, { ...mode, apply: false }, f.deps);
     const applied = await changeWriterMode(f.configPath, mode, f.deps);
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("main");
@@ -189,7 +231,7 @@ describe("writer setup reconciliation", () => {
   });
   it("allows an explicit migration base despite mixed writer bases and preserves it on repeated requests", async () => {
     const f = await fixture();
-    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "provisioning", base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
     const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
     await changeWriterMode(f.configPath, { ...mode, baseRef: "dev" }, { ...f.deps, lifecycle: life });
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
@@ -235,8 +277,13 @@ describe("writer setup reconciliation", () => {
     for (const [ctx] of f.life.provisionWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
     for (const [ctx] of f.accept.acceptWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
-    for (const [ctx] of f.life.writerSettingsDrift.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
-    for (const call of f.runner.run.mock.calls) expect(call[3]).toMatchObject({ inheritFds: [expect.any(Number)] });
+    // The pre-write settings gate reads without a lease, then reconcile re-checks under its fence (#163).
+    expect(f.life.writerSettingsDrift.mock.calls.map(([ctx]) => ctx.leaseFd)).toEqual([undefined, undefined, expect.any(Number), expect.any(Number)]);
+    for (const call of f.runner.run.mock.calls) {
+      // The gate's read-only Podman calls run before any lease exists; every fenced call inherits the lease fd.
+      if (call[3] === undefined) continue;
+      expect(call[3]).toMatchObject({ inheritFds: [expect.any(Number)] });
+    }
   });
   it.each(["busy", "unavailable", "unexpected", "fence"] as const)("maps %s fence errors and releases an acquired lease", async (failure) => {
     const f = await fixture(), release = vi.fn(async () => {});
@@ -407,7 +454,8 @@ describe("writer setup reconciliation", () => {
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     expect(f.life.writerSettingsDrift).not.toHaveBeenCalled();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
-    expect(f.life.writerSettingsDrift.mock.calls.map(([, input]) => input.index)).toEqual([1, 2]);
+    // The pre-write gate and reconcile each check both kept writers (#163).
+    expect(f.life.writerSettingsDrift.mock.calls.map(([, input]) => input.index)).toEqual([1, 2, 1, 2]);
   });
   type Host = { executionProfiles: Record<string, Record<string, unknown>>; skillCatalog?: Record<string, string>; events?: unknown };
   const editHost = async (configPath: string, edit: (host: Host) => Host) => writeFile(configPath, JSON.stringify(edit(JSON.parse(await readFile(configPath, "utf8")) as Host)));
@@ -445,8 +493,8 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
   });
   it.each([
-    // On Linux the container fence asks Podman first; elsewhere its stand-in passes and acceptance does.
-    ["Podman cannot be asked", process.platform === "linux" ? "writer_fenced" : "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
+    // The pre-write settings gate asks Podman before anything is fenced, on every platform (#163).
+    ["Podman cannot be asked", "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
     ["the image cannot be resolved locally", "image_unavailable", (args: readonly string[]) => args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : { exitCode: 0, stdout: podmanAnswer(args), stderr: "" }],
   ])("leaves a ready writer as it is when %s, and never pulls (#134)", async (_label, code, answer) => {
     const f = await fixture();
@@ -470,6 +518,22 @@ describe("writer setup reconciliation", () => {
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.findings.filter((finding) => finding.code === "container_profile_unsupported").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
     expect(f.calls).toEqual([]);
+  });
+  it("refuses an apply with changed settings before the mode is written (#163)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.calls.length = 0;
+    const modesBefore = await readFile(executionModesPath(f.configPath), "utf8");
+    const stateBefore = await readFile(writerPaths(f.home, "x-w1").state, "utf8");
+    const output = await changeWriterMode(f.configPath, { ...mode, container: { ...mode.container, tags: "reachable" as const } }, f.deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings.filter((finding) => finding.code === "writer_settings_changed").map((finding) => finding.target.alias)).toEqual(["x-w1", "x-w2"]);
+    expect(output.findings.every((finding) => finding.target.client === "writer")).toBe(true);
+    expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(modesBefore);
+    expect(await readFile(writerPaths(f.home, "x-w1").state, "utf8")).toBe(stateBefore);
+    expect(f.calls).toEqual([]);
+    // A request whose settings match still applies.
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
   });
   it("shows the settings change in the dry run without changing anything (#134)", async () => {
     const f = await fixture();

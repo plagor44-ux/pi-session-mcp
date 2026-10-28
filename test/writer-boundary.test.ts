@@ -50,6 +50,11 @@ it("builds the restricted serving boundary with explicit environment and Git pro
   for (const value of [`${paths.uv}:/pi/uv:rw`, "UV_CACHE_DIR=/pi/uv/cache", "npm_config_cache=/pi/uv/npm", "--network=none"]) expect(uv).toContain(value);
   expect(uv).not.toContain(`${paths.go}:/pi/go:rw`);
   expect(uv).not.toContain("GOPATH=/pi/go");
+  const npm = serveArgs(paths, { ...state, cache: "npm" }, serve, "/release");
+  expect(npm).toEqual([...baseArgs(), "-v", `${paths.npm}:/pi/npm:rw`, "-e", "npm_config_cache=/pi/npm/cache", imageId, ...serve]);
+  for (const other of [args, go, uv]) expect(other).not.toContain(`${paths.npm}:/pi/npm:rw`);
+  expect(npm).not.toContain(`${paths.uv}:/pi/uv:rw`);
+  expect(npm).not.toContain(`${paths.go}:/pi/go:rw`);
 });
 
 const baseArgs = (): string[] => [
@@ -71,6 +76,12 @@ const baseArgs = (): string[] => [
   "-e", "PI_SESSION_MCP_WRITER_GUARD=/pi/config/writer-guard.json",
 ];
 const serve = ["node", "/opt/pi-session-mcp/dist/main.js"];
+
+it("serving limits are optional and do not change the throwaway boundary", () => {
+  const limits = { cpus: 1.25, cpuShares: 256, memory: "512m" };
+  expect(serveArgs(paths, { ...state, limits }, serve, "/release")).toEqual([...baseArgs(), "--cpus=1.25", "--cpu-shares=256", "--memory=512m", imageId, ...serve]);
+  expect(serveArgs(paths, state, serve, "/release").some((arg) => /^--(?:cpus|cpu-shares|memory)=/.test(arg))).toBe(false);
+});
 
 it("serveArgs adds the fixed name and label", () => {
   expect(serveArgs(paths, state, serve, "/release", undefined, { name: "repo-w1" })).toEqual([

@@ -15,7 +15,8 @@ import { localHookNeededByOthers, ownsWakeHook, runWakeHook, type WakeHookOutcom
 import { result, type SetupFinding, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
 import { createWriterRegistrationAdapter, unregisterWriter, type WriterRegistrationIntent, type WriterRegistrationAdapter } from "./client-adapters/writer-registration.js";
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
-import { IMAGE_PULL_TIMEOUT_MS } from "./writer-boundary.js";
+import { sameWriterLimits, writerLimits } from "./writer-limits.js";
+import { IMAGE_PULL_TIMEOUT_MS, podmanCgroupControllers } from "./writer-boundary.js";
 import { acquireWriterLease, WriterLeaseError } from "./writer-lease.js";
 import { ensureWriterAbsent } from "./writer-fence.js";
 
@@ -191,6 +192,14 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
       if (!planned.missing.includes(name)) {
         const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
         if (drift) { add(name, drift); return; }
+        const state = await readWriterState(ctx.home, name);
+        if (!state) throw new Error("writer_state_invalid");
+        const limits = writerLimits(entry.container!);
+        if (!sameWriterLimits(state.limits, limits)) {
+          const { limits: _previous, ...rest } = state;
+          await writeWriterState(ctx.home, name, { ...rest, ...(limits ? { limits } : {}) });
+          add(name, { status: "ok", code: "writer_limits_updated" });
+        }
       }
       // Decide for both clients before removing anything, so a divergent registration of one client never
       // costs the writer its owned registration of the other. A client that is not installed has nothing to keep.
@@ -260,7 +269,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
   if (!ALIAS_PATTERN.test(request.alias)) return failed("alias_unknown");
   let runtimeProbe: Promise<boolean> | undefined;
   const containerRuntime = () => runtimeProbe ??= (deps.containerRuntime ?? containerRuntimeUsable)().catch(() => false);
-  const modeDependencies = { containerRuntime };
+  const modeDependencies = { containerRuntime, cgroupControllers: () => podmanCgroupControllers(services(deps).runner) };
   try {
     let writerWork = request.mode === "container";
     if (!writerWork) {
@@ -317,6 +326,21 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
                 throw error;
               }
             }
+            // Settings drift before the write, so a kept writer with changed settings refuses the mode
+            // change itself and the modes file never records a mode no writer matches (#163). Read-only like
+            // the dry run, which fences nothing; reconcile re-checks under its fence. Missing writers have
+            // no settings yet.
+            if (entry.mode === "container") {
+              const { life } = services(deps);
+              const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
+              const drifted: SetupFinding[] = [];
+              for (const name of planned.keep) {
+                if (planned.missing.includes(name)) continue;
+                const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
+                if (drift) drifted.push({ target: targetFor(request.alias, name), ...drift });
+              }
+              if (drifted.length) return result(operation, drifted);
+            }
           } else await preflight(ctx, planned.surplus, request.discard ?? false, deps);
         }
         catch (error) { return error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(codeFor(error)); }
@@ -333,7 +357,9 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
             for (const name of planned.keep) {
               // The same settings check as apply, so a drifted writer shows before anything is applied (#134).
               const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: proposed.container!, rawConfig, overrideDirectory });
-              kept.push({ target: targetFor(request.alias, name), ...(drift ?? { status: "planned" as const, code: "writer_planned" }) });
+              const state = await readWriterState(ctx.home, name);
+              const updatingLimits = state && state.phase !== "provisioning" && !sameWriterLimits(state.limits, writerLimits(proposed.container!));
+              kept.push({ target: targetFor(request.alias, name), ...(drift ?? { status: "planned" as const, code: updatingLimits ? "writer_limits_update_planned" : "writer_planned" }) });
             }
             const refused = kept.some((finding) => finding.status === "failed" || finding.status === "divergent");
             writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" }))], refused ? "failed" : "planned");

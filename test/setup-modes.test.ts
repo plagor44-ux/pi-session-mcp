@@ -80,6 +80,35 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.clean).toBe("all");
   });
+  it.each([
+    [{ cpus: 1 }, ["memory"], false],
+    [{ cpuShares: 256 }, ["memory"], false],
+    [{ memory: "512m" }, ["cpu"], false],
+    [{ cpus: 1 }, ["cpu"], true],
+    [{ cpuShares: 256 }, ["cpu"], true],
+    [{ memory: "512m" }, ["memory"], true],
+  ] as const)("requires only the controllers needed for %j", async (limits, controllers, allowed) => {
+    const { config, path } = await fixture();
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), probe(true))).exitCode).toBe(0);
+    const before = await readFile(path, "utf8");
+    for (const apply of [false, true]) {
+      const output = await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], ...limits }, apply }), { ...probe(true), cgroupControllers: async () => controllers });
+      expect(output.exitCode === 0).toBe(allowed);
+      if (!allowed) {
+        expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "cgroup_controller_unavailable" }));
+        expect(await readFile(path, "utf8")).toBe(before);
+      }
+    }
+  });
+  it("removes limits when a later mode request omits them", async () => {
+    const { config, path } = await fixture();
+    const deps = { ...probe(true), cgroupControllers: async () => ["cpu", "memory"] };
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], cpus: 1, cpuShares: 256, memory: "512m" }, apply: true }), deps)).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toMatchObject({ cpus: 1, cpuShares: 256, memory: "512m" });
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), deps)).exitCode).toBe(0);
+    const entry = JSON.parse(await readFile(path, "utf8")).workspaces.a;
+    for (const key of ["cpus", "cpuShares", "memory"]) expect(entry).not.toHaveProperty(key);
+  });
   it("returns clean to untracked when a later request omits it", async () => {
     const { config, path } = await fixture();
     expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], clean: "all" }, apply: true }), probe(true))).exitCode).toBe(0);
@@ -92,11 +121,11 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("go");
   });
-  it("records the uv and npm cache in a container entry", async () => {
+  it.each(["uv", "npm"] as const)("records the %s cache in a container entry", async (cache) => {
     const { config, path } = await fixture();
-    const input = request({ mode: "container", container: { profiles: ["code"], cache: "uv" }, apply: true });
+    const input = request({ mode: "container", container: { profiles: ["code"], cache }, apply: true });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe("uv");
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.cache).toBe(cache);
   });
   it("setup records --base dev for a container request", async () => {
     const { config, path } = await fixture();

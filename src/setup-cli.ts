@@ -1,3 +1,4 @@
+import { cpusSchema, cpuSharesSchema, memorySchema } from "./writer-limits.js";
 import { SetupOrchestrator, type SetupRequest } from "./setup.js";
 import type { SetupOperation, SetupResult, SetupTarget } from "./setup-result.js";
 import type { ModeRequest } from "./setup-modes.js";
@@ -62,12 +63,12 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       customizeSkill = value;
       continue;
     }
-    if (["--repo", "--mode", "--accept-host-writes", "--writers", "--lifecycle", "--profiles", "--image", "--network", "--cache", "--tags", "--clean"].includes(argument!)) {
+    if (["--repo", "--mode", "--accept-host-writes", "--writers", "--lifecycle", "--profiles", "--image", "--network", "--cache", "--tags", "--clean", "--cpus", "--cpu-shares", "--memory"].includes(argument!)) {
       if (modeFlags.has(argument!)) throw new Error("repo_argument_repeated");
       modeFlags.add(argument!);
       if (argument === "--accept-host-writes") { acceptHostWrites = true; continue; }
-      const value = argv[++index];
-      if (!value || value.startsWith("-")) throw new Error("repo_argument_invalid");
+      const value = argv[++index] ?? "";
+      if ((!value || value.startsWith("-")) && !["--cpus", "--cpu-shares", "--memory"].includes(argument!)) throw new Error("repo_argument_invalid");
       switch (argument) {
         case "--repo": repo = value; break;
         case "--mode":
@@ -92,8 +93,17 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
         case "--clean":
           if (value !== "untracked" && value !== "all") throw new Error("clean_invalid");
           container.clean = value; break;
+        case "--cpus":
+          if (!value || !/^[0-9]+(?:\.[0-9]{1,2})?$/.test(value) || !cpusSchema.safeParse(Number(value)).success) throw new Error("cpus_invalid");
+          container.cpus = Number(value); break;
+        case "--cpu-shares":
+          if (!value || !/^[0-9]+$/.test(value) || !cpuSharesSchema.safeParse(Number(value)).success) throw new Error("cpu_shares_invalid");
+          container.cpuShares = Number(value); break;
+        case "--memory":
+          if (!memorySchema.safeParse(value).success) throw new Error("memory_invalid");
+          container.memory = value; break;
         case "--cache":
-          if (value !== "none" && value !== "go" && value !== "uv") throw new Error("cache_invalid");
+          if (value !== "none" && value !== "go" && value !== "uv" && value !== "npm") throw new Error("cache_invalid");
           container.cache = value; break;
       }
       continue;

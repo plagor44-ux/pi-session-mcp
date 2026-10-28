@@ -34,7 +34,7 @@ participates in settings drift, not the acceptance fingerprint.
 Ignored files in a persistent writer's clone survive reset and finish by
 default (`clean: "untracked"`); an ephemeral writer's finish recreates the
 clone. Add `--clean all` to a container mode request to remove
-them with `git clean -ffdx`; the per-writer `/pi/go` and `/pi/uv` caches outside
+them with `git clean -ffdx`; the per-writer `/pi/go`, `/pi/uv` and `/pi/npm` caches outside
 the clone stay untouched. Changing this setting requires collecting work,
 removing the writer with `--writer <name> --remove`, and provisioning again;
 it participates in settings drift, not the acceptance fingerprint.
@@ -68,7 +68,7 @@ it participates in settings drift, not the acceptance fingerprint.
 | Workspace | Separate full clone per writer, created via a base bundle; no hardlinks or shared linked-worktree metadata |
 | Wrapper | Generated stdio-only launcher bound to the release and writer name; no daemon between client connections |
 | Boundary | Rootless keep-id, read-only root, capability drop, no-new-privileges, tmpfs home and /tmp; clone read-write with hooks/config overmounted read-only |
-| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go or uv/npm cache; no per-session writer spool mount ([below](#event-spool-mount)) |
+| Mounts | Only clone, release read-only, contained config read-only, isolated writable agent directory, optional Go, uv/npm or npm-only cache; no per-session writer spool mount ([below](#event-spool-mount)) |
 | Configuration | One workspace, selected coding profiles and a synthetic read-only default; internal acknowledged host mode permits writes only in the contained clone |
 | Credentials | Selected provider entries only; OAuth refresh token emptied, API keys retained; no host SSH/Git/client credentials intentionally mounted |
 | Acceptance | Explicit uncontained host control, then provider-free contained harness per writer; fingerprint gates readiness |
@@ -106,7 +106,13 @@ list and providers in its state, and the whole rendered writer configuration
 with each selected profile's model, thinking level and skills and the event
 delivery. A difference reports `writer_settings_changed` and leaves the writer
 as it is
-([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). The same
+([#134](https://github.com/plagor44-ux/pi-session-mcp/issues/134)). On
+apply the check runs before the mode is written, so a kept writer with a
+difference refuses the mode change itself: the modes file stays unchanged
+and no kept writer is changed; a surplus writer of a smaller count may already
+have been fenced
+([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163));
+reconciliation repeats the check under each writer's lease. The same
 holds for the other findings of this check: `podman_unavailable` when Podman
 cannot be asked, `image_unavailable` when Podman answers but cannot resolve the
 image, and `container_profile_unsupported` when a selected coding profile is
@@ -261,6 +267,20 @@ with `UV_CACHE_DIR=/pi/uv/cache` and `npm_config_cache=/pi/uv/npm`. No other uv
 or npm variables are set. The cache belongs to one writer: it is never shared
 between writers and never a host cache mount, and setup does not install uv
 or npm for you.
+
+Optional container settings `--cpus`, `--cpu-shares` and `--memory` bound the
+serving container's CPU or memory use. CPU shares are relative weight under
+contention (for example 256 on a host shared with CI); CPU count and memory
+are hard caps. Setup requires the corresponding host cgroup controllers.
+Repeat these flags on later mode requests or their limits are removed;
+changes update existing writer state without reprovisioning. See
+[Resource limits](execution-modes.md#resource-limits) for ranges and syntax.
+
+A Node writer can instead use `--cache npm`, recording `cache: "npm"` and
+mounting its private directory at `/pi/npm` with
+`npm_config_cache=/pi/npm/cache`. No other npm variables are set. Like the Go
+and uv caches, it survives reset, finish and recreate, and is removed with the
+writer. Repeat the cache flag on later mode requests.
 
 See [Execution modes](execution-modes.md#migration-from-manual-writers) for
 migration limitations and [Doctor](doctor-design.md) for offline writer checks.

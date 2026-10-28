@@ -4,6 +4,7 @@ import { chmod, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
+import { writerLimits } from "./writer-limits.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
@@ -269,11 +270,12 @@ export async function provisionWriter(ctx: WriterContext, input: {
     // With spool delivery the spool directory exists from provisioning on: launch would otherwise add it to the
     // writer root, a host directory the acceptance harness digests around its own first launch.
     const spool = config.events?.delivery === "spool" ? [paths.events] : [];
-    const cache = settings.cache === "go" ? [paths.go] : settings.cache === "uv" ? [paths.uv] : [];
+    const cache = settings.cache === "none" ? [] : [paths[settings.cache]];
     for (const path of [paths.root, paths.clone, paths.config, paths.agent, paths.bundles, ...spool, ...cache]) await privateDirectory(path);
     const state: WriterState = {
       schemaVersion: 1, alias: ctx.alias, index, phase: "provisioning", lifecycle: settings.lifecycle,
       profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, tags: settings.tags, clean: settings.clean, imageId,
+      ...(writerLimits(settings) ? { limits: writerLimits(settings)! } : {}),
       base: { ref: `refs/heads/${short}`, commit },
     };
     await writeWriterState(ctx.home, name, state);

@@ -82,13 +82,26 @@ it("derives the private writer layout", () => {
   expect(writersRoot(home)).toBe(join(home, ".local/state/pi-session-mcp/writers"));
   expect(writerPaths(home, name)).toEqual({
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), npm: join(root, "npm"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"),
   });
+});
+
+it("round-trips optional strict limits and omits them for legacy states", async () => {
+  const home = await temporaryRoot("pi-writer-limits-");
+  await writeWriterState(home, name, state);
+  expect(await readWriterState(home, name)).not.toHaveProperty("limits");
+  for (const limits of [{ cpus: 1 }, { cpuShares: 256 }, { memory: "512m" }, { cpus: 1, cpuShares: 256, memory: "512m" }]) {
+    await writeWriterState(home, name, { ...state, limits });
+    expect((await readWriterState(home, name))?.limits).toEqual(limits);
+  }
+  for (const limits of [{ unknown: 1 }, { cpus: 0 }, { cpuShares: 1 }, { memory: "1gb" }]) {
+    await expect(writeWriterState(home, name, { ...state, limits } as unknown as WriterState)).rejects.toThrow();
+  }
 });
 
 it("round-trips every configured cache kind", async () => {
   const home = await temporaryRoot("pi-writer-state-");
-  for (const cache of ["none", "go", "uv"] as const) {
+  for (const cache of ["none", "go", "uv", "npm"] as const) {
     await writeWriterState(home, name, { ...state, cache });
     expect((await readWriterState(home, name))?.cache).toBe(cache);
   }
@@ -192,7 +205,7 @@ it("fingerprints canonical key-sorted JSON and includes Podman version", () => {
   expect(acceptanceFingerprint(input)).toBe(`sha256:${createHash("sha256").update(canonical).digest("hex")}`);
   expect(acceptanceFingerprint(input)).toBe(acceptanceFingerprint(reordered));
   expect(acceptanceFingerprint(input)).not.toBe(acceptanceFingerprint({ ...input, podmanVersion: "5.1.0" }));
-  expect(new Set(["none", "go", "uv"].map((cache) => acceptanceFingerprint({ ...input, cache }))).size).toBe(3);
+  expect(new Set(["none", "go", "uv", "npm"].map((cache) => acceptanceFingerprint({ ...input, cache }))).size).toBe(4);
 });
 
 it.each([
@@ -236,6 +249,7 @@ describe("acceptance fingerprint and event delivery", () => {
     await mkdir(paths.config, { recursive: true });
     await writeFile(paths.wrapper, "wrapper");
     const plain = await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0");
+    expect(await currentAcceptanceFingerprint(paths.wrapper, { ...state, limits: { cpus: 1, cpuShares: 256, memory: "512m" } }, "5.4.0")).toBe(plain);
     // Without a configuration, and with delivery off, the fingerprint is the one an earlier release computed.
     expect(plain).toBe(acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache }));
     await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify({ events: { delivery: "off" } }));

@@ -747,7 +747,8 @@ repository step between the install and the client targets:
    more; both clients code through the one host `pi-session-mcp` registration.
    Use the same
    settings as before: a writer whose settings or coding profiles changed is
-   reported as `writer_settings_changed` and left as it is, and one whose
+   reported as `writer_settings_changed`, the apply is refused before the
+   mode is written and the writer is left as it is, and one whose
    coding profile selects an overridden or unshipped `builtin:` skill as
    `container_profile_unsupported`. Such a writer stays `writer_not_ready`
    until you change the profile or remove the override, or collect it,

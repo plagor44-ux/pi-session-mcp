@@ -5,6 +5,7 @@ import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { PACKAGE_VERSION } from "./package-metadata.js";
+import { writerLimitsSchema } from "./writer-limits.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 
 export const WRITER_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,63}-w([1-9]|1[0-6])$/;
@@ -33,9 +34,10 @@ export const writerStateSchema = z.object({
     model: z.string().min(1).max(200),
   }).strict()).refine((providers) => new Set(providers.map(({ provider }) => provider)).size === providers.length).readonly(),
   network: z.enum(["pasta", "none"]),
-  cache: z.enum(["none", "go", "uv"]),
+  cache: z.enum(["none", "go", "uv", "npm"]),
   tags: z.enum(["none", "reachable"]).default("none"),
   clean: z.enum(["untracked", "all"]).default("untracked"),
+  limits: writerLimitsSchema.optional(),
   imageId: hex64,
   base: z.object({ ref: z.string(), commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict(),
   acceptance: z.object({
@@ -72,7 +74,7 @@ export function writerPaths(home: string, name: string) {
   const root = join(writersRoot(home), name);
   return {
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), npm: join(root, "npm"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
     acceptanceFailure: join(root, "acceptance-failure.json"),
   };
 }
