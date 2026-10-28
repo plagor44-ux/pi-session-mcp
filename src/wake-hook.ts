@@ -13,11 +13,10 @@ import { WRITER_NAME_PATTERN } from "./writer-state.js";
  * Trust model. An event is a wake trigger only; it carries no instruction and no content. Writer
  * namespaces (`<home>/.local/state/pi-session-mcp/writers/<name>/events/`, see `writerEventsDir`) are writable by the
  * worker inside that writer's container, which can create any file, directory or symlink there. The spool is therefore read defensively:
- * - The accepted namespace follows from the arming tool name: `mcp__pi-session-mcp__*` reads the top-level
- *   `<events>/inst-*` directories only; `mcp__pi-coding-<name>-wN__*` reads exactly `inst-*` below
- *   `writerEventsDir(home, "<name>-wN")`. The old `<events>/writer-<name>/` location is not read, no other writer's
- *   directory is listed, and the claim key carries the namespace, so a forged event in
- *   one namespace can neither take nor block a claim of another.
+ * - Only `mcp__pi-session-mcp__*` arms the hook (ADR 0012: relayed writer sessions report through the host
+ *   spool), and it reads the top-level `<events>/inst-*` directories only. No writer directory and no old
+ *   `<events>/writer-<name>/` location is read. The writer namespace type and its scan remain for spools that
+ *   writers of older releases may still hold; the claim key carries the namespace.
  * - Every directory is opened with `O_NOFOLLOW|O_DIRECTORY`, checked on the handle (a directory of this user)
  *   and read through that handle (`/proc/self/fd/<fd>/<name>`). Event delivery is Linux-only (ADR 0011): without
  *   `/proc/self/fd` the program does nothing (see `isSupportedPlatform`). Event files are opened with `O_NOFOLLOW`, must be regular and small.

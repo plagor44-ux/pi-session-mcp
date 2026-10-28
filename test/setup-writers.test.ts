@@ -146,6 +146,30 @@ describe("writer setup reconciliation", () => {
     expect(f.adapter.remove).not.toHaveBeenCalled();
     expect(f.accept.acceptWriter).not.toHaveBeenCalledWith(expect.anything(), "x-w1");
   });
+  it("migrates a writer on a host without the Codex CLI", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
+    await registerWriter(f.ownership, f.adapter, { client: "claude-code", name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    const inspect = f.adapter.inspect.getMockImplementation()!;
+    f.adapter.inspect.mockImplementation(async (intent) => intent.client === "codex" ? "unsupported" as never : inspect(intent));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).not.toContainEqual(expect.objectContaining({ code: "registration_divergent" }));
+    expect(f.adapter.remove.mock.calls.some(([intent]) => intent.client === "claude-code" && intent.name === "pi-coding-x-w1")).toBe(true);
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("relay");
+  });
+  it("removes no registration of a writer when another client's registration is foreign", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
+    await registerWriter(f.ownership, f.adapter, { client: "claude-code", name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    f.registered.add("codexpi-coding-x-w1");
+    f.adapter.remove.mockClear();
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "registration_divergent", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
+  });
   it("records the shared migration base and refuses ambiguous bases before writing modes", async () => {
     const f = await fixture();
     for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });

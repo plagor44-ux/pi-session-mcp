@@ -192,16 +192,21 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
         if (drift) { add(name, drift); return; }
       }
+      // Decide for both clients before removing anything, so a divergent registration of one client never
+      // costs the writer its owned registration of the other. A client that is not installed has nothing to keep.
       let divergent = false;
+      const owned: WriterRegistrationIntent[] = [];
       for (const client of ["claude-code", "codex"] as const) {
         const expected = intent(ctx, name, client);
-        const owned = await ownership.get({ client, scope: client === "codex" ? "user" : "local", alias: expected.name });
-        try {
-          if (owned) await unregisterWriter(ownership, adapter, expected);
-          else if (await adapter.inspect(expected) !== "absent") divergent = true;
-        } catch (error) {
-          if (codeFor(error) !== "ownership_diverged") throw error;
-          divergent = true;
+        const record = await ownership.get({ client, scope: client === "codex" ? "user" : "local", alias: expected.name });
+        const current = await adapter.inspect(expected);
+        if (record ? current === "divergent" : current === "equivalent" || current === "divergent") divergent = true;
+        else if (record) owned.push(expected);
+      }
+      if (!divergent) {
+        for (const expected of owned) {
+          try { await unregisterWriter(ownership, adapter, expected); }
+          catch (error) { if (codeFor(error) !== "ownership_diverged") throw error; divergent = true; }
         }
       }
       const hook = await writerHook(ctx, name, deps, "remove", false);
