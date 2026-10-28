@@ -44,12 +44,12 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
   const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked", cpus: 1, memory: "512m" }, rawConfig })).toMatchObject({ status: "ok" });
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked", cpus: 1, cpuShares: 256, memory: "512m" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
-  expect(state.limits).toEqual({ cpus: 1, memory: "512m" });
-  const limited = await runner.run("podman", serveArgs(paths, state, ["sh", "-c", "test $(cat /sys/fs/cgroup/memory.max) = 536870912 && grep -q '^100000 100000$' /sys/fs/cgroup/cpu.max"], home), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  expect(state.limits).toEqual({ cpus: 1, cpuShares: 256, memory: "512m" });
+  const limited = await runner.run("podman", serveArgs(paths, state, ["sh", "-c", "test $(cat /sys/fs/cgroup/memory.max) = 536870912 && grep -q '^100000 100000$' /sys/fs/cgroup/cpu.max && test $(cat /sys/fs/cgroup/cpu.weight) -lt 100"], home), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   expect(limited.exitCode, limited.stderr).toBe(0);
   const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
 export GIT_CONFIG_NOSYSTEM=1

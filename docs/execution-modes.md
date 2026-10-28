@@ -401,7 +401,9 @@ Podman host exposes the `cpu` controller for either CPU option and the
 with `cgroup_controller_unavailable`, including dry-runs. Limits apply to the
 serving container, not throwaway clone/maintenance containers. They update
 existing writer state under its lease without reprovisioning or changing
-boundary acceptance, and take effect at the writer's next launch. Repeat the flags on later mode requests: omitting a
+boundary acceptance, and take effect at the writer's next launch. Acceptance
+and `--writer <name> --verify` run the serving container under the same
+limits, so a very small cap can make them time out. Repeat the flags on later mode requests: omitting a
 flag removes that limit.
 
 ### npm cache (opt-in)
