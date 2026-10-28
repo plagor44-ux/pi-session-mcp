@@ -1,3 +1,6 @@
+import { podmanCgroupControllers } from "./writer-boundary.js";
+import { createProcessRunner } from "./setup-process.js";
+import { writerLimits } from "./writer-limits.js";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -21,7 +24,7 @@ export interface ModeRequest {
 }
 
 /** A dry run writes nothing; apply serializes the entire read/validate/replace transaction. */
-export async function changeExecutionMode(configPath: string, request: ModeRequest, dependencies: { containerRuntime?: () => Promise<boolean>; beforeWrite?: (entry: import("./execution-modes.js").WorkspaceModeEntry) => Promise<SetupResult | undefined>; afterChange?: (output: SetupResult) => Promise<SetupResult> } = {}): Promise<SetupResult> {
+export async function changeExecutionMode(configPath: string, request: ModeRequest, dependencies: { cgroupControllers?: () => Promise<readonly string[]>; containerRuntime?: () => Promise<boolean>; beforeWrite?: (entry: import("./execution-modes.js").WorkspaceModeEntry) => Promise<SetupResult | undefined>; afterChange?: (output: SetupResult) => Promise<SetupResult> } = {}): Promise<SetupResult> {
   const target = { client: "modes", scope: "workspace", alias: ALIAS_PATTERN.test(request.alias) ? request.alias : "invalid" };
   const operation = request.apply ? "apply" : "dry-run";
   const done = (status: SetupStatus, code: string): SetupResult => result(operation, [{ target, status, code }], status === "planned" ? "planned" : undefined);
@@ -69,6 +72,12 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
       resolveExecutionModes(proposed, aliases, config.executionProfiles);
     } catch { return done("failed", "modes_file_invalid"); }
     const resolved = resolveExecutionModes(proposed, aliases, config.executionProfiles).get(request.alias)!;
+    const limits = resolved.container && writerLimits(resolved.container);
+    if (limits) {
+      const controllers: readonly string[] = await (dependencies.cgroupControllers ?? (() => podmanCgroupControllers(createProcessRunner())))().catch(() => []);
+      if (((limits.cpus !== undefined || limits.cpuShares !== undefined) && !controllers.includes("cpu"))
+        || (limits.memory !== undefined && !controllers.includes("memory"))) return done("failed", "cgroup_controller_unavailable");
+    }
     const refused = await dependencies.beforeWrite?.(resolved);
     if (refused) return refused;
     if (JSON.stringify(current.workspaces[request.alias]) === JSON.stringify(proposed.workspaces[request.alias])) return done("unchanged", "mode_unchanged");

@@ -49,6 +49,13 @@ async function fixture(remote = "git@github.com:o/r.git", identity: readonly str
   const ctx: WriterContext = { home, releaseRoot: "/release", nodePath: process.execPath, runner, checkout: join(home, "source"), alias: "repo" };
   return { ctx, paths, calls, phases, dirty: () => { dirty = true; }, unavailable: () => { unavailable = true; }, work: (output: string) => { workOutput = output; } };
 }
+it("stores optional limits on provisioning without treating them as settings drift", async () => {
+  const f = await fixture();
+  const limits = { cpus: 1, cpuShares: 256, memory: "512m" };
+  expect((await provisionWriter(f.ctx, { index: 1, settings: { ...settings, ...limits }, rawConfig })).status).toBe("ok");
+  expect((await readWriterState(f.ctx.home, "repo-w1"))?.limits).toEqual(limits);
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings, rawConfig })).toBeUndefined();
+});
 it("provisions privately from the checkout bundle with ordered state and provider deduplication", async () => {
   const f = await fixture();
   expect(await provisionWriter(f.ctx, { index: 1, settings, rawConfig })).toEqual({ code: "writer_provisioned", status: "ok" });

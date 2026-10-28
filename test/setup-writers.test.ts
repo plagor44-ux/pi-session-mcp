@@ -68,6 +68,44 @@ const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : 
 const podmanAnswer = (args: readonly string[]): string => args[0] === "ps" ? "[]" : args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it("plans and applies limits under the fence without settings drift or reprovisioning", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    f.runner.run.mockImplementation(async (_command, args) => ({ exitCode: 0, stdout: args[0] === "info" && args.includes("json") ? JSON.stringify({ host: { cgroupControllers: ["cpu", "memory"] } }) : podmanAnswer(args), stderr: "" }));
+    const limited = { ...mode, container: { ...mode.container, cpus: 1, cpuShares: 256, memory: "512m" } };
+    const dry = await changeWriterMode(f.configPath, { ...limited, apply: false }, f.deps);
+    expect(dry.findings.filter((finding) => finding.code === "writer_limits_update_planned")).toHaveLength(2);
+    expect((await readWriterState(f.home, "x-w1"))?.limits).toBeUndefined();
+    const held = new Set<string>();
+    f.life.writerSettingsDrift.mockImplementation(async (ctx, input) => {
+      expect(held.size).toBe(1);
+      expect(ctx.leaseFd).toBe(42);
+      return lifecycle.writerSettingsDrift(ctx, input);
+    });
+    const output = await changeWriterMode(f.configPath, limited, { ...f.deps, lease: async (_home, name) => {
+      held.add(name);
+      return { fd: 42, release: async () => {
+        expect((await readWriterState(f.home, name))?.limits).toEqual({ cpus: 1, cpuShares: 256, memory: "512m" });
+        held.delete(name);
+      } };
+    }, ensureAbsent: async () => {} });
+    expect(output.exitCode).toBe(0);
+    expect(output.findings.filter((finding) => finding.code === "writer_limits_updated")).toHaveLength(2);
+    expect(output.findings.some((finding) => finding.code === "writer_settings_changed")).toBe(false);
+    expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
+    f.life.writerSettingsDrift.mockImplementation(lifecycle.writerSettingsDrift);
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(await readWriterState(f.home, "x-w1")).not.toHaveProperty("limits");
+    expect(f.accept.acceptWriter).toHaveBeenCalledTimes(2);
+  });
+  it.each([false, true])("refuses unavailable cgroup controllers before writing modes (apply=%s)", async (apply) => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const path = executionModesPath(f.configPath), before = await readFile(path, "utf8");
+    const output = await changeWriterMode(f.configPath, { ...mode, apply, container: { ...mode.container, memory: "512m" } }, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "cgroup_controller_unavailable" }));
+    expect(await readFile(path, "utf8")).toBe(before);
+  });
   it("migrates owned registrations under the lease before rebinding and accepting the relay", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps);

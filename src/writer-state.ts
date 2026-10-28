@@ -5,6 +5,7 @@ import { lstat, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { PACKAGE_VERSION } from "./package-metadata.js";
+import { writerLimitsSchema } from "./writer-limits.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 
 export const WRITER_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,63}-w([1-9]|1[0-6])$/;
@@ -36,6 +37,7 @@ export const writerStateSchema = z.object({
   cache: z.enum(["none", "go", "uv", "npm"]),
   tags: z.enum(["none", "reachable"]).default("none"),
   clean: z.enum(["untracked", "all"]).default("untracked"),
+  limits: writerLimitsSchema.optional(),
   imageId: hex64,
   base: z.object({ ref: z.string(), commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict(),
   acceptance: z.object({

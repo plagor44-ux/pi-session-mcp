@@ -267,6 +267,14 @@ or npm variables are set. The cache belongs to one writer: it is never shared
 between writers and never a host cache mount, and setup does not install uv
 or npm for you.
 
+Optional container settings `--cpus`, `--cpu-shares` and `--memory` bound the
+serving container's CPU or memory use. CPU shares are relative weight under
+contention (for example 256 on a host shared with CI); CPU count and memory
+are hard caps. Setup requires the corresponding host cgroup controllers.
+Repeat these flags on later mode requests or their limits are removed;
+changes update existing writer state without reprovisioning. See
+[Resource limits](execution-modes.md#resource-limits) for ranges and syntax.
+
 A Node writer can instead use `--cache npm`, recording `cache: "npm"` and
 mounting its private directory at `/pi/npm` with
 `npm_config_cache=/pi/npm/cache`. No other npm variables are set. Like the Go

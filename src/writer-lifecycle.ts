@@ -4,6 +4,7 @@ import { chmod, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
+import { writerLimits } from "./writer-limits.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
@@ -274,6 +275,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     const state: WriterState = {
       schemaVersion: 1, alias: ctx.alias, index, phase: "provisioning", lifecycle: settings.lifecycle,
       profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, tags: settings.tags, clean: settings.clean, imageId,
+      ...(writerLimits(settings) ? { limits: writerLimits(settings)! } : {}),
       base: { ref: `refs/heads/${short}`, commit },
     };
     await writeWriterState(ctx.home, name, state);

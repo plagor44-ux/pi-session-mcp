@@ -28,6 +28,20 @@ function expectInvalid(raw: unknown): void {
 }
 
 describe("resolveExecutionModes", () => {
+  it("round-trips optional limits without adding unset fields", () => {
+    for (const limits of [{}, { cpus: 0.01 }, { cpus: 1024, cpuShares: 262144, memory: "9999999g" }]) {
+      const raw = modes({ a: { mode: "container", profiles: ["code"], ...limits } });
+      const parsed = executionModesSchema.parse(JSON.parse(JSON.stringify(executionModesSchema.parse(raw))));
+      const settings = resolveExecutionModes(parsed, aliases, profiles).get("a")!.container!;
+      for (const key of ["cpus", "cpuShares", "memory"]) {
+        if (key in limits) expect(settings).toHaveProperty(key);
+        else expect(settings).not.toHaveProperty(key);
+      }
+    }
+  });
+  it.each([{ cpus: 0 }, { cpus: 1.001 }, { cpus: 0.00000000001 }, { cpus: 1025 }, { cpuShares: 1 }, { cpuShares: 262145 }, { cpuShares: 2.5 }, { memory: "0m" }, { memory: "512M" }])("rejects invalid limits %j", (limits) => {
+    expectInvalid(modes({ a: { mode: "container", profiles: ["code"], ...limits } }));
+  });
   it("fills every missing alias with unset", () => {
     expect([...resolveExecutionModes(modes({}), aliases, profiles)]).toEqual([
       ["a", { mode: "unset" }], ["b", { mode: "unset" }],

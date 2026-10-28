@@ -40,6 +40,9 @@ export function serveArgs(paths: WriterPaths, state: WriterState, command: reado
     "-e", "PI_CODING_AGENT_DIR=/pi/agent",
     "-e", "PI_SESSION_MCP_WRITER_GUARD=/pi/config/writer-guard.json",
   ];
+  if (state.limits?.cpus !== undefined) args.push(`--cpus=${state.limits.cpus}`);
+  if (state.limits?.cpuShares !== undefined) args.push(`--cpu-shares=${state.limits.cpuShares}`);
+  if (state.limits?.memory !== undefined) args.push(`--memory=${state.limits.memory}`);
   if (options?.name !== undefined) args.push("--name", writerContainerName(options.name));
   if (eventsDir !== undefined) args.push(
     "-v", `${eventsDir}:${CONTAINER_EVENTS_DIR}:rw`,
@@ -249,6 +252,20 @@ export async function podmanInfo(runner: CommandRunner): Promise<{ usable: boole
   } catch {
     return { usable: false };
   }
+}
+
+/** A failed or malformed host probe provides no usable controllers. */
+export async function podmanCgroupControllers(runner: CommandRunner): Promise<readonly string[]> {
+  try {
+    const output = await podman(runner, ["info", "--format", "json"]);
+    if (output.exitCode !== 0) return [];
+    const info: unknown = JSON.parse(output.stdout);
+    if (!info || typeof info !== "object" || !("host" in info)) return [];
+    const host = info.host;
+    if (!host || typeof host !== "object" || !("cgroupControllers" in host)) return [];
+    const controllers = host.cgroupControllers;
+    return Array.isArray(controllers) && controllers.every((value: unknown) => typeof value === "string") ? controllers : [];
+  } catch { return []; }
 }
 
 export async function resolveImage(runner: CommandRunner, image: string, pull: boolean): Promise<string> {

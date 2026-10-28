@@ -5,6 +5,8 @@ import { ConfigError } from "./config.js";
 import { ImmutableMap } from "./execution-profile.js";
 import { isSafeRefName } from "./writer-boundary.js";
 
+import { cpusSchema, cpuSharesSchema, memorySchema } from "./writer-limits.js";
+
 export type WorkspaceMode = "unset" | "host" | "container" | "read-only";
 
 export interface ContainerSettings {
@@ -17,6 +19,9 @@ export interface ContainerSettings {
   readonly tags: "none" | "reachable";
   readonly clean: "untracked" | "all";
   readonly base?: string;
+  readonly cpus?: number;
+  readonly cpuShares?: number;
+  readonly memory?: string;
 }
 
 export interface WorkspaceModeEntry {
@@ -55,6 +60,9 @@ const entrySchema = z.discriminatedUnion("mode", [
     tags: z.enum(["none", "reachable"]).default("none"),
     clean: z.enum(["untracked", "all"]).default("untracked"),
     base: z.string().refine(isShortBranchName).optional(),
+    cpus: cpusSchema.optional(),
+    cpuShares: cpuSharesSchema.optional(),
+    memory: memorySchema.optional(),
   }).strict(),
 ]);
 
@@ -82,10 +90,13 @@ export function resolveExecutionModes(
           throw new ConfigError("invalid_execution_modes");
         }
       }
-      const { mode, base, ...settings } = entry;
+      const { mode, base, cpus, cpuShares, memory, ...settings } = entry;
       entries.set(alias, Object.freeze({ mode, container: Object.freeze({
         ...settings, profiles: Object.freeze([...settings.profiles]),
         ...(base === undefined ? {} : { base }),
+        ...(cpus === undefined ? {} : { cpus }),
+        ...(cpuShares === undefined ? {} : { cpuShares }),
+        ...(memory === undefined ? {} : { memory }),
       }) }));
     } else {
       entries.set(alias, Object.freeze({ mode: entry.mode }));

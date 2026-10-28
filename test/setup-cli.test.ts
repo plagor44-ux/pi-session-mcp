@@ -22,6 +22,16 @@ describe("setup CLI", () => {
   it("rejects unsupported, repeated, and malformed arguments", () => { expect(() => parseSetupArgs(["--wat"])).toThrow("argument_unsupported"); expect(() => parseSetupArgs(["--apply", "--verify"])).toThrow("operation_repeated"); expect(() => parseSetupArgs(["--target", "codex:user"])).toThrow("target_invalid"); });
   it("does not echo secret or path sentinels from a target projection", () => { const result: SetupResult = { ...sample, findings: [{ ...sample.findings[0]!, target: { client: "codex", scope: "user", alias: "SAFE_ALIAS" }, code: "setup_failed" }] }; const rendered = `${formatSetupResult(result)}\n${formatSetupHuman(result)}`; expect(rendered).not.toContain("SECRET_SENTINEL"); expect(rendered).not.toContain("/tmp/secret"); });
   describe("--repo", () => {
+    it("parses optional resource limits", () => {
+      expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "1.25", "--cpu-shares", "256", "--memory", "512m"]).repo?.container).toMatchObject({ cpus: 1.25, cpuShares: 256, memory: "512m" });
+    });
+    it.each([
+      ...["0", "-1", "1024.01", "1.001", "NaN", "1e2", ""].map((value) => ["--cpus", value, "cpus_invalid"]),
+      ...["1", "262145", "2.5", "-2", ""].map((value) => ["--cpu-shares", value, "cpu_shares_invalid"]),
+      ...["0m", "512M", "1gb", "10000000m", "-1g", ""].map((value) => ["--memory", value, "memory_invalid"]),
+    ])("rejects resource limit %s %s", (flag, value, code) => {
+      expect(() => parseSetupArgs(["--repo", "a", flag!, value!])).toThrow(code);
+    });
     it.each(["untracked", "all"])("passes clean %s into container settings", (clean) => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--clean", clean]).repo?.container?.clean).toBe(clean);
     });

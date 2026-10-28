@@ -77,6 +77,12 @@ const baseArgs = (): string[] => [
 ];
 const serve = ["node", "/opt/pi-session-mcp/dist/main.js"];
 
+it("serving limits are optional and do not change the throwaway boundary", () => {
+  const limits = { cpus: 1.25, cpuShares: 256, memory: "512m" };
+  expect(serveArgs(paths, { ...state, limits }, serve, "/release")).toEqual([...baseArgs(), "--cpus=1.25", "--cpu-shares=256", "--memory=512m", imageId, ...serve]);
+  expect(serveArgs(paths, state, serve, "/release").some((arg) => /^--(?:cpus|cpu-shares|memory)=/.test(arg))).toBe(false);
+});
+
 it("serveArgs adds the fixed name and label", () => {
   expect(serveArgs(paths, state, serve, "/release", undefined, { name: "repo-w1" })).toEqual([
     ...baseArgs(), "--name", "pi-writer-repo-w1", imageId, ...serve,

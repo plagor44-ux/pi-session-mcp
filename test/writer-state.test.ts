@@ -86,6 +86,19 @@ it("derives the private writer layout", () => {
   });
 });
 
+it("round-trips optional strict limits and omits them for legacy states", async () => {
+  const home = await temporaryRoot("pi-writer-limits-");
+  await writeWriterState(home, name, state);
+  expect(await readWriterState(home, name)).not.toHaveProperty("limits");
+  for (const limits of [{ cpus: 1 }, { cpuShares: 256 }, { memory: "512m" }, { cpus: 1, cpuShares: 256, memory: "512m" }]) {
+    await writeWriterState(home, name, { ...state, limits });
+    expect((await readWriterState(home, name))?.limits).toEqual(limits);
+  }
+  for (const limits of [{ unknown: 1 }, { cpus: 0 }, { cpuShares: 1 }, { memory: "1gb" }]) {
+    await expect(writeWriterState(home, name, { ...state, limits } as unknown as WriterState)).rejects.toThrow();
+  }
+});
+
 it("round-trips every configured cache kind", async () => {
   const home = await temporaryRoot("pi-writer-state-");
   for (const cache of ["none", "go", "uv", "npm"] as const) {
@@ -236,6 +249,7 @@ describe("acceptance fingerprint and event delivery", () => {
     await mkdir(paths.config, { recursive: true });
     await writeFile(paths.wrapper, "wrapper");
     const plain = await currentAcceptanceFingerprint(paths.wrapper, state, "5.4.0");
+    expect(await currentAcceptanceFingerprint(paths.wrapper, { ...state, limits: { cpus: 1, cpuShares: 256, memory: "512m" } }, "5.4.0")).toBe(plain);
     // Without a configuration, and with delivery off, the fingerprint is the one an earlier release computed.
     expect(plain).toBe(acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: "5.4.0", network: state.network, cache: state.cache }));
     await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify({ events: { delivery: "off" } }));

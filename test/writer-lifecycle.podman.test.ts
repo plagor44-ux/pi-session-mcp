@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, expect, it } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
-import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, podmanInfo, resolveImage, throwawayArgs } from "../src/writer-boundary.js";
+import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, podmanInfo, resolveImage, serveArgs, throwawayArgs } from "../src/writer-boundary.js";
 import { collectWriter, inspectWork, provisionWriter, removeWriter, resetWriter } from "../src/writer-lifecycle.js";
 import { readWriterState, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { acquireWriterLease } from "../src/writer-lease.js";
@@ -44,10 +44,13 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
   const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked", cpus: 1, memory: "512m" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
+  expect(state.limits).toEqual({ cpus: 1, memory: "512m" });
+  const limited = await runner.run("podman", serveArgs(paths, state, ["sh", "-c", "test $(cat /sys/fs/cgroup/memory.max) = 536870912 && grep -q '^100000 100000$' /sys/fs/cgroup/cpu.max"], home), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  expect(limited.exitCode, limited.stderr).toBe(0);
   const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
 export GIT_CONFIG_NOSYSTEM=1
 ${BOUNDARY_GIT} checkout -b feature
