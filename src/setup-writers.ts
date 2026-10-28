@@ -6,7 +6,7 @@ import { loadConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { runDoctor } from "./doctor.js";
-import type { WorkspaceModeEntry } from "./execution-modes.js";
+import { MAX_WRITERS, type WorkspaceModeEntry } from "./execution-modes.js";
 import { changeExecutionMode, type ModeRequest } from "./setup-modes.js";
 import { acquireOverrideLock, OverrideLockError } from "./override-lock.js";
 import { createCommandMcpStdioLauncher, createProcessRunner } from "./setup-process.js";
@@ -154,7 +154,7 @@ async function remove(ctx: lifecycle.WriterContext, name: string, discard: boole
 const writerIndex = (name: string): number => Number(name.slice(name.lastIndexOf("-w") + 2));
 async function plan(ctx: lifecycle.WriterContext, entry: WorkspaceModeEntry) {
   const keep: string[] = [], missing: string[] = [], surplus: string[] = [];
-  for (let index = 1; index <= 16; index++) {
+  for (let index = 1; index <= MAX_WRITERS; index++) {
     const name = writerName(ctx.alias, index), state = await readWriterState(ctx.home, name);
     if (entry.mode === "container" && index <= entry.container!.writers) { keep.push(name); if (!state || state.phase === "provisioning") missing.push(name); }
     else if (state) surplus.push(name);
@@ -268,7 +268,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
       try { config = await loadConfig(configPath); }
       catch { return changeExecutionMode(configPath, request, modeDependencies); }
       writerWork = config.workspaceModes.get(request.alias)?.mode === "container";
-      for (let index = 1; index <= 16 && !writerWork; index++) {
+      for (let index = 1; index <= MAX_WRITERS && !writerWork; index++) {
         try { await lstat(join(writersRoot(deps.home ?? homedir()), writerName(request.alias, index))); writerWork = true; }
         catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
       }
@@ -288,7 +288,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
       const config = await loadConfig(configPath);
       if (!config.workspaceModes.get(request.alias)?.container?.base) {
         const bases = new Set<string>();
-        for (let index = 1; index <= 16; index++) {
+        for (let index = 1; index <= MAX_WRITERS; index++) {
           const state = await readWriterState(deps.home ?? homedir(), writerName(request.alias, index));
           if (state) bases.add(state.base.ref);
         }

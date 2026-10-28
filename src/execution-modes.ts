@@ -24,6 +24,8 @@ export interface WorkspaceModeEntry {
 }
 
 export const EXECUTION_MODES_FILE = "execution-modes.json";
+/** Writers per container workspace; capabilities report it and setup verify checks it. */
+export const MAX_WRITERS = 16;
 
 /** A base is a plain local branch name: safe, not `HEAD`, no ref prefix, no commit ID, at most 200 characters. */
 export function isShortBranchName(value: string): boolean {
@@ -43,7 +45,7 @@ const entrySchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("read-only") }).strict(),
   z.object({
     mode: z.literal("container"),
-    writers: z.number().int().min(1).max(16).default(1),
+    writers: z.number().int().min(1).max(MAX_WRITERS).default(1),
     lifecycle: z.enum(["persistent", "ephemeral"]).default("persistent"),
     profiles: z.array(z.string()).min(1),
     image: z.union([z.literal("node"), z.string().regex(/^[0-9a-f]{64}$/)]).default("node"),

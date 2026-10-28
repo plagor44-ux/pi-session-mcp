@@ -113,6 +113,29 @@ describe("setup verification against the real server", () => {
     expect(result).toMatchObject({ status: "verified", initialize: true, toolsList: true, capabilitiesGet: true });
   }, 60_000);
 
+  it("verifies a server whose configuration has container workspaces (#160)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-setup-verify-container-");
+    const config = join(root, "config.json");
+    await mkdir(join(root, "other"));
+    await writeFile(config, JSON.stringify({
+      workspaces: { project: root, other: join(root, "other") },
+      executionProfiles: {
+        safe: { default: true, permissionProfile: "read-only", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" },
+        code: { default: false, permissionProfile: "coding", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" },
+      },
+    }), { mode: 0o600 });
+    await writeFile(join(root, "execution-modes.json"), JSON.stringify({
+      schemaVersion: 1,
+      workspaces: {
+        project: { mode: "container", writers: 2, profiles: ["code"], base: "main" },
+        other: { mode: "container", profiles: ["code"] },
+      },
+    }), { mode: 0o600 });
+    const launch = createMcpStdioLauncher({ nodePath: process.execPath, entryPath: entry, configPath: config, timeoutMs: 20_000 });
+    const result = await verifyMcpCapabilities({ launch, timeoutMs: 20_000 });
+    expect(result).toMatchObject({ status: "verified", initialize: true, toolsList: true, capabilitiesGet: true });
+  }, 60_000);
+
   it.each([
     ["passes the runtime directory, so a spool server starts its spool there", true],
     ["verifies a spool server that gets no runtime directory", false],
