@@ -25,7 +25,7 @@ export function projectCapabilities(
       .sort(compareAliases)
       .map((alias) => {
         const entry = workspaceModes.get(alias);
-        return { alias, mode: entry?.mode ?? "unset", ...(entry?.mode === "container" ? { writers: entry.container!.writers, defaultBase: entry.container!.base ?? null } : {}) };
+        return { alias, mode: entry?.mode ?? "unset", ...(entry?.mode === "container" && entry.container ? { writers: entry.container.writers, defaultBase: entry.container.base ?? null } : {}) };
       }),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))

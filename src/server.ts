@@ -48,6 +48,7 @@ export function createServer(
     const alias = executionProfile ?? defaultExecutionProfile;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
+    if (!workspaces.has(workspace)) throw new RegistryError("unknown_workspace");
     const mode = workspaceModes.get(workspace) ?? { mode: "unset" };
     if (base !== undefined && (configured.permissionProfile !== "coding" || mode.mode !== "container")) {
       throw new RegistryError("base_not_applicable");

@@ -75,8 +75,8 @@ export class WriterUnavailableError extends Error {
 }
 
 export interface PiSessionHandle {
-  readonly placement?: { writer: string; base: { ref: string; commit: string } };
-  readonly deadlines?: { preflightMs?: number; abortMs?: number; cleanupMs?: number };
+  readonly placement?: { writer: string; base: { ref: string; commit: string } } | undefined;
+  readonly deadlines?: { preflightMs?: number; abortMs?: number; cleanupMs?: number } | undefined;
   isLost?(): boolean;
   readonly sdkSessionId: string;
   /** Only whitelisted, post-verified selection metadata may cross the adapter boundary. */
