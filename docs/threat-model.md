@@ -48,7 +48,8 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     fresh tmpfs, so only the truncated output is available. `ls` omits entries
     that are symlinks pointing outside the read roots, without a notice. A skill
     directory that equals or contains the operator's home, the configuration
-    directory or `~/.pi` contributes only the skill file as a read root. On
+    directory (or its symlink target's), `~/.pi` or Pi's agent directory
+    contributes only the skill file as a read root. On
     timeout or abort the server kills bubblewrap and the PID namespace takes every
     process of the sandbox with it. The start probe is cancelled with the start
     request. A granted research

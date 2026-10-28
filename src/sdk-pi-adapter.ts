@@ -12,6 +12,7 @@ import {
   createAgentSessionServices,
   createBashToolDefinition,
   DefaultResourceLoader,
+  getAgentDir,
   ModelRuntime,
   type PromptOptions,
   type ResourceLoader,
@@ -420,7 +421,8 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     this.sandbox = options.sandbox ?? {};
     // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
     const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
-    this.protectedReadPaths = [home, join(home, ".pi"), ...(options.protectedReadPaths ?? [])];
+    // Pi's agent directory holds its credentials; the SDK resolves it from `PI_CODING_AGENT_DIR` or below `~/.pi`.
+    this.protectedReadPaths = [home, join(home, ".pi"), getAgentDir(), ...(options.protectedReadPaths ?? [])];
   }
 
   async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {

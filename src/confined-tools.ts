@@ -45,13 +45,16 @@ function isWithin(path: string, root: string): boolean {
  * The allowed read roots: the workspace and the directory of each selected skill file, as real paths.
  * A skill directory that equals or contains a protected path (the operator's home, the configuration
  * directory, the Pi agent directory) would expose it, so only the skill file itself is a root then.
+ * A symlinked skill file resolves outside its directory, so its real file is a root as well.
  */
 export async function allowedReadRoots(workspace: string, skills: readonly Skill[], protectedPaths: readonly string[] = []): Promise<string[]> {
   const roots = new Set<string>([await realpath(workspace)]);
   const protectedReal = await Promise.all(protectedPaths.map((path) => canonical(path)));
   for (const skill of skills) {
-    const directory = await realpath(dirname(skill.filePath));
-    roots.add(protectedReal.some((path) => isWithin(path, directory)) ? await realpath(skill.filePath) : directory);
+    const directory = await realpath(dirname(skill.filePath)), file = await canonical(skill.filePath);
+    const root = protectedReal.some((path) => isWithin(path, directory)) ? file : directory;
+    roots.add(root);
+    if (!isWithin(file, root)) roots.add(file);
   }
   return [...roots];
 }

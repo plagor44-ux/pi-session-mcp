@@ -834,6 +834,17 @@ describe("protected skill roots and aborted sandbox probes", () => {
     await expect(readOf(read as never, join(directory, "notes.txt"))).rejects.toThrow("Path is outside the allowed read roots");
   });
 
+  it("limits a skill directory equal to Pi's agent directory to the skill file", async () => {
+    const directory = await skillDirectory("review");
+    await writeFile(join(directory, "auth.json"), "{}");
+    vi.stubEnv("PI_CODING_AGENT_DIR", directory);
+    try {
+      const read = await readTool(directory, {});
+      await expect(readOf(read as never, join(directory, "SKILL.md"))).resolves.toBeDefined();
+      await expect(readOf(read as never, join(directory, "auth.json"))).rejects.toThrow("Path is outside the allowed read roots");
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it("fails the start, killing the probe, when the start request is aborted during the probe", async () => {
     const fixture = runtimeFixture();
     const createSession = createSessionFixture(sessionFixture().session);
