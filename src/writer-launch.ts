@@ -50,7 +50,7 @@ export async function launch(argv: readonly string[], deps: LaunchDependencies):
   const name = argv[0];
   if (!name || !WRITER_NAME_PATTERN.test(name)) { await serveRefusal("writer_not_ready"); return 0; }
   const inherited = deps.env.PI_WRITER_LEASE_FD;
-  if (inherited !== undefined && (!/^[0-9]+$/.test(inherited) || !Number.isSafeInteger(Number(inherited)))) {
+  if (inherited !== undefined && (!Number.isSafeInteger(Number(inherited)) || Number(inherited) < 0 || String(Number(inherited)) !== inherited)) {
     await serveRefusal("writer_not_ready"); return 0;
   }
   let lease: WriterLease;

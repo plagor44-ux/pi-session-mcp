@@ -225,7 +225,7 @@ it("adopts PI_WRITER_LEASE_FD and does not acquire a second lease", async () => 
   expect(deps.lease!.acquire).not.toHaveBeenCalled();
   expect(deps.spawnPodman).toHaveBeenCalledWith(expect.arrayContaining(["--name", "pi-writer-x-w1"]), [3]);
 });
-it.each(["", "-1", "3x", " 3", "+3", "3.0", "1e2", "9007199254740992"])("refuses malformed inherited descriptor %j before Podman", async (fd) => {
+it.each(["", "-1", "3x", " 3", "+3", "3.0", "1e2", "9007199254740992", "3\n", "03"])("refuses malformed inherited descriptor %j before Podman", async (fd) => {
   deps.env.PI_WRITER_LEASE_FD = fd;
   await launch(["x-w1"], deps);
   expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready");
