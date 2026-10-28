@@ -30,6 +30,8 @@ function dependencies(modes: Record<string, WorkspaceMode>, coding = true): Doct
     },
     loadConfig: async () => config,
     containerRuntime: async () => false,
+    // Keep the host's real writer lease directory out of the check list.
+    writerLeaseRoot: async () => undefined,
   };
 }
 
