@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking for read-only workflows:** `read`, `grep`, `find` and `ls` of every
+  read-only profile now accept only paths inside the session's workspace and the
+  directories of the profile's selected skill files. An absolute path, `..`, `~`
+  or a symlink leading outside is refused with the tool error `Path is outside
+  the allowed read roots`. Read-only workers that read files outside the
+  workspace, Pi credentials included, can no longer do so. Coding profiles are
+  unchanged ([ADR 0013](docs/adr/0013-hardened-read-only-profiles.md),
+  [#169](https://github.com/plagor44-ux/pi-session-mcp/issues/169)).
+
+### Added
+
+- Optional profile field `"shell": "sandboxed"` for read-only profiles: a `bash`
+  tool whose commands run in a bubblewrap sandbox without network and with the
+  workspace as a temporary overlay, so review workers can run `git log`,
+  `git blame`, tests and scripts without touching the host tree. Linux only,
+  not together with `grantedExtensionTools`. New start error
+  `sandbox_unavailable` (class `needs_operator`), new capabilities field
+  `shell` (`none` or `sandboxed`) after `grantedExtensionTools`, and the Doctor
+  checks `sandbox_unavailable` (error) and `workspace_git_unavailable` (warning)
+  ([#169](https://github.com/plagor44-ux/pi-session-mcp/issues/169)).
+
 ### Fixed
 
 - An apply of `pi-session-mcp-setup --repo <alias> --mode container ...` with
