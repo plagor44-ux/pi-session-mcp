@@ -39,6 +39,17 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
       expect(JSON.parse((await child.read())!)).toEqual({ refresh: "1" });
     } finally { await child.kill(); }
   });
+  it("passes inheritFds at child index 3 and subsequent indices in order", async () => {
+    const directory = await temporaryRoot("setup-process-fds-");
+    const first = await open(join(directory, "first"), "w+");
+    const second = await open(join(directory, "second"), "w+");
+    try {
+      const stats = await Promise.all([first.stat(), second.stat()]);
+      const result = await createProcessRunner().run(execPath, ["-e", "const fs=require('node:fs');process.stdout.write(JSON.stringify([3,4].map(fd=>{const s=fs.fstatSync(fd);return [s.dev,s.ino]})))"], undefined, { inheritFds: [first.fd, second.fd] });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout)).toEqual(stats.map((s) => [s.dev, s.ino]));
+    } finally { await first.close(); await second.close(); }
+  });
   it("honors per-command cwd and merges per-command environment", async () => {
     const cwd = await temporaryRoot("setup-process-cwd-");
     const runner = createProcessRunner({ env: { BASE: "base", OVERRIDE: "old" } });

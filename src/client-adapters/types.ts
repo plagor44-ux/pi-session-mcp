@@ -10,7 +10,7 @@ export interface CommandResult {
 }
 
 export interface CommandRunner {
-  run(command: string, args: readonly string[], signal?: AbortSignal, options?: { cwd?: string; env?: NodeJS.ProcessEnv }): Promise<CommandResult>;
+  run(command: string, args: readonly string[], signal?: AbortSignal, options?: { cwd?: string; env?: NodeJS.ProcessEnv; inheritFds?: readonly number[] }): Promise<CommandResult>;
 }
 export interface CommandExecution {
   readonly signal?: AbortSignal;

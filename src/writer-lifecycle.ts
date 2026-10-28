@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { configSchema } from "./config.js";
@@ -158,7 +158,7 @@ async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPat
 async function cloneFromBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, imageId: string, base: { ref: string; short: string; commit: string }, remote: string | undefined, tags: ContainerSettings["tags"]): Promise<void> {
   // Clone only auto-fetches refs/heads; fetch the exact bundled ref before checkout.
   const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\n${BOUNDARY_GIT} clone --no-hardlinks /bundles/base.bundle "$1"\ncd "$1"\n${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle "$5"\n${BOUNDARY_GIT} checkout -B "$2" "$3"\nif [ -n "$4" ]; then ${BOUNDARY_GIT} remote set-url origin "$4"; else ${BOUNDARY_GIT} remote remove origin; fi\n${identityScript(6, 7)}\n${tags === "reachable" ? `${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle '+refs/tags/*:refs/tags/*'` : ""}`;
-  const clone = await ctx.runner.run("podman", throwawayArgs(paths, imageId, { clone: "rw", bundles: true }, script, [paths.clone, base.short, base.commit, remote ?? "", base.ref, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  const clone = await ctx.runner.run("podman", throwawayArgs(basename(paths.root), paths, imageId, { clone: "rw", bundles: true }, script, [paths.clone, base.short, base.commit, remote ?? "", base.ref, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (clone.exitCode !== 0) throw new LifecycleError("writer_clone_failed");
   await verifyCloneLayout(paths.clone);
 }
@@ -288,7 +288,7 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
   const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads refs/stash\n${BOUNDARY_GIT} write-tree\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
-  const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
   const hash = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -379,7 +379,7 @@ if [ -z "$(${BOUNDARY_GIT} --git-dir=/tmp/scratch for-each-ref --format='%(refna
 else
   ${BOUNDARY_GIT} --git-dir=/tmp/scratch bundle create /bundles/collect.bundle --all
 fi`;
-      const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+      const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
       if (result.exitCode !== 0) throw new LifecycleError("writer_collect_failed");
       const messages = result.stdout.split("\n");
       for (const message of messages) if (message === "ref_name_refused") findings.push({ code: "ref_name_refused" });
@@ -456,7 +456,7 @@ done
 ${BOUNDARY_GIT} stash clear
 ${BOUNDARY_GIT} clean -fd
 ${identityScript(4, 5)}`;
-    const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "rw", bundles: true }, script, [base.ref, base.short, base.commit, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+    const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "rw", bundles: true }, script, [base.ref, base.short, base.commit, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
     if (result.exitCode !== 0) throw new LifecycleError("writer_reset_failed");
     const next = { ...state, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
     await refreshPrivateFiles(ctx, name, next);

@@ -41,7 +41,7 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
-  const work = await runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
+  const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
 export GIT_CONFIG_NOSYSTEM=1
 ${BOUNDARY_GIT} checkout -b feature
 printf '%s\\n' committed > committed.txt

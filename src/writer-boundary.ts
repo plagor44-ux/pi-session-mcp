@@ -1,9 +1,10 @@
 import { constants } from "node:fs";
 import { chmod, lstat, mkdir, open, opendir, readdir, rmdir, unlink, type FileHandle } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DEFAULT_COMMAND_TIMEOUT_MS } from "./client-adapters/command.js";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
 import { CONTAINER_EVENTS_DIR, EVENTS_DIR_ENV, writerEventsDir } from "./turn-events.js";
+import { writerContainerName, writerLabel } from "./writer-fence.js";
 import { writerPaths, type WriterState } from "./writer-state.js";
 
 export const NODE_IMAGE_REF = "docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d";
@@ -13,17 +14,18 @@ export const BOUNDARY_GIT = "git -c safe.directory=* -c core.fsmonitor=false -c 
 type WriterPaths = ReturnType<typeof writerPaths>;
 
 export class BoundaryError extends Error {
-  constructor(readonly code: "image_unavailable" | "clone_verification_failed") {
+  constructor(readonly code: "image_unavailable" | "clone_verification_failed" | "writer_fenced") {
     super(code);
     this.name = "BoundaryError";
   }
 }
 
 /** `eventsDir` is the dedicated host spool directory of this writer; pass it only when event delivery is enabled for the writer. */
-export function serveArgs(paths: WriterPaths, state: WriterState, command: readonly string[], releaseRoot: string, eventsDir?: string): string[] {
+export function serveArgs(paths: WriterPaths, state: WriterState, command: readonly string[], releaseRoot: string, eventsDir?: string, options?: { name?: string }): string[] {
   const args = [
     "run", "-i", "--rm", "--pull=never", "--userns=keep-id", "--read-only",
     "--cap-drop=all", "--security-opt=no-new-privileges", `--network=${state.network}`,
+    "--label", writerLabel(options?.name ?? basename(paths.root)),
     "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
     "--tmpfs", "/pi/home:rw,nosuid,nodev,mode=0700,size=64m,U",
     "-v", `${paths.clone}:${paths.clone}:rw`,
@@ -38,6 +40,7 @@ export function serveArgs(paths: WriterPaths, state: WriterState, command: reado
     "-e", "PI_CODING_AGENT_DIR=/pi/agent",
     "-e", "PI_SESSION_MCP_WRITER_GUARD=/pi/config/writer-guard.json",
   ];
+  if (options?.name !== undefined) args.push("--name", writerContainerName(options.name));
   if (eventsDir !== undefined) args.push(
     "-v", `${eventsDir}:${CONTAINER_EVENTS_DIR}:rw`,
     "-e", `${EVENTS_DIR_ENV}=${CONTAINER_EVENTS_DIR}`,
@@ -212,13 +215,13 @@ export async function ensureWriterEventsDirectory(
 }
 
 export function throwawayArgs(
-  paths: WriterPaths, imageId: string,
+  name: string, paths: WriterPaths, imageId: string,
   opts: { clone: "ro" | "rw"; bundles: boolean },
   script: string, args: readonly string[],
 ): string[] {
   const result = [
     "run", "--rm", "-i", "--pull=never", "--network=none", "--userns=keep-id", "--read-only",
-    "--cap-drop=all", "--security-opt=no-new-privileges",
+    "--cap-drop=all", "--security-opt=no-new-privileges", "--label", writerLabel(name),
     "--tmpfs", "/tmp:rw,nosuid,nodev,size=1g", "-e", "HOME=/tmp",
     "-v", `${paths.clone}:${paths.clone}:${opts.clone}`,
     "--workdir", paths.clone,
