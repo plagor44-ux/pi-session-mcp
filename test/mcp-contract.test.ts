@@ -226,7 +226,7 @@ describe("MCP contracts", () => {
         }],
       ]),
       defaultExecutionProfile: "alpha-profile",
-      workspaceModes: new Map([["alpha-workspace", { mode: "container", container: { writers: 2, lifecycle: "persistent", profiles: ["zeta-profile"], image: "node", network: "pasta", cache: "none", tags: "none" } }]]),
+      workspaceModes: new Map([["alpha-workspace", { mode: "container", container: { writers: 2, lifecycle: "persistent", profiles: ["zeta-profile"], image: "node", network: "pasta", cache: "none", tags: "none", clean: "untracked" } }]]),
     });
 
     const registryList = vi.spyOn(connected.registry, "list");

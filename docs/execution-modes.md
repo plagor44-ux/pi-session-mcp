@@ -86,6 +86,7 @@ clone.
 | `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags |
 | `--network <value>` | `pasta` (default, not limited) or `none` |
 | `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
+| `--clean <untracked\|all>` | `untracked` (default) keeps ignored files; `all` also removes ignored files on reset and finish |
 | `--cache <value>` | `none` (default), `go` for the writer's Go module/build cache, or `uv` for its private uv and npm cache |
 | `--base <ref>` | Named local or remote branch for provisioning; also supported by writer reset; not HEAD or a raw commit hash |
 | `--client codex` | No writer effect; coding uses the host registration for either client |
@@ -194,7 +195,7 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 | Writer operation | Behavior |
 | --- | --- |
 | `--collect --apply` | Bundle export; retain clone |
-| `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files; falls back to recreation if post-reset verification fails |
+| `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files, and ignored files with `--clean all`; falls back to recreation if post-reset verification fails |
 | `--recreate --apply` | Rebuild clone and agent copy from the workspace default base, retaining image/settings |
 | `--finish --apply` | Collect, then reset persistent / recreate ephemeral on the workspace default base |
 | `--remove` | Explicit mutation: unregister owned registrations before removing writer state |
@@ -383,6 +384,18 @@ flag on later mode requests to retain it. Reset deletes every clone tag before
 importing the selected base tags; tags created by workers are never collected
 and do not change the collected-work digest. Changing the tag setting requires
 reprovisioning for settings drift, but does not change boundary acceptance.
+
+### Ignored files (opt-in)
+
+Container writers default to `clean: "untracked"`, keeping ignored files such as
+`.venv`, `node_modules`, `.env` and build output across reset and a persistent
+writer's finish (an ephemeral writer's finish recreates the clone). Pass
+`--clean all` on a container mode request to remove them with `git clean -ffdx`.
+Repeat this flag on later mode requests to retain it. Per-writer caches at
+`/pi/go` and `/pi/uv` live outside the clone and stay untouched.
+Changing the setting requires reprovisioning for settings drift: collect work,
+run `--writer <name> --remove`, then run the provisioning command again with
+the desired `--clean` value. It does not change boundary acceptance.
 
 See [Isolation setup](isolation-setup.md) for boundary prerequisites and what
 setup automates, and the historical manual acceptance evidence linked there.

@@ -39,10 +39,14 @@ describe("setup executable", () => {
     expect(await main(["--json", "--isolation-control", "--repo", "x"])).toBe(linux ? 0 : 1);
     expect(JSON.parse(writes.join("")).findings[0]).toMatchObject({ target: { client: "writer", scope: "host", alias: "control" }, code: linux ? "isolation_control_planned" : "platform_unsupported" });
   });
-  it("returns a strict sanitized misuse result", async () => {
+  it.each([
+    ["--unsupported"],
+    ["--repo", "a", "--tags", "bogus"],
+    ["--repo", "a", "--clean", "bogus"],
+  ])("returns a strict sanitized misuse result for %j", async (...args) => {
     const writes: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((value: string | Uint8Array) => { writes.push(String(value)); return true; }) as typeof process.stdout.write);
-    expect(await main(["--json", "--unsupported"])).toBe(64);
+    expect(await main(["--json", ...args])).toBe(64);
     expect(JSON.parse(writes.join(""))).toMatchObject({ schemaVersion: 1, status: "failed", exitCode: 64, findings: [{ code: "usage_invalid" }] });
   });
 

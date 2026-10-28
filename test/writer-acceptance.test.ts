@@ -11,7 +11,7 @@ afterEach(async () => { await Promise.all(roots.splice(0).map((p) => rm(p, { rec
 async function fixture(exitCode = 0, classification = "not_limited") {
   const home = await mkdtemp(join(tmpdir(), "accept-writer-")); roots.push(home);
   const paths = writerPaths(home, "repo-w1");
-  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
+  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "not_ready", lifecycle: "persistent", profiles: ["coding"], providers: [], network: "pasta", cache: "none", tags: "none", clean: "untracked", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
   await writeWriterState(home, "repo-w1", state);
   await writeFile(paths.wrapper, "wrapper");
   const run = vi.fn(async (command: string, args: readonly string[], signal?: AbortSignal, _options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => {

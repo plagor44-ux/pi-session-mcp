@@ -234,7 +234,7 @@ describe("client adapters", () => {
       { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" },
       new ImmutableMap<string, WorkspaceModeEntry>([["repo", {
         mode: "container",
-        container: { writers: 2, base: "main", lifecycle: "persistent", profiles: ["code-ext"], image: "node", network: "none", cache: "none", tags: "none" },
+        container: { writers: 2, base: "main", lifecycle: "persistent", profiles: ["code-ext"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" },
       }]]),
     );
     expect(capabilities.workspaces).toEqual([{ alias: "repo", mode: "container", writers: 2, defaultBase: "main" }]);

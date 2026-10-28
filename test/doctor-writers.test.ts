@@ -13,9 +13,9 @@ async function fixture(options: { base?: string } = {}) {
   const home = await mkdtemp(join(tmpdir(), "doctor-writer-")); roots.push(home);
   const paths = writerPaths(home, "repo-w1");
   const config: AppConfig = { workspaces: new Map([["repo", home]]), workspaceModes: new Map(), executionProfiles: new Map(), defaultExecutionProfile: "ro", eventDelivery: "off", skillOverrideDirectory: join(home, "skills"), configuration: { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" } };
-  const container = { writers: 1, lifecycle: "persistent" as const, profiles: ["coding"], image: "node", network: "pasta" as const, cache: "none" as const, tags: "none" as const, ...(options.base === undefined ? {} : { base: options.base }) };
+  const container = { writers: 1, lifecycle: "persistent" as const, profiles: ["coding"], image: "node", network: "pasta" as const, cache: "none" as const, tags: "none" as const, clean: "untracked" as const, ...(options.base === undefined ? {} : { base: options.base }) };
   const configured = { ...config, workspaceModes: new Map([["repo", { mode: "container" as const, container }]]) };
-  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent", launch: "relay", profiles: ["coding"], providers: [], network: "pasta", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
+  const state: WriterState = { schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent", launch: "relay", profiles: ["coding"], providers: [], network: "pasta", cache: "none", tags: "none", clean: "untracked", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } };
   const run = async (overrides: DoctorDependencies = {}) => runDoctor({
     home, loadConfig: async () => configured, containerRuntime: async () => true,
     writerRuntime: async () => ({ podmanVersion: "5.4.0", imageExists: async () => true }), ...overrides,

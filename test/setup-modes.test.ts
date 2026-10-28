@@ -72,7 +72,19 @@ describe("setup execution modes", () => {
     expect(await changeExecutionMode(config, input, probe(false))).toMatchObject({ exitCode: 1, findings: [{ code: "container_runtime_unavailable" }] });
     await expect(stat(path)).rejects.toMatchObject({ code: "ENOENT" });
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
-    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none", tags: "none" });
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "container", profiles: ["code"], writers: 1, lifecycle: "persistent", image: "node", network: "pasta", cache: "none", tags: "none", clean: "untracked" });
+  });
+  it("records clean all in a container entry", async () => {
+    const { config, path } = await fixture();
+    const input = request({ mode: "container", container: { profiles: ["code"], clean: "all" }, apply: true });
+    expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.clean).toBe("all");
+  });
+  it("returns clean to untracked when a later request omits it", async () => {
+    const { config, path } = await fixture();
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], clean: "all" }, apply: true }), probe(true))).exitCode).toBe(0);
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.clean).toBe("untracked");
   });
   it("records the Go toolchain cache in a container entry", async () => {
     const { config, path } = await fixture();

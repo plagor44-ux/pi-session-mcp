@@ -19,7 +19,7 @@ afterAll(removeTemporaryRoots);
 import { parseSetupArgs } from "../src/setup-cli.js";
 import { runWriterOperation } from "../src/setup-writers.js";
 
-const state = (index: number): WriterState => ({ schemaVersion: 1, alias: "x", index, phase: "not_ready", lifecycle: "persistent", profiles: ["code"], providers: [{ provider: "example", model: "model" }], network: "pasta", cache: "none", tags: "none", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } });
+const state = (index: number): WriterState => ({ schemaVersion: 1, alias: "x", index, phase: "not_ready", lifecycle: "persistent", profiles: ["code"], providers: [{ provider: "example", model: "model" }], network: "pasta", cache: "none", tags: "none", clean: "untracked", imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) } });
 async function fixture() {
   const home = await temporaryRoot("setup-writers-");
   const configPath = join(home, "config.json");
@@ -415,6 +415,7 @@ describe("writer setup reconciliation", () => {
     ["thinking level", (host: Host) => ({ ...host, executionProfiles: { ...host.executionProfiles, code: { ...host.executionProfiles.code, thinkingLevel: "high" } } }), mode],
     ["image", (host: Host) => host, { ...mode, container: { ...mode.container, image: "c".repeat(64) } }],
     ["tags", (host: Host) => host, { ...mode, container: { ...mode.container, tags: "reachable" as const } }],
+    ["clean", (host: Host) => host, { ...mode, container: { ...mode.container, clean: "all" as const } }],
     ["network", (host: Host) => host, { ...mode, container: { ...mode.container, network: "none" as const } }],
     ["event delivery", (host: Host) => ({ ...host, events: { delivery: "spool" } }), mode],
     ["profile list", (host: Host) => ({ ...host, executionProfiles: { ...host.executionProfiles, other: { ...host.executionProfiles.code, model: "second" } } }), { ...mode, container: { ...mode.container, profiles: ["code", "other"] } }],

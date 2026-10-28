@@ -11,7 +11,7 @@ import { temporaryRoot, removeTemporaryRoots } from "./temporary-roots.js";
 
 const profile = { alias: "code", default: true, permissionProfile: "coding" as const, provider: "p", model: "m", thinkingLevel: "off" as const };
 const input = { cwd: "/unused", workspace: "repo", executionProfile: profile };
-const modes = (writers = 1, base: string | undefined = "main") => new Map<string, WorkspaceModeEntry>([["repo", { mode: "container", container: { writers, base, lifecycle: "persistent", profiles: ["code"], image: "image", network: "none", cache: "none", tags: "none" } }]]);
+const modes = (writers = 1, base: string | undefined = "main") => new Map<string, WorkspaceModeEntry>([["repo", { mode: "container", container: { writers, base, lifecycle: "persistent", profiles: ["code"], image: "image", network: "none", cache: "none", tags: "none", clean: "untracked" } }]]);
 const handles: PiSessionHandle[] = [];
 afterAll(async () => { await Promise.all(handles.map(handle => handle.dispose())); await removeTemporaryRoots(); });
 beforeAll(() => { execFileSync("npm", ["run", "build"], { stdio: "pipe" }); }, 30000);

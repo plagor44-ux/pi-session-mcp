@@ -44,7 +44,7 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
   const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none" }, rawConfig })).toMatchObject({ status: "ok" });
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
@@ -67,6 +67,45 @@ printf '%s\\n' untracked > untracked.txt`, []), AbortSignal.timeout(IMAGE_PULL_T
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   expect(await removeWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok" });
   await expect(lstat(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+}, 120_000);
+
+it.skipIf(skipReason !== undefined)("keeps ignored files on reset by default and removes them with clean all (#162)", async () => {
+  const home = await temporaryRoot("pi-writer-clean-podman-");
+  const checkout = join(home, "source");
+  await mkdir(checkout);
+  async function git(...args: string[]) {
+    const result = await runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", checkout, ...args]);
+    expect(result.exitCode, result.stderr).toBe(0);
+  }
+  await git("init", "-b", "main");
+  await writeFile(join(checkout, ".gitignore"), "ignored/\n");
+  await git("add", ".gitignore");
+  await git("-c", "user.name=writer-test", "-c", "user.email=writer@example.invalid", "commit", "-m", "base");
+  await git("update-ref", "refs/remotes/origin/main", "HEAD");
+  await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
+  const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "uv", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
+  const paths = writerPaths(home, "repo-w1");
+  const state = (await readWriterState(home, "repo-w1"))!;
+  await writeFile(join(paths.uv, "cached.txt"), "cache\n");
+  const leaveIgnored = async () => {
+    const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
+mkdir -p ignored
+printf '%s\\n' left > ignored/left.txt`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+    expect(work.exitCode, work.stderr).toBe(0);
+  };
+  await leaveIgnored();
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true });
+  expect(await resetWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_reset", status: "ok" });
+  expect(await readFile(join(paths.clone, "ignored", "left.txt"), "utf8")).toBe("left\n");
+  await writeWriterState(home, "repo-w1", { ...(await readWriterState(home, "repo-w1"))!, clean: "all" });
+  expect(await resetWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_reset", status: "ok" });
+  await expect(lstat(join(paths.clone, "ignored"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(paths.clone, ".gitignore"), "utf8")).toBe("ignored/\n");
+  expect(await readFile(join(paths.uv, "cached.txt"), "utf8")).toBe("cache\n");
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok" });
 }, 120_000);
 
 it.skipIf(skipReason !== undefined)("neither the container nor Podman's monitor holds the lease descriptor", async () => {
@@ -133,7 +172,7 @@ async function relayWriter() {
   await writeFile(join(paths.clone, ".git", "config"), "");
   await writeWriterState(home, name, {
     schemaVersion: 1, alias: "relay", index: 1, phase: "not_ready", launch: "relay", lifecycle: "persistent",
-    profiles: ["code"], providers: [], network: "none", cache: "none", tags: "none",
+    profiles: ["code"], providers: [], network: "none", cache: "none", tags: "none", clean: "untracked",
     imageId: await resolveImage(runner, "node", false), base: { ref: "refs/heads/main", commit: "a".repeat(40) },
   });
   return { home, name, paths, container, release };

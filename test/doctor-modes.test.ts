@@ -100,7 +100,7 @@ describe("Doctor container profile acceptance", () => {
     const loadRawConfig = vi.fn(async () => rawConfig);
     const result = await runDoctor({ ...deps, home, containerRuntime: async () => true, loadRawConfig,
       loadConfig: async () => ({ ...config, ...(overrideDirectory === undefined ? {} : { skillOverrideDirectory: overrideDirectory }),
-        workspaceModes: new Map([["repo", { mode, container: { writers: 1, lifecycle: "persistent", profiles, image: "node", network: "none", cache: "none", tags: "none" } }]]) }),
+        workspaceModes: new Map([["repo", { mode, container: { writers: 1, lifecycle: "persistent", profiles, image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" } }]]) }),
     });
     return { result, loadRawConfig, checks: result.checks.filter((entry) => entry.id === "container_profile_refused") };
   }
@@ -161,7 +161,7 @@ describe("Doctor container profile acceptance", () => {
     const readFile = vi.fn(async () => { throw new Error("PRIVATE_SECRET /private/config.json"); });
     const result = await runDoctor({ ...deps, configPath: "/private/config.json", fileSystem: { ...deps.fileSystem!, readFile }, loadConfig: async () => ({ ...config,
       workspaceModes: new Map(["repo", "other"].map((alias) => [alias, { mode: "container" as const, container: {
-        writers: 1, lifecycle: "persistent" as const, profiles: ["code", "missing"], image: "node", network: "none" as const, cache: "none" as const, tags: "none" as const,
+        writers: 1, lifecycle: "persistent" as const, profiles: ["code", "missing"], image: "node", network: "none" as const, cache: "none" as const, tags: "none" as const, clean: "untracked" as const,
       } }])),
     }) });
     expect(result.checks.filter((entry) => entry.id === "container_profile_refused")).toEqual(
