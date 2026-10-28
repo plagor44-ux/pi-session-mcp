@@ -80,6 +80,12 @@ describe("setup execution modes", () => {
     expect((await changeExecutionMode(config, input, probe(true))).exitCode).toBe(0);
     expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.clean).toBe("all");
   });
+  it("returns clean to untracked when a later request omits it", async () => {
+    const { config, path } = await fixture();
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"], clean: "all" }, apply: true }), probe(true))).exitCode).toBe(0);
+    expect((await changeExecutionMode(config, request({ mode: "container", container: { profiles: ["code"] }, apply: true }), probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a.clean).toBe("untracked");
+  });
   it("records the Go toolchain cache in a container entry", async () => {
     const { config, path } = await fixture();
     const input = request({ mode: "container", container: { profiles: ["code"], cache: "go" }, apply: true });

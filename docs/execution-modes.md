@@ -388,7 +388,8 @@ reprovisioning for settings drift, but does not change boundary acceptance.
 ### Ignored files (opt-in)
 
 Container writers default to `clean: "untracked"`, keeping ignored files such as
-`.venv`, `node_modules`, `.env` and build output across reset and finish. Pass
+`.venv`, `node_modules`, `.env` and build output across reset and a persistent
+writer's finish (an ephemeral writer's finish recreates the clone). Pass
 `--clean all` on a container mode request to remove them with `git clean -ffdx`.
 Repeat this flag on later mode requests to retain it. Per-writer caches at
 `/pi/go` and `/pi/uv` live outside the clone and stay untouched.

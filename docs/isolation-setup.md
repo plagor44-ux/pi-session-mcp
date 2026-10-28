@@ -31,8 +31,9 @@ clone tags, then imports the selected base tags when enabled. Worker-created
 tags are not collected work and do not affect the collected digest. The setting
 participates in settings drift, not the acceptance fingerprint.
 
-Ignored files in the writer clone survive reset and finish by default
-(`clean: "untracked"`). Add `--clean all` to a container mode request to remove
+Ignored files in a persistent writer's clone survive reset and finish by
+default (`clean: "untracked"`); an ephemeral writer's finish recreates the
+clone. Add `--clean all` to a container mode request to remove
 them with `git clean -ffdx`; the per-writer `/pi/go` and `/pi/uv` caches outside
 the clone stay untouched. Changing this setting requires collecting work,
 removing the writer with `--writer <name> --remove`, and provisioning again;
