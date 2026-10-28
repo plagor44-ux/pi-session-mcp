@@ -69,7 +69,7 @@ const creationCodes = new Set<PiSessionCreationErrorCode>([
   "model_unavailable", "thinking_level_unavailable", "execution_selection_mismatch", "external_mcp_unavailable",
   "external_mcp_no_tools", "external_mcp_grant_tool_missing", "external_mcp_activation_mismatch",
   "extension_not_installed", "extension_version_mismatch", "extension_load_failed", "extension_tool_conflict",
-  "extension_tool_missing", "skill_load_failed", "pi_session_creation_failed",
+  "extension_tool_missing", "skill_load_failed", "sandbox_unavailable", "pi_session_creation_failed",
 ]);
 class InnerError extends Error {
   constructor(readonly code: string) { super("Writer refused the operation"); }

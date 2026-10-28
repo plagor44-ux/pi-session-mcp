@@ -31,6 +31,7 @@ export type PiSessionCreationErrorCode =
   | "extension_tool_conflict"
   | "extension_tool_missing"
   | "skill_load_failed"
+  | "sandbox_unavailable"
   | "pi_session_creation_failed";
 
 const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> = {
@@ -51,6 +52,7 @@ const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> =
   extension_tool_conflict: "Configured Pi extension tools conflict",
   extension_tool_missing: "Granted Pi extension tool is not available",
   skill_load_failed: "Configured Pi skill could not be loaded",
+  sandbox_unavailable: "Read-only shell sandbox is not available",
   pi_session_creation_failed: "Pi session creation failed",
 };
 

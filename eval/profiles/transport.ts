@@ -5,7 +5,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { z } from "zod";
 
 export class TransportFailure extends Error {constructor(readonly code:string){super(code);}}
-const startupCodes=new Set(["unknown_execution_profile","unknown_workspace","unknown_provider","unknown_model","local_authentication_missing","local_authentication_unavailable","model_unavailable","thinking_level_unavailable","execution_selection_mismatch","extension_not_installed","extension_version_mismatch","extension_load_failed","extension_tool_conflict","extension_tool_missing","skill_load_failed","external_mcp_unavailable","external_mcp_no_tools","external_mcp_grant_tool_missing","external_mcp_activation_mismatch","server_stopping"]);
+const startupCodes=new Set(["unknown_execution_profile","unknown_workspace","unknown_provider","unknown_model","local_authentication_missing","local_authentication_unavailable","model_unavailable","thinking_level_unavailable","execution_selection_mismatch","extension_not_installed","extension_version_mismatch","extension_load_failed","extension_tool_conflict","extension_tool_missing","skill_load_failed","sandbox_unavailable","external_mcp_unavailable","external_mcp_no_tools","external_mcp_grant_tool_missing","external_mcp_activation_mismatch","server_stopping"]);
 interface Identity {pid:number;start:string;ppid:number;state:string}
 async function identity(pid:number):Promise<Identity|null> {
   try { const s=await readFile(`/proc/${pid}/stat`,"utf8"), fields=s.slice(s.lastIndexOf(")")+2).split(" ");

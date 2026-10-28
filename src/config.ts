@@ -27,6 +27,7 @@ const profileSchema = z.object({
   mcpServers: z.custom<McpServers>((value) => isMcpServers(value)).optional(),
   extensions: z.array(extensionSpec).max(MAX_PROFILE_EXTENSIONS).optional(),
   grantedExtensionTools: z.array(z.string().refine(isAcceptableExtensionToolName)).max(MAX_GRANTED_EXTENSION_TOOLS).optional(),
+  shell: z.literal("sandboxed").optional(),
   skills: z.array(alias).max(MAX_PROFILE_SKILLS).optional(),
 }).strict().superRefine((profile, context) => {
   if (profile.mcpServers !== undefined && !isMcpServers(profile.mcpServers, profile.permissionProfile)) {
@@ -51,6 +52,18 @@ const profileSchema = z.object({
     const builtins = new Set([...PROFILE_TOOLS.coding, ...PROFILE_TOOLS["read-only"]]);
     if (profile.grantedExtensionTools.some((name) => builtins.has(name))) {
       context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "Extension tool grants must not name built-in tools" });
+    }
+  }
+  if (profile.shell !== undefined) {
+    // Granted extension tools may write, so the sandbox's read-only guarantee would not hold (ADR 0013).
+    if (profile.permissionProfile !== "read-only") {
+      context.addIssue({ code: "custom", path: ["shell"], message: "A sandboxed shell requires a read-only profile" });
+    }
+    if (profile.grantedExtensionTools !== undefined) {
+      context.addIssue({ code: "custom", path: ["shell"], message: "A sandboxed shell cannot be combined with granted extension tools" });
+    }
+    if (process.platform !== "linux") {
+      context.addIssue({ code: "custom", path: ["shell"], message: "A sandboxed shell requires Linux" });
     }
   }
   if (profile.skills !== undefined && new Set(profile.skills).size !== profile.skills.length) {
@@ -175,13 +188,14 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const overrideDirectory = skillOverrideDirectory(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
   const catalog = parsed.skillCatalog ?? {};
-  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, skills, ...value }]) => {
+  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, shell, skills, ...value }]) => {
     const selection = resolveSkillSelection(skills, catalog, base, overrideDirectory);
     return [key, Object.freeze({
       alias: key, ...value,
       ...(mcpServers === undefined ? {} : { mcpServers: snapshotMcpServers(mcpServers) }),
       ...(extensions === undefined ? {} : { extensions: Object.freeze(extensions.map((spec) => parseExtensionSpec(spec)!)) }),
       ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...grantedExtensionTools]) }),
+      ...(shell === undefined ? {} : { shell }),
       ...(selection === undefined ? {} : { skills: selection }),
     })] as const;
   }));

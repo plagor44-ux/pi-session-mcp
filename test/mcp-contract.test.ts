@@ -523,6 +523,7 @@ describe("MCP contracts", () => {
     ["external_mcp_grant_tool_missing", "Configured external MCP grant is missing from discovery"],
     ["external_mcp_activation_mismatch", "Configured external MCP tools could not be activated"],
     ["skill_load_failed", "Configured Pi skill could not be loaded"],
+    ["sandbox_unavailable", "Read-only shell sandbox is not available"],
   ] as const)("projects %s with consistent sanitized public representations", async (code, message) => {
     const connected = await client();
     const sentinel = "SECRET_PRIVATE_PATH_CHILD_STDERR";

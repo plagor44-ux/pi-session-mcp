@@ -4,7 +4,10 @@ import { ModelRuntime, type AgentSession, type CreateAgentSessionOptions, type C
 import type { AgentSessionRuntime, AgentSessionServices, CreateAgentSessionRuntimeFactory } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { ConfigError } from "../src/config.js";
+import type { SandboxChild, SandboxDependencies } from "../src/sandbox-shell.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 import type { McpConnection } from "../src/mcp-session-tools.js";
 import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
@@ -616,13 +619,14 @@ function extensionHarness(options: {
   diagnosticError?: boolean;
   activeTools?: string[];
   withMcp?: boolean;
+  shell?: "sandboxed";
 } = {}) {
   const permissionProfile = options.permissionProfile ?? "read-only";
   const extensionTools = options.extensionTools ?? [["fixture_tool"]];
   const mcpNames = options.withMcp ? ["mcp_knowledge_search"] : [];
   const expectedTools = permissionProfile === "coding"
     ? [...PROFILE_TOOLS.coding, ...mcpNames, ...extensionTools.flat()]
-    : [...PROFILE_TOOLS["read-only"], ...mcpNames];
+    : [...PROFILE_TOOLS["read-only"], ...(options.shell === undefined ? [] : ["bash"]), ...mcpNames];
   // The same mutable maps back every `getExtensions()` call, so a fake bind can register tools.
   const toolMaps = extensionTools.map((names) => new Map<string, unknown>(names.map((name) => [name, {}])));
   const mcpClosed = vi.fn();
@@ -665,9 +669,11 @@ function extensionHarness(options: {
     extensionSdk: { createServices, createSessionFromServices, createRuntime } as unknown as ExtensionSdk,
     mcpConnectionFactory: () => mcpConnection,
     diagnosticSink: (diagnostic) => { diagnostics.push(diagnostic); },
+    ...(options.shell === undefined ? {} : { sandbox: workingSandbox() }),
   });
   const executionProfile: ResolvedExecutionProfile = {
     ...extensionProfile, permissionProfile,
+    ...(options.shell === undefined ? {} : { shell: options.shell }),
     ...(options.withMcp ? { mcpServers: { knowledge: { command: process.execPath, args: ["/operator/server.mjs"], tools: { search: { name: "search_knowledge", readOnly: true } } } } } : {}),
   };
   return {
@@ -677,6 +683,110 @@ function extensionHarness(options: {
     create: (override: ResolvedExecutionProfile = executionProfile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile: override }),
   };
 }
+
+/** A sandbox whose bubblewrap is trusted and whose probe exits 0, or exits with `probeExit`. */
+function workingSandbox(options: { trusted?: boolean; probeExit?: number; spawnError?: boolean } = {}): SandboxDependencies & { spawned: string[][] } {
+  const spawned: string[][] = [];
+  return {
+    spawned,
+    trusted: () => options.trusted ?? true,
+    rootEntries: () => [],
+    gitCommonDir: async () => undefined,
+    spawn: (_file, args) => {
+      spawned.push([...args]);
+      const emitter = new EventEmitter();
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      setImmediate(() => {
+        stdout.end(); stderr.end();
+        if (options.spawnError) emitter.emit("error", new Error("spawn failed"));
+        else emitter.emit("close", options.probeExit ?? 0, null);
+      });
+      return Object.assign(emitter, { stdout, stderr, kill: () => undefined }) as unknown as SandboxChild;
+    },
+  };
+}
+
+describe("sandboxed shell", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  const shellProfile: ResolvedExecutionProfile = Object.freeze({ ...profile, shell: "sandboxed" });
+  const createIn = (adapter: SdkPiSessionAdapter, executionProfile: ResolvedExecutionProfile = shellProfile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile });
+
+  it("probes the sandbox, then adds the confined bash tool to the custom tools and the allowlist", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox }));
+    expect(sandbox.spawned).toHaveLength(1);
+    expect(sandbox.spawned[0]!.slice(-4)).toEqual(["--chdir", WORKSPACE_DIR, "--", "/usr/bin/true"]);
+    const options = createSession.mock.calls[0]![0];
+    expect(options.tools).toEqual([...PROFILE_TOOLS["read-only"], "bash"]);
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "bash"]);
+  });
+
+  it("does not run the probe or add bash for a profile without a shell and for coding", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    await createIn(adapter, profile);
+    await createIn(adapter, { ...profile, permissionProfile: "coding" });
+    expect(sandbox.spawned).toHaveLength(0);
+    expect(createSession.mock.calls[0]![0].customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
+    expect(createSession.mock.calls[1]![0]).not.toHaveProperty("customTools");
+  });
+
+  it.each([
+    ["an untrusted binary", { trusted: false }],
+    ["a failing probe", { probeExit: 1 }],
+    ["a bubblewrap that cannot start", { spawnError: true }],
+  ] as const)("fails with sandbox_unavailable and creates no session for %s", async (_name, sandboxOptions) => {
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const createSession = createSessionFixture(session);
+    const diagnostics: SdkPiAdapterDiagnostic[] = [];
+    const connections = vi.fn();
+    const adapter = new SdkPiSessionAdapter({
+      modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox: workingSandbox(sandboxOptions),
+      mcpConnectionFactory: () => { connections(); throw new Error("must not connect"); },
+      diagnosticSink: (value) => { diagnostics.push(value); },
+    });
+    await expect(createIn(adapter, { ...shellProfile, mcpServers: { knowledge: { command: process.execPath, args: ["/x.mjs"], tools: { search: { name: "search_knowledge", readOnly: true } } } } }))
+      .rejects.toMatchObject({ name: "PiSessionCreationError", code: "sandbox_unavailable", message: "Read-only shell sandbox is not available" });
+    expect(createSession).not.toHaveBeenCalled();
+    expect(connections).not.toHaveBeenCalled();
+    expect(diagnostics).toEqual([expect.objectContaining({ stage: "sandbox", code: "sandbox_unavailable", executionProfile: shellProfile.alias })]);
+    expect(JSON.stringify(diagnostics)).not.toContain(WORKSPACE_DIR);
+  });
+
+  it("fails the start when the session resolves another definition for bash", async () => {
+    const fixture = runtimeFixture();
+    const { session, dispose } = sessionFixture();
+    const createSession = vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      Object.assign(session as object, { getToolDefinition: (name: string) => name === "bash" ? { name } : options.customTools?.find((tool) => tool.name === name) });
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox: workingSandbox() })))
+      .rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("activates bash on the extension path and requires the server's bash definition", async () => {
+    const h = extensionHarness({ shell: "sandboxed" });
+    await h.create();
+    const options = h.createSessionFromServices.mock.calls[0]![0] as { tools: string[]; customTools?: { name: string }[] };
+    expect(options.tools).toEqual([...PROFILE_TOOLS["read-only"], "bash"]);
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "bash"]);
+
+    const replaced = extensionHarness({ shell: "sandboxed" });
+    replaced.createSessionFromServices.mockImplementationOnce(async () => {
+      Object.assign(replaced.session as object, { getToolDefinition: (name: string) => name === "bash" ? { name } : undefined });
+      return { session: replaced.session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(replaced.create()).rejects.toMatchObject({ code: "pi_session_creation_failed" });
+  });
+});
 
 describe("confined read-only tools", () => {
   beforeEach(() => vi.restoreAllMocks());

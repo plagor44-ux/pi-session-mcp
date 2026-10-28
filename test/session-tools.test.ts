@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { composeSessionTools, PROFILE_TOOLS } from "../src/session-tools.js";
+import { composeSessionTools, PROFILE_TOOLS, profileTools } from "../src/session-tools.js";
 
 describe("composeSessionTools", () => {
   it("keeps read-only output unchanged without a grant", () => {
@@ -45,5 +45,18 @@ describe("composeSessionTools", () => {
 
   it.each(["a".repeat(64), "cursor_activate_skill", "fixture_tool", "my-tool", "_x", "mcp_note_x"])("accepts the extension tool name %j", (name) => {
     expect(composeSessionTools("coding", [], [[name]])).toEqual({ ok: true, tools: [...PROFILE_TOOLS.coding, name] });
+  });
+});
+
+describe("profileTools", () => {
+  it("adds bash only to a read-only profile with a sandboxed shell", () => {
+    expect(profileTools("read-only")).toEqual(PROFILE_TOOLS["read-only"]);
+    expect(profileTools("read-only", "sandboxed")).toEqual([...PROFILE_TOOLS["read-only"], "bash"]);
+    expect(profileTools("coding")).toEqual(PROFILE_TOOLS.coding);
+  });
+
+  it("composes the sandboxed shell into the allowlist ahead of MCP and extension tools", () => {
+    expect(composeSessionTools("read-only", ["mcp_note"], [["fixture_tool"]], [], "sandboxed")).toEqual({ ok: true, tools: [...PROFILE_TOOLS["read-only"], "bash", "mcp_note"] });
+    expect(composeSessionTools("read-only", [], [["bash"]], [], "sandboxed")).toEqual({ ok: false, code: "extension_tool_conflict" });
   });
 });

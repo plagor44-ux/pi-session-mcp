@@ -14,11 +14,16 @@ import { setTimeout as waitFor } from "node:timers/promises";
 import { afterEach, describe, it } from "vitest";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { PermissionProfile, ResolvedExecutionProfile } from "../src/execution-profile.js";
+import { probeSandbox, sandboxBinaryTrusted } from "../src/sandbox-shell.js";
 import { admitsTurn, PROFILE_TOOLS, SdkPiSessionAdapter, type SdkStopReason } from "../src/sdk-pi-adapter.js";
 import { RegistryError, SessionRegistry, type TurnView } from "../src/session-registry.js";
 import { declaredTools, type DeclaringMessage } from "./model-context.js";
 
+/** The real read-only shell sandbox needs a trusted bubblewrap and user namespaces; the test is skipped without them. */
 const temporaries: string[] = [];
+const probeDirectory = await mkdtemp(join(tmpdir(), "pi-session-mcp-sdk-contract-probe-"));
+temporaries.push(probeDirectory);
+const sandboxAvailable = sandboxBinaryTrusted() && await probeSandbox(probeDirectory);
 afterEach(async () => {
   while (temporaries.length > 0) await rm(temporaries.pop()!, { recursive: true, force: true });
 });
@@ -111,6 +116,22 @@ describe("Pi SDK contract assumptions", () => {
       }
     }, 30_000);
   }
+
+  it.skipIf(!sandboxAvailable)("declares the sandboxed bash tool to the model next to the confined read tools", async () => {
+    const { runtime, toolsSeen } = scriptedRuntime();
+    const cwd = await mkdtemp(join(tmpdir(), "pi-session-mcp-sdk-contract-shell-"));
+    temporaries.push(cwd);
+    const registry = new SessionRegistry(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => runtime }), new Map([["repo", cwd]]));
+    const session = await registry.start("repo", { ...executionProfile("read-only"), shell: "sandboxed" });
+    try {
+      const accepted = await registry.prompt(session.id, "list the tools");
+      const done = await terminal(registry, session.id, accepted.turn.turnId);
+      assert.equal(done.state, "completed");
+      assert.deepEqual(toolsSeen[0], [...PROFILE_TOOLS["read-only"], "bash"].sort());
+    } finally {
+      await registry.close(session.id);
+    }
+  }, 30_000);
 
   it("projects a prompt the SDK rejects before dispatch as prompt_rejected without a turn", async () => {
     const { runtime, toolsSeen, auth } = scriptedRuntime();
