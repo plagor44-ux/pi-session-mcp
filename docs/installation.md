@@ -65,8 +65,9 @@ the same arguments.
   [client setup reference](client-setup.md), works independently of `setup`.
 - For real prompts: local Pi authentication and a provider/model pair that Pi
   knows. Doctor is offline. Container apply may pull the built-in pinned image
-  and runs the acceptance network probes; writer registration health checks can
-  start its launcher and copy/refresh selected credentials. Direct writer verify
+  and runs the acceptance network probes; coding session launchers can
+  copy/refresh selected credentials. Host registration health checks do not
+  start writer containers. Direct writer verify
   disables credential refresh and uses no session or provider request.
 
 Pi Session MCP embeds the Pi SDK version pinned in `package.json`. It reuses the
@@ -207,12 +208,12 @@ coding-profile aliases (`--profiles a,b`); without it, setup reports
 [Execution modes](execution-modes.md#choose-at-installation) for explicit
 host-write acknowledgment and all options. With usable rootless Podman, setup
 proposes container; otherwise it requires an explicit host or read-only choice.
-On Linux, container apply provisions and accepts separate full-clone writers,
-then registers their wrappers. First explicitly authorize the host isolation
+On Linux, container apply provisions and accepts separate full-clone writers
+for the host registration's leased pool; it adds no writer registrations. First explicitly authorize the host isolation
 control (`--isolation-control --repo <alias> --apply`): it writes real canaries
 below $HOME and removes them. Without a passing control writers remain not ready.
 See [Isolation setup](isolation-setup.md) for prerequisites, residual credential
-and network risks, and migration of `psm-alpha` and `go-app-alpha`.
+and network risks, and migration of hand-made writers.
 Missing entries retain host behavior as `unset` for compatibility and warn in
 Doctor when a coding profile exists.
 
@@ -395,8 +396,8 @@ not a token or cost saving, and none is measured on short tasks. Design:
    `pi_capabilities_get` and stops polling only when it is `spool`.
 
 **What setup writes.** One entry, with `matcher` for
-`pi_session_prompt` and `pi_turn_get` of `pi-session-mcp` and of the
-`pi-coding-*` writer registrations, and one command hook:
+`pi_session_prompt` and `pi_turn_get` of `pi-session-mcp` only
+(`mcp__pi-session-mcp__*`), and one command hook:
 `<node> <package>/dist/wake-main.js --budget-ms 1800000`, `asyncRewake: true`
 and `timeout` 1860 seconds (the 30-minute wait budget plus 60 seconds, so the
 client never ends the hook before its own budget). The entry is compared by
@@ -405,17 +406,16 @@ and keeps its permissions; every other setting stays as it was. Verify checks
 the file and that the program exists; it does not test that Claude Code honors
 the hook.
 
-The hook reads only the spool of the server that armed it: the host's
-`$XDG_RUNTIME_DIR/pi-session-mcp/events/inst-*` for `pi-session-mcp`, and a
-writer's own `~/.local/state/pi-session-mcp/writers/<name>-wN/events/inst-*` for
-`pi-coding-<name>-wN`. Its claims stay in `$XDG_RUNTIME_DIR/pi-session-mcp/claims`.
+The hook reads only the host spool
+`$XDG_RUNTIME_DIR/pi-session-mcp/events/inst-*`, including relayed container
+turns. Its claims stay in `$XDG_RUNTIME_DIR/pi-session-mcp/claims`. There are no
+writer hook entries or per-session writer spool mounts.
 
 **Change and remove.** With delivery switched off, `--apply` removes an entry
 that setup owns (`hook_removed`); `--remove` and `--rollback` remove it with the
 registration. Setup never replaces or deletes an entry it did not write or that
-you edited (`hook_divergent`). The local-scope entry of a project is shared by
-the host registration and the writer registrations there and stays
-(`hook_kept_shared`) until the last of them that needs it is removed. With
+you edited (`hook_divergent`). During migration an owned shared legacy entry may stay
+(`hook_kept_shared`) while another owned registration still needs it. With
 delivery off and no entry of its own, setup does not read the settings file. The upgrade procedure below removes the entry with the
 old registration and adds it again with the new one, because it names the
 package path. The settings-file codes are in the
@@ -446,8 +446,8 @@ package path. The settings-file codes are in the
   Whether a running extension or TUI session does the same is not checked, so
   step 3 above stays the rule
   ([Sprint 7 evidence](evaluation/s7-live-acceptance-2026-10-24/README.md)).
-- Container writers need their own spool mount; see
-  [Isolation setup](isolation-setup.md#event-spool-mount).
+- Container turns are relayed into the host spool, with no writer spool mount;
+  see [Isolation setup](isolation-setup.md#event-spool-mount).
 
 ### Register without setup
 
@@ -728,13 +728,24 @@ Writer acceptance binds the package version, so every container writer is
 targets until they are accepted again. With container writers, run the
 repository step between the install and the client targets:
 
-1. Install the new package (`npm install -g` or the release checkout above).
-2. For each repository in mode `container`, repeat its provisioning command
+1. Close all coding sessions and controllers first. This quiescence barrier
+   ensures no old-release launcher is still in flight. Install the new package
+   (`npm install -g` or the release checkout above).
+2. For each repository in mode `container`, repeat its existing provisioning command
    with `--apply`, for example
    `pi-session-mcp-setup --repo <alias> --mode container ... --apply`. It
-   accepts every writer again whose acceptance is not current and keeps its
-   clone and the work in it. Close the coding sessions on those writers
-   first: acceptance briefly places canaries in the clone. Use the same
+   migrates writers under the lease and container fence: removes owned writer
+   registrations and hooks, rewrites stable wrappers for the new release,
+   marks writers `launch: "relay"` and re-accepts them provider-free before
+   admitting them to the pool. It keeps the clone and work in it; acceptance
+   briefly places canaries in the clone. Migration records the shared default
+   base; differing writer bases fail with `workspace_base_ambiguous` unless
+   you supply an explicit `--base <branch>`. A divergent registration is never
+   deleted or replaced: it reports `registration_divergent` and keeps that
+   writer legacy, outside the pool. Resolve divergence before use; do not
+   launch through a retained legacy registration. `--client codex` has no writer effect any
+   more; both clients code through the one host `pi-session-mcp` registration.
+   Use the same
    settings as before: a writer whose settings or coding profiles changed is
    reported as `writer_settings_changed` and left as it is, and one whose
    coding profile selects an overridden or unshipped `builtin:` skill as
@@ -743,7 +754,8 @@ repository step between the install and the client targets:
    `--writer <name> --remove` it and provision it again
    ([Isolation setup](isolation-setup.md)).
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
-   for each writer.
+   for each writer. Reconnect the host `pi-session-mcp` server after migration
+   and client setup. Later reset, finish and recreate need no reconnect.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases

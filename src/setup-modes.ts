@@ -56,7 +56,13 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
     if (mode === "host" && !request.acceptHostWrites) return done("failed", "host_ack_required");
     if (mode === "container" && !request.container?.profiles?.length) return done("failed", "container_profiles_required");
     if (request.mode === "container" && !await runtimeUsable()) return done("failed", "container_runtime_unavailable");
-    const entry = mode === "host" ? { mode, acceptHostWrites: true } : mode === "container" ? { ...request.container, mode } : { mode };
+    const entry = mode === "host" ? { mode, acceptHostWrites: true } : mode === "container" ? (() => {
+      const existing = current.workspaces[request.alias];
+      const previousBase = existing?.mode === "container" ? existing.base : undefined;
+      const requestedBase = request.baseRef?.replace(/^refs\/heads\//, "");
+      const base = requestedBase ?? previousBase ?? request.container?.base;
+      return { ...request.container, mode, ...(base === undefined ? {} : { base }) };
+    })() : { mode };
     let proposed;
     try {
       proposed = executionModesSchema.parse({ schemaVersion: 1, workspaces: { ...raw.workspaces, [request.alias]: entry } });

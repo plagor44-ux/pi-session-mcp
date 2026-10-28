@@ -252,6 +252,17 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
     }
   }, 25_000);
 
+  it("refuses inheritFds through the guardian runner instead of dropping them", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-owned-fds-");
+    const resultMarker = join(directory, "result.code");
+    const harness = guardianHarness(join(directory, "ownership.json.flock"), [
+      "const output=await guardian.runner.run(process.execPath,['-e','0'],undefined,{inheritFds:[handle.fd]});",
+      `fs.writeFileSync(${JSON.stringify(resultMarker)},String(output.exitCode)); await guardian.release(); await handle.close();`,
+    ]);
+    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore" });
+    await new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
+    expect(await readTextIfPresent(resultMarker)).toBe("126");
+  });
   it("retains the fence after indeterminate cleanup reports exit 126", async () => {
     const directory = await temporaryRoot("pi-session-mcp-owned-unknown-");
     const path = join(directory, "ownership.json");

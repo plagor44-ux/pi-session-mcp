@@ -5,6 +5,11 @@ import { podmanInfo } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
 import { currentAcceptanceFingerprint, readWriterState, writerAcceptanceCurrent, writerPaths, writersRoot, writeWriterState, WriterStateError } from "./writer-state.js";
 
+function leasedContext(ctx: WriterContext): WriterContext {
+  if (ctx.leaseFd === undefined) return ctx;
+  const runner = ctx.runner;
+  return { ...ctx, runner: { run: (command, args, signal, options) => runner.run(command, args, signal, { ...options, inheritFds: [ctx.leaseFd!] }) } };
+}
 export function controlStatePath(home: string): string {
   return join(home, ".local", "state", "pi-session-mcp", "isolation-control.json");
 }
@@ -58,6 +63,7 @@ async function recordFailure(root: string, file: string, code: string, result?: 
   } catch { /* Diagnostics only. */ }
 }
 export async function runIsolationControl(ctx: WriterContext): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   const record = async (verdict: "fail" | "control_detected_escapes") => {
     await writeFile(controlStatePath(ctx.home), JSON.stringify({ schemaVersion: 1, verdict, at: new Date().toISOString() }) + "\n", { mode: 0o600 });
   };
@@ -87,6 +93,7 @@ export async function runIsolationControl(ctx: WriterContext): Promise<WriterOut
  * would downgrade a ready writer before it found that out, so setup leaves the writer as it is.
  */
 export async function acceptanceCurrent(ctx: WriterContext, name: string): Promise<"current" | "stale" | "unknown"> {
+  ctx = leasedContext(ctx);
   let state;
   try { state = await readWriterState(ctx.home, name); } catch { return "stale"; }
   if (state?.phase !== "ready" || !state.acceptance) return "stale";
@@ -104,6 +111,7 @@ export async function acceptanceCurrent(ctx: WriterContext, name: string): Promi
   } catch { return "stale"; }
 }
 export async function acceptWriter(ctx: WriterContext, name: string): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   let paths: ReturnType<typeof writerPaths> | undefined; // Set once the writer state is accepted; failures after it leave a record.
   let ran: HarnessResult | undefined;
   const fail = async (code: string): Promise<WriterOutcome> => {
@@ -127,7 +135,7 @@ export async function acceptWriter(ctx: WriterContext, name: string): Promise<Wr
     // Acceptance makes no provider request: a launch-time refresh of an expired host token would change
     // the host agent directory inside the harness's digest window (#131).
     ran = await harness(ctx, ["--mode", "contained", "--agent-dir-copy-writable", "--agent-dir-copy", paths.agent,
-      "--launch", `${quote(paths.wrapper)} node`, "--workspace", paths.clone], { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" });
+      "--launch", `${quote(paths.wrapper)} node`, "--workspace", paths.clone], { PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(ctx.leaseFd === undefined ? {} : { PI_WRITER_LEASE_FD: "3" }) });
     const network = networkOf(ran.data);
     if (ran.exitCode !== 0 || ran.report !== "present" || ran.data.verdict !== "pass" || (network !== "limited" && network !== "not_limited")) return await fail("acceptance_harness_failed");
     if (fingerprint !== await currentAcceptanceFingerprint(paths.wrapper, state, info.version)) return await fail("acceptance_fingerprint_changed");

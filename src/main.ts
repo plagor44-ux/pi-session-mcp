@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { stdoutGuard } from "./stdout-guard-install.js";
 import { isAbsolute } from "node:path";
+import { homedir } from "node:os";
+import { RoutingPiSessionAdapter, WriterRelayAdapter } from "./writer-relay.js";
 import { serveStdio, StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import { loadConfig } from "./config.js";
 import { EventSpoolError, TurnEventSpool, type EventSpoolDiagnostic } from "./event-spool.js";
@@ -61,14 +63,19 @@ async function main(): Promise<void> {
       } else spool = TurnEventSpool.open(directory, { diagnostic: writeDiagnostic });
     }
     const events = spool;
-    registry = new SessionRegistry(new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic }), config.workspaces, {
+    const hostAdapter = new SdkPiSessionAdapter({ diagnosticSink: writeDiagnostic });
+    const relay = guardPath === undefined;
+    const adapter = relay ? new RoutingPiSessionAdapter(hostAdapter, new WriterRelayAdapter({
+      home: homedir(), workspaceModes: config.workspaceModes, executionProfiles: config.executionProfiles,
+    }), config.workspaceModes) : hostAdapter;
+    registry = new SessionRegistry(adapter, config.workspaces, {
       ...(guardPath === undefined ? {} : { writerGuard: createWriterGuard(guardPath, config.workspaces) }),
       ...(events === undefined ? {} : {
         onTurnTerminal: (event) => events.write({ kind: "turn_terminal", session: event.sessionId, turn: event.turnId, state: event.state, via: event.via }),
       }),
     });
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),

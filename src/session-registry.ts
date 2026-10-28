@@ -7,6 +7,7 @@ export type TurnState = "running" | "completed" | "failed" | "aborted";
 export interface SessionView {
   id: string; workspace: string; executionProfile: string; profile: PermissionProfile;
   provider: string; model: string; thinkingLevel: ThinkingLevel;
+  writer?: string; base?: { ref: string; commit: string };
   state: SessionState; createdAt: string; updatedAt: string; lastError?: string;
 }
 /**
@@ -20,8 +21,10 @@ export interface TurnView { turnId: string; sessionId: string; state: TurnState;
 export interface PromptResult { session: SessionView; turn: TurnView; }
 interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; }
 interface Entry extends SessionView { handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
-export type RegistryErrorCode = "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
+export type RegistryErrorCode = "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
+  writer_session_lost: "Writer session was lost",
+  base_not_applicable: "Base is only applicable to coding sessions on container workspaces",
   unknown_workspace: "Unknown workspace",
   writer_uncollected: "Writer is not at its collected baseline",
   writer_busy: "Writer already has an open coding session",
@@ -68,18 +71,18 @@ export class SessionRegistry {
     this.onTurnTerminal = options.onTurnTerminal;
     this.options = { preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
-  async start(workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
+  async start(workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string } = {}): Promise<SessionView> {
     if (this.stopping) throw new RegistryError("server_stopping");
     const cwd = this.workspaces.get(workspace);
     if (!cwd) throw new RegistryError("unknown_workspace");
     // Track registration and orphan cleanup too, not just the raw adapter promise.
     const start = this.writerGuard && executionProfile.permissionProfile === "coding"
-      ? this.guardedCreate(cwd, workspace, executionProfile)
-      : this.createAndRegister(cwd, workspace, executionProfile);
+      ? this.guardedCreate(cwd, workspace, executionProfile, options)
+      : this.createAndRegister(cwd, workspace, executionProfile, options);
     this.pendingStarts.add(start);
     try { return await start; } finally { this.pendingStarts.delete(start); }
   }
-  private async guardedCreate(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
+  private async guardedCreate(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string }): Promise<SessionView> {
     const previous = this.codingAdmissions.get(workspace) ?? Promise.resolve();
     let release!: () => void;
     const admission = new Promise<void>((resolve) => { release = resolve; });
@@ -90,14 +93,14 @@ export class SessionRegistry {
       const open = [...this.sessions.values()].filter((entry) => entry.workspace === workspace && entry.profile === "coding").length;
       await this.writerGuard!.check(workspace, open);
       if (this.stopping) throw new RegistryError("server_stopping");
-      return await this.createAndRegister(cwd, workspace, executionProfile);
+      return await this.createAndRegister(cwd, workspace, executionProfile, options);
     } finally {
       release();
       if (this.codingAdmissions.get(workspace) === admission) this.codingAdmissions.delete(workspace);
     }
   }
-  private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile): Promise<SessionView> {
-    const handle = await Promise.resolve().then(() => this.adapter.create({ cwd, executionProfile, signal: this.shutdownController.signal }));
+  private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string }): Promise<SessionView> {
+    const handle = await Promise.resolve().then(() => this.adapter.create({ cwd, workspace, ...(options.base === undefined ? {} : { base: options.base }), executionProfile, signal: this.shutdownController.signal }));
     try {
       if (this.stopping) throw new RegistryError("server_stopping");
       this.verifySelection(handle.appliedSelection, executionProfile);
@@ -106,6 +109,7 @@ export class SessionRegistry {
         id: randomUUID(), workspace, executionProfile: executionProfile.alias, profile: executionProfile.permissionProfile,
         provider: handle.appliedSelection.provider, model: handle.appliedSelection.model,
         thinkingLevel: handle.appliedSelection.thinkingLevel, state: "idle", createdAt: time, updatedAt: time,
+        ...(handle.placement ? { writer: handle.placement.writer, base: { ...handle.placement.base } } : {}),
         handle, operation: Promise.resolve(), disposed: false, turns: new Map(), order: [],
       };
       this.sessions.set(entry.id, entry);
@@ -126,6 +130,7 @@ export class SessionRegistry {
   async prompt(id: string, text: string): Promise<PromptResult> {
     const entry = this.require(id);
     return this.serial(entry, async () => {
+      if (entry.handle.isLost?.()) throw new RegistryError("writer_session_lost");
       if (entry.state === "running" || entry.abortPromise) throw new RegistryError("session_running");
       if (entry.state === "closing" || entry.state === "closed") throw new RegistryError("unknown_session");
       const previous = { state: entry.state, updatedAt: entry.updatedAt, lastError: entry.lastError };
@@ -181,7 +186,7 @@ export class SessionRegistry {
       const result = await this.withTimeout<Exclude<Admission, { kind: "timeout" }>, Admission>(Promise.race([
         preflight.then((value) => ({ kind: "preflight" as const, value })),
         operation.then(() => ({ kind: "operation" as const }), () => ({ kind: "operation" as const })),
-      ]), this.options.preflightDeadlineMs, { kind: "timeout" });
+      ]), entry.handle.deadlines?.preflightMs ?? this.options.preflightDeadlineMs, { kind: "timeout" });
 
       if (result.kind === "timeout") {
         this.quarantineTimedOutPreflight(entry, turn, operation, previous);
@@ -219,7 +224,7 @@ export class SessionRegistry {
     const result = await this.withTimeout<Exclude<AbortResult, { kind: "timeout" }>, AbortResult>(operation.then(
       (session) => ({ kind: "completed" as const, session }),
       () => ({ kind: "failed" as const }),
-    ), this.options.abortDeadlineMs, { kind: "timeout" });
+    ), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
     if (result.kind === "timeout") throw new RegistryError("abort_timeout");
     if (result.kind === "failed") throw new RegistryError("abort_failed");
     return result.session;
@@ -244,7 +249,7 @@ export class SessionRegistry {
         turn.completedAt = time;
         this.notifyTerminal(existing, turn, "close");
         const abortPromise = this.beginAbort(existing, turn);
-        await this.withTimeout(abortPromise.then(() => undefined, () => undefined), this.options.closeCleanupDeadlineMs, undefined);
+        await this.withTimeout(abortPromise.then(() => undefined, () => undefined), existing.handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
       }
       existing.turn = undefined;
       existing.turnPromise = undefined;
@@ -274,7 +279,7 @@ export class SessionRegistry {
       throw new PiSessionCreationError("execution_selection_mismatch");
     }
   }
-  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
+  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
   private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
   /**
    * Called once per terminal transition, after the turn is final. Only a published turn is reported:
@@ -355,7 +360,7 @@ export class SessionRegistry {
   private async disposeHandle(handle: PiSessionHandle): Promise<void> {
     try {
       const cleanup = Promise.resolve(handle.dispose()).then(() => undefined, () => undefined);
-      await this.withTimeout(cleanup, this.options.closeCleanupDeadlineMs, undefined);
+      await this.withTimeout(cleanup, handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
     } catch { /* Cleanup errors must never expose adapter internals. */ }
   }
   private rememberClosed(id: string, view: SessionView): void { this.closed.set(id, view); while (this.closed.size > MAX_CLOSED_TOMBSTONES) this.closed.delete(this.closed.keys().next().value!); }

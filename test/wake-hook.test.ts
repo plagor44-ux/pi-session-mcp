@@ -31,9 +31,9 @@ describe("hook input parsing", () => {
   it("re-arms on a pi_turn_get that still shows the turn running, in every shape", () => {
     for (const response of shapes(running)) expect(parseHookInput(hookInput("pi_turn_get", response))).toEqual(target);
   });
-  it("accepts writer registrations and rejects look-alike server names", () => {
-    expect(parseHookInput(hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w1"))).toEqual(writerTarget("review-w1"));
-    expect(parseHookInput(hookInput("pi_turn_get", running, "pi-coding-code_x-y-w16"))).toEqual(writerTarget("code_x-y-w16"));
+  it("ignores writer registrations and rejects look-alike server names", () => {
+    expect(parseHookInput(hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w1"))).toBeUndefined();
+    expect(parseHookInput(hookInput("pi_turn_get", running, "pi-coding-code_x-y-w16"))).toBeUndefined();
     for (const server of ["pi-coding-review-w0", "pi-coding-review-w17", "pi-coding-Review-w1", "pi-coding--w1", "pi-coding-review", "pi-session-mcp2", "other", "pi-eval", "pi-coding-review-w1x", `pi-coding-${"a".repeat(65)}-w1`]) {
       expect(parseHookInput(hookInput("pi_session_prompt", promptPayload, server)), server).toBeUndefined();
     }
@@ -766,8 +766,8 @@ linuxOnly("compiled pi-session-mcp-wake process", () => {
   it("wakes at once for a pi_turn_get that shows the turn running when the event is already there", async () => {
     needBuild();
     const f = await fixture();
-    f.put(terminal({ state: "aborted", via: "registry" }), join(f.wdir("review-w2"), INSTANCE));
-    const exit = await runWaiter(f.xdg, hookInput("pi_turn_get", { content: [{ type: "text", text: "x" }], structuredContent: running }, "pi-coding-review-w2")).done;
+    f.put(terminal({ state: "aborted", via: "registry" }));
+    const exit = await runWaiter(f.xdg, hookInput("pi_turn_get", { content: [{ type: "text", text: "x" }], structuredContent: running })).done;
     expect(exit).toMatchObject({ code: 2, stderr: `pi-session-mcp: turn ${TURN} of session ${SESSION} is aborted. Read it once with pi_turn_get.\n` });
   });
   it("exits 0 silently when nothing arms: other tool, failed prompt, bad JSON, no runtime directory, relative runtime directory", async () => {
@@ -896,10 +896,10 @@ linuxOnly("compiled pi-session-mcp-wake process", () => {
     expect(second).toMatchObject({ code: 0, stderr: "", stdout: "" });
     expect(Date.now() - started).toBeLessThan(1500);
     expect(first.child.exitCode).toBeNull();
-    // The same turn in another namespace is not blocked.
+    // An obsolete writer tool does not arm a waiter or consume its event.
     f.put(terminal({ instance: INSTANCE_B }), join(f.wdir("review-w2"), INSTANCE_B));
     const writer = await runWaiter(f.xdg, hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w2"), []).done;
-    expect(writer.code).toBe(2);
+    expect(writer.code).toBe(0);
     f.put(terminal());
     const exit = await first.done;
     expect(exit.code).toBe(2);
@@ -960,13 +960,13 @@ linuxOnly("compiled pi-session-mcp-wake process", () => {
     writeFileSync(g.claims, "not a directory");
     expect(await runWaiter(g.xdg, armInput, ["--budget-ms", "800"]).done).toMatchObject({ code: 0, stderr: "" });
   });
-  it("wakes a writer controller from the writer's state directory in the compiled process", async () => {
+  it("ignores writer tools even when the writer's state directory holds an event", async () => {
     needBuild();
     const f = await fixture();
     f.put(terminal({ state: "failed" }), join(f.wdir("review-w2"), INSTANCE));
     const exit = await runWaiter(f.xdg, hookInput("pi_session_prompt", promptPayload, "pi-coding-review-w2"), ["--budget-ms", "10000"]).done;
-    expect(exit).toMatchObject({ code: 2, stderr: `pi-session-mcp: turn ${TURN} of session ${SESSION} is failed. Read it once with pi_turn_get.\n` });
-    expect(readdirSync(f.claims)).toEqual([`writer-review-w2-${INSTANCE}-1`]);
+    expect(exit).toMatchObject({ code: 0, stderr: "" });
+    expect(existsSync(f.claims) ? readdirSync(f.claims) : []).toEqual([]);
   });
   it("lets an in-process waiter and a process race for one event: exactly one wakes", async () => {
     needBuild();

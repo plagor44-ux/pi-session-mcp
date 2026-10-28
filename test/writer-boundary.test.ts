@@ -55,6 +55,7 @@ it("builds the restricted serving boundary with explicit environment and Git pro
 const baseArgs = (): string[] => [
   "run", "-i", "--rm", "--pull=never", "--userns=keep-id", "--read-only",
   "--cap-drop=all", "--security-opt=no-new-privileges", "--network=pasta",
+  "--label", "pi-session-mcp.writer=repo-w1",
   "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
   "--tmpfs", "/pi/home:rw,nosuid,nodev,mode=0700,size=64m,U",
   "-v", `${paths.clone}:${paths.clone}:rw`,
@@ -71,7 +72,23 @@ const baseArgs = (): string[] => [
 ];
 const serve = ["node", "/opt/pi-session-mcp/dist/main.js"];
 
-it("keeps the serving arguments exactly as they were without event delivery", () => {
+it("serveArgs adds the fixed name and label", () => {
+  expect(serveArgs(paths, state, serve, "/release", undefined, { name: "repo-w1" })).toEqual([
+    ...baseArgs(), "--name", "pi-writer-repo-w1", imageId, ...serve,
+  ]);
+});
+
+it("throwawayArgs adds the label and no name", () => {
+  expect(throwawayArgs("repo-w1", paths, imageId, { clone: "ro", bundles: false }, "x", [])).toEqual([
+    "run", "--rm", "-i", "--pull=never", "--network=none", "--userns=keep-id", "--read-only",
+    "--cap-drop=all", "--security-opt=no-new-privileges", "--label", "pi-session-mcp.writer=repo-w1",
+    "--tmpfs", "/tmp:rw,nosuid,nodev,size=1g", "-e", "HOME=/tmp",
+    "-v", `${paths.clone}:${paths.clone}:ro`, "--workdir", paths.clone,
+    imageId, "sh", "-c", "x", "sh",
+  ]);
+});
+
+it("keeps the serving arguments unchanged apart from the label without event delivery", () => {
   expect(serveArgs(paths, state, serve, "/release")).toEqual([...baseArgs(), imageId, ...serve]);
   expect(serveArgs(paths, state, serve, "/release", undefined)).toEqual(serveArgs(paths, state, serve, "/release"));
 });
@@ -329,11 +346,11 @@ describe.runIf(process.platform === "linux")("writer spool directory (Linux)", (
 });
 
 it("keeps hostile values positional and mounts only requested throwaway data", () => {
-  const args = throwawayArgs(paths, imageId, { clone: "ro", bundles: true }, "x", ["--upload-pack=evil"]);
+  const args = throwawayArgs("repo-w1", paths, imageId, { clone: "ro", bundles: true }, "x", ["--upload-pack=evil"]);
   expect(args.slice(-6)).toEqual([imageId, "sh", "-c", "x", "sh", "--upload-pack=evil"]);
   for (const value of ["--network=none", "--pull=never", "--read-only", "--cap-drop=all", "HOME=/tmp", "/tmp:rw,nosuid,nodev,size=1g", `${paths.clone}:${paths.clone}:ro`, `${paths.bundles}:/bundles:rw`]) expect(args).toContain(value);
   expect(args.join(" ")).not.toContain(paths.agent);
-  const minimal = throwawayArgs(paths, imageId, { clone: "rw", bundles: false }, `${BOUNDARY_GIT} --version`, []);
+  const minimal = throwawayArgs("repo-w1", paths, imageId, { clone: "rw", bundles: false }, `${BOUNDARY_GIT} --version`, []);
   expect(minimal).toContain(`${paths.clone}:${paths.clone}:rw`);
   expect(minimal.join(" ")).not.toContain(paths.bundles);
 });

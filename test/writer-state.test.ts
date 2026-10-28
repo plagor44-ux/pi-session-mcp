@@ -16,7 +16,7 @@ import { wrapperDigest } from "../src/writer-wrapper.js";
 afterAll(removeTemporaryRoots);
 
 const state: WriterState = {
-  schemaVersion: 1, alias: "pi-session-mcp", index: 2, phase: "ready",
+  schemaVersion: 1, alias: "pi-session-mcp", index: 2, phase: "ready", launch: "legacy",
   lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none", tags: "none",
   providers: [{ provider: "example-provider", model: "example-model" }],
   imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) },
@@ -25,6 +25,19 @@ const state: WriterState = {
 };
 const name = "pi-session-mcp-w2";
 
+it("launch defaults to legacy and does not change the acceptance fingerprint", async () => {
+  const home = await temporaryRoot("writer-launch-state-");
+  const { launch: _launch, ...legacy } = state;
+  await writeWriterState(home, name, legacy);
+  expect((await readWriterState(home, name))!.launch).toBe("legacy");
+  const wrapper = writerPaths(home, name).wrapper;
+  await writeFile(wrapper, "wrapper");
+  expect(await currentAcceptanceFingerprint(wrapper, state, "5.4.0"))
+    .toBe(await currentAcceptanceFingerprint(wrapper, { ...state, launch: "relay" }, "5.4.0"));
+  await writeWriterState(home, name, { ...state, launch: "relay" });
+  expect((await readWriterState(home, name))!.launch).toBe("relay");
+  await expect(writeWriterState(home, name, { ...state, launch: "invalid" } as unknown as WriterState)).rejects.toThrow(WriterStateError);
+});
 it("defaults legacy state tags without changing acceptance", async () => {
   const home = await temporaryRoot("writer-tags-");
   await writeWriterState(home, name, state);

@@ -32,7 +32,7 @@ It is not the right tool when:
 
 The package version is **0.11.9**.
 
-Since 0.9.0, [per-repository execution modes](docs/execution-modes.md) make host writes explicit and block host coding for container/read-only aliases, and setup provisions, accepts, collects and resets rootless-Podman container writers on Linux.
+[Per-repository execution modes](docs/execution-modes.md) make host writes explicit and block coding on read-only aliases. On container workspaces, the one host `pi-session-mcp` registration leases a rootless-Podman writer per coding session on Linux; no per-writer registrations or tool prefixes are needed ([ADR 0012](docs/adr/0012-leased-writer-pool.md)). Setup provisions, accepts, collects and resets the pool. Starts normally use the workspace default base; fix rounds can pass a short branch `base`. Start/get report `writer` and `base` for collection, and capabilities report configured `writers` and `defaultBase`. Reset, finish and recreate need no reconnect; finish returns the writer to the default base. See the [container upgrade runbook](docs/installation.md#container-writers).
 
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is recorded for Claude Code only; Codex is still pending. See [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.
@@ -173,6 +173,7 @@ Contract and design:
 - [ADR 0004: setup accepts clients by contract, not by version](docs/adr/0004-client-contract-not-version.md)
 - [ADR 0007: execution profiles select Pi skills from an operator catalog](docs/adr/0007-profile-skill-selection.md)
 - [ADR 0011: turn events and controller wake](docs/adr/0011-turn-events-and-controller-wake.md)
+- [ADR 0012: one registration with a leased writer pool](docs/adr/0012-leased-writer-pool.md)
 
 Maintain:
 

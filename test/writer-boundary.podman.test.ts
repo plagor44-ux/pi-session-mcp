@@ -29,7 +29,7 @@ describe.skipIf(!info.usable || !imageId)("Podman throwaway boundary", () => {
   it("runs Git in the locally accepted image without provider access", async () => {
     const paths = writerPaths(await temporaryRoot("pi-boundary-podman-"), "repo-w1");
     await mkdir(paths.clone, { recursive: true });
-    const result = await runner.run("podman", throwawayArgs(paths, imageId!, { clone: "ro", bundles: false }, `${BOUNDARY_GIT} --version`, []), AbortSignal.timeout(30_000));
+    const result = await runner.run("podman", throwawayArgs("repo-w1", paths, imageId!, { clone: "ro", bundles: false }, `${BOUNDARY_GIT} --version`, []), AbortSignal.timeout(30_000));
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toMatch(/^git version /);
   });

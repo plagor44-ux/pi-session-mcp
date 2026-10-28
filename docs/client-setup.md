@@ -208,10 +208,10 @@ of the target's scope, after the registration succeeded. Guided steps and limits
 
 **Where the hook reads.** The hook that a `pi-session-mcp` tool call arms reads only
 the `inst-*` directories directly under `$XDG_RUNTIME_DIR/pi-session-mcp/events`.
-The hook that a `pi-coding-<name>-wN` tool call arms reads only the `inst-*`
-directories of that writer's own spool, `~/.local/state/pi-session-mcp/writers/<name>-wN/events`.
-It reads no other location, and it keeps its claims and waiter locks in
-`$XDG_RUNTIME_DIR/pi-session-mcp/claims`, outside both spools.
+Relayed container sessions emit through that host spool too. The hook matches
+only `mcp__pi-session-mcp__*`; writer hook entries and per-session writer spool
+mounts are gone. It reads no other location, and keeps claims and waiter locks
+in `$XDG_RUNTIME_DIR/pi-session-mcp/claims`, outside the spool.
 
 `<project>` is the real path of the directory in which setup runs. Claude Code
 has no command for hooks, so setup follows the contract of the settings file,
@@ -262,17 +262,13 @@ applicable), delivery off while setup holds no entry (`hook_not_enabled`), and
 setup report with delivery off and no owned entry therefore has the same
 findings, order and exit code as before the hook existed.
 
-Writer registrations (`pi-coding-<name>`, Claude Code local scope) get the entry
-in `<project>/.claude/settings.local.json` of the operator's project when the
-writer's own configuration enables delivery. One entry and one record serve the
-project, so it is removed only when no other owned registration needs it: a
-writer of the same project whose configuration enables delivery, or the owned
-host registration `claude-code:local:pi-session-mcp` while the host
-configuration enables delivery (its project is not recorded, so it counts for
-every project). When in doubt the entry stays. A hook problem while removing a
-writer is reported (`settings_*`, `hook_divergent`) but does not keep the
-writer: its registration and files are removed, and the record keeps the entry
-owned for the next removal. Codex writer registrations get no hook.
+Container provisioning creates no writer client registrations or writer hooks.
+Coding for either client uses the one host `pi-session-mcp` registration and a
+coding profile, not a per-writer tool prefix. `--client codex` has no writer
+effect. Migration removes owned legacy registrations and hook ownership under
+the writer fence; divergent entries are retained and reported, never replaced.
+An owned shared legacy hook can stay while another registration needs it.
+Use the [container upgrade runbook](installation.md#container-writers).
 
 Setup never replaces or deletes an entry that it did not write or that was
 edited, and it keeps all other settings. The entry is not part of the MCP

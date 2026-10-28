@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { lstatSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { CommandResult, CommandRunner } from "./client-adapters/types.js";
@@ -56,9 +56,9 @@ const delay = (milliseconds: number): Promise<void> => new Promise((resolve) => 
 export function createProcessRunner(options: ProcessRunnerOptions = {}): CommandRunner {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT; const maxOutputBytes = options.maxOutputBytes ?? DEFAULT_MAX;
   return { async run(command, args, signal, runOptions): Promise<CommandResult> { const effectiveSignal = options.signal && signal ? AbortSignal.any([options.signal, signal]) : options.signal ?? signal; const table = await currentProcessTable(); if (!table) return { exitCode: 126, stdout: "", stderr: "" }; return new Promise((resolve) => {
-    const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe"], env: runOptions?.env ? { ...(options.env ?? process.env), ...runOptions.env } : options.env, cwd: runOptions?.cwd, detached: process.platform !== "win32" }); let stdout = ""; let stderr = ""; let overflow = false; let aborted = false;
+    const child = spawn(command, [...args], { stdio: ["ignore", "pipe", "pipe", ...(runOptions?.inheritFds ?? [])], env: runOptions?.env ? { ...(options.env ?? process.env), ...runOptions.env } : options.env, cwd: runOptions?.cwd, detached: process.platform !== "win32" }); let stdout = ""; let stderr = ""; let overflow = false; let aborted = false;
     const collect = (part: "stdout" | "stderr") => (chunk: Buffer): void => { const value = chunk.toString("utf8"); const current = part === "stdout" ? stdout : stderr; if (Buffer.byteLength(current + value, "utf8") > maxOutputBytes) { overflow = true; return; } if (part === "stdout") stdout += value; else stderr += value; };
-    child.stdout.on("data", collect("stdout")); child.stderr.on("data", collect("stderr")); let done = false; let timedOut = false; let killTimer: NodeJS.Timeout | undefined; let hardTimer: NodeJS.Timeout | undefined; let groupPoll: NodeJS.Timeout | undefined; let groupDeadline = 0;
+    child.stdout!.on("data", collect("stdout")); child.stderr!.on("data", collect("stderr")); let done = false; let timedOut = false; let killTimer: NodeJS.Timeout | undefined; let hardTimer: NodeJS.Timeout | undefined; let groupPoll: NodeJS.Timeout | undefined; let groupDeadline = 0;
     const finish = (exitCode: number): void => { if (done) return; done = true; effectiveSignal?.removeEventListener("abort", abort); clearTimeout(timer); if (!timedOut && killTimer) clearTimeout(killTimer); if (!timedOut && hardTimer) clearTimeout(hardTimer); if (groupPoll) clearTimeout(groupPoll); resolve({ exitCode, stdout: overflow ? Buffer.from(stdout).subarray(0, maxOutputBytes).toString("utf8") : stdout, stderr: overflow ? "output_limit" : stderr }); };
     let groupCheck = false;
     const finishAfterGroup = (successCode: number): void => {
@@ -90,9 +90,9 @@ export function createProcessRunner(options: ProcessRunnerOptions = {}): Command
 }
 
 /** Generalized bounded stdio transport for a generated writer wrapper. */
-export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv): (signal: AbortSignal) => Promise<McpStdioProcess> {
+export function createCommandMcpStdioLauncher(command: readonly [string, ...string[]], env: NodeJS.ProcessEnv, options?: { inheritFds?: readonly number[] }): (signal: AbortSignal) => Promise<McpStdioProcess> {
   return async (signal) => {
-    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe"], env, detached: process.platform !== "win32" });
+    const child = spawn(command[0], command.slice(1), { stdio: ["pipe", "pipe", "pipe", ...(options?.inheritFds ?? [])], env, detached: process.platform !== "win32" }) as ChildProcessWithoutNullStreams;
     let buffer = "", closed = false, overflow = false;
     child.stdout.on("data", (chunk: Buffer) => { if (!overflow) { buffer += chunk.toString("utf8"); if (Buffer.byteLength(buffer) > DEFAULT_MAX) { overflow = true; buffer = ""; } } });
     child.stderr.resume();
@@ -291,7 +291,8 @@ export async function acquireSetupGuardian(lockFd: number, timeoutMs: number, si
 
   const runner: CommandRunner = {
     run(command, args, runSignal, runOptions): Promise<CommandResult> {
-      if (runOptions?.env !== undefined || released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
+      // The guardian child cannot pass descriptors through; refuse instead of dropping a caller's lease.
+      if (runOptions?.env !== undefined || runOptions?.inheritFds !== undefined || released || unsafe || pending || runSignal?.aborted || !child.connected) return Promise.resolve({ exitCode: 126, stdout: "", stderr: "" });
       const id = nextId++;
       return new Promise((resolve) => {
         const abort = (): void => { if (child.connected) child.send({ type: "abort", id }, undefined, undefined, () => undefined); };

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { ConfigError } from "./config.js";
 import { ImmutableMap } from "./execution-profile.js";
+import { isSafeRefName } from "./writer-boundary.js";
 
 export type WorkspaceMode = "unset" | "host" | "container" | "read-only";
 
@@ -14,6 +15,7 @@ export interface ContainerSettings {
   readonly network: "pasta" | "none";
   readonly cache: "none" | "go" | "uv";
   readonly tags: "none" | "reachable";
+  readonly base?: string;
 }
 
 export interface WorkspaceModeEntry {
@@ -22,6 +24,15 @@ export interface WorkspaceModeEntry {
 }
 
 export const EXECUTION_MODES_FILE = "execution-modes.json";
+
+/** A base is a plain local branch name: safe, not `HEAD`, no ref prefix, no commit ID, at most 200 characters. */
+export function isShortBranchName(value: string): boolean {
+  return value.length <= 200
+    && isSafeRefName(value)
+    && value !== "HEAD"
+    && !value.startsWith("refs/")
+    && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value);
+}
 
 export function executionModesPath(configPath: string): string {
   return join(dirname(configPath), EXECUTION_MODES_FILE);
@@ -39,6 +50,7 @@ const entrySchema = z.discriminatedUnion("mode", [
     network: z.enum(["pasta", "none"]).default("pasta"),
     cache: z.enum(["none", "go", "uv"]).default("none"),
     tags: z.enum(["none", "reachable"]).default("none"),
+    base: z.string().refine(isShortBranchName).optional(),
   }).strict(),
 ]);
 
@@ -66,9 +78,10 @@ export function resolveExecutionModes(
           throw new ConfigError("invalid_execution_modes");
         }
       }
-      const { mode, ...settings } = entry;
+      const { mode, base, ...settings } = entry;
       entries.set(alias, Object.freeze({ mode, container: Object.freeze({
         ...settings, profiles: Object.freeze([...settings.profiles]),
+        ...(base === undefined ? {} : { base }),
       }) }));
     } else {
       entries.set(alias, Object.freeze({ mode: entry.mode }));
@@ -96,6 +109,6 @@ export async function loadExecutionModes(
   return resolveExecutionModes(raw, workspaceAliases, profiles);
 }
 
-export function codingAllowed(entry: WorkspaceModeEntry): boolean {
-  return entry.mode === "unset" || entry.mode === "host";
+export function codingAllowed(entry: WorkspaceModeEntry, relay: boolean): boolean {
+  return entry.mode === "unset" || entry.mode === "host" || (entry.mode === "container" && relay);
 }

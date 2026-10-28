@@ -36,8 +36,6 @@ export const WAKE_TIMEOUT_MARGIN_SECONDS = 60;
 export const WAKE_MATCHER = [
   "mcp__pi-session-mcp__pi_session_prompt",
   "mcp__pi-session-mcp__pi_turn_get",
-  "mcp__pi-coding-.*__pi_session_prompt",
-  "mcp__pi-coding-.*__pi_turn_get",
 ].join("|");
 /** A command referencing this program path marks an entry as pi-session-mcp's. */
 const WAKE_PROGRAM = /\/dist\/wake-main\.js(?=$|[\s"'])/;

@@ -55,9 +55,9 @@ describe("configuration capability projection", () => {
   it("reports configured workspace modes and defaults missing entries to unset", () => {
     const capabilities = projectCapabilities(
       new Map([["b", "/private/b"], ["a", "/private/a"]]),
-      new Map(), configuration, new Map([["a", { mode: "container" }]]),
+      new Map(), configuration, new Map([["a", { mode: "container", container: { writers: 2, lifecycle: "persistent", profiles: ["code"], image: "node", network: "pasta", cache: "none", tags: "none" } }]]),
     );
-    expect(capabilities.workspaces).toEqual([{ alias: "a", mode: "container" }, { alias: "b", mode: "unset" }]);
+    expect(capabilities.workspaces).toEqual([{ alias: "a", mode: "container", writers: 2, defaultBase: null }, { alias: "b", mode: "unset" }]);
   });
 
   it("reports the event delivery it is given", () => {
@@ -80,4 +80,9 @@ describe("configuration capability projection", () => {
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");
   });
+});
+
+it("container workspace lists configured writers and defaultBase", () => {
+  const container = { writers: 4, base: "dev", lifecycle: "persistent" as const, profiles: ["code"], image: "node", network: "pasta" as const, cache: "none" as const, tags: "none" as const };
+  expect(projectCapabilities(new Map([["repo", "/repo"]]), new Map(), configuration, new Map([["repo", { mode: "container", container }]])).workspaces).toEqual([{ alias: "repo", mode: "container", writers: 4, defaultBase: "dev" }]);
 });

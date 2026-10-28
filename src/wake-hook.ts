@@ -13,11 +13,10 @@ import { WRITER_NAME_PATTERN } from "./writer-state.js";
  * Trust model. An event is a wake trigger only; it carries no instruction and no content. Writer
  * namespaces (`<home>/.local/state/pi-session-mcp/writers/<name>/events/`, see `writerEventsDir`) are writable by the
  * worker inside that writer's container, which can create any file, directory or symlink there. The spool is therefore read defensively:
- * - The accepted namespace follows from the arming tool name: `mcp__pi-session-mcp__*` reads the top-level
- *   `<events>/inst-*` directories only; `mcp__pi-coding-<name>-wN__*` reads exactly `inst-*` below
- *   `writerEventsDir(home, "<name>-wN")`. The old `<events>/writer-<name>/` location is not read, no other writer's
- *   directory is listed, and the claim key carries the namespace, so a forged event in
- *   one namespace can neither take nor block a claim of another.
+ * - Only `mcp__pi-session-mcp__*` arms the hook (ADR 0012: relayed writer sessions report through the host
+ *   spool), and it reads the top-level `<events>/inst-*` directories only. No writer directory and no old
+ *   `<events>/writer-<name>/` location is read. The writer namespace type and its scan remain for spools that
+ *   writers of older releases may still hold; the claim key carries the namespace.
  * - Every directory is opened with `O_NOFOLLOW|O_DIRECTORY`, checked on the handle (a directory of this user)
  *   and read through that handle (`/proc/self/fd/<fd>/<name>`). Event delivery is Linux-only (ADR 0011): without
  *   `/proc/self/fd` the program does nothing (see `isSupportedPlatform`). Event files are opened with `O_NOFOLLOW`, must be regular and small.
@@ -48,7 +47,7 @@ export const NO_SPOOL_GRACE_MS = 2000;
 export const CLAIM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const CLAIM_CLEANUP_MAX_ENTRIES = 4096;
 
-const WAKE_TOOL_PATTERN = /^mcp__(?:(pi-session-mcp)|pi-coding-([a-z][a-z0-9_-]{0,63}-w(?:[1-9]|1[0-6])))__(pi_session_prompt|pi_turn_get)$/;
+const WAKE_TOOL_PATTERN = /^mcp__pi-session-mcp__(pi_session_prompt|pi_turn_get)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const INSTANCE_DIR_PATTERN = /^inst-[0-9a-f]{16}$/;
 const MAX_CONTENT_BLOCKS = 32;
@@ -98,10 +97,8 @@ export function parseHookInput(text: string): HookTarget | undefined {
   if (!isObject(input) || typeof input.tool_name !== "string") return undefined;
   const match = WAKE_TOOL_PATTERN.exec(input.tool_name);
   if (!match) return undefined;
-  const isPrompt = match[3] === "pi_session_prompt";
-  const writer = match[2];
-  if (writer !== undefined && !WRITER_NAME_PATTERN.test(writer)) return undefined;
-  const namespace: WakeNamespace = writer === undefined ? HOST_NAMESPACE : { kind: "writer", name: writer };
+  const isPrompt = match[1] === "pi_session_prompt";
+  const namespace: WakeNamespace = HOST_NAMESPACE;
   for (const payload of payloadCandidates(input.tool_response)) {
     if (payload.ok !== true || !isObject(payload.turn) || payload.turn.state !== "running") continue;
     const turnId = uuid(payload.turn.turnId);

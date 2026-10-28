@@ -1,10 +1,14 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { acquireWriterLease, WriterLeaseError } from "../src/writer-lease.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore } from "../src/setup-ownership.js";
 import { acceptanceFingerprint, readWriterState, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
-import { wrapperDigest } from "../src/writer-wrapper.js";
+import { registerWriter } from "../src/client-adapters/writer-registration.js";
+import { renderWrapper, wrapperDigest } from "../src/writer-wrapper.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import * as lifecycle from "../src/writer-lifecycle.js";
 import * as acceptance from "../src/writer-acceptance.js";
@@ -27,6 +31,8 @@ async function fixture() {
   const ownership = new MemoryOwnershipStore();
   const registered = new Set<string>();
   const life = { ...lifecycle,
+    // The fixture workspace is no Git checkout: provisioning's default base resolves to main.
+    baseBranchName: vi.fn(async (_ctx: lifecycle.WriterContext, requested?: string) => requested?.replace(/^refs\/heads\//, "") ?? "main"),
     provisionWriter: vi.fn(async (_ctx, input) => {
       calls.push(`provision${input.index}`);
       const paths = writerPaths(home, `x-w${input.index}`);
@@ -44,7 +50,7 @@ async function fixture() {
     recreateWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => ({ status: "ok" as const, code: "writer_recreated" })),
     writerSettingsDrift: vi.fn(lifecycle.writerSettingsDrift),
   } satisfies typeof lifecycle;
-  const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...state(index), phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }),
+  const accept = { ...acceptance, acceptWriter: vi.fn(async (_ctx: lifecycle.WriterContext, name: string): Promise<lifecycle.WriterOutcome> => { calls.push(`accept:${name}`); const index = Number(name.slice(-1)); await writeWriterState(home, name, { ...(await readWriterState(home, name))!, phase: "ready" }); return { status: "ok" as const, code: "writer_accepted" }; }),
     acceptanceCurrent: vi.fn(async (_ctx: lifecycle.WriterContext, name: string) => ((await readWriterState(home, name))?.phase === "ready" ? "current" : "stale") as "current" | "stale" | "unknown") };
   const adapter = {
     inspect: vi.fn(async (intent: { client: string; name: string }) => registered.has(intent.client + intent.name) ? "equivalent" as const : "absent" as const),
@@ -52,14 +58,214 @@ async function fixture() {
     remove: vi.fn(async (intent: { client: string; name: string }) => { calls.push(`unregister:${intent.client}:${intent.name}`); registered.delete(intent.client + intent.name); }),
   };
   // Podman as the settings check asks it: usable, a full image ID resolves to itself, the built-in node image to the state's ID.
-  const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
-  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })) };
-  return { home, configPath, calls, life, accept, deps, adapter, runner };
+  const runner = { run: vi.fn(async (_command: string, args: readonly string[], _signal?: AbortSignal, _options?: { inheritFds?: readonly number[] }) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
+  const deps: WriterSetupDependencies = { configPath, home, releaseRoot: home, platform: "linux", runner, lifecycle: life, acceptance: accept, ownership, adapter, doctor: async () => ({ schemaVersion: 1, ok: true, exitCode: 0, checks: [] }), containerRuntime: async () => true, lock: vi.fn(async () => ({ release: async () => {} })),
+    // The writer lease and container fence are Linux-only; elsewhere these tests exercise setup with stand-ins.
+    ...(process.platform === "linux" ? {} : { lease: vi.fn(async () => ({ fd: 3, release: async () => {} })), ensureAbsent: vi.fn(async () => {}) }) };
+  return { home, configPath, calls, life, accept, deps, adapter, runner, ownership, registered };
 }
 const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : state(1).imageId;
-const podmanAnswer = (args: readonly string[]): string => args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
+const podmanAnswer = (args: readonly string[]): string => args[0] === "ps" ? "[]" : args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it("migrates owned registrations under the lease before rebinding and accepting the relay", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    for (const client of ["claude-code", "codex"] as const) await registerWriter(f.ownership, f.adapter, { client, name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    await writeWriterState(f.home, "x-w1", { ...state(1), phase: "ready" });
+    await writeFile(writerPaths(f.home, "x-w1").wrapper, "old wrapper");
+    // Ownership binds the old wrapper bytes, as it would before a release upgrade.
+    for (const client of ["claude-code", "codex"] as const) {
+      const target = { client, scope: client === "codex" ? "user" : "local", alias: "pi-coding-x-w1" };
+      await f.ownership.delete(target);
+      f.registered.delete(client + target.alias);
+      await registerWriter(f.ownership, f.adapter, { client, name: target.alias, wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    }
+    const order: string[] = [], held = new Set<string>();
+    const inspect = f.adapter.inspect.getMockImplementation()!;
+    f.adapter.inspect.mockImplementation(async (intent) => {
+      const name = intent.name.slice("pi-coding-".length);
+      expect(held.has(name)).toBe(true); order.push(`inspect:${name}`);
+      return inspect(intent);
+    });
+    const remove = f.adapter.remove.getMockImplementation()!;
+    f.adapter.remove.mockImplementation(async (intent) => {
+      const name = intent.name.slice("pi-coding-".length);
+      expect(held.has(name)).toBe(true); order.push(`unregister:${name}`);
+      return remove(intent);
+    });
+    const accept = f.accept.acceptWriter.getMockImplementation()!;
+    f.accept.acceptWriter.mockImplementation(async (ctx, name) => {
+      expect((await readWriterState(f.home, name))?.launch).toBe("relay");
+      expect(await readFile(writerPaths(f.home, name).wrapper, "utf8")).toBe(renderWrapper(process.execPath, f.home, name));
+      return accept(ctx, name);
+    });
+    const output = await changeWriterMode(f.configPath, mode, { ...f.deps, lease: async (_home, name) => {
+      held.add(name); order.push(`acquire:${name}`);
+      return { fd: 42, release: async () => { order.push(`release:${name}`); held.delete(name); } };
+    }, ensureAbsent: async () => {} });
+    expect(output.exitCode).toBe(0);
+    expect(f.registered.size).toBe(0);
+    expect(order[0]).toBe("acquire:x-w1");
+    expect(order.indexOf("release:x-w1")).toBeGreaterThan(order.lastIndexOf("inspect:x-w1"));
+    expect(order.filter((event) => event === "unregister:x-w1")).toHaveLength(2);
+    expect(order.indexOf("release:x-w1")).toBeGreaterThan(order.lastIndexOf("unregister:x-w1"));
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("relay");
+  });
+  it.skipIf(process.platform !== "linux")("does not change a writer or inspect registrations when migration cannot acquire its lease", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", state(1));
+    const paths = writerPaths(f.home, "x-w1"), before = await readFile(paths.state, "utf8"), wrapper = await readFile(paths.wrapper, "utf8");
+    const held = await acquireWriterLease(f.home, "x-w1", { waitMs: 0 });
+    f.adapter.inspect.mockClear();
+    try {
+      const output = await changeWriterMode(f.configPath, mode, { ...f.deps, lease: (home, name) => acquireWriterLease(home, name, { waitMs: 0 }) });
+      expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_busy", target: expect.objectContaining({ alias: "x-w1" }) }));
+      expect(await readFile(paths.state, "utf8")).toBe(before);
+      expect(await readFile(paths.wrapper, "utf8")).toBe(wrapper);
+      expect(f.adapter.inspect.mock.calls.some(([i]) => i.name === "pi-coding-x-w1")).toBe(false);
+    } finally { await held.release(); }
+  });
+  it("retains an owned registration whose wrapper fingerprint diverged", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await registerWriter(f.ownership, f.adapter, { client: "claude-code", name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    await writeFile(writerPaths(f.home, "x-w1").wrapper, "operator edited wrapper");
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "registration_divergent", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
+    expect(await readFile(writerPaths(f.home, "x-w1").wrapper, "utf8")).toBe("operator edited wrapper");
+  });
+  it("leaves a foreign registration and its writer legacy", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", state(1));
+    f.registered.add("claude-codepi-coding-x-w1");
+    f.accept.acceptWriter.mockClear();
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "registration_divergent", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
+    expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect(f.accept.acceptWriter).not.toHaveBeenCalledWith(expect.anything(), "x-w1");
+  });
+  it("migrates a writer on a host without the Codex CLI", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
+    await registerWriter(f.ownership, f.adapter, { client: "claude-code", name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    const inspect = f.adapter.inspect.getMockImplementation()!;
+    f.adapter.inspect.mockImplementation(async (intent) => intent.client === "codex" ? "unsupported" as never : inspect(intent));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).not.toContainEqual(expect.objectContaining({ code: "registration_divergent" }));
+    expect(f.adapter.remove.mock.calls.some(([intent]) => intent.client === "claude-code" && intent.name === "pi-coding-x-w1")).toBe(true);
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("relay");
+  });
+  it("removes no registration of a writer when another client's registration is foreign", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
+    await registerWriter(f.ownership, f.adapter, { client: "claude-code", name: "pi-coding-x-w1", wrapperPath: writerPaths(f.home, "x-w1").wrapper, projectDir: f.home });
+    f.registered.add("codexpi-coding-x-w1");
+    f.adapter.remove.mockClear();
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "registration_divergent", target: expect.objectContaining({ alias: "x-w1" }) }));
+    expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
+  });
+  it("records the shared migration base and refuses ambiguous bases before writing modes", async () => {
+    const f = await fixture();
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.findings).toContainEqual({ target: { client: "modes", scope: "workspace", alias: "x" }, status: "failed", code: "workspace_base_ambiguous" });
+    await expect(readFile(executionModesPath(f.configPath))).rejects.toThrow();
+    expect(f.life.provisionWriter).not.toHaveBeenCalled();
+    await writeWriterState(f.home, "x-w2", state(2));
+    await changeWriterMode(f.configPath, { ...mode, apply: false }, f.deps);
+    const applied = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("main");
+    expect(applied.findings.some((f) => f.code === "workspace_base_ambiguous")).toBe(false);
+  });
+  it("allows an explicit migration base despite mixed writer bases and preserves it on repeated requests", async () => {
+    const f = await fixture();
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), base: { ...state(index).base, ref: index === 1 ? "refs/heads/main" : "refs/heads/dev" } });
+    const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
+    await changeWriterMode(f.configPath, { ...mode, baseRef: "dev" }, { ...f.deps, lifecycle: life });
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
+    const again = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(again.findings.some((finding) => finding.code === "workspace_base_ambiguous")).toBe(false);
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
+  });
+  // The real lease and fence are Linux-only.
+  it.skipIf(process.platform !== "linux")("collect, reset, recreate, finish, remove and verify fail with writer_busy while another process holds the writer lease", async () => {
+    const f = await fixture();
+    const lease = await acquireWriterLease(f.home, "x-w1", { waitMs: 0 });
+    const child = spawn(process.execPath, ["-e", "process.stdout.write('ready'); process.stdin.resume()"], { stdio: ["pipe", "pipe", "pipe", lease.fd] });
+    await once(child.stdout!, "data");
+    await lease.release();
+    try {
+      const outputs = await Promise.all((["collect", "reset", "recreate", "finish", "remove", "verify"] as const).map((op) => runWriterOperation("x-w1", op, { apply: true, discard: true }, f.deps)));
+      for (const output of outputs) expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_busy", status: "failed" }));
+      expect(f.life.collectWriter).not.toHaveBeenCalled();
+      expect(f.calls).toEqual([]);
+    } finally { const exited = once(child, "exit"); child.stdin!.end(); await exited; }
+  }, 20_000);
+  // The real lease and fence are Linux-only.
+  it.skipIf(process.platform !== "linux")("provisions and reconciles under the lease and removes a stale container before writer changes", async () => {
+    const f = await fixture();
+    const provision = f.life.provisionWriter.getMockImplementation()!;
+    f.life.provisionWriter.mockImplementation(async (ctx, input) => {
+      await expect(acquireWriterLease(ctx.home, `x-w${input.index}`, { waitMs: 0 })).rejects.toMatchObject({ code: "writer_busy" });
+      return provision(ctx, input);
+    });
+    const accept = f.accept.acceptWriter.getMockImplementation()!;
+    f.accept.acceptWriter.mockImplementation(async (ctx, name) => {
+      await expect(acquireWriterLease(ctx.home, name, { waitMs: 0 })).rejects.toMatchObject({ code: "writer_busy" });
+      return accept(ctx, name);
+    });
+    let stale = true;
+    f.runner.run.mockImplementation(async (_command, args) => {
+      if (args[0] === "ps") return { exitCode: 0, stdout: stale ? JSON.stringify([{ Id: "a".repeat(64), Names: ["pi-writer-x-w1"] }]) : "[]", stderr: "" };
+      if (args[0] === "rm") { f.calls.push("fence-remove"); stale = false; }
+      return { exitCode: 0, stdout: podmanAnswer(args), stderr: "" };
+    });
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.calls[0]).toBe("fence-remove");
+    for (const [ctx] of f.life.provisionWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    for (const [ctx] of f.accept.acceptWriter.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    for (const [ctx] of f.life.writerSettingsDrift.mock.calls) expect(ctx).toMatchObject({ leaseFd: expect.any(Number) });
+    for (const call of f.runner.run.mock.calls) expect(call[3]).toMatchObject({ inheritFds: [expect.any(Number)] });
+  });
+  it.each(["busy", "unavailable", "unexpected", "fence"] as const)("maps %s fence errors and releases an acquired lease", async (failure) => {
+    const f = await fixture(), release = vi.fn(async () => {});
+    const lease = vi.fn(async () => {
+      if (failure === "busy") throw new WriterLeaseError("writer_busy");
+      if (failure === "unavailable") throw new WriterLeaseError("writer_lease_unavailable");
+      if (failure === "unexpected") throw new Error("private failure");
+      return { fd: 42, release };
+    });
+    const output = await runWriterOperation("x-w1", "collect", { apply: true, discard: false }, { ...f.deps, lease, ensureAbsent: async () => { throw new Error("private fence failure"); } });
+    expect(output.findings[0]?.code).toBe(failure === "busy" ? "writer_busy" : failure === "fence" ? "writer_fenced" : "writer_lease_unavailable");
+    expect(lease).toHaveBeenCalledWith(f.home, "x-w1", { waitMs: 10_000 });
+    expect(release).toHaveBeenCalledTimes(failure === "fence" ? 1 : 0);
+    expect(f.life.collectWriter).not.toHaveBeenCalled();
+  });
+  it("dry runs take no writer lease", async () => {
+    const f = await fixture(), lease = vi.fn(acquireWriterLease);
+    await runWriterOperation("x-w1", "reset", { apply: false, discard: false }, { ...f.deps, lease });
+    await changeWriterMode(f.configPath, { ...mode, apply: false }, { ...f.deps, lease });
+    expect(lease).not.toHaveBeenCalled();
+  });
+  it("passes the recorded workspace default base to finish and recreate but not reset", async () => {
+    const f = await fixture();
+    await writeFile(executionModesPath(f.configPath), JSON.stringify({ schemaVersion: 1, workspaces: { x: { mode: "container", profiles: ["code"], base: "main" } } }));
+    for (const op of ["finish", "recreate", "reset"] as const) await runWriterOperation("x-w1", op, { apply: true, discard: true }, f.deps);
+    expect(f.life.finishWriter).toHaveBeenCalledWith(expect.objectContaining({ leaseFd: expect.any(Number) }), "x-w1", { baseRef: "main" });
+    expect(f.life.recreateWriter).toHaveBeenCalledWith(expect.anything(), "x-w1", expect.objectContaining({ baseRef: "main" }));
+    expect(f.life.resetWriter).toHaveBeenCalledWith(expect.anything(), "x-w1", { apply: true, discard: true });
+  });
   it.each(["linux", "darwin"] as const)("sanitizes invalid aliases on %s", async (platform) => {
     const f = await fixture();
     const output = await changeWriterMode(f.configPath, { ...mode, alias: "../x" }, { ...f.deps, platform });
@@ -114,6 +320,28 @@ describe("writer setup reconciliation", () => {
     expect(JSON.stringify(output)).not.toContain("SECRET");
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
   });
+  it("records the base that first provisioning resolves when --base is omitted", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    expect(f.life.baseBranchName).toHaveBeenCalledWith(expect.anything());
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("main");
+  });
+  it("records --base as provisioning resolves it", async () => {
+    const f = await fixture();
+    const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
+    expect((await changeWriterMode(f.configPath, { ...mode, baseRef: "refs/remotes/origin/dev" }, { ...f.deps, lifecycle: life })).exitCode).toBe(0);
+    expect(life.baseBranchName).toHaveBeenCalledWith(expect.anything(), "refs/remotes/origin/dev");
+    expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
+    expect(f.life.provisionWriter.mock.calls[0]?.[1]).toMatchObject({ baseRef: "refs/remotes/origin/dev" });
+  });
+  it("refuses an unresolvable --base before the modes file changes", async () => {
+    const f = await fixture();
+    const life = { ...f.life, baseBranchName: vi.fn(async () => { throw new Error("base_ref_invalid"); }) };
+    const output = await changeWriterMode(f.configPath, { ...mode, baseRef: "origin/dev" }, { ...f.deps, lifecycle: life });
+    expect(output.findings).toEqual([{ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "base_ref_invalid" }]);
+    await expect(readFile(executionModesPath(f.configPath), "utf8")).rejects.toThrow();
+    expect(f.life.provisionWriter).not.toHaveBeenCalled();
+  });
   it("hands the host configuration's event delivery field to writer provisioning", async () => {
     const f = await fixture();
     const host = JSON.parse(await readFile(f.configPath, "utf8")) as object;
@@ -133,29 +361,34 @@ describe("writer setup reconciliation", () => {
     expect(f.deps.lock).not.toHaveBeenCalled();
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
-  it("provisions, accepts and registers two writers in order with one restart notice", async () => {
+  it("provisions and accepts two relay writers without registrations with one restart notice", async () => {
     const f = await fixture();
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).toBe(0);
-    expect(f.calls).toEqual(["provision1", "provision2", "accept:x-w1", "accept:x-w2", "register:claude-code:pi-coding-x-w1", "register:claude-code:pi-coding-x-w2"]);
+    expect(f.calls).toEqual(["provision1", "accept:x-w1", "provision2", "accept:x-w2"]);
+    expect(f.adapter.add).not.toHaveBeenCalled();
     expect(output.findings.filter((finding) => finding.code === "controllers_restart_required")).toHaveLength(1);
     expect(JSON.stringify(output)).not.toContain("/");
   });
-  it("registers Codex on request and does not reprovision ready writers", async () => {
+  it("accepts Codex without registering and does not reprovision ready writers", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, { ...mode, codex: true }, f.deps)).exitCode).toBe(0);
-    expect(f.calls).toContain("register:codex:pi-coding-x-w1");
+    expect(f.adapter.add).not.toHaveBeenCalled();
     f.calls.length = 0;
     const output = await changeWriterMode(f.configPath, { ...mode, codex: true }, f.deps);
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual([]);
-    expect(output.findings.some((finding) => finding.code === "controllers_restart_required")).toBe(false);
+    // The second request records the now-known shared base; the next is fully unchanged.
+    const again = await changeWriterMode(f.configPath, { ...mode, codex: true }, f.deps);
+    expect(again.findings.some((finding) => finding.code === "controllers_restart_required")).toBe(false);
   });
   it("reports settings drift instead of keeping a ready writer whose coding profile model changed (#134)", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
     f.accept.acceptWriter.mockClear(); f.adapter.add.mockClear();
+    // A writer of an older release: the drift check must run before migration touches it.
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
     const host = JSON.parse(await readFile(f.configPath, "utf8")) as { executionProfiles: { code: { model: string } } };
     host.executionProfiles.code.model = "changed-model";
     await writeFile(f.configPath, JSON.stringify(host));
@@ -167,6 +400,7 @@ describe("writer setup reconciliation", () => {
     // The existing registrations stay: nothing is added and nothing removed for a held writer.
     expect(f.adapter.add).not.toHaveBeenCalled();
     expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
   });
   it("checks only writers it did not provision in the same run (#134)", async () => {
     const f = await fixture();
@@ -203,14 +437,15 @@ describe("writer setup reconciliation", () => {
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual([]);
-    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.status)).toEqual(["unchanged", "unchanged"]);
+    expect(f.adapter.add).not.toHaveBeenCalled();
     // An explicit delivery "off" means the same as no events field.
     await editHost(f.configPath, (host) => ({ ...host, events: { delivery: "off" } }));
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     expect(f.calls).toEqual([]);
   });
   it.each([
-    ["Podman cannot be asked", "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
+    // On Linux the container fence asks Podman first; elsewhere its stand-in passes and acceptance does.
+    ["Podman cannot be asked", process.platform === "linux" ? "writer_fenced" : "podman_unavailable", (_args: readonly string[]) => ({ exitCode: 125, stdout: "", stderr: "" })],
     ["the image cannot be resolved locally", "image_unavailable", (args: readonly string[]) => args[0] === "image" ? { exitCode: 1, stdout: "", stderr: "" } : { exitCode: 0, stdout: podmanAnswer(args), stderr: "" }],
   ])("leaves a ready writer as it is when %s, and never pulls (#134)", async (_label, code, answer) => {
     const f = await fixture();
@@ -266,7 +501,7 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual(["accept:x-w1"]);
     expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_accepted", target: expect.objectContaining({ alias: "x-w1" }) }));
-    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.status)).toEqual(["unchanged", "unchanged"]);
+    expect(f.adapter.add).not.toHaveBeenCalled();
   });
   it("leaves a ready writer as it is when Podman cannot be asked, and reports it", async () => {
     const f = await fixture();
@@ -278,20 +513,20 @@ describe("writer setup reconciliation", () => {
     expect(f.calls).toEqual([]);
     expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "podman_unavailable", target: expect.objectContaining({ alias: "x-w1" }) }));
     expect((await readWriterState(f.home, "x-w1"))?.phase).toBe("ready");
-    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.target.alias)).toEqual(["x-w2"]);
+    expect(f.adapter.add).not.toHaveBeenCalled();
   });
   it("accepts a ready writer again after a package upgrade, judged by the real predicate", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
-    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : args[0] === "image" ? podmanImage(args.at(-1)!) : "5.4.0", stderr: "" })) };
-    const upgraded = (version: string) => acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: version, imageId: state(1).imageId, podmanVersion: "5.4.0", network: "pasta", cache: "none" });
-    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), phase: "ready", acceptance: { fingerprint: upgraded(index === 1 ? "0.0.0" : PACKAGE_VERSION), verdict: "pass", network: "limited", at: "then" } });
+    const runner = { run: vi.fn(async (_command: string, args: readonly string[]) => ({ exitCode: 0, stdout: podmanAnswer(args), stderr: "" })) };
+    const upgraded = (index: number, version: string) => acceptanceFingerprint({ wrapperDigest: wrapperDigest(renderWrapper(process.execPath, f.home, `x-w${index}`)), packageVersion: version, imageId: state(1).imageId, podmanVersion: "5.4.0", network: "pasta", cache: "none" });
+    for (const index of [1, 2]) await writeWriterState(f.home, `x-w${index}`, { ...state(index), launch: "relay", phase: "ready", acceptance: { fingerprint: upgraded(index, index === 1 ? "0.0.0" : PACKAGE_VERSION), verdict: "pass", network: "limited", at: "then" } });
     const output = await changeWriterMode(f.configPath, mode, { ...f.deps, runner, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });
     expect(output.exitCode).toBe(0);
     expect(f.calls).toEqual(["accept:x-w1"]);
   });
-  it("does not register a writer again when its re-acceptance fails, and keeps the existing registration", async () => {
+  it("does not register a writer when its re-acceptance fails", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.accept.acceptanceCurrent.mockImplementation(async (_ctx, name) => name === "x-w1" ? "stale" : "current");
@@ -299,7 +534,7 @@ describe("writer setup reconciliation", () => {
     const output = await changeWriterMode(f.configPath, mode, f.deps);
     expect(output.exitCode).not.toBe(0);
     expect(output.findings).toContainEqual(expect.objectContaining({ status: "failed", code: "acceptance_harness_failed", target: expect.objectContaining({ alias: "x-w1" }) }));
-    expect(output.findings.filter((finding) => finding.code === "writer_registered").map((finding) => finding.target.alias)).toEqual(["x-w2"]);
+    expect(f.adapter.add).not.toHaveBeenCalled();
     expect(f.adapter.remove).not.toHaveBeenCalled();
   });
   it("reports the existing global lock code without running mutations", async () => {
@@ -441,13 +676,26 @@ describe("writer setup reconciliation", () => {
     expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
+  it("names the surplus writer whose lease is busy and leaves the modes file unchanged", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const before = await readFile(executionModesPath(f.configPath), "utf8");
+    const lease = vi.fn(async (_home: string, name: string) => {
+      if (name === "x-w2") throw new WriterLeaseError("writer_busy");
+      return { fd: 42, release: async () => {} };
+    });
+    const output = await changeWriterMode(f.configPath, { ...mode, container: { ...mode.container, writers: 1 } }, { ...f.deps, lease, ensureAbsent: async () => {} });
+    expect(output.findings).toEqual([{ target: { client: "writer", scope: "x", alias: "x-w2" }, status: "failed", code: "writer_busy" }]);
+    expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
+    expect(f.life.removeWriter).not.toHaveBeenCalled();
+  });
   it("removes clean writers and owned registrations when leaving container mode", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps); f.calls.length = 0;
     const output = await changeWriterMode(f.configPath, { alias: "x", mode: "read-only", apply: true, acceptHostWrites: false }, f.deps);
     expect(output.exitCode).toBe(0);
     expect(output.findings.find((finding) => finding.code === "controllers_restart_required")?.target).toEqual({ client: "modes", scope: "workspace", alias: "x" });
-    expect(f.calls).toEqual(["unregister:claude-code:pi-coding-x-w1", "remove:x-w1", "unregister:claude-code:pi-coding-x-w2", "remove:x-w2"]);
+    expect(f.calls).toEqual(["remove:x-w1", "remove:x-w2"]);
   });
   it("keeps a writer not ready if the control is missing", async () => {
     const f = await fixture();
@@ -465,11 +713,11 @@ describe("writer setup reconciliation", () => {
     expect((await runWriterOperation("x-w1", "remove", { apply: true, discard: false }, f.deps)).findings[0]?.code).toBe("writer_uncollected");
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
-  it.each(["reset", "recreate", "finish"] as const)("asks for the writer's servers to reconnect after an applied %s", async (operation) => {
+  it.each(["reset", "recreate", "finish"] as const)("does not report writer_reconnect_required after an applied %s", async (operation) => {
     const f = await fixture();
     const output = await runWriterOperation("x-w1", operation, { apply: true, discard: false }, f.deps);
     expect(output.exitCode).toBe(0);
-    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "ok", code: "writer_reconnect_required" });
+    expect(output.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
   });
   it("does not ask for a reconnect after a failed reset, a dry run or a collect", async () => {
     const f = await fixture();
@@ -485,14 +733,15 @@ describe("writer setup reconciliation", () => {
     expect(unfinished.exitCode).toBe(1);
     expect(unfinished.findings.some((finding) => finding.code === "writer_reconnect_required")).toBe(false);
   });
-  it.each(["divergent", "unsupported", "equivalent"] as const)("checks unowned present Codex registrations (%s)", async (codexState) => {
+  it.each(["divergent", "unsupported", "equivalent"] as const)("does not inspect writer registrations during verify (%s)", async (codexState) => {
     const f = await fixture();
     const adapter = { ...f.adapter, inspect: vi.fn(async (intent: { client: string }) => intent.client === "codex" ? codexState : "equivalent" as const) };
     const launch = vi.fn();
     const verify = vi.fn(async () => ({ status: "verified" as const, initialize: true, toolsList: true, capabilitiesGet: true, tools: [] }));
     const output = await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, adapter, launch, verify });
-    expect(output.exitCode).toBe(codexState === "equivalent" ? 0 : 1);
-    expect(verify).toHaveBeenCalledTimes(codexState === "equivalent" ? 1 : 0);
+    expect(output.exitCode).toBe(0);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(adapter.inspect).not.toHaveBeenCalled();
   });
   it.each([undefined, "/runtime"])("passes only the minimal wrapper environment (runtime=%s)", async (runtime) => {
     const f = await fixture();
@@ -502,7 +751,7 @@ describe("writer setup reconciliation", () => {
       const launch = vi.fn();
       const verify = vi.fn(async () => ({ status: "verified" as const, initialize: true, toolsList: true, capabilitiesGet: true, tools: [] }));
       expect((await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, launch, verify })).exitCode).toBe(0);
-      expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], { HOME: f.home, PATH: "/bin", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }) });
+      expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], { HOME: f.home, PATH: "/bin", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(runtime === undefined ? {} : { XDG_RUNTIME_DIR: runtime }) }, { inheritFds: [expect.any(Number)] });
     } finally { vi.unstubAllEnvs(); }
   });
   it("verifies only relevant Doctor errors and launches with no credential refresh", async () => {
@@ -513,7 +762,7 @@ describe("writer setup reconciliation", () => {
     const doctor = vi.fn(async () => ({ schemaVersion: 1 as const, ok: false, exitCode: 2 as const, checks: [{ id: "writer_not_ready" as const, severity: "error" as const, subject: "other-w1" }] }));
     const output = await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, launch, verify, doctor });
     expect(output.exitCode).toBe(0);
-    expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], expect.objectContaining({ PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }));
+    expect(launch).toHaveBeenCalledWith([writerPaths(f.home, "x-w1").wrapper], expect.objectContaining({ PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3" }), { inheritFds: [expect.any(Number)] });
     expect(f.calls).toEqual([]);
   });
 });

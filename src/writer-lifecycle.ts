@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { chmod, mkdir, open, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { configSchema } from "./config.js";
@@ -18,6 +18,12 @@ export interface WriterContext {
   runner: CommandRunner;
   checkout: string;
   alias: string;
+  leaseFd?: number;
+}
+function leasedContext(ctx: WriterContext): WriterContext {
+  if (ctx.leaseFd === undefined) return ctx;
+  const runner = ctx.runner;
+  return { ...ctx, runner: { run: (command, args, signal, options) => runner.run(command, args, signal, { ...options, inheritFds: [ctx.leaseFd!] }) } };
 }
 export type WriterOutcome = { code: string; status: "ok" | "planned" | "unchanged" | "failed" };
 
@@ -104,6 +110,7 @@ function buildContainedConfig(alias: string, clonePath: string, rawConfig: unkno
 
 // CommandRunner has no per-call environment option. Hooks are disabled even for injected runners.
 async function git(ctx: WriterContext, args: readonly string[], optional = false): Promise<string | undefined> {
+  ctx = leasedContext(ctx);
   const result = await ctx.runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", ctx.checkout, ...args], AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) {
     if (optional) return undefined;
@@ -144,6 +151,10 @@ async function resolveBase(ctx: WriterContext, requested?: string) {
   if (!commit || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit)) throw new LifecycleError("writer_base_unavailable");
   return { ref, short, commit };
 }
+/** The short branch name provisioning would record for `requested` (or its default base), normalized like the writer state. */
+export async function baseBranchName(ctx: WriterContext, requested?: string): Promise<string> {
+  return (await resolveBase(ctx, requested)).short;
+}
 async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, ref: string, commit: string, tags: ContainerSettings["tags"]): Promise<void> {
   // for-each-ref prints one full ref per line; `git tag` honours column.ui/column.tag and can print several per line.
   const reachable = tags === "reachable" ? (await git(ctx, ["for-each-ref", "--format=%(refname)", "--merged", commit, "refs/tags"]))?.split("\n").filter((ref) => ref.startsWith("refs/tags/")) ?? [] : [];
@@ -154,7 +165,7 @@ async function baseBundle(ctx: WriterContext, paths: ReturnType<typeof writerPat
 async function cloneFromBundle(ctx: WriterContext, paths: ReturnType<typeof writerPaths>, imageId: string, base: { ref: string; short: string; commit: string }, remote: string | undefined, tags: ContainerSettings["tags"]): Promise<void> {
   // Clone only auto-fetches refs/heads; fetch the exact bundled ref before checkout.
   const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\n${BOUNDARY_GIT} clone --no-hardlinks /bundles/base.bundle "$1"\ncd "$1"\n${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle "$5"\n${BOUNDARY_GIT} checkout -B "$2" "$3"\nif [ -n "$4" ]; then ${BOUNDARY_GIT} remote set-url origin "$4"; else ${BOUNDARY_GIT} remote remove origin; fi\n${identityScript(6, 7)}\n${tags === "reachable" ? `${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle '+refs/tags/*:refs/tags/*'` : ""}`;
-  const clone = await ctx.runner.run("podman", throwawayArgs(paths, imageId, { clone: "rw", bundles: true }, script, [paths.clone, base.short, base.commit, remote ?? "", base.ref, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  const clone = await ctx.runner.run("podman", throwawayArgs(basename(paths.root), paths, imageId, { clone: "rw", bundles: true }, script, [paths.clone, base.short, base.commit, remote ?? "", base.ref, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (clone.exitCode !== 0) throw new LifecycleError("writer_clone_failed");
   await verifyCloneLayout(paths.clone);
 }
@@ -214,6 +225,7 @@ function withoutDeliveryOff(config: unknown): unknown {
  * answers but cannot resolve the image.
  */
 export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionInput & { index: number }): Promise<WriterOutcome | undefined> {
+  ctx = leasedContext(ctx);
   try {
     const name = writerName(ctx.alias, input.index), paths = writerPaths(ctx.home, name);
     const existing = await readWriterState(ctx.home, name);
@@ -228,6 +240,7 @@ export async function writerSettingsDrift(ctx: WriterContext, input: ProvisionIn
 export async function provisionWriter(ctx: WriterContext, input: {
   index: number; settings: ContainerSettings; baseRef?: string; rawConfig: unknown; overrideDirectory?: string;
 }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const { index, settings } = input;
     const name = writerName(ctx.alias, index), paths = writerPaths(ctx.home, name);
@@ -279,12 +292,13 @@ export async function provisionWriter(ctx: WriterContext, input: {
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   baseline: boolean; digest: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
 }> {
+  ctx = leasedContext(ctx);
   const state = await readWriterState(ctx.home, name);
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
   const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads refs/stash\n${BOUNDARY_GIT} write-tree\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
-  const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
   const hash = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
@@ -335,6 +349,7 @@ export type CollectOutcome = WriterOutcome & {
   findings: readonly { code: "ref_name_refused" }[];
 };
 export async function collectWriter(ctx: WriterContext, name: string): Promise<CollectOutcome> {
+  ctx = leasedContext(ctx);
   const refs: string[] = [], findings: { code: "ref_name_refused" }[] = [];
   try {
     const paths = writerPaths(ctx.home, name);
@@ -375,7 +390,7 @@ if [ -z "$(${BOUNDARY_GIT} --git-dir=/tmp/scratch for-each-ref --format='%(refna
 else
   ${BOUNDARY_GIT} --git-dir=/tmp/scratch bundle create /bundles/collect.bundle --all
 fi`;
-      const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+      const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
       if (result.exitCode !== 0) throw new LifecycleError("writer_collect_failed");
       const messages = result.stdout.split("\n");
       for (const message of messages) if (message === "ref_name_refused") findings.push({ code: "ref_name_refused" });
@@ -422,15 +437,17 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
   if (!(await inspectWork(ctx, name)).baseline) throw new LifecycleError("writer_recreate_failed");
   return { status: "ok", code: "writer_recreated" };
 }
-export async function recreateWriter(ctx: WriterContext, name: string, opts: { discard: boolean }): Promise<WriterOutcome> {
+export async function recreateWriter(ctx: WriterContext, name: string, opts: { discard: boolean; baseRef?: string }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const state = await requiredState(ctx, name);
     await requireCollected(ctx, name, state, opts.discard);
-    return await recreate(ctx, name, state, await writerBase(ctx, name, state));
+    return await recreate(ctx, name, state, await writerBase(ctx, name, state, opts.baseRef));
   } catch (error) { return failure(error); }
 }
 
 export async function resetWriter(ctx: WriterContext, name: string, opts: { discard: boolean; baseRef?: string }): Promise<WriterOutcome> {
+  ctx = leasedContext(ctx);
   try {
     const state = await requiredState(ctx, name);
     const base = await writerBase(ctx, name, state, opts.baseRef);
@@ -452,7 +469,7 @@ done
 ${BOUNDARY_GIT} stash clear
 ${BOUNDARY_GIT} clean -fd
 ${identityScript(4, 5)}`;
-    const result = await ctx.runner.run("podman", throwawayArgs(paths, state.imageId, { clone: "rw", bundles: true }, script, [base.ref, base.short, base.commit, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+    const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "rw", bundles: true }, script, [base.ref, base.short, base.commit, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
     if (result.exitCode !== 0) throw new LifecycleError("writer_reset_failed");
     const next = { ...state, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
     await refreshPrivateFiles(ctx, name, next);
@@ -467,12 +484,12 @@ ${identityScript(4, 5)}`;
   } catch (error) { return failure(error); }
 }
 
-export async function finishWriter(ctx: WriterContext, name: string): Promise<WriterOutcome> {
+export async function finishWriter(ctx: WriterContext, name: string, opts: { baseRef?: string } = {}): Promise<WriterOutcome> {
   try {
     const state = await requiredState(ctx, name);
     const collected = await collectWriter(ctx, name);
     if (collected.status === "failed") return collected;
-    return state.lifecycle === "ephemeral" ? await recreateWriter(ctx, name, { discard: false }) : await resetWriter(ctx, name, { discard: false });
+    return state.lifecycle === "ephemeral" ? await recreateWriter(ctx, name, { discard: false, ...opts }) : await resetWriter(ctx, name, { discard: false, ...opts });
   } catch (error) { return failure(error); }
 }
 

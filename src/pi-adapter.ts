@@ -3,7 +3,7 @@ import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from 
 export type { PermissionProfile };
 
 export type PiTurnOutcome =
-  | { status: "completed"; assistantText: string }
+  | { status: "completed"; assistantText: string; truncated?: boolean }
   | { status: "failed" }
   | { status: "aborted" };
 
@@ -63,7 +63,21 @@ export class PiSessionCreationError extends Error {
   }
 }
 
+export class WriterUnavailableError extends Error {
+  readonly code = "writer_unavailable";
+  constructor(
+    readonly reason: "none_ready" | "none_at_base" | "none_admitted",
+    readonly counts?: { busy: number; notAtBaseline: number; settingsChanged: number },
+  ) {
+    super("No writer is available");
+    this.name = "WriterUnavailableError";
+  }
+}
+
 export interface PiSessionHandle {
+  readonly placement?: { writer: string; base: { ref: string; commit: string } } | undefined;
+  readonly deadlines?: { preflightMs?: number; abortMs?: number; cleanupMs?: number } | undefined;
+  isLost?(): boolean;
   readonly sdkSessionId: string;
   /** Only whitelisted, post-verified selection metadata may cross the adapter boundary. */
   readonly appliedSelection: PiAppliedSelection;
@@ -82,5 +96,5 @@ export interface PiSessionHandle {
 }
 
 export interface PiSessionAdapter {
-  create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle>;
+  create(input: { cwd: string; workspace: string; base?: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle>;
 }

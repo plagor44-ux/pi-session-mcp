@@ -53,7 +53,7 @@ const classOf = (code: string): StartClass[] => CLASSES.filter((name) => classes
 describe("orchestration skill start-error classification", () => {
   it("teaches finish and classifies writer refusals exactly once", () => {
     expect(skill).toContain("--finish");
-    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "container_runtime_unavailable"]) {
+    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "container_runtime_unavailable", "writer_unavailable", "writer_session_lost", "base_not_applicable"]) {
       expect(classOf(code), code).toHaveLength(1);
       expect(backticked(reference).filter((value) => value === code), code).toHaveLength(1);
     }
@@ -111,7 +111,12 @@ describe("orchestration skill start-error classification", () => {
 
   it("keeps the classification out of SKILL.md so that it loads on demand", () => {
     for (const name of CLASSES) expect(skill, name).not.toContain(`- ${name} (`);
-    for (const name of CLASSES) for (const code of classes[name]) expect(backticked(skill), code).not.toContain(code);
+    // Pool state and lease contention need inline operational guidance; the
+    // classification itself still loads only from the reference.
+    const inlineGuidance = new Set(["writer_unavailable", "writer_busy"]);
+    for (const name of CLASSES) for (const code of classes[name]) {
+      if (!inlineGuidance.has(code)) expect(backticked(skill), code).not.toContain(code);
+    }
   });
 
   it("states the terminal-turn, cadence and cost rules", () => {
@@ -127,7 +132,7 @@ describe("orchestration skill start-error classification", () => {
   it("states the action of each class", () => {
     const bullet = (name: StartClass) => reference.split("\n").find((line) => line.startsWith(`- ${name} (`))!;
     expect(bullet("Operator needed")).toMatch(/do not retry and do not switch to another profile/);
-    expect(classes["Controller action"]).toEqual(["writer_uncollected", "writer_busy"]);
+    expect(classes["Controller action"]).toEqual(["writer_uncollected", "writer_busy", "writer_unavailable", "writer_session_lost", "base_not_applicable"]);
     expect(bullet("Controller action")).toMatch(/collect and reset the writer/);
     expect(bullet("Controller action")).toMatch(/wait for or close the open coding session/);
     expect(bullet("Transient")).toMatch(/retry at most once after a pause/);
