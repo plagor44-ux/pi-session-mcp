@@ -55,6 +55,8 @@ describe.skipIf(process.platform!=="linux")("bounded oracle worker process", () 
       "import { spawn } from 'node:child_process';",
       `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' });`,
       "child.unref();",
+      // Wait for the child's PID file so the oracle never finishes before the child has started.
+      `const { existsSync } = await import('node:fs'); while (!existsSync(${JSON.stringify(pidPath)})) await new Promise((resolve) => setTimeout(resolve, 10));`,
       "export function parseLimit(value) { const n=Number(value); return Number.isFinite(n)&&n>=0?n:20; }",
     ].join("\n"));
     const result = await evaluateBounded(process.cwd(), "T2", workspace, {}, undefined, "implementer", 10_000);
