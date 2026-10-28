@@ -22,6 +22,9 @@ it("documents literal writer findings and Doctor writer ids", () => {
   }
   expect(codes.size).toBeGreaterThan(30);
   for (const code of codes) expect(docs.split("\n").filter((line) => line.startsWith(`| \`${code}\` |`)), code).toHaveLength(1);
+  for (const removed of ["writer_registered", "registration_not_equivalent", "writer_reconnect_required"]) {
+    expect(docs.split("\n").some((line) => line.startsWith(`| \`${removed}\` |`)), removed).toBe(false);
+  }
   const doctorDocs = read("docs/doctor-design.md");
   const ids = new Set([...read("src/doctor.ts").matchAll(/(?:failure|warning|ok)\("(writer_[^"]+)"/g)].map((match) => match[1]!));
   expect(ids.size).toBe(7);

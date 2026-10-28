@@ -48,7 +48,7 @@ export const NO_SPOOL_GRACE_MS = 2000;
 export const CLAIM_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 export const CLAIM_CLEANUP_MAX_ENTRIES = 4096;
 
-const WAKE_TOOL_PATTERN = /^mcp__(?:(pi-session-mcp)|pi-coding-([a-z][a-z0-9_-]{0,63}-w(?:[1-9]|1[0-6])))__(pi_session_prompt|pi_turn_get)$/;
+const WAKE_TOOL_PATTERN = /^mcp__pi-session-mcp__(pi_session_prompt|pi_turn_get)$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const INSTANCE_DIR_PATTERN = /^inst-[0-9a-f]{16}$/;
 const MAX_CONTENT_BLOCKS = 32;
@@ -98,10 +98,8 @@ export function parseHookInput(text: string): HookTarget | undefined {
   if (!isObject(input) || typeof input.tool_name !== "string") return undefined;
   const match = WAKE_TOOL_PATTERN.exec(input.tool_name);
   if (!match) return undefined;
-  const isPrompt = match[3] === "pi_session_prompt";
-  const writer = match[2];
-  if (writer !== undefined && !WRITER_NAME_PATTERN.test(writer)) return undefined;
-  const namespace: WakeNamespace = writer === undefined ? HOST_NAMESPACE : { kind: "writer", name: writer };
+  const isPrompt = match[1] === "pi_session_prompt";
+  const namespace: WakeNamespace = HOST_NAMESPACE;
   for (const payload of payloadCandidates(input.tool_response)) {
     if (payload.ok !== true || !isObject(payload.turn) || payload.turn.state !== "running") continue;
     const turnId = uuid(payload.turn.turnId);

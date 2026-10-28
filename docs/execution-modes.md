@@ -246,7 +246,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_provisioned` | Clone/config/wrapper prepared, not yet accepted |
 | `writer_unchanged` | Provisioned settings already match |
 | `writer_settings_changed` | Existing writer settings or its rendered configuration differ from the current ones; no silent replacement, no acceptance and no registration change ([Isolation setup](isolation-setup.md)) |
-| `writer_registered` | Registration added or already equivalent |
+| `registration_divergent` | Writer registration is foreign or differs from its ownership record; it is retained and the writer stays in legacy launch mode |
 | `writer_reconcile_failed` | Unexpected reconciliation failure |
 | `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
 | `hook_install_failed` | The wake hook step of a writer failed unexpectedly; other `hook_*` and `settings_*` codes are in [Client setup](client-setup.md#wake-hook) |
@@ -275,7 +275,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_lease_unavailable` | The writer's lease file or directory could not be opened safely (see Doctor `writer_lease_directory`) |
 | `writer_removed` | Writer state deleted after registration cleanup |
 | `ownership_unavailable` | Existing registration lacks ownership proof; removal refused |
-| `registration_not_equivalent` | Verify found absent/divergent/unsupported required registration |
+| `workspace_base_ambiguous` | Existing writers have different base branches; supply an explicit base before migration can change the workspace modes |
 | `isolation_control_planned` | Control planned only; no canaries written |
 | `isolation_control_required` | Passing host control record required before writer acceptance |
 | `isolation_control_passed` | Uncontained control detected expected escapes and cleaned up |

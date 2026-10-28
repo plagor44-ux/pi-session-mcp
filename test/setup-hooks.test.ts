@@ -44,7 +44,7 @@ describe("wake hook entry and settings locations", () => {
   it("builds the canonical entry with a timeout that covers the budget", async () => {
     const f = await fixture();
     expect(f.entry).toEqual({
-      matcher: "mcp__pi-session-mcp__pi_session_prompt|mcp__pi-session-mcp__pi_turn_get|mcp__pi-coding-.*__pi_session_prompt|mcp__pi-coding-.*__pi_turn_get",
+      matcher: "mcp__pi-session-mcp__pi_session_prompt|mcp__pi-session-mcp__pi_turn_get",
       hooks: [{ type: "command", command: `/usr/bin/node ${f.packageRoot}/dist/wake-main.js --budget-ms ${WAKE_BUDGET_MS}`, timeout: Math.ceil(WAKE_BUDGET_MS / 1000) + 60, asyncRewake: true }],
     });
     expect(buildWakeEntry({ ...f.roots, budgetMs: 90_500 }).hooks[0]).toMatchObject({ command: expect.stringContaining("--budget-ms 90500"), timeout: 151 });
@@ -81,6 +81,16 @@ describe("wake hook entry and settings locations", () => {
 });
 
 describe("wake hook install", () => {
+  it("rewrites an exactly owned old writer matcher but never adopts a foreign one", async () => {
+    const f = await fixture();
+    const old = { ...f.entry, matcher: `${f.entry.matcher}|mcp__pi-coding-.*__pi_session_prompt|mcp__pi-coding-.*__pi_turn_get` };
+    await f.seed("user", { hooks: { PostToolUse: [old] } });
+    expect(await f.run("apply")).toMatchObject({ code: "hook_divergent" });
+    await f.ownership.put({ target: f.userTarget, fingerprint: wakeEntryFingerprint(old), previous: "absent", phase: "owned", transactionId: "00000000-0000-4000-8000-000000000001" });
+    expect(await f.run("dry-run")).toMatchObject({ code: "hook_update_planned" });
+    expect(await f.run("apply")).toMatchObject({ code: "hook_updated" });
+    expect(JSON.parse(await readFile(f.settings("user"), "utf8")).hooks.PostToolUse).toEqual([f.entry]);
+  });
   it("creates an absent file and directory with mode 0600 and records ownership", async () => {
     const f = await fixture();
     expect(await f.run("dry-run")).toEqual({ status: "planned", code: "hook_add_planned" });

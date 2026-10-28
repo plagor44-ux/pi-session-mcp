@@ -1,4 +1,5 @@
-import { chmod, lstat, mkdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.js";
@@ -12,7 +13,7 @@ import { createCommandMcpStdioLauncher, createProcessRunner } from "./setup-proc
 import { DurableOwnershipStore, type OwnershipAccess, type OwnershipStore } from "./setup-ownership.js";
 import { localHookNeededByOthers, ownsWakeHook, runWakeHook, type WakeHookOutcome } from "./setup-hooks.js";
 import { result, type SetupFinding, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
-import { createWriterRegistrationAdapter, registerWriter, unregisterWriter, type WriterRegistrationIntent, type WriterRegistrationAdapter } from "./client-adapters/writer-registration.js";
+import { createWriterRegistrationAdapter, unregisterWriter, type WriterRegistrationIntent, type WriterRegistrationAdapter } from "./client-adapters/writer-registration.js";
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
 import { IMAGE_PULL_TIMEOUT_MS } from "./writer-boundary.js";
 import { acquireWriterLease, WriterLeaseError } from "./writer-lease.js";
@@ -21,7 +22,8 @@ import { ensureWriterAbsent } from "./writer-fence.js";
 import * as lifecycle from "./writer-lifecycle.js";
 import * as acceptance from "./writer-acceptance.js";
 import { skillOverrideDirectory } from "./skill-library.js";
-import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
+import { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
+import { readWriterState, writeWriterState, writerName, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 
 export const SETUP_LEASE_WAIT_MS = 10_000;
 const FENCE_CODES: readonly string[] = ["writer_busy", "writer_fenced", "writer_lease_unavailable"];
@@ -104,10 +106,6 @@ async function writerHook(ctx: lifecycle.WriterContext, name: string, deps: Writ
   const outcome = operation === "apply" || operation === "remove" ? await ownership.transaction((access) => request(access, operation)) : await request(ownership, operation);
   return outcome.code === "hook_not_enabled" || outcome.code === "hook_not_owned" ? undefined : outcome;
 }
-/** Whether a provisioned writer's own configuration enables delivery; before provisioning the host configuration decides, as provisioning copies it. */
-async function writerDelivery(ctx: lifecycle.WriterContext, name: string, hostDelivery: boolean): Promise<boolean> {
-  return await readWriterState(ctx.home, name) ? writerEventDeliveryEnabled(writerPaths(ctx.home, name).config) : hostDelivery;
-}
 class DoctorGateError extends Error {
   constructor(readonly findings: readonly SetupFinding[]) { super("doctor_failed"); }
 }
@@ -164,7 +162,7 @@ async function plan(ctx: lifecycle.WriterContext, entry: WorkspaceModeEntry) {
   return { keep, missing, surplus };
 }
 
-type ReconcileRequest = { discard: boolean; baseRef?: string; codex: boolean };
+type ReconcileRequest = { discard: boolean; baseRef?: string };
 async function reconcileUnlocked(configPath: string, alias: string, request: ReconcileRequest, deps: WriterSetupDependencies): Promise<SetupResult> {
   const findings: SetupFinding[] = [];
   const ctx = await context(alias, { ...deps, configPath });
@@ -188,8 +186,42 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
       if (planned.missing.includes(name)) {
         const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
         add(name, outcome); if (outcome.status === "failed") return;
-      } else {
-        // Settings first: a writer that no longer matches its configuration is not accepted or registered again (#134).
+      }
+      let divergent = false;
+      for (const client of ["claude-code", "codex"] as const) {
+        const expected = intent(ctx, name, client);
+        const owned = await ownership.get({ client, scope: client === "codex" ? "user" : "local", alias: expected.name });
+        try {
+          if (owned) await unregisterWriter(ownership, adapter, expected);
+          else if (await adapter.inspect(expected) !== "absent") divergent = true;
+        } catch (error) {
+          if (codeFor(error) !== "ownership_diverged") throw error;
+          divergent = true;
+        }
+      }
+      const hook = await writerHook(ctx, name, deps, "remove", false);
+      if (hook) findings.push({ target: targetFor(alias, name), ...hook });
+      const state = await readWriterState(ctx.home, name);
+      if (!state) throw new Error("writer_state_invalid");
+      if (divergent) {
+        if (state.launch !== "legacy") await writeWriterState(ctx.home, name, { ...state, launch: "legacy" });
+        add(name, { status: "failed", code: "registration_divergent" }); return;
+      }
+      const paths = writerPaths(ctx.home, name), wrapper = renderWrapper(ctx.nodePath, ctx.releaseRoot, name);
+      if (!(await lstat(paths.wrapper)).isFile()) throw new Error("writer_state_invalid");
+      const wrapperChanged = wrapperDigest(await readFile(paths.wrapper, "utf8")) !== wrapperDigest(wrapper);
+      if (wrapperChanged) {
+        const temporary = join(paths.root, `.wrapper-${randomUUID()}.tmp`);
+        try { await writeFile(temporary, wrapper, { flag: "wx", mode: 0o700 }); await rename(temporary, paths.wrapper); }
+        finally { await rm(temporary, { force: true }); }
+      }
+      // A launch change also needs fresh provider-free acceptance, even when wrapper bytes match.
+      const migrated = state.launch !== "relay";
+      if (migrated || wrapperChanged) {
+        const { acceptance: _oldAcceptance, ...unaccepted } = state;
+        await writeWriterState(ctx.home, name, { ...unaccepted, launch: "relay", phase: "not_ready" });
+      }
+      if (!planned.missing.includes(name)) {
         const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
         if (drift) { add(name, drift); return; }
       }
@@ -199,16 +231,6 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         const outcome = await accept.acceptWriter(ctx, name);
         add(name, outcome); if (outcome.status === "failed") return;
       } else if (current === "unknown") { add(name, { status: "failed", code: "podman_unavailable" }); return; }
-      if ((await readWriterState(ctx.home, name))?.phase !== "ready") return;
-      for (const client of request.codex ? ["claude-code", "codex"] as const : ["claude-code"] as const) {
-        const expected = intent(ctx, name, client), before = await adapter.inspect(expected);
-        try { await registerWriter(ownership, adapter, expected); add(name, { status: before === "equivalent" ? "unchanged" : "ok", code: "writer_registered" }); }
-        catch (error) { add(name, { status: "failed", code: codeFor(error) }); continue; }
-        if (client === "claude-code") {
-          const hook = await writerHook(ctx, name, deps, "apply", await writerEventDeliveryEnabled(writerPaths(ctx.home, name).config));
-          if (hook) findings.push({ target: targetFor(alias, name), ...hook });
-        }
-      }
     }); } catch (error) {
       if (!FENCE_CODES.includes(codeFor(error))) throw error;
       add(name, { status: "failed", code: codeFor(error) });
@@ -256,6 +278,17 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
     if (request.baseRef !== undefined) {
       try { recorded = { ...request, baseRef: await services(deps).life.baseBranchName(await context(request.alias, deps), request.baseRef) }; }
       catch (error) { return failed(codeFor(error)); }
+    } else if (request.mode === "container" || request.mode === undefined && await containerRuntime()) {
+      const config = await loadConfig(configPath);
+      if (!config.workspaceModes.get(request.alias)?.container?.base) {
+        const bases = new Set<string>();
+        for (let index = 1; index <= 16; index++) {
+          const state = await readWriterState(deps.home ?? homedir(), writerName(request.alias, index));
+          if (state) bases.add(state.base.ref);
+        }
+        if (bases.size > 1) return result(operation, [{ target: modesTarget(request.alias), status: "failed", code: "workspace_base_ambiguous" }]);
+        if (bases.size === 1) recorded = { ...request, baseRef: [...bases][0]!.replace(/^refs\/heads\//, "") };
+      }
     }
     return changeExecutionMode(configPath, recorded, {
       ...modeDependencies,
@@ -281,20 +314,18 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
       afterChange: async (modes) => {
         let writers: SetupResult;
         try {
-          if (request.apply) writers = await reconcileUnlocked(configPath, request.alias, { discard: request.discard ?? false, codex: request.codex ?? false, ...(request.baseRef ? { baseRef: request.baseRef } : {}) }, deps);
+          if (request.apply) writers = await reconcileUnlocked(configPath, request.alias, { discard: request.discard ?? false, ...(request.baseRef ? { baseRef: request.baseRef } : {}) }, deps);
           else {
             const ctx = await context(request.alias, deps), planned = await plan(ctx, proposed), { life } = services(deps);
-            const hostDelivery = (await loadConfig(configPath)).eventDelivery === "spool", hooks: SetupFinding[] = [], kept: SetupFinding[] = [];
+            const kept: SetupFinding[] = [];
             const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
             for (const name of planned.keep) {
               // The same settings check as apply, so a drifted writer shows before anything is applied (#134).
               const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: proposed.container!, rawConfig, overrideDirectory });
               kept.push({ target: targetFor(request.alias, name), ...(drift ?? { status: "planned" as const, code: "writer_planned" }) });
             }
-            for (const name of planned.keep) { const hook = await writerHook(ctx, name, deps, "dry-run", await writerDelivery(ctx, name, hostDelivery)); if (hook) hooks.push({ target: targetFor(request.alias, name), ...hook }); }
-            for (const name of planned.surplus) { const hook = await writerHook(ctx, name, deps, "dry-run", false); if (hook) hooks.push({ target: targetFor(request.alias, name), ...hook }); }
-            const refused = [...kept, ...hooks].some((finding) => finding.status === "failed" || finding.status === "divergent");
-            writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], refused ? "failed" : "planned");
+            const refused = kept.some((finding) => finding.status === "failed" || finding.status === "divergent");
+            writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" }))], refused ? "failed" : "planned");
           }
         } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(FENCE_CODES.includes(codeFor(error)) ? codeFor(error) : "writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
@@ -320,22 +351,13 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
   try {
     if (!opts.apply && operation !== "verify") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }
     return await locked(deps, async () => fenced(await context(alias, deps), name, deps, async (ctx) => {
-      const { life, ownership, adapter } = services(deps);
+      const { life } = services(deps);
       if (operation === "verify") {
         const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
         if (doctor.checks.some((check) => check.severity === "error" && (check.subject === name || GLOBAL_ERRORS.has(check.id)))) return done({ status: "failed", code: "doctor_failed" });
-        for (const client of ["claude-code", "codex"] as const) {
-          const expected = intent(ctx, name, client);
-          const owned = await ownership.get({ client, scope: client === "codex" ? "user" : "local", alias: expected.name });
-          const current = await adapter.inspect(expected);
-          if ((client === "claude-code" || owned || current !== "absent") && current !== "equivalent") return done({ status: "failed", code: "registration_not_equivalent" });
-        }
         const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }, { inheritFds: [ctx.leaseFd!] }) });
         if (checked.status !== "verified") return done({ status: "failed", code: `mcp_${checked.status}` });
-        // The hook is part of the Claude Code registration: verified after it, from the writer's own configuration.
-        const hook = await writerHook(ctx, name, deps, "verify", await writerEventDeliveryEnabled(writerPaths(ctx.home, name).config));
-        if (hook?.status === "failed" || hook?.status === "divergent") return done({ status: "failed", code: hook.code });
-        return done({ status: "ok", code: "mcp_verified" }, hook ? [hook] : []);
+        return done({ status: "ok", code: "mcp_verified" });
       }
       try { await doctorGate(ctx, deps); }
       catch (error) {
