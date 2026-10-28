@@ -21,7 +21,7 @@ const paths = writerPaths("/home/example", "repo-w1");
 const imageId = "a".repeat(64);
 const state: WriterState = {
   schemaVersion: 1, alias: "repo", index: 1, phase: "ready", lifecycle: "persistent",
-  profiles: ["code"], providers: [], network: "pasta", cache: "none", tags: "none", imageId,
+  profiles: ["code"], providers: [], network: "pasta", cache: "none", tags: "none", clean: "untracked", imageId,
   base: { ref: "refs/heads/main", commit: "b".repeat(40) },
 };
 const ok = (stdout: string): CommandResult => ({ exitCode: 0, stdout, stderr: "" });

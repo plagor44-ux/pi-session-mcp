@@ -8,7 +8,7 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
 const commit = "b".repeat(40), tree = "c".repeat(40), imageId = "a".repeat(64);
-const settings = { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none" } as const;
+const settings = { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" } as const;
 const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
 async function fixture() {
   const home = await temporaryRoot("pi-writer-collect-");
@@ -159,6 +159,14 @@ it("refuses uncollected work, allows discard, preserves acceptance and clears co
   expect(reset.args).toContain(`${f.paths.clone}:${f.paths.clone}:rw`);
   expect(reset.args.slice(-5)).toEqual(["refs/remotes/origin/main", "main", commit, "", ""]);
   expect(reset.args.some((a) => a.includes("clean -fd") && !a.includes("clean -fdx"))).toBe(true);
+});
+it("removes ignored files on reset only when clean is all", async () => {
+  const f = await fixture(); await provision(f);
+  const state = (await readWriterState(f.ctx.home, "repo-w1"))!;
+  await writeWriterState(f.ctx.home, "repo-w1", { ...state, clean: "all" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_reset", status: "ok" });
+  const reset = f.calls.find((c) => c.args.some((a) => a.includes("stash clear")))!;
+  expect(reset.args.some((a) => a.includes("clean -ffdx"))).toBe(true);
 });
 it.each([false, true])("reset checks collected digest (changed=%s)", async (changed) => {
   const f = await fixture(); await provision(f); await collectWriter(f.ctx, "repo-w1");

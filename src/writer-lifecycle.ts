@@ -207,7 +207,7 @@ async function sameSettings(paths: ReturnType<typeof writerPaths>, existing: Wri
   now: { config: unknown; providers: WriterState["providers"]; imageId: string }): Promise<boolean> {
   const stored = await storedConfig(paths);
   return stored !== undefined && existing.imageId === now.imageId && existing.lifecycle === settings.lifecycle
-    && existing.network === settings.network && existing.cache === settings.cache && existing.tags === settings.tags
+    && existing.network === settings.network && existing.cache === settings.cache && existing.tags === settings.tags && existing.clean === settings.clean
     && JSON.stringify(existing.profiles) === JSON.stringify(settings.profiles)
     && JSON.stringify(existing.providers) === JSON.stringify(now.providers) && canonical(withoutDeliveryOff(stored)) === canonical(withoutDeliveryOff(now.config));
 }
@@ -273,7 +273,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     for (const path of [paths.root, paths.clone, paths.config, paths.agent, paths.bundles, ...spool, ...cache]) await privateDirectory(path);
     const state: WriterState = {
       schemaVersion: 1, alias: ctx.alias, index, phase: "provisioning", lifecycle: settings.lifecycle,
-      profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, tags: settings.tags, imageId,
+      profiles: [...settings.profiles], providers, network: settings.network, cache: settings.cache, tags: settings.tags, clean: settings.clean, imageId,
       base: { ref: `refs/heads/${short}`, commit },
     };
     await writeWriterState(ctx.home, name, state);
@@ -467,7 +467,7 @@ ${BOUNDARY_GIT} for-each-ref --format='%(refname)' refs/heads | while read -r re
   if [ "$ref" != "refs/heads/$2" ]; then ${BOUNDARY_GIT} update-ref -d "$ref"; fi
 done
 ${BOUNDARY_GIT} stash clear
-${BOUNDARY_GIT} clean -fd
+${BOUNDARY_GIT} clean ${state.clean === "all" ? "-ffdx" : "-fd"}
 ${identityScript(4, 5)}`;
     const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "rw", bundles: true }, script, [base.ref, base.short, base.commit, ...await operatorIdentity(ctx)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
     if (result.exitCode !== 0) throw new LifecycleError("writer_reset_failed");

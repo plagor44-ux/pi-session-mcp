@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added: opt-in container setting `--clean all` removes ignored files from writer
+  clones on reset and finish while preserving the default dependency-cache
+  behavior and per-writer caches outside the clone
+  ([#162](https://github.com/plagor44-ux/pi-session-mcp/issues/162)).
+
 ## 0.12.1 — 2026-10-28
 
 Patch release for

@@ -25,7 +25,7 @@ it("documents literal writer findings and Doctor writer ids", () => {
   for (const removed of ["writer_registered", "registration_not_equivalent", "writer_reconnect_required"]) {
     expect(docs.split("\n").some((line) => line.startsWith(`| \`${removed}\` |`)), removed).toBe(false);
   }
-  for (const term of ["defaultBase", "writer_unavailable", "base_not_applicable", "--reset --base <branch> --apply"]) {
+  for (const term of ["defaultBase", "writer_unavailable", "base_not_applicable", "--reset --base <branch> --apply", "--clean", "Ignored files (opt-in)", "git clean -ffdx", "/pi/go", "/pi/uv"]) {
     expect(docs).toContain(term);
   }
   for (const path of ["docs/tool-contracts.md", "skills/pi-session-orchestration/references/start-errors.md"]) {

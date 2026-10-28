@@ -14,7 +14,7 @@ afterAll(removeTemporaryRoots);
 const commit = "b".repeat(40), tree = "c".repeat(40), imageId = "a".repeat(64);
 const profile = { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "high" };
 const rawConfig = { workspaces: { repo: "/host" }, executionProfiles: { code: profile, other: { ...profile, model: "second" } } };
-const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none", tags: "none" } as const;
+const settings = { writers: 1, lifecycle: "persistent", profiles: ["code", "other"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" } as const;
 async function fixture(remote = "git@github.com:o/r.git", identity: readonly string[] = []) {
   const home = await temporaryRoot("pi-writer-provision-");
   const paths = writerPaths(home, "repo-w1");
@@ -113,6 +113,14 @@ it.each(["none", "reachable"] as const)("bundles and explicitly fetches tags onl
   expect(reset.args.join("\n")).toContain("refs/tags | while read -r ref; do");
   expect(reset.args.join("\n").includes("+refs/tags/*:refs/tags/*")).toBe(tags === "reachable");
   expect(await writerSettingsDrift(f.ctx, { index: 1, settings: { ...settings, tags: tags === "none" ? "reachable" : "none" }, rawConfig })).toMatchObject({ code: "writer_settings_changed" });
+});
+it.each(["untracked", "all"] as const)("stores clean %s and detects settings drift", async (clean) => {
+  const f = await fixture();
+  expect(await provisionWriter(f.ctx, { index: 1, settings: { ...settings, clean }, rawConfig })).toMatchObject({ status: "ok" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.clean).toBe(clean);
+  const changed = { ...settings, clean: clean === "untracked" ? "all" as const : "untracked" as const };
+  expect(await writerSettingsDrift(f.ctx, { index: 1, settings: changed, rawConfig })).toMatchObject({ code: "writer_settings_changed" });
+  expect(await provisionWriter(f.ctx, { index: 1, settings: changed, rawConfig })).toMatchObject({ code: "writer_settings_changed" });
 });
 it("refuses URL userinfo before writing, but allows scp syntax", async () => {
   const f = await fixture("https://user:tok@host/x.git");

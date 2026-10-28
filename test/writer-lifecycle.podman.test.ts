@@ -44,7 +44,7 @@ it.skipIf(skipReason !== undefined)("provisions, collects branch and WIP refs, a
   await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
   const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
-  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none" }, rawConfig })).toMatchObject({ status: "ok" });
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
@@ -133,7 +133,7 @@ async function relayWriter() {
   await writeFile(join(paths.clone, ".git", "config"), "");
   await writeWriterState(home, name, {
     schemaVersion: 1, alias: "relay", index: 1, phase: "not_ready", launch: "relay", lifecycle: "persistent",
-    profiles: ["code"], providers: [], network: "none", cache: "none", tags: "none",
+    profiles: ["code"], providers: [], network: "none", cache: "none", tags: "none", clean: "untracked",
     imageId: await resolveImage(runner, "node", false), base: { ref: "refs/heads/main", commit: "a".repeat(40) },
   });
   return { home, name, paths, container, release };

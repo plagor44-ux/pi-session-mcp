@@ -35,6 +35,7 @@ export const writerStateSchema = z.object({
   network: z.enum(["pasta", "none"]),
   cache: z.enum(["none", "go", "uv"]),
   tags: z.enum(["none", "reachable"]).default("none"),
+  clean: z.enum(["untracked", "all"]).default("untracked"),
   imageId: hex64,
   base: z.object({ ref: z.string(), commit: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict(),
   acceptance: z.object({

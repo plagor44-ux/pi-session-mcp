@@ -17,7 +17,7 @@ afterAll(removeTemporaryRoots);
 
 const state: WriterState = {
   schemaVersion: 1, alias: "pi-session-mcp", index: 2, phase: "ready", launch: "legacy",
-  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none", tags: "none",
+  lifecycle: "persistent", profiles: ["code"], network: "pasta", cache: "none", tags: "none", clean: "untracked",
   providers: [{ provider: "example-provider", model: "example-model" }],
   imageId: "a".repeat(64), base: { ref: "refs/heads/main", commit: "b".repeat(40) },
   acceptance: { fingerprint: `sha256:${"c".repeat(64)}`, verdict: "pass", network: "limited", at: "2026-01-01T00:00:00Z" },
@@ -49,6 +49,19 @@ it("defaults legacy state tags without changing acceptance", async () => {
   await writeFile(wrapper, "wrapper");
   expect(await currentAcceptanceFingerprint(wrapper, state, "5.4.0"))
     .toBe(await currentAcceptanceFingerprint(wrapper, { ...state, tags: "reachable" }, "5.4.0"));
+});
+it("defaults legacy clean, round-trips all, and does not change acceptance", async () => {
+  const home = await temporaryRoot("writer-clean-");
+  await writeWriterState(home, name, state);
+  const { clean: _clean, ...legacy } = state;
+  await writeFile(writerPaths(home, name).state, JSON.stringify(legacy));
+  expect((await readWriterState(home, name))!.clean).toBe("untracked");
+  const wrapper = writerPaths(home, name).wrapper;
+  await writeFile(wrapper, "wrapper");
+  expect(await currentAcceptanceFingerprint(wrapper, state, "5.4.0"))
+    .toBe(await currentAcceptanceFingerprint(wrapper, { ...state, clean: "all" }, "5.4.0"));
+  await writeWriterState(home, name, { ...state, clean: "all" });
+  expect((await readWriterState(home, name))!.clean).toBe("all");
 });
 it("derives validated writer names and registrations", () => {
   expect(writerName("pi-session-mcp", 2)).toBe(name);
@@ -126,6 +139,7 @@ describe("state validation", () => {
     ["wrong identity", { ...state, index: 1 }],
     ["schema version", { ...state, schemaVersion: 2 }],
     ["image", { ...state, imageId: "node" }],
+    ["invalid clean", { ...state, clean: "bogus" }],
     ["commit", { ...state, base: { ...state.base, commit: "bad" } }],
     ["nested unknown key", { ...state, base: { ...state.base, SECRET_SENTINEL: true } }],
     ["path profile", { ...state, profiles: ["../SECRET_SENTINEL"] }],
