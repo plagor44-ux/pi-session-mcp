@@ -527,6 +527,19 @@ describe("writer setup reconciliation", () => {
     expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
+  it("names the surplus writer whose lease is busy and leaves the modes file unchanged", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const before = await readFile(executionModesPath(f.configPath), "utf8");
+    const lease = vi.fn(async (_home: string, name: string) => {
+      if (name === "x-w2") throw new WriterLeaseError("writer_busy");
+      return { fd: 42, release: async () => {} };
+    });
+    const output = await changeWriterMode(f.configPath, { ...mode, container: { ...mode.container, writers: 1 } }, { ...f.deps, lease, ensureAbsent: async () => {} });
+    expect(output.findings).toEqual([{ target: { client: "writer", scope: "x", alias: "x-w2" }, status: "failed", code: "writer_busy" }]);
+    expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
+    expect(f.life.removeWriter).not.toHaveBeenCalled();
+  });
   it("removes clean writers and owned registrations when leaving container mode", async () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps); f.calls.length = 0;

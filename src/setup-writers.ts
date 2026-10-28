@@ -24,6 +24,7 @@ import { skillOverrideDirectory } from "./skill-library.js";
 import { readWriterState, writerEventDeliveryEnabled, writerName, writerPaths, writerRegistrationName, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 
 export const SETUP_LEASE_WAIT_MS = 10_000;
+const FENCE_CODES: readonly string[] = ["writer_busy", "writer_fenced", "writer_lease_unavailable"];
 
 export type WriterOperation = "collect" | "reset" | "recreate" | "finish" | "remove" | "verify";
 export interface WriterOptions { apply: boolean; discard: boolean; baseRef?: string; }
@@ -171,7 +172,15 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   const planned = await plan(ctx, entry), { life, accept, ownership, adapter } = services(deps);
   const add = (name: string, outcome: lifecycle.WriterOutcome): void => { findings.push({ target: targetFor(alias, name), ...outcome }); };
   await doctorGate(ctx, deps);
-  for (const name of planned.surplus) await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard, deps));
+  // A surplus writer that cannot be fenced is reported on its own target and left in place; the others proceed.
+  const unfenced = new Set<string>();
+  for (const name of planned.surplus) {
+    try { await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard, deps)); }
+    catch (error) {
+      if (!FENCE_CODES.includes(codeFor(error))) throw error;
+      unfenced.add(name); add(name, { status: "failed", code: codeFor(error) });
+    }
+  }
   const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
   // Each writer's reconciliation, including first provisioning and acceptance, owns one fence.
   for (const name of planned.keep) {
@@ -201,11 +210,12 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         }
       }
     }); } catch (error) {
-      if (!["writer_busy", "writer_fenced", "writer_lease_unavailable"].includes(codeFor(error))) throw error;
+      if (!FENCE_CODES.includes(codeFor(error))) throw error;
       add(name, { status: "failed", code: codeFor(error) });
     }
   }
   for (const name of planned.surplus) {
+    if (unfenced.has(name)) continue;
     const extras: WakeHookOutcome[] = [];
     try { add(name, await fenced(ctx, name, deps, (leased) => remove(leased, name, request.discard, deps, extras))); }
     catch (error) { add(name, { status: "failed", code: codeFor(error) }); }
@@ -255,7 +265,14 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
         try {
           if (request.apply) {
             await doctorGate(ctx, deps);
-            for (const name of planned.surplus) await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard ?? false, deps));
+            for (const name of planned.surplus) {
+              try { await fenced(ctx, name, deps, (leased) => preflight(leased, [name], request.discard ?? false, deps)); }
+              catch (error) {
+                // Refuse the mode change, but name the writer that could not be fenced.
+                if (FENCE_CODES.includes(codeFor(error))) return result(operation, [{ target: targetFor(request.alias, name), status: "failed", code: codeFor(error) }]);
+                throw error;
+              }
+            }
           } else await preflight(ctx, planned.surplus, request.discard ?? false, deps);
         }
         catch (error) { return error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(codeFor(error)); }
@@ -279,7 +296,7 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
             const refused = [...kept, ...hooks].some((finding) => finding.status === "failed" || finding.status === "divergent");
             writers = result("dry-run", [...kept, ...planned.surplus.map((name) => ({ target: targetFor(request.alias, name), status: "planned" as const, code: "writer_remove_planned" })), ...hooks], refused ? "failed" : "planned");
           }
-        } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(["writer_busy", "writer_fenced", "writer_lease_unavailable"].includes(codeFor(error)) ? codeFor(error) : "writer_reconcile_failed"); }
+        } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(FENCE_CODES.includes(codeFor(error)) ? codeFor(error) : "writer_reconcile_failed"); }
         const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
         if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
         return result(operation, findings, writers.exitCode ? "failed" : request.apply ? undefined : "planned");
