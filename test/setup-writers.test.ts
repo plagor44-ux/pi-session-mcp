@@ -383,6 +383,16 @@ describe("writer setup reconciliation", () => {
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.base).toBe("dev");
     expect(f.life.provisionWriter.mock.calls[0]?.[1]).toMatchObject({ baseRef: "refs/remotes/origin/dev" });
   });
+  it("provisions a writer added without --base on the recorded workspace base", async () => {
+    const f = await fixture();
+    const life = { ...f.life, baseBranchName: vi.fn(async () => "dev") };
+    expect((await changeWriterMode(f.configPath, { ...mode, container: { profiles: ["code"], writers: 1 }, baseRef: "dev" }, { ...f.deps, lifecycle: life })).exitCode).toBe(0);
+    f.life.provisionWriter.mockClear();
+    // The repeated mode without --base, as an operator adds a writer.
+    expect((await changeWriterMode(f.configPath, mode, { ...f.deps, lifecycle: life })).exitCode).toBe(0);
+    expect(f.life.provisionWriter).toHaveBeenCalledTimes(1);
+    expect(f.life.provisionWriter.mock.calls[0]?.[1]).toMatchObject({ index: 2, baseRef: "dev" });
+  });
   it("refuses an unresolvable --base before the modes file changes", async () => {
     const f = await fixture();
     const life = { ...f.life, baseBranchName: vi.fn(async () => { throw new Error("base_ref_invalid"); }) };
