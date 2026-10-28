@@ -3,11 +3,12 @@
  * Opt-in by capability: every test is skipped unless `/usr/bin/bwrap` is a trusted system binary and a probe run
  * through the sandbox succeeds (unprivileged user namespaces, overlay support), and the Git tests also need `git`.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { afterAll, describe, expect, it } from "vitest";
 import { createSandboxedBashOperations, probeSandbox, sandboxBinaryTrusted } from "../src/sandbox-shell.js";
@@ -79,6 +80,45 @@ describe.skipIf(!available)("real bubblewrap sandbox", () => {
     } finally {
       delete process.env.SANDBOX_LEAK_PROBE;
     }
+  });
+
+  describe("cleanup on timeout and abort", () => {
+    const alive = (token: string): boolean => spawnSync("pgrep", ["-f", token]).status === 0;
+    const settled = async (token: string): Promise<boolean> => {
+      for (let attempt = 0; attempt < 40; attempt++) { if (!alive(token)) return true; await sleep(50); }
+      return false;
+    };
+    /** Runs a script that starts a foreground, a backgrounded and a setsid sleeper, all marked by `token`. */
+    const script = (token: string): string =>
+      `sleep ${token}.1 & (setsid sleep ${token}.2 &) ; nohup sleep ${token}.3 >/dev/null 2>&1 & sleep ${token}.4`;
+    const token = (): string => String(900_000 + Math.floor(Math.random() * 90_000));
+
+    it.skipIf(spawnSync("pgrep", ["-V"]).error !== undefined)("returns promptly on timeout and leaves no sandbox process", async () => {
+      const workspace = await temporaryRoot("sandbox-real-timeout-");
+      const marker = token();
+      const started = Date.now();
+      await expect(createSandboxedBashOperations(workspace).exec(script(marker), workspace, { onData: () => undefined, timeout: 1 })).rejects.toThrow("timeout:1");
+      expect(Date.now() - started).toBeLessThan(5_000);
+      expect(await settled(marker)).toBe(true);
+    });
+
+    it.skipIf(spawnSync("pgrep", ["-V"]).error !== undefined)("returns promptly on abort and leaves no sandbox process", async () => {
+      const workspace = await temporaryRoot("sandbox-real-abort-");
+      const marker = token();
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 700);
+      const started = Date.now();
+      await expect(createSandboxedBashOperations(workspace).exec(script(marker), workspace, { onData: () => undefined, signal: controller.signal })).rejects.toThrow("aborted");
+      expect(Date.now() - started).toBeLessThan(5_000);
+      expect(await settled(marker)).toBe(true);
+    });
+
+    it("limits /tmp to 512 MiB", async () => {
+      const workspace = await temporaryRoot("sandbox-real-tmp-");
+      const result = await sh(workspace, "df -B1 --output=size /tmp | tail -n 1");
+      expect(Number(result.output.trim())).toBe(536_870_912);
+      expect((await sh(workspace, "head -c 600000000 /dev/zero > /tmp/big; echo $?")).output.trim()).not.toBe("0");
+    });
   });
 
   it("maps a failing command to its exit code", async () => {

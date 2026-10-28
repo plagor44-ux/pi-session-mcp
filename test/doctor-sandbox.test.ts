@@ -43,7 +43,7 @@ async function workspace(gitfile?: string): Promise<string> {
   return dir;
 }
 
-async function run(profiles: ConfiguredExecutionProfile[], workspaces: Record<string, string>, dependencies: { sandboxProbe?: () => Promise<boolean>; worktreeGitDir?: (workspace: string) => Promise<string | undefined> } = {}) {
+async function run(profiles: ConfiguredExecutionProfile[], workspaces: Record<string, string>, dependencies: { sandboxProbe?: (workspace: string) => Promise<boolean>; worktreeGitDir?: (workspace: string) => Promise<string | undefined> } = {}) {
   const result = await runDoctor({ packageRoot: await packageRoot(), loadConfig: configFor(workspaces, profiles), ...dependencies });
   return { result, sandbox: result.checks.filter((check) => check.id === "sandbox_unavailable"), git: result.checks.filter((check) => check.id === "workspace_git_unavailable") };
 }
@@ -59,20 +59,34 @@ describe("doctor sandbox checks", () => {
     expect(resolver).not.toHaveBeenCalled();
   });
 
-  it("reports ok per sandboxed profile when the probe succeeds, probing once", async () => {
-    const probe = vi.fn(async () => true);
-    const { result, sandbox } = await run([profile("p0", { shell: "sandboxed" }), profile("p1", { shell: "sandboxed" }), profile("p2")], { repo: await workspace() }, { sandboxProbe: probe });
-    expect(sandbox).toEqual([{ id: "sandbox_unavailable", severity: "ok", subject: "p0" }, { id: "sandbox_unavailable", severity: "ok", subject: "p1" }]);
-    expect(probe).toHaveBeenCalledTimes(1);
+  it("probes each existing workspace directory, reporting per workspace alias", async () => {
+    const a = await workspace();
+    const b = await workspace();
+    const probe = vi.fn(async (path: string) => path === a);
+    const { result, sandbox } = await run([profile("p0", { shell: "sandboxed" }), profile("p1", { shell: "sandboxed" }), profile("p2")], { alpha: a, beta: b }, { sandboxProbe: probe });
+    expect(probe.mock.calls.map(([path]) => path)).toEqual([a, b]);
+    expect(sandbox).toEqual([
+      { id: "sandbox_unavailable", severity: "ok", subject: "alpha" },
+      { id: "sandbox_unavailable", severity: "error", subject: "beta", remediation: expect.stringContaining("overlay lower layer") },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.exitCode).toBe(2);
+    expect(renderDoctorHuman(result)).toContain("ERROR sandbox_unavailable [beta]");
+  });
+
+  it("reports ok for every workspace when all probes succeed", async () => {
+    const { result, sandbox } = await run([profile("p0", { shell: "sandboxed" })], { alpha: await workspace(), beta: await workspace() }, { sandboxProbe: async () => true });
+    expect(sandbox.map((check) => [check.severity, check.subject])).toEqual([["ok", "alpha"], ["ok", "beta"]]);
     expect(result.exitCode).toBe(0);
   });
 
-  it("reports an error per sandboxed profile when the probe fails", async () => {
-    const { result, sandbox } = await run([profile("p0", { shell: "sandboxed" }), profile("p1")], { repo: await workspace() }, { sandboxProbe: async () => false });
-    expect(sandbox).toEqual([{ id: "sandbox_unavailable", severity: "error", subject: "p0", remediation: expect.stringContaining("bubblewrap") }]);
-    expect(result.ok).toBe(false);
-    expect(result.exitCode).toBe(2);
-    expect(renderDoctorHuman(result)).toContain("ERROR sandbox_unavailable [p0]");
+  it("skips a workspace that is missing or not a directory", async () => {
+    const file = join(await temporaryRoot("pi-session-mcp-doctor-sandbox-file-"), "f");
+    await writeFile(file, "x");
+    const probe = vi.fn(async () => true);
+    const { sandbox } = await run([profile("p0", { shell: "sandboxed" })], { gone: join(file, "..", "missing"), file, good: await workspace() }, { sandboxProbe: probe });
+    expect(sandbox.map((check) => check.subject)).toEqual(["good"]);
+    expect(probe).toHaveBeenCalledTimes(1);
   });
 
   it("treats a probe that throws as a failed probe", async () => {

@@ -21,7 +21,7 @@ export const OUTSIDE_ROOTS_MESSAGE = "Path is outside the allowed read roots";
 export const CONFINED_TOOL_NAMES: readonly string[] = ["read", "grep", "find", "ls"];
 
 /** What the SDK's `normalizePath` would rewrite before resolving (core/tools/path-utils.js, utils/paths.js). */
-const UNICODE_SPACES = /[  -   　]/;
+const UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/;
 
 /** Real path of an existing path, or the nearest existing ancestor's real path plus the missing rest. */
 async function canonical(path: string): Promise<string> {
@@ -41,10 +41,18 @@ function isWithin(path: string, root: string): boolean {
   return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
 }
 
-/** The allowed read roots: the workspace and the directory of each selected skill file, as real paths. */
-export async function allowedReadRoots(workspace: string, skills: readonly Skill[]): Promise<string[]> {
+/**
+ * The allowed read roots: the workspace and the directory of each selected skill file, as real paths.
+ * A skill directory that equals or contains a protected path (the operator's home, the configuration
+ * directory, the Pi agent directory) would expose it, so only the skill file itself is a root then.
+ */
+export async function allowedReadRoots(workspace: string, skills: readonly Skill[], protectedPaths: readonly string[] = []): Promise<string[]> {
   const roots = new Set<string>([await realpath(workspace)]);
-  for (const skill of skills) roots.add(await realpath(dirname(skill.filePath)));
+  const protectedReal = await Promise.all(protectedPaths.map((path) => canonical(path)));
+  for (const skill of skills) {
+    const directory = await realpath(dirname(skill.filePath));
+    roots.add(protectedReal.some((path) => isWithin(path, directory)) ? await realpath(skill.filePath) : directory);
+  }
   return [...roots];
 }
 

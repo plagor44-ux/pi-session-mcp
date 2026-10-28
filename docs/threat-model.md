@@ -38,7 +38,20 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     overlay of the workspace and, for worktrees, of the repository's Git
     directory, including their configuration. Lock-dependent tests that need a
     supported local filesystem can fail on the overlay. macOS, a VM backend and
-    network allowlists inside the sandbox are out of scope. A granted research
+    network allowlists inside the sandbox are out of scope. The sandbox has no
+    memory, process-count or overlay upper-layer limits (only `/tmp` is limited to
+    512 MiB and a command defaults to a 600 second timeout), so a prompt-injected
+    worker can exhaust memory or processes of the operator's user until the
+    command ends, as a host-mode coding session already can. When `bash`
+    truncates long output the SDK names a full-output file in the host's
+    temporary directory; confined `read` refuses it and the sandbox's `/tmp` is a
+    fresh tmpfs, so only the truncated output is available. `ls` omits entries
+    that are symlinks pointing outside the read roots, without a notice. A skill
+    directory that equals or contains the operator's home, the configuration
+    directory or `~/.pi` contributes only the skill file as a read root. On
+    timeout or abort the server kills bubblewrap and the PID namespace takes every
+    process of the sandbox with it. The start probe is cancelled with the start
+    request. A granted research
     tool with free-form input (search, documentation lookup) is a possible
     outbound channel for workspace content; prefer query-style tools.
 - **Unsafe diagnostics:** Doctor is a separate offline CLI with no MCP, Pi,

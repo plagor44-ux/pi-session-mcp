@@ -1,7 +1,7 @@
-import { access, lstat, mkdtemp, open, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
+import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { probeSandbox, resolveWorktreeGitDir } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
@@ -87,8 +87,8 @@ export interface DoctorDependencies {
   readonly writerLeaseRoot?: (path: string) => Promise<EventSpoolRootInfo | undefined>;
   /** Effective user id of the current process; defaults to the real one. */
   readonly uid?: number;
-  /** Probes the read-only shell sandbox with the session's fixed arguments; called only when a profile selects it. */
-  readonly sandboxProbe?: () => Promise<boolean>;
+  /** Probes the read-only shell sandbox with the session's fixed arguments for one workspace; called only when a profile selects it. */
+  readonly sandboxProbe?: (workspace: string) => Promise<boolean>;
   /** The main Git directory of a linked worktree workspace, or `undefined` when the pointer is unusable. */
   readonly worktreeGitDir?: (workspace: string) => Promise<string | undefined>;
 }
@@ -197,15 +197,8 @@ async function hasGitfilePointer(fs: DoctorFileSystem, workspace: string): Promi
   } catch { return false; }
 }
 
-/** The trusted bubblewrap binary plus a probe run in a temporary empty directory. */
-async function defaultSandboxProbe(): Promise<boolean> {
-  let directory: string | undefined;
-  try {
-    directory = await mkdtemp(join(tmpdir(), "pi-session-mcp-doctor-sandbox-"));
-    return await probeSandbox(directory);
-  } catch { return false; }
-  finally { if (directory !== undefined) await rm(directory, { recursive: true, force: true }).catch(() => undefined); }
-}
+/** The trusted bubblewrap binary plus a probe run through the session's fixed arguments for the workspace, its worktree Git directory included. */
+const defaultSandboxProbe = (workspace: string): Promise<boolean> => probeSandbox(workspace);
 
 async function defaultRootInfo(path: string): Promise<EventSpoolRootInfo | undefined> {
   try {
@@ -549,13 +542,14 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   if (config) {
     const sandboxed = [...config.executionProfiles].filter(([, profile]) => profile.shell === "sandboxed").map(([alias]) => alias).sort((a, b) => a.localeCompare(b));
     if (sandboxed.length > 0) {
-      // One probe serves every profile: the arguments do not depend on the profile.
-      let usable = false;
-      try { usable = await (dependencies.sandboxProbe ?? defaultSandboxProbe)(); } catch { usable = false; }
-      for (const alias of sandboxed) {
+      // The overlay depends on the workspace's filesystem, so each existing workspace directory is probed.
+      for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {
+        try { if (!(await fs.stat(path)).isDirectory()) continue; } catch { continue; }
+        let usable = false;
+        try { usable = await (dependencies.sandboxProbe ?? defaultSandboxProbe)(path); } catch { usable = false; }
         checks.push(usable
           ? ok("sandbox_unavailable", alias)
-          : failure("sandbox_unavailable", alias, "install a bubblewrap with --overlay-src, --tmp-overlay and --disable-userns support at /usr/bin/bwrap (root-owned, not group- or world-writable) and allow unprivileged user namespaces; see docs/installation.md"));
+          : failure("sandbox_unavailable", alias, "install a bubblewrap with --overlay-src, --tmp-overlay and --disable-userns support at /usr/bin/bwrap (root-owned, not group- or world-writable) and allow unprivileged user namespaces, and keep the workspace on a filesystem that can be an overlay lower layer; see docs/installation.md"));
       }
       // Without a usable worktree pointer Git commands fail inside the sandbox; the read tools are unaffected.
       for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {

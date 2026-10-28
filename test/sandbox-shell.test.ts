@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  BWRAP_PATH, createSandboxedBashOperations, PROBE_TIMEOUT_MS, probeSandbox, resolveWorktreeGitDir, sandboxArgs,
+  BWRAP_PATH, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS, probeSandbox, resolveWorktreeGitDir, sandboxArgs,
   type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -22,7 +22,7 @@ const FIXED_HEAD = [
   "--unshare-all", "--unshare-user", "--disable-userns", "--die-with-parent", "--new-session", "--clearenv",
   "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "HOME", "/tmp/home", "--ro-bind", "/usr", "/usr",
 ];
-const FIXED_MIDDLE = ["--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--dir", "/tmp/home"];
+const FIXED_MIDDLE = ["--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--size", "536870912", "--tmpfs", "/tmp", "--dir", "/tmp/home"];
 
 describe("sandboxArgs", () => {
   it("produces the fixed argument list for a merged-/usr host", () => {
@@ -285,6 +285,28 @@ describe("createSandboxedBashOperations", () => {
     await settled;
   });
 
+  it("applies the default timeout when the call names none", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const h = harness();
+      const running = exec(createSandboxedBashOperations(workspace, h.dependencies), "sleep 1000", workspace);
+      const settled = expect(running).rejects.toThrow(`timeout:${DEFAULT_COMMAND_TIMEOUT_SECONDS}`);
+      // `vi.waitFor` would advance the fake clock; poll with the real setImmediate instead.
+      while (h.calls.length === 0) await new Promise((resolvePromise) => setImmediate(resolvePromise));
+      await vi.advanceTimersByTimeAsync(DEFAULT_COMMAND_TIMEOUT_SECONDS * 1000 - 1);
+      expect(h.children[0]!.kill).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.children[0]!.kill).toHaveBeenCalledWith("SIGKILL");
+      h.children[0]!.close(null, "SIGKILL");
+      await vi.advanceTimersByTimeAsync(10);
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("exports a 600 second default", () => { expect(DEFAULT_COMMAND_TIMEOUT_SECONDS).toBe(600); });
+
   it.each([0, -1, Number.NaN])("rejects the invalid timeout %s without spawning", async (timeout) => {
     const h = harness();
     await expect(exec(createSandboxedBashOperations(workspace, h.dependencies), "x", workspace, { timeout })).rejects.toThrow(/Invalid timeout/);
@@ -353,6 +375,22 @@ describe("probeSandbox", () => {
     const untrusted = harness({ trusted: () => false });
     await expect(probeSandbox(workspace, untrusted.dependencies)).resolves.toBe(false);
     expect(untrusted.calls).toHaveLength(0);
+  });
+
+  it("kills the probe and reports failure when the start is aborted", async () => {
+    const h = harness();
+    const controller = new AbortController();
+    const probing = probeSandbox(workspace, h.dependencies, controller.signal);
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+    controller.abort();
+    await expect(probing).resolves.toBe(false);
+    expect(h.children[0]!.kill).toHaveBeenCalledWith("SIGKILL");
+  });
+
+  it("does not spawn when the start is already aborted", async () => {
+    const h = harness();
+    await expect(probeSandbox(workspace, h.dependencies, AbortSignal.abort())).resolves.toBe(false);
+    expect(h.calls).toHaveLength(0);
   });
 
   it("reports failure for a missing workspace", async () => {

@@ -65,8 +65,10 @@ the same arguments.
   `--overlay-src`, `--tmp-overlay` and `--disable-userns`. It runs unprivileged and
   needs unprivileged user namespaces (kernel setting, and on some distributions an
   AppArmor profile that allows the user namespace for `bwrap`; see
-  [ADR 0008](adr/0008-coding-profile-isolation.md)). Doctor reports
-  `sandbox_unavailable` as an error when it does not work. The sandbox shows only
+  [ADR 0008](adr/0008-coding-profile-isolation.md)). Doctor probes every
+  configured workspace and reports `sandbox_unavailable` as an error per
+  workspace when it does not work (the workspace's filesystem must be able to be
+  an overlay lower layer). The sandbox shows only
   `/usr`, `/etc` and the workspace: toolchains installed under the home
   directory or `/opt` (nvm, `~/.local`) are not available, Node.js and Git from
   the distribution are.

@@ -164,3 +164,101 @@ describe("confined tools", () => {
     }
   });
 });
+
+describe("allowedReadRoots protected paths", () => {
+  const skillAt = (directory: string): Skill => ({ name: "s", description: "d", filePath: join(directory, "SKILL.md"), baseDir: directory }) as unknown as Skill;
+  let area: string;
+  let home: string;
+  let config: string;
+
+  beforeAll(async () => {
+    area = await temporaryRoot("confined-protected-");
+    home = join(area, "home");
+    config = join(home, ".config", "pi-session-mcp");
+    await mkdir(join(home, ".pi", "agent"), { recursive: true });
+    await mkdir(join(home, "skills", "review"), { recursive: true });
+    await mkdir(config, { recursive: true });
+    await mkdir(join(area, "elsewhere", "cfg"), { recursive: true });
+    for (const directory of [home, join(home, ".pi"), join(home, ".pi", "agent"), config, join(home, "skills", "review"), join(area, "elsewhere", "cfg")]) {
+      await writeFile(join(directory, "SKILL.md"), "skill");
+    }
+  });
+
+  const protectedPaths = (): string[] => [home, join(home, ".pi"), config];
+
+  it.each([
+    ["the home directory itself", () => home],
+    ["a directory containing the home directory", () => area],
+    ["the configuration directory", () => config],
+    ["a directory containing the configuration directory", () => join(home, ".config")],
+    ["the Pi agent directory's parent ~/.pi", () => join(home, ".pi")],
+  ])("uses only the skill file as a root when the skill directory is %s", async (_name, directory) => {
+    const skillDirectory = directory();
+    await writeFile(join(skillDirectory, "SKILL.md"), "skill");
+    const result = await allowedReadRoots(workspace, [skillAt(skillDirectory)], protectedPaths());
+    expect(result).toEqual([workspace, join(skillDirectory, "SKILL.md")]);
+    await expect(confineToolPath(join(skillDirectory, "SKILL.md"), workspace, result)).resolves.toBe(join(skillDirectory, "SKILL.md"));
+    await expect(confineToolPath(join(skillDirectory, "other.txt"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+  });
+
+  it("keeps a skill directory below a protected path, and an unrelated one, as a root", async () => {
+    for (const directory of [join(home, "skills", "review"), join(home, ".pi", "agent"), join(area, "elsewhere", "cfg")]) {
+      expect(await allowedReadRoots(workspace, [skillAt(directory)], protectedPaths())).toEqual([workspace, directory]);
+    }
+  });
+
+  it("does not expose the configuration file next to a skill named ./SKILL.md", async () => {
+    await writeFile(join(config, "pi-session-mcp.json"), "{}");
+    const result = await allowedReadRoots(workspace, [skillAt(config)], protectedPaths());
+    await expect(confineToolPath(join(config, "pi-session-mcp.json"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+  });
+
+  it("treats a symlinked skill directory by its real path and ignores missing protected paths", async () => {
+    const link = join(area, "home-link");
+    await symlink(home, link);
+    expect(await allowedReadRoots(workspace, [skillAt(link)], [...protectedPaths(), join(area, "does-not-exist")])).toEqual([workspace, join(home, "SKILL.md")]);
+  });
+
+  it("without protected paths every skill directory is a root", async () => {
+    expect(await allowedReadRoots(workspace, [skillAt(home)])).toEqual([workspace, home]);
+  });
+});
+
+describe("tool context and pattern arguments", () => {
+  const withContext = async (name: string, params: Record<string, unknown>, cwd: string): Promise<string> => {
+    const result = await tools[name]!.execute("call", params as never, undefined, undefined, { cwd } as never);
+    return JSON.stringify(result.content);
+  };
+
+  it("resolves against the context cwd, as the SDK does, when it lies inside the roots", async () => {
+    expect(await withContext("read", { path: "a.txt" }, join(workspace, "src"))).toContain("inside needle");
+    expect(await withContext("ls", {}, join(workspace, "src"))).toContain("a.txt");
+    expect(await withContext("grep", { pattern: "needle" }, join(workspace, "src"))).toContain("inside needle");
+    expect(await withContext("find", { pattern: "*.txt" }, join(workspace, "src"))).toContain("a.txt");
+  });
+
+  it("refuses a context cwd that points outside the roots, for relative and default paths", async () => {
+    const refused = new Error(OUTSIDE_ROOTS_MESSAGE);
+    await expect(withContext("read", { path: "secret.txt" }, outside)).rejects.toThrow(refused);
+    await expect(withContext("ls", {}, outside)).rejects.toThrow(refused);
+    await expect(withContext("grep", { pattern: "needle" }, outside)).rejects.toThrow(refused);
+    await expect(withContext("find", { pattern: "*" }, outside)).rejects.toThrow(refused);
+    await expect(withContext("read", { path: "../../outside/secret.txt" }, join(workspace, "src"))).rejects.toThrow(refused);
+  });
+
+  it("grep globs with .. or absolute paths return nothing from outside", async () => {
+    for (const glob of [`../outside/*.txt`, `../../outside/**`, `${outside}/**`, `${outside}/secret.txt`, "/**"]) {
+      let output: string;
+      try { output = await run("grep", { pattern: "needle", path: ".", glob }); } catch (error) { output = String(error); }
+      expect(output, glob).not.toContain(SECRET);
+    }
+  });
+
+  it("find patterns with .. or absolute paths return nothing from outside", async () => {
+    for (const pattern of ["../outside/*", "../outside/secret.txt", `${outside}/*`, `${outside}/**`, "/etc/*", "../*"]) {
+      let output: string;
+      try { output = await run("find", { pattern, path: "." }); } catch (error) { output = String(error); }
+      expect(output, pattern).not.toMatch(/secret\.txt|outside|passwd|hostname/);
+    }
+  });
+});

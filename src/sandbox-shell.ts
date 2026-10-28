@@ -15,6 +15,10 @@ const SANDBOX_HOME = "/tmp/home";
 /** Directories of a merged-`/usr` host that the sandbox recreates as symlinks or binds read-only. */
 const ROOT_ENTRIES = ["/bin", "/lib", "/lib64", "/sbin"] as const;
 export const PROBE_TIMEOUT_MS = 5_000;
+/** Seconds a command may run when the tool call names no `timeout`. */
+export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 600;
+/** Size limit of the sandbox's tmpfs `/tmp`, in bytes (512 MiB). */
+export const SANDBOX_TMP_BYTES = 536_870_912;
 export const SANDBOX_UNAVAILABLE_MESSAGE = "Read-only shell sandbox is not available";
 const GITFILE_LIMIT_BYTES = 4096;
 
@@ -45,7 +49,7 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
     else args.push("--ro-bind", entry.path, entry.path);
   }
   args.push(
-    "--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp", "--dir", SANDBOX_HOME,
+    "--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--size", String(SANDBOX_TMP_BYTES), "--tmpfs", "/tmp", "--dir", SANDBOX_HOME,
     "--overlay-src", input.workspace, "--tmp-overlay", input.workspace,
   );
   if (input.gitCommonDir !== undefined) args.push("--overlay-src", input.gitCommonDir, "--tmp-overlay", input.gitCommonDir);
@@ -157,23 +161,31 @@ function start(args: readonly string[], dependencies: SandboxDependencies): Runn
  * Runs `/usr/bin/true` through the same sandbox as a command, bounded by `PROBE_TIMEOUT_MS`.
  * False for an untrusted binary, a spawn failure, a non-zero exit or a timeout.
  */
-export async function probeSandbox(workspace: string, dependencies: SandboxDependencies = {}): Promise<boolean> {
+export async function probeSandbox(workspace: string, dependencies: SandboxDependencies = {}, signal?: AbortSignal): Promise<boolean> {
   let running: Running | undefined;
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   try {
+    if (signal?.aborted) return false;
     const workspaceReal = await realpath(workspace);
     running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies), dependencies);
     const { child, closed } = running;
     child.stdout?.resume(); child.stderr?.resume();
-    const deadline = new Promise<null>((resolvePromise) => { timer = setTimeout(() => resolvePromise(null), PROBE_TIMEOUT_MS); });
+    const deadline = new Promise<null>((resolvePromise) => {
+      timer = setTimeout(() => resolvePromise(null), PROBE_TIMEOUT_MS);
+      onAbort = () => resolvePromise(null);
+      signal?.addEventListener("abort", onAbort, { once: true });
+      if (signal?.aborted) resolvePromise(null);
+    });
     const outcome = await Promise.race([closed, deadline]);
     if (outcome === null) child.kill("SIGKILL");
-    return outcome !== null && outcome.code === 0;
+    return outcome !== null && outcome.code === 0 && signal?.aborted !== true;
   } catch {
     try { running?.child.kill("SIGKILL"); } catch { /* already gone */ }
     return false;
   } finally {
     if (timer) clearTimeout(timer);
+    if (onAbort) signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -195,7 +207,7 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
         throw new Error("Working directory is not available");
       }
       if (!within(cwdReal, workspaceReal)) throw new Error("Working directory is outside the workspace");
-      let timeoutMs: number | undefined;
+      let timeoutMs = DEFAULT_COMMAND_TIMEOUT_SECONDS * 1000;
       if (timeout !== undefined) {
         if (!Number.isFinite(timeout) || timeout <= 0) throw new Error("Invalid timeout: must be a finite number of seconds");
         timeoutMs = Math.min(timeout * 1000, 2_147_483_647);
@@ -214,12 +226,12 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
       const kill = (): void => { try { child.kill("SIGKILL"); } catch { /* already gone */ } };
       const onAbort = (): void => kill();
       try {
-        if (timeoutMs !== undefined) timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
+        timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
         signal?.addEventListener("abort", onAbort, { once: true });
         if (signal?.aborted) kill();
         const outcome = await closed;
         if (signal?.aborted) throw new Error("aborted");
-        if (timedOut) throw new Error(`timeout:${timeout}`);
+        if (timedOut) throw new Error(`timeout:${timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS}`);
         return { exitCode: outcome.code ?? (outcome.signal ? 128 + (osConstants.signals[outcome.signal] ?? 0) : 1) };
       } finally {
         if (timer) clearTimeout(timer);

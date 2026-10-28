@@ -788,6 +788,83 @@ describe("sandboxed shell", () => {
   });
 });
 
+describe("protected skill roots and aborted sandbox probes", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  async function skillDirectory(name: string): Promise<string> {
+    const directory = join(await temporaryRoot("sdk-adapter-skill-"), name);
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "SKILL.md"), `---\nname: ${name}\ndescription: Review changes.\n---\nBody.\n`);
+    await writeFile(join(directory, "notes.txt"), "sibling-content");
+    return directory;
+  }
+
+  async function readTool(directory: string, options: { protectedReadPaths?: string[] }) {
+    const fixture = runtimeFixture();
+    const createSession = vi.fn(async (sessionOptions: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      const { session } = sessionFixture();
+      exposeCustomTools(session, sessionOptions);
+      Object.assign(session as object, { resourceLoader: sessionOptions.resourceLoader });
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, ...options });
+    await adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, skills: [{ alias: "review", path: join(directory, "SKILL.md") }] } });
+    return createSession.mock.calls[0]![0].customTools!.find((tool) => tool.name === "read")!;
+  }
+  const readOf = (tool: { execute: (...args: never[]) => Promise<{ content: unknown }> }, path: string) =>
+    (tool.execute as unknown as (...args: unknown[]) => Promise<{ content: unknown }>)("call", { path }, undefined, undefined, undefined);
+
+  it("keeps a normal skill directory as a read root", async () => {
+    const directory = await skillDirectory("review");
+    const read = await readTool(directory, {});
+    await expect(readOf(read as never, join(directory, "notes.txt"))).resolves.toBeDefined();
+  });
+
+  it("limits a skill directory equal to a protected configuration directory to the skill file", async () => {
+    const directory = await skillDirectory("review");
+    const read = await readTool(directory, { protectedReadPaths: [directory] });
+    await expect(readOf(read as never, join(directory, "SKILL.md"))).resolves.toBeDefined();
+    await expect(readOf(read as never, join(directory, "notes.txt"))).rejects.toThrow("Path is outside the allowed read roots");
+  });
+
+  it("limits a skill directory that contains a protected configuration directory", async () => {
+    const directory = await skillDirectory("review");
+    await mkdir(join(directory, "cfg"));
+    const read = await readTool(directory, { protectedReadPaths: [join(directory, "cfg")] });
+    await expect(readOf(read as never, join(directory, "notes.txt"))).rejects.toThrow("Path is outside the allowed read roots");
+  });
+
+  it("fails the start, killing the probe, when the start request is aborted during the probe", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const kill = vi.fn();
+    const spawned = deferred<void>();
+    const sandbox: SandboxDependencies = {
+      trusted: () => true, rootEntries: () => [], gitCommonDir: async () => undefined,
+      spawn: () => (spawned.resolve(), Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill }) as unknown as SandboxChild),
+    };
+    const controller = new AbortController();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    const starting = adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, shell: "sandboxed" }, signal: controller.signal });
+    const failed = expect(starting).rejects.toMatchObject({ code: "sandbox_unavailable" });
+    await spawned.promise;
+    controller.abort();
+    await failed;
+    expect(kill).toHaveBeenCalledWith("SIGKILL");
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("does not run the probe for a start that is already aborted", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    await expect(adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, shell: "sandboxed" }, signal: AbortSignal.abort() })).rejects.toMatchObject({ code: "sandbox_unavailable" });
+    expect(sandbox.spawned).toHaveLength(0);
+    expect(createSession).not.toHaveBeenCalled();
+  });
+});
+
 describe("confined read-only tools", () => {
   beforeEach(() => vi.restoreAllMocks());
 

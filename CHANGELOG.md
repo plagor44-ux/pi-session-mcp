@@ -22,7 +22,13 @@
   not together with `grantedExtensionTools`. New start error
   `sandbox_unavailable` (class `needs_operator`), new capabilities field
   `shell` (`none` or `sandboxed`) after `grantedExtensionTools`, and the Doctor
-  checks `sandbox_unavailable` (error) and `workspace_git_unavailable` (warning)
+  checks `sandbox_unavailable` (error, probed for each configured workspace) and
+  `workspace_git_unavailable` (warning). The sandbox's `/tmp` is limited to
+  512 MiB, commands default to a 600 second timeout and are killed with all
+  their processes on timeout or abort; the start probe is cancelled with the
+  start request. A skill directory that equals or contains the operator's home,
+  the configuration directory or `~/.pi` is no longer a read root, only its
+  skill file is
   ([#169](https://github.com/plagor44-ux/pi-session-mcp/issues/169)).
 
 ### Fixed

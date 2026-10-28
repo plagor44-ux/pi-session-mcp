@@ -20,6 +20,8 @@ import {
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { homedir, userInfo } from "node:os";
+import { join } from "node:path";
 import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import type { ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
@@ -94,6 +96,11 @@ export interface SdkPiSessionAdapterOptions {
   readonly extensionSdk?: ExtensionSdk;
   /** Host seams of the read-only shell sandbox; tests inject a fake runner. */
   readonly sandbox?: SandboxDependencies;
+  /**
+   * Directories a skill directory must not expose through the read tools, in addition to the
+   * operator's home and the Pi agent directory (`~/.pi`). The server passes the configuration directory.
+   */
+  readonly protectedReadPaths?: readonly string[];
 }
 
 class AuthDeadlineError extends Error {
@@ -401,6 +408,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
   private readonly resolveExtension: (extension: ExtensionSpec) => Promise<string>;
   private readonly extensionSdk: ExtensionSdk;
   private readonly sandbox: SandboxDependencies;
+  private readonly protectedReadPaths: readonly string[];
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
     this.modelRuntimeFactory = options.modelRuntimeFactory ?? (() => ModelRuntime.create({ refreshOnCreate: false }));
@@ -410,6 +418,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     this.resolveExtension = options.resolveExtension ?? ((extension) => resolvePiExtension(extension));
     this.extensionSdk = options.extensionSdk ?? DEFAULT_EXTENSION_SDK;
     this.sandbox = options.sandbox ?? {};
+    // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
+    const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
+    this.protectedReadPaths = [home, join(home, ".pi"), ...(options.protectedReadPaths ?? [])];
   }
 
   async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {
@@ -581,19 +592,19 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
    * root is the session directory: a root that cannot be resolved fails the start. With a sandboxed shell
    * the sandbox is probed first, and a profile whose sandbox cannot start never gets a session.
    */
-  private async confinedTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
+  private async confinedTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
     const { executionProfile } = input;
     if (executionProfile.permissionProfile !== "read-only") return [];
     let roots: string[];
     try {
-      roots = await allowedReadRoots(input.cwd, skills);
+      roots = await allowedReadRoots(input.cwd, skills, this.protectedReadPaths);
     } catch {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }
     const tools = createConfinedReadOnlyTools(input.cwd, roots);
     if (executionProfile.shell === "sandboxed") {
       // The first root is the real path of the workspace.
-      if (!(await probeSandbox(roots[0]!, this.sandbox))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
+      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
       tools.push(createBashToolDefinition(input.cwd, {
         operations: createSandboxedBashOperations(roots[0]!, this.sandbox),
         exposeSessionEnvironment: false,
