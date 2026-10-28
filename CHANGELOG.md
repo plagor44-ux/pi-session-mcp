@@ -2,6 +2,75 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-10-28
+
+Minor release under ADR 0003 for
+[ADR 0012](docs/adr/0012-leased-writer-pool.md)
+([#157](https://github.com/plagor44-ux/pi-session-mcp/issues/157)): one host
+registration codes in container workspaces through a leased writer pool. The
+MCP contract changes: `pi_session_start` gains an optional `base`, sessions and
+capabilities gain writer fields, and there are new error codes. It also ships
+the writer cache and identity changes of
+[#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151) and
+[#154](https://github.com/plagor44-ux/pi-session-mcp/issues/154). `npm audit`
+still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+Upgrading needs a one-time migration of every container repository; follow
+[Installation](docs/installation.md#upgrade). Writers must be accepted again
+after the upgrade, as after every release.
+
+- Changed: coding on a `container` workspace goes through the one host
+  registration `pi-session-mcp`. The host leases a ready, accepted writer at
+  the requested or default base and relays the session to the writer's
+  contained server over stdio. Setup no longer adds `pi-coding-<alias>-w<n>`
+  registrations or writer hook entries, and `--client codex` has no writer
+  effect any more. Relayed start has a 60-second budget, prompt preflight and
+  abort 15 seconds each, and close cleanup 10 seconds; inner replies are
+  validated and size-bounded.
+- Changed: every writer operation, from launch to setup's collect, finish,
+  reset and recreate, runs under a per-writer host lease
+  (`~/.local/state/pi-session-mcp/leases/<name>.lock`) and a container fence
+  (container name, label and clone mount). A held lease fails with
+  `writer_busy`; setup waits up to 10 seconds for it. A container that cannot be
+  removed fails with `writer_fenced`. The lease descriptor never enters a
+  container.
+- Changed: reset, finish and recreate no longer need a reconnect of the writer
+  server; setup no longer reports `writer_reconnect_required`.
+- Added: `pi_session_start` accepts an optional `base`, a short branch name,
+  for coding profiles on `container` workspaces; elsewhere it fails with
+  `base_not_applicable`. Container coding sessions carry `writer` and `base`,
+  and `pi_capabilities_get` lists each container workspace's `writers` and
+  `defaultBase`.
+- Added: error codes `writer_unavailable` (with `reason` `none_ready`,
+  `none_at_base` or `none_admitted`, and the counts `busy`, `notAtBaseline`
+  and `settingsChanged`), `writer_session_lost` and `base_not_applicable`.
+- Added: container modes record a default base. Setup records the base that
+  provisioning resolves (`--base`, else `origin/HEAD`, else `main`); migration
+  records the writers' shared base and fails with `workspace_base_ambiguous` if
+  they differ and no `--base` is given. Finish returns a writer to the default
+  base.
+- Added: re-running a repository's provisioning command migrates its writers:
+  it removes the owned writer registrations and hooks, rewrites the wrappers,
+  marks the writers `launch: "relay"` and accepts them again. A divergent
+  registration is never removed; it reports `registration_divergent`, and that
+  writer stays outside the pool.
+- Added: Doctor checks `writer_lease_directory`, `writer_not_migrated`,
+  `workspace_base_unset` and `writer_off_default_base`.
+- Added: `--cache uv` mounts a private per-writer cache at `/pi/uv` with
+  `UV_CACHE_DIR=/pi/uv/cache` and `npm_config_cache=/pi/uv/npm`
+  ([#151](https://github.com/plagor44-ux/pi-session-mcp/issues/151)).
+- Added: writer clones get the operator checkout's commit identity when both
+  values are valid, and Doctor warns with `writer_git_identity_missing`
+  otherwise. `--tags reachable` bundles the tags reachable from the base
+  commit; the default stays `none`
+  ([#154](https://github.com/plagor44-ux/pi-session-mcp/issues/154)).
+- Changed: the wake hook matches only `mcp__pi-session-mcp__*` and reads the
+  host spool, which now also carries relayed container turns. Migrated writers
+  get no spool mount; a writer that is not yet migrated keeps it.
+- Limits: lease, fence and relay need Linux. The live migration of an existing
+  installation and a relayed coding turn follow the release.
+
 ## 0.11.9 — 2026-10-27
 
 Documentation-only release. The published `docs/` of 0.9.0 to 0.11.8 contained
