@@ -278,7 +278,10 @@ it.skipIf(process.platform !== "linux")("on host stdin end and child close joins
   let finish!: () => void;
   vi.mocked(credentials.writeBoundaryCredentials).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
   tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
-  process.stdin.emit("end"); child.emit("close", 0);
+  process.stdin.emit("end");
+  // EOF reaches the child through the pipe; a finite probe must be allowed to finish on its own.
+  expect(child.kill).not.toHaveBeenCalled();
+  child.emit("close", 0);
   await Promise.resolve(); expect(release).not.toHaveBeenCalled();
   finish(); await running;
   expect(release).toHaveBeenCalledTimes(1); expect(deps.ensureAbsent).toHaveBeenCalledTimes(2);

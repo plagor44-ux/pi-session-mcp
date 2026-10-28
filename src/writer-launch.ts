@@ -145,7 +145,7 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
       } finally {
         clearTimeout(timeout);
         process.off("SIGINT", interrupt); process.off("SIGTERM", terminate); process.off("SIGHUP", terminate);
-        process.stdin.off("end", terminate);
+        process.stdin.off("end", endOfInput);
         if (child.stdin) {
           process.stdin.unpipe(child.stdin);
           child.stdin.destroy();
@@ -162,8 +162,11 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
   };
   const interrupt = () => { void stop("SIGINT"); };
   const terminate = () => { void stop("SIGTERM"); };
+  // End of input is passed on through the pipe, not as a signal: a relayed server shuts down on EOF and a
+  // finite acceptance probe needs EOF to run at all. Cleanup starts and waits, bounded, for the child to close.
+  const endOfInput = () => { void stop(); };
   process.on("SIGINT", interrupt); process.on("SIGTERM", terminate); process.on("SIGHUP", terminate);
-  process.stdin.once("end", terminate);
+  process.stdin.once("end", endOfInput);
   {
     // Signal/EOF cleanup and child-exit cleanup share exactly one completion.
     const complete = () => { void stop(); };
@@ -180,7 +183,7 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
       child.stdin.once("error", terminate);
       process.stdin.pipe(child.stdin);
     }
-    if (process.stdin.readableEnded) terminate();
+    if (process.stdin.readableEnded) { child.stdin?.end(); endOfInput(); }
   }
   return finished;
 }

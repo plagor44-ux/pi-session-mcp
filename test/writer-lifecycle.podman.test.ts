@@ -94,7 +94,32 @@ it.skipIf(skipReason !== undefined)("neither the container nor Podman's monitor 
   }
 }, 60_000);
 
-it.skipIf(skipReason !== undefined)("host SIGKILL of the relay parent releases the writer within the cleanup bound", async () => {
+it.skipIf(skipReason !== undefined)("a finite-input probe gets EOF and runs to completion", async () => {
+  const { home, name, release } = await relayWriter();
+  const launcher = join(home, "launcher.mjs");
+  await writeFile(launcher, `
+    import { spawn } from 'node:child_process';
+    import { launchEntry } from ${JSON.stringify(pathToFileURL(join(release, "dist", "writer-launch.js")).href)};
+    import { createProcessRunner } from ${JSON.stringify(pathToFileURL(join(release, "dist", "setup-process.js")).href)};
+    process.exitCode = await launchEntry([${JSON.stringify(name)}, 'node', '-e', "let d='';process.stdin.on('data',(c)=>{d+=c}).on('end',()=>{process.stdout.write('probe:'+d.trim())})"], {
+      home: ${JSON.stringify(home)}, releaseRoot: ${JSON.stringify(release)}, runner: createProcessRunner(),
+      env: { PI_WRITER_NO_CREDENTIAL_REFRESH: '1' }, now: Date.now, setInterval, clearInterval,
+      spawnPodman: (args, fds) => spawn('podman', args, { stdio: ['pipe', 'inherit', 'inherit', ...fds] }),
+    });
+  `);
+  const child = spawn(process.execPath, [launcher], { stdio: ["pipe", "pipe", "ignore"] });
+  let output = "";
+  child.stdout!.on("data", (chunk: Buffer) => { output += chunk.toString("utf8"); });
+  const exited = once(child, "exit");
+  child.stdin!.end("ok");
+  const [code] = await exited;
+  expect(output).toContain("probe:ok");
+  expect(code).toBe(0);
+  const lease = await acquireWriterLease(home, name, { waitMs: 0 }); await lease.release();
+}, 120_000);
+
+/** A relay-mode writer around a fresh build of this checkout, without clone, provider or credentials. */
+async function relayWriter() {
   const home = await temporaryRoot("pi-writer-relay-podman-");
   const name = "relay-w1", paths = writerPaths(home, name), container = writerContainerName(name);
   const release = join(home, "release");
@@ -111,6 +136,11 @@ it.skipIf(skipReason !== undefined)("host SIGKILL of the relay parent releases t
     profiles: ["code"], providers: [], network: "none", cache: "none", tags: "none",
     imageId: await resolveImage(runner, "node", false), base: { ref: "refs/heads/main", commit: "a".repeat(40) },
   });
+  return { home, name, paths, container, release };
+}
+
+it.skipIf(skipReason !== undefined)("host SIGKILL of the relay parent releases the writer within the cleanup bound", async () => {
+  const { home, name, container, release } = await relayWriter();
   // No provider or session: the probe keeps stdin open, just as the inner stdio server does.
   const launcher = join(home, "launcher.mjs");
   await writeFile(launcher, `
