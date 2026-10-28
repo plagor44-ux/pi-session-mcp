@@ -16,7 +16,8 @@ export const RELAY_CALL_TIMEOUT_MS = 10_000;
 export const RELAY_PREFLIGHT_DEADLINE_MS = 15_000;
 export const RELAY_ABORT_DEADLINE_MS = 15_000;
 export const RELAY_CLEANUP_DEADLINE_MS = 10_000;
-export const RELAY_MAX_RESPONSE_BYTES = 262_144;
+// The inner text cap is 64 KiB; JSON escaping can grow it up to sixfold.
+export const RELAY_MAX_RESPONSE_BYTES = 524_288;
 
 export interface WriterProcessFactory {
   spawn(wrapperPath: string, env: Record<string, string>): Transport;
@@ -256,13 +257,14 @@ export class WriterRelayAdapter implements PiSessionAdapter {
         if (error instanceof InnerError) {
           if (error.code === "writer_busy") counts.busy++;
           else if (error.code === "writer_uncollected") counts.notAtBaseline++;
-          else if (error.code !== "writer_fenced" && error.code !== "writer_not_ready") {
+          else if (!["writer_fenced", "writer_not_ready", "container_runtime_unavailable"].includes(error.code)) {
             const code = error.code as PiSessionCreationErrorCode;
             throw new PiSessionCreationError(creationCodes.has(code) ? code : "pi_session_creation_failed");
           }
         }
       } finally {
-        if (!admitted && connection) await connection.cleanup(sessionId, Math.min(RELAY_CLEANUP_DEADLINE_MS, Math.max(0, end - now())));
+        // Own bound, not the start budget: a started inner session is always closed explicitly.
+        if (!admitted && connection) await connection.cleanup(sessionId);
       }
     }
     throw new WriterUnavailableError("none_admitted", counts);

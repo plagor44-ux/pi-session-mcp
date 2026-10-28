@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { ReadBuffer, serializeMessage, type Transport } from "@modelcontextprotocol/client";
 
 /** A launcher is a lease guardian: EOF requests cleanup; killing it would break that contract. */
+/** A frame carries a result twice (text content and structured content); 2 MiB covers both at the relay's size bound. */
 export class ChildStdioTransport implements Transport {
   onclose: Transport["onclose"];
   onerror: Transport["onerror"];
@@ -9,7 +10,7 @@ export class ChildStdioTransport implements Transport {
   private child?: ChildProcessWithoutNullStreams;
   private closed = false;
   private started = false;
-  private readonly buffer = new ReadBuffer({ maxBufferSize: 524_288 });
+  private readonly buffer = new ReadBuffer({ maxBufferSize: 2_097_152 });
   private pending = Buffer.alloc(0);
 
   constructor(private readonly command: string, private readonly env: Record<string, string>, private readonly args: readonly string[] = []) {}
@@ -28,7 +29,7 @@ export class ChildStdioTransport implements Transport {
         this.pending = Buffer.concat([this.pending, chunk]);
         let newline: number;
         while ((newline = this.pending.indexOf(10)) !== -1) {
-          if (newline > 524_288) throw new Error();
+          if (newline > 2_097_152) throw new Error();
           const line = this.pending.subarray(0, newline + 1);
           this.pending = this.pending.subarray(newline + 1);
           // ReadBuffer silently skips JSON syntax errors; detect them before decoding.
@@ -38,7 +39,7 @@ export class ChildStdioTransport implements Transport {
           if (message === null) throw new Error();
           this.onmessage?.(message);
         }
-        if (this.pending.length > 524_288) throw new Error();
+        if (this.pending.length > 2_097_152) throw new Error();
       } catch {
         this.onerror?.(new Error("Invalid writer frame"));
         void this.close();
