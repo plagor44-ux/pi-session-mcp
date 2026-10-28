@@ -387,8 +387,11 @@ never a host cache mount. Setup does not install uv or npm for you.
 Container writers are unlimited by default. Optional `--cpus <n>` sets a hard
 CPU cap (greater than 0, at most 1024, with at most two decimals).
 `--cpu-shares <n>` sets relative CPU weight under contention (integer 2–262144;
-Podman's default is 1024). For a host shared with CI runners, for example,
-`--cpu-shares 256` makes writers yield CPU under contention without a hard cap.
+Podman's default is 1024). The weight only counts against sibling cgroups:
+rootless writers run in the operator's user slice, so `--cpu-shares` makes a
+writer yield to the operator's other containers and processes, not to system
+services such as rootful Docker CI runners in `system.slice`. To protect such
+a service, use the `--cpus` hard cap.
 `--memory <size>` sets a hard memory cap: 1–9999999 followed by lowercase `m`
 or `g`, for example `--memory 512m`.
 
