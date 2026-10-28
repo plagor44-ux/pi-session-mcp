@@ -2457,6 +2457,54 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.13.0 pre-release acceptance
+
+`v0.13.0` was accepted on 2026-10-28 from 19:30 to 19:36 UTC on its release
+candidate `f7442b3`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.312`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record.
+
+The minor release ships ADR 0013 (#169) and the writer settings changes #162,
+#163, #165 and #166. It changes the MCP contract (read-only confinement,
+profile field and capabilities field `shell`, start error
+`sandbox_unavailable`); the setup report schema is unchanged.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    125 files, 3936 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` finding through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 916 files (tarball shasum
+    `1259d57d2d59099ad72e796609ecab3d581e9b06`, identical in two packs). A scan
+    of the packed files for private names, hosts and paths found none; its only
+    matches for `/home/` are the already redacted
+    `<repo>/eval/results/.../home/.pi/...` paths of disposable evaluation homes
+    in six `docs/evaluation/extension-functions-2026-10-17/cursor/` evidence
+    files, which `0.12.1` shipped unchanged.
+  - Doctor reported `packageVersion` `0.13.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke from another fresh prefix
+  reported `smoke_passed` with version `0.13.0`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories were removed.
+- Podman-gated writer tests on the candidate: 7 of 7 passed.
+- Bubblewrap-gated sandbox tests (`test/sandbox-shell.bwrap.test.ts`, bubblewrap
+  `0.13.1`): 12 of 12 passed, none skipped.
+- Review: #169 had an independent review of its full diff (same model family as
+  the author) that found no confinement or sandbox escape; its follow-ups were
+  fixed before the merge of #170.
+
+Not established for `0.13.0`: a live session with `shell: "sandboxed"` against
+a real provider, client-target `--verify` through the installed package, which
+follows the upgrade; Level 3.
+
 ### v0.12.1 post-release evidence
 
 Recorded on 2026-10-28 for the published release `0.12.1`.

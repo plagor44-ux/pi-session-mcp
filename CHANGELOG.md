@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.13.0 — 2026-10-28
+
+Minor release under ADR 0003 for
+[ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)
+([#169](https://github.com/plagor44-ux/pi-session-mcp/issues/169)): hardened
+read-only profiles. The MCP contract changes: read-only tools are confined to
+the workspace and the selected skills' directories, profiles gain the optional
+`shell` field, capabilities report `shell`, and `pi_session_start` has the new
+error code `sandbox_unavailable`. It also ships the writer settings changes of
+[#162](https://github.com/plagor44-ux/pi-session-mcp/issues/162),
+[#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163),
+[#165](https://github.com/plagor44-ux/pi-session-mcp/issues/165) and
+[#166](https://github.com/plagor44-ux/pi-session-mcp/issues/166). `npm audit`
+still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+Upgrading follows [Installation](docs/installation.md#upgrade); writers must be
+accepted again after the upgrade, as after every release.
+
 ### Changed
 
 - **Breaking for read-only workflows:** `read`, `grep`, `find` and `ls` of every
@@ -31,18 +50,6 @@
   skill file is
   ([#169](https://github.com/plagor44-ux/pi-session-mcp/issues/169)).
 
-### Fixed
-
-- An apply of `pi-session-mcp-setup --repo <alias> --mode container ...` with
-  drifted settings is now refused before the mode is written: each kept writer
-  with a difference reports `writer_settings_changed`, the modes file stays
-  unchanged and no kept writer is changed (a surplus writer of a smaller count
-  may already have been fenced), so the recorded mode never drifts from
-  what the writers run
-  ([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163)).
-
-### Added
-
 - Optional container resource settings `--cpus`, `--cpu-shares` and `--memory`,
   with host cgroup-controller preflight and fenced in-place writer updates
   without reprovisioning. A later mode request that omits a limit keeps it;
@@ -54,10 +61,20 @@
   and removed with the writer
   ([#165](https://github.com/plagor44-ux/pi-session-mcp/issues/165)).
 
-- Added: opt-in container setting `--clean all` removes ignored files from writer
+- Opt-in container setting `--clean all` removes ignored files from writer
   clones on reset and finish while preserving the default dependency-cache
   behavior and per-writer caches outside the clone
   ([#162](https://github.com/plagor44-ux/pi-session-mcp/issues/162)).
+
+### Fixed
+
+- An apply of `pi-session-mcp-setup --repo <alias> --mode container ...` with
+  drifted settings is now refused before the mode is written: each kept writer
+  with a difference reports `writer_settings_changed`, the modes file stays
+  unchanged and no kept writer is changed (a surplus writer of a smaller count
+  may already have been fenced), so the recorded mode never drifts from
+  what the writers run
+  ([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163)).
 
 ## 0.12.1 — 2026-10-28
 
