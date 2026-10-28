@@ -77,9 +77,11 @@ describe("writer setup reconciliation", () => {
     expect(dry.findings.filter((finding) => finding.code === "writer_limits_update_planned")).toHaveLength(2);
     expect((await readWriterState(f.home, "x-w1"))?.limits).toBeUndefined();
     const held = new Set<string>();
+    // The pre-write gate (#163) reads drift without a fence; reconcile re-checks each writer under its lease.
+    let unfenced = 0;
     f.life.writerSettingsDrift.mockImplementation(async (ctx, input) => {
-      expect(held.size).toBe(1);
-      expect(ctx.leaseFd).toBe(42);
+      if (held.size === 0) unfenced++;
+      else { expect(held.size).toBe(1); expect(ctx.leaseFd).toBe(42); }
       return lifecycle.writerSettingsDrift(ctx, input);
     });
     const output = await changeWriterMode(f.configPath, limited, { ...f.deps, lease: async (_home, name) => {
@@ -90,6 +92,7 @@ describe("writer setup reconciliation", () => {
       } };
     }, ensureAbsent: async () => {} });
     expect(output.exitCode).toBe(0);
+    expect(unfenced).toBe(2);
     expect(output.findings.filter((finding) => finding.code === "writer_limits_updated")).toHaveLength(2);
     expect(output.findings.some((finding) => finding.code === "writer_settings_changed")).toBe(false);
     expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
