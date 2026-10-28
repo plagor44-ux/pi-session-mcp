@@ -18,11 +18,11 @@ mean they are implemented or that their gates passed.
   0.12.0 together with #151 and #154, released the same day and installed with
   a live relayed coding session; 0.12.1 fixes client-target verify (#160).
   Both machines run 0.12.1, and #151 and #154 passed their live checks. The
-  opt-in `--clean all` (#162) follows as an unreleased change.
-- 2026-10-28: [ADR 0013](adr/0013-hardened-read-only-profiles.md) (#169),
-  implemented and unreleased: workspace-confined read tools for every read-only
-  profile and the opt-in bubblewrap shell (`shell: "sandboxed"`). It changes the
-  public contract and needs minor release 0.13.0.
+  opt-in `--clean all` (#162) shipped in 0.13.0.
+- 2026-10-28: [ADR 0013](adr/0013-hardened-read-only-profiles.md) (#169):
+  workspace-confined read tools for every read-only profile and the opt-in
+  bubblewrap shell (`shell: "sandboxed"`), released in minor release 0.13.0
+  together with #162, #163, #165 and #166.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

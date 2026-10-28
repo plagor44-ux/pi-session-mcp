@@ -1,6 +1,6 @@
 # ADR 0013: Hardened read-only profiles
 
-**Status:** Accepted (2026-10-28). Amends
+**Status:** Accepted (2026-10-28); released in 0.13.0. Amends
 [ADR 0006](0006-pi-extension-allowlist.md) and
 [ADR 0010](0010-read-only-extension-tools.md). Issue #169.
 

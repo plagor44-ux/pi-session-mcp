@@ -34,6 +34,8 @@ The package version is **0.13.0**.
 
 [Per-repository execution modes](docs/execution-modes.md) make host writes explicit and block coding on read-only aliases. On container workspaces, the one host `pi-session-mcp` registration leases a rootless-Podman writer per coding session on Linux; no per-writer registrations or tool prefixes are needed ([ADR 0012](docs/adr/0012-leased-writer-pool.md)). Setup provisions, accepts, collects and resets the pool. Starts normally use the workspace default base; fix rounds can pass a short branch `base`. Start/get report `writer` and `base` for collection, and capabilities report configured `writers` and `defaultBase`. Reset, finish and recreate need no reconnect; finish returns the writer to the default base. See the [container upgrade runbook](docs/installation.md#container-writers).
 
+Every read-only profile reads only inside its workspace and the directories of its selected skills, and a read-only profile on Linux can opt into a bubblewrap shell without network, home or host writes (`shell: "sandboxed"`, [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)).
+
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is recorded for Claude Code only; Codex is still pending. See [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
@@ -113,7 +115,7 @@ The [installation guide](docs/installation.md) also covers installing from a rel
 ```
 
 - A workspace alias maps to a directory. Clients can select aliases only.
-- An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`.
+- An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`. A read-only profile can add `shell: "sandboxed"` on Linux.
 - A profile can grant individual tools of local stdio MCP servers to its sessions; see [External MCP tools in embedded sessions](docs/session-mcp.md).
 - An optional top-level `skillCatalog` maps skill aliases to `builtin:<name>` (a skill of the package or of your override directory) or to a `SKILL.md` file, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
 - An optional top-level `"events": { "delivery": "spool" }` turns on content-free turn events, so that a Claude Code hook can wake the controller when a turn ends instead of polling. It is off by default and changes nothing for Codex. See [Wake the controller](docs/installation.md#wake-the-controller-claude-code).

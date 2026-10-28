@@ -53,7 +53,7 @@ const classOf = (code: string): StartClass[] => CLASSES.filter((name) => classes
 describe("orchestration skill start-error classification", () => {
   it("teaches finish and classifies writer refusals exactly once", () => {
     expect(skill).toContain("--finish");
-    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "container_runtime_unavailable", "writer_unavailable", "writer_session_lost", "base_not_applicable"]) {
+    for (const code of ["writer_uncollected", "writer_busy", "writer_not_ready", "writer_fenced", "container_runtime_unavailable", "writer_unavailable", "writer_session_lost", "base_not_applicable"]) {
       expect(classOf(code), code).toHaveLength(1);
       expect(backticked(reference).filter((value) => value === code), code).toHaveLength(1);
     }
@@ -68,7 +68,7 @@ describe("orchestration skill start-error classification", () => {
     expect(mcpErrorCodes).toContain("writer_uncollected");
     expect(mcpErrorCodes).toContain("writer_busy");
     expect(new Set(mcpErrorCodes).size).toBe(mcpErrorCodes.length);
-    expect(startupCodes).toEqual(["invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes", "invalid_event_delivery", "event_spool_unavailable"]);
+    expect(startupCodes).toEqual(["config_path_required", "invalid_execution_profile_config", "invalid_thinking_level", "invalid_execution_modes", "invalid_event_delivery", "event_spool_unavailable"]);
   });
 
   it("puts every documented start code in exactly one class", () => {
