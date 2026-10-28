@@ -17,6 +17,8 @@ mean they are implemented or that their gates passed.
   pool, base-aware allocation and host-spool events. Prepared as minor release
   0.12.0 together with #151 and #154, released the same day and installed with
   a live relayed coding session; 0.12.1 fixes client-target verify (#160).
+  Both machines run 0.12.1, and #151 and #154 passed their live checks. The
+  opt-in `--clean all` (#162) follows as an unreleased change.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

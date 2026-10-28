@@ -2457,6 +2457,99 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.12.1 post-release evidence
+
+Recorded on 2026-10-28 for the published release `0.12.1`.
+
+Tag binding: a fresh clone of the annotated tag `v0.12.1` (tag object
+`eecd6dbf0c220ded997c697f281f6b984d9ebf4e`) peels to the merge commit
+`91799f2e84b514110f77c24986d59e72c5ed98e5` of #161, and
+`git describe --tags --exact-match` reports `v0.12.1`. CI on the merge commit
+and on the tag passed on the first attempt.
+
+- Level 1 on the tag clone after `npm ci`, from 14:43 to 14:47 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (120 files, 3708 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean.
+- `pi-session-mcp@0.12.1` on npm: 907 files, shasum
+  `58dc7235e0d54d4290d92934d877223e22eec03d`, `gitHead` `cc25693` (the head of
+  #161, whose tree equals the merge commit). `npm pack` of the tag clone gives
+  the same shasum and file count.
+- Published npm package, Level 2 from a fresh prefix: 160 of 160 with delivery
+  off and 228 of 228 with `--events spool`; real registrations and built files
+  unchanged, no process left, leak check passed. Clients: Codex CLI `0.162.1`
+  and Claude Code `2.1.312`. The install smoke on the published package
+  reported `smoke_passed` with version `0.12.1`.
+- The GitHub release `v0.12.1` was published the same day.
+
+Workstation, upgraded from `0.12.0` to `0.12.1` by the release session: Doctor
+reported no error, client-target `--verify` passed for `claude-code:user` and
+`codex:user` (`mcp_verified`, `skill_verified`, and `hook_verified` for the
+wake hook), the open point of the pre-release record, and
+`--writer <name> --verify` passed for all 18 writers (`mcp_verified`).
+
+Operator upgrade of the second machine (Linux) from `0.11.8` to `0.12.1` on
+2026-10-28 from 14:50 UTC, following
+[Installation](installation.md#container-writers), with Node.js `24.22.0`:
+
+- No pi-session-mcp server process and no writer container ran at the start.
+- Both client targets were removed with `0.11.8`, then
+  `npm install -g pi-session-mcp@0.12.1`. Doctor reported every writer
+  `writer_not_ready`, each container workspace `workspace_base_unset` and each
+  writer `writer_git_identity_missing`.
+- Four container repositories with 14 writers were migrated by repeating their
+  provisioning commands with unchanged settings, each first as a dry run
+  (`planned`), then with `--apply`: 2, 4, 4 (operator image, `--cache go`) and
+  4 (operator image) writers. Every writer reported `writer_accepted`.
+- `--finish --apply` of all 14 writers reported `writer_reset`; no work was
+  collected. Doctor then reported no writer or base finding.
+- `--apply` and `--verify` of both client targets passed (`mcp_verified`), and
+  `--writer <name> --verify` passed for all 14 writers. No writer registration
+  and no container remained.
+
+Live checks of #154 and #151 on the workstation, 15:02 to 15:04 UTC, with the
+coding profile `code-deepseek` through the one host registration and wake
+events from the host spool:
+
+- Settings change: a writer whose settings differ is refused with
+  `writer_settings_changed`. Both repositories' writers were collected
+  (`nothing_to_collect`), removed with `--writer <name> --remove` and
+  provisioned again with `--tags reachable` (2 writers) and `--cache uv`
+  (4 writers, operator image with uv `0.13.6`); every writer reported
+  `writer_accepted`.
+- Tags (#154): the writer with `--tags reachable` held 14 tags, the tags of
+  the operator checkout merged into `main`. In the session,
+  `git describe --tags` reported `v0.12.1` and
+  `git show v0.12.0:package.json` read the file at that tag. The writer without
+  the setting held no tags.
+- Identity (#154): an empty commit in the session, without `GIT_AUTHOR_*` or
+  `GIT_COMMITTER_*` and without `--author`, recorded the operator's name as
+  author and committer. `git config user.name` inside the writer failed with
+  exit `4` because `.git/config` is mounted read-only. The collected ref showed
+  the same identity. The test ref was removed afterwards.
+- uv cache (#151): three sessions on the same writer, with `--finish --apply`
+  between the second and the third. In the first, `UV_CACHE_DIR` was
+  `/pi/uv/cache` and empty; `uv sync --frozen` took 1.9 s and left 95,576 KiB
+  in 1,648 files. The second and third sessions found the same size and file
+  count before they ran anything, and `uv sync --frozen --offline` after
+  removing `.venv` took 0.07 s and 0.08 s.
+
+Findings from these checks:
+
+- Reset and finish keep Git-ignored files in the clone, as designed: `.venv`
+  from the first session was still present in the third, after the finish.
+  The opt-in `--clean all` removes them
+  ([#162](https://github.com/plagor44-ux/pi-session-mcp/issues/162)); it is
+  not part of the released `0.12.1`.
+- A provisioning command with changed settings reported `mode_applied` and
+  recorded the new mode although every writer failed with
+  `writer_settings_changed`; Doctor reported no mismatch
+  ([#163](https://github.com/plagor44-ux/pi-session-mcp/issues/163), open).
+
+Not established for `0.12.1`: a busy pool (`writer_unavailable`) and a `base`
+fix round in live use; Level 3; the macOS upgrade.
+
 ### v0.12.1 pre-release acceptance
 
 `v0.12.1` was accepted on 2026-10-28 from 13:12 to 13:17 UTC on its release
