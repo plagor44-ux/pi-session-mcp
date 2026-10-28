@@ -187,6 +187,11 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
         add(name, outcome); if (outcome.status === "failed") return;
       }
+      // Settings first: a drifted writer is left exactly as it is, neither migrated nor accepted again (#134).
+      if (!planned.missing.includes(name)) {
+        const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
+        if (drift) { add(name, drift); return; }
+      }
       let divergent = false;
       for (const client of ["claude-code", "codex"] as const) {
         const expected = intent(ctx, name, client);
@@ -220,10 +225,6 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
       if (migrated || wrapperChanged) {
         const { acceptance: _oldAcceptance, ...unaccepted } = state;
         await writeWriterState(ctx.home, name, { ...unaccepted, launch: "relay", phase: "not_ready" });
-      }
-      if (!planned.missing.includes(name)) {
-        const drift = await life.writerSettingsDrift(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory });
-        if (drift) { add(name, drift); return; }
       }
       // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
       const current = await accept.acceptanceCurrent(ctx, name);

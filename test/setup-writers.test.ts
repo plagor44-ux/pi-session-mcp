@@ -351,6 +351,8 @@ describe("writer setup reconciliation", () => {
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
     f.calls.length = 0;
     f.accept.acceptWriter.mockClear(); f.adapter.add.mockClear();
+    // A writer of an older release: the drift check must run before migration touches it.
+    await writeWriterState(f.home, "x-w1", { ...(await readWriterState(f.home, "x-w1"))!, launch: "legacy" });
     const host = JSON.parse(await readFile(f.configPath, "utf8")) as { executionProfiles: { code: { model: string } } };
     host.executionProfiles.code.model = "changed-model";
     await writeFile(f.configPath, JSON.stringify(host));
@@ -362,6 +364,7 @@ describe("writer setup reconciliation", () => {
     // The existing registrations stay: nothing is added and nothing removed for a held writer.
     expect(f.adapter.add).not.toHaveBeenCalled();
     expect(f.adapter.remove).not.toHaveBeenCalled();
+    expect((await readWriterState(f.home, "x-w1"))?.launch).toBe("legacy");
   });
   it("checks only writers it did not provision in the same run (#134)", async () => {
     const f = await fixture();
