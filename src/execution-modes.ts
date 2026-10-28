@@ -109,6 +109,6 @@ export async function loadExecutionModes(
   return resolveExecutionModes(raw, workspaceAliases, profiles);
 }
 
-export function codingAllowed(entry: WorkspaceModeEntry): boolean {
-  return entry.mode === "unset" || entry.mode === "host";
+export function codingAllowed(entry: WorkspaceModeEntry, relay: boolean): boolean {
+  return entry.mode === "unset" || entry.mode === "host" || (entry.mode === "container" && relay);
 }

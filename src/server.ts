@@ -2,56 +2,12 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import packageMetadata from "../package.json" with { type: "json" };
 import { projectCapabilities } from "./capabilities.js";
-import { CONFIGURATION_FINGERPRINT_PATTERN, RELOAD_POLICY, type ConfigurationMetadata } from "./config.js";
-import { codingAllowed, type WorkspaceModeEntry } from "./execution-modes.js";
-import { PiSessionCreationError } from "./pi-adapter.js";
-import { ALIAS_PATTERN, toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
+import type { ConfigurationMetadata } from "./config.js";
+import { codingAllowed, isShortBranchName, type WorkspaceModeEntry } from "./execution-modes.js";
+import { PiSessionCreationError, WriterUnavailableError } from "./pi-adapter.js";
+import { toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
 import { RegistryError, type SessionRegistry } from "./session-registry.js";
-
-const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
-const viewSchema = z.object({
-  id: z.string(), workspace: z.string(), executionProfile: z.string(), profile: z.enum(["read-only", "coding"]),
-  provider: z.string(), model: z.string(), thinkingLevel: thinkingLevelSchema,
-  state: z.enum(["idle", "running", "failed", "closing", "closed"]), createdAt: z.string(), updatedAt: z.string(),
-  lastError: z.string().optional(),
-});
-const aliasSchema = z.string().regex(ALIAS_PATTERN);
-// Input IDs: tools/list keeps `format: "uuid"` but omits zod's long repeated `pattern`; the
-// server still validates with the unchanged `z.string().uuid()`, so accepted values and issues are identical.
-const idInputSchema = z.string().meta({ format: "uuid" }).pipe(z.string().uuid());
-const successSchema = z.object({ ok: z.literal(true), session: viewSchema });
-const turnBase = { turnId: z.string().uuid(), sessionId: z.string().uuid(), startedAt: z.string(), updatedAt: z.string() };
-const turnSchema = z.discriminatedUnion("state", [
-  z.object({ ...turnBase, state: z.literal("running") }),
-  z.object({ ...turnBase, state: z.literal("completed"), completedAt: z.string(), assistantText: z.string(), truncated: z.boolean() }),
-  z.object({ ...turnBase, state: z.literal("failed"), completedAt: z.string(), error: z.object({ code: z.literal("turn_failed"), message: z.literal("Pi turn failed") }) }),
-  z.object({ ...turnBase, state: z.literal("aborted"), completedAt: z.string() }),
-]);
-const promptSuccessSchema = z.object({ ok: z.literal(true), session: viewSchema, turn: turnSchema });
-const turnSuccessSchema = z.object({ ok: z.literal(true), turn: turnSchema });
-const listSchema = z.object({ ok: z.literal(true), sessions: z.array(viewSchema) });
-const errorSchema = z.object({ ok: z.literal(false), error: z.object({ code: z.string(), message: z.string() }) });
-const capabilitiesSchema = z.object({
-  ok: z.literal(true),
-  server: z.object({ name: z.literal(packageMetadata.name), version: z.literal(packageMetadata.version) }).strict(),
-  configuration: z.object({
-    fingerprint: z.string().regex(CONFIGURATION_FINGERPRINT_PATTERN),
-    reloadPolicy: z.literal(RELOAD_POLICY),
-  }).strict(),
-  events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
-  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only"]) }).strict()),
-  executionProfiles: z.array(z.object({
-    alias: aliasSchema,
-    default: z.boolean(),
-    permissionProfile: z.enum(["read-only", "coding"]),
-    provider: z.string(),
-    model: z.string(),
-    thinkingLevel: thinkingLevelSchema,
-    extensions: z.array(z.string()),
-    grantedExtensionTools: z.array(z.string()),
-    skills: z.array(aliasSchema),
-  }).strict()),
-}).strict();
+import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema } from "./tool-schemas.js";
 
 function result<T extends Record<string, unknown>>(value: T, isError = false) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value) }], structuredContent: value, ...(isError ? { isError: true } : {}) };
@@ -59,6 +15,9 @@ function result<T extends Record<string, unknown>>(value: T, isError = false) {
 async function safe(action: () => Promise<Record<string, unknown>> | Record<string, unknown>) {
   try { return result(await action()); }
   catch (error) {
+    if (error instanceof WriterUnavailableError) {
+      return result({ ok: false, error: { code: error.code, message: error.message, reason: error.reason, ...(error.counts === undefined ? {} : { counts: error.counts }) } }, true);
+    }
     const known = error instanceof RegistryError || error instanceof PiSessionCreationError;
     return result({ ok: false, error: { code: known ? error.code : "internal_error", message: known ? error.message : "Operation failed" } }, true);
   }
@@ -72,6 +31,7 @@ export function createServer(
   configuration: ConfigurationMetadata,
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
+  relay = false,
 ): McpServer {
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
@@ -82,16 +42,20 @@ export function createServer(
   }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery)));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
-    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, ({ workspace, executionProfile }) => safe(async () => {
+  }, ({ workspace, executionProfile, base }) => safe(async () => {
     const alias = executionProfile ?? defaultExecutionProfile;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
-    if (configured.permissionProfile === "coding" && !codingAllowed(workspaceModes.get(workspace) ?? { mode: "unset" })) {
+    const mode = workspaceModes.get(workspace) ?? { mode: "unset" };
+    if (base !== undefined && (configured.permissionProfile !== "coding" || mode.mode !== "container")) {
+      throw new RegistryError("base_not_applicable");
+    }
+    if (configured.permissionProfile === "coding" && !codingAllowed(mode, relay)) {
       throw new RegistryError("workspace_mode_forbids_coding");
     }
-    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured)) };
+    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), base === undefined ? {} : { base }) };
   }));
   server.registerTool("pi_session_list", {
     description: "List local Pi sessions and their state.", inputSchema: z.object({}).strict(), outputSchema: z.union([listSchema, errorSchema]),

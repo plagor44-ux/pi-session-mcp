@@ -167,7 +167,8 @@ describe("isShortBranchName", () => {
 });
 
 it.each([
-  ["unset", true], ["host", true], ["container", false], ["read-only", false],
-] as const)("codingAllowed(%s) is %s", (mode, allowed) => {
-  expect(codingAllowed({ mode })).toBe(allowed);
+  ["unset", false, true], ["host", false, true], ["container", false, false], ["read-only", false, false],
+  ["unset", true, true], ["host", true, true], ["container", true, true], ["read-only", true, false],
+] as const)("codingAllowed(%s, %s) is %s", (mode, relay, allowed) => {
+  expect(codingAllowed({ mode }, relay)).toBe(allowed);
 });

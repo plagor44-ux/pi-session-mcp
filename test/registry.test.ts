@@ -446,3 +446,63 @@ describe("SessionRegistry Phase 0 regressions", () => {
     expect(adapter.handles[0]).toMatchObject({ aborted: 1, disposeCalls: 1 }); expect(registry.list()).toEqual([]);
   });
 });
+
+
+describe("relay session contract", () => {
+  it("passes workspace and base to the adapter only when given", async () => {
+    const { registry, adapter } = setup();
+    await registry.start("repo", codingProfile, { base: "dev" });
+    await registry.start("repo", readOnlyProfile);
+    expect(adapter.createInputs[0]).toMatchObject({ workspace: "repo", base: "dev" });
+    expect(adapter.createInputs[1]).toMatchObject({ workspace: "repo" });
+    expect(adapter.createInputs[1]).not.toHaveProperty("base");
+  });
+
+  it("placement appears in the session view; lost handles still support get and close", async () => {
+    const { registry, adapter } = setup();
+    const create = adapter.create.bind(adapter);
+    vi.spyOn(adapter, "create").mockImplementation(async (input) => Object.assign(await create(input), {
+      placement: { writer: "repo-w1", base: { ref: "refs/heads/dev", commit: "abc" } }, isLost: () => true,
+    }));
+    const session = await registry.start("repo", codingProfile);
+    expect(session).toMatchObject({ writer: "repo-w1", base: { ref: "refs/heads/dev", commit: "abc" } });
+    await expect(registry.prompt(session.id, "lost")).rejects.toMatchObject({ code: "writer_session_lost" });
+    expect(registry.get(session.id)).toEqual(session);
+    await expect(registry.close(session.id)).resolves.toMatchObject({ state: "closed" });
+  });
+
+  it("completed outcome with truncated true sets truncated", async () => {
+    const { registry, adapter } = setup();
+    const session = await registry.start("repo", codingProfile);
+    adapter.handles[0]!.prompt = (_text, preflight) => { preflight(true); return Promise.resolve({ status: "completed", assistantText: "short", truncated: true }); };
+    const result = await registry.prompt(session.id, "run");
+    await settle();
+    expect(registry.getTurn(session.id, result.turn.turnId)).toMatchObject({ truncated: true, assistantText: "short" });
+    expect(session).not.toHaveProperty("writer"); expect(session).not.toHaveProperty("base");
+  });
+
+  it("uses handle deadlines for preflight, abort and cleanup", async () => {
+    vi.useFakeTimers();
+    try {
+      const handle: PiSessionHandle = {
+        sdkSessionId: "relay", appliedSelection: codingProfile,
+        deadlines: { preflightMs: 50, abortMs: 50, cleanupMs: 50 },
+        prompt: (_text, preflight) => { setTimeout(() => preflight(true), 30); return new Promise(() => undefined); },
+        abort: () => new Promise(resolve => setTimeout(resolve, 30)),
+        dispose: () => new Promise(resolve => setTimeout(resolve, 30)),
+      };
+      const registry = new SessionRegistry({ create: async () => handle }, new Map([["repo", "/repo"]]), { preflightDeadlineMs: 5, abortDeadlineMs: 5, closeCleanupDeadlineMs: 5 });
+      const session = await registry.start("repo", codingProfile);
+      const prompting = registry.prompt(session.id, "run");
+      await vi.advanceTimersByTimeAsync(30); await prompting;
+      const aborting = registry.abort(session.id);
+      await vi.advanceTimersByTimeAsync(30); await expect(aborting).resolves.toMatchObject({ state: "idle" });
+      const promptingAgain = registry.prompt(session.id, "again");
+      await vi.advanceTimersByTimeAsync(30); await promptingAgain;
+      let closed = false;
+      const closing = registry.close(session.id).then(() => { closed = true; });
+      await vi.advanceTimersByTimeAsync(59); expect(closed).toBe(false);
+      await vi.advanceTimersByTimeAsync(1); await closing; expect(closed).toBe(true);
+    } finally { vi.useRealTimers(); }
+  });
+});

@@ -6,7 +6,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { createServer } from "../src/server.js";
 import { SessionRegistry, type SessionRegistryOptions } from "../src/session-registry.js";
 import { FakeAdapter } from "./fake-adapter.js";
-import { PiSessionCreationError } from "../src/pi-adapter.js";
+import { PiSessionCreationError, WriterUnavailableError } from "../src/pi-adapter.js";
 import packageMetadata from "../package.json" with { type: "json" };
 import { loadConfig, type ConfigurationMetadata } from "../src/config.js";
 import type { WorkspaceModeEntry } from "../src/execution-modes.js";
@@ -30,6 +30,7 @@ describe("MCP contracts", () => {
     configuration?: ConfigurationMetadata;
     workspaceModes?: ReadonlyMap<string, WorkspaceModeEntry>;
     eventDelivery?: "spool" | "off";
+    relay?: boolean;
   } = {}) {
     const workspaces = fixtures.workspaces ?? new Map([["repo", "/safe/repo"]]);
     const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, workspaces, registryOptions);
@@ -37,10 +38,56 @@ describe("MCP contracts", () => {
       ["safe", { alias: "safe", default: true, permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const }],
       ["coding", { alias: "coding", default: false, permissionProfile: "coding" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "high" as const }],
     ]);
-    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery);
+    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery, fixtures.relay);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: "contract-test", version: "1.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); closers.push(async () => { await client.close(); await server.close(); await registry.shutdown(); }); return { client, adapter, registry };
   }
+
+  it.each([
+    ["container", "safe"], ["host", "coding"], ["read-only", "coding"], ["unset", "coding"],
+  ] as const)("rejects base for %s / %s before creation", async (mode, executionProfile) => {
+    const connected = await client({}, { workspaceModes: new Map([["repo", { mode }]]) });
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile, base: "dev" } });
+    expect(response.structuredContent).toMatchObject({ ok: false, error: { code: "base_not_applicable" } });
+    expect(connected.adapter.createInputs).toHaveLength(0);
+  });
+
+  it("allows container coding with relay and passes base", async () => {
+    const connected = await client({}, { workspaceModes: new Map([["repo", { mode: "container" }]]), relay: true });
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile: "coding", base: "dev" } });
+    expect(response.structuredContent).toMatchObject({ ok: true });
+    expect(connected.adapter.createInputs[0]).toMatchObject({ workspace: "repo", base: "dev" });
+  });
+
+  it("checks unknown_execution_profile before base applicability", async () => {
+    const connected = await client();
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile: "missing", base: "dev" } });
+    expect(response.structuredContent).toMatchObject({ ok: false, error: { code: "unknown_execution_profile" } });
+    expect(connected.adapter.createInputs).toHaveLength(0);
+  });
+
+  it.each(["", "HEAD", "refs/heads/main", "a".repeat(40), "a".repeat(64), "../x"])("rejects invalid base %s at schema validation", async (base) => {
+    const connected = await client({}, { workspaceModes: new Map([["repo", { mode: "container" }]]), relay: true });
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", executionProfile: "coding", base } });
+    expect(response.isError).toBe(true);
+    expect(response.structuredContent).toBeUndefined();
+    expect(connected.adapter.createInputs).toHaveLength(0);
+  });
+
+  it.each(["none_ready", "none_at_base"] as const)("writer_unavailable omits absent counts for %s", async (reason) => {
+    const connected = await client();
+    connected.adapter.plans.push({ creationError: new WriterUnavailableError(reason) });
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } });
+    expect(response.structuredContent).toEqual({ ok: false, error: { code: "writer_unavailable", message: "No writer is available", reason } });
+  });
+
+  it("writer_unavailable carries reason and counts", async () => {
+    const connected = await client();
+    const counts = { busy: 1, notAtBaseline: 2, settingsChanged: 3 };
+    connected.adapter.plans.push({ creationError: new WriterUnavailableError("none_admitted", counts) });
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } });
+    expect(response.structuredContent).toEqual({ ok: false, error: { code: "writer_unavailable", message: "No writer is available", reason: "none_admitted", counts } });
+  });
 
   const modeProfiles = new Map<string, ConfiguredExecutionProfile>([
     ["code", { alias: "code", default: true, permissionProfile: "coding", provider: "fake-provider", model: "fake-model", thinkingLevel: "off" }],
@@ -95,7 +142,7 @@ describe("MCP contracts", () => {
     expect(discovery?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(discovery?.inputSchema).toMatchObject({ type: "object", properties: {}, additionalProperties: false });
     const inputSchemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
-    expect(inputSchemaOf("pi_session_start")).toMatchObject({ type: "object", required: ["workspace"], additionalProperties: false, properties: { workspace: { type: "string" }, executionProfile: { type: "string" } } });
+    expect(inputSchemaOf("pi_session_start")).toMatchObject({ type: "object", required: ["workspace"], additionalProperties: false, properties: { workspace: { type: "string" }, executionProfile: { type: "string" }, base: { type: "string" } } });
     expect(inputSchemaOf("pi_session_list")).toMatchObject({ type: "object", properties: {}, additionalProperties: false });
     for (const name of ["pi_session_get", "pi_session_abort", "pi_session_close"]) expect(inputSchemaOf(name)).toMatchObject({ type: "object", required: ["sessionId"], additionalProperties: false, properties: { sessionId: { type: "string" } } });
     expect(inputSchemaOf("pi_session_prompt")).toMatchObject({ type: "object", required: ["sessionId", "prompt"], additionalProperties: false, properties: { sessionId: { type: "string" }, prompt: { type: "string" } } });
@@ -179,7 +226,7 @@ describe("MCP contracts", () => {
         }],
       ]),
       defaultExecutionProfile: "alpha-profile",
-      workspaceModes: new Map([["alpha-workspace", { mode: "container" }]]),
+      workspaceModes: new Map([["alpha-workspace", { mode: "container", container: { writers: 2, lifecycle: "persistent", profiles: ["zeta-profile"], image: "node", network: "pasta", cache: "none", tags: "none" } }]]),
     });
 
     const registryList = vi.spyOn(connected.registry, "list");
@@ -190,7 +237,7 @@ describe("MCP contracts", () => {
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: TEST_CONFIGURATION.fingerprint, reloadPolicy: "restart-required" },
       events: { delivery: "off" },
-      workspaces: [{ alias: "alpha-workspace", mode: "container" }, { alias: "zeta-workspace", mode: "unset" }],
+      workspaces: [{ alias: "alpha-workspace", mode: "container", writers: 2, defaultBase: null }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
@@ -343,7 +390,8 @@ describe("MCP contracts", () => {
 
   it("retains generic structured error shape", async () => {
     const connected = await client(); const failed = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "missing" } });
-    expect(failed).toMatchObject({ isError: true, structuredContent: { ok: false, error: { code: "unknown_workspace" } } });
+    expect(failed.structuredContent).toEqual({ ok: false, error: { code: "unknown_workspace", message: "Unknown workspace" } });
+    expect(failed.isError).toBe(true);
     const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } });
     expect(started.structuredContent).toMatchObject({ ok: true, session: { workspace: "repo", profile: "read-only", state: "idle" } });
   });

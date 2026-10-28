@@ -96,7 +96,7 @@ class TapHandle implements PiSessionHandle {
 class TapAdapter implements PiSessionAdapter {
   readonly taps = new WeakMap<PiSessionHandle, TapHandle>(); settled: () => void = () => undefined; aborting: (tap: TapHandle) => void = () => undefined;
   constructor(private readonly inner: PiSessionAdapter, private readonly slot: AsyncLocalStorage<{ tap?: TapHandle }>) {}
-  async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {
+  async create(input: Parameters<PiSessionAdapter["create"]>[0]): Promise<PiSessionHandle> {
     const handle = await this.inner.create(input);
     const tap: TapHandle = new TapHandle(handle, { settled: () => this.settled(), aborting: () => this.aborting(tap) });
     this.taps.set(handle, tap);

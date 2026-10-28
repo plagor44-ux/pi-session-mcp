@@ -23,7 +23,10 @@ export function projectCapabilities(
     events: { delivery: eventDelivery },
     workspaces: [...workspaces.keys()]
       .sort(compareAliases)
-      .map((alias) => ({ alias, mode: workspaceModes.get(alias)?.mode ?? "unset" })),
+      .map((alias) => {
+        const entry = workspaceModes.get(alias);
+        return { alias, mode: entry?.mode ?? "unset", ...(entry?.mode === "container" ? { writers: entry.container!.writers, defaultBase: entry.container!.base ?? null } : {}) };
+      }),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
       .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, skills }) => ({
