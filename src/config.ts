@@ -83,11 +83,33 @@ const CONFIG_ERROR_MESSAGES: Record<ConfigErrorCode, string> = {
 
 export class ConfigError extends Error {
   readonly code: ConfigErrorCode;
-  constructor(code: ConfigErrorCode) {
+  /** Dotted schema issue locations for Doctor; built by `issueLocations`, never a value, message or path. */
+  readonly locations: readonly string[];
+  constructor(code: ConfigErrorCode, locations: readonly string[] = []) {
     super(CONFIG_ERROR_MESSAGES[code]);
     this.name = "ConfigError";
     this.code = code;
+    this.locations = Object.freeze([...locations]);
   }
+}
+
+export const MAX_CONFIG_ISSUE_LOCATIONS = 5;
+
+/**
+ * Sorted, deduplicated and bounded issue locations; an issue at the root has the empty location.
+ * A segment is kept only if it is a schema field name, or, inside the path, a key that has the alias
+ * form (record keys are aliases, which Doctor already reports). Any other key, and every unrecognized
+ * key that is not a schema field name, could be a path or a secret and becomes `<key>`.
+ */
+export function issueLocations(issues: readonly z.core.$ZodIssue[]): string[] {
+  const fields = new Set([...Object.keys(configSchema.shape), ...Object.keys(profileSchema.shape), ...Object.keys(eventsSchema.shape)]);
+  const segment = (value: PropertyKey, aliasAllowed: boolean): string =>
+    typeof value === "number" ? String(value) : typeof value === "string" && (fields.has(value) || (aliasAllowed && ALIAS_PATTERN.test(value))) ? value : "<key>";
+  const locations = issues.flatMap((issue) => {
+    const path = issue.path.map((value) => segment(value, true));
+    return issue.code === "unrecognized_keys" ? issue.keys.map((key) => [...path, segment(key, false)]) : [path];
+  });
+  return [...new Set(locations.map((path) => path.join(".")))].sort().slice(0, MAX_CONFIG_ISSUE_LOCATIONS);
 }
 
 const eventsSchema = z.object({ delivery: z.enum(["spool", "off"]) }).strict();
@@ -180,7 +202,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       const thinkingLevelIssue = error.issues.some((issue) => issue.path.at(-1) === "thinkingLevel");
       // Only the events field's own issues map to the delivery code; an unknown top-level key stays a profile-config error.
       const eventsIssue = error.issues.some((issue) => issue.path[0] === "events");
-      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config");
+      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config", issueLocations(error.issues));
     }
     throw error;
   }

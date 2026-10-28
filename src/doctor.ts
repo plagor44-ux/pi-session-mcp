@@ -8,7 +8,7 @@ import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
-import { loadConfig, type AppConfig } from "./config.js";
+import { ConfigError, loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import { readPackageMetadata } from "./package-metadata.js";
@@ -382,7 +382,13 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   catch (error) {
     if (isMissing(error)) checks.push(failure("config_missing", "configuration", "create PI_SESSION_MCP_CONFIG configuration"));
     else if (isUnreadable(error)) checks.push(failure("config_unreadable", "configuration", "grant configuration read access"));
-    else checks.push(failure("config_invalid", "configuration", "fix configuration using the documented schema"));
+    else {
+      // Locations name the offending field; an error without one, or at the root, keeps the plain subject.
+      const locations = error instanceof ConfigError ? error.locations : [];
+      for (const location of locations.length ? locations : [""]) {
+        checks.push(failure("config_invalid", location ? `configuration:${location}` : "configuration", "fix configuration using the documented schema"));
+      }
+    }
   }
   if (config) {
     for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {

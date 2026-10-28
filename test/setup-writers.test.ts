@@ -618,7 +618,8 @@ describe("writer setup reconciliation", () => {
       { id: "workspace_missing", severity: "error", subject: "other" },
       { id: "extension_version_mismatch", severity: "error", subject: "safe:fixture-ext" },
       { id: "build_missing", severity: "error", subject: "/secret/path" },
-      { id: "config_invalid", severity: "error", subject: "configuration" },
+      { id: "config_invalid", severity: "error", subject: "configuration:executionProfiles.a.default" },
+      { id: "config_invalid", severity: "error", subject: "configuration:workspaces.<key>" },
       { id: "writer_not_ready", severity: "error", subject: "x-w1" },
       { id: "extension_unpinned", severity: "warning", subject: "other" },
     ] });

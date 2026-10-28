@@ -107,6 +107,28 @@ describe("loadConfig", () => {
     }
   });
 
+  it("records where the schema rejects the configuration, without values or paths (#173)", async () => {
+    const locations = async (config: unknown) => {
+      try { await loadConfig(await writeConfig(config)); } catch (error) { expect(error).toBeInstanceOf(ConfigError); return (error as ConfigError).locations; }
+      throw new Error("expected a ConfigError");
+    };
+    const { default: _default, ...withoutDefault } = validProfile;
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: { safe: validProfile, extra: withoutDefault } }))
+      .toEqual(["executionProfiles.extra.default"]);
+    // Unknown keys and keys that are not valid aliases could be paths or secrets; only a placeholder is kept.
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, apiKey: "SECRET_CONFIG_SENTINEL" } } }))
+      .toEqual(["executionProfiles.safe.<key>"]);
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: { safe: validProfile }, "sk-secret-sentinel": 1 })).toEqual(["<key>"]);
+    expect(await locations({ workspaces: { "/private/SECRET_DIR": "." }, executionProfiles: { safe: validProfile } })).toEqual(["workspaces.<key>"]);
+    // A known field in the wrong object is named.
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: { safe: validProfile }, skills: [] })).toEqual(["skills"]);
+    // A record-level issue names the record, and the list is bounded.
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: {} })).toEqual(["executionProfiles"]);
+    const many = Object.fromEntries(["a", "b", "c", "d", "e", "f", "g"].map((name) => [`extra-${name}`, withoutDefault]));
+    expect(await locations({ workspaces: { repo: "." }, executionProfiles: { safe: validProfile, ...many } }))
+      .toEqual(["a", "b", "c", "d", "e"].map((name) => `executionProfiles.extra-${name}.default`));
+  });
+
   describe("event delivery", () => {
     const base = { workspaces: { repo: "." }, executionProfiles: { safe: validProfile } };
 
