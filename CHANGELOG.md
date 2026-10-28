@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- Doctor's `config_invalid` names where the schema rejects the configuration:
+  one check per issue location (at most five) with the subject
+  `configuration:<location>`, for example
+  `configuration:executionProfiles.review.default`. Locations hold only schema
+  field names, aliases and array indexes; an unknown key that is not a schema
+  field name, and any other key that is not a valid alias, is shown as
+  `<key>`, and values and messages are never reported. An error without a
+  location keeps the subject `configuration`
+  ([#173](https://github.com/plagor44-ux/pi-session-mcp/issues/173)).
+
 ## 0.13.0 — 2026-10-28
 
 Minor release under ADR 0003 for

@@ -164,6 +164,40 @@ describe("offline doctor", () => {
     expect(`${renderDoctorJson(result)}${renderDoctorHuman(result)}`).not.toMatch(/PACKAGE_SENTINEL|RAW_PACKAGE_SECRET|private/);
   });
 
+  it("names each rejected configuration field in the subject (#173)", async () => {
+    const deps = (error: Error) => ({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), loadConfig: async () => { throw error; } });
+    const located = await runDoctor(deps(new ConfigError("invalid_execution_profile_config", ["executionProfiles.review.default", "workspaces.<key>"])));
+    expect(located.exitCode).toBe(2);
+    expect(located.checks.filter((check) => check.id === "config_invalid")).toEqual([
+      { id: "config_invalid", severity: "error", subject: "configuration:executionProfiles.review.default", remediation: "fix configuration using the documented schema" },
+      { id: "config_invalid", severity: "error", subject: "configuration:workspaces.<key>", remediation: "fix configuration using the documented schema" },
+    ]);
+    expect(renderDoctorHuman(located)).toContain("[configuration:executionProfiles.review.default]");
+    for (const error of [new ConfigError("invalid_execution_modes"), new ConfigError("invalid_execution_profile_config", [""])]) {
+      const plain = await runDoctor(deps(error));
+      expect(plain.checks.filter((check) => check.id === "config_invalid").map((check) => check.subject)).toEqual(["configuration"]);
+    }
+  });
+
+  it("keeps secrets and paths out of the located config_invalid checks of a real configuration (#173)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-doctor-locations-");
+    const profile = { default: true, permissionProfile: "read-only", provider: "fake", model: "fake", thinkingLevel: "off" };
+    const configPath = join(root, "pi-session-mcp.json");
+    await writeFile(configPath, JSON.stringify({
+      workspaces: { "/private/PATH_SENTINEL": "." },
+      skillCatalog: { "Bad Key": "skill.md" },
+      events: { delivery: "off", "sk-SECRET_SENTINEL": true },
+      executionProfiles: { safe: profile, other: { ...profile, default: undefined, mcpServers: { "/SERVER_SENTINEL": {} } }, "UPPER_SENTINEL": profile },
+    }));
+    const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), configPath });
+    const subjects = result.checks.filter((check) => check.id === "config_invalid").map((check) => check.subject);
+    expect(subjects).toContain("configuration:executionProfiles.other.default");
+    expect(subjects).toContain("configuration:events.<key>");
+    // Sorted and bounded: the sixth location (workspaces) is cut.
+    expect(subjects).toHaveLength(5);
+    expect(`${renderDoctorJson(result)}${renderDoctorHuman(result)}`).not.toMatch(/SENTINEL|private|Bad Key/);
+  });
+
   it("reports a missing configuration when no configuration path is set", async () => {
     const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), loadConfig: async () => { throw new ConfigError("config_path_required"); } });
     expect(result.checks).toContainEqual(expect.objectContaining({ id: "config_missing", severity: "error" }));

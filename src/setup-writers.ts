@@ -120,7 +120,10 @@ async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetupDepende
     || (check.id === "container_profile_refused" && check.subject.startsWith(`${ctx.alias}:`))
     || (check.id === "writer_not_ready" && WRITER_NAME_PATTERN.test(check.subject));
   const blocking = doctor.checks.filter((check) => check.severity === "error" && !own(check));
-  if (blocking.length) throw new DoctorGateError(blocking.map((check) => ({ status: "failed", code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } })));
+  // One finding per check and alias: several `config_invalid` locations (#173) all map to the alias `invalid`.
+  const findings = blocking.map((check) => ({ status: "failed" as const, code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } }));
+  const unique = findings.filter((finding, index) => findings.findIndex((other) => other.code === finding.code && other.target.alias === finding.target.alias) === index);
+  if (unique.length) throw new DoctorGateError(unique);
 }
 /** The alias that leads a Doctor subject: `<profile>:<package>` and writer names report their alias part; global checks have none. */
 function gateAlias(id: string, subject: string): string {
