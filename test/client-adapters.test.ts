@@ -4,6 +4,7 @@ import { createCodexAdapter } from "../src/client-adapters/codex.js";
 import { verifyMcpCapabilities, type McpStdioProcess, type McpVerifierResult } from "../src/client-adapters/mcp-verifier.js";
 import { versionFromOutput } from "../src/client-adapters/command.js";
 import { projectCapabilities } from "../src/capabilities.js";
+import type { WorkspaceModeEntry } from "../src/execution-modes.js";
 import { ImmutableMap, type ConfiguredExecutionProfile } from "../src/execution-profile.js";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec, type ExtensionSpec } from "../src/extension-spec.js";
 import { MAX_PROFILE_SKILLS } from "../src/skill-catalog.js";
@@ -41,6 +42,10 @@ function withoutConfiguration(capabilities: Record<string, unknown>): Record<str
 
 function capabilitiesWith(configuration: unknown): Record<string, unknown> {
   return { ...VERIFIED_CAPABILITIES, configuration };
+}
+
+function capabilitiesWithWorkspace(workspace: Record<string, unknown>): Record<string, unknown> {
+  return { ...VERIFIED_CAPABILITIES, workspaces: [workspace] };
 }
 
 function capabilitiesWithProfile(profile: Record<string, unknown>): Record<string, unknown> {
@@ -130,9 +135,40 @@ describe("client adapters", () => {
     expect(methods).not.toContain("pi_session_start");
   });
 
-  it.each(["unset", "host", "container", "read-only"])("accepts workspace mode %s", async (mode) => {
+  it.each(["unset", "host", "read-only"])("accepts workspace mode %s", async (mode) => {
     const capabilities = { ...VERIFIED_CAPABILITIES, workspaces: [{ alias: "repo", mode }] };
     expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "verified", capabilitiesGet: true });
+  });
+
+  it.each([
+    [1, "main"],
+    [16, "feature/container-verify"],
+    [2, null],
+  ])("accepts a container workspace with writers %s and defaultBase %s", async (writers, defaultBase) => {
+    const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode: "container", writers, defaultBase });
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "verified", capabilitiesGet: true });
+  });
+
+  it.each([
+    ["missing writers", { defaultBase: "main" }],
+    ["missing defaultBase", { writers: 1 }],
+    ["zero writers", { writers: 0, defaultBase: "main" }],
+    ["too many writers", { writers: 17, defaultBase: "main" }],
+    ["fractional writers", { writers: 1.5, defaultBase: "main" }],
+    ["non-number writers", { writers: "1", defaultBase: "main" }],
+    ["invalid defaultBase", { writers: 1, defaultBase: "refs/heads/main" }],
+    ["non-string defaultBase", { writers: 1, defaultBase: 1 }],
+    ["unknown key", { writers: 1, defaultBase: "main", extra: true }],
+  ])("rejects a container workspace with %s", async (_label, fields) => {
+    const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode: "container", ...fields });
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "failed", capabilitiesGet: false });
+  });
+
+  it.each(["unset", "host", "read-only"])("rejects container fields on a %s workspace", async (mode) => {
+    for (const fields of [{ writers: 1 }, { defaultBase: null }]) {
+      const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode, ...fields });
+      expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "failed", capabilitiesGet: false });
+    }
   });
 
   const malformedCapabilities: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
@@ -187,7 +223,7 @@ describe("client adapters", () => {
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
   });
 
-  it("verifies the server's own capability projection, including profile extensions and skills", async () => {
+  it("verifies the server's own capability projection, including container workspaces, profile extensions and skills", async () => {
     const profiles: ConfiguredExecutionProfile[] = [
       { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off" },
       { alias: "code-ext", default: false, permissionProfile: "coding", provider: "fake-ext", model: "fake-ext-model", thinkingLevel: "high", extensions: [extension("npm:pi-cursor-sdk@0.5.3"), extension("npm:@scope/other-ext@1.2.3-beta.1")], skills: [{ alias: "review", path: "/srv/review/SKILL.md" }, { alias: "docs", path: "/srv/docs/SKILL.md" }] },
@@ -196,7 +232,12 @@ describe("client adapters", () => {
       new ImmutableMap([["repo", "/srv/repo"]]),
       new ImmutableMap(profiles.map((profile) => [profile.alias, profile] as const)),
       { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" },
+      new ImmutableMap<string, WorkspaceModeEntry>([["repo", {
+        mode: "container",
+        container: { writers: 2, base: "main", lifecycle: "persistent", profiles: ["code-ext"], image: "node", network: "none", cache: "none", tags: "none" },
+      }]]),
     );
+    expect(capabilities.workspaces).toEqual([{ alias: "repo", mode: "container", writers: 2, defaultBase: "main" }]);
     expect((await verifyCapabilityPayload(capabilities)).status).toBe("verified");
   });
 

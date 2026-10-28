@@ -1,6 +1,6 @@
 {
   "name": "pi-session-mcp",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Local stdio MCP server for controlled Pi coding-agent sessions",
   "license": "MIT",
   "keywords": [

@@ -2457,6 +2457,131 @@ Not established for `0.11.6`:
   wrapper's periodic credential copy (#136);
 - the VS Code wake; macOS delivery.
 
+### v0.12.1 pre-release acceptance
+
+`v0.12.1` was accepted on 2026-10-28 from 13:12 to 13:17 UTC on its release
+candidate `c6b472d`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.312`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record.
+
+The patch ships #160 on top of 0.12.0. It does not change the MCP contract or
+the setup report schema.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    120 files, 3708 passed and 14 skipped, and no unhandled error. It ran on a
+    host with a real writer lease directory, which the Doctor mode-order test
+    no longer reads.
+  - `npm audit` exited with `1` and names only the known `undici` finding
+    through `@earendil-works/pi-coding-agent` 1.4.0
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 907 files (tarball shasum
+    `f206e0eb0818342fb9e6a36c2c147fb690c515ce`); a scan of the packed files for
+    private names, hosts and paths found none.
+  - Doctor reported `packageVersion` `0.12.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.12.1`.
+- In every Level 2 run the real client registrations and the built files were
+  unchanged, no process remained, and the leak check passed.
+- Podman-gated writer tests on the candidate: 4 of 4 passed.
+- The candidate's setup verifier against its own server with the operator's
+  real configuration, which has five container workspaces, reported
+  `verified`, with initialize, `tools/list` (eight tools) and
+  `pi_capabilities_get`. The same check with the installed 0.12.0 failed at
+  `pi_capabilities_get`.
+- Review: `review-glm` (another model family than the author) on the fix,
+  verdict `NON_BLOCKING_ONLY`; the shared writer bound and the real-server test
+  with container workspaces were added.
+
+Not established for `0.12.1`: client-target `--verify` through the installed
+package, which follows the upgrade; Level 3.
+
+### v0.12.0 post-release evidence
+
+Recorded on 2026-10-28 for the published release `0.12.0`.
+
+Tag binding: a fresh clone of the annotated tag `v0.12.0` (tag object
+`bb77dfd8a4e49849d5e9c7fd305fb00baf443044`) peels to the merge commit
+`dfbef8c5efce38eacc8704dbaf93c534cdad0ef8` of #159, and
+`git describe --tags --exact-match` reports `v0.12.0`. CI on the merge commit
+passed on Linux, macOS 15, macOS 26 and `verify` after one rerun: the first
+macOS 26 run hit a timeout in `test/extension-ablation-deps.test.ts`
+(5044 ms against 5000 ms), a git-heavy evaluation test that the release did not
+touch. CI on the tag passed on the first attempt.
+
+- Level 1 on the tag clone after `npm ci`: typecheck, `build:cli`, the test
+  run (120 files, 3693 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. Doctor
+  reported `packageVersion` `0.12.0`.
+- `pi-session-mcp@0.12.0` on npm: 907 files, shasum
+  `4699b05ef849e88c6d56f5ddae6b06984799cea6`, `gitHead` `1fb8a7e` (the head of
+  #159, whose tree equals the merge commit). A local `npm pack` of the merge
+  commit gives the same shasum. A scan of the published files for private
+  names, hosts and paths found none.
+- Published npm package, Level 2 from a fresh prefix: 160 of 160 with delivery
+  off and 228 of 228 with `--events spool`; the install smoke reported
+  `smoke_passed` with version `0.12.0`. Clients: Codex CLI `0.162.1` and Claude
+  Code `2.1.312`.
+- The GitHub release `v0.12.0` was published the same day.
+
+Operator upgrade of the workstation from `0.11.8` to `0.12.0` on 2026-10-28,
+following [Installation](installation.md#container-writers):
+
+- Coding sessions were closed and the two pi-session-mcp writer servers were
+  disabled in the controller; one idle controller of another repository still
+  had four writer containers running.
+- Both host client targets (`claude-code:user`, `codex:user`) were removed with
+  `0.11.8`, then `npm install -g pi-session-mcp@0.12.0`. Doctor reported
+  `packageVersion` `0.12.0` and, as expected, every writer `writer_not_ready`
+  and `writer_not_migrated`.
+- Five container repositories with 18 writers were migrated by repeating their
+  provisioning commands with unchanged settings, each first as a dry run
+  (`planned`), then with `--apply`: pi-session-mcp (2 writers), node-app (4),
+  go-app (4, operator image, `--cache go`), pynode-app (4, operator image,
+  base `dev`) and py-app (4, operator image). Every writer reported
+  `writer_accepted` and is `launch: "relay"`, `ready`, verdict `pass`. Each
+  repository recorded its shared default base (`main`, and `dev` for
+  pynode-app). All 36 owned writer registrations and their hook entries were
+  removed; the fence removed the four running legacy containers; no writer
+  container remained.
+- `--apply` of both client targets passed, but `--verify` failed with
+  `mcp_failed` on both:
+  [#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160). A direct
+  handshake with the installed server returned the eight tools and the
+  capabilities, including `writers` and `defaultBase` for each container
+  workspace; the 0.12.0 verifier rejected them. The fix, run with the real
+  configuration against the candidate's own server, reported `verified`.
+- `--writer <name> --verify` passed for all 18 writers over the relay path
+  (`mcp_verified`).
+- Live relayed coding session through the one host registration, after
+  reconnecting `pi-session-mcp`: `pi_capabilities_get` listed the container
+  workspaces with `writers` and `defaultBase`; `pi_session_start` with profile
+  `code` on the pi-session-mcp workspace leased `pi-session-mcp-w1` at
+  `refs/heads/main` and returned `writer` and `base`. The worker implemented
+  the #160 fix in two turns. Both turns woke the controller through the wake
+  hook from the host spool, without polling. Close, collect and finish
+  succeeded without a reconnect. A read-only `review-glm` session on the host
+  checkout reviewed the commit (`NON_BLOCKING_ONLY`).
+- The first turn could not commit: the migrated clones had no commit identity
+  (Doctor `writer_git_identity_missing` on all 18 writers), because migration
+  keeps the clone and only provisioning and reset copy the identity. After
+  `--finish` of the used writer and `--reset --apply` of the other 17, Doctor
+  reported no writer finding, and all 18 writers stayed `relay`, `ready` and
+  accepted. The upgrade runbook now names this step.
+
+Not established for `0.12.0`: the upgrade of the second machine; the live
+checks of #151 (`--cache uv`) and #154 (`--tags reachable`), which need a
+settings change of an existing writer; a busy-pool (`writer_unavailable`) and a
+`base` fix round in live use; Level 3.
+
 ### v0.12.0 pre-release acceptance
 
 `v0.12.0` was accepted on 2026-10-28 from 11:40 to 11:45 UTC on its release
