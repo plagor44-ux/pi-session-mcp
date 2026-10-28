@@ -26,6 +26,7 @@ export const writerStateSchema = z.object({
   index: indexSchema,
   phase: z.enum(["provisioning", "ready", "not_ready"]),
   lifecycle: z.enum(["persistent", "ephemeral"]),
+  launch: z.enum(["legacy", "relay"]).default("legacy"),
   profiles: z.array(aliasSchema).min(1).readonly(),
   providers: z.array(z.object({
     provider: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
@@ -42,7 +43,8 @@ export const writerStateSchema = z.object({
   collected: z.object({ digest: z.string(), at: z.string() }).strict().optional(),
 }).strict();
 
-export type WriterState = z.infer<typeof writerStateSchema>;
+// Legacy constructors may omit launch; every parsed/read state has the schema's default.
+export type WriterState = Omit<z.infer<typeof writerStateSchema>, "launch"> & { launch?: "legacy" | "relay" };
 
 export function writerName(alias: string, index: number): string {
   if (!aliasSchema.safeParse(alias).success || !indexSchema.safeParse(index).success) {

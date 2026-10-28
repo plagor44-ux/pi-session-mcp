@@ -6,21 +6,23 @@ const { transportStdout, serve, transport } = vi.hoisted(() => ({
 }));
 vi.mock("../src/stdout-guard-install.js", () => ({ stdoutGuard: { transportStdout } }));
 vi.mock("@modelcontextprotocol/server/stdio", () => ({
-  serveStdio: serve,
+  serveStdio: serve.mockReturnValue({ close: async () => {} }),
   StdioServerTransport: class { constructor(...args: unknown[]) { transport(...args); } },
 }));
 import { serveRefusal } from "../src/refusal-server.js";
 
 it("uses protected stdout by default and preserves explicit stream injection", async () => {
-  await serveRefusal("writer_not_ready");
-  expect(transport).toHaveBeenLastCalledWith(process.stdin, transportStdout);
+  const defaultServing = serveRefusal("writer_not_ready");
+  await vi.waitFor(() => expect(transport).toHaveBeenLastCalledWith(process.stdin, transportStdout));
+  process.emit("SIGHUP"); await defaultServing;
   const stdin = new PassThrough(), stdout = new PassThrough();
-  await serveRefusal("writer_not_ready", { stdin, stdout });
+  const serving = serveRefusal("writer_not_ready", { stdin, stdout });
+  await Promise.resolve();
   expect(transport).toHaveBeenLastCalledWith(stdin, stdout);
   const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   try {
     const options = serve.mock.calls[0]![1] as { onerror: (error: Error) => void };
     options.onerror(new Error("secret /private/path"));
     expect(stderr.mock.calls).toEqual([[JSON.stringify({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }) + "\n"]]);
-  } finally { stderr.mockRestore(); }
+  } finally { stdin.emit("end"); await serving; stderr.mockRestore(); }
 });

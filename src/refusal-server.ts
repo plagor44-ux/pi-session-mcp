@@ -4,15 +4,23 @@ import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { PACKAGE_VERSION } from "./package-metadata.js";
 
-export type RefusalCode = "container_runtime_unavailable" | "writer_not_ready";
+export type RefusalCode = "container_runtime_unavailable" | "writer_not_ready" | "writer_busy" | "writer_fenced";
 const messages: Record<RefusalCode, string> = {
   container_runtime_unavailable: "Rootless Podman is not usable on this machine; this writer refuses all work.",
   writer_not_ready: "This writer is not ready; run pi-session-mcp-setup for its repository.",
+  writer_busy: "This writer is already leased; try another writer.",
+  writer_fenced: "Container absence could not be confirmed; this writer refuses all work.",
 };
 
 export async function serveRefusal(code: RefusalCode, io?: { stdin: Readable; stdout: Writable }): Promise<void> {
   const stdout = io?.stdout ?? (await import("./stdout-guard-install.js")).stdoutGuard.transportStdout;
-  serveStdio(() => {
+  const stdin = io?.stdin ?? process.stdin;
+  let finish!: () => void;
+  const ended = new Promise<void>((resolve) => { finish = resolve; });
+  stdin.once("end", finish); stdin.once("close", finish);
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+  for (const signal of signals) process.once(signal, finish);
+  const handle = serveStdio(() => {
     const server = new McpServer({ name: "pi-session-mcp", version: PACKAGE_VERSION }, { capabilities: { tools: {} } });
     for (const name of ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"]) {
       server.registerTool(name, { inputSchema: z.object({}).passthrough() }, () => {
@@ -22,7 +30,15 @@ export async function serveRefusal(code: RefusalCode, io?: { stdin: Readable; st
     }
     return server;
   }, {
-    transport: new StdioServerTransport(io?.stdin ?? process.stdin, stdout),
+    transport: new StdioServerTransport(stdin, stdout),
     onerror: () => { process.stderr.write(JSON.stringify({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }) + "\n"); },
   });
+  try {
+    if (stdin.readableEnded || stdin.destroyed) finish();
+    await ended;
+    await handle.close();
+  } finally {
+    stdin.off("end", finish); stdin.off("close", finish);
+    for (const signal of signals) process.off(signal, finish);
+  }
 }

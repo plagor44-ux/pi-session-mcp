@@ -5,12 +5,13 @@ import { chmod, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/pr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { launch, launchEntry, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
+import { LAUNCHER_CLEANUP_BOUND_MS, launch, launchEntry, renderWrapper, wrapperDigest, type LaunchDependencies } from "../src/writer-launch.js";
 import { acceptanceFingerprint, writeWriterState, writerEventDeliveryEnabled, writerPaths, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { serveArgs } from "../src/writer-boundary.js";
 import { serveRefusal } from "../src/refusal-server.js";
 import * as credentials from "../src/writer-credentials.js";
+import { WriterLeaseError } from "../src/writer-lease.js";
 vi.mock("../src/refusal-server.js", () => ({ serveRefusal: vi.fn() }));
 vi.mock("../src/writer-credentials.js", async (original) => ({ ...await original<typeof credentials>(), refreshHostCredential: vi.fn(), writeBoundaryCredentials: vi.fn() }));
 let home: string, child: ChildProcess, deps: LaunchDependencies, tick: () => void;
@@ -20,6 +21,8 @@ beforeEach(async () => {
   child = new EventEmitter() as ChildProcess; child.kill = vi.fn(() => true);
   deps = { home, releaseRoot: "/release", env: { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }, now: () => 1_800_000_000_000,
     runner: { run: vi.fn(async (_cmd, args) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : "5.0.0", stderr: "" })) },
+    lease: { acquire: vi.fn(async () => ({ fd: 42, release: vi.fn(async () => {}) })), adopt: vi.fn(async () => ({ fd: 3, release: vi.fn(async () => {}) })) },
+    ensureAbsent: vi.fn(async () => {}),
     spawnPodman: vi.fn(() => { setImmediate(() => child.emit("close", 7)); return child; }),
     setInterval: vi.fn((fn) => { tick = fn; return setInterval(() => {}, 100000); }), clearInterval: vi.fn(clearInterval) };
 });
@@ -64,7 +67,7 @@ it("refuses missing, provisioning and stale accepted states", async () => {
 });
 it("runs accepted servers with identical boundary args and skips credentials when disabled", async () => {
   await save(true); expect(await launch(["x-w1"], deps)).toBe(7);
-  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", undefined, { name: "x-w1" }), [42]);
   expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled(); expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
 });
 it("invalidates acceptance when current wrapper bytes change", async () => {
@@ -74,7 +77,7 @@ it("invalidates acceptance when current wrapper bytes change", async () => {
 });
 it("allows a probe before acceptance", async () => {
   await save(); await launch(["x-w1", "node", "-", "cfg"], deps);
-  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-", "cfg"], "/release"));
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-", "cfg"], "/release", undefined, { name: "x-w1" }), [42]);
 });
 it("recopies at the configured interval across 300000 ms and forwards signals", async () => {
   await save(); deps.env = {}; vi.mocked(deps.spawnPodman).mockReturnValue(child);
@@ -88,7 +91,7 @@ it("recopies at the configured interval across 300000 ms and forwards signals", 
     await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(i + 2));
   }
   process.emit("SIGINT"); process.emit("SIGTERM");
-  expect(child.kill).toHaveBeenCalledWith("SIGINT"); expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+  expect(child.kill).toHaveBeenCalledExactlyOnceWith("SIGINT");
   child.emit("close", 0); expect(await running).toBe(0);
   await vi.advanceTimersByTimeAsync(60_000); expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(6);
 });
@@ -122,11 +125,12 @@ it("reads fresh credentials, copies after failed refresh, skips overlapping tick
   tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
   expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "api_key", key: "fresh" } });
   await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: 1 } }));
-  vi.mocked(credentials.refreshHostCredential).mockImplementation(() => new Promise(() => {}));
+  let finishRefresh!: () => void;
+  vi.mocked(credentials.refreshHostCredential).mockImplementation(() => new Promise<void>((resolve) => { finishRefresh = resolve; }));
   tick(); await vi.waitFor(() => expect(credentials.refreshHostCredential).toHaveBeenCalledTimes(2));
   for (let i = 0; i < 5; i++) tick();
   expect(credentials.refreshHostCredential).toHaveBeenCalledTimes(2);
-  child.emit("close", 0); await running; expect(deps.clearInterval).toHaveBeenCalled();
+  child.emit("close", 0); finishRefresh(); await running; expect(deps.clearInterval).toHaveBeenCalled();
 });
 it("refreshes an OAuth token 8 minutes from expiry with the threshold validity and copies the refreshed credentials", async () => {
   await save(); deps.env = {};
@@ -187,6 +191,121 @@ it("still copies the host credentials without new logging when the refresh fails
   child.emit("close", 0); await running;
 });
 
+it("launches in lease, runtime, fence, events, credentials, spawn, timer order", async () => {
+  await save(); await enableDelivery(); deps.env = {};
+  const order: string[] = [];
+  vi.mocked(deps.lease!.acquire).mockImplementation(async () => {
+    order.push("lease"); return { fd: 42, release: vi.fn(async () => { order.push("release"); }) };
+  });
+  const run = vi.mocked(deps.runner.run).getMockImplementation()!;
+  vi.mocked(deps.runner.run).mockImplementation(async (...args) => { order.push("runtime"); return run(...args); });
+  vi.mocked(deps.ensureAbsent!).mockImplementation(async () => {
+    order.push("fence");
+    if (!vi.mocked(deps.spawnPodman).mock.calls.length) await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  vi.mocked(credentials.writeBoundaryCredentials).mockImplementationOnce(async () => {
+    expect((await lstat(eventsDir())).isDirectory()).toBe(true); order.push("credentials");
+  });
+  vi.mocked(deps.spawnPodman).mockImplementation(() => { order.push("spawn"); setImmediate(() => child.emit("close", 0)); return child; });
+  const interval = deps.setInterval;
+  deps.setInterval = vi.fn((callback, ms) => { order.push("timer"); return interval(callback, ms); });
+  await launch(["x-w1", "probe"], deps);
+  expect(order).toEqual(["lease", "runtime", "runtime", "fence", "credentials", "spawn", "timer", "fence", "release"]);
+});
+it("refuses with writer_busy and spawns no podman when the lease is held", async () => {
+  vi.mocked(deps.lease!.acquire).mockRejectedValue(new WriterLeaseError("writer_busy"));
+  await launch(["x-w1"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_busy");
+  expect(deps.runner.run).not.toHaveBeenCalled(); expect(deps.spawnPodman).not.toHaveBeenCalled();
+});
+it("adopts PI_WRITER_LEASE_FD and does not acquire a second lease", async () => {
+  await save(); deps.env.PI_WRITER_LEASE_FD = "3";
+  await launch(["x-w1", "probe"], deps);
+  expect(deps.lease!.adopt).toHaveBeenCalledWith(home, "x-w1", 3);
+  expect(deps.lease!.acquire).not.toHaveBeenCalled();
+  expect(deps.spawnPodman).toHaveBeenCalledWith(expect.arrayContaining(["--name", "pi-writer-x-w1"]), [3]);
+});
+it.each(["", "-1", "3x", " 3", "+3", "3.0", "1e2", "9007199254740992"])("refuses malformed inherited descriptor %j before Podman", async (fd) => {
+  deps.env.PI_WRITER_LEASE_FD = fd;
+  await launch(["x-w1"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready");
+  expect(deps.lease!.adopt).not.toHaveBeenCalled(); expect(deps.runner.run).not.toHaveBeenCalled();
+});
+it.each(["acquire", "adopt"] as const)("maps other %s failures to writer_not_ready", async (method) => {
+  if (method === "adopt") deps.env.PI_WRITER_LEASE_FD = "3";
+  vi.mocked(deps.lease![method]).mockRejectedValue(new WriterLeaseError("writer_lease_unavailable"));
+  await launch(["x-w1"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+});
+it("holds the lease while the refusal server serves and releases it on exit", async () => {
+  const release = vi.fn(async () => {});
+  vi.mocked(deps.lease!.acquire).mockResolvedValue({ fd: 42, release });
+  let finish!: () => void;
+  vi.mocked(serveRefusal).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  const running = launch(["x-w1"], deps);
+  await vi.waitFor(() => expect(serveRefusal).toHaveBeenCalled());
+  expect(release).not.toHaveBeenCalled(); finish(); await running;
+  expect(release).toHaveBeenCalledTimes(1);
+});
+it("refuses with writer_fenced and writes no credentials or events when absence cannot be confirmed", async () => {
+  await save(); await enableDelivery(); deps.env = {};
+  const paths = writerPaths(home, "x-w1"); await mkdir(paths.agent);
+  await writeFile(join(paths.agent, "auth.json"), "unchanged");
+  vi.mocked(deps.ensureAbsent!).mockRejectedValue(new Error("private"));
+  await launch(["x-w1", "probe"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("writer_fenced");
+  expect(credentials.writeBoundaryCredentials).not.toHaveBeenCalled(); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  const { readFile } = await import("node:fs/promises");
+  expect(await readFile(join(paths.agent, "auth.json"), "utf8")).toBe("unchanged");
+  await expect(lstat(paths.events)).rejects.toMatchObject({ code: "ENOENT" });
+});
+it("relay launch omits the events mount; legacy launch keeps it", async () => {
+  await save(); await enableDelivery();
+  await writeWriterState(home, "x-w1", { ...state, launch: "relay" });
+  await launch(["x-w1", "probe"], deps);
+  expect(vi.mocked(deps.spawnPodman).mock.calls[0]![0].join(" ")).not.toContain("/pi/events");
+  await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
+  await writeWriterState(home, "x-w1", { ...state, launch: "legacy" });
+  await launch(["x-w1", "probe"], deps);
+  expect(vi.mocked(deps.spawnPodman).mock.calls[1]![0]).toContain(`${eventsDir()}:/pi/events:rw`);
+});
+it("on host stdin end and child close joins an outstanding refresh before releasing the lease", async () => {
+  await save(); deps.env = {}; vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const release = vi.fn(async () => {});
+  vi.mocked(deps.lease!.acquire).mockResolvedValue({ fd: 42, release });
+  const running = launch(["x-w1", "probe"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  let finish!: () => void;
+  vi.mocked(credentials.writeBoundaryCredentials).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+  tick(); await vi.waitFor(() => expect(credentials.writeBoundaryCredentials).toHaveBeenCalledTimes(2));
+  process.stdin.emit("end"); child.emit("close", 0);
+  await Promise.resolve(); expect(release).not.toHaveBeenCalled();
+  finish(); await running;
+  expect(release).toHaveBeenCalledTimes(1); expect(deps.ensureAbsent).toHaveBeenCalledTimes(2);
+});
+it("on SIGHUP forwards SIGTERM to podman once and releases after the child closes", async () => {
+  await save(); vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const release = vi.fn(async () => {});
+  vi.mocked(deps.lease!.acquire).mockResolvedValue({ fd: 42, release });
+  const running = launch(["x-w1", "probe"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  process.emit("SIGHUP"); process.emit("SIGTERM");
+  expect(child.kill).toHaveBeenCalledExactlyOnceWith("SIGTERM"); expect(release).not.toHaveBeenCalled();
+  child.emit("close", 0); await running; expect(release).toHaveBeenCalledTimes(1);
+});
+it.each([false, true])("force-removes after LAUNCHER_CLEANUP_BOUND_MS and confirms absence even if rm fails (%s)", async (rmFails) => {
+  await save(); vi.mocked(deps.spawnPodman).mockReturnValue(child);
+  const running = launch(["x-w1", "probe"], deps);
+  await vi.waitFor(() => expect(deps.spawnPodman).toHaveBeenCalled());
+  if (rmFails) vi.mocked(deps.runner.run).mockRejectedValue(new Error("rm failed"));
+  vi.useFakeTimers(); process.emit("SIGTERM");
+  await vi.advanceTimersByTimeAsync(LAUNCHER_CLEANUP_BOUND_MS - 1);
+  expect(deps.runner.run).not.toHaveBeenCalledWith("podman", expect.arrayContaining(["rm"]), expect.anything(), expect.anything());
+  await vi.advanceTimersByTimeAsync(1); expect(await running).toBe(1);
+  expect(deps.runner.run).toHaveBeenCalledWith("podman", ["rm", "-f", "-t", "0", "pi-writer-x-w1"], expect.any(AbortSignal), { inheritFds: [42] });
+  expect(deps.ensureAbsent).toHaveBeenCalledTimes(2);
+});
+
 const uid = process.getuid!();
 async function enableDelivery(config: unknown = { events: { delivery: "spool" } }) {
   const paths = writerPaths(home, "x-w1");
@@ -203,7 +322,7 @@ itLinux("mounts a freshly created private spool directory of the writer when its
   const dir = eventsDir();
   expect(dir).toBe(join(writerPaths(home, "x-w1").root, "events"));
   expect(await launch(["x-w1"], deps)).toBe(7);
-  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", dir));
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", dir, { name: "x-w1" }), [42]);
   const args = vi.mocked(deps.spawnPodman).mock.calls[0]![0];
   expect(args).toContain(`${dir}:/pi/events:rw`); expect(args).toContain("PI_SESSION_MCP_EVENTS_DIR=/pi/events");
   expect((await lstat(dir)).mode & 0o777).toBe(0o700);
@@ -231,7 +350,7 @@ itLinux("mounts the spool directory for a probe launch too, and reuses an existi
   const dir = eventsDir();
   await launch(["x-w1", "node", "-"], deps); await launch(["x-w1", "node", "-"], deps);
   expect(deps.spawnPodman).toHaveBeenCalledTimes(2);
-  for (const call of vi.mocked(deps.spawnPodman).mock.calls) expect(call[0]).toEqual(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-"], "/release", dir));
+  for (const call of vi.mocked(deps.spawnPodman).mock.calls) expect(call[0]).toEqual(serveArgs(writerPaths(home, "x-w1"), state, ["node", "-"], "/release", dir, { name: "x-w1" }));
 });
 it.each([
   ["no events field", { workspaces: {} }],
@@ -241,7 +360,7 @@ it.each([
 ])("adds no mount and creates no directory with %s", async (_label, config) => {
   await enableDelivery(config); await save(true);
   await launch(["x-w1"], deps);
-  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release"));
+  expect(deps.spawnPodman).toHaveBeenCalledWith(serveArgs(writerPaths(home, "x-w1"), state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release", undefined, { name: "x-w1" }), [42]);
   await expect(lstat(eventsDir())).rejects.toMatchObject({ code: "ENOENT" });
 });
 it("adds no mount without a writer configuration file", async () => {
