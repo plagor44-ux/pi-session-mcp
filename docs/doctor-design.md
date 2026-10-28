@@ -34,10 +34,14 @@ and owners are:
 | `workspace_not_writable` | A workspace is not writable while a coding profile can target it | validated workspace alias |
 | `workspace_gitfile` | Warning. A workspace's `.git` is a regular file starting with `gitdir:` while at least one execution profile has the `coding` permission profile | validated workspace alias |
 | `workspace_mode_unset` | Warning. A workspace has mode `unset` while at least one execution profile has the `coding` permission profile | validated workspace alias |
+| `workspace_base_unset` | Warning. A workspace has mode `container` without a recorded default base in its execution-modes entry | validated workspace alias |
 | `workspace_host_writes_accepted` | Always `ok`, without remediation. The operator has explicitly accepted host writes for this workspace | validated workspace alias |
 | `container_runtime_unavailable` | A workspace has mode `container` and the local rootless Podman probe fails | validated workspace alias |
 | `container_profile_refused` | A selected container coding profile cannot be rendered: missing profile, extensions or MCP grants, non-false default, non-coding permission, invalid skills, non-builtin/unshipped/operator-overridden skills, or schema-invalid rendered configuration (error); one ok per workspace when all selected profiles pass; one workspace error saying selected profiles could not be checked if the original configuration cannot be read | workspace alias:profile alias on refusal; workspace alias on success or unreadable configuration |
+| `writer_lease_directory` | Only when `~/.local/state/pi-session-mcp/leases` exists. Error when it is a symbolic link, is not a real directory, is not owned by the current user, or has a mode other than exactly 0700; an absent directory is not reported | `writer lease` |
 | `writer_not_ready` | State is missing or invalid, phase is not ready, acceptance fingerprint is stale, or the local image is absent (error) | validated writer name |
+| `writer_not_migrated` | Warning. The writer state still records the legacy launch, so the writer is not in the relay pool | validated writer name |
+| `writer_off_default_base` | Warning. One or more ready writers of a container workspace have a base other than the workspace default base; the remediation states only their count | validated workspace alias |
 | `writer_git_identity_missing` | Clone Git config lacks a readable user name and email (warning); set both in the operator checkout, then reset the writer | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning) | validated writer name |
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |

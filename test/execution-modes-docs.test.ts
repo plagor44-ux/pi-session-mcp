@@ -24,6 +24,6 @@ it("documents literal writer findings and Doctor writer ids", () => {
   for (const code of codes) expect(docs.split("\n").filter((line) => line.startsWith(`| \`${code}\` |`)), code).toHaveLength(1);
   const doctorDocs = read("docs/doctor-design.md");
   const ids = new Set([...read("src/doctor.ts").matchAll(/(?:failure|warning|ok)\("(writer_[^"]+)"/g)].map((match) => match[1]!));
-  expect(ids.size).toBe(4);
+  expect(ids.size).toBe(7);
   for (const id of ids) expect(doctorDocs.split("\n").filter((line) => line.startsWith(`| \`${id}\` |`)), id).toHaveLength(1);
 });
