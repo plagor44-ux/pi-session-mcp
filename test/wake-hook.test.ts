@@ -705,6 +705,15 @@ linuxOnly("per-turn waiter lock", () => {
     expect(readFileSync(path, "utf8")).toBe("22");
     expect(existsSync(`${path}.reclaim`)).toBe(false);
   });
+  it("takes the lock under the guard when the stale lock vanished after it was judged", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    writeFileSync(path, "4242");
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 24, isAlive: dead, beforeReclaim: () => rmSync(path) })).toBe(path);
+    expect(readFileSync(path, "utf8")).toBe("24");
+    expect(existsSync(`${path}.reclaim`)).toBe(false);
+  });
   it("leaves a stale lock to the waiter that holds the reclaim guard", async () => {
     const f = await fixture();
     mkdirSync(f.claims, { recursive: true, mode: 0o700 });

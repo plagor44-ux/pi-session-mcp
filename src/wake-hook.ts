@@ -428,7 +428,11 @@ export interface WaiterLockOptions {
  * Reclaiming a stale lock is serialized by the exclusive guard `<lock>.reclaim`, and the lock is judged again while
  * holding it: an earlier observation never deletes a lock that another waiter created after it. A guard that is already
  * there means another waiter is reclaiming and will cover the turn. A guard left by a crash between two calls blocks
- * reclamation for that one turn only, until `cleanupOldClaims` removes it.
+ * reclamation for that one turn only, until `cleanupOldClaims` removes it. A guard that cannot be created (for example
+ * in a full runtime directory) fails like the lock itself, and the caller waits without a lock rather than dropping the
+ * wake. Remaining limit: the guard does not serialize a fresh create or a release, so a lock judged stale by age alone
+ * (its pid alive) that its owner releases between the inode check and the unlink, and that a new waiter recreates with
+ * the same inode number, can still be removed.
  */
 export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sessionId: string, turnId: string, options: WaiterLockOptions = {}): string | undefined {
   const path = join(claims, waiterLockName(namespace, sessionId, turnId));
@@ -436,14 +440,18 @@ export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sess
   const stale = (held: NonNullable<ReturnType<typeof readLockPid>>): boolean =>
     // A lock that is still being written (no pid yet) is young; it is stale only once it has been unreadable for a while.
     !(held.pid !== undefined ? isAlive(held.pid) && held.ageMs <= maxAgeMs : held.ageMs < 2000);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const create = (): string | undefined => {
     try {
       const fd = openSync(path, "wx", 0o600);
       try { writeSync(fd, String(pid)); } finally { closeSync(fd); }
       return path;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      return undefined;
     }
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (create() !== undefined) return path;
     const held = readLockPid(path);
     if (held === undefined) continue; // vanished meanwhile: try to create it again
     if (!stale(held)) return undefined;
@@ -455,10 +463,14 @@ export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sess
     }
     try {
       const current = readLockPid(path);
-      if (current !== undefined && !stale(current)) return undefined;
-      // Only the file that was judged stale is removed; a different one at the path is decided by the next attempt.
-      if (current !== undefined && lstatSync(path, { throwIfNoEntry: false })?.ino === current.ino) unlinkSync(path);
-    } catch { /* replaced by someone else: the next attempt decides */ } finally {
+      if (current !== undefined) {
+        if (!stale(current)) return undefined;
+        // Only the file that was judged stale is removed; a different one at the path is decided by the create below.
+        try { if (lstatSync(path, { throwIfNoEntry: false })?.ino === current.ino) unlinkSync(path); } catch { /* gone or replaced */ }
+      }
+      // Created while holding the guard, so a reclamation on the last attempt still covers the turn.
+      if (create() !== undefined) return path;
+    } finally {
       try { unlinkSync(guard); } catch { /* already gone */ }
     }
   }
