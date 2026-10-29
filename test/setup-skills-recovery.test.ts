@@ -11,7 +11,7 @@ import { FileSetupSkillInstaller, type SkillCheckpoint } from "../src/setup-skil
 import type { SetupFinding, SetupOperation, SetupTarget } from "../src/setup-result.js";
 import { readSkillTree, SKILL_TREE_FINGERPRINT_PATTERN } from "../src/skill-library.js";
 import { compileServerEntry } from "./compiled-entry.js";
-import { expectSkill, fixture, skill, skillTarget, targets } from "./fixtures/setup-skills-fixture.js";
+import { afterProfilesCleanup, expectSkill, fixture, skill, skillTarget, targets } from "./fixtures/setup-skills-fixture.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
@@ -215,7 +215,7 @@ describe("recovery only deletes this transaction's verified directories", () => 
     expectSkill(await x.f.run("apply"), "skill_updated", "ok");
     expect(await readFile(join(x.slot, "SKILL.md"), "utf8")).toBe("controller v2");
     for (const path of foreign) expect(await readFile(join(path, "SKILL.md"), "utf8")).toBe("unrelated");
-    expect((await readdir(x.parent)).sort()).toEqual([...foreign.map((path) => path.slice(x.parent.length + 1)), skill].sort());
+    expect((await readdir(x.parent)).sort()).toEqual([...foreign.map((path) => path.slice(x.parent.length + 1)), skill, "pi-session-profiles"].sort());
     expect(before).toContain("unrelated");
   });
 
@@ -253,7 +253,8 @@ describe("recovery only deletes this transaction's verified directories", () => 
       const output = await x.f.run(operation);
       expectSkill(output, "skill_recovery_retained", "divergent");
       expect(JSON.stringify(output)).not.toContain(x.f.root);
-      expect(await snapshot(x.parent)).toBe(before);
+      expect(await snapshot(x.parent)).toBe(operation === "apply" ? before : afterProfilesCleanup(before));
+      expect(output.findings[2]).toMatchObject({ target: { alias: "pi-session-profiles" }, code: operation === "apply" ? "skill_already_equivalent" : "skill_removed" });
       expect(await x.f.ownership.get(skillTarget(targets[0]!))).toEqual(x.record);
     }
   });

@@ -37,10 +37,13 @@ describe("version 2 skill records", () => {
     expect(await f.ownership.get(ownedTarget)).toMatchObject({ phase: "owned", fingerprint: installed.fingerprint });
     expectSkill(await f.run("verify"), "skill_verified", "ok");
     expectSkill(await f.run("apply"), "skill_already_equivalent", "unchanged");
-    expect(puts.map((record) => record.phase)).toEqual(["pending", "owned"]);
+    expect(puts.map((record) => [record.target.alias, record.phase])).toEqual([
+      ["skill:pi-session-orchestration", "pending"], ["skill:pi-session-orchestration", "owned"],
+      ["skill:pi-session-profiles", "pending"], ["skill:pi-session-profiles", "owned"],
+    ]);
     await overrideWith(f, "controller v2");
     expectSkill(await f.run("apply"), "skill_updated", "ok");
-    const pending = puts[2]!;
+    const pending = puts[4]!;
     expect(pending).toMatchObject({ phase: "pending", replaces: installed.fingerprint });
     expect(pending.fingerprint).toMatch(SKILL_TREE_FINGERPRINT_PATTERN);
     expect((await f.ownership.get(ownedTarget))?.fingerprint).toBe((await readSkillTree(slot)).fingerprint);
@@ -82,7 +85,7 @@ describe("records that 0.8.0 wrote with version 1 values", () => {
     expect(await readFile(join(f.slot(target), "SKILL.md"), "utf8")).toBe("controller v2");
     const record = (await f.ownership.get(ownedTarget))!;
     expect(record).toMatchObject({ phase: "owned", fingerprint: (await readSkillTree(f.slot(target))).fingerprint });
-    expect(await readdir(join(f.slot(target), ".."))).toEqual([skill]);
+    expect(await readdir(join(f.slot(target), ".."))).toEqual([skill, "pi-session-profiles"]);
   });
 
   it("migrates a pending 0.8.0 record whose replaced copy a released tree proves", async () => {

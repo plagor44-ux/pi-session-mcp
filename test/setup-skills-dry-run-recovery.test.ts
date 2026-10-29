@@ -124,7 +124,7 @@ describe("a dry-run keeps announcing the recovery apply can settle", () => {
     ["a backup and a complete staging directory with an empty slot", () => scripted("backup-renamed"), async (x) => { expect(await existsSlot(x)).toBe(false); }, "skill_recovered"],
     ["a pending record with the target installed and no intermediates", recorded, async (x) => {
       await rm(x.slot, { recursive: true }); await put(x.slot, V2);
-      expect(await readdir(x.parent)).toEqual([skill]);
+      expect(await readdir(x.parent)).toEqual([skill, "pi-session-profiles"]);
     }, "skill_recovered"],
   ];
   const existsSlot = (x: Pending): Promise<boolean> => lstat(x.slot).then(() => true, () => false);
@@ -136,7 +136,7 @@ describe("a dry-run keeps announcing the recovery apply can settle", () => {
     const output = await x.f.run("apply");
     expectSkill(output, code, "ok");
     expect(output.exitCode).toBe(0);
-    expect(await readdir(x.parent)).toEqual([skill]);
+    expect(await readdir(x.parent)).toEqual([skill, "pi-session-profiles"]);
     expect(await x.f.ownership.get(owned)).toMatchObject({ phase: "owned" });
     expect(JSON.stringify(output)).not.toContain(x.f.root);
   });
