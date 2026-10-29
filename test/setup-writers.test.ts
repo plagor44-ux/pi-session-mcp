@@ -380,6 +380,20 @@ describe("writer setup reconciliation", () => {
     expect(output.findings.some((finding) => finding.code === "writer_reconcile_failed")).toBe(false);
     expect(output.findings.filter((finding) => finding.target.alias === "x-w2" && finding.status === "failed")).toEqual([]);
   });
+  it("reports one writer's unavailable registration record on that writer and reconciles the others", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    const get = f.ownership.get.bind(f.ownership);
+    vi.spyOn(f.ownership, "get").mockImplementation(async (target) => {
+      if (target.alias === "pi-coding-x-w1") throw new Error("ownership_unavailable");
+      return get(target);
+    });
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "ownership_unavailable" });
+    expect(output.findings.some((finding) => finding.code === "writer_reconcile_failed")).toBe(false);
+    expect(output.findings.filter((finding) => finding.target.alias === "x-w2" && finding.status === "failed")).toEqual([]);
+  });
   it("ends the whole reconciliation on a shared-state failure", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);

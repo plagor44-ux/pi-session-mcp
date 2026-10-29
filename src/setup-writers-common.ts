@@ -24,8 +24,11 @@ import { readWriterState, writerName, writerPaths, writerRegistrationName, write
 
 export const SETUP_LEASE_WAIT_MS = 10_000;
 export const FENCE_CODES: readonly string[] = ["writer_busy", "writer_fenced", "writer_lease_unavailable"];
-/** Failures of shared setup state rather than of one writer: they end the whole reconciliation (#180). */
-export const INFRASTRUCTURE_CODE = /^(?:ownership_[a-z_]+|config_[a-z_]+|operation_aborted|platform_unsupported)$/;
+/**
+ * Failures of shared setup state rather than of one writer: they end the whole reconciliation (#180). The ownership
+ * store's own failures count; `ownership_unavailable` and `ownership_diverged` concern one writer's registration.
+ */
+export const INFRASTRUCTURE_CODE = /^(?:ownership_(?!unavailable$|diverged$)[a-z_]+|config_[a-z_]+|operation_aborted|platform_unsupported)$/;
 export const GLOBAL_ERRORS = new Set(["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid"]);
 
 export interface WriterSetupDependencies {
