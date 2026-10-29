@@ -2582,6 +2582,20 @@ from 09:36 to 09:39 UTC. Client-target `--apply` and `--verify` passed for
 18 writers. Doctor reported no error, only the known `workspace_gitfile` and
 `workspace_mode_unset` warnings of the worktree aliases.
 
+Operator upgrade of the second machine (Linux) from `0.13.0` to `0.13.1` on
+2026-10-29 from 09:47 UTC, with Node.js `24.22.0` and the same steps: no
+writer container and no server process of a client session ran at the start.
+Both client targets were removed with `0.13.0`, then
+`npm install -g pi-session-mcp@0.13.1`; Doctor reported only
+`writer_not_ready` for the 14 writers. The dry runs reported `mode_unchanged`
+and `writer_planned`; with `--apply`, four container repositories with 14
+writers (4, 2, 4 with an operator image and `--cache go`, 4 with an operator
+image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
+`--apply` and `--verify` passed for `claude-code:user` and `codex:user`
+(`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
+all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
+workspace without a mode.
+
 ### v0.13.1 pre-release acceptance
 
 `v0.13.1` was accepted on 2026-10-29 from 06:40 to 06:48 UTC on its release
