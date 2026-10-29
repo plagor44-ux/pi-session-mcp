@@ -2535,6 +2535,58 @@ Not established for `0.13.0`: the sandbox on a host that restricts unprivileged
 user namespaces; Git inside the sandbox on a linked worktree in live use (the
 bubblewrap-gated tests cover it); the macOS upgrade; Level 3.
 
+### v0.13.1 pre-release acceptance
+
+`v0.13.1` was accepted on 2026-10-29 from 06:40 to 06:48 UTC on its release
+candidate `89a366e`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.312`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. After the candidate, one lockfile-only
+commit moved the development-path `@hono/node-server` 2.1.1 → 2.1.5; Level 1
+was run again on it after `npm ci` (same counts). The packed package and the
+working-tree build that Level 2 used do not contain that package. Later commits
+on the release pull request change only this record.
+
+The patch release ships #173, #176, #177, #179 and #180 under an unchanged MCP
+contract. The setup report schema is unchanged; a broken kept writer now
+reports its own code on its target instead of `writer_reconcile_failed`.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    136 files, 3948 passed and 14 skipped, and no unhandled error.
+  - `npm audit --omit=dev` exited with `1` and names only the known `undici`
+    finding through `@earendil-works/pi-coding-agent` 1.4.0, now with eight
+    advisories ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+    `npm audit` also named `@hono/node-server` 2.1.1 in the development path
+    (GHSA-rmxm-3fg6-px4f), patched in the lockfile afterwards as above.
+  - `npm pack` listed 922 files (tarball shasum
+    `93f9c5bc9e268af7e0be5e395d97558ec801668a`, identical in two packs). A scan
+    of the packed files for private names, hosts and paths found none; its only
+    matches for `/home/` are the already redacted paths in this file and in the
+    six `docs/evaluation/extension-functions-2026-10-17/cursor/` evidence files
+    that earlier releases shipped unchanged.
+  - Doctor reported `packageVersion` `0.13.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke from another fresh prefix
+  reported `smoke_passed` with version `0.13.1`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories were removed.
+- Podman-gated writer tests on the candidate (Podman `6.1.4`): 7 of 7 passed.
+- Bubblewrap-gated sandbox tests (`test/sandbox-shell.bwrap.test.ts`, bubblewrap
+  `0.13.1`): 12 of 12 passed, none skipped.
+- Review: #179, #180 and #181 had an independent review (same model family as
+  the author) with no blocking findings; its follow-ups were fixed before the
+  merge of #184. The final test-file split commit was checked by comparing the
+  sorted test names before and after (464, identical).
+
+Not established for `0.13.1`: a live wake-hook race, a live reconcile with a
+broken writer, client-target `--verify` through the installed package, which
+follows the upgrade; Level 3.
+
 ### v0.13.0 pre-release acceptance
 
 `v0.13.0` was accepted on 2026-10-28 from 19:30 to 19:36 UTC on its release

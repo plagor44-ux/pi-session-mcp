@@ -43,6 +43,14 @@ accepted again after the upgrade, as after every release.
 
 ### Fixed
 
+- Security, in the lockfile only, development path: `@hono/node-server`
+  2.1.1 → 2.1.5 (via MCP Inspector; GHSA-rmxm-3fg6-px4f). Still open:
+  `undici` 8.10.2 in the production path, pinned exactly by Pi SDK 1.4.0, now
+  with eight advisories (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472,
+  GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx,
+  GHSA-qrxm-fqhp-jwvm, GHSA-9fm3-97px-rjf6, GHSA-55wc-3pg8-jfw6), so
+  `npm audit` still reports it
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
 - Writer reconciliation reports a kept writer that fails, for example with
   a missing wrapper after a crash during provisioning, on that writer's
   target with its own code (`writer_state_invalid`) and still reconciles the
