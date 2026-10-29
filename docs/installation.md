@@ -89,6 +89,89 @@ local user's existing Pi authentication and never prints it. Automated writers
 keep selected provider credentials in their private boundary agent copy; see
 [Execution modes](execution-modes.md#writer-storage-launch-and-readiness).
 
+## Check profiles: model catalog and probe
+
+List the providers and model ids Pi knows locally, with authentication presence
+only (never credential values):
+
+```bash
+pi-session-mcp-setup --list-models
+pi-session-mcp-setup --list-models --json
+```
+
+This is offline and read-only: no provider request, credential refresh, model
+network access or setup lock. It requires no `PI_SESSION_MCP_CONFIG`.
+Providers registered only by Pi extensions are not listed; the report includes
+that note. Invalid catalog ids are omitted and counted in `omittedIds`.
+Catalog creation failures report `catalog_unavailable`.
+
+With `PI_SESSION_MCP_CONFIG` already set to the configuration to check:
+
+```bash
+pi-session-mcp-setup --probe-profile review,code --json
+pi-session-mcp-setup --probe-profile review,code --apply --json
+```
+
+The first command is a dry run: Doctor runs offline, followed by profile,
+provider, model and authentication-presence checks. Only `--apply` sends a
+provider turn: one fixed PONG request per profile that passes the offline
+checks, sequentially. Duplicate aliases are checked once in request order.
+Point the variable at a candidate configuration to check it before going live;
+the commands do not write configuration or registrations. The running MCP
+server still needs a restart or reconnect to read changes.
+
+The Doctor gate blocks global configuration/build/version errors and errors
+whose subject is a requested profile. Unrelated errors and all warnings are
+listed by check id in `doctor.other`, without blocking. A blocked request
+reports `doctor_failed`; missing or unusable configuration reports
+`config_required` or `config_unusable`. Unexpected operational failures report
+`operation_failed`, and catalog creation failures report `catalog_unavailable`.
+No raw exception text is printed.
+
+Each applied probe starts the normal adapter with the resolved profile in a
+private empty temporary directory (mode 0700), not a real repository. This
+directory is created internally, never supplied as an argument or workspace
+alias, and removed after cleanup. Start and turn deadlines are 60 and 120
+seconds; session cleanup is bounded to 10 seconds. Interrupts abort and dispose
+the current session and skip the remaining profiles. Reports never include
+paths, credential values, environment values, the prompt or reply text.
+Foreign stdout from profiles/extensions is suppressed so JSON remains intact;
+sanitized structured diagnostics go to stderr. No turn event spool is used.
+
+| Code | Status | Meaning |
+| --- | --- | --- |
+| `probe_planned` | planned | Dry run: offline checks passed |
+| `probe_profile_unknown` | failed | Alias not in the configuration |
+| `probe_provider_unknown` | failed | Provider not in the catalog (offline) |
+| `probe_model_unknown` | failed | Model not in the provider's catalog (offline) |
+| `probe_auth_missing` | failed | Provider has no configured authentication (offline) |
+| `probe_passed` | ok | Session started, reply was `PONG` |
+| `probe_unexpected_reply` | failed | Turn completed with another reply |
+| `probe_turn_failed` | failed | Turn failed or was aborted |
+| `probe_start_failed` | failed | Session creation refused; carries the existing sanitized `PiSessionCreationErrorCode` |
+| `probe_timeout` | failed | Start or turn deadline passed; the session was aborted and disposed |
+
+A profile that fails an offline check is not started; the other profiles are
+still checked. Apply findings include `durationMs`. `providerTurn` records
+whether a provider turn was accepted, including turns that failed or timed out;
+a `false` finding did not spend a provider turn. Provider usage and monetary
+cost remain `unknown`.
+
+Exit codes: `0` for a successful catalog, a clean dry run (`planned`) or an
+apply where every profile passed; `1` for a failed check or refusal; `64` for
+invalid usage; `130` for SIGINT and `143` for SIGTERM during a probe (both
+report `operation_interrupted`). Both operations run on Linux and macOS and
+need no setup lock. Probe requests cannot be combined with `--target`,
+`--repo`, `--writer`, `--customize-skill`, `--list-models`, `--verify`,
+`--rollback` or `--remove`. `--list-models` is standalone apart from `--json`.
+Doctor and `--verify` remain provider-free.
+
+**Container repositories:** the probe proves the profile on the host, with
+the host's Pi agent directory. Writer acceptance stays with Doctor's
+`container_profile_refused` check and writer provisioning; a host probe does
+not prove a container writer. See [Execution modes](execution-modes.md) and
+[ADR 0014](adr/0014-profile-probe-and-model-catalog.md).
+
 ## 1. Install
 
 ### From npm

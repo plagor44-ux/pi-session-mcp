@@ -85,7 +85,7 @@ export interface ProbeReport {
   readonly schemaVersion: 1;
   readonly operation: "dry-run" | "apply";
   readonly status: "planned" | "ok" | "failed";
-  readonly refusal?: "doctor_failed" | "config_required" | "config_unusable" | "operation_interrupted";
+  readonly refusal?: "doctor_failed" | "config_required" | "config_unusable" | "operation_interrupted" | "catalog_unavailable" | "operation_failed";
   readonly doctor: { readonly blocking: readonly string[]; readonly other: readonly string[] };
   readonly findings: readonly ProbeFinding[];
   readonly usage: "unknown";

@@ -53,6 +53,9 @@ npm run --silent setup -- --apply --target codex:user:pi-session-mcp
 npm run --silent setup -- --verify --target codex:user:pi-session-mcp
 npm run --silent setup -- --rollback --target codex:user:pi-session-mcp
 npm run --silent setup -- --remove --target codex:user:pi-session-mcp
+npm run --silent setup -- --list-models --json
+npm run --silent setup -- --probe-profile review,code --json
+npm run --silent setup -- --probe-profile review,code --apply --json
 ```
 
 Setup runs the previously built `dist/setup-main.js`. The dry-run operation
