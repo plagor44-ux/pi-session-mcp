@@ -23,6 +23,14 @@ mean they are implemented or that their gates passed.
   workspace-confined read tools for every read-only profile and the opt-in
   bubblewrap shell (`shell: "sandboxed"`), released in minor release 0.13.0
   together with #162, #163, #165 and #166.
+- 2026-10-29: the post-0.13.0 review findings in one pull request, unreleased:
+  stale waiter-lock reclamation in the wake hook
+  ([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)), per-writer
+  reconcile failures ([#180](https://github.com/plagor44-ux/pi-session-mcp/issues/180))
+  and the split of `setup-writers.ts` and the largest test files
+  ([#181](https://github.com/plagor44-ux/pi-session-mcp/issues/181)). #120 still
+  waits for a Pi SDK release: 1.4.0 is the newest and still pins `undici` 8.10.2,
+  which `npm audit` now reports with eight advisories.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
