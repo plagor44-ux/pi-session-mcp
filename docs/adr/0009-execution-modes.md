@@ -105,8 +105,9 @@ This decision does not itself bump the package version or authorize publication.
    it passes, then require contained provider-free acceptance bound to wrapper,
    package version, image ID, Podman version, network and cache.
 6. **Credential lifetime.** Launcher checks every 60 seconds. Only selected
-   OAuth tokens expired or within 2 minutes of expiry trigger host login
-   warmup (invalid/missing expiry also triggers it); measured warmup refreshes
+   OAuth tokens expired or within 2 minutes of expiry (raised to 10 minutes
+   in [#142](https://github.com/plagor44-ux/pi-session-mcp/issues/142), see
+   [Execution modes](../execution-modes.md)) trigger host login warmup (invalid/missing expiry also triggers it); measured warmup refreshes
    expired/almost expired tokens only. It then re-copies credentials, with
    OAuth refresh tokens emptied. Direct verify disables refresh with
    `PI_WRITER_NO_CREDENTIAL_REFRESH=1`, makes no session/provider request and

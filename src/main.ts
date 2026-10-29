@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { stdoutGuard } from "./stdout-guard-install.js";
+import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
 import { RoutingPiSessionAdapter, WriterRelayAdapter } from "./writer-relay.js";
@@ -63,10 +64,13 @@ async function main(): Promise<void> {
       } else spool = TurnEventSpool.open(directory, { diagnostic: writeDiagnostic });
     }
     const events = spool;
+    // The configuration directory must never become readable through a skill directory: the directory
+    // named by the variable and, for a symlinked configuration file, the directory of its target.
+    // loadConfig has read the file, so the variable is set and the path exists.
+    const configFile = resolve(process.env.PI_SESSION_MCP_CONFIG!);
     const hostAdapter = new SdkPiSessionAdapter({
       diagnosticSink: writeDiagnostic,
-      // The configuration directory must never become readable through a skill directory.
-      ...(process.env.PI_SESSION_MCP_CONFIG === undefined || process.env.PI_SESSION_MCP_CONFIG === "" ? {} : { protectedReadPaths: [dirname(resolve(process.env.PI_SESSION_MCP_CONFIG))] }),
+      protectedReadPaths: [dirname(configFile), dirname(await realpath(configFile))],
     });
     const relay = guardPath === undefined;
     const adapter = relay ? new RoutingPiSessionAdapter(hostAdapter, new WriterRelayAdapter({

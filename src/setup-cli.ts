@@ -1,5 +1,5 @@
 import { cpusSchema, cpuSharesSchema, memorySchema } from "./writer-limits.js";
-import { SetupOrchestrator, type SetupRequest } from "./setup.js";
+import type { SetupRequest } from "./setup.js";
 import type { SetupOperation, SetupResult, SetupTarget } from "./setup-result.js";
 import type { ModeRequest } from "./setup-modes.js";
 import type { ContainerSettings } from "./execution-modes.js";
@@ -138,10 +138,6 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
     return operation ? { operation, targets, json, customizeSkill } : { targets, json, customizeSkill };
   }
   return operation ? { operation, targets, json } : { targets, json };
-}
-
-export async function runSetupCli(argv: readonly string[], orchestrator: SetupOrchestrator): Promise<SetupResult> {
-  return orchestrator.run(parseSetupArgs(argv));
 }
 
 /** Both report modes are projections of the same sanitized result. */

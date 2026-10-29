@@ -1,0 +1,49 @@
+name: Maintenance task
+description: Documentation, tests, dependencies, release or refactoring work without a behaviour change.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A maintenance task should be small enough for one focused pull request. If it changes behaviour, use a change proposal or a bug report instead.
+
+        Dependency pins, client contracts, audit advisories and releases follow [Releasing](https://github.com/plagor44-ux/pi-session-mcp/blob/main/docs/releasing.md).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Documentation
+        - Tests or flaky test
+        - Dependency or Pi SDK update
+        - Release
+        - Refactoring
+        - CI or tooling
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be true afterwards and why it matters now.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: Checkable criteria, including the commands that must pass.
+      placeholder: |
+        - `npm run typecheck`, `npm run build` and `NODE_OPTIONS=--unhandled-rejections=strict npm test` pass.
+        - `test/<name>.test.ts` passes 10 of 10 isolated runs.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Files or areas to change, and what must not change.
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related issues, failing runs, advisories or documents.

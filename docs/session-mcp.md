@@ -146,9 +146,11 @@ files outside them through the model's read tools. Prefer query-style tools
 with free-form input is still a channel for whatever the workspace contains.
 The MCP server itself is trusted local code and is not confined.
 A skill directory that equals or contains the operator's home, the configuration
-file's directory or `~/.pi` is not a read root; only the skill file itself is,
-so a catalog entry such as `./SKILL.md` next to the configuration does not
-expose the configuration.
+file's directory (or its symlink target's directory), `~/.pi` or Pi's agent
+directory (`~/.pi/agent` or `PI_CODING_AGENT_DIR`) is not a read root; only the
+skill file itself is, so a catalog entry such as `./SKILL.md` next to the
+configuration or Pi's credentials does not expose them. The real file of a
+symlinked skill file is a read root too, and only that file.
 
 Only local stdio tools are covered here. HTTP/SSE/OAuth transports, sampling,
 elicitation, roots negotiation, separate resource/prompt APIs and global extension

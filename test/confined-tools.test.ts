@@ -219,6 +219,16 @@ describe("allowedReadRoots protected paths", () => {
     expect(await allowedReadRoots(workspace, [skillAt(link)], [...protectedPaths(), join(area, "does-not-exist")])).toEqual([workspace, join(home, "SKILL.md")]);
   });
 
+  it("admits the real file of a symlinked skill file outside its directory", async () => {
+    const catalog = join(area, "catalog", "review");
+    await mkdir(catalog, { recursive: true });
+    await symlink(join(home, "skills", "review", "SKILL.md"), join(catalog, "SKILL.md"));
+    const result = await allowedReadRoots(workspace, [skillAt(catalog)], protectedPaths());
+    expect(result).toEqual([workspace, catalog, join(home, "skills", "review", "SKILL.md")]);
+    await expect(confineToolPath(join(catalog, "SKILL.md"), workspace, result)).resolves.toBe(join(home, "skills", "review", "SKILL.md"));
+    await expect(confineToolPath(join(home, "skills", "review", "other.txt"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+  });
+
   it("without protected paths every skill directory is a root", async () => {
     expect(await allowedReadRoots(workspace, [skillAt(home)])).toEqual([workspace, home]);
   });

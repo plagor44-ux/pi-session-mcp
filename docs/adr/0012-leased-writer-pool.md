@@ -1,8 +1,8 @@
 # ADR 0012: One registration with a leased writer pool
 
-**Status:** Accepted (2026-10-28, maintainer decision) for release 0.12.0;
-implementation tracked in
-[#157](https://github.com/plagor44-ux/pi-session-mcp/issues/157). Amends
+**Status:** Accepted (2026-10-28, maintainer decision); implemented in
+[#157](https://github.com/plagor44-ux/pi-session-mcp/issues/157) and released
+in 0.12.0. Amends
 [ADR 0002](0002-embedded-pi-sdk.md) (container sessions are relayed to a Pi
 session in a writer process; host sessions stay embedded),
 [ADR 0008](0008-coding-profile-isolation.md) (adopts its option 4 in container

@@ -1,6 +1,6 @@
 # ADR 0013: Hardened read-only profiles
 
-**Status:** Accepted (2026-10-28). Amends
+**Status:** Accepted (2026-10-28); released in 0.13.0. Amends
 [ADR 0006](0006-pi-extension-allowlist.md) and
 [ADR 0010](0010-read-only-extension-tools.md). Issue #169.
 
@@ -28,9 +28,11 @@ paths inside the allowed read roots:
 - the directory of each selected skill file, because the model loads skills
   with `read` and they live outside the workspace. If that directory equals or
   contains the operator's home directory, the configuration file's directory
-  or the Pi agent directory (`~/.pi`), only the skill file itself is a root,
-  so a catalog entry such as `./SKILL.md` next to the configuration does not
-  expose the configuration.
+  (and, for a symlinked configuration file, its target's directory), `~/.pi`
+  or Pi's agent directory (`~/.pi/agent`, or `PI_CODING_AGENT_DIR`), only the
+  skill file itself is a root, so a catalog entry such as `./SKILL.md` next to
+  the configuration or Pi's credentials does not expose them. The real file of
+  a symlinked skill file is a root as well, so the model can read it.
 
 The server replaces the SDK's built-in definitions with definitions built from
 the root exports `createReadToolDefinition`, `createGrepToolDefinition`,

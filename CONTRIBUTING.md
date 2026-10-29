@@ -42,7 +42,14 @@ ones:
 Pull requests are limited to collaborators. If you are not a collaborator and
 want to contribute a fix, open an issue that describes it.
 
-- Keep a pull request to one focused change, and say which issue it addresses.
+Issues use the forms in [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/):
+bug report, change proposal or maintenance task. Each asks for acceptance
+criteria and a way to verify them, so that a person or a coding agent can carry
+the issue out and a reviewer can check it. Pull requests use
+[`.github/pull_request_template.md`](.github/pull_request_template.md).
+
+- Keep a pull request to one focused change, and name every issue it addresses
+  with its own closing keyword (`Closes #12. Closes #13.`).
 - Run the checks above and `npm audit` before opening it.
 - Describe what you verified and how. State only what was run: provider-free
   tests do not establish live client or model behavior.

@@ -1,0 +1,80 @@
+name: Change proposal
+description: A new capability or a change to existing behaviour, contract or configuration.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write this as a task spec that a coding agent can carry out and a reviewer can check: problem, proposal, acceptance criteria, scope and how to verify it. Leave out what the code or [AGENTS.md](https://github.com/plagor44-ux/pi-session-mcp/blob/main/AGENTS.md) already says.
+
+        Changes to the product boundary (local stdio, in-memory state, one trusted local MCP peer) or to a security promise need an ADR in `docs/adr/` before implementation.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is missing or wrong today, who hits it, and the evidence (sanitized output, issue, acceptance record).
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The intended behaviour. Name tools, error codes, configuration fields or CLI flags the change adds or alters.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checkable statements that are true once this is done.
+      placeholder: |
+        - `pi_capabilities_get` lists ...
+        - Setup without `--apply` changes nothing and reports ...
+        - Docs: `docs/tool-contracts.md` and CHANGELOG `Unreleased` describe ...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in scope, what is explicitly out of scope, and the files or areas expected to change.
+      value: |
+        In scope:
+        -
+
+        Out of scope:
+        -
+
+        Affected areas:
+        -
+    validations:
+      required: true
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Contract impact
+      description: Which public surfaces change. Each one needs matching docs and a CHANGELOG entry.
+      multiple: true
+      options:
+        - MCP tool schema, result or error code
+        - Configuration schema
+        - Setup or Doctor CLI flags, codes or reports
+        - Bundled skills
+        - Writer images or container behaviour
+        - Security boundary or threat model
+        - Internal only
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: How to prove it works. Provider-free tests are the default; say if live client, model or container acceptance is needed and at which level (see `docs/acceptance.md`).
+      placeholder: |
+        - npx vitest run test/<name>.test.ts
+        - Level 2 setup acceptance on Linux
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Related issues, ADRs, design docs or upstream changes.

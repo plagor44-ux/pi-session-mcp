@@ -1816,7 +1816,8 @@ describe("safe reads from the scope (R39)", () => {
 
 describe("estimates for untrusted runs (R41)", () => {
   it("charges the current estimate and flags it for a killed run, using the highest observed cost afterwards", async () => {
-    const s = await waveSetup(3, { runTimeoutMs: 300 });
+    // The first run must finish inside the run timeout even on a slow CI runner; only the second one hangs.
+    const s = await waveSetup(3, { runTimeoutMs: 3_000 });
     const r = await runWave(s.input, s.deps([text({ cost: 0.5 }), { hang: true }, text({ cost: 0.1 })], { residualCheck: undefined }).deps);
     const ledger = JSON.parse(await readFile(s.input.ledgerPath, "utf8")) as { entries: { runId: string; costUsd: number; estimated?: boolean }[] };
     expect(ledger.entries[0]).toMatchObject({ costUsd: 0.5 });
@@ -1825,7 +1826,7 @@ describe("estimates for untrusted runs (R41)", () => {
     expect(ledger.entries[1]).toMatchObject({ runId: s.runs[1]!.runId, costUsd: 0.5, estimated: true });
     expect(r.stopReason).toBe("harness_failure");
     expect(r.spentUsd).toBeCloseTo(1);
-  });
+  }, 30_000);
 });
 
 describe("source isolation (N5)", () => {

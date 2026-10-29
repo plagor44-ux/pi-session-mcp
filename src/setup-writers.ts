@@ -185,10 +185,15 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
   }
   const rawConfig: unknown = JSON.parse(await readFile(configPath, "utf8")), overrideDirectory = skillOverrideDirectory(configPath);
   // Each writer's reconciliation, including first provisioning and acceptance, owns one fence.
+  // A writer added without --base joins the recorded default base, so default starts find it. A recorded base that is
+  // the repository default stays unset: provisioning then resolves origin/HEAD, as the first provisioning did.
+  let baseRef = request.baseRef;
+  const recordedBase = entry.container?.base;
+  if (baseRef === undefined && recordedBase !== undefined && recordedBase !== await life.baseBranchName(ctx).catch(() => undefined)) baseRef = recordedBase;
   for (const name of planned.keep) {
     try { await fenced(ctx, name, deps, async (ctx) => {
       if (planned.missing.includes(name)) {
-        const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(request.baseRef ? { baseRef: request.baseRef } : {}) });
+        const outcome = await life.provisionWriter(ctx, { index: writerIndex(name), settings: entry.container!, rawConfig, overrideDirectory, ...(baseRef ? { baseRef } : {}) });
         add(name, outcome); if (outcome.status === "failed") return;
       }
       // Settings first: a drifted writer is left exactly as it is, neither migrated nor accepted again (#134).

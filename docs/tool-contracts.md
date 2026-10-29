@@ -201,14 +201,16 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `base_not_applicable` | Controller action: remove `base` unless starting a coding profile on a container workspace. No session was created; do not switch profiles to bypass policy. |
 | `writer_not_ready` | The writer launcher cannot establish current readiness; operator must run repository setup/acceptance. All refusal-server tools return this error. |
 | `container_runtime_unavailable` | The writer launcher found no usable rootless Podman; all refusal-server tools refuse work, with no host fallback. |
+| `writer_fenced` | The writer launcher could not confirm that no container of the writer is still running; all refusal-server tools refuse work. Through the host relay a start reports this as `writer_unavailable` with reason `none_admitted`. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |
 
-Lifecycle errors include `unknown_workspace`, `unknown_session`, `session_running`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.
+Lifecycle errors include `unknown_workspace`, `unknown_session`, `unknown_turn`, `session_running`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.
 
 Invalid execution-profile configuration prevents startup, so it cannot be an MCP response. In that case stderr receives a structured, sanitized `startup_failed` diagnostic with one of these stable codes; it contains no raw parser message or configuration path.
 
 | Startup diagnostic code | Meaning |
 | --- | --- |
+| `config_path_required` | `PI_SESSION_MCP_CONFIG` is not set or empty; there is no default configuration file. |
 | `invalid_execution_profile_config` | The execution-profile configuration violates its invariants or strict shape, including `grantedExtensionTools` on a coding profile or a profile without extensions, more than 32 grants, duplicate, unsafe, MCP-reserved or built-in grant names, an unknown or duplicate selected skill alias, two selected skill aliases with the same path, or an invalid `skillCatalog` entry (including a malformed `builtin:` name). |
 | `invalid_thinking_level` | A configured thinking level is outside the supported enum. |
 | `invalid_execution_modes` | The execution modes file is invalid or unreadable, including an unknown alias, an unrecognized shape, or an invalid container profile selection. |
