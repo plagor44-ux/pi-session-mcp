@@ -84,6 +84,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     { name: "added", host: ["a"], inner: ["a", "b"] },
     { name: "removed", host: ["a"], inner: [] },
     { name: "different", host: ["a"], inner: ["b"] },
+    { name: "duplicated inner", host: ["a", "b"], inner: ["a", "a"] },
   ])("$name skills are refused before the inner start", async ({ host, inner }) => {
     const s = await setup([{ profile: { skills: inner } }], { executionProfile: { ...profile, skills: host.map(skill) } });
     await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { busy: 0, notAtBaseline: 0, settingsChanged: 1 } });

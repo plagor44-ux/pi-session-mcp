@@ -76,8 +76,11 @@ const creationCodes = new Set<PiSessionCreationErrorCode>([
 type PublishedProfile = z.infer<typeof capabilitiesSchema>["executionProfiles"][number];
 const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell"] as const;
 const setFields = ["skills", "extensions", "grantedExtensionTools"] as const;
-const sameSet = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && left.every(value => right.includes(value));
-/** Admission compares every public capability field; the config schema already made the set fields duplicate-free. */
+const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
+  const a = new Set(left), b = new Set(right);
+  return a.size === left.length && b.size === right.length && a.size === b.size && [...a].every(value => b.has(value));
+};
+/** Admission compares every public capability field; a duplicate on either side is a mismatch. */
 function samePublishedProfile(host: PublishedProfile, inner: PublishedProfile): boolean {
   return exactFields.every(key => host[key] === inner[key]) && setFields.every(key => sameSet(host[key], inner[key]));
 }
