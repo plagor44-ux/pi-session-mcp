@@ -231,8 +231,9 @@ Collect with `--writer <name> --collect --apply`, then review
 After taking over the result and closing its coding session, run
 `pi-session-mcp-setup --writer <name> --finish --apply` before another task.
 It collects then resets (persistent) or recreates (ephemeral). If any branch name
-was refused, collection is incomplete and finish stops; a `<base>-detached`
-collision with an existing branch is refused the same way. The release digest is
+was refused, collection is incomplete and finish stops; a `<base>-detached` or
+`<branch>-wip` name that an exported branch takes or whose path it conflicts
+with is refused the same way. The release digest is
 recorded only when the clone's HEAD commit and every branch commit exist in the
 operator checkout, otherwise collection is `writer_collect_incomplete` and no
 digest is recorded. Rename inside the writer
