@@ -2598,6 +2598,70 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.0 post-release evidence
+
+Recorded on 2026-10-29 for the published release `0.14.0`.
+
+Tag binding: a fresh clone of the annotated tag `v0.14.0` (tag object
+`f3a8b088a85fd5825c3256f4a7950ba051cbf388`) peels to the merge commit
+`fd4fdeacf9d02c04b6fd89314f7ec819b5506ed9` of #190, and
+`git describe --tags --exact-match` reports `v0.14.0`. CI on the merge commit
+(run 40928709705) and on the tag (run 40929602738) passed on the first attempt.
+The tag was created after the npm package had been published; the package
+records `gitHead` `d904fed`, the head of #190, whose tree (`3ae966b`) is
+identical to the merge commit's.
+
+- Level 1 on the tag clone after `npm ci`, from 18:18 to 18:20 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (139 files, 4005 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. Doctor
+  reported `packageVersion` `0.14.0` and exited with `2` because no
+  configuration was set (`config_missing`).
+- `pi-session-mcp@0.14.0` on npm: 932 files, shasum
+  `579cc111a7aa62987b5f35e79b34b69853c8a0e3`. It was published by the
+  maintainer; `npm pack` of the tag clone gives the same shasum and file count.
+- Published npm package, Level 2 from a fresh prefix, 18:19 to 18:21 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool`; real
+  registrations and built files unchanged, no process left, leak check passed.
+  Clients: Codex CLI `0.162.1` and Claude Code `2.1.312`. The install smoke on
+  the published package reported `smoke_passed` with version `0.14.0`.
+- The GitHub release `v0.14.0` was published the same day.
+
+Operator upgrade of the workstation from `0.13.1` to `0.14.0` on 2026-10-29
+from 18:33 UTC, following
+[Installation](installation.md#container-writers): no Pi session of this
+controller was open; other controller sessions without a coding session stayed
+open and need a reconnect. Both client targets were removed with `0.13.1`, then
+`npm install -g pi-session-mcp@0.14.0`. Doctor reported only
+`writer_not_ready` for the 18 writers. A dry run of the first provisioning
+command with unchanged settings reported `mode_unchanged` and
+`writer_planned`; with `--apply`, five container repositories with 18 writers
+(2 with `--tags reachable`, 4, 4 with `--cache go`, 4 with base `dev`, 4 with
+`--cache uv`, three of them with operator images) reported `writer_accepted`
+from 18:34 to 18:37 UTC. Client-target `--apply` and `--verify` passed for
+`claude-code:user` and `codex:user` (`mcp_verified`, `skill_verified` for both
+controller skills, and `hook_verified` for the wake hook); `--writer <name>
+--verify` passed for all 18 writers. Doctor reported no error, only the known
+`workspace_gitfile` and `workspace_mode_unset` warnings of the worktree
+aliases.
+
+Operator upgrade of the second machine (Linux) from `0.13.1` to `0.14.0` on
+2026-10-29 from 18:38 UTC, with Node.js `24.22.0` and the same steps; one
+controller session's server process stayed open and needs a reconnect. Both
+client targets were removed with `0.13.1`, then
+`npm install -g pi-session-mcp@0.14.0`; Doctor reported only
+`writer_not_ready` for the 14 writers. With `--apply`, four container
+repositories with 14 writers (4, 2, 4 with an operator image and `--cache go`,
+4 with an operator image) reported `writer_accepted` from 18:39 to 18:42 UTC.
+Client-target `--apply` and `--verify` passed for `claude-code:user` and
+`codex:user` (`mcp_verified`, `skill_verified` for both controller skills), and
+`--writer <name> --verify` passed for all 14 writers. Doctor reported no
+error, only `workspace_mode_unset` for one workspace without a mode.
+
+Not established for `0.14.0` after the upgrade: a coding session through a
+re-accepted writer, an agent-driven profile change end to end, and Level 3.
+
 ### v0.14.0 pre-release acceptance
 
 `v0.14.0` was accepted on 2026-10-29 from 17:56 to 18:01 UTC on its release
