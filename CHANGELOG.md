@@ -14,6 +14,13 @@
   location keeps the subject `configuration`
   ([#173](https://github.com/plagor44-ux/pi-session-mcp/issues/173)).
 
+### Added
+
+- Issue forms for bug reports, change proposals and maintenance tasks, and a
+  pull request template, written so that a person or a coding agent can carry
+  an issue out and a reviewer can check it
+  ([#178](https://github.com/plagor44-ux/pi-session-mcp/issues/178)).
+
 ### Fixed
 
 - Read-only confinement protects Pi's agent directory (`~/.pi/agent`, or
@@ -21,11 +28,13 @@
   directory: a skill directory that equals or contains either contributes only
   the skill file as a read root. Before, a skill file placed directly in the
   agent directory made `auth.json` readable. The real file of a symlinked skill
-  file is now a read root too, so the model can read a skill it was given.
+  file is now a read root too, so the model can read a skill it was given
+  ([#177](https://github.com/plagor44-ux/pi-session-mcp/issues/177)).
 - Setup provisions a writer added without `--base` (for example by raising
   `--writers`) on the workspace's recorded default base, as finish and recreate
   already did. Before, it landed on `origin/HEAD` and default starts never
-  leased it.
+  leased it. A recorded base that is the repository default still provisions
+  from `origin/HEAD` ([#176](https://github.com/plagor44-ux/pi-session-mcp/issues/176)).
 
 ## 0.13.0 — 2026-10-28
 
