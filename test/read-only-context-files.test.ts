@@ -88,6 +88,15 @@ describe("read-only context file confinement", () => {
     expect(contents(loader)).not.toContain("SYNTHETIC_OUTSIDE_CONTEXT");
   });
 
+  it("fails closed when an outside AGENTS.override.md shadows a valid AGENTS.md", async () => {
+    // The SDK takes the first existing name per directory; the filter drops it and loads nothing else.
+    await writeFile(join(root, "outside.txt"), "SYNTHETIC_OUTSIDE_CONTEXT");
+    await symlink(join(root, "outside.txt"), join(workspace, "AGENTS.override.md"));
+    await writeFile(join(workspace, "AGENTS.md"), "SYNTHETIC_INSIDE_CONTEXT");
+    const { loader } = await harness();
+    expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
+  });
+
   it("keeps a symlink resolving inside the canonical workspace and filters again on reload", async () => {
     await writeFile(join(workspace, "instructions.txt"), "SYNTHETIC_INSIDE_CONTEXT");
     await symlink(join(workspace, "instructions.txt"), join(workspace, "AGENTS.md"));

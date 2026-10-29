@@ -21,7 +21,7 @@ import {
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
@@ -384,14 +384,16 @@ function phase0ResourceLoaderOptions(skills: readonly Skill[], confinedCwd?: str
     noContextFiles: false,
     ...(confinedCwd === undefined ? {} : {
       agentsFilesOverride: (current: ReturnType<ResourceLoader["getAgentsFiles"]>) => ({
-        agentsFiles: current.agentsFiles.filter((file) => {
+        agentsFiles: current.agentsFiles.flatMap((file) => {
           try {
-            const workspace = realpathSync(confinedCwd);
-            const path = relative(workspace, realpathSync(file.path));
-            return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+            const workspace = realpathSync(confinedCwd), real = realpathSync(file.path);
+            const path = relative(workspace, real);
+            if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) return [];
+            // Re-read from the verified real path: the SDK read the link before this check.
+            return [{ path: file.path, content: readFileSync(real, "utf-8").replace(/^﻿/, "") }];
           } catch {
             // Unresolvable context files never enter a read-only session's model context.
-            return false;
+            return [];
           }
         }),
       }),
