@@ -390,7 +390,7 @@ function phase0ResourceLoaderOptions(skills: readonly Skill[], confinedCwd?: str
             const path = relative(workspace, real);
             if (path === ".." || path.startsWith(`..${sep}`) || isAbsolute(path)) return [];
             // Re-read from the verified real path: the SDK read the link before this check.
-            return [{ path: file.path, content: readFileSync(real, "utf-8").replace(/^﻿/, "") }];
+            return [{ path: file.path, content: readFileSync(real, "utf-8").replace(/^\uFEFF/, "") }];
           } catch {
             // Unresolvable context files never enter a read-only session's model context.
             return [];
