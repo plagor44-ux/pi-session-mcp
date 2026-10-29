@@ -23,7 +23,8 @@ mean they are implemented or that their gates passed.
   workspace-confined read tools for every read-only profile and the opt-in
   bubblewrap shell (`shell: "sandboxed"`), released in minor release 0.13.0
   together with #162, #163, #165 and #166.
-- 2026-10-29: the post-0.13.0 review findings in one pull request, unreleased:
+- 2026-10-29: the post-0.13.0 review findings in one pull request, released in
+  patch release 0.13.1:
   stale waiter-lock reclamation in the wake hook
   ([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)), per-writer
   reconcile failures ([#180](https://github.com/plagor44-ux/pi-session-mcp/issues/180))
@@ -32,7 +33,9 @@ mean they are implemented or that their gates passed.
   waits for a Pi SDK release: 1.4.0 is the newest and still pins `undici` 8.10.2,
   which `npm audit` now reports with eight advisories.
 - 2026-10-29: agent-driven execution-profile setup
-  ([#139](https://github.com/plagor44-ux/pi-session-mcp/issues/139)), unreleased:
+  ([#139](https://github.com/plagor44-ux/pi-session-mcp/issues/139)), released in
+  minor release 0.14.0 together with the refusal of controller skills as worker
+  skills ([#188](https://github.com/plagor44-ux/pi-session-mcp/issues/188)):
   the offline model catalog `pi-session-mcp-setup --list-models`, the opt-in
   provider probe `--probe-profile <alias> --apply` (one fixed PONG turn per
   profile), and the shipped controller skill `pi-session-profiles`, with which a

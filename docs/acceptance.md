@@ -112,7 +112,9 @@ env -i HOME="$DISPOSABLE_HOME" PATH="$PATH" PI_SESSION_MCP_CONFIG="$ACCEPTANCE_C
   `skill_already_equivalent`, `skill_verified`, `skill_removed`,
   `skill_installed`, `skill_verified`, `skill_removed`); the skill file exists
   after steps 3 and 7 and is gone after steps 6 and 9; a foreign skill placed
-  in the same skill directory stays unchanged throughout.
+  in the same skill directory stays unchanged throughout. From 0.14.0 on
+  (#139), that holds for both controller skills, `pi-session-orchestration`
+  and `pi-session-profiles`, each with its own finding in that order.
 - Steps 1 and 2 leave the client state unchanged.
 - After step 9 the `pi-session-mcp` registration is absent, the sentinel is still
   present, and the ownership record set is empty. The ownership directory has
@@ -2595,6 +2597,66 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.14.0 pre-release acceptance
+
+`v0.14.0` was accepted on 2026-10-29 from 17:56 to 18:01 UTC on its release
+candidate `6e18659`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.312`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record.
+
+The minor release ships #139 ([ADR 0014](adr/0014-profile-probe-and-model-catalog.md))
+and #188. The MCP tool contract is unchanged. Setup gains `--list-models` and
+`--probe-profile`, installs a second controller skill (`pi-session-profiles`)
+and so reports one more skill finding per client target; Doctor gains the
+check `skill_controller_selected`.
+
+The first working-tree run on the earlier candidate `08fc620` failed 36 of 160
+checks: the Level 2 harness still expected one controller skill finding, so
+every step saw one finding too many. Setup itself reported the expected
+findings. The candidate `6e18659` teaches the harness both controller skills
+with the same number of checks; every result below is from that candidate.
+
+- Level 1 in a clean worktree of the candidate after `npm ci`: every command
+  exited with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    139 files, 4005 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` 8.10.2 finding through `@earendil-works/pi-coding-agent`
+    1.4.0, the latest SDK release, with eight advisories
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 932 files (tarball shasum
+    `4eb9b77c9484292a8533c6be0fda44ac18656787`, identical in three packs). A
+    scan of the unpacked files for private names, hosts and the maintainer's
+    home path found none.
+  - Doctor reported `packageVersion` `0.14.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke from another fresh prefix
+  reported `smoke_passed` with version `0.14.0`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories were removed.
+- Podman-gated writer tests on the candidate (Podman `6.1.4`): 7 of 7 passed.
+- Bubblewrap-gated sandbox tests (`test/sandbox-shell.bwrap.test.ts`, bubblewrap
+  `0.13.1`): 12 of 12 passed, none skipped.
+- Live checks before the candidate, on the merged #139 code: `--list-models`
+  against a real local Pi installation reported authentication for the
+  configured providers, the probe dry run planned two profiles, and one
+  `--probe-profile <alias> --apply` returned `probe_passed` with one provider
+  turn.
+- Review: #139 had three cross-family reviews (author family OpenAI and
+  Anthropic, reviewer family GLM) and #188 one, each without blocking findings;
+  their findings were fixed or declined with a reason in #187 and #189. The
+  harness fix in this release was checked by its live run above.
+
+Not established for `0.14.0`: an agent-driven profile change end to end with
+the `pi-session-profiles` skill, a container writer acceptance of a newly
+created profile, client-target `--verify` through the installed package, which
+follows the upgrade; Level 3.
 
 ### v0.13.1 pre-release acceptance
 

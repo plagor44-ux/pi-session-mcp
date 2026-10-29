@@ -300,7 +300,8 @@ const tick = () => new Promise((done) => setImmediate(done));
 const sleepMs = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 // ---- lifecycle -----------------------------------------------------------
-const CONTROLLER_SKILL = "pi-session-orchestration";
+// Setup reports one finding per controller skill, in this order, after the registration (#139).
+const CONTROLLER_SKILLS = ["pi-session-orchestration", "pi-session-profiles"];
 const SKILL_SEQUENCE = [
   ["skill_absent", "absent"], ["skill_absent", "absent"],
   ["skill_installed", "ok"], ["skill_already_equivalent", "unchanged"],
@@ -335,7 +336,9 @@ const SENTINELS = [
 function skillParent(t) {
   return join(t.scope === "project" ? project : homes[t.client], t.client === "codex" ? ".agents" : ".claude", "skills");
 }
-const skillFile = (t) => join(skillParent(t), CONTROLLER_SKILL, "SKILL.md");
+const skillFiles = (t) => CONTROLLER_SKILLS.map((name) => join(skillParent(t), name, "SKILL.md"));
+const skillsPresent = (t) => skillFiles(t).every((file) => existsSync(file));
+const skillsAbsent = (t) => skillFiles(t).every((file) => !existsSync(file));
 const foreignSkillFile = (t) => join(skillParent(t), "acceptance-foreign-skill", "SKILL.md");
 const FOREIGN_SKILL_CONTENT = "foreign skill sentinel\n";
 
@@ -420,19 +423,21 @@ function runStep(t, step, reports, stateBeforeStep1) {
   reports.push(r.stdout);
   let parsed;
   try { parsed = JSON.parse(r.stdout); } catch { parsed = undefined; }
-  const count = hookExpected(t) ? 3 : 2;
-  const finding = parsed?.findings?.length === count ? parsed.findings[0] : undefined;
-  const skillFinding = parsed?.findings?.length === count ? parsed.findings[1] : undefined;
-  const hookFinding = hookExpected(t) && parsed?.findings?.length === count ? parsed.findings[2] : undefined;
+  const count = 1 + CONTROLLER_SKILLS.length + (hookExpected(t) ? 1 : 0);
+  const complete = parsed?.findings?.length === count;
+  const finding = complete ? parsed.findings[0] : undefined;
+  const skillFindings = complete ? parsed.findings.slice(1, 1 + CONTROLLER_SKILLS.length) : [];
+  const hookFinding = hookExpected(t) && complete ? parsed.findings[1 + CONTROLLER_SKILLS.length] : undefined;
   const [skillCode, skillStatus] = SKILL_SEQUENCE[step.n - 1];
   const [hookCode, hookStatus] = hookExpected(t) ? HOOK_SEQUENCE[step.n - 1] : [null, null];
   const observed = {
     overall: parsed?.status ?? null,
     status: finding?.status ?? null,
     code: finding?.code ?? null,
-    skillStatus: skillFinding?.status ?? null,
-    skillCode: skillFinding?.code ?? null,
-    skillTargetMatches: skillFinding ? skillFinding.target.client === t.client && skillFinding.target.scope === t.scope && skillFinding.target.alias === CONTROLLER_SKILL : false,
+    skillStatuses: skillFindings.map((skillFinding) => skillFinding.status ?? null),
+    skillCodes: skillFindings.map((skillFinding) => skillFinding.code ?? null),
+    skillTargetMatches: skillFindings.length === CONTROLLER_SKILLS.length && skillFindings.every((skillFinding, index) =>
+      skillFinding.target.client === t.client && skillFinding.target.scope === t.scope && skillFinding.target.alias === CONTROLLER_SKILLS[index]),
     exit: r.status,
     findingCount: parsed?.findings?.length ?? null,
     targetMatches: finding ? finding.target.client === t.client && finding.target.scope === t.scope && finding.target.alias === ALIAS : false,
@@ -444,7 +449,8 @@ function runStep(t, step, reports, stateBeforeStep1) {
     observed.overall === step.overall && observed.status === step.status && observed.code === step.code &&
     observed.exit === 0 && observed.findingCount === count && observed.targetMatches &&
     observed.hookCode === hookCode && observed.hookStatus === hookStatus && observed.hookTargetMatches &&
-    observed.skillCode === skillCode && observed.skillStatus === skillStatus && observed.skillTargetMatches && !r.error && !r.signal,
+    observed.skillCodes.every((code) => code === skillCode) && observed.skillStatuses.every((status) => status === skillStatus) &&
+    observed.skillTargetMatches && !r.error && !r.signal,
   );
   const record = { step: step.n, operation: step.flag ?? "default", expected: { overall: step.overall, status: step.status, code: step.code, skillCode, skillStatus, ...(hookExpected(t) ? { hookCode, hookStatus } : {}), exit: 0 }, observed, pass };
   if (hookExpected(t)) {
@@ -455,8 +461,8 @@ function runStep(t, step, reports, stateBeforeStep1) {
   if (DELIVERY && (step.n === 5 || step.n === 8)) record.noSpoolInstanceLeft = check(spoolInstances() === 0);
   if (step.n === 1 || step.n === 2) record.clientStateUnchanged = check(clientState(t.client) === stateBeforeStep1);
   if (step.n === 3 || step.n === 7) record.registrationPresentAfter = check(present(t.client, t.scope, ALIAS));
-  if (step.n === 3 || step.n === 7) record.skillPresentAfter = check(existsSync(skillFile(t)));
-  if (step.n === 6 || step.n === 9) record.skillAbsentAfter = check(!existsSync(skillFile(t)));
+  if (step.n === 3 || step.n === 7) record.skillPresentAfter = check(skillsPresent(t));
+  if (step.n === 6 || step.n === 9) record.skillAbsentAfter = check(skillsAbsent(t));
   record.foreignSkillUnchanged = check(foreignSkillUnchanged(t));
   if (step.n === 6) record.registrationAbsentAfter = check(!present(t.client, t.scope, ALIAS));
   return record;
@@ -469,7 +475,7 @@ async function runTarget(t, reports) {
   // after step 9
   entry.postconditions = {
     registrationAbsent: check(!present(t.client, t.scope, ALIAS)),
-    skillAbsent: check(!existsSync(skillFile(t))),
+    skillAbsent: check(skillsAbsent(t)),
     foreignSkillUnchanged: check(foreignSkillUnchanged(t)),
     sentinelPresent: check(SENTINELS.filter((s) => s.client === t.client).every((s) => present(s.client, s.scope, s.name))),
     ...(hookExpected(t) ? { wakeEntryAbsent: check(wakeEntries(t) === 0), foreignHookUnchanged: check(foreignHookUnchanged(t)) } : {}),
@@ -482,7 +488,7 @@ function checkFinalState(result) {
   for (const client of CLIENTS) {
     result.finalChecks.push({
       client,
-      skillsAbsentEverySlot: check(TARGETS.filter((t) => t.client === client).every((t) => !existsSync(skillFile(t)))),
+      skillsAbsentEverySlot: check(TARGETS.filter((t) => t.client === client).every(skillsAbsent)),
       foreignSkillsUnchanged: check(TARGETS.filter((t) => t.client === client).every(foreignSkillUnchanged)),
       registrationAbsentEveryScope: check(TARGETS.filter((t) => t.client === client).every((t) => !present(t.client, t.scope, ALIAS))),
       sentinelsPresent: check(SENTINELS.filter((s) => s.client === client).every((s) => present(s.client, s.scope, s.name))),
