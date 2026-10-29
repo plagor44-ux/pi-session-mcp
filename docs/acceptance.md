@@ -112,7 +112,9 @@ env -i HOME="$DISPOSABLE_HOME" PATH="$PATH" PI_SESSION_MCP_CONFIG="$ACCEPTANCE_C
   `skill_already_equivalent`, `skill_verified`, `skill_removed`,
   `skill_installed`, `skill_verified`, `skill_removed`); the skill file exists
   after steps 3 and 7 and is gone after steps 6 and 9; a foreign skill placed
-  in the same skill directory stays unchanged throughout.
+  in the same skill directory stays unchanged throughout. From 0.14.0 on
+  (#139), that holds for both controller skills, `pi-session-orchestration`
+  and `pi-session-profiles`, each with its own finding in that order.
 - Steps 1 and 2 leave the client state unchanged.
 - After step 9 the `pi-session-mcp` registration is absent, the sentinel is still
   present, and the ownership record set is empty. The ownership directory has
