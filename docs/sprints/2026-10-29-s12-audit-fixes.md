@@ -161,8 +161,9 @@ reports `undici` 8.10.2 (high) through `@earendil-works/pi-coding-agent` 1.4.0
 is a semver-major downgrade. No override and no `npm audit fix --force`.
 
 Kept open: #79 (Sprint 8 steps 5 to 7 are not done), #120 and #144 (no macOS
-claim). The sandbox resource limits of ADR 0013 are a follow-up issue, not
-part of this sprint.
+claim). The sandbox resource limits of ADR 0013 are the follow-up issue
+[#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195), not part of
+this sprint.
 
 Cleanup: all controller Pi sessions closed; both `pi-session-mcp` writers
 finished (`writer_reset`); the test writer `s12-probe-w1` removed; expendable
