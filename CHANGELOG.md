@@ -23,6 +23,17 @@
 
 ### Fixed
 
+- Writer reconciliation reports a kept writer that fails, for example with
+  a missing wrapper after a crash during provisioning, on that writer's
+  target with its own code (`writer_state_invalid`) and still reconciles the
+  other writers. Only failures of shared setup state (configuration,
+  ownership) end the whole step with `writer_reconcile_failed`
+  ([#180](https://github.com/plagor44-ux/pi-session-mcp/issues/180)).
+- Wake hook: reclaiming a stale waiter lock is serialized by an exclusive
+  `<lock>.reclaim` guard, and the lock is judged again while holding it. Two
+  waiters that both saw the same stale lock can no longer both take the turn
+  and send a duplicate wake reminder
+  ([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)).
 - Read-only confinement protects Pi's agent directory (`~/.pi/agent`, or
   `PI_CODING_AGENT_DIR`) and, for a symlinked configuration file, its target's
   directory: a skill directory that equals or contains either contributes only

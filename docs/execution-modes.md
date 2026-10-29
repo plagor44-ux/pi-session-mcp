@@ -271,7 +271,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_unchanged` | Provisioned settings already match |
 | `writer_settings_changed` | Existing writer settings or its rendered configuration differ from the current ones; no silent replacement, no acceptance and no registration change, and an apply is refused before the mode is written ([Isolation setup](isolation-setup.md)) |
 | `registration_divergent` | Writer registration is foreign or differs from its ownership record; it is retained and the writer stays in legacy launch mode |
-| `writer_reconcile_failed` | Unexpected reconciliation failure |
+| `writer_reconcile_failed` | Unexpected reconciliation failure of shared setup state (configuration, ownership); a failure of one kept writer is reported on that writer's target with its own code, and the other writers are still reconciled |
 | `writer_operation_failed` | Unclassified lifecycle/orchestrator failure |
 | `hook_install_failed` | The wake hook step of a writer failed unexpectedly; other `hook_*` and `settings_*` codes are in [Client setup](client-setup.md#wake-hook) |
 | `container_profile_unsupported` | Profile or selected skills cannot be rendered safely in boundary |

@@ -691,6 +691,38 @@ linuxOnly("per-turn waiter lock", () => {
     writeFileSync(path, ""); // a lock still being written is young and counts as held
     expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 10, isAlive: alive })).toBeUndefined();
   });
+  it("lets exactly one of two waiters reclaim a stale lock that both observed (#179)", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    writeFileSync(path, "4242");
+    const isAlive = (pid: number) => pid !== 4242;
+    let second: string | undefined;
+    // The second waiter observes the stale lock and reclaims it completely after the first judged it stale too.
+    const first = acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 21, isAlive, beforeReclaim: () => { second = acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 22, isAlive }); } });
+    expect(second).toBe(path);
+    expect(first).toBeUndefined();
+    expect(readFileSync(path, "utf8")).toBe("22");
+    expect(existsSync(`${path}.reclaim`)).toBe(false);
+  });
+  it("takes the lock under the guard when the stale lock vanished after it was judged", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    writeFileSync(path, "4242");
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 24, isAlive: dead, beforeReclaim: () => rmSync(path) })).toBe(path);
+    expect(readFileSync(path, "utf8")).toBe("24");
+    expect(existsSync(`${path}.reclaim`)).toBe(false);
+  });
+  it("leaves a stale lock to the waiter that holds the reclaim guard", async () => {
+    const f = await fixture();
+    mkdirSync(f.claims, { recursive: true, mode: 0o700 });
+    const path = join(f.claims, waiterLockName(HOST, SESSION, TURN));
+    writeFileSync(path, "4242");
+    writeFileSync(`${path}.reclaim`, "");
+    expect(acquireWaiterLock(f.claims, HOST, SESSION, TURN, { pid: 23, isAlive: dead })).toBeUndefined();
+    expect(readFileSync(path, "utf8")).toBe("4242");
+  });
   it("sees a really dead and a really live process correctly", async () => {
     const f = await fixture();
     mkdirSync(f.claims, { recursive: true, mode: 0o700 });
