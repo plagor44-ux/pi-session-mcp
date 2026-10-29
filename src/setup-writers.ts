@@ -28,6 +28,8 @@ import { readWriterState, writeWriterState, writerName, writerPaths, writerRegis
 
 export const SETUP_LEASE_WAIT_MS = 10_000;
 const FENCE_CODES: readonly string[] = ["writer_busy", "writer_fenced", "writer_lease_unavailable"];
+/** Failures of shared setup state rather than of one writer: they end the whole reconciliation (#180). */
+const INFRASTRUCTURE_CODE = /^(?:ownership_[a-z_]+|config_[a-z_]+|operation_aborted|platform_unsupported)$/;
 
 export type WriterOperation = "collect" | "reset" | "recreate" | "finish" | "remove" | "verify";
 export interface WriterOptions { apply: boolean; discard: boolean; baseRef?: string; }
@@ -235,7 +237,7 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         add(name, { status: "failed", code: "registration_divergent" }); return;
       }
       const paths = writerPaths(ctx.home, name), wrapper = renderWrapper(ctx.nodePath, ctx.releaseRoot, name);
-      if (!(await lstat(paths.wrapper)).isFile()) throw new Error("writer_state_invalid");
+      if (!(await lstat(paths.wrapper).catch(() => undefined))?.isFile()) throw new Error("writer_state_invalid");
       const wrapperChanged = wrapperDigest(await readFile(paths.wrapper, "utf8")) !== wrapperDigest(wrapper);
       if (wrapperChanged) {
         const temporary = join(paths.root, `.wrapper-${randomUUID()}.tmp`);
@@ -255,7 +257,8 @@ async function reconcileUnlocked(configPath: string, alias: string, request: Rec
         add(name, outcome); if (outcome.status === "failed") return;
       } else if (current === "unknown") { add(name, { status: "failed", code: "podman_unavailable" }); return; }
     }); } catch (error) {
-      if (!FENCE_CODES.includes(codeFor(error))) throw error;
+      // A broken writer is reported on its own target and the others are still reconciled.
+      if (INFRASTRUCTURE_CODE.test(codeFor(error))) throw error;
       add(name, { status: "failed", code: codeFor(error) });
     }
   }

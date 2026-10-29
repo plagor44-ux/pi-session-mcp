@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { acquireWriterLease, WriterLeaseError } from "../src/writer-lease.js";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore } from "../src/setup-ownership.js";
@@ -364,10 +364,30 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(1);
     expect(output.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ code: "mode_applied", status: "ok" }),
-      { target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_reconcile_failed" },
+      { target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_operation_failed" },
+      { target: { client: "writer", scope: "x", alias: "x-w2" }, status: "ok", code: "writer_provisioned" },
     ]));
     expect(JSON.stringify(output)).not.toContain("SECRET");
     expect(JSON.parse(await readFile(executionModesPath(f.configPath), "utf8")).workspaces.x.mode).toBe("container");
+  });
+  it("reports a writer with a missing wrapper on its own target and reconciles the others (#180)", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    await rm(writerPaths(f.home, "x-w1").wrapper);
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_state_invalid" });
+    expect(output.findings.some((finding) => finding.code === "writer_reconcile_failed")).toBe(false);
+    expect(output.findings.filter((finding) => finding.target.alias === "x-w2" && finding.status === "failed")).toEqual([]);
+  });
+  it("ends the whole reconciliation on a shared-state failure", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    vi.spyOn(f.ownership, "get").mockRejectedValue(new Error("ownership_corrupt"));
+    const output = await changeWriterMode(f.configPath, mode, f.deps);
+    expect(output.exitCode).toBe(1);
+    expect(output.findings).toContainEqual({ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_reconcile_failed" });
+    expect(output.findings.some((finding) => finding.target.alias === "x-w2")).toBe(false);
   });
   it("records the base that first provisioning resolves when --base is omitted", async () => {
     const f = await fixture();
