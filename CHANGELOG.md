@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.13.1 — 2026-10-29
+
+Patch release under ADR 0003 with an unchanged MCP contract. It ships the
+fixes after 0.13.0: Doctor names where the configuration schema rejects a
+file ([#173](https://github.com/plagor44-ux/pi-session-mcp/issues/173)),
+read-only confinement of Pi's agent directory
+([#177](https://github.com/plagor44-ux/pi-session-mcp/issues/177)), a writer
+added without `--base` ([#176](https://github.com/plagor44-ux/pi-session-mcp/issues/176)),
+stale waiter-lock reclamation in the wake hook
+([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)) and
+per-writer reconcile failures
+([#180](https://github.com/plagor44-ux/pi-session-mcp/issues/180)). Setup
+reports change for a broken kept writer: it now carries its own code on its
+target instead of `writer_reconcile_failed`. `npm audit` still reports
+`undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release, now with
+eight advisories ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+Upgrading follows [Installation](docs/installation.md#upgrade); writers must be
+accepted again after the upgrade, as after every release.
+
 ### Changed
 
 - Doctor's `config_invalid` names where the schema rejects the configuration:
