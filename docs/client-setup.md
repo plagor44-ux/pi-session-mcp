@@ -112,27 +112,30 @@ inspected:
 None of the failure rows changes a registration or starts the handshake, and
 each exits with `1`.
 
-### Controller skill
+### Controller skills
 
-Besides the registration, `--apply` installs the controller skill
-`pi-session-orchestration` for each target, as a real copy of the effective
-skill: your override in the skill library if you have one, else the skill
-shipped in the package ([Pi skills](skills.md)). Clients discover it without
-further steps.
+Besides the registration, `--apply` installs the controller skills
+`pi-session-orchestration` (delegating work to Pi workers) and
+`pi-session-profiles` (creating, changing and retiring execution profiles) for
+each target, each as a real copy of the effective skill: your override in the
+skill library if you have one, else the skill shipped in the package
+([Pi skills](skills.md)). Clients discover them without further steps.
 
-| Target | Where the skill goes |
+| Target | Where the skills go |
 | --- | --- |
-| `codex:user:pi-session-mcp` | `~/.agents/skills/pi-session-orchestration` |
-| `claude-code:user:pi-session-mcp`, `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` (one shared directory) |
-| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration`, where `<project>` is the directory in which setup runs |
+| `codex:user:pi-session-mcp` | `~/.agents/skills/<skill>` |
+| `claude-code:user:pi-session-mcp`, `claude-code:local:pi-session-mcp` | `~/.claude/skills/<skill>` (one shared directory per skill) |
+| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/<skill>`, where `<project>` is the directory in which setup runs |
 
-Every result therefore has a second finding per target, with the same client
-and scope and the alias `pi-session-orchestration`:
+`<skill>` is `pi-session-orchestration` or `pi-session-profiles`. Every result
+therefore has one more finding per skill and target, with the same client and
+scope and the skill name as alias:
 
 ```text
 apply: ok
 claude-code/user/pi-session-mcp: ok (applied)
 claude-code/user/pi-session-orchestration: ok (skill_installed)
+claude-code/user/pi-session-profiles: ok (skill_installed)
 ```
 
 Skill findings per operation:

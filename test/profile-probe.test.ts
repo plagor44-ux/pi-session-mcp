@@ -7,7 +7,7 @@ import type { DoctorCheck, DoctorResult } from "../src/doctor.js";
 import { PiSessionCreationError } from "../src/pi-adapter.js";
 import { PROBE_DEADLINES, PROBE_PROMPT, isPong, runProfileProbe, type ProbeDependencies } from "../src/profile-probe.js";
 import { formatProbeHuman } from "../src/setup-probe-result.js";
-import { FakeAdapter } from "./fake-adapter.js";
+import { FakeAdapter, FakeHandle } from "./fake-adapter.js";
 
 describe("profile probe", () => {
   let root: string;
@@ -97,6 +97,36 @@ describe("profile probe", () => {
     expect(report.findings.map((finding) => finding.code)).toEqual(["probe_timeout", "probe_passed"]);
     expect(adapter.handles[0]).toMatchObject({ aborted: 1, disposed: true });
     expect(deps.removeDir).toHaveBeenCalledTimes(2);
+  });
+
+  it("disposes a session whose start finishes after its deadline", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const late = { create: async (input: Parameters<FakeAdapter["create"]>[0]) => { await gate; return adapter.create(input); } };
+    const report = await runProfileProbe(request, {
+      ...deps, adapter: async () => late, deadlines: { ...PROBE_DEADLINES, startMs: 20 } as unknown as typeof PROBE_DEADLINES,
+    });
+    expect(report.findings[0]).toMatchObject({ code: "probe_timeout", providerTurn: false });
+    expect(deps.removeDir).toHaveBeenCalledOnce();
+    release();
+    await vi.waitFor(() => expect(adapter.handles[0]).toMatchObject({ disposed: true }));
+    expect(adapter.handles[0]?.preflight).toBeUndefined();
+  });
+
+  it("still disposes and removes the directory when abort and dispose throw", async () => {
+    adapter.plans = [{}];
+    const throwing = { create: async (input: Parameters<FakeAdapter["create"]>[0]) => {
+      const handle = await adapter.create(input) as FakeHandle;
+      handle.abortError = new Error("abort failed");
+      handle.disposeError = new Error("dispose failed");
+      return handle;
+    } };
+    const report = await runProfileProbe(request, {
+      ...deps, adapter: async () => throwing, deadlines: { ...PROBE_DEADLINES, turnMs: 20 } as unknown as typeof PROBE_DEADLINES,
+    });
+    expect(report.findings[0]).toMatchObject({ code: "probe_timeout" });
+    expect(adapter.handles[0]).toMatchObject({ aborted: 1, disposeCalls: 1 });
+    expect(deps.removeDir).toHaveBeenCalledOnce();
   });
 
   it("aborts and cleans up on interrupt", async () => {
