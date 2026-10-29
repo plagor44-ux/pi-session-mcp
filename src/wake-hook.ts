@@ -398,30 +398,44 @@ const processAlive = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
 };
 
-function readLockPid(path: string): { pid: number | undefined; ageMs: number } | undefined {
+function readLockPid(path: string): { pid: number | undefined; ageMs: number; ino: number } | undefined {
   let fd: number | undefined;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = fstatSync(fd);
-    if (!stat.isFile()) return { pid: undefined, ageMs: Number.POSITIVE_INFINITY };
+    if (!stat.isFile()) return { pid: undefined, ageMs: Number.POSITIVE_INFINITY, ino: stat.ino };
     const buffer = Buffer.alloc(32);
     const length = readSync(fd, buffer, 0, buffer.length, null);
     const text = buffer.toString("utf8", 0, length).trim();
     const pid = /^[0-9]{1,10}$/.test(text) ? Number(text) : undefined;
-    return { pid: pid !== undefined && pid > 0 ? pid : undefined, ageMs: Date.now() - stat.mtimeMs };
+    return { pid: pid !== undefined && pid > 0 ? pid : undefined, ageMs: Date.now() - stat.mtimeMs, ino: stat.ino };
   } catch { return undefined; } finally { if (fd !== undefined) try { closeSync(fd); } catch { /* closed */ } }
 }
 
-export interface WaiterLockOptions { readonly pid?: number; readonly isAlive?: (pid: number) => boolean; readonly maxAgeMs?: number }
+export interface WaiterLockOptions {
+  readonly pid?: number;
+  readonly isAlive?: (pid: number) => boolean;
+  readonly maxAgeMs?: number;
+  /** Test seam: runs after a lock was judged stale and before its reclamation starts. */
+  readonly beforeReclaim?: () => void;
+}
 
 /**
  * At most one waiter per turn: `<claims>/wait-…` is created exclusively and holds the owner's pid. A lock whose owner
  * is alive (and younger than `maxAgeMs`, which guards against a reused pid) means another waiter already covers this
  * turn: returns `undefined`. A stale lock (dead pid, too old, unreadable content) is replaced. Returns the lock path.
+ *
+ * Reclaiming a stale lock is serialized by the exclusive guard `<lock>.reclaim`, and the lock is judged again while
+ * holding it: an earlier observation never deletes a lock that another waiter created after it. A guard that is already
+ * there means another waiter is reclaiming and will cover the turn. A guard left by a crash between two calls blocks
+ * reclamation for that one turn only, until `cleanupOldClaims` removes it.
  */
 export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sessionId: string, turnId: string, options: WaiterLockOptions = {}): string | undefined {
   const path = join(claims, waiterLockName(namespace, sessionId, turnId));
   const pid = options.pid ?? process.pid, isAlive = options.isAlive ?? processAlive, maxAgeMs = options.maxAgeMs ?? DEFAULT_BUDGET_MS + WAITER_LOCK_GRACE_MS;
+  const stale = (held: NonNullable<ReturnType<typeof readLockPid>>): boolean =>
+    // A lock that is still being written (no pid yet) is young; it is stale only once it has been unreadable for a while.
+    !(held.pid !== undefined ? isAlive(held.pid) && held.ageMs <= maxAgeMs : held.ageMs < 2000);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const fd = openSync(path, "wx", 0o600);
@@ -432,10 +446,21 @@ export function acquireWaiterLock(claims: string, namespace: WakeNamespace, sess
     }
     const held = readLockPid(path);
     if (held === undefined) continue; // vanished meanwhile: try to create it again
-    // A lock that is still being written (no pid yet) is young; it is stale only once it has been unreadable for a while.
-    const live = held.pid !== undefined ? isAlive(held.pid) && held.ageMs <= maxAgeMs : held.ageMs < 2000;
-    if (live) return undefined;
-    try { unlinkSync(path); } catch { /* replaced by someone else: the next attempt decides */ }
+    if (!stale(held)) return undefined;
+    options.beforeReclaim?.();
+    const guard = `${path}.reclaim`;
+    try { closeSync(openSync(guard, "wx", 0o600)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return undefined;
+      throw error;
+    }
+    try {
+      const current = readLockPid(path);
+      if (current !== undefined && !stale(current)) return undefined;
+      // Only the file that was judged stale is removed; a different one at the path is decided by the next attempt.
+      if (current !== undefined && lstatSync(path, { throwIfNoEntry: false })?.ino === current.ino) unlinkSync(path);
+    } catch { /* replaced by someone else: the next attempt decides */ } finally {
+      try { unlinkSync(guard); } catch { /* already gone */ }
+    }
   }
   return undefined;
 }

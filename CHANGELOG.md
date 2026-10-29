@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- Wake hook: reclaiming a stale waiter lock is serialized by an exclusive
+  `<lock>.reclaim` guard, and the lock is judged again while holding it. Two
+  waiters that both saw the same stale lock can no longer both take the turn
+  and send a duplicate wake reminder
+  ([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)).
 - Read-only confinement protects Pi's agent directory (`~/.pi/agent`, or
   `PI_CODING_AGENT_DIR`) and, for a symlinked configuration file, its target's
   directory: a skill directory that equals or contains either contributes only
