@@ -5,6 +5,7 @@ import type { ModeRequest } from "./setup-modes.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { WRITER_NAME_PATTERN } from "./writer-state.js";
 import type { WriterOperation } from "./setup-writers.js";
+import { ALIAS_PATTERN } from "./execution-profile.js";
 
 /** Small argv adapter; command execution remains injected in SetupClientAdapter. */
 export interface SetupCliRequest extends SetupRequest {
@@ -14,6 +15,10 @@ export interface SetupCliRequest extends SetupRequest {
   readonly repo?: ModeRequest;
   readonly writer?: { name: string; operation: WriterOperation; apply: boolean; discard: boolean; baseRef?: string };
   readonly isolationControl?: { alias: string; apply: boolean };
+  /** `--list-models`: prints the offline provider/model catalog. */
+  readonly listModels?: true;
+  /** `--probe-profile <alias>[,<alias>...]`: checks profiles offline, then probes them with `--apply`. */
+  readonly probe?: { readonly profiles: readonly string[]; readonly apply: boolean };
 }
 export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   let operation: SetupOperation | undefined;
@@ -25,6 +30,8 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   let acceptHostWrites = false;
   let writer: string | undefined, writerOperation: WriterOperation | undefined, baseRef: string | undefined;
   let discard = false, codex = false, isolationControl = false;
+  let listModels = false;
+  let probeProfiles: string[] | undefined;
   const container: { -readonly [K in keyof ContainerSettings]?: ContainerSettings[K] } = {};
   const modeFlags = new Set<string>();
   const clearLimits: ("cpus" | "cpuShares" | "memory")[] = [];
@@ -45,6 +52,16 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
     if (argument === "--discard") { if (discard) throw new Error("usage_invalid"); discard = true; continue; }
     if (argument === "--isolation-control") { if (isolationControl) throw new Error("usage_invalid"); isolationControl = true; continue; }
     if (argument === "--json") { if (json) throw new Error("json_repeated"); json = true; continue; }
+    if (argument === "--list-models") { if (listModels) throw new Error("usage_invalid"); listModels = true; continue; }
+    if (argument === "--probe-profile") {
+      if (probeProfiles !== undefined) throw new Error("usage_invalid");
+      const value = argv[++index];
+      if (value === undefined || value === "") throw new Error("usage_invalid");
+      const aliases = value.split(",");
+      if (aliases.some((alias) => !ALIAS_PATTERN.test(alias))) throw new Error("usage_invalid");
+      probeProfiles = [...new Set(aliases)];
+      continue;
+    }
     if (argument === "--dry-run" || argument === "--apply" || argument === "--verify" || argument === "--rollback" || argument === "--remove") {
       if (operation) throw new Error("operation_repeated");
       operation = argument.slice(2) as SetupOperation;
@@ -113,6 +130,18 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       continue;
     }
     throw new Error("argument_unsupported");
+  }
+  if (listModels || probeProfiles !== undefined) {
+    if (listModels && probeProfiles !== undefined) throw new Error("usage_invalid");
+    if (targets.length > 0 || modeFlags.size > 0 || customizeSkill !== undefined || writer !== undefined || writerOperation !== undefined || isolationControl || discard || baseRef || codex) {
+      throw new Error(listModels ? "list_models_combination" : "probe_combination");
+    }
+    if (listModels) {
+      if (operation !== undefined && operation !== "dry-run") throw new Error("list_models_combination");
+      return { ...(operation ? { operation } : {}), targets, json, listModels: true };
+    }
+    if (operation !== undefined && operation !== "dry-run" && operation !== "apply") throw new Error("probe_combination");
+    return { ...(operation ? { operation } : {}), targets, json, probe: { profiles: probeProfiles!, apply: operation === "apply" } };
   }
   if (writer !== undefined) {
     if (operation === "remove" || operation === "verify") { if (writerOperation) throw new Error("usage_invalid"); writerOperation = operation; }
