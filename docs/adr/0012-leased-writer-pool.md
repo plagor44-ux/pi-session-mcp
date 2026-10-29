@@ -161,12 +161,16 @@ base.
   In both cases the host server closes that launcher and tries the next
   candidate. The inner writer guard stays the authority for baseline admission
   inside the boundary.
-- Before the inner start the relay compares the requested profile's entry in
-  the writer's validated `pi_capabilities_get` (permission profile, provider,
-  model, thinking level) with the host's configured profile and moves on with
-  `writer_settings_changed` on any difference, so a writer never runs an
-  outdated version of a host profile. The launcher cannot do this check: it
-  starts before the profile is known.
+- Before the inner start the relay compares every public capability field of
+  the requested profile's entry in the writer's validated `pi_capabilities_get`
+  with the host's configured profile: `permissionProfile`, `provider`, `model`,
+  `thinkingLevel` and `shell` exactly, and `skills`, `extensions` and
+  `grantedExtensionTools` as sets. A mismatch or a missing entry counts as
+  `settingsChanged`, starts no inner session and moves on to the next
+  candidate, so a writer never runs an outdated version of a host profile. The
+  launcher cannot do this check: it starts before the profile is known.
+  (Amended 2026-10-29, #194: the comparison covers every public capability
+  field, not only permission profile, provider, model and thinking level.)
 - If no candidate is admitted, the start fails with `writer_unavailable`, a
   content-free reason and content-free counts. `none_ready`: no writer of the
   workspace is ready, migrated and has a recorded acceptance (whether that

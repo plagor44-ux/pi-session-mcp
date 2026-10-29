@@ -242,6 +242,14 @@ reset updates admission without a server restart. A missing/unusable runtime or
 stale/unready writer launches a refusal MCP server: all eight tools return the
 sanitized refusal, with no host fallback. See [Tool contracts](tool-contracts.md).
 
+Before the relay starts an inner session it compares every public capability
+field of the writer's profile with the host profile: `permissionProfile`,
+`provider`, `model`, `thinkingLevel` and `shell` exactly, and `skills`,
+`extensions` and `grantedExtensionTools` as sets. A mismatch or a missing
+entry counts as `settingsChanged`, starts no inner session and moves on to the
+next writer; if no writer is admitted, the start fails with
+`writer_unavailable` and reason `none_admitted`.
+
 ## Reports and finding codes
 
 Reports use sanitized targets `modes/workspace/<alias>` or `writer/<alias>/<name>`
