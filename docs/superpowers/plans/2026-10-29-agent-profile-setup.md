@@ -44,8 +44,8 @@
 - Produces (in `src/model-catalog.ts`):
   - `export interface CatalogProvider { readonly id: string; readonly authConfigured: boolean; readonly models: readonly string[] }`
   - `export interface ModelCatalog { providers(): readonly CatalogProvider[] }`
-  - `export async function createModelCatalog(): Promise<ModelCatalog>`: wraps `ModelRuntime.create({ refreshOnCreate: false, allowModelNetwork: false })`; maps `getProviders()`, `getModels(id)` (model `id`s) and `checkAuth(id)` (bounded, reduced to a boolean; `hasConfiguredAuth` stays empty offline). Sorted by provider id, then model id.
-  - `export const CATALOG_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,255}$/`
+  - `export async function createModelCatalog(createRuntime?: () => Promise<CatalogRuntime>): Promise<ModelCatalog>`: by default wraps `ModelRuntime.create({ refreshOnCreate: false, allowModelNetwork: false })`; maps `getProviders()`, `getModels(id)` (model `id`s) and `checkAuth(id)` (bounded, reduced to a boolean; `hasConfiguredAuth` stays empty offline). Sorted by provider id, then model id.
+  - `export const CATALOG_ID_PATTERN = /^[A-Za-z0-9@][A-Za-z0-9._:@\/-]{0,255}$/` (a leading `@` for scoped model ids; never a leading `/`, `~` or `.`)
 - Produces (in `src/setup-probe-result.ts`):
   - `export interface ModelCatalogReport { readonly schemaVersion: 1; readonly status: "ok" | "failed"; readonly code?: "catalog_unavailable"; readonly providers: readonly CatalogProvider[]; readonly omittedIds: number; readonly note: "extension_providers_not_listed"; readonly exitCode: 0 | 1 }`
   - `export function catalogReport(catalog: ModelCatalog | undefined): ModelCatalogReport`: `undefined` → `status: "failed"`, `code: "catalog_unavailable"`, exit 1. Drops any provider or model id not matching `CATALOG_ID_PATTERN` and counts it in `omittedIds`.

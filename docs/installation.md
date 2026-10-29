@@ -163,7 +163,7 @@ invalid usage; `130` for SIGINT and `143` for SIGTERM during a probe (both
 report `operation_interrupted`). Both operations run on Linux and macOS and
 need no setup lock. Probe requests cannot be combined with `--target`,
 `--repo`, `--writer`, `--customize-skill`, `--list-models`, `--verify`,
-`--rollback` or `--remove`. `--list-models` is standalone apart from `--json`.
+`--rollback` or `--remove`. `--list-models` is standalone apart from `--json` and the default `--dry-run`.
 Doctor and `--verify` remain provider-free.
 
 **Container repositories:** the probe proves the profile on the host, with
