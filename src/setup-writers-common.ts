@@ -29,7 +29,7 @@ export const FENCE_CODES: readonly string[] = ["writer_busy", "writer_fenced", "
  * store's own failures count; `ownership_unavailable` and `ownership_diverged` concern one writer's registration.
  */
 export const INFRASTRUCTURE_CODE = /^(?:ownership_(?!unavailable$|diverged$)[a-z_]+|config_[a-z_]+|operation_aborted|platform_unsupported)$/;
-export const GLOBAL_ERRORS = new Set(["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid"]);
+export const GLOBAL_ERRORS = new Set(["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected"]);
 
 export interface WriterSetupDependencies {
   configPath: string;

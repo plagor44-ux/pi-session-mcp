@@ -12,7 +12,7 @@ import {
   type PermissionProfile,
   type ThinkingLevel,
 } from "./execution-profile.js";
-import { builtinSkillPath, skillOverrideDirectory } from "./skill-library.js";
+import { builtinSkillPath, CONTROLLER_SKILLS, skillOverrideDirectory } from "./skill-library.js";
 import { loadExecutionModes, type WorkspaceModeEntry } from "./execution-modes.js";
 import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS, PROFILE_TOOLS } from "./session-tools.js";
 
@@ -85,12 +85,26 @@ export class ConfigError extends Error {
   readonly code: ConfigErrorCode;
   /** Dotted schema issue locations for Doctor; built by `issueLocations`, never a value, message or path. */
   readonly locations: readonly string[];
-  constructor(code: ConfigErrorCode, locations: readonly string[] = []) {
+  /** `skillCatalog` aliases refused because they name a controller skill (#188); Doctor reports them on their own. */
+  readonly refusedControllerSkills: readonly string[];
+  constructor(code: ConfigErrorCode, locations: readonly string[] = [], refusedControllerSkills: readonly string[] = []) {
     super(CONFIG_ERROR_MESSAGES[code]);
     this.name = "ConfigError";
     this.code = code;
     this.locations = Object.freeze([...locations]);
+    this.refusedControllerSkills = Object.freeze([...refusedControllerSkills]);
   }
+}
+
+const CONTROLLER_SKILL_ISSUE = "controller_skill";
+
+/** Catalog aliases of controller-skill issues; only alias-shaped keys, so no value or path can pass. */
+function controllerSkillAliases(issues: readonly z.core.$ZodIssue[]): string[] {
+  return [...new Set(issues.flatMap((issue) => {
+    const skillAlias = issue.path[1];
+    return issue.code === "custom" && issue.params?.reason === CONTROLLER_SKILL_ISSUE && issue.path[0] === "skillCatalog"
+      && typeof skillAlias === "string" && ALIAS_PATTERN.test(skillAlias) ? [skillAlias] : [];
+  }))].sort();
 }
 
 export const MAX_CONFIG_ISSUE_LOCATIONS = 5;
@@ -128,6 +142,12 @@ export const configSchema = z.object({
 }).strict().superRefine((config, context) => {
   // A profile may select only cataloged skills; there is no implicit or default skill.
   const catalog = config.skillCatalog ?? {};
+  // The catalog serves Pi workers, which are never the controlling agent (#188).
+  for (const [skillAlias, value] of Object.entries(catalog)) {
+    if (CONTROLLER_SKILLS.includes(builtinSkillName(value) ?? "")) {
+      context.addIssue({ code: "custom", path: ["skillCatalog", skillAlias], message: "A controller skill cannot be a worker skill", params: { reason: CONTROLLER_SKILL_ISSUE } });
+    }
+  }
   for (const [profileAlias, profile] of Object.entries(config.executionProfiles)) {
     if ((profile.skills ?? []).some((skill) => !Object.hasOwn(catalog, skill))) {
       context.addIssue({ code: "custom", path: ["executionProfiles", profileAlias, "skills"], message: "A selected skill must be a skillCatalog alias" });
@@ -202,7 +222,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       const thinkingLevelIssue = error.issues.some((issue) => issue.path.at(-1) === "thinkingLevel");
       // Only the events field's own issues map to the delivery code; an unknown top-level key stays a profile-config error.
       const eventsIssue = error.issues.some((issue) => issue.path[0] === "events");
-      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config", issueLocations(error.issues));
+      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config", issueLocations(error.issues), controllerSkillAliases(error.issues));
     }
     throw error;
   }

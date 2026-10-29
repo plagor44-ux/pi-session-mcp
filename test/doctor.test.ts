@@ -198,6 +198,36 @@ describe("offline doctor", () => {
     expect(`${renderDoctorJson(result)}${renderDoctorHuman(result)}`).not.toMatch(/SENTINEL|private|Bad Key/);
   });
 
+  it("names the catalog alias of a refused controller skill (#188)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-doctor-controller-skill-");
+    const configPath = join(root, "pi-session-mcp.json");
+    await writeFile(configPath, JSON.stringify({
+      workspaces: {}, skillCatalog: { lead: "builtin:pi-session-orchestration" },
+      executionProfiles: { safe: { default: true, permissionProfile: "read-only", provider: "fake", model: "fake", thinkingLevel: "off" } },
+    }));
+    const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), configPath });
+    const located = result.checks.filter((check) => check.id === "config_invalid" || check.id === "skill_controller_selected");
+    expect(located).toEqual([{
+      id: "skill_controller_selected", severity: "error", subject: "configuration:skillCatalog.lead",
+      remediation: "remove this skillCatalog entry: controller skills are for the controlling agent, not for Pi workers",
+    }]);
+    expect(result.exitCode).not.toBe(0);
+  });
+
+  it("keeps config_invalid for the other locations of the same error (#188)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-doctor-controller-mixed-");
+    const configPath = join(root, "pi-session-mcp.json");
+    await writeFile(configPath, JSON.stringify({
+      workspaces: {}, skillCatalog: { lead: "builtin:pi-session-profiles" },
+      executionProfiles: { safe: { default: true, permissionProfile: "read-only", provider: "fake", model: "fake", thinkingLevel: "off", skills: ["absent"] } },
+    }));
+    const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), configPath });
+    expect(result.checks.filter((check) => check.id === "config_invalid" || check.id === "skill_controller_selected").map((check) => [check.id, check.subject])).toEqual([
+      ["config_invalid", "configuration:executionProfiles.safe.skills"],
+      ["skill_controller_selected", "configuration:skillCatalog.lead"],
+    ]);
+  });
+
   it("reports a missing configuration when no configuration path is set", async () => {
     const result = await runDoctor({ packageRoot: "/root", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }), fileSystem: fsFor({ files: ["/root/dist/main.js"] }), loadConfig: async () => { throw new ConfigError("config_path_required"); } });
     expect(result.checks).toContainEqual(expect.objectContaining({ id: "config_missing", severity: "error" }));

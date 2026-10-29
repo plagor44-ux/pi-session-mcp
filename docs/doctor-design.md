@@ -28,6 +28,7 @@ and owners are:
 | `config_missing` | `PI_SESSION_MCP_CONFIG` is not set, or the file it names is absent | `configuration` |
 | `config_unreadable` | The supported configuration path cannot be read | `configuration` |
 | `config_invalid` | Production `loadConfig` rejects the configuration. One check per schema issue location, at most five, sorted | `configuration:<location>`, a dotted path of schema field names, aliases and array indexes such as `configuration:executionProfiles.review.default`; an unknown key that is not a schema field name, and any other key that is not a valid alias, is shown as `<key>`, because it could be a path or a secret. `configuration` when the error has no location |
+| `skill_controller_selected` | Production `loadConfig` rejects the configuration because a `skillCatalog` value names a controller skill (`builtin:pi-session-orchestration` or `builtin:pi-session-profiles`). Reported instead of `config_invalid` for that location and blocks like it | `configuration:skillCatalog.<alias>` |
 | `workspace_missing` | A resolved configured workspace does not exist | validated workspace alias |
 | `workspace_not_directory` | A resolved workspace is not a directory | validated workspace alias |
 | `workspace_unreadable` | A resolved workspace cannot be read | validated workspace alias |
