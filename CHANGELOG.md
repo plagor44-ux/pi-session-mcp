@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.13.1 — 2026-10-29
+
+Patch release under ADR 0003 with an unchanged MCP contract. It ships the
+fixes after 0.13.0: Doctor names where the configuration schema rejects a
+file ([#173](https://github.com/plagor44-ux/pi-session-mcp/issues/173)),
+read-only confinement of Pi's agent directory
+([#177](https://github.com/plagor44-ux/pi-session-mcp/issues/177)), a writer
+added without `--base` ([#176](https://github.com/plagor44-ux/pi-session-mcp/issues/176)),
+stale waiter-lock reclamation in the wake hook
+([#179](https://github.com/plagor44-ux/pi-session-mcp/issues/179)) and
+per-writer reconcile failures
+([#180](https://github.com/plagor44-ux/pi-session-mcp/issues/180)). Setup
+reports change for a broken kept writer: it now carries its own code on its
+target instead of `writer_reconcile_failed`. `npm audit` still reports
+`undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release, now with
+eight advisories ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
+Upgrading follows [Installation](docs/installation.md#upgrade); writers must be
+accepted again after the upgrade, as after every release.
+
 ### Changed
 
 - Doctor's `config_invalid` names where the schema rejects the configuration:
@@ -23,6 +43,14 @@
 
 ### Fixed
 
+- Security, in the lockfile only, development path: `@hono/node-server`
+  2.1.1 → 2.1.5 (via MCP Inspector; GHSA-rmxm-3fg6-px4f). Still open:
+  `undici` 8.10.2 in the production path, pinned exactly by Pi SDK 1.4.0, now
+  with eight advisories (GHSA-4qv8-2p9j-2685, GHSA-f72v-6w45-q472,
+  GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26, GHSA-2m5v-pch6-74hx,
+  GHSA-qrxm-fqhp-jwvm, GHSA-9fm3-97px-rjf6, GHSA-55wc-3pg8-jfw6), so
+  `npm audit` still reports it
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
 - Writer reconciliation reports a kept writer that fails, for example with
   a missing wrapper after a crash during provisioning, on that writer's
   target with its own code (`writer_state_invalid`) and still reconciles the
