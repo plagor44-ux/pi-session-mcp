@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+Sprint 12 fixes three defects that an external audit of `9d9cf8c` reported and
+that were reproduced on that commit
+([Sprint 12](docs/sprints/2026-10-29-s12-audit-fixes.md)). The MCP tool
+contract, result codes and configuration schema are unchanged.
+
+- Read-only sessions no longer load Pi context files (`AGENTS.override.md`,
+  `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD`) from outside the
+  workspace into the model context
+  ([#192](https://github.com/plagor44-ux/pi-session-mcp/issues/192)). Every
+  resource loader of a read-only profile keeps only files whose real path lies
+  inside the workspace's real path, on every reload and before the first
+  provider request, and reads them from that verified path. Behaviour change:
+  context files of directories above the workspace, including a main
+  repository above a linked worktree, are no longer loaded for read-only
+  profiles. Coding profiles are unchanged
+  ([ADR 0013 amendment](docs/adr/0013-hardened-read-only-profiles.md)).
+- Writer collection exports a clean detached `HEAD` whose commit no branch
+  reaches as `<base>-detached`, and records its release digest only when the
+  clone's `HEAD` and every branch commit exist in the operator checkout;
+  otherwise it reports `writer_collect_incomplete`. Before, such a commit was
+  reported as `nothing_to_collect` and finish, reset, recreate and remove
+  discarded it without `--discard`
+  ([#193](https://github.com/plagor44-ux/pi-session-mcp/issues/193)).
+  Clone-side Git, including the writer guard, now ignores replace refs, and a
+  derived `-wip` or `-detached` name that conflicts with an exported branch
+  path is refused instead of aborting the export.
+- The writer relay compares every public capability field of a writer's
+  profile with the host profile before it starts an inner session, including
+  skills, extensions, granted extension tools and shell; a mismatch counts as
+  `settingsChanged`. Before, a writer with a different skill selection was
+  admitted ([#194](https://github.com/plagor44-ux/pi-session-mcp/issues/194)).
+
 ## 0.14.0 — 2026-10-29
 
 Minor release under ADR 0003 for
