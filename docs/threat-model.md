@@ -16,7 +16,16 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   (arguments the SDK would rewrite, such as a leading `@` or `~`, a `file:`
   URL, Unicode spaces or NUL, are refused so both resolve the same path), and
   the `*Operations` hooks of `read`, `grep` and `ls` check the absolute path
-  again. `rg` and `fd` do not follow symlinks during traversal. A profile with
+  again. `rg` and `fd` do not follow symlinks during traversal. For read-only
+  profiles the resource loader likewise keeps only Pi context files
+  (`AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD`)
+  whose real path lies inside the workspace's real path, on every reload and
+  before the first provider request: a symlinked context file that resolves
+  outside the workspace, a dangling one and the context files of ancestor
+  directories above the workspace (including a main repository above a linked
+  worktree) are not loaded, while the linked worktree's own file inside the
+  workspace is. Coding profiles keep the SDK behaviour (the working directory
+  and its ancestors). A profile with
   `shell: "sandboxed"` also gets `bash`, run as `/usr/bin/bwrap` (fixed path,
   root-owned and not group- or world-writable, no `PATH` lookup) with
   `--unshare-all`, `--disable-userns`, a cleared environment, no network, `/usr`

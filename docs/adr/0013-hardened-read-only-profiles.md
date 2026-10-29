@@ -145,6 +145,36 @@ directly after `grantedExtensionTools`. This is configured intent only.
   MCP tools and the granted extension tools. A profile with granted extension
   tools cannot have a sandboxed shell.
 
+### Amendment 2026-10-29: context files
+
+Issue #192. Previously every resource loader kept the SDK behaviour: Pi
+context files (`AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`,
+`CLAUDE.MD`) were loaded from the session directory and every ancestor
+directory, and a context file reached through a symlink was followed to its
+target, so a read-only session also loaded context from outside the workspace.
+
+New rule: for **read-only profiles** every resource loader keeps only context
+files whose real path lies inside the workspace's real path, on every reload
+and before the first provider request. A symlinked context file that resolves
+outside the workspace, a dangling one, and the context files of ancestor
+directories above the workspace (including a main repository above a linked
+worktree) are not loaded for read-only profiles; the linked worktree's own file
+inside the workspace is. Coding profiles keep the SDK behaviour (the working
+directory and its ancestors).
+
+The filter runs on the SDK's result, after the SDK has picked the first
+existing name per directory. If that file is dropped, the directory contributes
+no context file: an `AGENTS.override.md` that resolves outside the workspace
+also hides an `AGENTS.md` beside it. This fails closed. A kept file's content
+is read again from its verified real path, so a link swapped after the SDK
+read cannot bring in outside content.
+
+Why: the read roots of this ADR. Section 1 confines the read tools of
+read-only profiles to the workspace and the skill directories; context files
+are model input rather than tool reads, and before this amendment they were the
+one channel through which content from outside those roots still reached a
+read-only session.
+
 ## Contract change and versioning
 
 The capabilities field `shell`, the start error `sandbox_unavailable` and the
