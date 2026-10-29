@@ -19,8 +19,12 @@ provider and model ids or inspecting credential files.
 whether authentication is configured. Package-root `ModelRuntime` access sits
 behind injectable `ModelCatalog`. Creation disables model network access and
 refresh (`allowModelNetwork: false`, `refreshOnCreate: false`); the catalog
-uses only `getProviders`, `getModels` and `hasConfiguredAuth`. It never calls
-`getAuth`, `getAvailable` or `checkAuth`. This is a second narrow exception
+uses only `getProviders`, `getModels` and `checkAuth`. `checkAuth` reads the
+local auth configuration offline and returns only its source and kind; the
+catalog reduces that to a boolean and bounds each lookup. `hasConfiguredAuth`
+is not used because it reads a snapshot that only an online availability
+refresh fills, so offline it always reports no authentication. The catalog
+never calls `getAuth` or `getAvailable`. This is a second narrow exception
 next to the writer wrapper's credential refresh (#142), not general permission
 to bypass `PiSessionAdapter`.
 

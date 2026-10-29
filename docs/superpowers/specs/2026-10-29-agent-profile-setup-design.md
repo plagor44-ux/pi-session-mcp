@@ -97,7 +97,7 @@ state without losing work, and reports what it did with evidence.
 ## Part A: model catalog and probe command
 
 Both read Pi's model registry through `ModelRuntime` from the package root
-(`getProviders`, `getModels`, `getModel`, `hasConfiguredAuth`), created
+(`getProviders`, `getModels`, `getModel`, `checkAuth`), created
 without network access to model endpoints and without refreshing
 credentials. That access sits behind a small injectable interface, like the
 session adapter, so tests use a fake and need no credentials. The ADR records

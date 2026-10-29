@@ -21,8 +21,8 @@
   refreshes host OAuth credentials through the package-root `ModelRuntime`
   (`getAuth` only, no session, injectable in tests). A second narrow exception
   is the offline model catalog: `getProviders`, `getModels`, and
-  `hasConfiguredAuth` only, without network access or refresh, behind injectable
-  `ModelCatalog`. Do not widen these exceptions.
+  `checkAuth` (reduced to a boolean) only, without network access or refresh,
+  behind injectable `ModelCatalog`. Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be

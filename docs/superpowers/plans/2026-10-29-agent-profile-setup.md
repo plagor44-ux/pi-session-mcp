@@ -44,7 +44,7 @@
 - Produces (in `src/model-catalog.ts`):
   - `export interface CatalogProvider { readonly id: string; readonly authConfigured: boolean; readonly models: readonly string[] }`
   - `export interface ModelCatalog { providers(): readonly CatalogProvider[] }`
-  - `export async function createModelCatalog(): Promise<ModelCatalog>`: wraps `ModelRuntime.create({ refreshOnCreate: false, allowModelNetwork: false })`; maps `getProviders()`, `getModels(id)` (model `id`s) and `hasConfiguredAuth(id)`. Sorted by provider id, then model id.
+  - `export async function createModelCatalog(): Promise<ModelCatalog>`: wraps `ModelRuntime.create({ refreshOnCreate: false, allowModelNetwork: false })`; maps `getProviders()`, `getModels(id)` (model `id`s) and `checkAuth(id)` (bounded, reduced to a boolean; `hasConfiguredAuth` stays empty offline). Sorted by provider id, then model id.
   - `export const CATALOG_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@\/-]{0,255}$/`
 - Produces (in `src/setup-probe-result.ts`):
   - `export interface ModelCatalogReport { readonly schemaVersion: 1; readonly status: "ok" | "failed"; readonly code?: "catalog_unavailable"; readonly providers: readonly CatalogProvider[]; readonly omittedIds: number; readonly note: "extension_providers_not_listed"; readonly exitCode: 0 | 1 }`
@@ -57,7 +57,7 @@
   - "fails closed when the catalog cannot be created": `catalogReport(undefined)` → `status: "failed"`, `code: "catalog_unavailable"`, `exitCode: 1`, `providers: []`.
   - "human format has no path and states the extension note": output contains `auth: yes` and the note line; it does not match `/\/[A-Za-z0-9_.-]+\//`.
 - [ ] **Step 2: Run** `npx vitest run test/model-catalog.test.ts`. Expected: FAIL (modules missing).
-- [ ] **Step 3: Implement** `src/model-catalog.ts` and `src/setup-probe-result.ts` with the interfaces above. `createModelCatalog` reads nothing besides what `ModelRuntime` reads and never calls `getAuth`, `getAvailable` or `checkAuth`.
+- [ ] **Step 3: Implement** `src/model-catalog.ts` and `src/setup-probe-result.ts` with the interfaces above. `createModelCatalog` reads nothing besides what `ModelRuntime` reads and never calls `getAuth` or `getAvailable`.
 - [ ] **Step 4: Run** `npx vitest run test/model-catalog.test.ts` and `npm run typecheck`. Expected: PASS, no type errors.
 - [ ] **Step 5: Commit** `feat: add an offline model catalog report (#139)`.
 
@@ -152,7 +152,7 @@ Behaviour that `runProfileProbe` must have:
   - "ordinary setup runs do not load the probe entry": with `vi.mock("../src/setup-probe-main.js", factory)` whose factory increments a counter, `main(["--target", "codex:user:pi-session-mcp", "--dry-run"], { createSetup })` leaves the counter at 0.
 - [ ] **Step 2: Run** `npx vitest run test/setup-probe-main.test.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** `src/setup-probe-main.ts` and the dispatch in `src/setup-main.ts`.
-- [ ] **Step 4: Write ADR 0014** (context: the running server reads its configuration once and a controller cannot reconnect its own server; decision: the opt-in provider probe with fixed prompt and private temporary directory, the offline catalog through `ModelRuntime` behind `ModelCatalog`; consequences: Doctor and `--verify` stay provider-free; the temporary directory is not a workspace alias and never an argument). Add to `AGENTS.md` under Rules: one bullet stating that `--probe-profile … --apply` is the only setup operation that uses a provider, with a fixed prompt, no reply text in output and fakes in tests; and widen the #142 `ModelRuntime` note by exactly the offline catalog (`getProviders`, `getModels`, `hasConfiguredAuth`, no network, no refresh). Document both commands, their findings table (copied from the spec), exit codes, and the container note (the probe proves the profile on the host; writer acceptance stays with `container_profile_refused` and provisioning) in `docs/installation.md`.
+- [ ] **Step 4: Write ADR 0014** (context: the running server reads its configuration once and a controller cannot reconnect its own server; decision: the opt-in provider probe with fixed prompt and private temporary directory, the offline catalog through `ModelRuntime` behind `ModelCatalog`; consequences: Doctor and `--verify` stay provider-free; the temporary directory is not a workspace alias and never an argument). Add to `AGENTS.md` under Rules: one bullet stating that `--probe-profile … --apply` is the only setup operation that uses a provider, with a fixed prompt, no reply text in output and fakes in tests; and widen the #142 `ModelRuntime` note by exactly the offline catalog (`getProviders`, `getModels`, `checkAuth`, no network, no refresh). Document both commands, their findings table (copied from the spec), exit codes, and the container note (the probe proves the profile on the host; writer acceptance stays with `container_profile_refused` and provisioning) in `docs/installation.md`.
 - [ ] **Step 5: Run** `npx vitest run test/setup-probe-main.test.ts test/setup-main.test.ts test/setup-cli.test.ts`, `npm run typecheck` and `npm run build`. Expected: PASS.
 - [ ] **Step 6: Commit** `feat: add --list-models and --probe-profile to setup (#139)`.
 
