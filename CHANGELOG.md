@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+Agent-driven execution-profile setup
+([#139](https://github.com/plagor44-ux/pi-session-mcp/issues/139),
+[ADR 0014](docs/adr/0014-profile-probe-and-model-catalog.md)):
+
+- `pi-session-mcp-setup --list-models` prints the provider and model ids Pi
+  knows offline, with authentication presence only. Ids that could read as a
+  path are omitted and counted; providers registered only by extensions are not
+  listed.
+- `pi-session-mcp-setup --probe-profile <alias>[,<alias>...]` checks profiles
+  offline (dry run by default); with `--apply` it sends one fixed PONG prompt
+  per profile in a private temporary directory and never prints the reply. It
+  is the only setup operation that uses a provider.
+- The shipped controller skill `pi-session-profiles` lets a controlling agent
+  create, change or retire execution profiles itself. Setup installs it next to
+  `pi-session-orchestration`, so every client target reports one more skill
+  finding.
+
 ## 0.13.1 — 2026-10-29
 
 Patch release under ADR 0003 with an unchanged MCP contract. It ships the
