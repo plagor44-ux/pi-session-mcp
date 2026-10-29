@@ -92,3 +92,16 @@ it("probes a real local repository, including branch targets, untracked files an
   git("stash", "push", "-u"); await expect(guard.check("repo", 0)).rejects.toMatchObject({ code: "writer_uncollected" });
   git("stash", "clear"); await guard.check("repo", 0);
 });
+it("ignores a replace ref that would make staged work look like the baseline (#193)", async () => {
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: dir, encoding: "utf8" }).trim();
+  git("init", "-b", "main"); git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "base");
+  const head = git("rev-parse", "HEAD");
+  await writeFile(join(dir, ".git", "info", "exclude"), "guard.json\n"); await baseline(head);
+  const guard = createWriterGuard(path, workspaces); await guard.check("repo", 0);
+  await writeFile(join(dir, "work.txt"), "work"); git("add", "work.txt");
+  // Replace the base commit with one whose tree matches the staged work, so plain status looks clean.
+  const fake = git("-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit-tree", git("write-tree"), "-m", "fake");
+  git("replace", head, fake);
+  expect(git("status", "--porcelain=v1", "-uall")).toBe("");
+  await expect(guard.check("repo", 0)).rejects.toMatchObject({ code: "writer_uncollected" });
+});

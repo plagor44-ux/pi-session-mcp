@@ -194,7 +194,11 @@ setup does not merge or cherry-pick them. Collection does not change the clone.
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch
 commit exist in the operator checkout; otherwise collection is incomplete
-(`writer_collect_incomplete`) and no digest is recorded. New work invalidates
+(`writer_collect_incomplete`) and no digest is recorded. This includes the base
+commit: if the operator checkout no longer has it (for example after a deleted
+base branch and garbage collection), collect and finish fail this way even on a
+pristine writer, without refused names; fetch the base again or resolve with
+`--reset --discard --apply`. New work invalidates
 that authorization. Stashes are not exported as branches:
 resolve any needed stash inside the boundary before collection.
 
