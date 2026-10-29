@@ -225,12 +225,17 @@ Git metadata can redirect reads to worker-controlled configuration. Setup checks
 clone layout and runs clone-side Git only in throwaway no-network containers.
 Collect with `--writer <name> --collect --apply`, then review
 `refs/remotes/writer-<name>/<branch>` in your own checkout, with dirty work at
-`<branch>-wip`. Imported refs are untrusted until reviewed.
+`<branch>-wip` and a clean detached HEAD at `<base>-detached` (for example
+`main-detached`). Imported refs are untrusted until reviewed.
 
 After taking over the result and closing its coding session, run
 `pi-session-mcp-setup --writer <name> --finish --apply` before another task.
 It collects then resets (persistent) or recreates (ephemeral). If any branch name
-was refused, collection is incomplete and finish stops. Rename inside the writer
+was refused, collection is incomplete and finish stops; a `<base>-detached`
+collision with an existing branch is refused the same way. The release digest is
+recorded only when the clone's HEAD commit and every branch commit exist in the
+operator checkout, otherwise collection is `writer_collect_incomplete` and no
+digest is recorded. Rename inside the writer
 or have the operator explicitly resolve loss with `--reset --discard --apply`.
 Finish returns persistent and ephemeral writers to the workspace default base.
 No reconnect is needed after finish, reset or recreate: each session starts a

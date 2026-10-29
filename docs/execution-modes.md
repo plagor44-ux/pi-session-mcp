@@ -182,10 +182,18 @@ pi-session-mcp-setup --writer my-project-w1 --finish --apply
 
 Collection exports changed branches via a bundle into the operator's checkout as
 `refs/remotes/writer-<name>/<branch>`. Uncommitted/untracked work is captured as a
-synthetic `<branch>-wip` commit. These refs are **untrusted until reviewed**;
+synthetic `<branch>-wip` commit. A clean detached HEAD whose commit no branch in
+the clone reaches is exported as `<base>-detached` (for example `main-detached`,
+imported as `refs/remotes/writer-<name>/main-detached`); a dirty detached HEAD
+keeps the `<base>-wip` export. A `<base>-detached` collision with an existing
+branch makes collection incomplete (`writer_collect_incomplete`), like a
+`<branch>-wip` collision. These refs are **untrusted until reviewed**;
 setup does not merge or cherry-pick them. Collection does not change the clone.
-Only a complete export records a digest authorizing later destructive cleanup;
-new work invalidates that authorization. Stashes are not exported as branches:
+Only a complete export records a digest authorizing later destructive cleanup,
+and the digest is recorded only when the clone's HEAD commit and every branch
+commit exist in the operator checkout; otherwise collection is incomplete
+(`writer_collect_incomplete`) and no digest is recorded. New work invalidates
+that authorization. Stashes are not exported as branches:
 resolve any needed stash inside the boundary before collection.
 
 `--finish` collects, then resets a persistent writer or recreates an ephemeral
