@@ -385,7 +385,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     else {
       // Locations name the offending field; an error without one, or at the root, keeps the plain subject.
       const locations = error instanceof ConfigError ? error.locations : [];
-      const controller = new Set((error instanceof ConfigError ? error.controllerSkills : []).map((skillAlias) => `skillCatalog.${skillAlias}`));
+      const controller = new Set((error instanceof ConfigError ? error.refusedControllerSkills : []).map((skillAlias) => `skillCatalog.${skillAlias}`));
       for (const location of locations.length ? locations : [""]) {
         const subject = location ? `configuration:${location}` : "configuration";
         checks.push(controller.has(location)

@@ -482,11 +482,11 @@ describe("skill catalog and profile skills", () => {
 
     it.each(CONTROLLER_SKILLS)("refuses the controller skill %s as a catalog entry (#188)", async (name) => {
       await expect((await load(builtin(`builtin:${name}`))).config()).rejects.toMatchObject({
-        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], controllerSkills: ["lib"],
+        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], refusedControllerSkills: ["lib"],
       });
       // Not even an unselected entry: the catalog serves worker profiles only.
       await expect((await load({ skillCatalog: { lib: `builtin:${name}` }, executionProfiles: { safe } })).config()).rejects.toMatchObject({
-        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], controllerSkills: ["lib"],
+        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], refusedControllerSkills: ["lib"],
       });
     });
 

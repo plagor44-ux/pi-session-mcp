@@ -86,13 +86,13 @@ export class ConfigError extends Error {
   /** Dotted schema issue locations for Doctor; built by `issueLocations`, never a value, message or path. */
   readonly locations: readonly string[];
   /** `skillCatalog` aliases refused because they name a controller skill (#188); Doctor reports them on their own. */
-  readonly controllerSkills: readonly string[];
-  constructor(code: ConfigErrorCode, locations: readonly string[] = [], controllerSkills: readonly string[] = []) {
+  readonly refusedControllerSkills: readonly string[];
+  constructor(code: ConfigErrorCode, locations: readonly string[] = [], refusedControllerSkills: readonly string[] = []) {
     super(CONFIG_ERROR_MESSAGES[code]);
     this.name = "ConfigError";
     this.code = code;
     this.locations = Object.freeze([...locations]);
-    this.controllerSkills = Object.freeze([...controllerSkills]);
+    this.refusedControllerSkills = Object.freeze([...refusedControllerSkills]);
   }
 }
 
