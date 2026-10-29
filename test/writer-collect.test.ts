@@ -145,7 +145,8 @@ it("preserves a real WIP-named branch and treats the skipped WIP export as refus
   expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
   const script = f.calls.find((c) => c.args.some((a) => a.includes("/tmp/scratch")))!.args.find((a) => a.includes("/tmp/scratch"))!;
   expect(script).toContain('show-ref --verify --quiet "refs/heads/$branch-wip"');
-  expect(script).toMatch(/if .*show-ref[^\n]+; then\n\s+printf[^\n]+ref_name_refused[^\n]*\n\s+else\n\s+.*update-ref/);
+  // The taken-name check runs before update-ref, so an existing branch is never overwritten.
+  expect(script).toMatch(/if .*show-ref --verify --quiet "refs\/heads\/\$branch-wip" \\\n\s+\|\| ! .*update-ref "refs\/heads\/\$branch-wip"[^\n]*; then\n\s+printf[^\n]+ref_name_refused/);
 });
 it("refuses uncollected work, allows discard, preserves acceptance and clears collected", async () => {
   const f = await fixture(); await provision(f);
@@ -190,8 +191,17 @@ it("records a digest even with nothing to collect, without host bundle or fetch 
   const f = await fixture(); await provision(f); f.empty();
   const start = f.calls.length;
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ code: "nothing_to_collect", refs: [], refused: 0 });
-  expect(f.calls.slice(start).some((c) => c.command === "git")).toBe(false);
+  // Only the reachability gate (#193) runs host Git here: no bundle, fetch or other command.
+  expect(f.calls.slice(start).filter((c) => c.command === "git").every((c) => c.args.includes("cat-file"))).toBe(true);
   expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected?.digest).toMatch(/^sha256:/);
+});
+it("records no digest with nothing to collect when a clone commit is missing from the operator checkout (#193)", async () => {
+  const f = await fixture(); await provision(f); f.empty();
+  const runner = f.ctx.runner;
+  f.ctx.runner = { run: (command, args, signal, options) => command === "git" && args.includes("cat-file")
+    ? Promise.resolve({ exitCode: 1, stdout: "", stderr: "" }) : runner.run(command, args, signal, options) };
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ code: "writer_collect_incomplete", status: "failed", refs: [] });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
 });
 it("checks clone redirects before any collect runner call", async () => {
   const f = await fixture(); await provision(f);

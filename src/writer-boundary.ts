@@ -9,7 +9,8 @@ import { writerPaths, type WriterState } from "./writer-state.js";
 
 export const NODE_IMAGE_REF = "docker.io/library/node@sha256:c4d5523090a817b7aa86d2111241fdd4f66d1e27782b44160e6aa63b357ecb2d";
 export const IMAGE_PULL_TIMEOUT_MS = 900_000;
-export const BOUNDARY_GIT = "git -c safe.directory=* -c core.fsmonitor=false -c core.hooksPath=/dev/null";
+// Replace refs in a clone are worker-controlled: they could make unexported work look reachable or clean (#193).
+export const BOUNDARY_GIT = "git -c safe.directory=* -c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.useReplaceRefs=false";
 
 type WriterPaths = ReturnType<typeof writerPaths>;
 

@@ -211,3 +211,29 @@ it("fails collection when a collected commit is missing from the operator checko
   expect(await gitPresent(f.checkout, "cat-file", "-e", `${detached}^{commit}`)).toBe(false);
   expect(await gitPresent(f.checkout, "rev-parse", "--verify", DETACHED_REF)).toBe(false);
 }, 60_000);
+
+it("ignores clone replace refs that would make a detached commit look reachable", async () => {
+  const f = await fixture();
+  await f.work("checkout", "--detach", "main");
+  const detached = await f.commit("detached work", "detached.txt", "detached\n");
+  // A graft makes the base commit claim the detached commit as its parent.
+  await f.work("replace", "--graft", f.baseCommit, detached);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0 });
+  expect(await git(f.checkout, "rev-parse", "--verify", DETACHED_REF)).toBe(detached);
+}, 60_000);
+
+it("refuses a derived name that conflicts with an exported branch path and still exports that branch", async () => {
+  const f = await fixture();
+  await f.work("checkout", "--detach", "main");
+  const detached = await f.commit("detached work", "detached.txt", "detached\n");
+  await f.work("branch", "main-detached/topic", detached);
+  await f.work("checkout", "--detach", "main");
+  const other = await f.commit("other detached work", "other.txt", "other\n");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete", findings: [{ code: "ref_name_refused" }] });
+  expect(await git(f.checkout, "rev-parse", "--verify", "refs/remotes/writer-repo-w1/main-detached/topic")).toBe(detached);
+  expect(await gitPresent(f.checkout, "cat-file", "-e", `${other}^{commit}`)).toBe(false);
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+}, 60_000);
