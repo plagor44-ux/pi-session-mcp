@@ -2565,6 +2565,23 @@ Tag binding: a fresh clone of the annotated tag `v0.13.1` (tag object
   the published package reported `smoke_passed` with version `0.13.1`.
 - The GitHub release `v0.13.1` was published the same day.
 
+Operator upgrade of the workstation from `0.13.0` to `0.13.1` on 2026-10-29
+from 09:35 UTC, following
+[Installation](installation.md#container-writers): no writer container ran at
+the start; controller sessions without a coding session stayed open and need a
+reconnect. Both client targets were removed with `0.13.0`, then
+`npm install -g pi-session-mcp@0.13.1`. Doctor reported only
+`writer_not_ready` for the 18 writers. A dry run of each provisioning command
+with unchanged settings reported `mode_unchanged` and `writer_planned`; with
+`--apply`, five container repositories with 18 writers (2 with
+`--tags reachable`, 4, 4 with `--cache go`, 4 with base `dev`, 4 with
+`--cache uv`, three of them with operator images) reported `writer_accepted`
+from 09:36 to 09:39 UTC. Client-target `--apply` and `--verify` passed for
+`claude-code:user` and `codex:user` (`mcp_verified`, `skill_verified`, and
+`hook_verified` for the wake hook); `--writer <name> --verify` passed for all
+18 writers. Doctor reported no error, only the known `workspace_gitfile` and
+`workspace_mode_unset` warnings of the worktree aliases.
+
 ### v0.13.1 pre-release acceptance
 
 `v0.13.1` was accepted on 2026-10-29 from 06:40 to 06:48 UTC on its release
