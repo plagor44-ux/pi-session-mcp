@@ -23,6 +23,32 @@ async function skill(root: string, name: string, files: Record<string, string> =
 }
 
 describe("skill library", () => {
+  it("ships both controller skills", () => {
+    expect(CONTROLLER_SKILLS).toEqual(["pi-session-orchestration", "pi-session-profiles"]);
+    expect(resolveLibrarySkill("pi-session-profiles", { overrideDirectory: "/nonexistent-override" })).toEqual({
+      name: "pi-session-profiles", source: "shipped", directory: join(shippedSkillsDirectory(), "pi-session-profiles"),
+    });
+  });
+
+  it("the profiles skill names its commands and stop rules", async () => {
+    const text = await readFile(join(shippedSkillsDirectory(), "pi-session-profiles", "SKILL.md"), "utf8");
+    for (const term of ["--list-models", "--probe-profile", "providerTurn", "execution-modes.json",
+      "writer_busy", "podman_unavailable", "registration_divergent", "uncollected work", "dirty clone"])
+      expect(text).toContain(term);
+    expect(text).not.toMatch(/\/home\/|\/Users\/|~\//);
+    expect([...text.matchAll(/^## (\d)\. (.+)$/gm)].map((match) => match[2])).toEqual([
+      "Find the configuration", "Inventory", "Work out the change", "Build and check a candidate",
+      "Probe the candidate", "Prepare writers", "Go live", "Provision", "Report",
+    ]);
+    for (const rule of ["Never read Pi credential or model files", "Never print environment values",
+      "Never hand-edit `execution-modes.json`", "Never run `--collect --apply`", "Never guess",
+      "at most one provider turn", "second provider turn", "stop and ask", "Never run a quality evaluation",
+      "pi-session-mcp-doctor --json", "--writer <name> --collect", "--writer <name> --remove",
+      "--writer <name> --verify", "--repo <alias> --mode container --profiles <aliases> --apply",
+      "docs/installation.md", "docs/skills.md", "docs/execution-modes.md", "docs/pi-extensions-design.md"])
+      expect(text).toContain(rule);
+  });
+
   it("ships every controller skill and resolves the package root", () => {
     for (const name of CONTROLLER_SKILLS) {
       expect(resolveLibrarySkill(name, { overrideDirectory: "/nonexistent-override" })).toMatchObject({ name, source: "shipped" });

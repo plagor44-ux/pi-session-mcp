@@ -31,6 +31,13 @@ mean they are implemented or that their gates passed.
   ([#181](https://github.com/plagor44-ux/pi-session-mcp/issues/181)). #120 still
   waits for a Pi SDK release: 1.4.0 is the newest and still pins `undici` 8.10.2,
   which `npm audit` now reports with eight advisories.
+- 2026-10-29: agent-driven execution-profile setup
+  ([#139](https://github.com/plagor44-ux/pi-session-mcp/issues/139)), unreleased:
+  the offline model catalog `pi-session-mcp-setup --list-models`, the opt-in
+  provider probe `--probe-profile <alias> --apply` (one fixed PONG turn per
+  profile), and the shipped controller skill `pi-session-profiles`, with which a
+  controlling agent creates, changes or retires profiles without a guided
+  dialog. Recorded in [ADR 0014](adr/0014-profile-probe-and-model-catalog.md).
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

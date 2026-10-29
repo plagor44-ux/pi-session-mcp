@@ -72,6 +72,53 @@ describe("setup CLI", () => {
       ["--repo", "a", "--network", "bridge"],
     ])("rejects invalid repo arguments %j", (...argv) => { expect(() => parseSetupArgs(argv)).toThrow(); });
   });
+  describe("--list-models and --probe-profile", () => {
+    it("parses --list-models", () => {
+      expect(parseSetupArgs(["--list-models"])).toEqual({ listModels: true, json: false, targets: [] });
+      expect(parseSetupArgs(["--list-models", "--json"])).toEqual({ listModels: true, json: true, targets: [] });
+    });
+    it("parses --probe-profile as dry run and apply", () => {
+      expect(parseSetupArgs(["--probe-profile", "review,code"]).probe).toEqual({ profiles: ["review", "code"], apply: false });
+      expect(parseSetupArgs(["--probe-profile", "review,code", "--apply"]).probe).toEqual({ profiles: ["review", "code"], apply: true });
+    });
+    it("rejects invalid probe aliases", () => {
+      expect(parseSetupArgs(["--probe-profile", "review,review"]).probe).toEqual({ profiles: ["review"], apply: false });
+      for (const value of ["A", "../x", "review,", "", ",review"]) {
+        expect(() => parseSetupArgs(["--probe-profile", value])).toThrow("usage_invalid");
+      }
+      expect(() => parseSetupArgs(["--probe-profile"])).toThrow("usage_invalid");
+      expect(() => parseSetupArgs(["--probe-profile", "--apply"])).toThrow("usage_invalid");
+    });
+    it("rejects repeated flags", () => {
+      expect(() => parseSetupArgs(["--probe-profile", "review", "--probe-profile", "code"])).toThrow("usage_invalid");
+      expect(() => parseSetupArgs(["--list-models", "--list-models"])).toThrow("usage_invalid");
+    });
+    it.each([
+      ["a target", ["--probe-profile", "review", "--target", "codex:user:pi-session-mcp"]],
+      ["a repository", ["--probe-profile", "review", "--repo", "a"]],
+      ["a writer", ["--probe-profile", "review", "--writer", "a-w1"]],
+      ["a customized skill", ["--probe-profile", "review", "--customize-skill", "review"]],
+      ["the catalog", ["--probe-profile", "review", "--list-models"]],
+      ["verify", ["--probe-profile", "review", "--verify"]],
+      ["rollback", ["--probe-profile", "review", "--rollback"]],
+      ["remove", ["--probe-profile", "review", "--remove"]],
+    ])("rejects a probe with %s", (_name, argv) => {
+      expect(() => parseSetupArgs(argv)).toThrow();
+    });
+    it.each([
+      ["apply", ["--list-models", "--apply"]],
+      ["a target", ["--list-models", "--target", "codex:user:pi-session-mcp"]],
+      ["a repository", ["--list-models", "--repo", "a"]],
+      ["a writer", ["--list-models", "--writer", "a-w1"]],
+      ["a customized skill", ["--list-models", "--customize-skill", "review"]],
+      ["a probe", ["--list-models", "--probe-profile", "review"]],
+      ["verify", ["--list-models", "--verify"]],
+      ["rollback", ["--list-models", "--rollback"]],
+      ["remove", ["--list-models", "--remove"]],
+    ])("rejects the catalog with %s", (_name, argv) => {
+      expect(() => parseSetupArgs(argv)).toThrow();
+    });
+  });
   describe("--customize-skill", () => {
     it("parses a dry run, an apply and the JSON flag in any order", () => {
       expect(parseSetupArgs(["--customize-skill", "review"])).toEqual({ json: false, targets: [], customizeSkill: "review" });

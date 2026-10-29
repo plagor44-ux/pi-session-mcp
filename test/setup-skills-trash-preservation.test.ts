@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { OwnershipRecord } from "../src/setup-ownership.js";
 import type { SkillCheckpoint } from "../src/setup-skills.js";
 import { readSkillTree } from "../src/skill-library.js";
-import { expectSkill, fixture, skill, skillTarget, targets } from "./fixtures/setup-skills-fixture.js";
+import { afterProfilesCleanup, expectSkill, fixture, skill, skillTarget, targets } from "./fixtures/setup-skills-fixture.js";
 import { removeTemporaryRoots } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
@@ -58,7 +58,7 @@ async function expectSettled(x: Interrupted, operation: Operation): Promise<void
     expect(await x.f.ownership.get(owned)).toMatchObject({ phase: "owned", fingerprint: x.v2.fingerprint });
     expect("replaces" in (await x.f.ownership.get(owned))!).toBe(false);
     expect((await readSkillTree(x.slot)).fingerprint).toBe(x.v2.fingerprint);
-    expect(await readdir(x.parent)).toEqual([skill]);
+    expect(await readdir(x.parent)).toEqual([skill, "pi-session-profiles"]);
     return;
   }
   expect(output.findings[0]).toMatchObject({ code: operation === "remove" ? "removed" : "rolled_back", status: "ok" });
@@ -74,7 +74,8 @@ async function expectRetained(x: Interrupted, operation: Operation): Promise<voi
   expectSkill(output, "skill_recovery_retained", "divergent");
   expect(output.status).toBe("failed"); expect(output.exitCode).toBe(1);
   if (operation !== "apply") expect(output.findings[0]).toMatchObject({ code: operation === "remove" ? "removed" : "rolled_back", status: "ok" });
-  expect(await snapshot(x.parent)).toBe(before);
+  expect(await snapshot(x.parent)).toBe(operation === "apply" ? before : afterProfilesCleanup(before));
+  expect(output.findings[2]).toMatchObject({ target: { alias: "pi-session-profiles" }, code: operation === "apply" ? "skill_already_equivalent" : "skill_removed" });
   expect(existsSync(x.trash)).toBe(true);
   expect(await x.f.ownership.get(owned)).toEqual(x.record);
   const report = JSON.stringify(output);
@@ -128,7 +129,8 @@ describe("recovery deletes the transaction's trash only when it is the complete 
     const output = await x.f.run(operation);
     expectSkill(output, "skill_recovery_retained", "divergent");
     expect(output.status).toBe("failed"); expect(output.exitCode).toBe(1);
-    expect(await snapshot(x.parent)).toBe(before);
+    expect(await snapshot(x.parent)).toBe(operation === "apply" ? before : afterProfilesCleanup(before));
+    expect(output.findings[2]).toMatchObject({ target: { alias: "pi-session-profiles" }, code: operation === "apply" ? "skill_already_equivalent" : "skill_removed" });
     expect(existsSync(trash)).toBe(true); expect(await readFile(join(x.slot, "SKILL.md"), "utf8")).toBe("controller v2");
     expect(await x.f.ownership.get(owned)).toEqual(unknown);
     expect(JSON.stringify(output)).not.toContain(x.f.root);
@@ -155,7 +157,7 @@ async function expectSettledBesides(x: Interrupted, operation: Operation, bystan
     expectSkill(output, "skill_recovered", "ok");
     expect(await x.f.ownership.get(owned)).toMatchObject({ phase: "owned", fingerprint: x.v2.fingerprint });
     expect((await readSkillTree(x.slot)).fingerprint).toBe(x.v2.fingerprint);
-    expect((await readdir(x.parent)).sort()).toEqual([name, skill].sort());
+    expect((await readdir(x.parent)).sort()).toEqual([name, skill, "pi-session-profiles"].sort());
     return;
   }
   expect(output.findings[0]).toMatchObject({ code: operation === "remove" ? "removed" : "rolled_back", status: "ok" });

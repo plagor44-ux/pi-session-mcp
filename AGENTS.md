@@ -19,7 +19,10 @@
 - Keep Pi behind `PiSessionAdapter`; tests must use a fake and must not need provider credentials.
   One maintainer-approved exception (2026-10-26, #142): the writer wrapper
   refreshes host OAuth credentials through the package-root `ModelRuntime`
-  (`getAuth` only, no session, injectable in tests). Do not widen it.
+  (`getAuth` only, no session, injectable in tests). A second narrow exception
+  is the offline model catalog: `getProviders`, `getModels`, and
+  `checkAuth` (reduced to a boolean) only, without network access or refresh,
+  behind injectable `ModelCatalog`. Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be
@@ -28,6 +31,8 @@
   `--rollback`, or `--remove`; default to dry-run, never pin client versions but
   reject a client whose public command output does not match the expected
   contract, and never auto-replace divergent registrations.
+- `--probe-profile … --apply` is the only setup operation that uses a provider;
+  it uses a fixed prompt, never outputs reply text, and uses fakes in tests.
 - Setup accepts only configured client targets and derives absolute paths
   internally; durable ownership state must remain path-free and secret-free.
 - Mutating setup runs on Linux and macOS only. Linux requires a supported

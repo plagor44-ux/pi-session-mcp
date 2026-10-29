@@ -15,7 +15,7 @@ export const SKILL_NAME_PATTERN = /^(?=.{1,64}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 /** A `skillCatalog` value `builtin:<name>` names a library skill instead of a path. */
 export const BUILTIN_SKILL_PREFIX = "builtin:";
 /** Skills for the controlling agent, which setup installs into Claude Code and Codex. */
-export const CONTROLLER_SKILLS: readonly string[] = Object.freeze(["pi-session-orchestration"]);
+export const CONTROLLER_SKILLS: readonly string[] = Object.freeze(["pi-session-orchestration", "pi-session-profiles"]);
 export const MAX_SKILL_TREE_FILES = 32;
 export const MAX_SKILL_TREE_BYTES = 1024 * 1024;
 const MAX_SKILL_TREE_DEPTH = 8;

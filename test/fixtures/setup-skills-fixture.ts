@@ -31,6 +31,9 @@ export async function fixture(linkedRoots = false, installer: SetupSkillDependen
   await mkdir(source, { recursive: true }); await mkdir(home); await mkdir(cwd);
   await mkdir(join(source, "references"));
   await writeFile(join(source, "SKILL.md"), "controller v1"); await writeFile(join(source, "references", "guide.md"), "guide");
+  const profiles = join(packageRoot, "skills", "pi-session-profiles");
+  await mkdir(profiles, { recursive: true });
+  await writeFile(join(profiles, "SKILL.md"), "profiles controller v1");
   const ownership = new MemoryOwnershipStore(); const registered = new Set<string>();
   const adapters: SetupClientAdapter[] = ["codex", "claude-code"].map((name) => ({
     name, supportedScopes: name === "codex" ? ["user"] : ["user", "local", "project"],
@@ -44,6 +47,11 @@ export async function fixture(linkedRoots = false, installer: SetupSkillDependen
   const slot = (target: SetupTarget) => join(target.scope === "project" ? cwd : home, target.client === "codex" ? ".agents" : ".claude", "skills", skill);
   const run = (operation: SetupOperation = "dry-run", selected: SetupTarget[] = [targets[0]!]) => orchestrator.run({ operation, targets: selected });
   return { root, home, cwd, source, override, ownership, registered, adapters, skills, orchestrator, slot, run };
+}
+/** A failed recovery for one skill does not prevent independent cleanup of the other. */
+export function afterProfilesCleanup(snapshot: string): string {
+  const entries = JSON.parse(snapshot) as [string, unknown][];
+  return JSON.stringify(entries.filter(([path]) => path !== "pi-session-profiles" && !path.startsWith("pi-session-profiles/")));
 }
 export function expectSkill(output: Awaited<ReturnType<SetupOrchestrator["run"]>>, code: string, status: string, target = targets[0]!) {
   expect(output.findings[1]).toEqual({ target: { ...target, alias: skill }, code, status });

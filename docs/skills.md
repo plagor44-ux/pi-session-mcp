@@ -8,12 +8,12 @@ its system prompt. The model may read the file when a task matches the skill's
 description. Pi Session MCP lets the operator register skill files in a catalog
 and select them per execution profile. MCP callers never choose skills.
 
-The package ships three skills and keeps them in a skill library together with
-the operator's own overrides. `pi-session-mcp-setup --apply` also installs the
-controller skill into Claude Code and Codex. Nothing needs to be linked by hand.
+The package ships four skills and keeps them in a skill library together with
+the operator's own overrides. `pi-session-mcp-setup --apply` also installs both
+controller skills into Claude Code and Codex. Nothing needs to be linked by hand.
 Sections: [Configuration](#configuration), [The skill library](#the-skill-library),
 [Customize and add skills](#customize-and-add-skills), [Install the
-orchestration skill into Codex and Claude Code](#install-the-orchestration-skill-into-codex-and-claude-code)
+controller skills into Codex and Claude Code](#install-the-controller-skills-into-codex-and-claude-code)
 and [Upgrade from 0.8.0](#upgrade-from-080).
 
 ## Configuration
@@ -143,7 +143,7 @@ The shipped example configuration registers the two worker skills with
 
 ### Shipped skills
 
-The package ships three skills under `skills/`. Each has one canonical copy and
+The package ships four skills under `skills/`. Each has one canonical copy and
 frontmatter with only `name` and `description`.
 
 | Skill | For | Use |
@@ -151,6 +151,7 @@ frontmatter with only `name` and `description`.
 | `pi-session-implementation` | A Pi worker | One bounded implementation task and a fixed final report. Register it as `builtin:pi-session-implementation` and select it on coding profiles. |
 | `pi-session-review` | A Pi worker | A review of a fixed target with findings and evidence. Register it as `builtin:pi-session-review` and select it on read-only profiles. |
 | `pi-session-orchestration` | The controlling Claude Code or Codex agent | How to run Pi worker sessions through this server. `setup --apply` installs it into the clients. It is not a Pi worker skill: do not select it in a profile. |
+| `pi-session-profiles` | The controlling agent | Create, change, tune, rename or retire execution profiles and change container repository profile selections. Uses the offline model catalog and a bounded profile probe, preserves writer work, and reports evidence. `setup --apply` installs it into clients; do not select it in a Pi worker profile. |
 
 The worker skills ask for concise final reports: status, actual changed paths,
 checks with exit codes, failures, blockers, risks and repository-relative
@@ -287,18 +288,19 @@ equals a shipped skill replaces that skill instead of adding one.
 Where `setup` is unsupported, create an override by copying a shipped skill
 directory by hand. Doctor does not track a copy that has no recorded base.
 
-## Install the orchestration skill into Codex and Claude Code
+## Install the controller skills into Codex and Claude Code
 
-The orchestration skill is for the controlling agent, not for a Pi worker.
-`pi-session-mcp-setup --apply --target <target>` installs it after the
-registration, as a real copy of the effective skill: your override if you have
-one, else the shipped skill. Clients discover it without further steps.
+`pi-session-orchestration` and `pi-session-profiles` are for the controlling
+agent, not for a Pi worker. `pi-session-mcp-setup --apply --target <target>`
+installs both after the registration, as real copies of the effective skills:
+your per-skill override if present, else the shipped skill. Clients discover
+them without further steps.
 
-| Target | Skill directory |
+| Target | Skill directories |
 | --- | --- |
-| `codex:user:pi-session-mcp` | `~/.agents/skills/pi-session-orchestration` |
-| `claude-code:user:pi-session-mcp` and `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` (one shared directory) |
-| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration`, where `<project>` is the directory in which `setup` runs |
+| `codex:user:pi-session-mcp` | `~/.agents/skills/pi-session-orchestration` and `~/.agents/skills/pi-session-profiles` |
+| `claude-code:user:pi-session-mcp` and `claude-code:local:pi-session-mcp` | `~/.claude/skills/pi-session-orchestration` and `~/.claude/skills/pi-session-profiles` (shared by both scopes) |
+| `claude-code:project:pi-session-mcp` | `<project>/.claude/skills/pi-session-orchestration` and `<project>/.claude/skills/pi-session-profiles`, where `<project>` is the directory in which `setup` runs |
 
 Claude Code reads personal skills in `~/.claude/skills/<name>/SKILL.md` and
 project skills in `.claude/skills/<name>/SKILL.md`
@@ -306,8 +308,9 @@ project skills in `.claude/skills/<name>/SKILL.md`
 skills in `~/.agents/skills`
 ([Codex skills](https://learn.chatgpt.com/docs/build-skills)).
 
-Every `setup` result has a second finding per target, with the same client and
-scope and the alias `pi-session-orchestration`. A skill problem never blocks
+Every eligible target has two skill findings in addition to its registration
+finding, with the same client and scope and aliases `pi-session-orchestration`
+and `pi-session-profiles`. A skill problem never blocks
 the registration, but a `divergent` or `failed` skill finding makes the overall
 status `failed` (exit 1), so it is not overlooked.
 
@@ -432,7 +435,7 @@ The directories of updates by 0.8.0 had random names. Setup never searches for
 or deletes them; you may delete them by hand. `--dry-run` and `--verify` do not
 report leftover intermediates.
 
-### Customize the controller skill
+### Customize the controller skills
 
 Never edit the installed copy: it becomes divergent. Instead:
 
@@ -441,13 +444,18 @@ Never edit the installed copy: it becomes divergent. Instead:
 3. `pi-session-mcp-setup --apply --target <target>` again. The unmodified
    installed copy is replaced (`skill_updated`).
 
+The same steps work for `pi-session-profiles`: use
+`pi-session-mcp-setup --customize-skill pi-session-profiles` to plan the copy,
+then add `--apply`, edit its override and reapply your client targets. Each
+skill has independent ownership, update, verification and removal behavior.
+
 To recover after editing the installed copy, move your edits into the override,
 delete the installed copy, and run `--apply` again.
 
 ### Scope of what setup installs
 
-Setup installs only `pi-session-orchestration` into clients. The worker skills
-are for Pi profiles and are used through `builtin:`. Controller skills of your
+Setup installs only `pi-session-orchestration` and `pi-session-profiles` into
+clients. The worker skills are for Pi profiles and are used through `builtin:`. Controller skills of your
 own belong in the clients' native skill directories; setup does not manage
 them.
 
@@ -457,8 +465,9 @@ Where `setup` does not run, copy the directory; do not link it. Copy
 `skills/pi-session-orchestration` from the installed package (in an npm
 installation `"$(npm root -g)/pi-session-mcp/skills/pi-session-orchestration"`)
 to `~/.claude/skills/` or `.claude/skills/` of a project for Claude Code, or to
-`~/.agents/skills/` for Codex. Repeat the copy after a package update; nothing
-keeps a manual copy current. Do not replace an existing skill of the same name
+`~/.agents/skills/` for Codex. Also copy `skills/pi-session-profiles` from the
+same package root into the same client skill directory. Repeat both copies
+after a package update; nothing keeps a manual copy current. Do not replace an existing skill of the same name
 without checking it first.
 
 Neither client needs a skill to call the Pi Session MCP tools; the skill only
@@ -471,8 +480,8 @@ setup](client-setup.md#run-codex-without-prompts) describes.
 
 Pi workers never discover skills on their own in Pi Session MCP. Register the
 worker skills with `builtin:` and select them on profiles, as described above.
-Do not select the orchestration skill for a Pi worker: a worker has only the
-tools of its profile and is not a controller of other Pi sessions.
+Do not select either controller skill for a Pi worker: a worker has only the
+tools of its profile and is not the controlling agent.
 
 ## What happens at session start
 
@@ -583,8 +592,8 @@ to.
 Skills are operator-managed prompt content. The override directory and its
 bases file are operator-trusted configuration next to the configuration file,
 never a workspace; keep them out of every workspace and writable only by you.
-Setup copies the effective orchestration skill into the clients' skill
-directories, where it becomes instructions for the controlling agent, so review
+Setup copies the effective controller skills into the clients' skill
+directories, where they become instructions for the controlling agent, so review
 an override like code. In a `coding` profile a skill's
 instructions are executed with that profile's tools, so review a skill like
 code. A skill grants no rights: the tools of the permission profile stay the

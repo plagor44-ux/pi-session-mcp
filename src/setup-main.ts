@@ -25,8 +25,12 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
   const operation = request.operation ?? "dry-run";
   const failureTargets = request.writer ? [{ client: "writer", scope: request.writer.name.slice(0, request.writer.name.lastIndexOf("-w")), alias: request.writer.name }] : request.isolationControl ? [{ client: "writer", scope: "host", alias: "control" }] : request.repo !== undefined ? [{ client: "modes", scope: "workspace", alias: request.repo.alias }] : request.customizeSkill === undefined ? request.targets : [skillTarget(request.customizeSkill)];
   if (!currentSetupPlatform()) return write(cliFailure(operation, failureTargets, "platform_unsupported", 1), request.json);
+  if (request.listModels) return (await import("./setup-probe-main.js")).runListModels(request.json);
   const config = process.env.PI_SESSION_MCP_CONFIG;
-  if (!config) return write(cliFailure(operation, failureTargets, "config_required", 1), request.json);
+  if (!config) {
+    if (request.probe) return (await import("./setup-probe-main.js")).runProbe(request.probe, request.json, "", new AbortController().signal);
+    return write(cliFailure(operation, failureTargets, "config_required", 1), request.json);
+  }
   if (request.customizeSkill !== undefined) {
     const name = request.customizeSkill;
     try { return write(await customizeSkill({ name, configPath: resolve(config), apply: operation === "apply", ...(dependencies.packageRoot === undefined ? {} : { packageRoot: dependencies.packageRoot }) }), request.json); }
@@ -35,12 +39,13 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
   const root = dependencies.packageRoot ?? resolve(dirname(fileURLToPath(import.meta.url)), "..");
   const controller = new AbortController();
   let interrupted: 130 | 143 | undefined;
-  const onInterrupt = (): void => { interrupted ??= 130; controller.abort(); };
-  const onTerminate = (): void => { interrupted ??= 143; controller.abort(); };
+  const onInterrupt = (): void => { interrupted ??= 130; controller.abort(interrupted); };
+  const onTerminate = (): void => { interrupted ??= 143; controller.abort(interrupted); };
   process.on("SIGINT", onInterrupt);
   process.on("SIGTERM", onTerminate);
   let setup;
   try {
+    if (request.probe) return await (await import("./setup-probe-main.js")).runProbe(request.probe, request.json, resolve(config), controller.signal, { packageRoot: root });
     const writerDeps = { configPath: resolve(config), releaseRoot: root, signal: controller.signal };
     if (request.repo !== undefined) {
       try { return write(await changeWriterMode(resolve(config), request.repo, writerDeps), request.json); }

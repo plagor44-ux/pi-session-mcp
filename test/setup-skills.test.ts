@@ -40,6 +40,29 @@ describe("skill ownership validation", () => {
 });
 
 describe("setup controller skills", () => {
+  it("installs both controller skills per target", async () => {
+    const f = await fixture(); const target = targets[0]!;
+    const applied = await f.run("apply", [target]);
+    expect(applied.exitCode).toBe(0);
+    expect(applied.findings.slice(1)).toEqual(["pi-session-orchestration", "pi-session-profiles"].map((alias) => ({
+      target: { ...target, alias }, status: "ok", code: "skill_installed",
+    })));
+    const removed = await f.run("remove", [target]);
+    expect(removed.exitCode).toBe(0);
+    expect(removed.findings.slice(1)).toEqual(["pi-session-orchestration", "pi-session-profiles"].map((alias) => ({
+      target: { ...target, alias }, status: "ok", code: "skill_removed",
+    })));
+  });
+  it("customizes the profiles skill", async () => {
+    const f = await fixture();
+    const { customizeSkill } = await import("../src/skill-customize.js");
+    for (const name of ["pi-session-orchestration", "pi-session-profiles"]) {
+      const result = await customizeSkill({ name, configPath: join(f.root, "config", "config.json"), apply: false });
+      expect(result.exitCode).toBe(0);
+      expect(result.findings).toEqual([{ target: { client: "skills", scope: "override", alias: name }, status: "planned", code: "skill_customize_planned" }]);
+      expect(existsSync(join(f.root, "config", "skills", name))).toBe(false);
+    }
+  });
   it.each(targets)("installs, verifies, reapplies and removes $client:$scope in its exact slot", async (target) => {
     const f = await fixture(); const slot = f.slot(target);
     const sentinel = join(slot, "..", "foreign-sentinel", "SKILL.md"); await mkdir(join(sentinel, ".."), { recursive: true }); await writeFile(sentinel, "foreign");
@@ -88,7 +111,7 @@ describe("setup controller skills", () => {
     expectSkill(await f.run("apply"), "skill_updated", "ok");
     expect(await readFile(join(f.slot(targets[0]!), "SKILL.md"), "utf8")).toBe("operator override");
     expect((await f.ownership.get(skillTarget(targets[0]!)))?.fingerprint).not.toBe(before?.fingerprint);
-    expect(await readdir(join(f.slot(targets[0]!), ".."))).toEqual([skill]);
+    expect(await readdir(join(f.slot(targets[0]!), ".."))).toEqual([skill, "pi-session-profiles"]);
   });
   it("uses an override on the first install", async () => {
     const f = await fixture(); await mkdir(f.override, { recursive: true }); await writeFile(join(f.override, "SKILL.md"), "override");
@@ -307,12 +330,16 @@ describe("setup controller skills", () => {
     f.ownership.put = async (record) => {
       if (record.target.alias.startsWith("skill:")) {
         phases.push(record.phase);
-        if (record.phase === "pending") expect(existsSync(join(f.home, ".agents"))).toBe(false);
-        else expect((await readSkillTree(f.slot(targets[0]!))).fingerprint).toBe(record.fingerprint);
+        const name = record.target.alias.slice("skill:".length);
+        const slot = join(f.home, ".agents", "skills", name);
+        if (record.phase === "pending") {
+          expect(existsSync(slot)).toBe(false);
+          if (name === skill) expect(existsSync(join(f.home, ".agents"))).toBe(false);
+        } else expect((await readSkillTree(slot)).fingerprint).toBe(record.fingerprint);
       }
       await put(record);
     };
-    expectSkill(await f.run("apply"), "skill_installed", "ok"); expect(phases).toEqual(["pending", "owned"]);
+    expectSkill(await f.run("apply"), "skill_installed", "ok"); expect(phases).toEqual(["pending", "owned", "pending", "owned"]);
   });
   it("leaves pending ownership and no filesystem mutation when the fence becomes unhealthy", async () => {
     const f = await fixture(); let compromised = false; const put = f.ownership.put.bind(f.ownership);
@@ -333,7 +360,7 @@ describe("setup controller skills", () => {
   it("removes both shared registrations in order within one request", async () => {
     const f = await fixture(); await f.run("apply", [targets[1]!, targets[2]!]);
     const output = await f.run("remove", [targets[1]!, targets[2]!]);
-    expect(output.findings.map((finding) => finding.code)).toEqual(["removed", "skill_kept_shared", "removed", "skill_removed"]);
+    expect(output.findings.map((finding) => finding.code)).toEqual(["removed", "skill_kept_shared", "skill_kept_shared", "removed", "skill_removed", "skill_removed"]);
     expect(existsSync(f.slot(targets[1]!))).toBe(false);
   });
   it("does not remove skills when registration cleanup fails", async () => {
