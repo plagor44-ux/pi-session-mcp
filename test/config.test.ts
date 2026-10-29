@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { ConfigError, loadConfig } from "../src/config.js";
 import { startupFailureDiagnostic } from "../src/process-diagnostics.js";
-import { shippedSkillsDirectory } from "../src/skill-library.js";
+import { CONTROLLER_SKILLS, shippedSkillsDirectory } from "../src/skill-library.js";
 import { toResolvedExecutionProfile } from "../src/execution-profile.js";
 import { PROFILE_TOOLS } from "../src/session-tools.js";
 
@@ -478,6 +478,24 @@ describe("skill catalog and profile skills", () => {
         executionProfiles: { safe: { ...safe, skills: ["one", "two"] } },
       });
       await expect(config()).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+    });
+
+    it.each(CONTROLLER_SKILLS)("refuses the controller skill %s as a catalog entry (#188)", async (name) => {
+      await expect((await load(builtin(`builtin:${name}`))).config()).rejects.toMatchObject({
+        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], controllerSkills: ["lib"],
+      });
+      // Not even an unselected entry: the catalog serves worker profiles only.
+      await expect((await load({ skillCatalog: { lib: `builtin:${name}` }, executionProfiles: { safe } })).config()).rejects.toMatchObject({
+        code: "invalid_execution_profile_config", locations: ["skillCatalog.lib"], controllerSkills: ["lib"],
+      });
+    });
+
+    it("keeps worker library skills selectable next to the refused controller skills", async () => {
+      const { config } = await load({
+        skillCatalog: { impl: "builtin:pi-session-implementation", review: "builtin:pi-session-review" },
+        executionProfiles: { safe: { ...safe, skills: ["impl", "review"] } },
+      });
+      expect((await config()).executionProfiles.get("safe")?.skills?.map((skill) => skill.alias)).toEqual(["impl", "review"]);
     });
 
     it.each(["builtin:", "builtin:Review", "builtin:a/b", "builtin:../x", "builtin:-x", "builtin:x-", "builtin:a--b", "builtin:" + "a".repeat(65), "builtin:review/SKILL.md", "Builtin:review", "builtin: review"])("rejects the invalid value %j", async (value) => {

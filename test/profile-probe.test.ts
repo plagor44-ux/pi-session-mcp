@@ -145,6 +145,7 @@ describe("profile probe", () => {
     const doctor = (checks: DoctorCheck[]) => async (): Promise<DoctorResult> => ({ schemaVersion: 1, ok: false, checks, exitCode: 1 });
     for (const check of [
       { id: "config_invalid", severity: "error", subject: "configuration" },
+      { id: "skill_controller_selected", severity: "error", subject: "configuration:skillCatalog.lead" },
       { id: "extension_missing", severity: "error", subject: "review:pkg" },
     ] satisfies DoctorCheck[]) {
       const report = await runProfileProbe(request, { ...deps, doctor: doctor([check, check]) });

@@ -784,6 +784,10 @@ choose skills.
   directory, so concurrent runs cannot lose a recorded base.
 - A `builtin:` name with no override and no shipped skill makes Doctor report
   `skill_missing` and the session start fail with `skill_load_failed`.
+- The controller skills `pi-session-orchestration` and `pi-session-profiles`
+  are not worker skills: a `builtin:` catalog entry for either makes the
+  configuration invalid, and Doctor reports `skill_controller_selected` for
+  `configuration:skillCatalog.<alias>`.
 - An extension allowlist alone makes none of a package's skills available. If a
   profile relied on them, add a catalog entry with the absolute path of the
   package's `SKILL.md` and select it; see the migration section of [Pi

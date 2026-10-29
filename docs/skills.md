@@ -96,6 +96,11 @@ Doctor reports `config_invalid`. Stderr shows the stable startup code
   for example two aliases for `builtin:pi-session-review`;
 - a catalog value that violates the rules above (including a malformed
   `builtin:` name), or more than 64 entries;
+- a catalog value `builtin:pi-session-orchestration` or
+  `builtin:pi-session-profiles`, selected or not: the catalog serves Pi
+  workers, and the controller skills are for the controlling agent only. Doctor
+  reports `skill_controller_selected` for `configuration:skillCatalog.<alias>`
+  instead of `config_invalid`;
 - more than 16 selected aliases.
 
 ## The skill library
@@ -480,8 +485,11 @@ setup](client-setup.md#run-codex-without-prompts) describes.
 
 Pi workers never discover skills on their own in Pi Session MCP. Register the
 worker skills with `builtin:` and select them on profiles, as described above.
-Do not select either controller skill for a Pi worker: a worker has only the
-tools of its profile and is not the controlling agent.
+Neither controller skill can be selected for a Pi worker: a worker has only the
+tools of its profile and is not the controlling agent, so the configuration
+rejects `builtin:pi-session-orchestration` and `builtin:pi-session-profiles` as
+catalog values. A catalog entry with a plain path to a copy of a controller
+skill is not detected; do not add one.
 
 ## What happens at session start
 

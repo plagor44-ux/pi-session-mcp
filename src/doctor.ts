@@ -21,7 +21,7 @@ export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
 export type DoctorCheckId =
   | "node_version_unsupported" | "package_metadata_unreadable" | "build_missing"
-  | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid"
+  | "build_stale" | "version_mismatch" | "config_missing" | "config_unreadable" | "config_invalid" | "skill_controller_selected"
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_base_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
@@ -108,7 +108,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "workspace_git_unavailable", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "workspace_git_unavailable", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -385,8 +385,12 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     else {
       // Locations name the offending field; an error without one, or at the root, keeps the plain subject.
       const locations = error instanceof ConfigError ? error.locations : [];
+      const controller = new Set((error instanceof ConfigError ? error.controllerSkills : []).map((skillAlias) => `skillCatalog.${skillAlias}`));
       for (const location of locations.length ? locations : [""]) {
-        checks.push(failure("config_invalid", location ? `configuration:${location}` : "configuration", "fix configuration using the documented schema"));
+        const subject = location ? `configuration:${location}` : "configuration";
+        checks.push(controller.has(location)
+          ? failure("skill_controller_selected", subject, "remove this skillCatalog entry: controller skills are for the controlling agent, not for Pi workers")
+          : failure("config_invalid", subject, "fix configuration using the documented schema"));
       }
     }
   }

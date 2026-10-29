@@ -19,6 +19,15 @@ Agent-driven execution-profile setup
   `pi-session-orchestration`, so every client target reports one more skill
   finding.
 
+- The configuration rejects the controller skills as worker skills: a
+  `skillCatalog` value `builtin:pi-session-orchestration` or
+  `builtin:pi-session-profiles` makes it invalid
+  (`invalid_execution_profile_config`), and Doctor reports the new error check
+  `skill_controller_selected` for `configuration:skillCatalog.<alias>`, which
+  blocks setup and the probe like `config_invalid`
+  ([#188](https://github.com/plagor44-ux/pi-session-mcp/issues/188)). A
+  configuration that used such an entry no longer starts; remove the entry.
+
 ## 0.13.1 — 2026-10-29
 
 Patch release under ADR 0003 with an unchanged MCP contract. It ships the

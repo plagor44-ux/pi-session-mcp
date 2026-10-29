@@ -44,7 +44,9 @@ selection of affected container repositories. Pick providers and models only
 from `--list-models` entries with configured authentication. Prefer the shape
 of an existing working profile of the same kind. Ask only if the request leaves
 an outcome-changing choice that the catalog and existing profiles do not settle;
-otherwise decide and state the decision in the report.
+otherwise decide and state the decision in the report. Select only worker
+skills for a profile; the controller skills are never catalog entries, and
+Doctor refuses them with `skill_controller_selected`.
 
 Before deleting a profile, check every container repository's selection. If any
 still selects it, stop and ask. Deleting an unselected profile needs no stop.
