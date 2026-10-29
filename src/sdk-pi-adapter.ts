@@ -21,8 +21,9 @@ import {
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { realpathSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
 import type { ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
@@ -372,7 +373,7 @@ function isTextBlock(block: unknown): block is { type: "text"; text: string } {
 }
 
 /** Independently validated skills replace package and extension discovery on every reload. */
-function phase0ResourceLoaderOptions(skills: readonly Skill[]): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
+function phase0ResourceLoaderOptions(skills: readonly Skill[], confinedCwd?: string): NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]> {
   // Keep the closure's snapshot private: the SDK may annotate or mutate returned objects.
   const selected = skills.map((skill) => ({ ...skill, sourceInfo: { ...skill.sourceInfo } }));
   return {
@@ -381,6 +382,20 @@ function phase0ResourceLoaderOptions(skills: readonly Skill[]): NonNullable<Crea
     noPromptTemplates: true,
     noThemes: true,
     noContextFiles: false,
+    ...(confinedCwd === undefined ? {} : {
+      agentsFilesOverride: (current: ReturnType<ResourceLoader["getAgentsFiles"]>) => ({
+        agentsFiles: current.agentsFiles.filter((file) => {
+          try {
+            const workspace = realpathSync(confinedCwd);
+            const path = relative(workspace, realpathSync(file.path));
+            return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+          } catch {
+            // Unresolvable context files never enter a read-only session's model context.
+            return false;
+          }
+        }),
+      }),
+    }),
     systemPrompt: "phase-0-system-prompt-disabled",
     appendSystemPrompt: [],
     systemPromptOverride: () => undefined,
@@ -391,11 +406,11 @@ function phase0ResourceLoaderOptions(skills: readonly Skill[]): NonNullable<Crea
   };
 }
 
-export async function createPhase0ResourceLoader(cwd: string, skills: readonly Skill[] = []): Promise<{
+export async function createPhase0ResourceLoader(cwd: string, skills: readonly Skill[] = [], permissionProfile?: ResolvedExecutionProfile["permissionProfile"]): Promise<{
   resourceLoader: DefaultResourceLoader; settingsManager: SettingsManager;
 }> {
   const settingsManager = SettingsManager.inMemory(undefined, { projectTrusted: false });
-  const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager, ...phase0ResourceLoaderOptions(skills) });
+  const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager, ...phase0ResourceLoaderOptions(skills, permissionProfile === "read-only" ? cwd : undefined) });
   await resourceLoader.reload();
   return { resourceLoader, settingsManager };
 }
@@ -441,7 +456,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     let resourceLoader: DefaultResourceLoader;
     let settingsManager: SettingsManager;
     try {
-      ({ resourceLoader, settingsManager } = await createPhase0ResourceLoader(input.cwd, skills));
+      ({ resourceLoader, settingsManager } = await createPhase0ResourceLoader(input.cwd, skills, executionProfile.permissionProfile));
     } catch {
       throw this.failure(executionProfile, "resource_loader", "pi_session_creation_failed");
     }
@@ -507,7 +522,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         agentDir: cwd,
         modelRuntime: runtime,
         settingsManager: SettingsManager.inMemory(undefined, { projectTrusted: false }),
-        resourceLoaderOptions: { ...phase0ResourceLoaderOptions(skills), additionalExtensionPaths: directories },
+        resourceLoaderOptions: { ...phase0ResourceLoaderOptions(skills, executionProfile.permissionProfile === "read-only" ? cwd : undefined), additionalExtensionPaths: directories },
       }));
       this.checkResources(services.resourceLoader, skills, executionProfile, "extension_load");
       const loaded = services.resourceLoader.getExtensions();
