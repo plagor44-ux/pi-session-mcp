@@ -15,6 +15,13 @@ whose skill catalog names a controller skill no longer loads
 still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release,
 with eight advisories ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
 
+Pre-release acceptance on the candidate: Level 1 except `npm audit`, and Level 2
+in the working tree and for the packed tarball, each with delivery off and on
+([acceptance record](docs/acceptance.md#v0140-pre-release-acceptance)). The
+Level 2 harness now expects both controller skills. Not established: an
+agent-driven profile change end to end, a container writer acceptance of a new
+profile, and Level 3.
+
 Agent-driven execution-profile setup
 ([#139](https://github.com/plagor44-ux/pi-session-mcp/issues/139),
 [ADR 0014](docs/adr/0014-profile-probe-and-model-catalog.md)):
