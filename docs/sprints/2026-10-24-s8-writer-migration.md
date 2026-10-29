@@ -4,9 +4,11 @@ Planning basis: main `47b8d26` (Sprint 7 merged), installed release 0.11.2.
 Tracking: [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79),
 prerequisite [#121](https://github.com/plagor44-ux/pi-session-mcp/issues/121).
 
-Status: **planned**. The maintainer made the choices on 2026-10-25; see
-[Decisions](#decisions-2026-10-25). Nothing below has been changed on any
-machine yet.
+Status: **in progress** — steps 1–4 are done (pilot `pi-session-mcp`,
+`node-app`, the operator images, go-app) and steps 5–7 are open; see
+[Progress (2026-10-27)](#progress-2026-10-27) and the v0.11.6 and v0.11.8
+post-release evidence in [Acceptance](../acceptance.md). The maintainer made
+the choices on 2026-10-25; see [Decisions](#decisions-2026-10-25).
 
 ## Mandate
 
