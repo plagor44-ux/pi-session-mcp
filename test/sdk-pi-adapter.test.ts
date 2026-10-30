@@ -43,12 +43,14 @@ function runtimeFixture() {
   const checkAuth = vi.fn<(...args: unknown[]) => Promise<unknown | undefined>>(async () => ({ configured: true }));
   const getAuth = vi.fn<(...args: unknown[]) => Promise<unknown | undefined>>(async () => ({ token: "SECRET_AUTH_TOKEN" }));
   const getAvailable = vi.fn<(...args: unknown[]) => Promise<readonly SdkModel[]>>(async () => [resolvedModel]);
+  const refresh = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ aborted: false, errors: new Map() }));
   const runtime = {
     getProvider,
     getModel,
     checkAuth,
     getAuth,
     getAvailable,
+    refresh,
   };
   return { runtime: runtime as unknown as ModelRuntime, resolvedModel, ...runtime };
 }
@@ -138,6 +140,26 @@ describe("SdkPiSessionAdapter deterministic selection", () => {
 
     expect(createRuntime).toHaveBeenCalledTimes(1);
     expect(createRuntime).toHaveBeenCalledWith({ refreshOnCreate: false });
+  });
+
+  it("restores the persisted catalog for the selected provider only, offline, before resolving the model (#199)", async () => {
+    const fixture = runtimeFixture();
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: createSessionFixture(sessionFixture().session) });
+
+    await create(adapter);
+
+    expect(fixture.refresh).toHaveBeenCalledTimes(1);
+    expect(fixture.refresh).toHaveBeenCalledWith({ allowNetwork: false, providers: [profile.provider], signal: expect.any(AbortSignal) });
+    expect(fixture.refresh.mock.invocationCallOrder[0]).toBeLessThan(fixture.getModel.mock.invocationCallOrder[0]!);
+  });
+
+  it("keeps the shipped models when the catalog restore fails", async () => {
+    const fixture = runtimeFixture();
+    fixture.refresh.mockRejectedValue(new Error("restore failed"));
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession: createSessionFixture(sessionFixture().session) });
+
+    await expect(create(adapter)).resolves.toBeDefined();
+    expect(fixture.getModel).toHaveBeenCalled();
   });
 
   it("rejects an unknown provider before model, auth, availability, or session creation", async () => {

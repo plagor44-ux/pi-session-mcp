@@ -6,6 +6,7 @@ import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { writerLimits } from "./writer-limits.js";
 import { removeWriterTree } from "./writer-tree-removal.js";
+import { copyModelsStore, hostModelsStorePath } from "./writer-models-store.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
@@ -21,7 +22,10 @@ export interface WriterContext {
   checkout: string;
   alias: string;
   leaseFd?: number;
+  /** The host's persisted Pi model catalog copied into writers; defaults to the host agent directory below `home`. Tests inject it. */
+  modelsStorePath?: string;
 }
+const modelsStoreSource = (ctx: WriterContext): string => ctx.modelsStorePath ?? hostModelsStorePath(ctx.home);
 function leasedContext(ctx: WriterContext): WriterContext {
   if (ctx.leaseFd === undefined) return ctx;
   const runner = ctx.runner;
@@ -286,6 +290,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     await jsonFile(join(paths.config, "execution-modes.json"), { schemaVersion: 1, workspaces: { [ctx.alias]: { mode: "host", acceptHostWrites: true } } });
     await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: commit });
     await jsonFile(join(paths.agent, "auth.json"), {});
+    await copyModelsStore(modelsStoreSource(ctx), paths.agent);
     await writeFile(paths.wrapper, renderWrapper(ctx.nodePath, ctx.releaseRoot, name), { mode: 0o700, flag: "wx" });
     await writeWriterState(ctx.home, name, { ...state, phase: "not_ready" });
     return { code: "writer_provisioned", status: "ok" };
@@ -344,6 +349,7 @@ async function refreshPrivateFiles(ctx: WriterContext, name: string, state: Writ
   for (const path of [join(paths.config, "writer-guard.json"), join(paths.agent, "auth.json")]) await rm(path, { force: true });
   await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: state.base.commit });
   await jsonFile(join(paths.agent, "auth.json"), {});
+  await copyModelsStore(modelsStoreSource(ctx), paths.agent);
 }
 
 export type CollectOutcome = WriterOutcome & {

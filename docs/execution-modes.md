@@ -119,6 +119,11 @@ not selected by tool prefix. Their private state lives under
 `$HOME/.local/state/pi-session-mcp/writers/<name>/`: `clone`, `agent`, `config`,
 `bundles`, optional `go`, `wrapper.sh` and `state.json`. This lifecycle metadata
 is distinct from in-memory MCP sessions; it does not implement session resume.
+The writer's `agent` directory also receives a byte copy of the host's persisted
+Pi model catalog (`models-store.json`, catalog data and no credentials) at
+provisioning, reset, recreate and each launch, so that a writer resolves the same
+models as the host. A missing, linked or oversized host file is skipped and the
+writer keeps the SDK's shipped model list.
 Each clone is made via a bundle, with no hardlinks to the operator's repository.
 The workspace records a short default `base` in its container entry, selected
 by `--base` or origin's symbolic HEAD, falling back to local main. Repeating a
