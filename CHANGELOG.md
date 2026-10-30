@@ -6,13 +6,15 @@
   ([#202](https://github.com/plagor44-ux/pi-session-mcp/issues/202)).
   Collection exports every stash entry, including one without a reflog, as
   `<base>-stash-<n>` in `stash@{n}` order, and records a digest only when every
-  stash commit exists in the operator checkout. Tags, notes, replace refs and
-  refs in other namespaces except `refs/remotes` stay unexported, but each must
-  name an object the operator checkout already has: otherwise the writer is not
-  at its baseline and collection is `writer_collect_incomplete`, so `finish`,
-  `reset`, `recreate` and `remove` without `--discard` refuse. Provisioned tags
-  and lightweight tags on exported commits still pass; only such a tag's name
-  is lost at cleanup.
+  stash commit exists in the operator checkout. Tags, notes, replace refs,
+  remote-tracking refs and refs in other namespaces stay unexported, but each
+  must name an object the operator checkout already has: otherwise the writer
+  is not at its baseline and collection is `writer_collect_incomplete`, so
+  `finish`, `reset`, `recreate` and `remove` without `--discard` refuse.
+  Provisioned tags and remote-tracking refs, and lightweight tags on exported
+  commits, still pass while the operator checkout has their objects; only such
+  a ref's name is lost at cleanup. Ref names outside the branch export rules,
+  such as a tag `pkg@1.0.0+build`, do not make inspection fail.
 - Writer cleanup no longer loses work that exists only in the clone's Git
   index ([#200](https://github.com/plagor44-ux/pi-session-mcp/issues/200)).
   Inspection now also evaluates the original index tree on a temporary copy,

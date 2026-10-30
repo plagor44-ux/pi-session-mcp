@@ -221,17 +221,20 @@ Every stash entry is exported as `<base>-stash-<n>`, numbered like
 `stash@{n}` (newest first; for example `main-stash-0`), with its index and
 untracked parts as the commit's parents; `git stash apply` accepts the imported
 ref. The same name rules apply, and every stash commit must exist in the
-operator checkout before a digest is recorded. Tags, notes, replace refs and
-refs in any other namespace except `refs/remotes` are not exported. Each must
-name an object the operator checkout already has, otherwise the writer is not
-at its baseline and collection is incomplete (`writer_collect_incomplete`,
-without a refused name) and no digest is recorded. Provisioned tags and a
-lightweight tag on an exported commit pass: only the tag name is lost at
-cleanup. An annotated tag, a note or a replace ref that the worker created
-blocks cleanup until a later session on that writer removes it or the operator
-decides on `--discard`; the server guard admits such a writer as long as its
-branches, stash and worktree are at the baseline. Remote-tracking refs are
-provisioning state and are ignored.
+operator checkout before a digest is recorded. Tags, notes, replace refs,
+remote-tracking refs and refs in any other namespace are not exported, whatever
+their names. Each must name an object the operator checkout already has,
+otherwise the writer is not at its baseline and collection is incomplete
+(`writer_collect_incomplete`, without a refused name) and no digest is
+recorded. Provisioned tags and remote-tracking refs, and a lightweight tag on
+an exported commit, pass while the operator checkout still has their objects:
+only such a ref's name is lost at cleanup. An annotated tag, a note, a replace
+ref or a moved remote-tracking ref that the worker created blocks cleanup until
+a later session on that writer removes it or the operator decides on
+`--discard`; the server guard admits such a writer as long as its branches,
+stash and worktree are at the baseline. If the operator deletes a provisioned
+annotated tag and its object is garbage-collected, the writer's copy blocks
+cleanup the same way.
 
 `--finish` collects, then resets a persistent writer or recreates an ephemeral
 writer, on the workspace default base. A collect refusing any branch name is incomplete (`writer_collect_incomplete`,

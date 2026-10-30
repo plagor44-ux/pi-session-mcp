@@ -237,9 +237,10 @@ It collects then resets (persistent) or recreates (ephemeral). If any branch nam
 was refused, collection is incomplete and finish stops; a `<base>-detached`,
 `<branch>-wip`, `<branch>-index` or `<base>-stash-<n>` name that an exported branch takes or whose path it conflicts
 with is refused the same way. The release digest is
-recorded only when the clone's HEAD commit and every branch commit exist in the
-operator checkout, otherwise collection is `writer_collect_incomplete` and no
-digest is recorded. Rename inside the writer
+recorded only when the clone's HEAD commit, every branch commit and every stash
+commit exist in the operator checkout and every other ref names an object the
+operator checkout has, otherwise collection is `writer_collect_incomplete` and
+no digest is recorded. Rename inside the writer
 or have the operator explicitly resolve loss with `--reset --discard --apply`.
 Finish returns persistent and ephemeral writers to the workspace default base.
 No reconnect is needed after finish, reset or recreate: each session starts a
