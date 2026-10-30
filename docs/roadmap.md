@@ -67,7 +67,7 @@ mean they are implemented or that their gates passed.
   [Sprint 14](sprints/2026-10-30-s14-sandbox-resource-limits.md) limits the
   sandboxed read-only shell
   ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195)) in one
-  pull request, not yet released: every probe and command runs in its own
+  pull request, released in patch release 0.14.3: every probe and command runs in its own
   transient systemd user scope with 1 GiB memory, no swap and 128 tasks, and
   the command is released only after the server has verified the effective
   cgroup values. Hosts without a systemd user manager or without `memory` and
