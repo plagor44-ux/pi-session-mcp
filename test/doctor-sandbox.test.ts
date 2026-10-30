@@ -67,7 +67,7 @@ describe("doctor sandbox checks", () => {
     expect(probe.mock.calls.map(([path]) => path)).toEqual([a, b]);
     expect(sandbox).toEqual([
       { id: "sandbox_unavailable", severity: "ok", subject: "alpha" },
-      { id: "sandbox_unavailable", severity: "error", subject: "beta", remediation: expect.stringContaining("overlay lower layer") },
+      { id: "sandbox_unavailable", severity: "error", subject: "beta", remediation: expect.stringMatching(/overlay lower layer.*systemd user manager.*memory and pids delegated/) },
     ]);
     expect(result.ok).toBe(false);
     expect(result.exitCode).toBe(2);
