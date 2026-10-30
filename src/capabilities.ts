@@ -5,6 +5,25 @@ import type { ConfiguredExecutionProfile } from "./execution-profile.js";
 
 const compareAliases = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 
+/** The public capability shape of one profile, exactly as `pi_capabilities_get` publishes it. */
+export function projectExecutionProfile(
+  { alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, shell, skills }: ConfiguredExecutionProfile,
+) {
+  return {
+    alias,
+    default: isDefault,
+    permissionProfile,
+    provider,
+    model,
+    thinkingLevel,
+    extensions: (extensions ?? []).map((extension) => extension.spec),
+    grantedExtensionTools: [...(grantedExtensionTools ?? [])],
+    // Configured intent only: whether the server's probe succeeds is a start-time fact.
+    shell: shell ?? ("none" as const),
+    skills: (skills ?? []).map((skill) => skill.alias),
+  };
+}
+
 /** Pure projection of the snapshot captured at load time; never reads the configuration file. */
 export function projectCapabilities(
   workspaces: ReadonlyMap<string, string>,
@@ -29,18 +48,6 @@ export function projectCapabilities(
       }),
     executionProfiles: [...executionProfiles.values()]
       .sort((left, right) => compareAliases(left.alias, right.alias))
-      .map(({ alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, shell, skills }) => ({
-        alias,
-        default: isDefault,
-        permissionProfile,
-        provider,
-        model,
-        thinkingLevel,
-        extensions: (extensions ?? []).map((extension) => extension.spec),
-        grantedExtensionTools: [...(grantedExtensionTools ?? [])],
-        // Configured intent only: whether the server's probe succeeds is a start-time fact.
-        shell: shell ?? ("none" as const),
-        skills: (skills ?? []).map((skill) => skill.alias),
-      })),
+      .map(projectExecutionProfile),
   };
 }

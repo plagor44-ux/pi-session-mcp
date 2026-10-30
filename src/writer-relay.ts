@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { Client, type Transport } from "@modelcontextprotocol/client";
 import { z } from "zod";
+import { projectExecutionProfile } from "./capabilities.js";
 import { ChildStdioTransport } from "./child-stdio-transport.js";
 import type { WorkspaceModeEntry } from "./execution-modes.js";
 import type { ConfiguredExecutionProfile } from "./execution-profile.js";
@@ -71,6 +72,19 @@ const creationCodes = new Set<PiSessionCreationErrorCode>([
   "extension_not_installed", "extension_version_mismatch", "extension_load_failed", "extension_tool_conflict",
   "extension_tool_missing", "skill_load_failed", "sandbox_unavailable", "pi_session_creation_failed",
 ]);
+/** The public profile shape `pi_capabilities_get` publishes; `alias` and `default` are not admission fields. */
+type PublishedProfile = z.infer<typeof capabilitiesSchema>["executionProfiles"][number];
+const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell"] as const;
+const setFields = ["skills", "extensions", "grantedExtensionTools"] as const;
+const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
+  const a = new Set(left), b = new Set(right);
+  return a.size === left.length && b.size === right.length && a.size === b.size && [...a].every(value => b.has(value));
+};
+/** Admission compares every public capability field; a duplicate on either side is a mismatch. */
+function samePublishedProfile(host: PublishedProfile, inner: PublishedProfile): boolean {
+  return exactFields.every(key => host[key] === inner[key]) && setFields.every(key => sameSet(host[key], inner[key]));
+}
+
 class InnerError extends Error {
   constructor(readonly code: string) { super("Writer refused the operation"); }
 }
@@ -243,7 +257,7 @@ export class WriterRelayAdapter implements PiSessionAdapter {
         const capabilities = await connection.call("pi_capabilities_get", {}, capabilitiesSchema, remaining(), input.signal);
         const inner = capabilities.executionProfiles.find(profile => profile.alias === input.executionProfile.alias);
         const host = this.options.executionProfiles.get(input.executionProfile.alias);
-        if (!host || !inner || (["permissionProfile", "provider", "model", "thinkingLevel"] as const).some(key => inner[key] !== host[key])) { counts.settingsChanged++; continue; }
+        if (!host || !inner || !samePublishedProfile(projectExecutionProfile(host), inner)) { counts.settingsChanged++; continue; }
         const result = await connection.call("pi_session_start", { workspace: input.workspace, executionProfile: input.executionProfile.alias }, successSchema, remaining(), input.signal);
         sessionId = result.session.id;
         if (remaining() <= 0 || connection.lost) continue;

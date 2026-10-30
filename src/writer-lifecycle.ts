@@ -292,7 +292,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
 }
 
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
-  baseline: boolean; digest: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
+  baseline: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
 }> {
   ctx = leasedContext(ctx);
   const state = await readWriterState(ctx.home, name);
@@ -313,7 +313,7 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   });
   return {
     baseline: head === state.base.commit && refs.length === 1 && refs[0]!.name === state.base.ref && refs[0]!.commit === state.base.commit && tree === baseTree,
-    dirty: tree !== headTree, branches: refs.filter(({ name }) => name.startsWith("refs/heads/")),
+    dirty: tree !== headTree, head: head!, branches: refs.filter(({ name }) => name.startsWith("refs/heads/")),
     digest: `sha256:${createHash("sha256").update(result.stdout).digest("hex")}`,
   };
 }
@@ -381,10 +381,16 @@ if [ "$tree" != "$(${BOUNDARY_GIT} rev-parse 'HEAD^{tree}')" ]; then
   export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
   commit=$(printf '%s\\n' 'WIP collected by pi-session-mcp' | ${BOUNDARY_GIT} commit-tree "$tree" -p HEAD)
   branch=$(${BOUNDARY_GIT} symbolic-ref --short HEAD || printf '%s' "$4")
-  if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$branch-wip"; then
+  # A taken name, or one that conflicts with an exported branch path, is refused rather than aborting the export.
+  if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$branch-wip" \\
+    || ! ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$branch-wip" "$commit" 2>/dev/null; then
     printf '%s\\n' ref_name_refused
-  else
-    ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$branch-wip" "$commit"
+  fi
+elif ! ${BOUNDARY_GIT} symbolic-ref -q HEAD >/dev/null 2>&1 && [ -n "$(${BOUNDARY_GIT} rev-list -n 1 HEAD --not --branches)" ]; then
+  # Clean detached HEAD that no branch of the clone reaches: export its commit under a derived name (#193).
+  if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$4-detached" \\
+    || ! ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$4-detached" "$(${BOUNDARY_GIT} rev-parse --verify HEAD)" 2>/dev/null; then
+    printf '%s\\n' ref_name_refused
   fi
 fi
 if [ -z "$(${BOUNDARY_GIT} --git-dir=/tmp/scratch for-each-ref --format='%(refname)')" ]; then
@@ -415,6 +421,14 @@ fi`;
         return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
       }
       const work = await inspectWork(ctx, name);
+      // Defence in depth (#193): whatever the boundary script exported or reported as nothing to collect,
+      // every commit the clone's work refers to must exist as a commit object in the operator checkout
+      // before a digest is recorded.
+      for (const sha of [work.head, ...work.branches.map((branch) => branch.commit)]) {
+        if (sha === undefined || await git(ctx, ["cat-file", "-e", `${sha}^{commit}`], true) === undefined) {
+          return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
+        }
+      }
       await writeWriterState(ctx.home, name, { ...state, collected: { digest: work.digest, at: new Date().toISOString() } });
       return { status: "ok", code: refs.length === 0 ? "nothing_to_collect" : "writer_collected", refs, refused: findings.length, findings };
     } finally { await rm(bundle, { force: true }); }

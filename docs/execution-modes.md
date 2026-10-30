@@ -182,10 +182,24 @@ pi-session-mcp-setup --writer my-project-w1 --finish --apply
 
 Collection exports changed branches via a bundle into the operator's checkout as
 `refs/remotes/writer-<name>/<branch>`. Uncommitted/untracked work is captured as a
-synthetic `<branch>-wip` commit. These refs are **untrusted until reviewed**;
+synthetic `<branch>-wip` commit. A clean detached HEAD whose commit no branch in
+the clone reaches is exported as `<base>-detached` (for example `main-detached`,
+imported as `refs/remotes/writer-<name>/main-detached`); a dirty detached HEAD
+keeps the `<base>-wip` export. A `<base>-detached` or `<branch>-wip` name that
+an exported branch already takes, or that conflicts with an exported branch's
+path (such as a branch `main-detached/topic`), is refused and makes collection
+incomplete (`writer_collect_incomplete`); the other branches are still
+exported. Clone-side Git ignores replace refs. These refs are **untrusted until reviewed**;
 setup does not merge or cherry-pick them. Collection does not change the clone.
-Only a complete export records a digest authorizing later destructive cleanup;
-new work invalidates that authorization. Stashes are not exported as branches:
+Only a complete export records a digest authorizing later destructive cleanup,
+and the digest is recorded only when the clone's HEAD commit and every branch
+commit exist in the operator checkout; otherwise collection is incomplete
+(`writer_collect_incomplete`) and no digest is recorded. This includes the base
+commit: if the operator checkout no longer has it (for example after a deleted
+base branch and garbage collection), collect and finish fail this way even on a
+pristine writer, without refused names; fetch the base again or resolve with
+`--reset --discard --apply`. New work invalidates
+that authorization. Stashes are not exported as branches:
 resolve any needed stash inside the boundary before collection.
 
 `--finish` collects, then resets a persistent writer or recreates an ephemeral
@@ -233,6 +247,14 @@ while another coding session is open. It re-reads the guard file each time, so a
 reset updates admission without a server restart. A missing/unusable runtime or
 stale/unready writer launches a refusal MCP server: all eight tools return the
 sanitized refusal, with no host fallback. See [Tool contracts](tool-contracts.md).
+
+Before the relay starts an inner session it compares every public capability
+field of the writer's profile with the host profile: `permissionProfile`,
+`provider`, `model`, `thinkingLevel` and `shell` exactly, and `skills`,
+`extensions` and `grantedExtensionTools` as sets. A mismatch or a missing
+entry counts as `settingsChanged`, starts no inner session and moves on to the
+next writer; if no writer is admitted, the start fails with
+`writer_unavailable` and reason `none_admitted`.
 
 ## Reports and finding codes
 

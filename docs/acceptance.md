@@ -2598,6 +2598,84 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### Sprint 12 candidate acceptance (2026-10-30)
+
+Recorded on 2026-10-29 and 2026-10-30 for the unreleased branch
+`fix/s12-audit-findings` ([Sprint 12](sprints/2026-10-29-s12-audit-fixes.md),
+#192, #193, #194). No release, tag or npm publish.
+
+- Level 1 on the final source `9426682` in a separate detached worktree with
+  Node.js `26.12.1`: `npm ci`, typecheck, `build:cli`, the test run (530 files,
+  4044 passed, 14 skipped, 0 failed, no unhandled error, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check 9d9cf8c..HEAD` exited with `0`. The same on the earlier
+  candidate `896e29d`: 4043 passed, 0 failed.
+- Real rootless Podman with the pinned Node image (git `2.39.5`):
+  `test/writer-lifecycle.podman.test.ts` 7 of 7, including the new clean
+  detached-HEAD case, which fails against the source of `9d9cf8c`. In the image,
+  `core.useReplaceRefs=false` makes a graft-hidden detached commit visible
+  again.
+- Level 2 on `npm pack` of `896e29d`, installed into a fresh prefix below the
+  home directory: 160 of 160 with delivery off and 228 of 228 with
+  `--events spool`; real registrations and built files unchanged, no process
+  left, path-leak scan 0 hits. Clients: Codex CLI `0.162.1` and Claude Code
+  `2.1.312`. The two later commits change the guard's Git arguments and a
+  regular-expression spelling; Level 2 was not repeated for them.
+- Live profile change (item D), on an expendable test configuration: a
+  candidate with the new read-only profile `review-sonnet`
+  (`anthropic/claude-sonnet-5-5`), Doctor without error, probe dry run, one
+  probe turn (`probe_passed`), timestamped backup and atomic replacement,
+  Doctor, then real use by a fresh server for the R1 and final reviews; rolled
+  back to the backup afterwards, Doctor without error. No production
+  configuration or writer was touched.
+- Live container writer (items B and C), with the packed candidate, an
+  expendable configuration and a synthetic repository: profile `s12-code`
+  (`deepseek/deepseek-flash`, coding, skill `pi-session-implementation`),
+  one probe turn (`probe_passed`); `--repo s12-probe --mode container
+  --profiles s12-code --writers 1 --apply` reported `writer_provisioned` and
+  `writer_accepted`, `--writer s12-probe-w1 --verify` `mcp_verified`. A real
+  relayed coding session completed its task; `--collect --apply` imported
+  `refs/remotes/writer-s12-probe-w1/s12-live-c`, whose commit passed the
+  oracle (4 of 4 tests), and `--finish --apply` reported `writer_reset`. With
+  the host profile's skills then changed, a start failed with
+  `writer_unavailable`, reason `none_admitted`, counts
+  `settingsChanged: 1`, and collection afterwards found `nothing_to_collect`.
+  After `--writer s12-probe-w1 --remove` and the provisioning request again,
+  the writer was accepted and verified and a start succeeded. Rolled back:
+  writer removed, configuration, repository and prefix deleted.
+- Level 3, ten-task cycle, on the final source `9426682` (`dist/main.js`
+  SHA-256 `ab93e3a932b1d5147dcbb48bbb85d9442c2214e486101f8d427360b99672cfdb`)
+  from a separate detached checkout, with a temporary credential-free
+  configuration (`l3-read` read-only and `l3-code` coding, both
+  `deepseek/deepseek-flash`), synthetic fixtures, events off, one probe turn
+  per profile as preflight. Claude Code `2.1.312` ran as `claude -p` with a
+  per-invocation `--mcp-config`, `--strict-mcp-config` and
+  `--model claude-sonnet-5-5`; Codex CLI `0.162.1` as `codex exec
+  --ignore-user-config` with `-c mcp_servers.*` overrides. Both clients could
+  wait with `sleep` between polls.
+  - Cycle 1 was not accepted: 5 of 10. The worker ignored a requested
+    ordering in both follow-ups (T2), refused the abort task's essay prompt
+    within about 1.5 seconds so that nothing was left to abort (T5), and the
+    Codex coding snapshot could not be written from the Codex sandbox (T3). A
+    path hit came from the worker's `assistantText`, not from server
+    metadata. No Pi Session MCP defect was found; the cycle is kept unchanged
+    with its own pre-registration.
+  - Cycle 2, with a new pre-registration before its first task (order-free
+    LOW oracle, a long deterministic listing as the abort prompt, snapshots
+    inside the controller directory, the leak scan separating server metadata
+    from `assistantText`): 10 of 10. Read-only fixture digests unchanged; both
+    coding snapshots pass their oracle and the fixture tests and show only the
+    allowed files; both abort tasks show running, abort, `aborted`, close, an
+    empty `pi_session_list` and a fresh `idle` session. Zero leak hits, also in
+    `assistantText`; no server or client process before or 10 seconds after any
+    invocation. Polls per turn: Claude Code 1 to 2, Codex 2 to 4. Deviation:
+    the Codex sandbox refused to spawn `git`, so the Codex snapshots' status
+    lists were derived from the barrier snapshot trees against `HEAD`.
+  The cycle-2 gate holds.
+
+Not established: a release of these fixes, the operator rollout on either
+machine, macOS, and #120.
+
 ### v0.14.0 post-release evidence
 
 Recorded on 2026-10-29 for the published release `0.14.0`.

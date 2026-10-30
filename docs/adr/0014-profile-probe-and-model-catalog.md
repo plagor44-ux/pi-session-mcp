@@ -1,6 +1,6 @@
 # ADR 0014: Profile probe and offline model catalog
 
-**Status:** Accepted (2026-10-29); unreleased. Issue #139.
+**Status:** Accepted (2026-10-29); released in 0.14.0. Issue #139.
 
 ## Context
 

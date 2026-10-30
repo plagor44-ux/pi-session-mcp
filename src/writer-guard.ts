@@ -24,7 +24,7 @@ const guardSchema = z.object({
 }).strict();
 const run = promisify(execFile);
 const defaultGit: GitProbe = async (cwd) => {
-  const git = async (...args: string[]) => (await run("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args], { cwd, timeout: 10_000, encoding: "utf8" })).stdout;
+  const git = async (...args: string[]) => (await run("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", ...args], { cwd, timeout: 10_000, encoding: "utf8" })).stdout;
   const [status, head, refs] = await Promise.all([
     git("status", "--porcelain=v1", "-uall"),
     git("rev-parse", "HEAD"),
