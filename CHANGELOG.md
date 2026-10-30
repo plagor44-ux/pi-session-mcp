@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- The sandboxed read-only shell now has resource limits
+  ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195),
+  ADR 0013 amendment 2026-10-30). Every probe and command runs through
+  `/usr/bin/systemd-run --user --scope` in its own transient scope with
+  `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 128, and bubblewrap
+  holds the command until the server has verified the scope's cgroup
+  membership and those values. The overlay upper layers of the workspace and of
+  a linked worktree's Git directory, `/tmp` and the sandbox's root tmpfs count
+  against the 1 GiB; `/tmp` keeps its own 512 MiB bound and commands keep the
+  600 second default timeout. A separate 512 MiB overlay bound was not
+  implemented, because bubblewrap cannot size the `--tmp-overlay` upper layer
+  without a second, outer sandbox. **Operator impact:** `shell: "sandboxed"`
+  now also needs a running systemd user manager, a trusted
+  `/usr/bin/systemd-run` and cgroup v2 with the `memory` and `pids`
+  controllers delegated to the user manager. Where these are missing, a
+  profile that worked before is refused with `sandbox_unavailable` and Doctor
+  reports `sandbox_unavailable` for each workspace; there is no unlimited
+  fallback. The MCP tool contract, result codes and configuration schema are
+  unchanged.
+
 ## 0.14.2 — 2026-10-30
 
 Patch release under ADR 0003 for Sprint 13 and its follow-ups. The MCP tool
