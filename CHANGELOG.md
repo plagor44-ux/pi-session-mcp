@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.14.1 — 2026-10-30
+
+Patch release under ADR 0003 for Sprint 12. The MCP tool contract, result
+codes and configuration schema are unchanged. `npm audit` still reports
+`undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 Sprint 12 fixes three defects that an external audit of `9d9cf8c` reported and
 that were reproduced on that commit
 ([Sprint 12](docs/sprints/2026-10-29-s12-audit-fixes.md)). The MCP tool
