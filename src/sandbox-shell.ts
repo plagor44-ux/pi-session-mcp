@@ -1,4 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { Readable, Writable } from "node:stream";
 import { constants as osConstants } from "node:os";
 import { lstatSync, readlinkSync } from "node:fs";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
@@ -8,6 +10,35 @@ import { isTrustedSystemBinary } from "./setup-platform.js";
 
 /** The only bubblewrap binary the shell uses: a fixed path, never a `PATH` lookup. */
 export const BWRAP_PATH = "/usr/bin/bwrap";
+export const SYSTEMD_RUN_PATH = "/usr/bin/systemd-run";
+export const SANDBOX_MEMORY_BYTES = 1_073_741_824;
+export const SANDBOX_TASKS = 128;
+export interface SandboxLimits { readonly memoryBytes: number; readonly tasks: number; }
+export const SANDBOX_LIMITS: SandboxLimits = { memoryBytes: SANDBOX_MEMORY_BYTES, tasks: SANDBOX_TASKS };
+
+export function scopeArgs(unit: string, limits: SandboxLimits, bwrapArgs: readonly string[]): string[] {
+  return ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "-p", `MemoryMax=${limits.memoryBytes}`, "-p", "MemorySwapMax=0", "-p", `TasksMax=${limits.tasks}`, "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", ...bwrapArgs];
+}
+
+export async function verifyScope(input: { pid: number; childPid: number; unit: string; limits: SandboxLimits }, readText: (path: string) => Promise<string>): Promise<boolean> {
+  try {
+    const mounts = await readText("/proc/self/mounts");
+    if (!mounts.split("\n").some((line) => { const fields = line.trim().split(/\s+/); return fields[1] === "/sys/fs/cgroup" && fields[2] === "cgroup2"; })) return false;
+    const cgroup = async (pid: string): Promise<string | undefined> => {
+      const text = (await readText(`/proc/${pid}/cgroup`)).replace(/\n$/, "");
+      return /^0::([^\n]+)$/.exec(text)?.[1];
+    };
+    const path = await cgroup(String(input.pid));
+    const self = await cgroup("self");
+    if (path === undefined || self === undefined || path !== await cgroup(String(input.childPid)) || path === self) return false;
+    const segments = path.split("/");
+    if (segments[0] !== "" || segments.slice(1).some((segment) => !segment || segment === "." || segment === "..") || segments.at(-1) !== `${input.unit}.scope`) return false;
+    const base = `/sys/fs/cgroup${path}`;
+    return (await readText(`${base}/memory.max`)).trim() === String(input.limits.memoryBytes)
+      && (await readText(`${base}/memory.swap.max`)).trim() === "0"
+      && (await readText(`${base}/pids.max`)).trim() === String(input.limits.tasks);
+  } catch { return false; }
+}
 export const SANDBOX_BASH_PATH = "/usr/bin/bash";
 const SANDBOX_TRUE_PATH = "/usr/bin/true";
 const SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin";
@@ -112,28 +143,45 @@ export async function resolveWorktreeGitDir(workspace: string): Promise<string |
 
 /** The part of a child process the sandbox uses; the default is `node:child_process`. */
 export interface SandboxChild {
+  readonly pid?: number | undefined;
+  readonly stdio: readonly unknown[];
   readonly stdout: NodeJS.ReadableStream | null;
   readonly stderr: NodeJS.ReadableStream | null;
   once(event: "error", listener: (error: Error) => void): unknown;
   once(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   kill(signal?: NodeJS.Signals): unknown;
 }
-export type SandboxSpawn = (file: string, args: readonly string[], options: { env: Record<string, never>; stdio: ["ignore", "pipe", "pipe"] }) => SandboxChild;
+export type SandboxSpawn = (file: string, args: readonly string[], options: { env: Record<string, string>; stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] }) => SandboxChild;
 
 export interface SandboxDependencies {
   readonly spawn?: SandboxSpawn;
   /** Whether the fixed bubblewrap binary may be used; defaults to a trusted-system-binary check. */
-  readonly trusted?: () => boolean;
+  readonly trusted?: (path: string) => boolean;
+  readonly limits?: SandboxLimits;
+  readonly runtimeDir?: () => string | undefined;
+  readonly readText?: (path: string) => Promise<string>;
+  readonly unitName?: () => string;
   readonly rootEntries?: () => readonly RootEntry[];
   readonly gitCommonDir?: (workspace: string) => Promise<string | undefined>;
 }
 
 const defaultSpawn: SandboxSpawn = (file, args, options) => spawn(file, [...args], options) as ChildProcess & SandboxChild;
-const defaultTrusted = (): boolean => isTrustedSystemBinary(BWRAP_PATH);
+const defaultTrusted = (path: string): boolean => isTrustedSystemBinary(path);
+
+function runtimeDir(): string | undefined {
+  try {
+    const uid = process.getuid?.();
+    if (uid === undefined) return undefined;
+    const dir = `/run/user/${uid}`;
+    const info = lstatSync(dir);
+    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== uid || (info.mode & 0o077) !== 0 || !lstatSync(`${dir}/bus`).isSocket()) return undefined;
+    return dir;
+  } catch { return undefined; }
+}
 
 /** Whether the fixed bubblewrap binary is a trusted system binary. */
 export function sandboxBinaryTrusted(dependencies: SandboxDependencies = {}): boolean {
-  try { return (dependencies.trusted ?? defaultTrusted)(); } catch { return false; }
+  try { const trusted = dependencies.trusted ?? defaultTrusted; return trusted(BWRAP_PATH) && trusted(SYSTEMD_RUN_PATH); } catch { return false; }
 }
 
 /** The complete argument list for one run; refuses when the fixed binary is not trusted. */
@@ -143,18 +191,66 @@ async function prepare(workspace: string, cwd: string, argv: readonly string[], 
   return sandboxArgs({ workspace, gitCommonDir, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
 }
 
-interface Running { readonly child: SandboxChild; readonly closed: Promise<{ code: number | null; signal: NodeJS.Signals | null }>; }
+interface Running {
+  readonly child: SandboxChild;
+  readonly closed: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  readonly gate: Promise<void>;
+  readonly kill: () => void;
+}
 
-/** Spawns bubblewrap and attaches the termination listeners in the same tick, so no event is missed. */
+/** Starts a scoped bubblewrap, holding its payload until the effective limits are verified. */
 function start(args: readonly string[], dependencies: SandboxDependencies): Running {
-  // An empty environment: neither the server's nor the tool's variables reach the sandbox.
-  const child = (dependencies.spawn ?? defaultSpawn)(BWRAP_PATH, args, { env: {}, stdio: ["ignore", "pipe", "pipe"] });
+  if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+  const dir = (dependencies.runtimeDir ?? runtimeDir)();
+  if (dir === undefined) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+  const unit = (dependencies.unitName ?? (() => `pi-session-mcp-shell-${randomUUID()}`))();
+  const limits = dependencies.limits ?? SANDBOX_LIMITS;
+  const child = (dependencies.spawn ?? defaultSpawn)(SYSTEMD_RUN_PATH, scopeArgs(unit, limits, args), { env: { XDG_RUNTIME_DIR: dir }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
+  const info = child.stdio[3] as Readable | undefined;
+  const block = child.stdio[4] as Writable | undefined;
+  let stopped = false;
+  const kill = (): void => {
+    if (stopped) return;
+    stopped = true;
+    try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    try { block?.destroy(); } catch { /* already closed */ }
+  };
+  let ended = false;
+  info?.on("error", kill);
+  block?.on("error", kill);
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {
-    child.once("error", () => reject(new Error(SANDBOX_UNAVAILABLE_MESSAGE)));
-    child.once("close", (code, signal) => resolvePromise({ code, signal }));
+    child.once("error", () => { ended = true; reject(new Error(SANDBOX_UNAVAILABLE_MESSAGE)); });
+    child.once("close", (code, signal) => { ended = true; resolvePromise({ code, signal }); });
   });
   closed.catch(() => undefined);
-  return { child, closed };
+  const gate = (async () => {
+    try {
+      if (!info || !block || child.pid === undefined) throw new Error();
+      const childPid = await new Promise<number>((resolvePromise, reject) => {
+        let text = "";
+        let bytes = 0;
+        info.on("error", reject);
+        info.on("end", () => reject(new Error()));
+        info.on("close", () => reject(new Error()));
+        info.on("data", (chunk: Buffer | string) => {
+          bytes += Buffer.byteLength(chunk);
+          if (bytes > 4096) { reject(new Error()); return; }
+          text += chunk.toString();
+          try {
+            const value: unknown = JSON.parse(text);
+            if (typeof value !== "object" || value === null || Array.isArray(value)) { reject(new Error()); return; }
+            const pid: unknown = (value as Record<string, unknown>)["child-pid"];
+            if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 1) { reject(new Error()); return; }
+            resolvePromise(pid);
+          } catch { /* incomplete JSON */ }
+        });
+      });
+      if (!await verifyScope({ pid: child.pid, childPid, unit, limits }, dependencies.readText ?? ((path) => readFile(path, "utf8"))) || stopped || ended) throw new Error();
+      block.end("1");
+    } catch { kill(); throw new Error(SANDBOX_UNAVAILABLE_MESSAGE); }
+  })();
+  gate.catch(() => undefined);
+  return { child, closed, gate, kill };
 }
 
 /**
@@ -169,19 +265,20 @@ export async function probeSandbox(workspace: string, dependencies: SandboxDepen
     if (signal?.aborted) return false;
     const workspaceReal = await realpath(workspace);
     running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies), dependencies);
-    const { child, closed } = running;
+    const { child, closed, gate, kill } = running;
     child.stdout?.resume(); child.stderr?.resume();
     const deadline = new Promise<null>((resolvePromise) => {
-      timer = setTimeout(() => resolvePromise(null), PROBE_TIMEOUT_MS);
-      onAbort = () => resolvePromise(null);
+      timer = setTimeout(() => { kill(); resolvePromise(null); }, PROBE_TIMEOUT_MS);
+      onAbort = () => { kill(); resolvePromise(null); };
       signal?.addEventListener("abort", onAbort, { once: true });
-      if (signal?.aborted) resolvePromise(null);
+      if (signal?.aborted) onAbort();
     });
+    const ready = await Promise.race([gate.then(() => true), closed.then(() => false), deadline]);
+    if (ready !== true) { kill(); return false; }
     const outcome = await Promise.race([closed, deadline]);
-    if (outcome === null) child.kill("SIGKILL");
     return outcome !== null && outcome.code === 0 && signal?.aborted !== true;
   } catch {
-    try { running?.child.kill("SIGKILL"); } catch { /* already gone */ }
+    running?.kill();
     return false;
   } finally {
     if (timer) clearTimeout(timer);
@@ -190,7 +287,7 @@ export async function probeSandbox(workspace: string, dependencies: SandboxDepen
 }
 
 /**
- * `BashOperations` that run each command as `bwrap <fixed arguments> -- bash -c <command>`. The passed
+ * `BashOperations` that run each command in a limited systemd scope through bubblewrap. The passed
  * `env` is ignored, a working directory outside the workspace is refused and there is no unsandboxed
  * fallback: a sandbox that cannot start fails the command.
  */
@@ -218,21 +315,27 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
       } catch {
         throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
       }
-      const { child, closed } = running;
+      const { child, closed, gate, kill } = running;
       child.stdout?.on("data", onData);
       child.stderr?.on("data", onData);
       let timedOut = false;
       let timer: NodeJS.Timeout | undefined;
-      const kill = (): void => { try { child.kill("SIGKILL"); } catch { /* already gone */ } };
-      const onAbort = (): void => kill();
+      let cancel: (() => void) | undefined;
+      const cancelled = new Promise<false>((resolvePromise) => { cancel = () => { kill(); resolvePromise(false); }; });
+      const onAbort = (): void => { cancel?.(); };
       try {
-        timer = setTimeout(() => { timedOut = true; kill(); }, timeoutMs);
+        timer = setTimeout(() => { timedOut = true; cancel?.(); }, timeoutMs);
         signal?.addEventListener("abort", onAbort, { once: true });
-        if (signal?.aborted) kill();
+        if (signal?.aborted) onAbort();
+        const ready = await Promise.race([gate.then(() => true), closed.then(() => false), cancelled]);
+        if (!ready) { kill(); throw new Error(SANDBOX_UNAVAILABLE_MESSAGE); }
         const outcome = await closed;
         if (signal?.aborted) throw new Error("aborted");
         if (timedOut) throw new Error(`timeout:${timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS}`);
         return { exitCode: outcome.code ?? (outcome.signal ? 128 + (osConstants.signals[outcome.signal] ?? 0) : 1) };
+      } catch (error) {
+        kill();
+        throw error;
       } finally {
         if (timer) clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
