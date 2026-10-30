@@ -175,6 +175,104 @@ are model input rather than tool reads, and before this amendment they were the
 one channel through which content from outside those roots still reached a
 read-only session.
 
+### Amendment 2026-10-30: resource limits of the sandboxed shell
+
+Issue #195. Previously the sandbox bounded only `/tmp` (512 MiB) and the
+command time (600 seconds by default). Memory, the number of processes and
+threads, and the overlay upper layers were unbounded, so a prompt-injected
+worker could exhaust the operator user's memory or task count until its command
+ended.
+
+New rule: every sandbox run, the start probe and each command alike, starts
+inside its own transient systemd user scope with fixed limits, and the command
+runs only after the server has verified that the limits are in force.
+
+- Launcher: `/usr/bin/systemd-run --user --scope --quiet --collect
+  --unit=pi-session-mcp-shell-<uuid>
+  --description="pi-session-mcp sandboxed shell" -p MemoryMax=1073741824
+  -p MemorySwapMax=0 -p TasksMax=128 -p RuntimeMaxSec=<deadline + 30>
+  -- /usr/bin/bwrap --info-fd 3
+  --block-fd 4 <the fixed arguments of section 2>`. systemd-run moves itself
+  into the new scope before it executes bubblewrap, so bubblewrap and every
+  descendant inherit the scope from their first instruction.
+- Limits per run: `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 128
+  (processes and threads of bubblewrap and all descendants together). `/tmp`
+  stays a 512 MiB tmpfs, and the default timeout stays 600 seconds.
+- Gate: bubblewrap writes the sandbox's child PID to fd 3 and then holds the
+  command until a byte arrives on fd 4. The server reads both processes'
+  `/proc/<pid>/cgroup`, requires one identical cgroup v2 path whose last
+  component is the unit it named and which is not the server's own cgroup,
+  requires a `cgroup2` mount at `/sys/fs/cgroup`, and reads `memory.max`,
+  `memory.swap.max` and `pids.max` of that cgroup. Only when all three equal
+  the fixed values does it release the command. On any other outcome, also on
+  abort or timeout during this phase, it ends the whole scope before it
+  closes fd 4 and the run fails. End of file on fd 4 releases bubblewrap, and
+  bubblewrap's sandbox child, which waits on its own copy of fd 4, outlives a
+  killed bubblewrap while it waits (`--die-with-parent` does not cover it yet;
+  observed natively on 2026-10-30, where closing fd 4 after the kill started
+  the command). The server therefore sends `SIGKILL` to the launcher, writes
+  `1` to the scope's `cgroup.kill`, found through the launcher's or the
+  reported child's `/proc/<pid>/cgroup` and accepted only for its own unit
+  name, kills each of those PIDs that is in that scope, and only then closes
+  fd 4. When neither PID leads to the scope because the launcher has already
+  ended on its own, fd 4 stays open until `RuntimeMaxSec` has passed and
+  systemd has stopped the scope. The run then fails: the
+  probe reports `false`, and a command fails with the unavailable message, or
+  with its usual abort or timeout error when the client aborted it or its
+  timeout passed during that phase.
+- Scope housekeeping: the unit has the fixed description
+  `pi-session-mcp sandboxed shell`, so the user journal never records the
+  command line, and `RuntimeMaxSec` set to the run's deadline (5 seconds for
+  the probe, the command timeout otherwise) plus 30 seconds. The server's own
+  timeout acts first; `RuntimeMaxSec` stops a scope that outlives it, including
+  an empty scope that systemd keeps when the launcher is killed before it has
+  joined its scope (observed natively for aborts within milliseconds of the
+  start). Such an empty scope holds no process and no memory but stays listed
+  for the run's whole deadline, up to the command timeout the worker chose.
+- Fixed binaries: `/usr/bin/systemd-run` must be a trusted system binary like
+  `/usr/bin/bwrap`; there is no `PATH` lookup. The user manager is reached
+  through `/run/user/<uid>`, derived from the server's UID and accepted only as
+  a real directory owned by that UID without group or other access that holds the `bus`
+  socket. That directory is the launcher's only environment variable
+  (`XDG_RUNTIME_DIR`); bubblewrap's `--clearenv` keeps it from the command. A
+  client that passes no `XDG_RUNTIME_DIR`, such as Codex, works the same way.
+- Fail closed: without a trusted launcher, a usable user manager, delegated
+  `memory` and `pids` controllers, or the exact values, the probe fails and
+  `pi_session_start` returns `sandbox_unavailable`; a later command whose
+  verification fails is refused the same way. There is no unlimited fallback
+  and no new code, field or configuration. Doctor runs the same probe.
+
+Overlay upper layers: the 512 MiB shared bound that was considered is not
+implemented. Bubblewrap places `--tmp-overlay` upper layers on its root tmpfs
+and accepts `--size` only before `--tmpfs`; `--overlay` resolves an explicit
+upper directory on the host, not on a tmpfs inside the sandbox. A dedicated
+bound would need a second, outer bubblewrap with its own namespaces and a view
+of the host root, which is a sandbox redesign. Instead the upper layers of the
+workspace and of a linked worktree's Git directory, the root tmpfs and `/tmp`
+are all RAM-backed and charged to the scope's memory cgroup, which has no swap:
+together with the processes' own memory they cannot exceed 1 GiB. Filling them
+past that ends the command through the kernel's out-of-memory handling rather
+than with `ENOSPC`; `/tmp` still reports `ENOSPC` at 512 MiB. The individual
+bounds act together; they cannot all be reached at once.
+
+Why: the limits must be in place before the command's first instruction and
+verifiable from outside; a per-user shell `ulimit` is shared by every process
+of the operator, and an address-space limit per process bounds no total.
+systemd's transient scopes use the cgroup v2 controllers that the user manager
+already delegates and need no privileges, no new dependency and no change to
+the sandbox's mounts.
+
+Residual risk: CPU time and I/O bandwidth are not limited; each concurrent
+command has its own scope, so several commands can together use several times
+the limits; a process of the operator's own UID or the user manager can change
+a scope's limits after the check (outside this threat model). Hosts without a
+systemd user manager, or with the `memory` or `pids` controller not delegated,
+lose the sandboxed shell; it is refused there rather than run without limits.
+If the server process itself dies while a run waits at the gate, the kernel
+closes fd 4 and the waiting command starts without a reader; it still runs in
+its limited scope, and `RuntimeMaxSec` ends it at the run's deadline plus 30
+seconds.
+
 ## Contract change and versioning
 
 The capabilities field `shell`, the start error `sandbox_unavailable` and the
@@ -193,10 +291,11 @@ not itself bump the version or authorize publication.
   from the distribution are.
 - Lock-dependent tests that need a supported local filesystem can fail on the
   overlay (seen with `test/setup-modes.test.ts` in the #169 probe).
-- The sandbox has no memory, process-count or overlay upper-layer limits.
-  A prompt-injected worker can exhaust memory or processes of the operator's
-  user until the command times out, as a host-mode coding session already
-  can. Limits through a cgroup scope are a possible follow-up.
+- Until the amendment of 2026-10-30 the sandbox had no memory, process-count
+  or overlay upper-layer limits, so a prompt-injected worker could exhaust
+  memory or processes of the operator's user until the command timed out.
+  Since then each run has its own systemd scope with fixed limits; see
+  [that amendment](#amendment-2026-10-30-resource-limits-of-the-sandboxed-shell).
 - When `bash` truncates long output, the SDK stores the full output in the
   host's temporary directory and names that file. Confined `read` refuses it
   and the sandbox's `/tmp` is a fresh tmpfs, so only the truncated output is

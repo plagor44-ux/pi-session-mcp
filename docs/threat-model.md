@@ -33,9 +33,16 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   worktree whose pointers are consistent, the main repository's Git directory)
   as a temporary overlay whose writes vanish with the command. The operator's
   home, `PI_*` variables and the server's environment never reach the command.
-  The shell fails closed: an untrusted binary or a failing probe is
-  `sandbox_unavailable`, and a command whose sandbox cannot start fails; there
-  is no unsandboxed fallback. It is not allowed together with granted extension
+  Each run starts through `/usr/bin/systemd-run` (fixed, trusted) in its own
+  transient systemd user scope limited to 1 GiB memory without swap and 128
+  tasks; bubblewrap holds the command until the server has read the scope's
+  effective `memory.max`, `memory.swap.max` and `pids.max` and the cgroup
+  membership of both sandbox processes (ADR 0013, amendment 2026-10-30).
+  The shell fails closed: an untrusted binary, a missing user manager or
+  controller, limits that are not in force or a failing probe is
+  `sandbox_unavailable`, and a command whose sandbox cannot start or whose
+  limits cannot be verified fails; there is no unsandboxed or unlimited
+  fallback. It is not allowed together with granted extension
   tools, which may write.
   - **Residual:** the confinement checks a path when the call starts, so a
     concurrent writer in the same workspace (for example a host-mode coding
@@ -47,11 +54,15 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     overlay of the workspace and, for worktrees, of the repository's Git
     directory, including their configuration. Lock-dependent tests that need a
     supported local filesystem can fail on the overlay. macOS, a VM backend and
-    network allowlists inside the sandbox are out of scope. The sandbox has no
-    memory, process-count or overlay upper-layer limits (only `/tmp` is limited to
-    512 MiB and a command defaults to a 600 second timeout), so a prompt-injected
-    worker can exhaust memory or processes of the operator's user until the
-    command ends, as a host-mode coding session already can. When `bash`
+    network allowlists inside the sandbox are out of scope. One command is
+    bounded to 1 GiB of memory without swap, which also bounds the RAM-backed
+    overlay upper layers of the workspace and Git directory, the root tmpfs and
+    `/tmp` (512 MiB on its own), and to 128 processes and threads; a command
+    defaults to a 600 second timeout. CPU time and I/O bandwidth are not limited,
+    concurrent commands each have their own scope, and a filled overlay ends the
+    command through the out-of-memory handling rather than `ENOSPC`. A process
+    of the operator's own UID could relax a scope after the check, which is
+    outside this boundary. When `bash`
     truncates long output the SDK names a full-output file in the host's
     temporary directory; confined `read` refuses it and the sandbox's `/tmp` is a
     fresh tmpfs, so only the truncated output is available. `ls` omits entries
@@ -60,7 +71,13 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     directory (or its symlink target's), `~/.pi` or Pi's agent directory
     contributes only the skill file as a read root. On
     timeout or abort the server kills bubblewrap and the PID namespace takes every
-    process of the sandbox with it. The start probe is cancelled with the start
+    process of the sandbox with it; before the command is released, the server
+    ends the whole transient scope through its `cgroup.kill` before it closes
+    the block fd, because the waiting sandbox child would otherwise start the
+    command; when it cannot find the scope it keeps the block fd open until
+    systemd has stopped the scope (`RuntimeMaxSec`). A server that dies while a
+    run waits releases that run, still inside its limited scope. The launcher's own diagnostics never reach the worker; only the
+    released command's output does. The start probe is cancelled with the start
     request. A granted research
     tool with free-form input (search, documentation lookup) is a possible
     outbound channel for workspace content; prefer query-style tools.

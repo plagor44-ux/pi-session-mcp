@@ -7,7 +7,7 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { ConfigError } from "../src/config.js";
-import type { SandboxChild, SandboxDependencies } from "../src/sandbox-shell.js";
+import { SANDBOX_LIMITS, type SandboxChild, type SandboxDependencies } from "../src/sandbox-shell.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 import type { McpConnection } from "../src/mcp-session-tools.js";
 import { parseExtensionSpec, PiExtensionError } from "../src/extension-spec.js";
@@ -706,7 +706,37 @@ function extensionHarness(options: {
   };
 }
 
-/** A sandbox whose bubblewrap is trusted and whose probe exits 0, or exits with `probeExit`. */
+const SCOPE = "/user.slice/app.slice/test-unit.scope";
+
+/** The cgroup files of a scope with the server's limits, as `verifyScope` reads them. */
+async function scopeFile(path: string): Promise<string> {
+  const files: Record<string, string> = {
+    "/proc/self/mounts": "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n",
+    "/proc/self/cgroup": "0::/user.slice/server.scope\n",
+    "/proc/4241/cgroup": `0::${SCOPE}\n`,
+    "/proc/4242/cgroup": `0::${SCOPE}\n`,
+    [`/sys/fs/cgroup${SCOPE}/memory.max`]: `${SANDBOX_LIMITS.memoryBytes}\n`,
+    [`/sys/fs/cgroup${SCOPE}/memory.swap.max`]: "0\n",
+    [`/sys/fs/cgroup${SCOPE}/pids.max`]: `${SANDBOX_LIMITS.tasks}\n`,
+  };
+  const value = files[path];
+  if (value === undefined) throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  return value;
+}
+
+/** A launcher child whose bubblewrap reports its PID on fd 3 and waits on fd 4, like the real gate. */
+function gatedChild(): { child: SandboxChild; emitter: EventEmitter; stdout: PassThrough; stderr: PassThrough; block: PassThrough } {
+  const emitter = new EventEmitter();
+  const stdout = new PassThrough();
+  const stderr = new PassThrough();
+  const info = new PassThrough();
+  const block = new PassThrough();
+  queueMicrotask(() => info.write('{"child-pid":4242}'));
+  const child = Object.assign(emitter, { pid: 4241, stdio: [null, stdout, stderr, info, block], stdout, stderr, kill: () => undefined }) as unknown as SandboxChild;
+  return { child, emitter, stdout, stderr, block };
+}
+
+/** A sandbox whose binaries are trusted, whose scope has the limits and whose probe exits 0, or exits with `probeExit`. */
 function workingSandbox(options: { trusted?: boolean; probeExit?: number; spawnError?: boolean } = {}): SandboxDependencies & { spawned: string[][] } {
   const spawned: string[][] = [];
   return {
@@ -714,17 +744,16 @@ function workingSandbox(options: { trusted?: boolean; probeExit?: number; spawnE
     trusted: () => options.trusted ?? true,
     rootEntries: () => [],
     gitCommonDir: async () => undefined,
+    runtimeDir: () => "/run/user/test",
+    unitName: () => "test-unit",
+    endScope: () => true,
+    readText: scopeFile,
     spawn: (_file, args) => {
       spawned.push([...args]);
-      const emitter = new EventEmitter();
-      const stdout = new PassThrough();
-      const stderr = new PassThrough();
-      setImmediate(() => {
-        stdout.end(); stderr.end();
-        if (options.spawnError) emitter.emit("error", new Error("spawn failed"));
-        else emitter.emit("close", options.probeExit ?? 0, null);
-      });
-      return Object.assign(emitter, { stdout, stderr, kill: () => undefined }) as unknown as SandboxChild;
+      const { child, emitter, stdout, stderr, block } = gatedChild();
+      if (options.spawnError) setImmediate(() => emitter.emit("error", new Error("spawn failed")));
+      else block.once("data", () => setImmediate(() => { stdout.end(); stderr.end(); emitter.emit("close", options.probeExit ?? 0, null); }));
+      return child;
     },
   };
 }
@@ -874,7 +903,9 @@ describe("protected skill roots and aborted sandbox probes", () => {
     const spawned = deferred<void>();
     const sandbox: SandboxDependencies = {
       trusted: () => true, rootEntries: () => [], gitCommonDir: async () => undefined,
-      spawn: () => (spawned.resolve(), Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kill }) as unknown as SandboxChild),
+      runtimeDir: () => "/run/user/test", unitName: () => "test-unit", endScope: () => true, readText: scopeFile,
+      // The info fd stays silent, so the probe waits in its setup until the abort.
+      spawn: () => (spawned.resolve(), Object.assign(new EventEmitter(), { pid: 4241, stdio: [null, new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()], stdout: new PassThrough(), stderr: new PassThrough(), kill }) as unknown as SandboxChild),
     };
     const controller = new AbortController();
     const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });

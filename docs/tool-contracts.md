@@ -135,7 +135,7 @@ server runs a probe through the same sandbox; if the binary is untrusted or the
 probe fails, start fails with `sandbox_unavailable` and no session exists. There
 is no unsandboxed fallback. For a linked worktree the main repository's Git
 directory is mounted as a second temporary overlay when its pointers are
-consistent, so `git log` and `git blame` work. The sandbox's `/tmp` is limited to 512 MiB, and a command without a `timeout` argument is killed after 600 seconds.
+consistent, so `git log` and `git blame` work. The sandbox's `/tmp` is limited to 512 MiB, and a command without a `timeout` argument is killed after 600 seconds. Each probe and command runs in its own systemd user scope limited to 1 GiB memory without swap and 128 processes and threads, and is released only after the server has verified those limits; when they cannot be applied or verified, start fails with `sandbox_unavailable` and a command fails, never running unlimited.
 
 ## Automated writer boundary (Plan B)
 
@@ -192,7 +192,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `extension_tool_conflict` | An extension tool name collides with a built-in, MCP or other extension tool, or is unsafe: not 1 to 64 letters, digits, `_` or `-` (not starting with `-`), or reserved for MCP (`mcp__` prefix, `list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). |
 | `extension_tool_missing` | A granted extension tool is not registered at load or is not active and declared to the model at admission. Fixed message: `Granted Pi extension tool is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
 | `skill_load_failed` | A skill that the profile selects could not be loaded: a missing (also a `builtin:` name that matches no override and no shipped skill), unreadable or oversized (over 256 KiB) file, an invalid skill, two selected files with the same Pi skill name, two aliases on the same canonical file, or a skill with `disable-model-invocation: true`. The message is the fixed `Configured Pi skill could not be loaded`; it never contains a path, skill name or SDK text. |
-| `sandbox_unavailable` | A profile with `shell: "sandboxed"` cannot start its shell sandbox: the bubblewrap binary is missing or untrusted, or the probe run for the session's workspace failed or was cancelled with the start request. Fixed message: `Read-only shell sandbox is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
+| `sandbox_unavailable` | A profile with `shell: "sandboxed"` cannot start its shell sandbox: the bubblewrap or systemd-run binary is missing or untrusted, the user's runtime directory or systemd user manager is not usable, the transient scope's memory, swap or task limit could not be verified, or the probe run for the session's workspace failed or was cancelled with the start request. Fixed message: `Read-only shell sandbox is not available`; class `needs_operator` (operator needed; do not retry or switch profiles). |
 | `pi_session_creation_failed` | Pi session construction failed without a more specific safe classification. |
 | `writer_uncollected` | The writer is not at its collected baseline, or its guard/Git state could not be verified; controller must collect and reset it. |
 | `writer_busy` | Controller action: a session or another operation holds the writer; wait for or close it. Setup waits briefly (10 seconds) for the lease, then fails with this code. |

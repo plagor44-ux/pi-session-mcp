@@ -2598,6 +2598,140 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.2 post-release evidence
+
+Recorded on 2026-10-30 for the published release `0.14.2`, during
+[Sprint 14](sprints/2026-10-30-s14-sandbox-resource-limits.md). It covers the
+published bytes only; the unreleased #195 candidate has its own record below.
+
+Tag binding: a fresh clone of the annotated tag `v0.14.2` (tag object
+`488459ded623ed52cf8b3a139b1ad0f265b3d2a2`) peels to the merge commit
+`7b8e5c801ed5ab05b8b94a9fe751b8b825ab0a3a` of #205, and
+`git describe --tags --exact-match` reports `v0.14.2`. CI on the merge commit
+(run 41085991886) and on the tag (run 41086907144) passed. The npm package
+records `gitHead` `7b8e5c8`.
+
+- Level 1 on the tag clone after `npm ci`, from 18:33 to 18:34 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (144 files, 4097 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` and name only the known `undici`
+  8.10.2 finding through `@earendil-works/pi-coding-agent` 1.4.0, still the
+  newest SDK release, with the same eight advisories
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)); Level 1
+  is therefore not unrestricted. Doctor reported `packageVersion` `0.14.2` and
+  exited with `2` because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.14.2` on npm: 940 files, shasum
+  `26b286ba30c605ab9454d0c570dee5e36d64a89e`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `775e6de2a6e810839ceb4d8518b8e7c93eae38f3` because the release commit adds the
+  pre-release record to the packaged `docs/acceptance.md`.
+- Published release, Level 2 on the tag clone, 18:34 to 18:36 UTC: 160 of 160
+  with delivery off and 228 of 228 with `--events spool`. The manifests and
+  the 190 built runtime files were byte-identical before and after the client
+  cycles.
+- Published npm package, Level 2 from a fresh prefix, 18:36 to 18:37 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool` (189 built
+  files unchanged). The install smoke on the published package, from another
+  fresh prefix, reported `smoke_passed` with version `0.14.2`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories and prefixes
+  were removed. Clients: Codex CLI `0.166.0` and Claude Code `2.1.314`.
+
+Installations, recorded separately:
+
+- Workstation: `pi-session-mcp@0.14.2` is installed globally; Doctor with the
+  real configuration reported no error (only the known `workspace_gitfile` and
+  `workspace_mode_unset` warnings); `--verify` passed for
+  `claude-code:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`,
+  `hook_verified`) and `codex:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`). A freshly reconnected Claude Code server reported version
+  `0.14.2` and leased both `pi-session-mcp` writers for this sprint.
+- Second machine: a read-only check shows `pi-session-mcp@0.14.2` installed. Its
+  registrations, Doctor and writers were not checked in this record.
+- Both installations were upgraded before this record; it does not establish
+  how or when, nor the individual upgrade steps.
+
+Not established for `0.14.2`: a Level 3 cycle.
+
+### Issue #195 candidate acceptance (2026-10-30)
+
+Recorded on 2026-10-30 for the unreleased branch
+`fix/195-sandbox-resource-limits`
+([Sprint 14](sprints/2026-10-30-s14-sandbox-resource-limits.md)), on its source
+commit `bef7eef`, in a fresh clone on Linux 7.3 (`x64`) with Node.js `26.12.1`,
+npm `12.2.1`, systemd `262`, bubblewrap `0.13.1`, Podman `6.1.4`, Codex CLI
+`0.166.0` and Claude Code `2.1.314`, cgroup v2 with `memory` and `pids`
+delegated to the user manager. Later commits on the branch change only
+documentation.
+
+- Level 1 after `npm ci`: typecheck, `build:cli`, the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` (144 files, 4183 passed, 14
+  skipped, no unhandled error), `build` and `git diff --check` exited with `0`,
+  and the status stayed clean. `npm audit` and `npm audit --omit=dev` exit with
+  `1` for the known `undici` finding only (#120).
+- Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
+  `systemd-run` and bubblewrap, none skipped): 35 of 35 in three runs. The
+  first run in the fresh clone failed one pre-existing case, "returns promptly
+  on abort and leaves no sandbox process" (a marked sleeper was still listed
+  after two seconds), while the interrupted previous verification may still
+  have been running its Podman tests. It did not recur in 17 later runs (four
+  full matrices, 13 targeted runs, eight of them under a parallel test run);
+  its cause is not established.
+- The mandatory cases of the brief, each in that matrix: a command above the
+  memory limit ends (Python and Bash allocation, exit status not `0`) while a
+  command under the default limits succeeds; the scope's `memory.max` and
+  `memory.swap.max` are the fixed values; more processes than the task limit
+  and more threads than the task limit are refused; a large write into the
+  workspace overlay, into a linked worktree's shared Git directory and two
+  medium writes together are bounded with the host workspace unchanged; `/tmp`
+  stays at 512 MiB; untrusted `systemd-run`, untrusted bubblewrap, a missing
+  runtime directory, a runtime directory without a bus, an unapplied memory
+  limit, an unapplied task limit and an unreadable mount table each fail with
+  `sandbox_unavailable` and leave no process of the command behind; a lost
+  precondition after a successful probe is refused; concurrent runs with
+  different limits and an abort stay separate; abort and timeout end the
+  command and remove its scope; a background child holding stdout does not
+  hang the call. The fail-closed cases failed 3 of 7 on `7d81acd`, where a
+  refused run's waiting sandbox child started the command once fd 4 closed.
+- Base comparison on `7b8e5c8` with the same host: a 200 MB allocation, a
+  200 MB write into the workspace overlay and into the root tmpfs, and 40
+  concurrent sleepers all exited with `0`.
+- Podman-gated writer tests, none skipped: 9 of 9 lifecycle tests and 1 of 1
+  boundary test.
+- Level 2 in the working tree: 160 of 160 with delivery off and 228 of 228 with
+  `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix (tarball SHA-256
+  `de65cd4fcd110406085d95f7943d3a1c1493b7ca51e1e8ce78add8eeee2f2c72`, 941
+  entries): 160 of 160 with delivery off and 228 of 228 with `--events spool`.
+  The install smoke reported `smoke_passed` with version `0.14.2`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. No transient shell
+  scope remained after any run.
+
+- Live interop (19:32 to 19:52 UTC) against the packed tarball installed in a
+  disposable prefix (`dist/main.js` SHA-256 `ab93e3a9…`), worker profile
+  `ro-sandboxed` (`deepseek`/`deepseek-flash`, `high`, `shell: "sandboxed"`,
+  delivery off) on a synthetic five-commit repository, within the budget
+  recorded in the Sprint 14 record. Codex CLI `0.166.0` (default model) and
+  Claude Code `2.1.314` (Sonnet 5.5) each discovered the server (`0.14.2`,
+  profile `shell: "sandboxed"`), started a session, ran two shell and Git
+  turns and one abort, then closed the session; a restart run of each client
+  saw no session, started and closed one. Both clients' first turn returned
+  `5` and the SHA-256 `813680c6…` of `data.txt`, their second `8` and
+  `synthetic commit 5`, matching the independent check on the host; the
+  third turn, `sleep 300`, ended `aborted` after `pi_session_abort`, and the
+  session list was empty after the close. Every shell scope seen during the
+  runs had `MemoryMax=1073741824`, `MemorySwapMax=0` and `TasksMax=128`;
+  afterwards no scope and no server process remained and the repository was
+  unchanged. Claude Code's main run passed on its third attempt; the first
+  two failed in the harness (see the Sprint 14 progress log).
+
+Not established: a Level 3 cycle, macOS (out of scope), hosts without
+`cgroup.kill` (kernels before 5.14), and a productive installation of this
+change.
+
 ### v0.14.2 pre-release acceptance
 
 `v0.14.2` was accepted on 2026-10-30 from 15:41 to 15:47 UTC on its release

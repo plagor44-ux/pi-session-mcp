@@ -167,6 +167,9 @@ claim). The sandbox resource limits of ADR 0013 are the follow-up issue
 [#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195), not part of
 this sprint.
 
+Follow-up (2026-10-30): #195 is worked in
+[Sprint 14](2026-10-30-s14-sandbox-resource-limits.md).
+
 Cleanup: all controller Pi sessions closed; both `pi-session-mcp` writers
 finished (`writer_reset`); the test writer `s12-probe-w1` removed; expendable
 configurations, the synthetic repository, the pack prefix and the

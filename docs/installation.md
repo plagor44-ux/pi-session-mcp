@@ -72,6 +72,20 @@ the same arguments.
   `/usr`, `/etc` and the workspace: toolchains installed under the home
   directory or `/opt` (nvm, `~/.local`) are not available, Node.js and Git from
   the distribution are.
+  Each command also needs a running systemd user manager for the server's user
+  (`/run/user/<uid>` with its `bus` socket; it is found from the UID, so a
+  client that passes no `XDG_RUNTIME_DIR` is fine), a trusted
+  `/usr/bin/systemd-run`, and cgroup v2 with the `memory` and `pids`
+  controllers delegated to the user manager (check with
+  `cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control`),
+  with swap accounting enabled in the kernel so that each scope has a
+  `memory.swap.max` file.
+  Every command runs in its own transient scope limited to 1 GiB memory
+  without swap and 128 processes and threads; the overlays, `/tmp` and the
+  sandbox's other tmpfs count against that memory. Without these the probe
+  fails with `sandbox_unavailable`: a host where the sandboxed shell worked
+  without a user manager or delegation loses it rather than running it without
+  limits.
 - Codex CLI or Claude Code. `setup` does not pin client versions. It accepts a
   client whose public `mcp` command output matches the expected contract and
   reports `unsupported` otherwise. The contract was last recorded with Codex CLI

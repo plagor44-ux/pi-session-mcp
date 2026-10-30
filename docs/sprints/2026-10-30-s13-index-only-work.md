@@ -149,6 +149,8 @@ had one implementer, and `test/writer-collect-real-git.test.ts` one author.
 
 - Work held only in a stash entry or in refs outside `refs/heads` is still lost
   after a collection (#202).
+  Follow-up (2026-10-30): fixed by #202 and released in 0.14.2; see the
+  [roadmap](../roadmap.md#current-state).
 - Skip-worktree and assume-unchanged entries hide worktree changes from Git and
   therefore from inspection.
 - The digest version means that a writer collected under 0.14.1 but not yet
