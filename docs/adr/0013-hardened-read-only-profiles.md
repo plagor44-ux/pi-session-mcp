@@ -188,8 +188,10 @@ inside its own transient systemd user scope with fixed limits, and the command
 runs only after the server has verified that the limits are in force.
 
 - Launcher: `/usr/bin/systemd-run --user --scope --quiet --collect
-  --unit=pi-session-mcp-shell-<uuid> -p MemoryMax=1073741824
-  -p MemorySwapMax=0 -p TasksMax=128 -- /usr/bin/bwrap --info-fd 3
+  --unit=pi-session-mcp-shell-<uuid>
+  --description="pi-session-mcp sandboxed shell" -p MemoryMax=1073741824
+  -p MemorySwapMax=0 -p TasksMax=128 -p RuntimeMaxSec=<deadline + 30>
+  -- /usr/bin/bwrap --info-fd 3
   --block-fd 4 <the fixed arguments of section 2>`. systemd-run moves itself
   into the new scope before it executes bubblewrap, so bubblewrap and every
   descendant inherit the scope from their first instruction.
@@ -212,7 +214,9 @@ runs only after the server has verified that the limits are in force.
   `1` to the scope's `cgroup.kill`, found through the launcher's or the
   reported child's `/proc/<pid>/cgroup` and accepted only for its own unit
   name, kills each of those PIDs that is in that scope, and only then closes
-  fd 4. The run then fails: the
+  fd 4. When neither PID leads to the scope because the launcher has already
+  ended on its own, fd 4 stays open until `RuntimeMaxSec` has passed and
+  systemd has stopped the scope. The run then fails: the
   probe reports `false`, and a command fails with the unavailable message, or
   with its usual abort or timeout error when the client aborted it or its
   timeout passed during that phase.
@@ -222,7 +226,9 @@ runs only after the server has verified that the limits are in force.
   the probe, the command timeout otherwise) plus 30 seconds. The server's own
   timeout acts first; `RuntimeMaxSec` stops a scope that outlives it, including
   an empty scope that systemd keeps when the launcher is killed before it has
-  joined its scope (observed natively for early aborts).
+  joined its scope (observed natively for aborts within milliseconds of the
+  start). Such an empty scope holds no process and no memory but stays listed
+  for the run's whole deadline, up to the command timeout the worker chose.
 - Fixed binaries: `/usr/bin/systemd-run` must be a trusted system binary like
   `/usr/bin/bwrap`; there is no `PATH` lookup. The user manager is reached
   through `/run/user/<uid>`, derived from the server's UID and accepted only as
@@ -262,6 +268,10 @@ the limits; a process of the operator's own UID or the user manager can change
 a scope's limits after the check (outside this threat model). Hosts without a
 systemd user manager, or with the `memory` or `pids` controller not delegated,
 lose the sandboxed shell; it is refused there rather than run without limits.
+If the server process itself dies while a run waits at the gate, the kernel
+closes fd 4 and the waiting command starts without a reader; it still runs in
+its limited scope, and `RuntimeMaxSec` ends it at the run's deadline plus 30
+seconds.
 
 ## Contract change and versioning
 

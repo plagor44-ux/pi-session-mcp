@@ -74,7 +74,9 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     process of the sandbox with it; before the command is released, the server
     ends the whole transient scope through its `cgroup.kill` before it closes
     the block fd, because the waiting sandbox child would otherwise start the
-    command. The launcher's own diagnostics never reach the worker; only the
+    command; when it cannot find the scope it keeps the block fd open until
+    systemd has stopped the scope (`RuntimeMaxSec`). A server that dies while a
+    run waits releases that run, still inside its limited scope. The launcher's own diagnostics never reach the worker; only the
     released command's output does. The start probe is cancelled with the start
     request. A granted research
     tool with free-form input (search, documentation lookup) is a possible

@@ -67,12 +67,12 @@ below.
 | --- | --- | --- |
 | agy (planning, dependency matrix, review route) | `agy -p --model gemini-3.8-flash-high --mode plan` | used once for the task and dependency matrix and the review route |
 | GPT 6.1 Terra (technical decision) | `review-terra` (openai `gpt-6.1-terra`) | used for the B0 decision; Terra is visible since #199 |
-| GPT 6.1 Terra (main implementation) | `code-terra` | see progress log |
-| DeepSeek (native regressions) | `code-deepseek` (`deepseek-flash`) | see progress log |
-| GLM 5.3 (independent review) | see progress log | |
+| GPT 6.1 Terra (main implementation) | `code-terra` (`gpt-6.1-terra`, medium) | used for B; one early stop, then commits without checks (progress log) |
+| DeepSeek (native regressions) | `code-deepseek` (`deepseek-flash`) | used for C |
+| GLM 5.3 (independent review) | `review-glm-sandboxed` (mistral `zai-glm-5-3`) | R1, `NON_BLOCKING_ONLY` |
 | Mistral Large 4 (release evidence, docs) | not used | the release evidence needed only local commands; the controller is the only docs editor |
-| Grok 4.7 (adversarial review) | see progress log | |
-| Sonnet 5.5 (final integration review) | see progress log | |
+| Grok 4.7 (adversarial review) | `review-grok` (xai `grok-4.7`) | R2, `turn_failed`, no report |
+| Sonnet 5.5 (final integration review) | `review-sonnet` (anthropic `claude-sonnet-5-5`) | R3 and its re-review (progress log) |
 
 At most two coding workers ran at once, each on its own leased writer and
 branch. One owner per file: `src/sandbox-shell.ts` and
@@ -127,8 +127,36 @@ the test author, Doctor, documentation and records the controller.
 - R2 (`review-grok`, optional adversarial review, on `de7d59d`): the turn
   ended after 6m33s with `turn_failed` and no report. Not retried: the xAI
   profiles are known to fail since 2026-10-25, and the review was optional.
+- I2 (controller, fresh clone of `7d81acd`): Level 1, the native matrix (35
+  of 35), the Podman tests (10 of 10) and Level 2 in the working tree and from
+  the packed tarball passed; superseded by R3.
+- R3 (`review-sonnet`, 3m46s, on `7d81acd`): `NON_BLOCKING_ONLY`, but its
+  first finding, marked as a hypothesis, was confirmed natively and is
+  blocking: bubblewrap's sandbox child waits on its own copy of fd 4 and
+  outlives a killed bubblewrap while it waits, so closing fd 4 after the kill
+  started the command of a refused run. The strengthened native fail-closed
+  cases failed 3 of 7 on `7d81acd`. Fixed in `7cd470c`: the kill path ends the
+  scope through `cgroup.kill` and kills the scope's PIDs before fd 4 closes.
+  Also adopted: launcher diagnostics no longer reach the worker, the Doctor
+  design and tool contracts name the new requirements, the changelog names
+  swap accounting and the workloads the limits stop, the ADR's runtime
+  directory wording (`810c025`). While fixing it, the controller found two
+  more native issues and fixed them in the same commit: the unit description
+  carried the whole command line into the user journal (now a fixed
+  description), and an abort before the launcher joined its scope left an
+  empty scope that systemd kept (4 of 30 early aborts; now removed by
+  `RuntimeMaxSec` at the run's deadline plus 30 seconds). Not adopted: exit
+  code 137 assertions in the native allocation tests (any failure is enough
+  there; the Git variants check more).
+- R3 re-review (`review-sonnet`, same session, 2m17s, on `810c025`):
+  `NON_BLOCKING_ONLY`; the release finding is fixed for every reachable path.
+  Adopted in the third and last fix round: when the launcher has already ended
+  and no PID leads to the scope, fd 4 now stays open until systemd has stopped
+  the scope, with a unit test; the ADR's launcher line, the server-death
+  residual and the empty-scope lifetime; a misplaced test comment; this
+  record's live budget line.
 - Live budget, recorded before the first live turn (2026-10-30, 18:57 UTC):
-  candidate `de7d59d`, installed from its packed tarball into a disposable
+  the final candidate commit, installed from its packed tarball into a disposable
   prefix; worker profile `ro-sandboxed` (`deepseek`/`deepseek-flash`,
   `medium`, `shell: "sandboxed"`, delivery off) on a synthetic five-commit
   repository. At most one main run and one restart run per client (Claude
@@ -144,4 +172,11 @@ the test author, Doctor, documentation and records the controller.
   rather than `ENOSPC`, except `/tmp` at 512 MiB.
 - Hosts without a systemd user manager or with `memory` or `pids` not delegated
   lose the sandboxed shell (`sandbox_unavailable`).
+- The 5-second probe deadline now also covers the scope's creation; a slow
+  user manager makes a start fail with `sandbox_unavailable`.
+- If the launcher has ended on its own before bubblewrap reported its child,
+  no PID leads to the scope; fd 4 then stays open until `RuntimeMaxSec`, and
+  a server that dies meanwhile releases that run inside its limited scope.
+- An abort within milliseconds of a start can leave an empty scope listed
+  until the run's deadline plus 30 seconds.
 - #120 is unchanged.
