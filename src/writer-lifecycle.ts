@@ -293,28 +293,30 @@ export async function provisionWriter(ctx: WriterContext, input: {
 
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   baseline: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
+  indexTree: string; tree: string; headTree: string;
 }> {
   ctx = leasedContext(ctx);
   const state = await readWriterState(ctx.home, name);
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
-  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads refs/stash\n${BOUNDARY_GIT} write-tree\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
+  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads refs/stash\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
   const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
   const hash = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-  const head = lines.shift(), baseTree = lines.pop(), headTree = lines.pop(), tree = lines.pop();
-  if (![head, baseTree, headTree, tree].every((value) => value !== undefined && hash.test(value))) throw new LifecycleError("writer_inspect_failed");
+  const head = lines.shift(), baseTree = lines.pop(), headTree = lines.pop(), indexTree = lines.pop(), tree = lines.pop();
+  if (![head, baseTree, headTree, indexTree, tree].every((value) => value !== undefined && hash.test(value))) throw new LifecycleError("writer_inspect_failed");
   const refs = lines.map((line) => {
     const [name, commit, extra] = line.split(" ");
     if (!name || !isSafeRefName(name) || !commit || !hash.test(commit) || extra !== undefined || !(name.startsWith("refs/heads/") || name === "refs/stash")) throw new LifecycleError("writer_inspect_failed");
     return { name, commit };
   });
   return {
-    baseline: head === state.base.commit && refs.length === 1 && refs[0]!.name === state.base.ref && refs[0]!.commit === state.base.commit && tree === baseTree,
-    dirty: tree !== headTree, head: head!, branches: refs.filter(({ name }) => name.startsWith("refs/heads/")),
-    digest: `sha256:${createHash("sha256").update(result.stdout).digest("hex")}`,
+    baseline: head === state.base.commit && refs.length === 1 && refs[0]!.name === state.base.ref && refs[0]!.commit === state.base.commit && tree === baseTree && indexTree === baseTree,
+    dirty: tree !== headTree || indexTree !== headTree, head: head!, branches: refs.filter(({ name }) => name.startsWith("refs/heads/")),
+    indexTree: indexTree!, tree: tree!, headTree: headTree!,
+    digest: `sha256:${createHash("sha256").update("inspect-v2\n").update(result.stdout).digest("hex")}`,
   };
 }
 
@@ -373,12 +375,22 @@ ${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads | wh
   fi
 done
 cp .git/index /tmp/index
+cp .git/index /tmp/staged-index
 export GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/scratch/objects
+staged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)
 ${BOUNDARY_GIT} add -A
 tree=$(${BOUNDARY_GIT} write-tree)
+export GIT_AUTHOR_NAME=pi-writer GIT_AUTHOR_EMAIL=pi-writer@example.invalid
+export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
+if [ "$staged" != "$(${BOUNDARY_GIT} rev-parse 'HEAD^{tree}')" ] && [ "$staged" != "$tree" ]; then
+  commit=$(printf '%s\\n' 'Index collected by pi-session-mcp' | ${BOUNDARY_GIT} commit-tree "$staged" -p HEAD)
+  branch=$(${BOUNDARY_GIT} symbolic-ref --short HEAD || printf '%s' "$4")
+  if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$branch-index" \\
+    || ! ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$branch-index" "$commit" 2>/dev/null; then
+    printf '%s\\n' ref_name_refused
+  fi
+fi
 if [ "$tree" != "$(${BOUNDARY_GIT} rev-parse 'HEAD^{tree}')" ]; then
-  export GIT_AUTHOR_NAME=pi-writer GIT_AUTHOR_EMAIL=pi-writer@example.invalid
-  export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
   commit=$(printf '%s\\n' 'WIP collected by pi-session-mcp' | ${BOUNDARY_GIT} commit-tree "$tree" -p HEAD)
   branch=$(${BOUNDARY_GIT} symbolic-ref --short HEAD || printf '%s' "$4")
   # A taken name, or one that conflicts with an exported branch path, is refused rather than aborting the export.
@@ -426,6 +438,11 @@ fi`;
       // before a digest is recorded.
       for (const sha of [work.head, ...work.branches.map((branch) => branch.commit)]) {
         if (sha === undefined || await git(ctx, ["cat-file", "-e", `${sha}^{commit}`], true) === undefined) {
+          return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
+        }
+      }
+      for (const tree of [work.indexTree, work.tree]) {
+        if (tree !== work.headTree && await git(ctx, ["cat-file", "-e", `${tree}^{tree}`], true) === undefined) {
           return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
         }
       }
