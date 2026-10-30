@@ -2598,6 +2598,55 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.2 pre-release acceptance
+
+`v0.14.2` was accepted on 2026-10-30 from 15:41 to 15:47 UTC on its release
+candidate `e911a6d`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.166.0` and Claude Code `2.1.314`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record.
+
+The patch release ships #198 and #199 (PR #201), #200 (PR #203) and #202
+(PR #204) from `main` at `5acbebb`; the candidate adds only the version, the
+changelog heading and the roadmap lines. The MCP tool contract, result codes
+and configuration schema are unchanged. The #200 source changes were accepted
+on their branch before the merge, see
+[Issue #200 candidate acceptance](#issue-200-candidate-acceptance-2026-10-30);
+#198, #199 and #202 were checked in their pull requests by the full test suite
+and, for #202, the native Podman tests.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    144 files, 4097 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` 8.10.2 finding through `@earendil-works/pi-coding-agent`
+    1.4.0, the latest SDK release, with eight advisories
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 940 files (tarball shasum
+    `775e6de2a6e810839ceb4d8518b8e7c93eae38f3`, identical in three packs). A
+    scan of the unpacked files for private names, hosts and the maintainer's
+    home path found none; the only matches were the public repository owner in
+    links and the already redacted paths of disposable evaluation homes.
+  - Doctor reported `packageVersion` `0.14.2`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke from another fresh prefix
+  reported `smoke_passed` with version `0.14.2`.
+- In every Level 2 run the real client registrations were unchanged and the
+  disposable prefixes were removed.
+- Podman-gated writer tests on the candidate (Podman `6.1.4`): 10 of 10 passed
+  (9 lifecycle tests, including the detached-`HEAD` export of #193, the
+  index-only export of #200 and the stash export of #202, and 1 boundary test).
+- Bubblewrap-gated sandbox tests (`test/sandbox-shell.bwrap.test.ts`, bubblewrap
+  `0.13.1`): 12 of 12 passed, none skipped.
+
+Not established for `0.14.2`: a Level 3 cycle on the release candidate, and the
+published-release Level 2 and upgrades, which follow after publishing.
+
 ### Issue #200 candidate acceptance (2026-10-30)
 
 Recorded on 2026-10-30 for the unreleased branch `fix/writer-index-only-work`
