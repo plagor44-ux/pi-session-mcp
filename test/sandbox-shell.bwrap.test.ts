@@ -129,7 +129,6 @@ const expectNoShellUnits = async (): Promise<void> => {
   await vi.waitFor(async () => { expect(await listShellUnits()).toBe(""); }, { timeout: 10_000, interval: 250 });
 };
 
-/** Asserts the fail-closed contract: rejection, no payload output, and a false probe. */
 /** How many processes have `marker` in their command line. */
 async function processesWith(marker: string): Promise<number> {
   let count = 0;
@@ -140,6 +139,7 @@ async function processesWith(marker: string): Promise<number> {
   return count;
 }
 
+/** Asserts the fail-closed contract: rejection, no payload output, no surviving process, and a false probe. */
 async function expectUnavailable(workspace: string, dependencies: SandboxDependencies): Promise<void> {
   const marker = `PAYLOAD-RAN-${Math.random().toString(36).slice(2)}`;
   const result = await runSandbox(workspace, `echo ${marker}; sleep 5`, { dependencies, timeout: 10 });

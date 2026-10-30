@@ -240,7 +240,7 @@ function harness(overrides: Partial<SandboxDependencies> = {}, info: string | nu
   const dependencies: SandboxDependencies = {
     spawn, trusted: () => true, rootEntries: () => MERGED, gitCommonDir: async () => undefined,
     runtimeDir: () => "/run/user/test", unitName: () => "test-unit",
-    endScope: (pids) => { children.at(-1)?.events.push(`scope:${pids.join(",")}`); },
+    endScope: (pids) => { children.at(-1)?.events.push(`scope:${pids.join(",")}`); return true; },
     readText: scopeFiles(), ...overrides,
   };
   return { children, calls, dependencies };
@@ -513,13 +513,13 @@ describe("endScope", () => {
 
   it("kills the scope once through cgroup.kill and each PID inside it", () => {
     const fake = io({ 4241: `0::${SCOPE}\n`, 4242: `0::${SCOPE}\n` });
-    endScope([4241, 4242], "test-unit", fake.io);
+    expect(endScope([4241, 4242], "test-unit", fake.io)).toBe(true);
     expect(fake.calls).toEqual([`write /sys/fs/cgroup${SCOPE}/cgroup.kill 1`, "kill 4241", "kill 4242"]);
   });
 
   it("finds the scope through the child when the launcher is gone", () => {
     const fake = io({ 4242: `0::${SCOPE}\n` });
-    endScope([4241, 4242], "test-unit", fake.io);
+    expect(endScope([4241, 4242], "test-unit", fake.io)).toBe(true);
     expect(fake.calls).toEqual([`write /sys/fs/cgroup${SCOPE}/cgroup.kill 1`, "kill 4242"]);
   });
 
@@ -536,13 +536,13 @@ describe("endScope", () => {
     ["a cgroup v1 line", "1:name=systemd:/test-unit.scope\n"],
   ])("leaves a PID in %s alone", (_name, cgroup) => {
     const fake = io({ 4241: cgroup });
-    endScope([4241, undefined], "test-unit", fake.io);
+    expect(endScope([4241, undefined], "test-unit", fake.io)).toBe(false);
     expect(fake.calls).toEqual([]);
   });
 
   it("ignores missing, invalid and init PIDs", () => {
     const fake = io({ 1: `0::${SCOPE}\n` });
-    endScope([undefined, 0, 1, 1.5, 999999], "test-unit", fake.io);
+    expect(endScope([undefined, 0, 1, 1.5, 999999], "test-unit", fake.io)).toBe(false);
     expect(fake.calls).toEqual([]);
   });
 });
@@ -616,6 +616,24 @@ describe("limited scope gate", () => {
     released.children[0]!.close(0);
     await expect(second.result).resolves.toEqual({ exitCode: 0 });
     expect(second.output.join("")).toBe("PAYLOAD\n");
+  });
+
+  it("keeps fd 4 open until systemd stops the scope when an ended launcher leaves no scope to end", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let h: ReturnType<typeof harness>;
+      h = harness({ endScope: (pids) => { h.children.at(-1)?.events.push(`scope:${pids.join(",")}`); return false; } }, false);
+      const { result } = run(h.dependencies, { timeout: 10 });
+      await vi.waitFor(() => expect(h.children).toHaveLength(1));
+      h.children[0]!.close(1);
+      await expect(result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,"]);
+      await vi.advanceTimersByTimeAsync((10 + 30) * 1000 - 1);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,", "block-closed"]);
+      expect(h.children[0]!.released).toEqual([]);
+    } finally { vi.useRealTimers(); }
   });
 
   it("gives up a probe whose setup never reports within the deadline", async () => {

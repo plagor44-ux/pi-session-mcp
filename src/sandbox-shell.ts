@@ -184,10 +184,12 @@ const defaultScopeIo: ScopeIo = {
 /**
  * SIGKILLs every process of the scope named `unit`: through the scope's `cgroup.kill`, found from the cgroup of
  * one of `pids`, and each of `pids` that is in that scope. A PID outside the scope is left alone, so a reused PID
- * is never signalled. Synchronous and never throws, so that the caller can close fd 4 right after it.
+ * is never signalled. Synchronous and never throws, so that the caller can close fd 4 right after it. True when
+ * one of `pids` was in the scope and has been signalled.
  */
-export function endScope(pids: readonly (number | undefined)[], unit: string, io: ScopeIo = defaultScopeIo): void {
+export function endScope(pids: readonly (number | undefined)[], unit: string, io: ScopeIo = defaultScopeIo): boolean {
   let scopeKilled = false;
+  let found = false;
   for (const pid of pids) {
     if (pid === undefined || !Number.isInteger(pid) || pid <= 1) continue;
     try {
@@ -196,9 +198,11 @@ export function endScope(pids: readonly (number | undefined)[], unit: string, io
       if (!scopeKilled) {
         try { io.write(`/sys/fs/cgroup${path}/cgroup.kill`, "1"); scopeKilled = true; } catch { /* no cgroup.kill: the PIDs below still end */ }
       }
+      found = true;
       io.kill(pid);
     } catch { /* already gone */ }
   }
+  return found;
 }
 
 /** The part of a child process the sandbox uses; the default is `node:child_process`. */
@@ -221,7 +225,7 @@ export interface SandboxDependencies {
   readonly runtimeDir?: () => string | undefined;
   readonly readText?: (path: string) => Promise<string>;
   readonly unitName?: () => string;
-  readonly endScope?: (pids: readonly (number | undefined)[], unit: string) => void;
+  readonly endScope?: (pids: readonly (number | undefined)[], unit: string) => boolean;
   readonly rootEntries?: () => readonly RootEntry[];
   readonly gitCommonDir?: (workspace: string) => Promise<string | undefined>;
 }
@@ -271,16 +275,20 @@ function start(args: readonly string[], dependencies: SandboxDependencies, deadl
   const block = child.stdio[4] as Writable | undefined;
   let stopped = false;
   let childPid: number | undefined;
+  let ended = false;
   const kill = (): void => {
     if (stopped) return;
     stopped = true;
     try { child.kill("SIGKILL"); } catch { /* already gone */ }
     // bubblewrap's sandbox child waits on its own copy of fd 4 and, while it waits, outlives a killed
     // bubblewrap; end of file on fd 4 would then start the command. End the whole scope first.
-    (dependencies.endScope ?? endScope)([child.pid, childPid], unit);
-    try { block?.destroy(); } catch { /* already closed */ }
+    const found = (dependencies.endScope ?? endScope)([child.pid, childPid], unit);
+    const close = (): void => { try { block?.destroy(); } catch { /* already closed */ } };
+    // A launcher that ended on its own can no longer lead to its scope; a child it left waiting would start on
+    // end of file. Keep fd 4 open until systemd has stopped the scope.
+    if (found || !ended) close();
+    else setTimeout(close, (Math.ceil(deadlineSeconds) + SCOPE_GRACE_SECONDS) * 1000).unref();
   };
-  let ended = false;
   info?.on("error", kill);
   block?.on("error", kill);
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolvePromise, reject) => {

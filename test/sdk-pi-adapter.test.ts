@@ -746,7 +746,7 @@ function workingSandbox(options: { trusted?: boolean; probeExit?: number; spawnE
     gitCommonDir: async () => undefined,
     runtimeDir: () => "/run/user/test",
     unitName: () => "test-unit",
-    endScope: () => undefined,
+    endScope: () => true,
     readText: scopeFile,
     spawn: (_file, args) => {
       spawned.push([...args]);
@@ -903,7 +903,7 @@ describe("protected skill roots and aborted sandbox probes", () => {
     const spawned = deferred<void>();
     const sandbox: SandboxDependencies = {
       trusted: () => true, rootEntries: () => [], gitCommonDir: async () => undefined,
-      runtimeDir: () => "/run/user/test", unitName: () => "test-unit", endScope: () => undefined, readText: scopeFile,
+      runtimeDir: () => "/run/user/test", unitName: () => "test-unit", endScope: () => true, readText: scopeFile,
       // The info fd stays silent, so the probe waits in its setup until the abort.
       spawn: () => (spawned.resolve(), Object.assign(new EventEmitter(), { pid: 4241, stdio: [null, new PassThrough(), new PassThrough(), new PassThrough(), new PassThrough()], stdout: new PassThrough(), stderr: new PassThrough(), kill }) as unknown as SandboxChild),
     };
