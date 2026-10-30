@@ -163,6 +163,29 @@ the test author, Doctor, documentation and records the controller.
   Code with Sonnet 5.5 as controller, Codex with its default model), at most
   four worker turns per main run and none in a restart run, 15 minutes per
   run. No other provider, account or quota is touched.
+- Live attempt 1 on `bef7eef` (19:30 UTC) ran no worker turn: Claude Code got
+  no prompt (the variadic `--allowedTools` option took it), and Codex's start
+  was refused with `thinking_level_unavailable` because `deepseek-flash` does
+  not offer `medium` here, a correct refusal of the test configuration.
+  Budget amendment before attempt 2: `thinkingLevel` `high`, as in the
+  productive `code-deepseek` profile; everything else unchanged.
+- Live attempt 2 (19:32 to 19:50 UTC): Codex passed its main and restart runs
+  (results in the acceptance record). The Claude Code main run hit its
+  15-minute limit after one worker prompt: the operator's installed wake hook,
+  a user-level `PostToolUse` hook that matches the server name
+  `pi-session-mcp`, also matched the test server and held the prompt result
+  in the one-shot run until the limit, because the test server has delivery
+  off. A harness interaction of the disposable setup, not of the candidate.
+  Budget amendment before attempt 3: one more Claude Code main run only, with
+  the test server registered under the name `pi-live` so no installed hook
+  matches; same limits.
+- Live attempt 3 (Claude Code main run only, 19:51 to 19:52 UTC): passed.
+  The live results of both clients are in the
+  [acceptance record](../acceptance.md#issue-195-candidate-acceptance-2026-10-30).
+- Automated security review of `dced50b`: the delayed close passed a delay
+  above Node's timer limit (2^31-1 ms) to `setTimeout`, which fires at once,
+  so a refused run with a long timeout could start. Fixed in `bef7eef` with a
+  chunked timer and a unit test.
 
 ## Remaining risk and limits
 
