@@ -187,8 +187,10 @@ HEAD's tree and the worktree (for example a staged change that the worktree
 reverted) is exported as an extra synthetic `<branch>-index` commit, so work
 that exists only in the index is recovered too; the same name rules apply. An
 index that cannot be evaluated, such as an unmerged conflict, makes inspection
-and collection fail closed and every non-`--discard` cleanup refuse; resolve the
-conflict inside the boundary first. A clean detached HEAD whose commit no branch in
+and collection fail closed and every non-`--discard` cleanup refuse. Such a
+writer is not at its baseline, so it is not admitted to a new session either;
+its work stays in the clone until the operator decides on `--discard`. Have the
+worker resolve or abort a merge before its session ends. A clean detached HEAD whose commit no branch in
 the clone reaches is exported as `<base>-detached` (for example `main-detached`,
 imported as `refs/remotes/writer-<name>/main-detached`); a dirty detached HEAD
 keeps the `<base>-wip` export. A `<base>-detached`, `<branch>-wip` or `<branch>-index` name that
@@ -314,12 +316,12 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `clone_verification_failed` | Clone layout/hook/config redirects unsafe |
 | `writer_state_invalid` | Missing/malformed/mismatched writer state |
 | `writer_state_unreadable` | Writer state cannot safely be read |
-| `writer_inspect_failed` | Contained work inspection failed |
+| `writer_inspect_failed` | Contained work inspection failed, including an index that cannot be evaluated such as an unmerged conflict |
 | `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
-| `writer_collect_failed` | Bundle generation/verification/import failed |
-| `writer_collect_incomplete` | One or more branch names refused; no cleanup authorization |
-| `ref_name_refused` | Unsafe export name or WIP name collision |
-| `nothing_to_collect` | No changed branch or WIP to export |
+| `writer_collect_failed` | Bundle generation/verification/import failed, including an unmerged index |
+| `writer_collect_incomplete` | One or more branch names refused, or a collected commit or tree is missing from the operator checkout; no cleanup authorization |
+| `ref_name_refused` | Unsafe export name, or a `-wip`, `-index` or `-detached` name collision |
+| `nothing_to_collect` | No changed branch, WIP, index or detached commit to export |
 | `writer_collected` | Complete export recorded |
 | `writer_reset_failed` | Reset command or validation failed |
 | `writer_reset` | Persistent clone reset and verified |

@@ -84,8 +84,12 @@ For each container repository whose selected profiles or settings change,
 determine every writer's state using the documented read-only checks:
 Doctor's `writer_dirty` and `writer_uncollected_bundle`, and
 `pi-session-mcp-setup --writer <name> --collect` (dry run).
+Neither proves a clone clean: Doctor reads only `HEAD` and refs, and the dry
+run inspects nothing. The authoritative check is `--remove` without
+`--discard`, which inspects the clone, including its index, and refuses with
+`writer_uncollected` when it holds work.
 If a writer to remove or re-provision has uncollected work or a dirty clone,
-stop and ask before anything goes live. Never run `--collect --apply` in this
+or `--remove` refuses, stop and ask before anything goes live. Never run `--collect --apply` in this
 workflow, and never discard work to get past a refusal.
 
 Stop and report `writer_busy`, `podman_unavailable`, `registration_divergent`

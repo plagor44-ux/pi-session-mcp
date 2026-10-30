@@ -63,7 +63,7 @@ available as profiles:
 | GLM 5.3 (test plan, counter-checks) | `review-glm` (`zai-glm-5-3`) | available |
 | Grok 4.7 (adversarial review) | `review-glm` | not used: xAI requests fail with HTTP 402 since 2026-10-25 |
 | Mistral Large 4 (release evidence, docs) | controller with a Claude runner subagent | the evidence needed only local commands; the controller is the only docs editor |
-| Sonnet 5.5 (final integration review) | `review-sonnet` (`claude-sonnet-5-5`) | available |
+| Sonnet 5.5 (final integration review) | a read-only Claude Code subagent on `claude-sonnet-5-5` | used instead of `review-sonnet`, because a read-only Pi worker reads only the workspace on `main`, not the branch worktree |
 
 agy (Antigravity CLI, Gemini) was not used: the controller's planning call was
 declined in this session, so the controller planned the packages and the
@@ -78,7 +78,7 @@ had one implementer, and `test/writer-collect-real-git.test.ts` one author.
 | T1 | Fix in inspection, collection and the digest | `pi-session-mcp` writer, `code` | `src/writer-lifecycle.ts`, unit tests and fakes |
 | T2 | Real-Git regression matrix | `pi-session-mcp` writer, `code-deepseek` | `test/writer-collect-real-git.test.ts` |
 | R1 | Adversarial review of the integrated diff | `review-glm` | none |
-| R2 | Final integration review | `review-sonnet` | none |
+| R2 | Final integration review | Sonnet 5.5 subagent, read-only | none |
 | A | Published-release Level 2 of 0.14.1, candidate Level 1 and 2, native Podman | controller, runner subagent | records |
 
 ## Progress log
@@ -116,6 +116,22 @@ had one implementer, and `test/writer-collect-real-git.test.ts` one author.
   - Fail closed, recorded as limits: a clone configured for a split index makes
     `add -A` fail on the read-only clone; a worker branch named
     `<branch>-index` makes the export refuse with `ref_name_refused`.
+- R2 (Sonnet 5.5, read-only, on the whole branch at `4670264`):
+  `NON_BLOCKING_ONLY`, no code defect. Fixed by the controller:
+  - The test for an index-only change after a collection also changed the
+    worktree, so it did not pin that the digest covers the index tree. It now
+    stages a second blob with `update-index --cacheinfo` and leaves the
+    worktree unchanged; with a digest that omits the index line it fails, with
+    the fix it passes.
+  - A test for a taken and a path-conflicting `<branch>-index` name.
+  - The code table in execution modes, the `pi-session-profiles` skill (Doctor
+    and the `--collect` dry run do not prove a clone clean; `--remove` without
+    `--discard` does), the unmerged-index consequence, the merge note and a
+    wrong direction in the acceptance record.
+  - Not changed: the verbatim issue reproduction stays as written although the
+    stricter collect, finish and remove test covers more; Doctor's
+    `writer_dirty` stays a documented offline ref-only hint (a maintainer
+    call against the issue's criterion 3).
 
 ## Checks
 
@@ -169,7 +185,14 @@ writer has to be collected again, which fails safe. The source change itself is
 reverted by reverting its commits.
 
 Merge order with #201: both change `src/writer-lifecycle.ts` (#201 replaces the
-recursive removal in `removeWriter`), and #201's
-`test/writer-models-store.test.ts` fakes the old three-tree inspection output.
-Whichever pull request merges second must take both changes and add the index
-tree line to that fake.
+recursive removal in `removeWriter`), `CHANGELOG.md` (`Unreleased`) and
+`docs/execution-modes.md`, and #201's `test/writer-models-store.test.ts` fakes
+the old three-tree inspection output. Whichever pull request merges second must
+take both sides and add the index tree line to that fake.
+
+Unmerged index: a writer whose index holds a merge conflict can no longer be
+collected, and pool admission refuses it because it is not at its baseline; its
+work stays in the clone until the operator explicitly decides on `--discard`.
+Before this change `git add -A` collected such a state as `-wip` with conflict
+markers. Exporting the worktree in that case without recording a digest would
+keep it recoverable; that is a possible follow-up, not part of this change.

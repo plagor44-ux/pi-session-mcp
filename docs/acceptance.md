@@ -2648,7 +2648,7 @@ The npm package records `gitHead` `0753fad`, the head of #197, whose tree
 - `pi-session-mcp@0.14.1` on npm: 933 files, shasum
   `886a20688a44a967d1f917e9dad5461e83fbb5e5`; `npm pack` of the tag clone gives
   the same shasum and file count. It differs from the candidate's
-  `47cf66a3856530112c11095d07cb05b7ab9892f4` above because `0753fad` adds the
+  `47cf66a3856530112c11095d07cb05b7ab9892f4` below because `0753fad` adds the
   pre-release record to the packaged `docs/acceptance.md`; no other file
   changed.
 - Published release, Level 2 on the tag clone, 08:29 to 08:31 UTC: 160 of 160
