@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { Readable, Writable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 import { constants as osConstants } from "node:os";
 import { lstatSync, readlinkSync } from "node:fs";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
@@ -10,35 +10,6 @@ import { isTrustedSystemBinary } from "./setup-platform.js";
 
 /** The only bubblewrap binary the shell uses: a fixed path, never a `PATH` lookup. */
 export const BWRAP_PATH = "/usr/bin/bwrap";
-export const SYSTEMD_RUN_PATH = "/usr/bin/systemd-run";
-export const SANDBOX_MEMORY_BYTES = 1_073_741_824;
-export const SANDBOX_TASKS = 128;
-export interface SandboxLimits { readonly memoryBytes: number; readonly tasks: number; }
-export const SANDBOX_LIMITS: SandboxLimits = { memoryBytes: SANDBOX_MEMORY_BYTES, tasks: SANDBOX_TASKS };
-
-export function scopeArgs(unit: string, limits: SandboxLimits, bwrapArgs: readonly string[]): string[] {
-  return ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "-p", `MemoryMax=${limits.memoryBytes}`, "-p", "MemorySwapMax=0", "-p", `TasksMax=${limits.tasks}`, "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", ...bwrapArgs];
-}
-
-export async function verifyScope(input: { pid: number; childPid: number; unit: string; limits: SandboxLimits }, readText: (path: string) => Promise<string>): Promise<boolean> {
-  try {
-    const mounts = await readText("/proc/self/mounts");
-    if (!mounts.split("\n").some((line) => { const fields = line.trim().split(/\s+/); return fields[1] === "/sys/fs/cgroup" && fields[2] === "cgroup2"; })) return false;
-    const cgroup = async (pid: string): Promise<string | undefined> => {
-      const text = (await readText(`/proc/${pid}/cgroup`)).replace(/\n$/, "");
-      return /^0::([^\n]+)$/.exec(text)?.[1];
-    };
-    const path = await cgroup(String(input.pid));
-    const self = await cgroup("self");
-    if (path === undefined || self === undefined || path !== await cgroup(String(input.childPid)) || path === self) return false;
-    const segments = path.split("/");
-    if (segments[0] !== "" || segments.slice(1).some((segment) => !segment || segment === "." || segment === "..") || segments.at(-1) !== `${input.unit}.scope`) return false;
-    const base = `/sys/fs/cgroup${path}`;
-    return (await readText(`${base}/memory.max`)).trim() === String(input.limits.memoryBytes)
-      && (await readText(`${base}/memory.swap.max`)).trim() === "0"
-      && (await readText(`${base}/pids.max`)).trim() === String(input.limits.tasks);
-  } catch { return false; }
-}
 export const SANDBOX_BASH_PATH = "/usr/bin/bash";
 const SANDBOX_TRUE_PATH = "/usr/bin/true";
 const SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin";
@@ -51,6 +22,14 @@ export const DEFAULT_COMMAND_TIMEOUT_SECONDS = 600;
 /** Size limit of the sandbox's tmpfs `/tmp`, in bytes (512 MiB). */
 export const SANDBOX_TMP_BYTES = 536_870_912;
 export const SANDBOX_UNAVAILABLE_MESSAGE = "Read-only shell sandbox is not available";
+/** The only launcher of the limited scope: a fixed path, never a `PATH` lookup. */
+export const SYSTEMD_RUN_PATH = "/usr/bin/systemd-run";
+/** `memory.max` of each run's scope (1 GiB); the overlays and tmpfs mounts count against it. Swap is 0. */
+export const SANDBOX_MEMORY_BYTES = 1_073_741_824;
+/** `pids.max` of each run's scope: processes and threads of bubblewrap and all its descendants. */
+export const SANDBOX_TASKS = 128;
+export interface SandboxLimits { readonly memoryBytes: number; readonly tasks: number; }
+export const SANDBOX_LIMITS: SandboxLimits = { memoryBytes: SANDBOX_MEMORY_BYTES, tasks: SANDBOX_TASKS };
 const GITFILE_LIMIT_BYTES = 4096;
 
 export type RootEntry =
@@ -86,6 +65,14 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
   if (input.gitCommonDir !== undefined) args.push("--overlay-src", input.gitCommonDir, "--tmp-overlay", input.gitCommonDir);
   args.push("--chdir", input.cwd, "--", ...input.argv);
   return args;
+}
+
+/**
+ * The `systemd-run` arguments of one run: a transient user scope with the fixed limits, whose bubblewrap
+ * reports its child PID on fd 3 and holds the command until a byte arrives on fd 4. Pure.
+ */
+export function scopeArgs(unit: string, limits: SandboxLimits, bwrapArgs: readonly string[]): string[] {
+  return ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "-p", `MemoryMax=${limits.memoryBytes}`, "-p", "MemorySwapMax=0", "-p", `TasksMax=${limits.tasks}`, "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", ...bwrapArgs];
 }
 
 /** The host's `/bin`, `/lib`, `/lib64` and `/sbin`: a symlink is recreated, a directory bound, an absent entry skipped. */
@@ -139,6 +126,30 @@ export async function resolveWorktreeGitDir(workspace: string): Promise<string |
     if (!(await isFile(join(common, "HEAD"))) || !(await isDirectory(join(common, "objects"))) || !(await isDirectory(join(common, "refs")))) return undefined;
     return common;
   } catch { return undefined; }
+}
+
+/**
+ * Whether both sandbox processes are in the one cgroup v2 scope named `unit` (not the server's own) and that
+ * scope's effective `memory.max`, `memory.swap.max` and `pids.max` equal the limits. Never throws.
+ */
+export async function verifyScope(input: { pid: number; childPid: number; unit: string; limits: SandboxLimits }, readText: (path: string) => Promise<string>): Promise<boolean> {
+  try {
+    const mounts = await readText("/proc/self/mounts");
+    if (!mounts.split("\n").some((line) => { const fields = line.trim().split(/\s+/); return fields[1] === "/sys/fs/cgroup" && fields[2] === "cgroup2"; })) return false;
+    const cgroup = async (pid: string): Promise<string | undefined> => {
+      const text = (await readText(`/proc/${pid}/cgroup`)).replace(/\n$/, "");
+      return /^0::([^\n]+)$/.exec(text)?.[1];
+    };
+    const path = await cgroup(String(input.pid));
+    const self = await cgroup("self");
+    if (path === undefined || self === undefined || path !== await cgroup(String(input.childPid)) || path === self) return false;
+    const segments = path.split("/");
+    if (segments[0] !== "" || segments.slice(1).some((segment) => !segment || segment === "." || segment === "..") || segments.at(-1) !== `${input.unit}.scope`) return false;
+    const base = `/sys/fs/cgroup${path}`;
+    return (await readText(`${base}/memory.max`)).trim() === String(input.limits.memoryBytes)
+      && (await readText(`${base}/memory.swap.max`)).trim() === "0"
+      && (await readText(`${base}/pids.max`)).trim() === String(input.limits.tasks);
+  } catch { return false; }
 }
 
 /** The part of a child process the sandbox uses; the default is `node:child_process`. */
@@ -328,13 +339,16 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
         signal?.addEventListener("abort", onAbort, { once: true });
         if (signal?.aborted) onAbort();
         const ready = await Promise.race([gate.then(() => true), closed.then(() => false), cancelled]);
-        if (!ready) { kill(); throw new Error(SANDBOX_UNAVAILABLE_MESSAGE); }
+        if (!ready) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
         const outcome = await closed;
         if (signal?.aborted) throw new Error("aborted");
         if (timedOut) throw new Error(`timeout:${timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS}`);
         return { exitCode: outcome.code ?? (outcome.signal ? 128 + (osConstants.signals[outcome.signal] ?? 0) : 1) };
       } catch (error) {
         kill();
+        // An abort or timeout during setup is reported as such, not as an unavailable sandbox.
+        if (signal?.aborted) throw new Error("aborted");
+        if (timedOut) throw new Error(`timeout:${timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS}`);
         throw error;
       } finally {
         if (timer) clearTimeout(timer);
