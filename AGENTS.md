@@ -21,8 +21,15 @@
   refreshes host OAuth credentials through the package-root `ModelRuntime`
   (`getAuth` only, no session, injectable in tests). A second narrow exception
   is the offline model catalog: `getProviders`, `getModels`, and
-  `checkAuth` (reduced to a boolean) only, without network access or refresh,
-  behind injectable `ModelCatalog`. Do not widen these exceptions.
+  `checkAuth` (reduced to a boolean) only, behind injectable `ModelCatalog`.
+  Its runtime is created with `refreshOnCreate: true` and
+  `allowModelNetwork: false`: an offline restore of the catalog Pi persisted
+  earlier (`models-store.json`). It reads stored credential records and
+  resolves API-key values in-process, as `checkAuth` does, but makes no
+  network request, no credential refresh and no `getAuth`. The session
+  adapter keeps `refreshOnCreate: false` and restores that catalog only for
+  the selected provider, offline and within its auth deadline
+  (maintainer-approved 2026-10-30, #199). Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be

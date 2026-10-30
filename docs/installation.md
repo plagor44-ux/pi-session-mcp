@@ -105,6 +105,15 @@ Providers registered only by Pi extensions are not listed; the report includes
 that note. Invalid catalog ids are omitted and counted in `omittedIds`.
 Catalog creation failures report `catalog_unavailable`.
 
+The list includes the models in the catalog overlay that Pi persisted earlier
+(`models-store.json` in Pi's agent directory, written when Pi refreshes its
+model catalogs), restored offline. Pi Session MCP makes no request to refresh
+it: run Pi once so that it refreshes its catalogs, and a model that only the
+refreshed catalog offers becomes available to `--list-models`,
+`--probe-profile` and sessions alike. Without that file only the models
+shipped with the Pi SDK are listed. (ADR 0014 describes the original design
+with a catalog that is created without this restore.)
+
 With `PI_SESSION_MCP_CONFIG` already set to the configuration to check:
 
 ```bash

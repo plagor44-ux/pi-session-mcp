@@ -119,6 +119,11 @@ not selected by tool prefix. Their private state lives under
 `$HOME/.local/state/pi-session-mcp/writers/<name>/`: `clone`, `agent`, `config`,
 `bundles`, optional `go`, `wrapper.sh` and `state.json`. This lifecycle metadata
 is distinct from in-memory MCP sessions; it does not implement session resume.
+The writer's `agent` directory also receives a byte copy of the host's persisted
+Pi model catalog (`models-store.json`, catalog data and no credentials) at
+provisioning, reset, recreate and each launch, so that a writer resolves the same
+models as the host. A missing, linked or oversized host file is skipped and the
+writer keeps the SDK's shipped model list.
 Each clone is made via a bundle, with no hardlinks to the operator's repository.
 The workspace records a short default `base` in its container entry, selected
 by `--base` or origin's symbolic HEAD, falling back to local main. Repeating a
@@ -215,7 +220,7 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 | `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files, and ignored files with `--clean all`; falls back to recreation if post-reset verification fails |
 | `--recreate --apply` | Rebuild clone and agent copy from the workspace default base, retaining image/settings |
 | `--finish --apply` | Collect, then reset persistent / recreate ephemeral on the workspace default base |
-| `--remove` | Explicit mutation: unregister owned registrations before removing writer state |
+| `--remove` | Explicit mutation: unregister owned registrations before removing writer state; read-only directories inside the writer root (such as Go's module cache) are made removable first, and `state.json` is removed last |
 | `--verify` | Doctor and bounded relay-path MCP handshake/tools/list/capabilities; verify the host registration with client-target verify too; no session or provider request |
 
 Other than explicit `--remove` and `--verify`, omitting apply only plans.
