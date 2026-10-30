@@ -14,7 +14,7 @@ import { promisify } from "node:util";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
   BWRAP_PATH, createSandboxedBashOperations, probeSandbox, sandboxBinaryTrusted,
-  SANDBOX_LIMITS, SANDBOX_MEMORY_BYTES, SANDBOX_TASKS, SANDBOX_UNAVAILABLE_MESSAGE, SYSTEMD_RUN_PATH,
+  SANDBOX_LIMITS, SANDBOX_MEMORY_BYTES, SANDBOX_TASKS, SANDBOX_TMP_BYTES, SANDBOX_UNAVAILABLE_MESSAGE, SYSTEMD_RUN_PATH,
   type SandboxDependencies, type SandboxLimits,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -327,7 +327,8 @@ describe.skipIf(!available)("real bubblewrap sandbox", () => {
     it.skipIf(!pythonAvailable)("ends a Python allocation above the memory limit while a default-limit command succeeds", async () => {
       const workspace = await temporaryRoot("sandbox-real-limits-memory-python-");
       const [allocated, sentinel] = await Promise.all([
-        runSandbox(workspace, 'python3 -c "b = bytearray(200 * 1024 * 1024)"', { dependencies: { limits: SMALL_MEMORY }, timeout: 30 }),
+        // Multiplying bytes writes every page; a zeroed bytearray would stay unbacked and never be charged.
+        runSandbox(workspace, 'python3 -c "b = b\'x\' * (200 * 1024 * 1024); print(len(b))"', { dependencies: { limits: SMALL_MEMORY }, timeout: 30 }),
         runSandbox(workspace, "sleep 1; echo sentinel-ok", { timeout: 30 }),
       ]);
       expect(okRun(allocated).exitCode).not.toBe(0);
@@ -426,9 +427,12 @@ describe.skipIf(!available)("real bubblewrap sandbox", () => {
 
     it("keeps the temporary filesystem bound under the default limits", async () => {
       const workspace = await temporaryRoot("sandbox-real-limits-tmp-");
-      const result = okRun(await runSandbox(workspace, "head -c 600000000 /dev/zero > /tmp/big 2>/tmp/head.err; echo write=$?; cat /tmp/head.err; echo still-running", { timeout: 60 }));
+      // The error goes to the tool output: a file in the full /tmp could not hold it.
+      const result = okRun(await runSandbox(workspace, "head -c 600000000 /dev/zero > /tmp/big; echo write=$?; echo size=$(stat -c %s /tmp/big); echo still-running", { timeout: 60 }));
       expect(result.exitCode).toBe(0);
       expect(result.output).toContain("No space left on device");
+      expect(result.output).toContain("write=1");
+      expect(Number(/size=(\d+)/.exec(result.output)?.[1])).toBeLessThanOrEqual(SANDBOX_TMP_BYTES);
       expect(result.output).toContain("still-running");
     }, 60_000);
 
