@@ -204,7 +204,10 @@ runs only after the server has verified that the limits are in force.
   `memory.swap.max` and `pids.max` of that cgroup. Only when all three equal
   the fixed values does it release the command. On any other outcome, also on
   abort or timeout during this phase, it kills bubblewrap before it closes
-  fd 4 (end of file on fd 4 would release bubblewrap) and the run fails.
+  fd 4 (end of file on fd 4 would release bubblewrap) and the run fails: the
+  probe reports `false`, and a command fails with the unavailable message, or
+  with its usual abort or timeout error when the client aborted it or its
+  timeout passed during that phase.
 - Fixed binaries: `/usr/bin/systemd-run` must be a trusted system binary like
   `/usr/bin/bwrap`; there is no `PATH` lookup. The user manager is reached
   through `/run/user/<uid>`, derived from the server's UID and accepted only as

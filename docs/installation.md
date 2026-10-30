@@ -77,7 +77,9 @@ the same arguments.
   client that passes no `XDG_RUNTIME_DIR` is fine), a trusted
   `/usr/bin/systemd-run`, and cgroup v2 with the `memory` and `pids`
   controllers delegated to the user manager (check with
-  `cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control`).
+  `cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control`),
+  with swap accounting enabled in the kernel so that each scope has a
+  `memory.swap.max` file.
   Every command runs in its own transient scope limited to 1 GiB memory
   without swap and 128 processes and threads; the overlays, `/tmp` and the
   sandbox's other tmpfs count against that memory. Without these the probe
