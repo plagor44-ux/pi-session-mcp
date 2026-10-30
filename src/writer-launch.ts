@@ -11,6 +11,7 @@ import { ensureWriterAbsent, writerContainerName } from "./writer-fence.js";
 import { createProcessRunner } from "./setup-process.js";
 import { ensureWriterEventsDirectory, podmanInfo, serveArgs } from "./writer-boundary.js";
 import { expiresWithin, type HostCredentialRefresh, REFRESH_INTERVAL_MS, REFRESH_THRESHOLD_MINUTES, refreshHostCredential, selectedOAuthProviders, selectBoundaryCredentials, writeBoundaryCredentials } from "./writer-credentials.js";
+import { copyModelsStore, hostModelsStorePath } from "./writer-models-store.js";
 import { currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerEventDeliveryEnabled, writerPaths } from "./writer-state.js";
 export { currentAcceptanceFingerprint } from "./writer-state.js";
 export { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
@@ -29,6 +30,8 @@ export interface LaunchDependencies {
   now(): number;
   /** Warms up one host OAuth credential through Pi's locked store; defaults to the SDK refresh, tests inject a fake. */
   warmupHostCredential?: (input: HostCredentialRefresh) => Promise<void>;
+  /** The host's persisted Pi model catalog copied into the writer's agent directory; defaults to the host agent directory below `home`. */
+  modelsStorePath?: string;
   setInterval(callback: () => void, ms: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
 }
@@ -106,6 +109,8 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
   };
   const enabled = deps.env.PI_WRITER_NO_CREDENTIAL_REFRESH !== "1";
   try { if (enabled) await refresh(); } catch { return refuse("writer_not_ready"); }
+  // Best effort: without the host's persisted catalog the writer's Pi keeps the static model list.
+  await copyModelsStore(deps.modelsStorePath ?? hostModelsStorePath(deps.home), paths.agent);
   const command = argv.length > 1 ? argv.slice(1) : ["node", "/opt/pi-session-mcp/dist/main.js"];
   let child: ChildProcess;
   try { child = deps.spawnPodman(serveArgs(paths, state, command, deps.releaseRoot, eventsDir, { name }), [lease.fd]); }

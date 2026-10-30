@@ -18,6 +18,22 @@
   cleanup; collect a writer once more before resetting or removing it. Pool
   admission was already index-aware through the in-boundary `git status`
   probe, and Doctor's `writer_dirty` stays an offline ref-only hint.
+- `--list-models`, `--probe-profile` and sessions now see the models of the
+  catalog overlay that Pi persisted earlier (`models-store.json`), restored
+  offline: no network request and no credential refresh. The catalog restores
+  it at creation; a session restores it for its selected provider only, within
+  the existing auth deadline. Writers receive a byte copy of the host's
+  persisted catalog in their private agent directory at provisioning, reset,
+  recreate and launch; without a host file the copy is removed. Before, a model
+  that only Pi's refreshed catalog offered failed with `probe_model_unknown` or
+  `unknown_model`
+  ([#199](https://github.com/plagor44-ux/pi-session-mcp/issues/199)).
+- `--writer <name> --remove`, provisioning restarts and recreation now remove a
+  writer tree that contains read-only directories, such as the Go module cache
+  of a writer with `--cache go`. Before, removal failed with
+  `writer_operation_failed` after deleting `state.json`, which left a writer
+  that setup could no longer address; `state.json` is now removed last
+  ([#198](https://github.com/plagor44-ux/pi-session-mcp/issues/198)).
 
 ## 0.14.1 — 2026-10-30
 

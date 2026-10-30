@@ -187,8 +187,9 @@ reverted by reverting its commits.
 Merge order with #201: both change `src/writer-lifecycle.ts` (#201 replaces the
 recursive removal in `removeWriter`), `CHANGELOG.md` (`Unreleased`) and
 `docs/execution-modes.md`, and #201's `test/writer-models-store.test.ts` fakes
-the old three-tree inspection output. Whichever pull request merges second must
-take both sides and add the index tree line to that fake.
+the old three-tree inspection output. #201 merged first; the merge of `main`
+into this branch keeps both `Unreleased` entries and adds the index tree line
+to that fake.
 
 Unmerged index: a writer whose index holds a merge conflict can no longer be
 collected, and pool admission refuses it because it is not at its baseline; its

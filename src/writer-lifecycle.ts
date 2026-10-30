@@ -5,6 +5,8 @@ import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { writerLimits } from "./writer-limits.js";
+import { removeWriterTree } from "./writer-tree-removal.js";
+import { copyModelsStore, hostModelsStorePath } from "./writer-models-store.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
@@ -20,7 +22,10 @@ export interface WriterContext {
   checkout: string;
   alias: string;
   leaseFd?: number;
+  /** The host's persisted Pi model catalog copied into writers; defaults to the host agent directory below `home`. Tests inject it. */
+  modelsStorePath?: string;
 }
+const modelsStoreSource = (ctx: WriterContext): string => ctx.modelsStorePath ?? hostModelsStorePath(ctx.home);
 function leasedContext(ctx: WriterContext): WriterContext {
   if (ctx.leaseFd === undefined) return ctx;
   const runner = ctx.runner;
@@ -266,7 +271,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
       }
     }
-    if (restart || existing?.phase === "provisioning") await rm(paths.root, { recursive: true, force: true });
+    if (restart || existing?.phase === "provisioning") await removeWriterTree(paths.root);
     // With spool delivery the spool directory exists from provisioning on: launch would otherwise add it to the
     // writer root, a host directory the acceptance harness digests around its own first launch.
     const spool = config.events?.delivery === "spool" ? [paths.events] : [];
@@ -285,6 +290,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
     await jsonFile(join(paths.config, "execution-modes.json"), { schemaVersion: 1, workspaces: { [ctx.alias]: { mode: "host", acceptHostWrites: true } } });
     await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: commit });
     await jsonFile(join(paths.agent, "auth.json"), {});
+    await copyModelsStore(modelsStoreSource(ctx), paths.agent);
     await writeFile(paths.wrapper, renderWrapper(ctx.nodePath, ctx.releaseRoot, name), { mode: 0o700, flag: "wx" });
     await writeWriterState(ctx.home, name, { ...state, phase: "not_ready" });
     return { code: "writer_provisioned", status: "ok" };
@@ -345,6 +351,7 @@ async function refreshPrivateFiles(ctx: WriterContext, name: string, state: Writ
   for (const path of [join(paths.config, "writer-guard.json"), join(paths.agent, "auth.json")]) await rm(path, { force: true });
   await jsonFile(join(paths.config, "writer-guard.json"), { schemaVersion: 1, workspace: ctx.alias, baseRef: state.base.ref, baseCommit: state.base.commit });
   await jsonFile(join(paths.agent, "auth.json"), {});
+  await copyModelsStore(modelsStoreSource(ctx), paths.agent);
 }
 
 export type CollectOutcome = WriterOutcome & {
@@ -461,7 +468,7 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
   const next = { ...retained, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
   await writeWriterState(ctx.home, name, { ...next, phase: "provisioning" });
   for (const path of [paths.clone, paths.agent]) {
-    await rm(path, { recursive: true, force: true });
+    await removeWriterTree(path);
     await privateDirectory(path);
   }
   await cloneFromBundle(ctx, paths, state.imageId, base, remote, state.tags);
@@ -535,7 +542,7 @@ export async function removeWriter(ctx: WriterContext, name: string, opts: { dis
       const work = await inspectWork(ctx, name);
       if (!work.baseline && state.collected?.digest !== work.digest) throw new LifecycleError("writer_uncollected");
     }
-    await rm(paths.root, { recursive: true, force: true });
+    await removeWriterTree(paths.root);
     return { code: "writer_removed", status: "ok" };
   } catch (error) { return failure(error); }
 }

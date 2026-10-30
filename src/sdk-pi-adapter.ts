@@ -417,6 +417,12 @@ export async function createPhase0ResourceLoader(cwd: string, skills: readonly S
   return { resourceLoader, settingsManager };
 }
 
+/**
+ * Created without the refresh-time availability pass, which would read and resolve every provider's credential. Pi's persisted
+ * catalog is restored per session for the selected provider only (`resolveVerifiedModel`). The extension path uses the same factory.
+ */
+export const defaultModelRuntimeFactory = (): Promise<ModelRuntime> => ModelRuntime.create({ refreshOnCreate: false });
+
 export class SdkPiSessionAdapter implements PiSessionAdapter {
   private runtimePromise: Promise<ModelRuntime> | undefined;
   private readonly modelRuntimeFactory: () => Promise<ModelRuntime>;
@@ -429,7 +435,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
   private readonly protectedReadPaths: readonly string[];
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
-    this.modelRuntimeFactory = options.modelRuntimeFactory ?? (() => ModelRuntime.create({ refreshOnCreate: false }));
+    this.modelRuntimeFactory = options.modelRuntimeFactory ?? defaultModelRuntimeFactory;
     this.createSession = options.createSession ?? createAgentSession;
     this.diagnosticSink = options.diagnosticSink ?? (() => undefined);
     this.mcpConnectionFactory = options.mcpConnectionFactory ?? createStdioMcpConnection;
@@ -671,6 +677,11 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "provider", "pi_session_creation_failed");
     }
     if (!provider) throw this.failure(executionProfile, "provider", "unknown_provider");
+
+    // Restores the catalog Pi persisted (the pi.dev overlay) for this provider only, offline and bounded (#199). Best effort:
+    // on failure the shipped models remain, and the checks below decide.
+    await withAuthDeadline((signal) => runtime.refresh({ allowNetwork: false, providers: [executionProfile.provider], signal }))
+      .catch(() => undefined);
 
     let model: SdkModel | undefined;
     try {
