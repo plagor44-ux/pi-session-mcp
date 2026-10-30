@@ -42,7 +42,7 @@ async function fixture(remote = "git@github.com:o/r.git", identity: readonly str
         phases.push((await readWriterState(home, "repo-w1"))!.phase);
         await mkdir(join(paths.clone, ".git/hooks"), { recursive: true });
         await writeFile(join(paths.clone, ".git/config"), "");
-      } else stdout = workOutput ?? `${commit}\nrefs/heads/main ${commit}\n${dirty ? "d".repeat(40) : tree}\n${tree}\n${tree}\n`;
+      } else stdout = workOutput ?? `${commit}\nrefs/heads/main ${commit}\n${dirty ? "d".repeat(40) : tree}\n${tree}\n${tree}\n${tree}\n`;
     }
     return { exitCode: 0, stdout, stderr: "" };
   } };
@@ -228,9 +228,9 @@ it("a missing local image writes nothing", async () => {
   await expect(lstat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 });
 it.each([
-  ["extra branch", `${commit}\nrefs/heads/main ${commit}\nrefs/heads/feature ${commit}\n${tree}\n${tree}\n${tree}\n`],
-  ["stash", `${commit}\nrefs/heads/main ${commit}\nrefs/stash ${commit}\n${tree}\n${tree}\n${tree}\n`],
-  ["moved HEAD", `${"e".repeat(40)}\nrefs/heads/main ${"e".repeat(40)}\n${tree}\n${tree}\n${tree}\n`],
+  ["extra branch", `${commit}\nrefs/heads/main ${commit}\nrefs/heads/feature ${commit}\n${tree}\n${tree}\n${tree}\n${tree}\n`],
+  ["stash", `${commit}\nrefs/heads/main ${commit}\nrefs/stash ${commit}\n${tree}\n${tree}\n${tree}\n${tree}\n`],
+  ["moved HEAD", `${"e".repeat(40)}\nrefs/heads/main ${"e".repeat(40)}\n${tree}\n${tree}\n${tree}\n${tree}\n`],
 ])("does not treat %s as baseline", async (_label, output) => {
   const f = await fixture(); await provisionWriter(f.ctx, { index: 1, settings, rawConfig });
   f.work(output);

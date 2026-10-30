@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
-import { collectWriter, finishWriter, provisionWriter, recreateWriter, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
+import { collectWriter, finishWriter, inspectWork, provisionWriter, recreateWriter, removeWriter, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -39,7 +40,7 @@ async function fixture() {
         if (collision) stdout += "ref_name_refused\n";
       }
       else if (script.includes("stash clear")) { if (!badReset) dirty = false; }
-      else stdout = `${commit}\n${(await readWriterState(home, "repo-w1"))!.base.ref} ${commit}\n${dirty ? (changed ? "e" : "d").repeat(40) : tree}\n${tree}\n${tree}\n`;
+      else stdout = `${commit}\n${(await readWriterState(home, "repo-w1"))!.base.ref} ${commit}\n${dirty ? (changed ? "e" : "d").repeat(40) : tree}\n${tree}\n${tree}\n${tree}\n`;
     }
     return { exitCode: 0, stdout, stderr: "" };
   } };
@@ -209,6 +210,43 @@ it("checks clone redirects before any collect runner call", async () => {
   const start = f.calls.length;
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ code: "clone_verification_failed", status: "failed", refs: [] });
   expect(f.calls).toHaveLength(start);
+});
+function inspectOutput(f: Awaited<ReturnType<typeof fixture>>, stdout: string) {
+  const runner = f.ctx.runner;
+  f.ctx.runner = { run: (command, args, signal, options) => command === "podman" && args.some((arg) => arg.includes("mkdir /tmp/objects"))
+    ? Promise.resolve({ exitCode: 0, stdout, stderr: "" }) : runner.run(command, args, signal, options) };
+}
+it("index-only work is dirty, not baseline, and cannot be removed without collection", async () => {
+  const f = await fixture(); await provision(f);
+  const indexTree = "f".repeat(40);
+  inspectOutput(f, `${commit}\nrefs/heads/main ${commit}\n${tree}\n${indexTree}\n${tree}\n${tree}\n`);
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, dirty: true, indexTree, tree, headTree: tree });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+});
+it("a digest without the inspection version tag cannot authorize removal", async () => {
+  const f = await fixture(); await provision(f);
+  const stdout = `${commit}\nrefs/heads/main ${commit}\n${tree}\n${"f".repeat(40)}\n${tree}\n${tree}\n`;
+  inspectOutput(f, stdout);
+  const digest = `sha256:${createHash("sha256").update(stdout).digest("hex")}`;
+  await writeWriterState(f.ctx.home, "repo-w1", { ...(await readWriterState(f.ctx.home, "repo-w1"))!, collected: { digest, at: "now" } });
+  expect((await inspectWork(f.ctx, "repo-w1")).digest).not.toBe(digest);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+});
+it.each(["", "not-a-tree\n"])("fails closed on a missing or invalid staged-tree line (%s)", async (staged) => {
+  const f = await fixture(); await provision(f);
+  inspectOutput(f, `${commit}\nrefs/heads/main ${commit}\n${tree}\n${staged}${tree}\n${tree}\n`);
+  await expect(inspectWork(f.ctx, "repo-w1")).rejects.toMatchObject({ code: "writer_inspect_failed" });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_inspect_failed" });
+});
+it.each(["index", "worktree"])("records no digest when the collected %s tree is missing from the operator checkout", async (missing) => {
+  const f = await fixture(); await provision(f);
+  const indexTree = "f".repeat(40), worktree = "d".repeat(40);
+  inspectOutput(f, `${commit}\nrefs/heads/main ${commit}\n${worktree}\n${indexTree}\n${tree}\n${tree}\n`);
+  const runner = f.ctx.runner, missingTree = missing === "index" ? indexTree : worktree;
+  f.ctx.runner = { run: (command, args, signal, options) => command === "git" && args.includes("cat-file") && args.includes(`${missingTree}^{tree}`)
+    ? Promise.resolve({ exitCode: 1, stdout: "", stderr: "" }) : runner.run(command, args, signal, options) };
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
 });
 it("allows baseline reset without collect or discard", async () => {
   const f = await fixture();

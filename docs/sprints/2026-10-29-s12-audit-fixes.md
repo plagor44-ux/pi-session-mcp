@@ -132,7 +132,9 @@ Recorded as work lands on the branch.
   (Grok's variant with a plain replacement did not reproduce, the graft did);
   the reachability gate now also runs on `nothing_to_collect`. Recorded as
   limits, not changed: an index-only staged change that the worktree reverted
-  (pre-existing), a base name of 192 to 200 characters (fails closed), and a
+  (pre-existing; fixed later in
+  [#200](https://github.com/plagor44-ux/pi-session-mcp/issues/200), see
+  [Sprint 13](2026-10-30-s13-index-only-work.md)), a base name of 192 to 200 characters (fails closed), and a
   runner that reports a fetch it did not do (outside the threat model).
 - Final integration review (Sonnet 5.5, read-only, on `896e29d`):
   `NON_BLOCKING_ONLY`. Fixed: the in-boundary guard probe now ignores replace

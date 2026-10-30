@@ -42,7 +42,7 @@ async function fixture(options: { delivery: boolean; aliases?: readonly string[]
       await writeFile(paths.wrapper, "wrapper");
       return { status: "ok" as const, code: "writer_provisioned" };
     }),
-    inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false })),
+    inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false, indexTree: "c".repeat(40), tree: "c".repeat(40), headTree: "c".repeat(40) })),
     removeWriter: vi.fn(async () => ({ status: "ok" as const, code: "writer_removed" })),
     // These writers carry only the delivery field as their configuration; the settings check has its own tests.
     writerSettingsDrift: vi.fn(async () => undefined),

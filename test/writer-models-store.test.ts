@@ -120,7 +120,7 @@ async function lifecycleFixture(modelsStorePath: string | undefined) {
       if (args.some((arg) => arg.includes("clone --no-hardlinks"))) {
         await mkdir(join(paths.clone, ".git/hooks"), { recursive: true });
         await writeFile(join(paths.clone, ".git/config"), "");
-      } else stdout = `${commit}\nrefs/heads/main ${commit}\n${tree}\n${tree}\n${tree}\n`;
+      } else stdout = `${commit}\nrefs/heads/main ${commit}\n${tree}\n${tree}\n${tree}\n${tree}\n`;
     }
     return { exitCode: 0, stdout, stderr: "" };
   } };
