@@ -506,6 +506,7 @@ it("refuses cleanup while a note or an annotated tag holds objects only the clon
   for (const [label, create, drop] of [
     ["note", ["notes", "add", "-m", "SYNTHETIC_NOTE_3107", "HEAD"], ["update-ref", "-d", "refs/notes/commits"]],
     ["tag", ["tag", "-a", "-m", "SYNTHETIC_TAG_3107", "v-writer", "HEAD"], ["tag", "-d", "v-writer"]],
+    ["tag name outside the export rules", ["tag", "-a", "-m", "SYNTHETIC_TAG_3107", "pkg@1.0.0+build", "HEAD"], ["tag", "-d", "pkg@1.0.0+build"]],
   ] as const) {
     const f = await fixture();
     await f.work(...create);
@@ -526,10 +527,36 @@ it("treats tags and other refs whose objects the operator checkout has as baseli
   const f = await fixture();
   // Provisioned tags and a lightweight tag on the base commit name only objects the operator has; only the name is lost.
   await git(f.checkout, "tag", "-a", "-m", "operator", "v-operator", "main");
+  // Tag names outside the branch export name rules are only compared, never refused.
+  await git(f.checkout, "tag", "-a", "-m", "operator", "@scope/pkg@1.0.0+build", "main");
   await f.work("fetch", "--quiet", "origin", "+refs/tags/*:refs/tags/*");
+  expect(await f.work("tag", "--list")).toContain("@scope/pkg@1.0.0+build");
   await f.work("tag", "v-light", "main");
   await f.work("update-ref", "refs/bisect/bad", "main");
   expect((await inspectWork(f.ctx, "repo-w1")).baseline).toBe(true);
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [] });
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+}, 60_000);
+
+it("refuses cleanup while a remote-tracking ref holds the only copy of a commit (#202)", async () => {
+  const f = await fixture();
+  const hidden = await f.commit("hidden work", "hidden.txt", "SYNTHETIC_REMOTE_ONLY_3107\n");
+  await f.work("update-ref", "refs/remotes/origin/hidden", hidden);
+  await f.work("reset", "--hard", f.baseCommit);
+  expect((await inspectWork(f.ctx, "repo-w1")).baseline).toBe(false);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: [], findings: [] });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await f.work("cat-file", "-p", `${hidden}:hidden.txt`)).toBe("SYNTHETIC_REMOTE_ONLY_3107");
+}, 60_000);
+
+it("refuses cleanup when refs/stash names a non-commit object (#202)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "blob.txt"), "SYNTHETIC_BLOB_STASH_3107\n");
+  const blob = await f.work("hash-object", "-w", "blob.txt");
+  await rm(join(f.paths.clone, "blob.txt"));
+  await f.work("update-ref", "refs/stash", blob);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
 }, 60_000);

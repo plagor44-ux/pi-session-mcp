@@ -297,7 +297,10 @@ export async function provisionWriter(ctx: WriterContext, input: {
   } catch (error) { return failure(error); }
 }
 
-/** Distinct object names among `objects` that the operator checkout does not have. */
+/**
+ * Distinct object names among `objects` that the operator checkout does not have. Objects that an operator ref
+ * names need no further call; each remaining one costs one `cat-file`, since the runner has no stdin for a batch.
+ */
 async function missingObjects(ctx: WriterContext, objects: readonly string[]): Promise<string[]> {
   if (objects.length === 0) return [];
   const known = new Set((await git(ctx, ["for-each-ref", "--format=%(objectname)"], true))?.split("\n"));
@@ -329,13 +332,15 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
     const [name, commit, extra] = line.split(" ");
     if (!commit || !hash.test(commit) || extra !== undefined) throw new LifecycleError("writer_inspect_failed");
     if (name === "stash") stashes.push(commit);
-    else if (name && isSafeRefName(name) && name.startsWith("refs/")) refs.push({ name, commit });
+    // Only branch names reach a command (as export names); other refs such as a tag `pkg@1.0.0+build` are
+    // only compared, so any ref name Git accepts must not make inspection fail.
+    else if (name && (name.startsWith("refs/heads/") ? isSafeRefName(name) : name.startsWith("refs/"))) refs.push({ name, commit });
     else throw new LifecycleError("writer_inspect_failed");
   }
   const branches = refs.filter(({ name }) => name.startsWith("refs/heads/"));
-  // Refs outside branches, the stash and remote-tracking refs are not exported (#202): they must name objects
-  // the operator checkout already has, or the clone holds work that only it can recover.
-  const others = refs.filter(({ name }) => !name.startsWith("refs/heads/") && name !== "refs/stash" && !name.startsWith("refs/remotes/"));
+  // Refs outside branches and the stash are not exported (#202): they must name objects the operator
+  // checkout already has, or the clone holds work that only it can recover.
+  const others = refs.filter(({ name }) => !name.startsWith("refs/heads/") && name !== "refs/stash");
   const unknownRefs = (await missingObjects(ctx, others.map(({ commit }) => commit))).length;
   return {
     baseline: head === state.base.commit && branches.length === 1 && branches[0]!.name === state.base.ref && branches[0]!.commit === state.base.commit
