@@ -113,6 +113,48 @@ ${BOUNDARY_GIT} rev-parse HEAD`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS)
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
   expect(await removeWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok" });
 }, 120_000);
+
+it.skipIf(skipReason !== undefined)("exports work that exists only in the index and refuses cleanup before that (#200)", async () => {
+  const home = await temporaryRoot("pi-writer-index-podman-");
+  const checkout = join(home, "source");
+  await mkdir(checkout);
+  async function git(...args: string[]) {
+    const result = await runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", checkout, ...args]);
+    expect(result.exitCode, result.stderr).toBe(0);
+    return result.stdout.trim();
+  }
+  await git("init", "-b", "main");
+  await writeFile(join(checkout, "base.txt"), "base\n");
+  await git("add", "base.txt");
+  await git("-c", "user.name=writer-test", "-c", "user.email=writer@example.invalid", "commit", "-m", "base");
+  await git("update-ref", "refs/remotes/origin/main", "HEAD");
+  await git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
+  const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
+  const paths = writerPaths(home, "repo-w1");
+  const state = (await readWriterState(home, "repo-w1"))!;
+  // HEAD and worktree hold "base"; only the index holds the staged marker (`git status` shows MM).
+  const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
+export GIT_CONFIG_NOSYSTEM=1
+printf '%s\\n' SYNTHETIC_STAGED_ONLY_3107 > base.txt
+${BOUNDARY_GIT} add base.txt
+printf '%s\\n' base > base.txt
+${BOUNDARY_GIT} status --porcelain
+${BOUNDARY_GIT} rev-parse :base.txt`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  expect(work.exitCode, work.stderr).toBe(0);
+  const [status, blob] = work.stdout.trim().split("\n");
+  expect(status).toBe("MM base.txt");
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: false, dirty: true });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_uncollected", status: "failed" });
+  const collected = await collectWriter(ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0 });
+  expect(collected.refs).toEqual(["refs/remotes/writer-repo-w1/main-index"]);
+  expect(await git("rev-parse", "refs/remotes/writer-repo-w1/main-index:base.txt")).toBe(blob);
+  expect(await finishWriter(ctx, "repo-w1")).toMatchObject({ code: "writer_reset", status: "ok" });
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok" });
+}, 120_000);
 it.skipIf(skipReason !== undefined).each(["uv", "npm"] as const)("keeps the %s cache across reset, preserving ignored files by default and cleaning with all (#162, #165)", async (cache) => {
   const home = await temporaryRoot("pi-writer-clean-podman-");
   const checkout = join(home, "source");
