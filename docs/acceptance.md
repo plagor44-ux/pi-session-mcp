@@ -2606,13 +2606,15 @@ candidate `7ebbb32`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
 Codex CLI `0.166.0` and Claude Code `2.1.314`, cgroup v2 with `memory` and
 `pids` delegated to the user manager. Level 2 passed in the working tree and
 for the packed tarball, each with delivery off and with delivery on. Level 1
-passed except `npm audit`. Later commits on the release pull request change
-only this record.
+passed except `npm audit`. Later commits change only this record.
 
-The patch release ships #195 (PR #206) from `main` at `9d8b3e9`. Besides the
-version, the changelog heading and the roadmap line, the candidate raises the
-sandbox's task limit from 128 to 512 (`20e74f5`, reasons and measurements in
-the [Sprint 14 record](sprints/2026-10-30-s14-sandbox-resource-limits.md)).
+The patch release ships #195 (PR #206). The version, the changelog heading and
+the roadmap line were merged in PR #207 (`main` at `c1ed011`) while the task
+limit was still 128, before the raise had been pushed to it; the raise from
+128 to 512 (`20e74f5`, reasons and measurements in the
+[Sprint 14 record](sprints/2026-10-30-s14-sandbox-resource-limits.md)) follows
+in its own pull request. The candidate `7ebbb32` is `main` at `c1ed011` plus
+that raise, with the same tree. No tag was made at `c1ed011`.
 The MCP tool contract, result codes and configuration schema are unchanged.
 The other #195 source changes were accepted on their branch before the merge,
 see [Issue #195 candidate acceptance](#issue-195-candidate-acceptance-2026-10-30);

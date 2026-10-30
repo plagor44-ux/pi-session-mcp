@@ -195,8 +195,9 @@ the test author, Doctor, documentation and records the controller.
   with 128 tasks every run failed to start its workers (`pthread_create:
   Resource temporarily unavailable`). With 512 tasks and 1 GiB the serial run
   passed (4183 tests); two or more workers ended on the memory limit. The
-  maintainer chose to raise the task limit to 512 in the release pull request
-  (`20e74f5`). In the real sandboxed shell with the new limits, the serial run
+  maintainer chose to raise the task limit to 512 (`20e74f5`); release pull
+  request #207 had been merged with 128 before the raise was pushed to it, so
+  the raise follows in its own pull request, before any tag. In the real sandboxed shell with the new limits, the serial run
   then executed 2619 passing tests in 186 seconds without a fork or memory
   error; 142 tests failed on the sandbox environment itself (setup locks, a
   nested sandbox, Podman), and the run ended with exit 143 (SIGTERM, cause not
