@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import { constants as osConstants } from "node:os";
-import { lstatSync, readlinkSync } from "node:fs";
+import { lstatSync, readlinkSync, type Stats } from "node:fs";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
@@ -179,13 +179,13 @@ export interface SandboxDependencies {
 const defaultSpawn: SandboxSpawn = (file, args, options) => spawn(file, [...args], options) as ChildProcess & SandboxChild;
 const defaultTrusted = (path: string): boolean => isTrustedSystemBinary(path);
 
-function runtimeDir(): string | undefined {
+/** `/run/user/<uid>` when it is a real directory of that UID, closed to others and holding the user bus socket. */
+export function validatedRuntimeDir(uid: number | undefined, stat: (path: string) => Stats = lstatSync): string | undefined {
   try {
-    const uid = process.getuid?.();
     if (uid === undefined) return undefined;
     const dir = `/run/user/${uid}`;
-    const info = lstatSync(dir);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== uid || (info.mode & 0o077) !== 0 || !lstatSync(`${dir}/bus`).isSocket()) return undefined;
+    const info = stat(dir);
+    if (!info.isDirectory() || info.isSymbolicLink() || info.uid !== uid || (info.mode & 0o077) !== 0 || !stat(`${dir}/bus`).isSocket()) return undefined;
     return dir;
   } catch { return undefined; }
 }
@@ -212,7 +212,7 @@ interface Running {
 /** Starts a scoped bubblewrap, holding its payload until the effective limits are verified. */
 function start(args: readonly string[], dependencies: SandboxDependencies): Running {
   if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-  const dir = (dependencies.runtimeDir ?? runtimeDir)();
+  const dir = (dependencies.runtimeDir ?? (() => validatedRuntimeDir(process.getuid?.())))();
   if (dir === undefined) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
   const unit = (dependencies.unitName ?? (() => `pi-session-mcp-shell-${randomUUID()}`))();
   const limits = dependencies.limits ?? SANDBOX_LIMITS;

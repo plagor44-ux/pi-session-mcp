@@ -6,7 +6,7 @@ import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   BWRAP_PATH, SYSTEMD_RUN_PATH, SANDBOX_LIMITS, SANDBOX_UNAVAILABLE_MESSAGE, scopeArgs, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS,
-  probeSandbox, resolveWorktreeGitDir, sandboxArgs, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
+  probeSandbox, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -490,6 +490,36 @@ describe("verifyScope", () => {
   });
 });
 
+describe("validatedRuntimeDir", () => {
+  const entry = (overrides: Partial<{ directory: boolean; link: boolean; socket: boolean; uid: number; mode: number }> = {}) => {
+    const value = { directory: true, link: false, socket: false, uid: 1000, mode: 0o40700, ...overrides };
+    return { isDirectory: () => value.directory, isSymbolicLink: () => value.link, isSocket: () => value.socket, uid: value.uid, mode: value.mode };
+  };
+  const stat = (dir: ReturnType<typeof entry> | Error, bus: ReturnType<typeof entry> | Error = entry({ directory: false, socket: true })) => (path: string) => {
+    const value = path === "/run/user/1000" ? dir : path === "/run/user/1000/bus" ? bus : new Error("ENOENT");
+    if (value instanceof Error) throw value;
+    return value as never;
+  };
+
+  it("accepts the user's own closed runtime directory with a bus socket", () => {
+    expect(validatedRuntimeDir(1000, stat(entry()))).toBe("/run/user/1000");
+  });
+
+  it.each([
+    ["no UID", undefined, stat(entry())],
+    ["a missing directory", 1000, stat(new Error("ENOENT"))],
+    ["a file instead of a directory", 1000, stat(entry({ directory: false }))],
+    ["a symbolic link", 1000, stat(entry({ link: true }))],
+    ["another owner", 1000, stat(entry({ uid: 0 }))],
+    ["group access", 1000, stat(entry({ mode: 0o40750 }))],
+    ["access for others", 1000, stat(entry({ mode: 0o40701 }))],
+    ["no bus", 1000, stat(entry(), new Error("ENOENT"))],
+    ["a bus that is not a socket", 1000, stat(entry(), entry({ directory: false }))],
+  ] as const)("refuses %s", (_name, uid, lstat) => {
+    expect(validatedRuntimeDir(uid, lstat)).toBeUndefined();
+  });
+});
+
 describe("limited scope gate", () => {
   let workspace: string;
   beforeAll(async () => { workspace = await temporaryRoot("sandbox-gate-"); });
@@ -511,6 +541,37 @@ describe("limited scope gate", () => {
     h.children[0]!.close(0);
     await expect(result).resolves.toEqual({ exitCode: 0 });
     expect(h.children[0]!.kill).not.toHaveBeenCalled();
+  });
+
+  it("releases bubblewrap when the child PID report arrives in pieces", async () => {
+    const h = harness({}, false);
+    const { result } = run(h.dependencies);
+    await vi.waitFor(() => expect(h.children).toHaveLength(1));
+    h.children[0]!.info.write('{"child-');
+    h.children[0]!.info.write('pid":4242}');
+    await vi.waitFor(() => expect(h.children[0]!.released).toEqual(["1"]));
+    h.children[0]!.close(0);
+    await expect(result).resolves.toEqual({ exitCode: 0 });
+  });
+
+  it("does not release bubblewrap when the launcher ends while the scope is verified", async () => {
+    const files = scopeFiles();
+    let closedDuringVerify = false;
+    const h = harness({
+      readText: async (path) => {
+        if (path.endsWith("/pids.max")) {
+          h.children[0]!.close(null, "SIGKILL");
+          await new Promise((resolvePromise) => setImmediate(resolvePromise));
+          closedDuringVerify = true;
+        }
+        return files(path);
+      },
+    });
+    await expect(run(h.dependencies).result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+    // The verification finishes after the command has failed; the gate must still not release.
+    await vi.waitFor(() => expect(closedDuringVerify).toBe(true));
+    await new Promise((resolvePromise) => setImmediate(resolvePromise));
+    expect(h.children[0]!.released).toEqual([]);
   });
 
   it.each([
