@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.14.3 — 2026-10-30
+
+Patch release under ADR 0003 for Sprint 14. The MCP tool contract, result
+codes and configuration schema are unchanged. **Upgrade note:** a profile with
+`shell: "sandboxed"` now needs a running systemd user manager, a trusted
+`/usr/bin/systemd-run` and cgroup v2 with the `memory` and `pids` controllers
+delegated to the user manager and swap accounting enabled; without them the
+start fails with `sandbox_unavailable` and Doctor reports it per workspace.
+Run Doctor after the upgrade. Commands in that shell are now limited to 1 GiB
+of memory without swap and 128 processes and threads.
+`npm audit` still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest
+SDK release ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 - The sandboxed read-only shell now has resource limits
   ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195),
   ADR 0013 amendment 2026-10-30). Every probe and command runs through
