@@ -68,7 +68,7 @@ mean they are implemented or that their gates passed.
   sandboxed read-only shell
   ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195)) in one
   pull request, released in patch release 0.14.3: every probe and command runs in its own
-  transient systemd user scope with 1 GiB memory, no swap and 128 tasks, and
+  transient systemd user scope with 1 GiB memory, no swap and 512 tasks, and
   the command is released only after the server has verified the effective
   cgroup values. Hosts without a systemd user manager or without `memory` and
   `pids` delegation lose the sandboxed shell. Open: #79, #120, #144.

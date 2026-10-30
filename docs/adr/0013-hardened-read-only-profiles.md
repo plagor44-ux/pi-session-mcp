@@ -190,14 +190,19 @@ runs only after the server has verified that the limits are in force.
 - Launcher: `/usr/bin/systemd-run --user --scope --quiet --collect
   --unit=pi-session-mcp-shell-<uuid>
   --description="pi-session-mcp sandboxed shell" -p MemoryMax=1073741824
-  -p MemorySwapMax=0 -p TasksMax=128 -p RuntimeMaxSec=<deadline + 30>
+  -p MemorySwapMax=0 -p TasksMax=512 -p RuntimeMaxSec=<deadline + 30>
   -- /usr/bin/bwrap --info-fd 3
   --block-fd 4 <the fixed arguments of section 2>`. systemd-run moves itself
   into the new scope before it executes bubblewrap, so bubblewrap and every
   descendant inherit the scope from their first instruction.
-- Limits per run: `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 128
+- Limits per run: `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 512
   (processes and threads of bubblewrap and all descendants together). `/tmp`
-  stays a 512 MiB tmpfs, and the default timeout stays 600 seconds.
+  stays a 512 MiB tmpfs, and the default timeout stays 600 seconds. The
+  first value, 128, was raised before the release: a Node.js process runs
+  about ten threads, and this repository's own serial test run
+  (`vitest run --maxWorkers=1`) peaked at 179 tasks and could not start its
+  workers, so a sandboxed reviewer could not run it. With 512 tasks and 1 GiB
+  that run passed; parallel runs still end on the memory limit.
 - Gate: bubblewrap writes the sandbox's child PID to fd 3 and then holds the
   command until a byte arrives on fd 4. The server reads both processes'
   `/proc/<pid>/cgroup`, requires one identical cgroup v2 path whose last
