@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.14.2 — 2026-10-30
+
+Patch release under ADR 0003 for Sprint 13 and its follow-ups. The MCP tool
+contract, result codes and configuration schema are unchanged. Collection adds
+the export names `<branch>-index` and `<base>-stash-<n>`, and the versioned
+collection digest means that a writer collected by 0.14.1 but not yet reset
+must be collected once more before `finish`, `reset`, `recreate` or `remove`.
+`npm audit` still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest
+SDK release ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 - Writer cleanup no longer loses work that exists only in a stash entry
   ([#202](https://github.com/plagor44-ux/pi-session-mcp/issues/202)).
   Collection exports every stash entry, including one without a reflog, as
