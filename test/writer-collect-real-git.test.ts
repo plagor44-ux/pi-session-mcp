@@ -351,10 +351,12 @@ it("invalidates an earlier collection when only the index changes afterwards (#2
   await f.work("add", "base.txt");
   expect(await f.work("status", "--porcelain")).toBe("M  base.txt");
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_collected" });
-  // Stage a different blob and put the worktree back to HEAD, so only the index changes.
-  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_INDEX_SECOND_3107\n");
-  await f.work("add", "base.txt");
-  await f.work("restore", "--source=HEAD", "--worktree", "--", "base.txt");
+  // Stage a different blob without touching the worktree, so only the index tree changes.
+  const outside = join(await temporaryRoot("pi-writer-blob-"), "second.txt");
+  await writeFile(outside, "SYNTHETIC_INDEX_SECOND_3107\n");
+  const second = await f.work("hash-object", "-w", outside);
+  await f.work("update-index", "--cacheinfo", `100644,${second},base.txt`);
+  expect(await readFile(join(f.paths.clone, "base.txt"), "utf8")).toBe("SYNTHETIC_INDEX_FIRST_3107\n");
   expect(await f.work("status", "--porcelain")).toBe("MM base.txt");
   const staged = await f.work("rev-parse", ":base.txt");
   const indexBefore = await readFile(join(f.paths.clone, ".git/index"));
@@ -363,6 +365,18 @@ it("invalidates an earlier collection when only the index changes afterwards (#2
   expect(await f.work("rev-parse", ":base.txt")).toBe(staged);
   expect((await readFile(join(f.paths.clone, ".git/index"))).equals(indexBefore)).toBe(true);
 }, 60_000);
+
+it("refuses a taken or conflicting -index name and records no digest (#200)", async () => {
+  for (const branch of ["main-index", "main-index/topic"]) {
+    const f = await fixture();
+    await f.work("branch", branch);
+    const blob = await indexOnlyWork(f);
+    expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", findings: [{ code: "ref_name_refused" }] });
+    expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+    expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed" });
+    expect(await f.work("rev-parse", ":base.txt")).toBe(blob);
+  }
+}, 120_000);
 
 it("fails closed on an unmerged index and preserves the conflict (#200)", async () => {
   const f = await fixture();
