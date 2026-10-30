@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import { constants as osConstants } from "node:os";
-import { lstatSync, readlinkSync, type Stats } from "node:fs";
+import { lstatSync, readFileSync, readlinkSync, writeFileSync, type Stats } from "node:fs";
 import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
@@ -67,12 +67,23 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
   return args;
 }
 
+/** The fixed unit description; systemd would otherwise log the whole command line, command text included. */
+export const SCOPE_DESCRIPTION = "pi-session-mcp sandboxed shell";
+/** How long systemd lets a scope outlive the server's own deadline before it stops the scope itself. */
+export const SCOPE_GRACE_SECONDS = 30;
+
 /**
- * The `systemd-run` arguments of one run: a transient user scope with the fixed limits, whose bubblewrap
- * reports its child PID on fd 3 and holds the command until a byte arrives on fd 4. Pure.
+ * The `systemd-run` arguments of one run: a transient user scope with the fixed limits, stopped by systemd
+ * `SCOPE_GRACE_SECONDS` after `deadlineSeconds`, whose bubblewrap reports its child PID on fd 3 and holds the
+ * command until a byte arrives on fd 4. Pure.
  */
-export function scopeArgs(unit: string, limits: SandboxLimits, bwrapArgs: readonly string[]): string[] {
-  return ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, "-p", `MemoryMax=${limits.memoryBytes}`, "-p", "MemorySwapMax=0", "-p", `TasksMax=${limits.tasks}`, "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", ...bwrapArgs];
+export function scopeArgs(unit: string, limits: SandboxLimits, bwrapArgs: readonly string[], deadlineSeconds: number): string[] {
+  return [
+    "--user", "--scope", "--quiet", "--collect", `--unit=${unit}`, `--description=${SCOPE_DESCRIPTION}`,
+    "-p", `MemoryMax=${limits.memoryBytes}`, "-p", "MemorySwapMax=0", "-p", `TasksMax=${limits.tasks}`,
+    "-p", `RuntimeMaxSec=${Math.ceil(deadlineSeconds) + SCOPE_GRACE_SECONDS}`,
+    "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", ...bwrapArgs,
+  ];
 }
 
 /** The host's `/bin`, `/lib`, `/lib64` and `/sbin`: a symlink is recreated, a directory bound, an absent entry skipped. */
@@ -128,6 +139,12 @@ export async function resolveWorktreeGitDir(workspace: string): Promise<string |
   } catch { return undefined; }
 }
 
+/** Whether `path` is an absolute cgroup path without empty, `.` or `..` segments whose last segment is `<unit>.scope`. */
+function isScopePath(path: string, unit: string): boolean {
+  const segments = path.split("/");
+  return segments[0] === "" && !segments.slice(1).some((segment) => !segment || segment === "." || segment === "..") && segments.at(-1) === `${unit}.scope`;
+}
+
 /**
  * Whether both sandbox processes are in the one cgroup v2 scope named `unit` (not the server's own) and that
  * scope's effective `memory.max`, `memory.swap.max` and `pids.max` equal the limits. Never throws.
@@ -143,13 +160,45 @@ export async function verifyScope(input: { pid: number; childPid: number; unit: 
     const path = await cgroup(String(input.pid));
     const self = await cgroup("self");
     if (path === undefined || self === undefined || path !== await cgroup(String(input.childPid)) || path === self) return false;
-    const segments = path.split("/");
-    if (segments[0] !== "" || segments.slice(1).some((segment) => !segment || segment === "." || segment === "..") || segments.at(-1) !== `${input.unit}.scope`) return false;
+    if (!isScopePath(path, input.unit)) return false;
     const base = `/sys/fs/cgroup${path}`;
     return (await readText(`${base}/memory.max`)).trim() === String(input.limits.memoryBytes)
       && (await readText(`${base}/memory.swap.max`)).trim() === "0"
       && (await readText(`${base}/pids.max`)).trim() === String(input.limits.tasks);
   } catch { return false; }
+}
+
+/** Synchronous process and cgroup access for `endScope`; the default uses `node:fs` and `process.kill`. */
+export interface ScopeIo {
+  readonly read: (path: string) => string;
+  readonly write: (path: string, data: string) => void;
+  readonly kill: (pid: number) => void;
+}
+
+const defaultScopeIo: ScopeIo = {
+  read: (path) => readFileSync(path, "utf8"),
+  write: (path, data) => writeFileSync(path, data),
+  kill: (pid) => process.kill(pid, "SIGKILL"),
+};
+
+/**
+ * SIGKILLs every process of the scope named `unit`: through the scope's `cgroup.kill`, found from the cgroup of
+ * one of `pids`, and each of `pids` that is in that scope. A PID outside the scope is left alone, so a reused PID
+ * is never signalled. Synchronous and never throws, so that the caller can close fd 4 right after it.
+ */
+export function endScope(pids: readonly (number | undefined)[], unit: string, io: ScopeIo = defaultScopeIo): void {
+  let scopeKilled = false;
+  for (const pid of pids) {
+    if (pid === undefined || !Number.isInteger(pid) || pid <= 1) continue;
+    try {
+      const path = /^0::([^\n]+)$/.exec(io.read(`/proc/${pid}/cgroup`).replace(/\n$/, ""))?.[1];
+      if (path === undefined || !isScopePath(path, unit)) continue;
+      if (!scopeKilled) {
+        try { io.write(`/sys/fs/cgroup${path}/cgroup.kill`, "1"); scopeKilled = true; } catch { /* no cgroup.kill: the PIDs below still end */ }
+      }
+      io.kill(pid);
+    } catch { /* already gone */ }
+  }
 }
 
 /** The part of a child process the sandbox uses; the default is `node:child_process`. */
@@ -172,6 +221,7 @@ export interface SandboxDependencies {
   readonly runtimeDir?: () => string | undefined;
   readonly readText?: (path: string) => Promise<string>;
   readonly unitName?: () => string;
+  readonly endScope?: (pids: readonly (number | undefined)[], unit: string) => void;
   readonly rootEntries?: () => readonly RootEntry[];
   readonly gitCommonDir?: (workspace: string) => Promise<string | undefined>;
 }
@@ -210,20 +260,24 @@ interface Running {
 }
 
 /** Starts a scoped bubblewrap, holding its payload until the effective limits are verified. */
-function start(args: readonly string[], dependencies: SandboxDependencies): Running {
+function start(args: readonly string[], dependencies: SandboxDependencies, deadlineSeconds: number): Running {
   if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
   const dir = (dependencies.runtimeDir ?? (() => validatedRuntimeDir(process.getuid?.())))();
   if (dir === undefined) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
   const unit = (dependencies.unitName ?? (() => `pi-session-mcp-shell-${randomUUID()}`))();
   const limits = dependencies.limits ?? SANDBOX_LIMITS;
-  const child = (dependencies.spawn ?? defaultSpawn)(SYSTEMD_RUN_PATH, scopeArgs(unit, limits, args), { env: { XDG_RUNTIME_DIR: dir }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
+  const child = (dependencies.spawn ?? defaultSpawn)(SYSTEMD_RUN_PATH, scopeArgs(unit, limits, args, deadlineSeconds), { env: { XDG_RUNTIME_DIR: dir }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
   const info = child.stdio[3] as Readable | undefined;
   const block = child.stdio[4] as Writable | undefined;
   let stopped = false;
+  let childPid: number | undefined;
   const kill = (): void => {
     if (stopped) return;
     stopped = true;
     try { child.kill("SIGKILL"); } catch { /* already gone */ }
+    // bubblewrap's sandbox child waits on its own copy of fd 4 and, while it waits, outlives a killed
+    // bubblewrap; end of file on fd 4 would then start the command. End the whole scope first.
+    (dependencies.endScope ?? endScope)([child.pid, childPid], unit);
     try { block?.destroy(); } catch { /* already closed */ }
   };
   let ended = false;
@@ -237,7 +291,7 @@ function start(args: readonly string[], dependencies: SandboxDependencies): Runn
   const gate = (async () => {
     try {
       if (!info || !block || child.pid === undefined) throw new Error();
-      const childPid = await new Promise<number>((resolvePromise, reject) => {
+      const reported = await new Promise<number>((resolvePromise, reject) => {
         let text = "";
         let bytes = 0;
         info.on("error", reject);
@@ -252,11 +306,12 @@ function start(args: readonly string[], dependencies: SandboxDependencies): Runn
             if (typeof value !== "object" || value === null || Array.isArray(value)) { reject(new Error()); return; }
             const pid: unknown = (value as Record<string, unknown>)["child-pid"];
             if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 1) { reject(new Error()); return; }
+            childPid = pid;
             resolvePromise(pid);
           } catch { /* incomplete JSON */ }
         });
       });
-      if (!await verifyScope({ pid: child.pid, childPid, unit, limits }, dependencies.readText ?? ((path) => readFile(path, "utf8"))) || stopped || ended) throw new Error();
+      if (!await verifyScope({ pid: child.pid, childPid: reported, unit, limits }, dependencies.readText ?? ((path) => readFile(path, "utf8"))) || stopped || ended) throw new Error();
       block.end("1");
     } catch { kill(); throw new Error(SANDBOX_UNAVAILABLE_MESSAGE); }
   })();
@@ -275,7 +330,7 @@ export async function probeSandbox(workspace: string, dependencies: SandboxDepen
   try {
     if (signal?.aborted) return false;
     const workspaceReal = await realpath(workspace);
-    running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies), dependencies);
+    running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies), dependencies, PROBE_TIMEOUT_MS / 1000);
     const { child, closed, gate, kill } = running;
     child.stdout?.resume(); child.stderr?.resume();
     const deadline = new Promise<null>((resolvePromise) => {
@@ -322,13 +377,11 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
       }
       let running: Running;
       try {
-        running = start(await prepare(workspaceReal, cwdReal, [SANDBOX_BASH_PATH, "-c", command], dependencies), dependencies);
+        running = start(await prepare(workspaceReal, cwdReal, [SANDBOX_BASH_PATH, "-c", command], dependencies), dependencies, timeoutMs / 1000);
       } catch {
         throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
       }
       const { child, closed, gate, kill } = running;
-      child.stdout?.on("data", onData);
-      child.stderr?.on("data", onData);
       let timedOut = false;
       let timer: NodeJS.Timeout | undefined;
       let cancel: (() => void) | undefined;
@@ -340,6 +393,9 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
         if (signal?.aborted) onAbort();
         const ready = await Promise.race([gate.then(() => true), closed.then(() => false), cancelled]);
         if (!ready) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+        // Only the released command's output reaches the caller, never the launcher's diagnostics.
+        child.stdout?.on("data", onData);
+        child.stderr?.on("data", onData);
         const outcome = await closed;
         if (signal?.aborted) throw new Error("aborted");
         if (timedOut) throw new Error(`timeout:${timeout ?? DEFAULT_COMMAND_TIMEOUT_SECONDS}`);

@@ -130,12 +130,26 @@ const expectNoShellUnits = async (): Promise<void> => {
 };
 
 /** Asserts the fail-closed contract: rejection, no payload output, and a false probe. */
+/** How many processes have `marker` in their command line. */
+async function processesWith(marker: string): Promise<number> {
+  let count = 0;
+  for (const entry of await readdir("/proc")) {
+    if (!/^\d+$/.test(entry)) continue;
+    try { if ((await readFile(`/proc/${entry}/cmdline`, "utf8")).includes(marker)) count++; } catch { /* already gone */ }
+  }
+  return count;
+}
+
 async function expectUnavailable(workspace: string, dependencies: SandboxDependencies): Promise<void> {
   const marker = `PAYLOAD-RAN-${Math.random().toString(36).slice(2)}`;
-  const result = await runSandbox(workspace, `echo ${marker}`, { dependencies, timeout: 10 });
+  const result = await runSandbox(workspace, `echo ${marker}; sleep 5`, { dependencies, timeout: 10 });
   const error = failedRun(result);
   expect(error.message).toBe(SANDBOX_UNAVAILABLE_MESSAGE);
   expect(result.output).not.toContain(marker);
+  // A sandbox child that is still waiting, or a command that a late end of file on fd 4 released,
+  // would still be here: neither may survive the refusal.
+  await sleep(500);
+  expect(await processesWith(marker)).toBe(0);
   await expect(probeSandbox(workspace, dependencies)).resolves.toBe(false);
 }
 

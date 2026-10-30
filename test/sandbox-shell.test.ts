@@ -6,7 +6,7 @@ import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   BWRAP_PATH, SYSTEMD_RUN_PATH, SANDBOX_LIMITS, SANDBOX_UNAVAILABLE_MESSAGE, scopeArgs, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS,
-  probeSandbox, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
+  endScope, probeSandbox, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -26,10 +26,15 @@ const FIXED_MIDDLE = ["--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/
 
 describe("scopeArgs", () => {
   it("wraps bubblewrap in the fixed limited scope", () => {
-    expect(scopeArgs("unit", SANDBOX_LIMITS, ["arg"])).toEqual([
-      "--user", "--scope", "--quiet", "--collect", "--unit=unit", "-p", "MemoryMax=1073741824",
-      "-p", "MemorySwapMax=0", "-p", "TasksMax=128", "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", "arg",
+    expect(scopeArgs("unit", SANDBOX_LIMITS, ["arg"], 600)).toEqual([
+      "--user", "--scope", "--quiet", "--collect", "--unit=unit", "--description=pi-session-mcp sandboxed shell",
+      "-p", "MemoryMax=1073741824", "-p", "MemorySwapMax=0", "-p", "TasksMax=128", "-p", "RuntimeMaxSec=630",
+      "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", "arg",
     ]);
+  });
+
+  it("rounds a fractional deadline up", () => {
+    expect(scopeArgs("unit", SANDBOX_LIMITS, [], 0.05)).toContain("RuntimeMaxSec=31");
   });
 });
 
@@ -207,7 +212,9 @@ function fakeChild() {
   // The order of kill and the block fd's close: closing fd 4 first would release bubblewrap.
   const events: string[] = [];
   block.on("data", (chunk) => released.push(chunk.toString()));
-  block.on("close", () => events.push("block-closed"));
+  // Record the close where the server asks for it: the stream's own close event comes a tick later.
+  const destroy = block.destroy.bind(block);
+  block.destroy = (error?: Error) => { events.push("block-closed"); return destroy(error); };
   const kill = vi.fn(() => { events.push("kill"); });
   const child = Object.assign(emitter, { pid: 4241, stdio: [null, stdout, stderr, info, block], stdout, stderr, kill }) as unknown as SandboxChild;
   return {
@@ -233,6 +240,7 @@ function harness(overrides: Partial<SandboxDependencies> = {}, info: string | nu
   const dependencies: SandboxDependencies = {
     spawn, trusted: () => true, rootEntries: () => MERGED, gitCommonDir: async () => undefined,
     runtimeDir: () => "/run/user/test", unitName: () => "test-unit",
+    endScope: (pids) => { children.at(-1)?.events.push(`scope:${pids.join(",")}`); },
     readText: scopeFiles(), ...overrides,
   };
   return { children, calls, dependencies };
@@ -264,7 +272,7 @@ describe("createSandboxedBashOperations", () => {
     const call = h.calls[0]!;
     expect(call.file).toBe(SYSTEMD_RUN_PATH);
     expect(call.options).toEqual({ env: { XDG_RUNTIME_DIR: "/run/user/test" }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
-    expect(call.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: join(workspace, "src"), rootEntries: MERGED, argv: ["/usr/bin/bash", "-c", "echo hi"] })));
+    expect(call.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: join(workspace, "src"), rootEntries: MERGED, argv: ["/usr/bin/bash", "-c", "echo hi"] }), DEFAULT_COMMAND_TIMEOUT_SECONDS));
     expect(JSON.stringify(call)).not.toMatch(/SECRET_TOKEN|PI_SESSION_ID/);
   });
 
@@ -400,7 +408,7 @@ describe("probeSandbox", () => {
     h.children[0]!.close(0);
     await expect(probing).resolves.toBe(true);
     expect(h.calls[0]!.file).toBe(SYSTEMD_RUN_PATH);
-    expect(h.calls[0]!.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: workspace, rootEntries: MERGED, argv: ["/usr/bin/true"] })));
+    expect(h.calls[0]!.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: workspace, rootEntries: MERGED, argv: ["/usr/bin/true"] }), PROBE_TIMEOUT_MS / 1000));
   });
 
   it("reports failure for a non-zero exit, a spawn error and an untrusted binary", async () => {
@@ -490,6 +498,55 @@ describe("verifyScope", () => {
   });
 });
 
+describe("endScope", () => {
+  const io = (cgroups: Record<number, string>, options: { noKillFile?: boolean } = {}) => {
+    const calls: string[] = [];
+    return {
+      calls,
+      io: {
+        read: (path: string) => { const pid = Number(/^\/proc\/(\d+)\/cgroup$/.exec(path)?.[1]); const text = cgroups[pid]; if (text === undefined) throw new Error("ENOENT"); return text; },
+        write: (path: string, data: string) => { if (options.noKillFile) throw new Error("ENOENT"); calls.push(`write ${path} ${data}`); },
+        kill: (pid: number) => { calls.push(`kill ${pid}`); },
+      },
+    };
+  };
+
+  it("kills the scope once through cgroup.kill and each PID inside it", () => {
+    const fake = io({ 4241: `0::${SCOPE}\n`, 4242: `0::${SCOPE}\n` });
+    endScope([4241, 4242], "test-unit", fake.io);
+    expect(fake.calls).toEqual([`write /sys/fs/cgroup${SCOPE}/cgroup.kill 1`, "kill 4241", "kill 4242"]);
+  });
+
+  it("finds the scope through the child when the launcher is gone", () => {
+    const fake = io({ 4242: `0::${SCOPE}\n` });
+    endScope([4241, 4242], "test-unit", fake.io);
+    expect(fake.calls).toEqual([`write /sys/fs/cgroup${SCOPE}/cgroup.kill 1`, "kill 4242"]);
+  });
+
+  it("still kills the PIDs in the scope without cgroup.kill", () => {
+    const fake = io({ 4241: `0::${SCOPE}\n`, 4242: `0::${SCOPE}\n` }, { noKillFile: true });
+    endScope([4241, 4242], "test-unit", fake.io);
+    expect(fake.calls).toEqual(["kill 4241", "kill 4242"]);
+  });
+
+  it.each([
+    ["another unit's scope", "0::/user.slice/app.slice/other-unit.scope\n"],
+    ["the server's cgroup", "0::/user.slice/server.scope\n"],
+    ["a path with ..", "0::/user.slice/../test-unit.scope\n"],
+    ["a cgroup v1 line", "1:name=systemd:/test-unit.scope\n"],
+  ])("leaves a PID in %s alone", (_name, cgroup) => {
+    const fake = io({ 4241: cgroup });
+    endScope([4241, undefined], "test-unit", fake.io);
+    expect(fake.calls).toEqual([]);
+  });
+
+  it("ignores missing, invalid and init PIDs", () => {
+    const fake = io({ 1: `0::${SCOPE}\n` });
+    endScope([undefined, 0, 1, 1.5, 999999], "test-unit", fake.io);
+    expect(fake.calls).toEqual([]);
+  });
+});
+
 describe("validatedRuntimeDir", () => {
   const entry = (overrides: Partial<{ directory: boolean; link: boolean; socket: boolean; uid: number; mode: number }> = {}) => {
     const value = { directory: true, link: false, socket: false, uid: 1000, mode: 0o40700, ...overrides };
@@ -541,6 +598,37 @@ describe("limited scope gate", () => {
     h.children[0]!.close(0);
     await expect(result).resolves.toEqual({ exitCode: 0 });
     expect(h.children[0]!.kill).not.toHaveBeenCalled();
+  });
+
+  it("keeps the launcher's diagnostics from the caller and passes the released command's output", async () => {
+    const refused = harness({}, false);
+    const first = run(refused.dependencies);
+    await vi.waitFor(() => expect(refused.children).toHaveLength(1));
+    refused.children[0]!.stderr.write("Failed to start transient scope unit: host detail\n");
+    refused.children[0]!.info.end();
+    await expect(first.result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+    expect(first.output).toEqual([]);
+
+    const released = harness();
+    const second = run(released.dependencies);
+    await vi.waitFor(() => expect(released.children[0]?.released).toEqual(["1"]));
+    released.children[0]!.stdout.write("PAYLOAD\n");
+    released.children[0]!.close(0);
+    await expect(second.result).resolves.toEqual({ exitCode: 0 });
+    expect(second.output.join("")).toBe("PAYLOAD\n");
+  });
+
+  it("gives up a probe whose setup never reports within the deadline", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const h = harness({}, false);
+      const probing = probeSandbox(workspace, h.dependencies);
+      await vi.waitFor(() => expect(h.children).toHaveLength(1));
+      await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS);
+      await expect(probing).resolves.toBe(false);
+      expect(h.children[0]!.released).toEqual([]);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,", "block-closed"]);
+    } finally { vi.useRealTimers(); }
   });
 
   it("releases bubblewrap when the child PID report arrives in pieces", async () => {
@@ -599,7 +687,7 @@ describe("limited scope gate", () => {
     await expect(result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
     const child = h.children[0]!;
     expect(child.released).toEqual([]);
-    expect(child.events[0]).toBe("kill");
+    await vi.waitFor(() => expect(child.events).toEqual(["kill", "scope:4241,", "block-closed"]));
     expect(child.kill).toHaveBeenCalledWith("SIGKILL");
     expect(output).toEqual([]);
   });
@@ -614,7 +702,7 @@ describe("limited scope gate", () => {
     const h = harness({ readText: scopeFiles(changes) });
     await expect(run(h.dependencies).result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
     expect(h.children[0]!.released).toEqual([]);
-    expect(h.children[0]!.events[0]).toBe("kill");
+    await vi.waitFor(() => expect(h.children[0]!.events).toEqual(["kill", "scope:4241,4242", "block-closed"]));
     await expect(probeSandbox(workspace, h.dependencies)).resolves.toBe(false);
     expect(h.children[1]!.released).toEqual([]);
     expect(h.children[1]!.kill).toHaveBeenCalledWith("SIGKILL");
@@ -650,7 +738,7 @@ describe("limited scope gate", () => {
     controller.abort();
     await expect(result).rejects.toThrow("aborted");
     expect(h.children[0]!.released).toEqual([]);
-    expect(h.children[0]!.events[0]).toBe("kill");
+    await vi.waitFor(() => expect(h.children[0]!.events).toEqual(["kill", "scope:4241,", "block-closed"]));
   });
 
   it("reports a timeout during setup as a timeout and kills", async () => {
