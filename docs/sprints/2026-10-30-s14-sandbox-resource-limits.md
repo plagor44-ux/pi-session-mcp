@@ -34,7 +34,8 @@ decisions.
 
 - Mechanism: each sandbox run starts through
   `/usr/bin/systemd-run --user --scope` in its own transient scope with
-  `MemoryMax=1073741824`, `MemorySwapMax=0` and `TasksMax=128`. Bubblewrap
+  `MemoryMax=1073741824`, `MemorySwapMax=0` and `TasksMax=128` (raised to
+  512 before the 0.14.3 release, see the progress log). Bubblewrap
   writes its child PID to `--info-fd 3` and holds the command on
   `--block-fd 4` until the server has verified both processes' cgroup
   membership and the scope's effective `memory.max`, `memory.swap.max` and
@@ -186,6 +187,24 @@ the test author, Doctor, documentation and records the controller.
   above Node's timer limit (2^31-1 ms) to `setTimeout`, which fires at once,
   so a refused run with a long timeout could start. Fixed in `bef7eef` with a
   chunked timer and a unit test.
+- Release preparation of 0.14.3 (after PR #206 was merged): a note from a
+  side agent warned that sandboxed reviewers might no longer run test suites.
+  Measured in a scope with the shipped limits, outside the sandbox: this
+  repository's serial test run (`vitest run --maxWorkers=1`) peaked at 179
+  tasks and 2.8 GiB of memory including page cache, the default run at 432;
+  with 128 tasks every run failed to start its workers (`pthread_create:
+  Resource temporarily unavailable`). With 512 tasks and 1 GiB the serial run
+  passed (4183 tests); two or more workers ended on the memory limit. The
+  maintainer chose to raise the task limit to 512 in the release pull request
+  (`20e74f5`). In the real sandboxed shell with the new limits, the serial run
+  then executed 2619 passing tests in 186 seconds without a fork or memory
+  error; 142 tests failed on the sandbox environment itself (setup locks, a
+  nested sandbox, Podman), and the run ended with exit 143 (SIGTERM, cause not
+  established) while test files were still pending, so a sandboxed reviewer
+  can run targeted tests of this repository but not its whole suite. Review:
+  `review-glm` (mistral `zai-glm-5-3`) on `20e74f5`, `NON_BLOCKING_ONLY`; both
+  findings (this record's decision line and the scope of the live evidence in
+  the acceptance record) adopted.
 
 ## Remaining risk and limits
 
