@@ -256,6 +256,15 @@ async function prepare(workspace: string, cwd: string, argv: readonly string[], 
   return sandboxArgs({ workspace, gitCommonDir, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
 }
 
+/** Node fires a longer timer at once, so a longer delay is waited for in pieces of at most this length. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+/** Runs `action` after `delayMs`, also beyond Node's timer limit, without keeping the process alive. */
+function after(delayMs: number, action: () => void): void {
+  const step = Math.min(delayMs, MAX_TIMER_MS);
+  setTimeout(() => { if (delayMs > step) after(delayMs - step, action); else action(); }, step).unref();
+}
+
 interface Running {
   readonly child: SandboxChild;
   readonly closed: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
@@ -287,7 +296,7 @@ function start(args: readonly string[], dependencies: SandboxDependencies, deadl
     // A launcher that ended on its own can no longer lead to its scope; a child it left waiting would start on
     // end of file. Keep fd 4 open until systemd has stopped the scope.
     if (found || !ended) close();
-    else setTimeout(close, (Math.ceil(deadlineSeconds) + SCOPE_GRACE_SECONDS) * 1000).unref();
+    else after((Math.ceil(deadlineSeconds) + SCOPE_GRACE_SECONDS) * 1000, close);
   };
   info?.on("error", kill);
   block?.on("error", kill);

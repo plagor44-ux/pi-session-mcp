@@ -636,6 +636,23 @@ describe("limited scope gate", () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it("waits beyond Node's timer limit before closing fd 4 for the longest command timeout", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let h: ReturnType<typeof harness>;
+      h = harness({ endScope: (pids) => { h.children.at(-1)?.events.push(`scope:${pids.join(",")}`); return false; } }, false);
+      const timeout = 2_147_483.647;
+      const { result } = run(h.dependencies, { timeout });
+      await vi.waitFor(() => expect(h.children).toHaveLength(1));
+      h.children[0]!.close(1);
+      await expect(result).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+      await vi.advanceTimersByTimeAsync(2_147_483_647);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,"]);
+      await vi.advanceTimersByTimeAsync((Math.ceil(timeout) + 30) * 1000 - 2_147_483_647);
+      expect(h.children[0]!.events).toEqual(["kill", "scope:4241,", "block-closed"]);
+    } finally { vi.useRealTimers(); }
+  });
+
   it("gives up a probe whose setup never reports within the deadline", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     try {
