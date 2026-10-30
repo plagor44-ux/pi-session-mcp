@@ -62,6 +62,16 @@ mean they are implemented or that their gates passed.
   0.14.2: collection exports every stash entry as `<base>-stash-<n>`, and tags,
   notes and other unexported refs must name objects the operator checkout
   already has before a writer counts as baseline or a digest is recorded.
+- 2026-10-30: the published-release Level 2 of 0.14.2 passed
+  ([evidence](acceptance.md#v0142-post-release-evidence)).
+  [Sprint 14](sprints/2026-10-30-s14-sandbox-resource-limits.md) limits the
+  sandboxed read-only shell
+  ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195)) in one
+  pull request, not yet released: every probe and command runs in its own
+  transient systemd user scope with 1 GiB memory, no swap and 128 tasks, and
+  the command is released only after the server has verified the effective
+  cgroup values. Hosts without a systemd user manager or without `memory` and
+  `pids` delegation lose the sandboxed shell. Open: #79, #120, #144.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
