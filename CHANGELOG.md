@@ -8,7 +8,11 @@
   `/usr/bin/systemd-run --user --scope` in its own transient scope with
   `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 128, and bubblewrap
   holds the command until the server has verified the scope's cgroup
-  membership and those values. The overlay upper layers of the workspace and of
+  membership and those values. A run that fails before that ends the whole
+  scope before the command could start, the launcher's diagnostics never reach
+  the worker, the unit's journal entries carry a fixed description instead of
+  the command line, and systemd stops any scope 30 seconds after the run's
+  deadline. The overlay upper layers of the workspace and of
   a linked worktree's Git directory, `/tmp` and the sandbox's root tmpfs count
   against the 1 GiB; `/tmp` keeps its own 512 MiB bound and commands keep the
   600 second default timeout. A separate 512 MiB overlay bound was not
@@ -16,7 +20,11 @@
   without a second, outer sandbox. **Operator impact:** `shell: "sandboxed"`
   now also needs a running systemd user manager, a trusted
   `/usr/bin/systemd-run` and cgroup v2 with the `memory` and `pids`
-  controllers delegated to the user manager. Where these are missing, a
+  controllers delegated to the user manager, with swap accounting enabled.
+  Commands that need more than 1 GiB of memory or more than 128 processes and
+  threads, for example a large parallel build or test run, now end with exit
+  137 or fail to fork instead of running unbounded, and a filled overlay ends
+  the command the same way rather than with `ENOSPC`. Where these are missing, a
   profile that worked before is refused with `sandbox_unavailable` and Doctor
   reports `sandbox_unavailable` for each workspace; there is no unlimited
   fallback. The MCP tool contract, result codes and configuration schema are

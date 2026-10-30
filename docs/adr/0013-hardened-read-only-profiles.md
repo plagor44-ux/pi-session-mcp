@@ -203,15 +203,30 @@ runs only after the server has verified that the limits are in force.
   requires a `cgroup2` mount at `/sys/fs/cgroup`, and reads `memory.max`,
   `memory.swap.max` and `pids.max` of that cgroup. Only when all three equal
   the fixed values does it release the command. On any other outcome, also on
-  abort or timeout during this phase, it kills bubblewrap before it closes
-  fd 4 (end of file on fd 4 would release bubblewrap) and the run fails: the
+  abort or timeout during this phase, it ends the whole scope before it
+  closes fd 4 and the run fails. End of file on fd 4 releases bubblewrap, and
+  bubblewrap's sandbox child, which waits on its own copy of fd 4, outlives a
+  killed bubblewrap while it waits (`--die-with-parent` does not cover it yet;
+  observed natively on 2026-10-30, where closing fd 4 after the kill started
+  the command). The server therefore sends `SIGKILL` to the launcher, writes
+  `1` to the scope's `cgroup.kill`, found through the launcher's or the
+  reported child's `/proc/<pid>/cgroup` and accepted only for its own unit
+  name, kills each of those PIDs that is in that scope, and only then closes
+  fd 4. The run then fails: the
   probe reports `false`, and a command fails with the unavailable message, or
   with its usual abort or timeout error when the client aborted it or its
   timeout passed during that phase.
+- Scope housekeeping: the unit has the fixed description
+  `pi-session-mcp sandboxed shell`, so the user journal never records the
+  command line, and `RuntimeMaxSec` set to the run's deadline (5 seconds for
+  the probe, the command timeout otherwise) plus 30 seconds. The server's own
+  timeout acts first; `RuntimeMaxSec` stops a scope that outlives it, including
+  an empty scope that systemd keeps when the launcher is killed before it has
+  joined its scope (observed natively for early aborts).
 - Fixed binaries: `/usr/bin/systemd-run` must be a trusted system binary like
   `/usr/bin/bwrap`; there is no `PATH` lookup. The user manager is reached
   through `/run/user/<uid>`, derived from the server's UID and accepted only as
-  a real directory owned by that UID with mode `0700` that holds the `bus`
+  a real directory owned by that UID without group or other access that holds the `bus`
   socket. That directory is the launcher's only environment variable
   (`XDG_RUNTIME_DIR`); bubblewrap's `--clearenv` keeps it from the command. A
   client that passes no `XDG_RUNTIME_DIR`, such as Codex, works the same way.

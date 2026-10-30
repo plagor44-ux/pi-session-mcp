@@ -71,7 +71,11 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     directory (or its symlink target's), `~/.pi` or Pi's agent directory
     contributes only the skill file as a read root. On
     timeout or abort the server kills bubblewrap and the PID namespace takes every
-    process of the sandbox with it. The start probe is cancelled with the start
+    process of the sandbox with it; before the command is released, the server
+    ends the whole transient scope through its `cgroup.kill` before it closes
+    the block fd, because the waiting sandbox child would otherwise start the
+    command. The launcher's own diagnostics never reach the worker; only the
+    released command's output does. The start probe is cancelled with the start
     request. A granted research
     tool with free-form input (search, documentation lookup) is a possible
     outbound channel for workspace content; prefer query-style tools.
