@@ -2598,6 +2598,82 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### Issue #200 candidate acceptance (2026-10-30)
+
+Recorded on 2026-10-30 for the unreleased branch `fix/writer-index-only-work`
+([Sprint 13](sprints/2026-10-30-s13-index-only-work.md)), on its source commit
+`1e1e694`, in a fresh clone on Linux (`x64`) with Node.js `26.12.1`, npm
+`12.2.1`, Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.314`. Later
+commits on the branch change only documentation.
+
+- Level 1 after `npm ci`: typecheck, `build:cli`, the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` (141 files, 4062 passed, 14
+  skipped, no unhandled error), `build` and `git diff --check` exited with `0`,
+  and the status stayed clean. `npm audit --omit=dev` still exits with `1` for
+  the known `undici` finding (#120).
+- Podman-gated writer tests, none skipped: 8 of 8 lifecycle tests, including
+  the new index-only case, and 1 of 1 boundary test. The index-only case fails
+  against the source of `7752d3f` (`baseline: true`).
+- Level 2 in the working tree: 160 of 160 with delivery off and 228 of 228 with
+  `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.14.1`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained, the leak check passed and the disposable
+  directories were removed.
+
+Not established: a Level 3 cycle, macOS, and a productive writer upgrade with
+this change.
+
+### v0.14.1 post-release evidence
+
+Recorded on 2026-10-30 for the published release `0.14.1`.
+
+Tag binding: a fresh clone of the annotated tag `v0.14.1` (tag object
+`bd1ba81739742e1692d65425e94d5a091731a402`) peels to the merge commit
+`7752d3f1555d19fed06f43c0e046da07017a3320` of #197, and
+`git describe --tags --exact-match` reports `v0.14.1`. CI on the merge commit
+(run 41013930671) and on the tag (run 41017350738) passed on the first attempt.
+The npm package records `gitHead` `0753fad`, the head of #197, whose tree
+(`36654c3`) is identical to the merge commit's.
+
+- Level 1 on the tag clone after `npm ci`, from 08:27 to 08:29 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (141 files, 4044 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. Doctor
+  reported `packageVersion` `0.14.1` and exited with `2` because no
+  configuration was set (`config_missing`).
+- `pi-session-mcp@0.14.1` on npm: 933 files, shasum
+  `886a20688a44a967d1f917e9dad5461e83fbb5e5`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `47cf66a3856530112c11095d07cb05b7ab9892f4` above because `0753fad` adds the
+  pre-release record to the packaged `docs/acceptance.md`; no other file
+  changed.
+- Published release, Level 2 on the tag clone, 08:29 to 08:31 UTC: 160 of 160
+  with delivery off and 228 of 228 with `--events spool`. The manifests and
+  the 152 built runtime files were byte-identical before and after the client
+  cycles.
+- Published npm package, Level 2 from a fresh prefix, 08:31 to 08:33 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool`. The
+  install smoke on the published package reported `smoke_passed` with version
+  `0.14.1`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained and the leak check passed. Clients: Codex CLI `0.166.0` and Claude
+  Code `2.1.314`.
+- The GitHub release `v0.14.1` was published the same day.
+
+Installations: the workstation and the second machine (Linux) run `0.14.1`,
+upgraded by the maintainer with the steps of
+[Installation](installation.md#container-writers); both client targets passed
+`--verify`, and Doctor reported no error. On the workstation all 18 writers
+were provisioned again with `0.14.1` on 2026-10-30 for a profile change and
+reported `writer_accepted` and `--writer <name> --verify` ok. Those writers
+were removed before re-provisioning on the strength of the `0.14.1`
+inspection, which #200 shows to ignore work that exists only in the index;
+whether any of them held such work cannot be established afterwards.
+
 ### v0.14.1 pre-release acceptance
 
 `v0.14.1` was accepted on 2026-10-30 from 06:04 to 06:15 UTC on its release

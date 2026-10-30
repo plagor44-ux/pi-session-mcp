@@ -50,6 +50,14 @@ mean they are implemented or that their gates passed.
   full writer profile comparison in the relay
   ([#194](https://github.com/plagor44-ux/pi-session-mcp/issues/194)). Levels 1
   to 3 passed for the candidate. #120 still waits for a Pi SDK release.
+- 2026-10-30: [Sprint 13](sprints/2026-10-30-s13-index-only-work.md) fixes the
+  loss of work that exists only in a writer's Git index
+  ([#200](https://github.com/plagor44-ux/pi-session-mcp/issues/200)) in one
+  pull request, unreleased: inspection evaluates the original index tree, the
+  versioned collection digest covers it, and collection exports staged-only
+  work as `<branch>-index`. The published-release Level 2 of 0.14.1 passed. The
+  same loss for work that exists only in a stash entry is the follow-up
+  [#202](https://github.com/plagor44-ux/pi-session-mcp/issues/202).
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

@@ -182,10 +182,16 @@ pi-session-mcp-setup --writer my-project-w1 --finish --apply
 
 Collection exports changed branches via a bundle into the operator's checkout as
 `refs/remotes/writer-<name>/<branch>`. Uncommitted/untracked work is captured as a
-synthetic `<branch>-wip` commit. A clean detached HEAD whose commit no branch in
+synthetic `<branch>-wip` commit. A staged index whose tree differs from both
+HEAD's tree and the worktree (for example a staged change that the worktree
+reverted) is exported as an extra synthetic `<branch>-index` commit, so work
+that exists only in the index is recovered too; the same name rules apply. An
+index that cannot be evaluated, such as an unmerged conflict, makes inspection
+and collection fail closed and every non-`--discard` cleanup refuse; resolve the
+conflict inside the boundary first. A clean detached HEAD whose commit no branch in
 the clone reaches is exported as `<base>-detached` (for example `main-detached`,
 imported as `refs/remotes/writer-<name>/main-detached`); a dirty detached HEAD
-keeps the `<base>-wip` export. A `<base>-detached` or `<branch>-wip` name that
+keeps the `<base>-wip` export. A `<base>-detached`, `<branch>-wip` or `<branch>-index` name that
 an exported branch already takes, or that conflicts with an exported branch's
 path (such as a branch `main-detached/topic`), is refused and makes collection
 incomplete (`writer_collect_incomplete`); the other branches are still
@@ -198,8 +204,11 @@ commit exist in the operator checkout; otherwise collection is incomplete
 commit: if the operator checkout no longer has it (for example after a deleted
 base branch and garbage collection), collect and finish fail this way even on a
 pristine writer, without refused names; fetch the base again or resolve with
-`--reset --discard --apply`. New work invalidates
-that authorization. Stashes are not exported as branches:
+`--reset --discard --apply`. The digest also covers the index tree, and the
+index and worktree tree objects must exist in the operator checkout. New work,
+including a change to the index alone, invalidates that authorization. A digest
+recorded by 0.14.1 or earlier never matches the versioned digest, so collect
+such a writer again before a destructive operation. Stashes are not exported as branches:
 resolve any needed stash inside the boundary before collection.
 
 `--finish` collects, then resets a persistent writer or recreates an ephemeral

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- Writer cleanup no longer loses work that exists only in the clone's Git
+  index ([#200](https://github.com/plagor44-ux/pi-session-mcp/issues/200)).
+  Inspection now also evaluates the original index tree on a temporary copy,
+  so a staged change that the worktree reverted (`git status` `MM`) is neither
+  baseline nor clean. Collection exports such a staged tree as an extra
+  `<branch>-index` commit next to the unchanged `<branch>-wip` and
+  `<base>-detached` exports, and records a digest only when the index and
+  worktree trees exist in the operator checkout. An index that cannot be
+  evaluated, such as an unmerged conflict, makes inspection and collection fail
+  closed (`writer_inspect_failed`, `writer_collect_failed`), so `finish`,
+  `reset`, `recreate` and `remove` without `--discard` refuse and the clone
+  stays unchanged. Upgrade note: the collection digest is versioned and covers
+  the index tree, so a digest recorded by 0.14.1 or earlier never authorizes
+  cleanup; collect a writer once more before resetting or removing it. Pool
+  admission was already index-aware through the in-boundary `git status`
+  probe, and Doctor's `writer_dirty` stays an offline ref-only hint.
+
 ## 0.14.1 — 2026-10-30
 
 Patch release under ADR 0003 for Sprint 12. The MCP tool contract, result
