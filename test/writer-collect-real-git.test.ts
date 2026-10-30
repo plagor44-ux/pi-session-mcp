@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
@@ -104,6 +104,8 @@ async function fixture() {
 }
 
 const DETACHED_REF = "refs/remotes/writer-repo-w1/main-detached";
+const INDEX_REF = "refs/remotes/writer-repo-w1/main-index";
+const WIP_REF = "refs/remotes/writer-repo-w1/main-wip";
 
 it("collects a clean detached-HEAD commit under <base>-detached and finish keeps it in the operator checkout (#193)", async () => {
   const f = await fixture();
@@ -236,4 +238,158 @@ it("refuses a derived name that conflicts with an exported branch path and still
   expect(await gitPresent(f.checkout, "cat-file", "-e", `${other}^{commit}`)).toBe(false);
   expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+}, 60_000);
+
+/** The exact index-only case: HEAD and worktree hold "base", only the index holds the marker (`git status` shows `MM`). */
+async function indexOnlyWork(f: Awaited<ReturnType<typeof fixture>>): Promise<string> {
+  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_STAGED_ONLY_3107\n");
+  await f.work("add", "base.txt");
+  await f.work("restore", "--source=HEAD", "--worktree", "--", "base.txt");
+  expect(await f.work("status", "--porcelain")).toBe("MM base.txt");
+  expect(await f.work("show", ":base.txt")).toBe("SYNTHETIC_STAGED_ONLY_3107");
+  return f.work("rev-parse", ":base.txt");
+}
+
+it("never removes a writer whose only work is staged in the index, without discard", async () => {
+  const f = await fixture();
+  const blob = await indexOnlyWork(f);
+  expect((await removeWriter(f.ctx, "repo-w1", { discard: false })).status).toBe("failed");
+  expect(await f.work("rev-parse", ":base.txt")).toBe(blob);
+}, 60_000);
+
+it("does not report index-only work as nothing to collect, and finish keeps it", async () => {
+  const f = await fixture();
+  const blob = await indexOnlyWork(f);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected.code).not.toBe("nothing_to_collect");
+  const finished = await finishWriter(f.ctx, "repo-w1");
+  const kept = await gitPresent(f.checkout, "cat-file", "-e", `${blob}^{blob}`);
+  // Either the staged blob reached the operator checkout, or finish refused and the index is unchanged.
+  if (!kept) {
+    expect(finished.status).toBe("failed");
+    expect(await f.work("rev-parse", ":base.txt")).toBe(blob);
+  }
+}, 60_000);
+
+it("collects, finishes and removes the exact index-only writer under <branch>-index (#200)", async () => {
+  const f = await fixture();
+  const blob = await indexOnlyWork(f);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected.status).toBe("ok");
+  expect(collected.code).toBe("writer_collected");
+  expect(collected.refs).toContain(INDEX_REF);
+  expect(collected.refs).not.toContain(WIP_REF);
+  expect(await git(f.checkout, "show", `${INDEX_REF}:base.txt`)).toBe("SYNTHETIC_STAGED_ONLY_3107");
+  expect(await git(f.checkout, "rev-parse", `${INDEX_REF}:base.txt`)).toBe(blob);
+  expect(await gitPresent(f.checkout, "cat-file", "-e", `${blob}^{blob}`)).toBe(true);
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await git(f.checkout, "rev-parse", `${INDEX_REF}:base.txt`)).toBe(blob);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+}, 60_000);
+
+it("exports a staged new file whose worktree copy is gone (AD) and finish keeps the blob (#200)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "staged-only.txt"), "SYNTHETIC_STAGED_NEW_3107\n");
+  await f.work("add", "staged-only.txt");
+  await rm(join(f.paths.clone, "staged-only.txt"));
+  expect(await f.work("status", "--porcelain")).toBe("AD staged-only.txt");
+  const blob = await f.work("rev-parse", ":staged-only.txt");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected" });
+  expect(collected.refs).toContain(INDEX_REF);
+  expect(await git(f.checkout, "rev-parse", `${INDEX_REF}:staged-only.txt`)).toBe(blob);
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await gitPresent(f.checkout, "cat-file", "-e", `${blob}^{blob}`)).toBe(true);
+}, 60_000);
+
+it("treats a staged deletion with the worktree file restored as uncollected work (#200)", async () => {
+  const f = await fixture();
+  // The index deletes base.txt while the worktree still holds it: the index tree differs from
+  // both the HEAD tree and the worktree tree.
+  await f.work("rm", "--cached", "base.txt");
+  expect(await f.work("status", "--porcelain")).toContain("D  base.txt");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected" });
+  expect(collected.refs).toContain(INDEX_REF);
+  // The export records the staged tree, in which base.txt is deleted.
+  expect(await git(f.checkout, "rev-parse", `${INDEX_REF}^{tree}`)).toBe(await f.work("write-tree"));
+  expect(await gitPresent(f.checkout, "cat-file", "-e", `${INDEX_REF}:base.txt`)).toBe(false);
+}, 60_000);
+
+it("exports only the -wip ref when the index matches the worktree (M) (#200)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_STAGED_AND_WORKTREE_3107\n");
+  await f.work("add", "base.txt");
+  expect(await f.work("status", "--porcelain")).toBe("M  base.txt");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected" });
+  expect(collected.refs).toContain(WIP_REF);
+  expect(collected.refs).not.toContain(INDEX_REF);
+  expect(await gitPresent(f.checkout, "rev-parse", "--verify", INDEX_REF)).toBe(false);
+  expect(await git(f.checkout, "show", `${WIP_REF}:base.txt`)).toBe("SYNTHETIC_STAGED_AND_WORKTREE_3107");
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+}, 60_000);
+
+it("invalidates an earlier collection when only the index changes afterwards (#200)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_INDEX_FIRST_3107\n");
+  await f.work("add", "base.txt");
+  expect(await f.work("status", "--porcelain")).toBe("M  base.txt");
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_collected" });
+  // Stage a different blob and put the worktree back to HEAD, so only the index changes.
+  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_INDEX_SECOND_3107\n");
+  await f.work("add", "base.txt");
+  await f.work("restore", "--source=HEAD", "--worktree", "--", "base.txt");
+  expect(await f.work("status", "--porcelain")).toBe("MM base.txt");
+  const staged = await f.work("rev-parse", ":base.txt");
+  const indexBefore = await readFile(join(f.paths.clone, ".git/index"));
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await f.work("rev-parse", ":base.txt")).toBe(staged);
+  expect((await readFile(join(f.paths.clone, ".git/index"))).equals(indexBefore)).toBe(true);
+}, 60_000);
+
+it("fails closed on an unmerged index and preserves the conflict (#200)", async () => {
+  const f = await fixture();
+  await f.work("checkout", "-b", "other");
+  await f.commit("other side", "base.txt", "SYNTHETIC_CONFLICT_OTHER_3107\n");
+  await f.work("checkout", "main");
+  await f.commit("main side", "base.txt", "SYNTHETIC_CONFLICT_MAIN_3107\n");
+  const merge = await spawn("git", ["-C", f.paths.clone, "merge", "other"]);
+  expect(merge.exitCode, "merge must conflict").not.toBe(0);
+  const unmerged = async () => (await f.work("ls-files", "-u")).split("\n").filter(Boolean);
+  const conflictBefore = await f.work("ls-files", "-u");
+  expect(await unmerged()).toHaveLength(3);
+  expect((await collectWriter(f.ctx, "repo-w1")).status).toBe("failed");
+  expect((await finishWriter(f.ctx, "repo-w1")).status).toBe("failed");
+  expect((await removeWriter(f.ctx, "repo-w1", { discard: false })).status).toBe("failed");
+  expect(await unmerged()).toHaveLength(3);
+  expect(await f.work("ls-files", "-u")).toBe(conflictBefore);
+}, 60_000);
+
+it("inspects the index non-mutatingly during collection (#200)", async () => {
+  const f = await fixture();
+  await indexOnlyWork(f);
+  const indexPath = join(f.paths.clone, ".git/index");
+  const statusBefore = await f.work("status", "--porcelain");
+  expect(statusBefore).toBe("MM base.txt");
+  const indexBefore = await readFile(indexPath);
+  const statBefore = await stat(indexPath);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected.status).toBe("ok");
+  // Sample the index before running any other Git command: `git status` may rewrite a racy index itself.
+  const indexAfter = await readFile(indexPath);
+  const statAfter = await stat(indexPath);
+  expect(indexAfter.equals(indexBefore)).toBe(true);
+  expect(statAfter.mtimeMs).toBe(statBefore.mtimeMs);
+  expect(statAfter.size).toBe(statBefore.size);
+  expect(await f.work("status", "--porcelain")).toBe(statusBefore);
+}, 60_000);
+
+it("still collects nothing and removes a pristine writer without discard (#200 regression guard)", async () => {
+  const f = await fixture();
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [], refused: 0, findings: [] });
+  expect(await git(f.checkout, "for-each-ref", "--format=%(refname)", "refs/remotes/writer-repo-w1/")).toBe("");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
 }, 60_000);
