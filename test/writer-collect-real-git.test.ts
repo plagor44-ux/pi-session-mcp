@@ -331,6 +331,20 @@ it("exports only the -wip ref when the index matches the worktree (M) (#200)", a
   expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
 }, 60_000);
 
+it("collects an intent-to-add file through -wip instead of refusing (#200)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "intent.txt"), "SYNTHETIC_INTENT_TO_ADD_3107\n");
+  await f.work("add", "-N", "intent.txt");
+  expect(await f.work("status", "--porcelain")).toBe("A intent.txt"); // " A", trimmed
+  // write-tree skips intent-to-add entries, so the index tree equals HEAD and no -index ref is needed.
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected" });
+  expect(collected.refs).toContain(WIP_REF);
+  expect(collected.refs).not.toContain(INDEX_REF);
+  expect(await git(f.checkout, "show", `${WIP_REF}:intent.txt`)).toBe("SYNTHETIC_INTENT_TO_ADD_3107");
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+}, 60_000);
+
 it("invalidates an earlier collection when only the index changes afterwards (#200)", async () => {
   const f = await fixture();
   await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_INDEX_FIRST_3107\n");
