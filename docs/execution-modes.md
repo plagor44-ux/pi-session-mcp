@@ -215,8 +215,26 @@ pristine writer, without refused names; fetch the base again or resolve with
 index and worktree tree objects must exist in the operator checkout. New work,
 including a change to the index alone, invalidates that authorization. A digest
 recorded by 0.14.1 or earlier never matches the versioned digest, so collect
-such a writer again before a destructive operation. Stashes are not exported as branches:
-resolve any needed stash inside the boundary before collection.
+such a writer again before a destructive operation.
+
+Every stash entry is exported as `<base>-stash-<n>`, numbered like
+`stash@{n}` (newest first; for example `main-stash-0`), with its index and
+untracked parts as the commit's parents; `git stash apply` accepts the imported
+ref. The same name rules apply, and every stash commit must exist in the
+operator checkout before a digest is recorded. Tags, notes, replace refs,
+remote-tracking refs and refs in any other namespace are not exported, whatever
+their names. Each must name an object the operator checkout already has,
+otherwise the writer is not at its baseline and collection is incomplete
+(`writer_collect_incomplete`, without a refused name) and no digest is
+recorded. Provisioned tags and remote-tracking refs, and a lightweight tag on
+an exported commit, pass while the operator checkout still has their objects:
+only such a ref's name is lost at cleanup. An annotated tag, a note, a replace
+ref or a moved remote-tracking ref that the worker created blocks cleanup until
+a later session on that writer removes it or the operator decides on
+`--discard`; the server guard admits such a writer as long as its branches,
+stash and worktree are at the baseline. If the operator deletes a provisioned
+annotated tag and its object is garbage-collected, the writer's copy blocks
+cleanup the same way.
 
 `--finish` collects, then resets a persistent writer or recreates an ephemeral
 writer, on the workspace default base. A collect refusing any branch name is incomplete (`writer_collect_incomplete`,
@@ -324,9 +342,9 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_inspect_failed` | Contained work inspection failed, including an index that cannot be evaluated such as an unmerged conflict |
 | `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
 | `writer_collect_failed` | Bundle generation/verification/import failed, including an unmerged index |
-| `writer_collect_incomplete` | One or more branch names refused, or a collected commit or tree is missing from the operator checkout; no cleanup authorization |
-| `ref_name_refused` | Unsafe export name, or a `-wip`, `-index` or `-detached` name collision |
-| `nothing_to_collect` | No changed branch, WIP, index or detached commit to export |
+| `writer_collect_incomplete` | One or more branch names refused, a collected commit or tree is missing from the operator checkout, or a tag, note or other unexported ref names an object only the clone has; no cleanup authorization |
+| `ref_name_refused` | Unsafe export name, or a `-wip`, `-index`, `-detached` or `-stash-<n>` name collision |
+| `nothing_to_collect` | No changed branch, WIP, index, detached commit or stash entry to export |
 | `writer_collected` | Complete export recorded |
 | `writer_reset_failed` | Reset command or validation failed |
 | `writer_reset` | Persistent clone reset and verified |

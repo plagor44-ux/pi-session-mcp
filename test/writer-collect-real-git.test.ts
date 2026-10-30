@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import type { CommandResult, CommandRunner } from "../src/client-adapters/types.js";
-import { collectWriter, finishWriter, provisionWriter, recreateWriter, removeWriter, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
+import { collectWriter, finishWriter, inspectWork, provisionWriter, recreateWriter, removeWriter, resetWriter, type WriterContext } from "../src/writer-lifecycle.js";
 import { readWriterState, writerPaths, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -221,8 +221,11 @@ it("ignores clone replace refs that would make a detached commit look reachable"
   // A graft makes the base commit claim the detached commit as its parent.
   await f.work("replace", "--graft", f.baseCommit, detached);
   const collected = await collectWriter(f.ctx, "repo-w1");
-  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0 });
+  expect(collected).toMatchObject({ refused: 0, findings: [] });
   expect(await git(f.checkout, "rev-parse", "--verify", DETACHED_REF)).toBe(detached);
+  // The graft commit exists only in the clone and replace refs are not exported, so no digest is recorded (#202).
+  expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
 }, 60_000);
 
 it("refuses a derived name that conflicts with an exported branch path and still exports that branch", async () => {
@@ -420,4 +423,140 @@ it("still collects nothing and removes a pristine writer without discard (#200 r
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [], refused: 0, findings: [] });
   expect(await git(f.checkout, "for-each-ref", "--format=%(refname)", "refs/remotes/writer-repo-w1/")).toBe("");
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+}, 60_000);
+
+const STASH_REF = (n: number) => `refs/remotes/writer-repo-w1/main-stash-${n}`;
+
+/** The issue's state: a clean worktree on the base branch whose only work is a stash entry. */
+async function stashOnlyWork(f: Awaited<ReturnType<typeof fixture>>, marker = "SYNTHETIC_STASH_ONLY_3107"): Promise<string> {
+  await writeFile(join(f.paths.clone, "base.txt"), `${marker}\n`);
+  const blob = await f.work("hash-object", "base.txt");
+  await f.work("stash", "push", "-m", marker);
+  expect(await f.work("status", "--porcelain")).toBe("");
+  return blob;
+}
+
+it("exports a stash-only writer as <base>-stash-0 before remove (#202)", async () => {
+  const f = await fixture();
+  const blob = await stashOnlyWork(f);
+  const stash = await f.work("rev-parse", "refs/stash");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refs: [STASH_REF(0)], refused: 0 });
+  expect(await git(f.checkout, "rev-parse", "--verify", STASH_REF(0))).toBe(stash);
+  expect(await gitPresent(f.checkout, "cat-file", "-e", blob)).toBe(true);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+  expect(await git(f.checkout, "cat-file", "-p", `${STASH_REF(0)}:base.txt`)).toBe("SYNTHETIC_STASH_ONLY_3107");
+}, 60_000);
+
+it("exports every stash entry in stash@{n} order, with staged and untracked parts, and finish keeps them (#202)", async () => {
+  const f = await fixture();
+  await stashOnlyWork(f, "older");
+  await writeFile(join(f.paths.clone, "base.txt"), "staged\n");
+  await f.work("add", "base.txt");
+  await writeFile(join(f.paths.clone, "untracked.txt"), "untracked\n");
+  await f.work("stash", "push", "--include-untracked", "-m", "newer");
+  const entries = (await f.work("stash", "list", "--format=%H")).split("\n");
+  expect(entries).toHaveLength(2);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0 });
+  expect([...collected.refs].sort()).toEqual([STASH_REF(0), STASH_REF(1)]);
+  expect(await git(f.checkout, "rev-parse", STASH_REF(0), STASH_REF(1))).toBe(entries.join("\n"));
+  // The newer entry's index parent and untracked parent arrive with it.
+  expect(await git(f.checkout, "cat-file", "-p", `${STASH_REF(0)}^2:base.txt`)).toBe("staged");
+  expect(await git(f.checkout, "cat-file", "-p", `${STASH_REF(0)}^3:untracked.txt`)).toBe("untracked");
+  expect(await git(f.checkout, "cat-file", "-p", `${STASH_REF(1)}:base.txt`)).toBe("older");
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await f.work("stash", "list")).toBe("");
+  expect(await git(f.checkout, "rev-parse", STASH_REF(0), STASH_REF(1))).toBe(entries.join("\n"));
+}, 60_000);
+
+it("exports a stash tip that has no reflog (#202)", async () => {
+  const f = await fixture();
+  await stashOnlyWork(f);
+  const stash = await f.work("rev-parse", "refs/stash");
+  await rm(join(f.paths.clone, ".git/logs/refs/stash"));
+  expect(await f.work("rev-list", "--walk-reflogs", "refs/stash")).toBe("");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refs: [STASH_REF(0)] });
+  expect(await git(f.checkout, "rev-parse", "--verify", STASH_REF(0))).toBe(stash);
+}, 60_000);
+
+it("invalidates an earlier collection when only a stash entry is added afterwards (#202)", async () => {
+  const f = await fixture();
+  expect((await collectWriter(f.ctx, "repo-w1")).code).toBe("nothing_to_collect");
+  const blob = await stashOnlyWork(f);
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await gitPresent(f.paths.clone, "cat-file", "-e", blob)).toBe(true);
+  expect(await f.work("stash", "list", "--format=%s")).toBe("On main: SYNTHETIC_STASH_ONLY_3107");
+}, 60_000);
+
+it("refuses a taken <base>-stash-0 name and records no digest (#202)", async () => {
+  const f = await fixture();
+  await stashOnlyWork(f);
+  await f.work("branch", "main-stash-0", "main");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete", findings: [{ code: "ref_name_refused" }] });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await f.work("stash", "list", "--format=%s")).toBe("On main: SYNTHETIC_STASH_ONLY_3107");
+}, 60_000);
+
+it("refuses cleanup while a note or an annotated tag holds objects only the clone has (#202)", async () => {
+  for (const [label, create, drop] of [
+    ["note", ["notes", "add", "-m", "SYNTHETIC_NOTE_3107", "HEAD"], ["update-ref", "-d", "refs/notes/commits"]],
+    ["tag", ["tag", "-a", "-m", "SYNTHETIC_TAG_3107", "v-writer", "HEAD"], ["tag", "-d", "v-writer"]],
+    ["tag name outside the export rules", ["tag", "-a", "-m", "SYNTHETIC_TAG_3107", "pkg@1.0.0+build", "HEAD"], ["tag", "-d", "pkg@1.0.0+build"]],
+  ] as const) {
+    const f = await fixture();
+    await f.work(...create);
+    expect(await removeWriter(f.ctx, "repo-w1", { discard: false }), label).toMatchObject({ status: "failed", code: "writer_uncollected" });
+    const collected = await collectWriter(f.ctx, "repo-w1");
+    expect(collected, label).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: [], refused: 0, findings: [] });
+    expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected, label).toBeUndefined();
+    expect(await finishWriter(f.ctx, "repo-w1"), label).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+    expect(await removeWriter(f.ctx, "repo-w1", { discard: false }), label).toMatchObject({ status: "failed", code: "writer_uncollected" });
+    // Once a session resolves the ref inside the boundary, the writer is pristine again.
+    await f.work(...drop);
+    expect(await collectWriter(f.ctx, "repo-w1"), label).toMatchObject({ status: "ok", code: "nothing_to_collect" });
+    expect(await removeWriter(f.ctx, "repo-w1", { discard: false }), label).toMatchObject({ status: "ok", code: "writer_removed" });
+  }
+}, 120_000);
+
+it("treats tags and other refs whose objects the operator checkout has as baseline (#202)", async () => {
+  const f = await fixture();
+  // Provisioned tags and a lightweight tag on the base commit name only objects the operator has; only the name is lost.
+  await git(f.checkout, "tag", "-a", "-m", "operator", "v-operator", "main");
+  // Tag names outside the branch export name rules are only compared, never refused.
+  await git(f.checkout, "tag", "-a", "-m", "operator", "@scope/pkg@1.0.0+build", "main");
+  await f.work("fetch", "--quiet", "origin", "+refs/tags/*:refs/tags/*");
+  expect(await f.work("tag", "--list")).toContain("@scope/pkg@1.0.0+build");
+  await f.work("tag", "v-light", "main");
+  await f.work("update-ref", "refs/bisect/bad", "main");
+  expect((await inspectWork(f.ctx, "repo-w1")).baseline).toBe(true);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [] });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+}, 60_000);
+
+it("refuses cleanup while a remote-tracking ref holds the only copy of a commit (#202)", async () => {
+  const f = await fixture();
+  const hidden = await f.commit("hidden work", "hidden.txt", "SYNTHETIC_REMOTE_ONLY_3107\n");
+  await f.work("update-ref", "refs/remotes/origin/hidden", hidden);
+  await f.work("reset", "--hard", f.baseCommit);
+  expect((await inspectWork(f.ctx, "repo-w1")).baseline).toBe(false);
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_collect_incomplete", refs: [], findings: [] });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await f.work("cat-file", "-p", `${hidden}:hidden.txt`)).toBe("SYNTHETIC_REMOTE_ONLY_3107");
+}, 60_000);
+
+it("refuses cleanup when refs/stash names a non-commit object (#202)", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "blob.txt"), "SYNTHETIC_BLOB_STASH_3107\n");
+  const blob = await f.work("hash-object", "-w", "blob.txt");
+  await rm(join(f.paths.clone, "blob.txt"));
+  await f.work("update-ref", "refs/stash", blob);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
+  expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
 }, 60_000);

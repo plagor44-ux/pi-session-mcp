@@ -58,6 +58,10 @@ mean they are implemented or that their gates passed.
   work as `<branch>-index`. The published-release Level 2 of 0.14.1 passed. The
   same loss for work that exists only in a stash entry is the follow-up
   [#202](https://github.com/plagor44-ux/pi-session-mcp/issues/202).
+- 2026-10-30: #202 is fixed in one pull request, unreleased: collection exports
+  every stash entry as `<base>-stash-<n>`, and tags, notes and other unexported
+  refs must name objects the operator checkout already has before a writer
+  counts as baseline or a digest is recorded.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

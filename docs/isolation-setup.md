@@ -226,18 +226,21 @@ clone layout and runs clone-side Git only in throwaway no-network containers.
 Collect with `--writer <name> --collect --apply`, then review
 `refs/remotes/writer-<name>/<branch>` in your own checkout, with dirty work at
 `<branch>-wip`, staged work that differs from both HEAD and the worktree at
-`<branch>-index`, and a clean detached HEAD at `<base>-detached` (for example
-`main-detached`). Imported refs are untrusted until reviewed.
+`<branch>-index`, a clean detached HEAD at `<base>-detached` (for example
+`main-detached`), and every stash entry at `<base>-stash-<n>`. Tags, notes and
+other refs are not exported; one that names an object only the clone has makes
+collection incomplete. Imported refs are untrusted until reviewed.
 
 After taking over the result and closing its coding session, run
 `pi-session-mcp-setup --writer <name> --finish --apply` before another task.
 It collects then resets (persistent) or recreates (ephemeral). If any branch name
 was refused, collection is incomplete and finish stops; a `<base>-detached`,
-`<branch>-wip` or `<branch>-index` name that an exported branch takes or whose path it conflicts
+`<branch>-wip`, `<branch>-index` or `<base>-stash-<n>` name that an exported branch takes or whose path it conflicts
 with is refused the same way. The release digest is
-recorded only when the clone's HEAD commit and every branch commit exist in the
-operator checkout, otherwise collection is `writer_collect_incomplete` and no
-digest is recorded. Rename inside the writer
+recorded only when the clone's HEAD commit, every branch commit and every stash
+commit exist in the operator checkout and every other ref names an object the
+operator checkout has, otherwise collection is `writer_collect_incomplete` and
+no digest is recorded. Rename inside the writer
 or have the operator explicitly resolve loss with `--reset --discard --apply`.
 Finish returns persistent and ephemeral writers to the workspace default base.
 No reconnect is needed after finish, reset or recreate: each session starts a

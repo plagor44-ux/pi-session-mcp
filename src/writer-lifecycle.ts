@@ -297,30 +297,55 @@ export async function provisionWriter(ctx: WriterContext, input: {
   } catch (error) { return failure(error); }
 }
 
+/**
+ * Distinct object names among `objects` that the operator checkout does not have. Objects that an operator ref
+ * names need no further call; each remaining one costs one `cat-file`, since the runner has no stdin for a batch.
+ */
+async function missingObjects(ctx: WriterContext, objects: readonly string[]): Promise<string[]> {
+  if (objects.length === 0) return [];
+  const known = new Set((await git(ctx, ["for-each-ref", "--format=%(objectname)"], true))?.split("\n"));
+  const missing: string[] = [];
+  for (const object of new Set(objects)) {
+    if (!known.has(object) && await git(ctx, ["cat-file", "-e", object], true) === undefined) missing.push(object);
+  }
+  return missing;
+}
+
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   baseline: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
-  indexTree: string; tree: string; headTree: string;
+  stashes: readonly string[]; unknownRefs: number; indexTree: string; tree: string; headTree: string;
 }> {
   ctx = leasedContext(ctx);
   const state = await readWriterState(ctx.home, name);
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
-  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads refs/stash\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
+  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)'\nif stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then\n  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)\n  printf 'stash %s\\n' "$stash" $log\nfi\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
   const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
   const hash = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
   const head = lines.shift(), baseTree = lines.pop(), headTree = lines.pop(), indexTree = lines.pop(), tree = lines.pop();
   if (![head, baseTree, headTree, indexTree, tree].every((value) => value !== undefined && hash.test(value))) throw new LifecycleError("writer_inspect_failed");
-  const refs = lines.map((line) => {
+  const refs: { name: string; commit: string }[] = [], stashes: string[] = [];
+  for (const line of lines) {
     const [name, commit, extra] = line.split(" ");
-    if (!name || !isSafeRefName(name) || !commit || !hash.test(commit) || extra !== undefined || !(name.startsWith("refs/heads/") || name === "refs/stash")) throw new LifecycleError("writer_inspect_failed");
-    return { name, commit };
-  });
+    if (!commit || !hash.test(commit) || extra !== undefined) throw new LifecycleError("writer_inspect_failed");
+    if (name === "stash") stashes.push(commit);
+    // Only branch names reach a command (as export names); other refs such as a tag `pkg@1.0.0+build` are
+    // only compared, so any ref name Git accepts must not make inspection fail.
+    else if (name && (name.startsWith("refs/heads/") ? isSafeRefName(name) : name.startsWith("refs/"))) refs.push({ name, commit });
+    else throw new LifecycleError("writer_inspect_failed");
+  }
+  const branches = refs.filter(({ name }) => name.startsWith("refs/heads/"));
+  // Refs outside branches and the stash are not exported (#202): they must name objects the operator
+  // checkout already has, or the clone holds work that only it can recover.
+  const others = refs.filter(({ name }) => !name.startsWith("refs/heads/") && name !== "refs/stash");
+  const unknownRefs = (await missingObjects(ctx, others.map(({ commit }) => commit))).length;
   return {
-    baseline: head === state.base.commit && refs.length === 1 && refs[0]!.name === state.base.ref && refs[0]!.commit === state.base.commit && tree === baseTree && indexTree === baseTree,
-    dirty: tree !== headTree || indexTree !== headTree, head: head!, branches: refs.filter(({ name }) => name.startsWith("refs/heads/")),
+    baseline: head === state.base.commit && branches.length === 1 && branches[0]!.name === state.base.ref && branches[0]!.commit === state.base.commit
+      && !refs.some(({ name }) => name === "refs/stash") && stashes.length === 0 && unknownRefs === 0 && tree === baseTree && indexTree === baseTree,
+    dirty: tree !== headTree || indexTree !== headTree, head: head!, branches, stashes, unknownRefs,
     indexTree: indexTree!, tree: tree!, headTree: headTree!,
     digest: `sha256:${createHash("sha256").update("inspect-v2\n").update(result.stdout).digest("hex")}`,
   };
@@ -381,6 +406,20 @@ ${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)' refs/heads | wh
     ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "$ref" "$commit"
   fi
 done
+# Every stash entry, newest first as in stash@{n}, under a derived name (#202). The tip covers a missing reflog.
+if stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then
+  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)
+  n=0 previous=
+  for commit in "$stash" $log; do
+    if [ "$commit" = "$previous" ]; then continue; fi
+    previous=$commit
+    if ${BOUNDARY_GIT} --git-dir=/tmp/scratch show-ref --verify --quiet "refs/heads/$4-stash-$n" \\
+      || ! ${BOUNDARY_GIT} --git-dir=/tmp/scratch update-ref "refs/heads/$4-stash-$n" "$commit" 2>/dev/null; then
+      printf '%s\\n' ref_name_refused
+    fi
+    n=$((n + 1))
+  done
+fi
 cp .git/index /tmp/index
 cp .git/index /tmp/staged-index
 export GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/scratch/objects
@@ -443,11 +482,13 @@ fi`;
       // Defence in depth (#193): whatever the boundary script exported or reported as nothing to collect,
       // every commit the clone's work refers to must exist as a commit object in the operator checkout
       // before a digest is recorded.
-      for (const sha of [work.head, ...work.branches.map((branch) => branch.commit)]) {
+      for (const sha of [work.head, ...work.branches.map((branch) => branch.commit), ...work.stashes]) {
         if (sha === undefined || await git(ctx, ["cat-file", "-e", `${sha}^{commit}`], true) === undefined) {
           return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
         }
       }
+      // Tags, notes and other refs are not exported: their objects must already be in the operator checkout (#202).
+      if (work.unknownRefs > 0) return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
       for (const tree of [work.indexTree, work.tree]) {
         if (tree !== work.headTree && await git(ctx, ["cat-file", "-e", `${tree}^{tree}`], true) === undefined) {
           return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
