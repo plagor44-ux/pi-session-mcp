@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import type { CommandRunner } from "./client-adapters/types.js";
 import type { ContainerSettings } from "./execution-modes.js";
 import { writerLimits } from "./writer-limits.js";
+import { removeWriterTree } from "./writer-tree-removal.js";
 import { configSchema } from "./config.js";
 import { renderWrapper } from "./writer-wrapper.js";
 import { builtinSkillName } from "./skill-catalog.js";
@@ -266,7 +267,7 @@ export async function provisionWriter(ctx: WriterContext, input: {
         if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
       }
     }
-    if (restart || existing?.phase === "provisioning") await rm(paths.root, { recursive: true, force: true });
+    if (restart || existing?.phase === "provisioning") await removeWriterTree(paths.root);
     // With spool delivery the spool directory exists from provisioning on: launch would otherwise add it to the
     // writer root, a host directory the acceptance harness digests around its own first launch.
     const spool = config.events?.delivery === "spool" ? [paths.events] : [];
@@ -444,7 +445,7 @@ async function recreate(ctx: WriterContext, name: string, state: WriterState, ba
   const next = { ...retained, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
   await writeWriterState(ctx.home, name, { ...next, phase: "provisioning" });
   for (const path of [paths.clone, paths.agent]) {
-    await rm(path, { recursive: true, force: true });
+    await removeWriterTree(path);
     await privateDirectory(path);
   }
   await cloneFromBundle(ctx, paths, state.imageId, base, remote, state.tags);
@@ -518,7 +519,7 @@ export async function removeWriter(ctx: WriterContext, name: string, opts: { dis
       const work = await inspectWork(ctx, name);
       if (!work.baseline && state.collected?.digest !== work.digest) throw new LifecycleError("writer_uncollected");
     }
-    await rm(paths.root, { recursive: true, force: true });
+    await removeWriterTree(paths.root);
     return { code: "writer_removed", status: "ok" };
   } catch (error) { return failure(error); }
 }

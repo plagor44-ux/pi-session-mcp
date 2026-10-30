@@ -215,7 +215,7 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 | `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files, and ignored files with `--clean all`; falls back to recreation if post-reset verification fails |
 | `--recreate --apply` | Rebuild clone and agent copy from the workspace default base, retaining image/settings |
 | `--finish --apply` | Collect, then reset persistent / recreate ephemeral on the workspace default base |
-| `--remove` | Explicit mutation: unregister owned registrations before removing writer state |
+| `--remove` | Explicit mutation: unregister owned registrations before removing writer state; read-only directories inside the writer root (such as Go's module cache) are made removable first, and `state.json` is removed last |
 | `--verify` | Doctor and bounded relay-path MCP handshake/tools/list/capabilities; verify the host registration with client-target verify too; no session or provider request |
 
 Other than explicit `--remove` and `--verify`, omitting apply only plans.
