@@ -2598,6 +2598,53 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.1 pre-release acceptance
+
+`v0.14.1` was accepted on 2026-10-30 from 06:04 to 06:15 UTC on its release
+candidate `a239610`, on Linux (`x64`) with Node.js `26.12.1`, npm `12.2.1`,
+Codex CLI `0.162.1` and Claude Code `2.1.314`. Level 2 passed in the working
+tree and for the packed tarball, each with delivery off and with delivery on.
+Level 1 passed except `npm audit`. Later commits on the release pull request
+change only this record.
+
+The patch release ships Sprint 12 (#192, #193, #194) from `main` at `d9a47f5`;
+the candidate adds only the version, the changelog heading and the roadmap
+line. The MCP tool contract, result codes and configuration schema are
+unchanged. The source changes were accepted on the branch before the merge, see
+[Sprint 12 candidate acceptance](#sprint-12-candidate-acceptance-2026-10-30),
+including Level 3.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    141 files, 4044 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` 8.10.2 finding through `@earendil-works/pi-coding-agent`
+    1.4.0, the latest SDK release, with eight advisories
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 933 files (tarball shasum
+    `47cf66a3856530112c11095d07cb05b7ab9892f4`, identical in three packs). A
+    scan of the unpacked files for private names, hosts and the maintainer's
+    home path found none.
+  - Doctor reported `packageVersion` `0.14.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke from another fresh prefix
+  reported `smoke_passed` with version `0.14.1`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories were removed.
+- Podman-gated writer tests on the candidate (Podman `6.1.4`): 8 of 8 passed
+  (7 lifecycle tests, including the detached-`HEAD` export of #193, and 1
+  boundary test).
+- Bubblewrap-gated sandbox tests (`test/sandbox-shell.bwrap.test.ts`, bubblewrap
+  `0.13.1`): 12 of 12 passed, none skipped.
+
+Not established for `0.14.1` beyond the Sprint 12 record: a Level 3 cycle on
+the release candidate itself, and the published-release Level 2 and upgrades,
+which follow after publishing.
+
 ### Sprint 12 candidate acceptance (2026-10-30)
 
 Recorded on 2026-10-29 and 2026-10-30 for the unreleased branch

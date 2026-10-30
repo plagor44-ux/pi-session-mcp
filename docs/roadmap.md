@@ -42,8 +42,8 @@ mean they are implemented or that their gates passed.
   controlling agent creates, changes or retires profiles without a guided
   dialog. Recorded in [ADR 0014](adr/0014-profile-probe-and-model-catalog.md).
 - 2026-10-30: [Sprint 12](sprints/2026-10-29-s12-audit-fixes.md) fixes three
-  audit findings on `9d9cf8c` in one pull request, unreleased: read-only
-  context files confined to the workspace
+  audit findings on `9d9cf8c` in one pull request, released in patch release
+  0.14.1: read-only context files confined to the workspace
   ([#192](https://github.com/plagor44-ux/pi-session-mcp/issues/192)), detached
   `HEAD` collection and the release-digest gate
   ([#193](https://github.com/plagor44-ux/pi-session-mcp/issues/193)) and the
