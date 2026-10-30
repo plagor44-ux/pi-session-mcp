@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  BWRAP_PATH, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS, probeSandbox, resolveWorktreeGitDir, sandboxArgs,
+  BWRAP_PATH, SYSTEMD_RUN_PATH, SANDBOX_LIMITS, scopeArgs, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS, probeSandbox, resolveWorktreeGitDir, sandboxArgs,
   type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -23,6 +23,15 @@ const FIXED_HEAD = [
   "--setenv", "PATH", "/usr/local/bin:/usr/bin:/bin", "--setenv", "HOME", "/tmp/home", "--ro-bind", "/usr", "/usr",
 ];
 const FIXED_MIDDLE = ["--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--size", "536870912", "--tmpfs", "/tmp", "--dir", "/tmp/home"];
+
+describe("scopeArgs", () => {
+  it("wraps bubblewrap in the fixed limited scope", () => {
+    expect(scopeArgs("unit", SANDBOX_LIMITS, ["arg"])).toEqual([
+      "--user", "--scope", "--quiet", "--collect", "--unit=unit", "-p", "MemoryMax=1073741824",
+      "-p", "MemorySwapMax=0", "-p", "TasksMax=128", "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", "arg",
+    ]);
+  });
+});
 
 describe("sandboxArgs", () => {
   it("produces the fixed argument list for a merged-/usr host", () => {
@@ -170,10 +179,14 @@ function fakeChild() {
   const emitter = new EventEmitter();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
+  const info = new PassThrough();
+  const block = new PassThrough();
+  const released: string[] = [];
+  block.on("data", (chunk) => released.push(chunk.toString()));
   const kill = vi.fn();
-  const child = Object.assign(emitter, { stdout, stderr, kill }) as unknown as SandboxChild;
+  const child = Object.assign(emitter, { pid: 4241, stdio: [null, stdout, stderr, info, block], stdout, stderr, kill }) as unknown as SandboxChild;
   return {
-    child, kill, stdout, stderr,
+    child, kill, stdout, stderr, info, block, released,
     close: (code: number | null, signal: NodeJS.Signals | null = null) => { stdout.end(); stderr.end(); setImmediate(() => emitter.emit("close", code, signal)); },
     fail: () => emitter.emit("error", new Error("spawn failed")),
   };
@@ -188,9 +201,22 @@ function harness(overrides: Partial<SandboxDependencies> = {}) {
     calls.push({ file, args, options });
     const fake = fakeChild();
     children.push(fake);
+    queueMicrotask(() => fake.info.write('{"child-pid":4242}'));
     return fake.child;
   };
-  const dependencies: SandboxDependencies = { spawn, trusted: () => true, rootEntries: () => MERGED, gitCommonDir: async () => undefined, ...overrides };
+  const dependencies: SandboxDependencies = {
+    spawn, trusted: () => true, rootEntries: () => MERGED, gitCommonDir: async () => undefined,
+    runtimeDir: () => "/run/user/test", unitName: () => "test-unit",
+    readText: async (path) => {
+      if (path === "/proc/self/mounts") return "cgroup2 /sys/fs/cgroup cgroup2 rw 0 0\n";
+      if (path === "/proc/self/cgroup") return "0::/user.slice/server.scope\n";
+      if (path === "/proc/4241/cgroup" || path === "/proc/4242/cgroup") return "0::/user.slice/app.slice/test-unit.scope\n";
+      if (path.endsWith("/memory.max")) return `${SANDBOX_LIMITS.memoryBytes}\n`;
+      if (path.endsWith("/memory.swap.max")) return "0\n";
+      if (path.endsWith("/pids.max")) return `${SANDBOX_LIMITS.tasks}\n`;
+      throw new Error("unexpected path");
+    }, ...overrides,
+  };
   return { children, calls, dependencies };
 }
 
@@ -218,9 +244,9 @@ describe("createSandboxedBashOperations", () => {
     h.children[0]!.close(0);
     await expect(running).resolves.toEqual({ exitCode: 0 });
     const call = h.calls[0]!;
-    expect(call.file).toBe(BWRAP_PATH);
-    expect(call.options).toEqual({ env: {}, stdio: ["ignore", "pipe", "pipe"] });
-    expect(call.args).toEqual(sandboxArgs({ workspace, cwd: join(workspace, "src"), rootEntries: MERGED, argv: ["/usr/bin/bash", "-c", "echo hi"] }));
+    expect(call.file).toBe(SYSTEMD_RUN_PATH);
+    expect(call.options).toEqual({ env: { XDG_RUNTIME_DIR: "/run/user/test" }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
+    expect(call.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: join(workspace, "src"), rootEntries: MERGED, argv: ["/usr/bin/bash", "-c", "echo hi"] })));
     expect(JSON.stringify(call)).not.toMatch(/SECRET_TOKEN|PI_SESSION_ID/);
   });
 
@@ -355,8 +381,8 @@ describe("probeSandbox", () => {
     await vi.waitFor(() => expect(h.calls).toHaveLength(1));
     h.children[0]!.close(0);
     await expect(probing).resolves.toBe(true);
-    expect(h.calls[0]!.file).toBe(BWRAP_PATH);
-    expect(h.calls[0]!.args).toEqual(sandboxArgs({ workspace, cwd: workspace, rootEntries: MERGED, argv: ["/usr/bin/true"] }));
+    expect(h.calls[0]!.file).toBe(SYSTEMD_RUN_PATH);
+    expect(h.calls[0]!.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: workspace, rootEntries: MERGED, argv: ["/usr/bin/true"] })));
   });
 
   it("reports failure for a non-zero exit, a spawn error and an untrusted binary", async () => {
