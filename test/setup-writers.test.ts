@@ -42,7 +42,7 @@ async function fixture() {
       await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(lifecycle.renderContainedConfig("x", paths.clone, input.rawConfig, input.settings.profiles, input.overrideDirectory)));
       return { status: "ok" as const, code: "writer_provisioned" };
     }),
-    inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false, indexTree: "c".repeat(40), tree: "c".repeat(40), headTree: "c".repeat(40) })),
+    inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false, stashes: [], unknownRefs: 0, indexTree: "c".repeat(40), tree: "c".repeat(40), headTree: "c".repeat(40) })),
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
     finishWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
     collectWriter: vi.fn(async (): Promise<lifecycle.CollectOutcome> => ({ status: "ok" as const, code: "writer_collected", refs: [], refused: 0, findings: [] })),
@@ -785,7 +785,7 @@ describe("writer setup reconciliation", () => {
     const f = await fixture();
     await changeWriterMode(f.configPath, mode, f.deps);
     const before = await readFile(executionModesPath(f.configPath), "utf8");
-    f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true, indexTree: "c".repeat(40), tree: "d".repeat(40), headTree: "c".repeat(40) });
+    f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true, stashes: [], unknownRefs: 0, indexTree: "c".repeat(40), tree: "d".repeat(40), headTree: "c".repeat(40) });
     const output = await changeWriterMode(f.configPath, { ...mode, container: { ...mode.container, writers: 1 } }, f.deps);
     expect(output.findings[0]?.code).toBe("writer_uncollected");
     expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
@@ -824,7 +824,7 @@ describe("writer setup reconciliation", () => {
     expect((await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, f.deps)).exitCode).toBe(0);
     expect(f.calls).toEqual(["collect", "reset"]);
     await writeWriterState(f.home, "x-w1", state(1));
-    f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true, indexTree: "c".repeat(40), tree: "d".repeat(40), headTree: "c".repeat(40) });
+    f.life.inspectWork.mockResolvedValue({ baseline: false, digest: "uncollected", branches: [], dirty: true, stashes: [], unknownRefs: 0, indexTree: "c".repeat(40), tree: "d".repeat(40), headTree: "c".repeat(40) });
     expect((await runWriterOperation("x-w1", "remove", { apply: true, discard: false }, f.deps)).findings[0]?.code).toBe("writer_uncollected");
     expect(f.life.removeWriter).not.toHaveBeenCalled();
   });
