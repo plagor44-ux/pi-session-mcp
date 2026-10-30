@@ -2598,6 +2598,63 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.2 post-release evidence
+
+Recorded on 2026-10-30 for the published release `0.14.2`, during
+[Sprint 14](sprints/2026-10-30-s14-sandbox-resource-limits.md). It covers the
+published bytes only; the unreleased #195 candidate has its own record below.
+
+Tag binding: a fresh clone of the annotated tag `v0.14.2` (tag object
+`488459ded623ed52cf8b3a139b1ad0f265b3d2a2`) peels to the merge commit
+`7b8e5c801ed5ab05b8b94a9fe751b8b825ab0a3a` of #205, and
+`git describe --tags --exact-match` reports `v0.14.2`. CI on the merge commit
+(run 41085991886) and on the tag (run 41086907144) passed. The npm package
+records `gitHead` `7b8e5c8`.
+
+- Level 1 on the tag clone after `npm ci`, from 18:33 to 18:34 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (144 files, 4097 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` and name only the known `undici`
+  8.10.2 finding through `@earendil-works/pi-coding-agent` 1.4.0, still the
+  newest SDK release, with the same eight advisories
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)); Level 1
+  is therefore not unrestricted. Doctor reported `packageVersion` `0.14.2` and
+  exited with `2` because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.14.2` on npm: 940 files, shasum
+  `26b286ba30c605ab9454d0c570dee5e36d64a89e`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `775e6de2a6e810839ceb4d8518b8e7c93eae38f3` because the release commit adds the
+  pre-release record to the packaged `docs/acceptance.md`.
+- Published release, Level 2 on the tag clone, 18:34 to 18:36 UTC: 160 of 160
+  with delivery off and 228 of 228 with `--events spool`. The manifests and
+  the 190 built runtime files were byte-identical before and after the client
+  cycles.
+- Published npm package, Level 2 from a fresh prefix, 18:36 to 18:37 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool` (189 built
+  files unchanged). The install smoke on the published package, from another
+  fresh prefix, reported `smoke_passed` with version `0.14.2`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories and prefixes
+  were removed. Clients: Codex CLI `0.166.0` and Claude Code `2.1.314`.
+
+Installations, recorded separately:
+
+- Workstation: `pi-session-mcp@0.14.2` is installed globally; Doctor with the
+  real configuration reported no error (only the known `workspace_gitfile` and
+  `workspace_mode_unset` warnings); `--verify` passed for
+  `claude-code:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`,
+  `hook_verified`) and `codex:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`). A freshly reconnected Claude Code server reported version
+  `0.14.2` and leased both `pi-session-mcp` writers for this sprint.
+- Second machine: a read-only check shows `pi-session-mcp@0.14.2` installed. Its
+  registrations, Doctor and writers were not checked in this record.
+- Both installations were upgraded before this record; it does not establish
+  how or when, nor the individual upgrade steps.
+
+Not established for `0.14.2`: a Level 3 cycle.
+
 ### v0.14.2 pre-release acceptance
 
 `v0.14.2` was accepted on 2026-10-30 from 15:41 to 15:47 UTC on its release
