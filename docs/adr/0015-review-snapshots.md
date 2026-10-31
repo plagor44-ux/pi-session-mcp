@@ -140,11 +140,20 @@ intended to review.
   created, the source checkout must have `<head>^{commit}` and
   `<base>^{commit}` (`snapshot_object_missing`), and the head tree must
   contain no gitlink (`snapshot_submodule_present`; submodules are
-  unsupported, since `git worktree add` leaves them empty). A source whose
-  effective Git configuration defines a `filter.*.clean` or `filter.*.process`
-  driver or `core.fsmonitor` is refused (`snapshot_source_unsupported`), so
-  neither setup nor the server's verification can run repository-configured
-  programs.
+  unsupported, since `git worktree add` leaves them empty).
+- Conversion filters are refused in the Git context of every operation that
+  can run them, not only in the source checkout. Before materialization the
+  source's effective configuration, and before every verification and removal
+  the snapshot's own effective configuration (which can differ: a conditional
+  `includeIf "gitdir:…"` or a worktree-specific `config.worktree` can apply
+  to the linked worktree only), must define no `filter.*.clean`,
+  `filter.*.smudge` or `filter.*.process` driver and no `core.fsmonitor`;
+  otherwise the operation fails with `snapshot_source_unsupported` before Git
+  runs a command that converts content. A smudge driver would otherwise run
+  during `git worktree add`, a clean or process driver during `git status`.
+  This is a check made immediately before each Git command, not a lock on the
+  configuration; a change of the operator's Git configuration in between is a
+  host-user write, outside this design's guarantee like any edit of the tree.
 - Fencing follows the writer pattern (ADR 0012 section 2, AGENTS.md): apply
   takes the slot's exclusive lock without waiting, every mutating Git child
   inherits that descriptor, and the setup guardian keeps the fence until a
@@ -169,14 +178,17 @@ intended to review.
   runs a repository-wide `git worktree prune`, which would also drop unrelated
   stale registrations of the operator. If the derived directory exists, it must
   be a linked worktree of the source whose administrative entry's `gitdir`
-  back-pointer names exactly the derived path; a clean one (section 3, without
+  back-pointer names exactly `<dir>/.git` (Git records the worktree's `.git`
+  file there, not the directory); a clean one (section 3, without
   a binding: clean status including ignored files, no index flags) is removed
   with `git worktree remove`, anything else is refused as
   `snapshot_incomplete` and kept until an explicit `--discard`. If the
   directory is missing but its registration remains, only that one
   registration is removed: the administrative entry whose `gitdir`
-  back-pointer names the derived path. An unrecognized occupant of the derived
-  path is never deleted.
+  back-pointer is the absolute pathname `<dir>/.git`, compared as text, since
+  a missing path cannot be canonicalized (setup derives `<dir>` from the real
+  path of the state directory, which still exists). An unrecognized occupant
+  of the derived path is never deleted.
 - `--snapshot <alias> --remove --apply` removes a clean slot the same way.
   Setup never runs Git in a writer clone and never deletes anything outside the
   derived slot and its own registration. The source checkout's branches,
@@ -251,10 +263,14 @@ checkout with `git rev-parse`. No path is reported.
 - Context files load through the existing read-only rule (#192): only files
   inside the snapshot tree, so a review sees the `AGENTS.md` of the reviewed
   commit, not the operator's current one.
-- The read roots are the snapshot tree plus the directories of the profile's
-  selected skills (ADR 0013, `allowedReadRoots`). Confined read tools resolve
-  symlinks and reject targets outside those roots; a symlink in the reviewed
-  commit that points into a selected skill directory therefore resolves. The
+- The read roots follow ADR 0013 exactly (`allowedReadRoots`): the snapshot
+  tree, the directory of each selected skill file, narrowed to the skill file
+  itself when that directory equals or contains a protected path (the
+  operator's home, the configuration directory, the Pi agent directory), plus
+  the real file of a symlinked skill file. Confined read tools resolve
+  symlinks and reject canonical targets outside those roots; a symlink in the
+  reviewed commit resolves only when its canonical target lies within one of
+  them. The
   `.git` file of a linked worktree is readable, while the common Git directory
   it points to is outside the read roots unless a skill root contains it. The
   sandboxed shell overlays that common directory (ADR 0013), so a sandboxed
@@ -306,7 +322,7 @@ the same frozen commit runs separately for Claude Code and Codex.
 - Out of scope: reviews of live writer clones, automatic merging, arbitrary
   paths, remote review, session persistence, OS-level immutability.
 - Bounded follow-up, if accepted: one issue that implements sections 1 to 5
-  with provider-free unit and real-Git tests (including the recovery,
+  with provider-free unit and real-Git tests (including the recovery with an existing and a missing worktree, the refusal of smudge-only and worktree-conditional filters,
   fencing and post-turn cases), Doctor checks, the skill update, the Level 2
   setup acceptance and the two real-controller review checks, in one minor
   release.
