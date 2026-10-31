@@ -1,14 +1,17 @@
 # ADR 0017: Per-profile maximum turn duration
 
-**Status:** Proposed (2026-10-31). Issue
-[#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212). Planning
-basis: branch `feat/s17-design-evaluations` on main `41ae199`, published
-0.14.3. This ADR changes no production contract by itself; implementation
-follows only if the maintainer accepts it.
+**Status:** Proposed (2026-10-31), revised the same day after two independent
+reviews. Issue
+[#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212).
+
+- Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
+  published 0.14.3.
+- This ADR changes no production contract by itself. Implementation follows
+  only if the maintainer accepts it.
 
 ## Context
 
-The controller skill asks the controller to set a time budget per task and
+The controller skill asks the controller to set a time budget per task. It
 says plainly that the server enforces none
 (`skills/pi-session-orchestration/SKILL.md`, section 4). The server bounds
 admission, abort, close and shutdown, but never the total duration of an
@@ -21,34 +24,70 @@ accepted turn:
 | Close cleanup | 5 s (relay 10 s) | `src/session-registry.ts:58`, `src/writer-relay.ts:19` |
 | Shutdown | 12 s, process 15 s | `src/session-registry.ts:59`, `src/shutdown.ts:1` |
 | Relay start budget | 60 s | `src/writer-relay.ts:14` |
+| Snapshot lease check | 30 s | `src/session-registry.ts:84` |
+| Relay poll interval | 1 s | `src/writer-relay.ts:15` |
 
-A turn whose controller stops supervising, for example because the client
-lost its context or crashed while the server process lives on, can run as long
-as the provider keeps it going. No incident motivates this ADR and no saving
-is claimed; it decides whether an optional operator policy is worth a minor
-release and what exactly it would promise.
+A controller can stop supervising while the server process lives on, for
+example when the client lost its context or crashed. Its turn can then run as
+long as the provider keeps it going.
+
+No incident motivates this ADR, and no saving is claimed. It decides two
+things: whether an optional operator policy is worth a minor release, and
+what exactly it would promise.
 
 Relevant registry facts (`src/session-registry.ts`):
 
-- One `turn.terminal` flag decides every terminal transition; the first
-  writer wins (`completeTurn`, `finishTurn`, `close`). `beginAbort` coalesces
-  concurrent aborts on `turn.abortPromise`.
-- A rejected abort returns `abort_failed` and leaves the turn and session
-  `running`; a timed-out abort returns `abort_timeout` while the abort keeps
-  running, and a late success still ends the turn `aborted` once.
-- `close()` marks a running turn `aborted` and emits its terminal notice
-  **before** the abort result is known (`:266-292`). That is an existing case
-  of a cancellation claim that was not observed. This ADR records it and does
-  not change it.
-- The registry does not keep the resolved profile after `start()`;
-  timestamps are wall-clock, deadlines are `setTimeout`.
-- The failed turn view has one code, `turn_failed`. Turn events accept only
-  `completed|failed|aborted` with `via: registry|close`
-  (`src/turn-events.ts:52`); any new value is a spool contract change.
-- Profiles are a strict zod schema (`src/config.ts:24-72`). A raw profile
-  field is copied into a container writer's inner configuration
-  (`src/writer-lifecycle.ts:102`), but relay admission compares only the ten
-  published capability fields (`src/writer-relay.ts:77-86`).
+- **One terminal flag.** `turn.terminal` decides every terminal transition,
+  and the first writer wins (`completeTurn`, `finishTurn`, `close`).
+- **Coalesced aborts.** `beginAbort` coalesces concurrent aborts on
+  `turn.abortPromise`.
+  - `pi_session_abort` reaches it through the serialized public `abort()`.
+  - That path bounds the wait with `handle.deadlines?.abortMs ??
+    abortDeadlineMs` (`:254`).
+- **Abort outcomes.**
+  - A rejected abort returns `abort_failed` and leaves the turn and session
+    `running`.
+  - A timed-out abort returns `abort_timeout` while the abort keeps running.
+    A late success still ends the turn `aborted`, once.
+- **Prompt refusal order.** `prompt()` refuses `writer_session_lost` first,
+  then `session_running` while a turn runs or an abort is pending (`:155-156`).
+- **Snapshot sessions.** A completed turn of a snapshot session becomes
+  terminal only after the lease check, which can take up to 30 s
+  (`turn.finalizing`, `:311-322`).
+- **Early `aborted` on close.** `close()` marks a running turn `aborted` and
+  emits its terminal notice **before** the abort result is known
+  (`:266-292`). That is an existing case of a cancellation claim that was not
+  observed. This ADR records it and does not change it.
+- **No stored profile.** The registry does not keep the resolved profile
+  after `start()`. Timestamps are wall-clock, and deadlines are `setTimeout`.
+- **Turn events.**
+  - The failed turn view has one code, `turn_failed`.
+  - Turn events accept only `completed|failed|aborted` with
+    `via: registry|close` (`src/turn-events.ts:52`).
+  - Any new value is a spool contract change.
+
+Relevant profile and relay facts:
+
+- **Strict profiles.** Profiles are a strict zod schema
+  (`src/config.ts:24-72`).
+- **Raw copy into writers.** A raw profile field is copied into a container
+  writer's inner configuration when the writer is provisioned
+  (`src/writer-lifecycle.ts:102`).
+- **Relay admission.** `pi_capabilities_get` publishes ten profile fields,
+  and relay admission compares eight of them (`src/writer-relay.ts:77-86`):
+  - five exact fields;
+  - three sets;
+  - not `alias` and `default`.
+- **Verifier.** The setup verifier requires exactly the ten published keys
+  (`src/client-adapters/mcp-verifier.ts:120`).
+- **Relay prompt errors.** An inner prompt refusal reaches the relay as an
+  `InnerError`. The relay calls `preflight(false)`
+  (`src/writer-relay.ts:178-186`), and the outer registry reports
+  `prompt_rejected` (`src/session-registry.ts:222-224`). The inner code is
+  lost.
+- **Relay turn states.** The relay maps an inner `aborted` turn to
+  `{ status: "aborted" }` (`src/writer-relay.ts:162-163`). `PiTurnOutcome`
+  has no field for a reason (`src/pi-adapter.ts:7-10`).
 
 ## Options
 
@@ -59,26 +98,33 @@ unsupervised controller has no bound.
 
 ### B. Per-profile limit enforced by the server that owns the Pi session (recommended)
 
-An optional profile field; the registry arms one monotonic deadline per
-published turn and, on expiry, runs the same abort path as
-`pi_session_abort`. On a container workspace, the inner server in the writer
-enforces it; the outer server compares the field like the other published
-profile fields.
+- An optional profile field.
+- The server that owns the Pi session arms one monotonic deadline per
+  published turn. That is the host server for a host session, or the inner
+  server in the writer for a container session.
+- On expiry, it runs the same abort path as `pi_session_abort`.
+- The outer server compares the field like the other admission fields, does
+  not arm a deadline for relayed sessions, and passes the inner outcome
+  through.
 
 ### C. Per-profile limit enforced by the outer (host) server only
 
-Same field, but the host registry enforces it for relayed sessions too, and
-the inner server ignores it. One clock for every route, but the outer abort
-reaches the inner turn only through the relay, whose abort failure already
-marks the session lost (ADR 0012 section 7); an expiry on a relayed session
-would then mostly end in `writer_session_lost` rather than an observed abort.
+Same field, but the host registry also enforces it for relayed sessions, and
+the inner server ignores it. That gives one clock for every route.
+
+The drawback: the outer abort reaches the inner turn only through the relay,
+whose abort failure already marks the session lost (ADR 0012 section 7). An
+expiry on a relayed session would then mostly end in `writer_session_lost`
+rather than an observed abort.
 
 ### D. Client-selected budget per prompt
 
-A `maxSeconds` argument on `pi_session_prompt`. Rejected: the issue requires
-that clients cannot select arbitrary larger budgets or bypass the configured
-policy, and a per-call value adds a contract surface without solving the
-unsupervised-controller case.
+A `maxSeconds` argument on `pi_session_prompt`. Rejected:
+
+- The issue requires that clients cannot select arbitrary larger budgets or
+  bypass the configured policy.
+- A per-call value adds a contract surface without solving the
+  unsupervised-controller case.
 
 ## Decision (proposed)
 
@@ -86,138 +132,248 @@ Option B.
 
 ### 1. Configuration
 
-- New optional profile field `maxTurnSeconds`: an integer from 60 to 86,400
-  (24 hours). 86,400,000 ms stays below Node's `setTimeout` limit of
-  2,147,483,647 ms. Fractions, strings, zero, negative and out-of-range values
-  fail startup with `invalid_execution_profile_config`, like every other
-  profile field; no clamping.
-- Absent means **no limit**. That is today's behavior and the default; the
+- **Field.** A new optional profile field, `maxTurnSeconds`.
+  - It is an integer from 60 to 86,400 (24 hours). 86,400,000 ms stays below
+    Node's `setTimeout` limit of 2,147,483,647 ms.
+  - Fractions, strings, zero, negative and out-of-range values fail startup
+    with `invalid_execution_profile_config`. There is no clamping.
+- **Absent means no limit.** That is today's behavior and the default. The
   documentation states it explicitly.
-- `pi_capabilities_get` publishes it as an eleventh profile field,
-  `maxTurnSeconds: number | null` (`null` = no limit), so controllers can read
-  the policy and relay admission compares it. A mismatch between outer and
-  inner configuration counts as `settingsChanged`, like a changed model.
+- **Published.** `pi_capabilities_get` publishes it as an eleventh profile
+  field, `maxTurnSeconds: number | null`, where `null` means no limit.
+  Controllers can read the policy from it.
+- **Admission and verifier.**
+  - Relay admission adds it to the exact fields, making nine.
+  - The setup verifier accepts the eleventh key.
+- **Mismatch.** A mismatch between outer and inner configuration counts as
+  `settingsChanged`, like a changed model.
+  - A writer provisioned before the field was set carries an inner
+    configuration without it.
+  - Every such writer is refused until it is provisioned again. The release
+    notes and the docs say so, as for any other profile change.
 
 ### 2. Deadline
 
-- **Anchor:** the moment the turn is published (preflight accepted,
-  `publishTurn`). Before that no public turn exists and preflight has its own
-  bound; anchoring at admission would let a slow preflight eat into the turn's
-  budget without a visible turn. The alternative is recorded under
-  "Consequences".
-- **Clock:** one monotonic deadline per turn (`performance.now()` plus
-  `maxTurnSeconds * 1000`). A timer that fires early re-arms for the
-  remainder; a wall-clock change does not move the deadline.
-- The timer is cleared by every terminal transition and by `close` and
-  `shutdown`, and it is `unref`'d so it never keeps the process alive.
+- **Who arms.** Only the server that owns the Pi session arms a deadline.
+  The outer registry never arms one for a relayed session, that is, a session
+  with a writer placement.
+- **Anchor.** The deadline starts when the turn is published: preflight
+  accepted, `publishTurn`.
+  - Before that, no public turn exists, and preflight has its own bound.
+  - Anchoring at admission would let a slow preflight eat into the turn's
+    budget without a visible turn. The alternative is recorded under
+    "Consequences".
+- **Clock.** One monotonic deadline per turn: `performance.now()` plus
+  `maxTurnSeconds * 1000`. A timer that fires early re-arms for the
+  remainder, and a wall-clock change does not move the deadline.
+- **Clearing.** The timer is cleared by every terminal transition, and by
+  `close` and `shutdown`. It is `unref`'d, so it never keeps the process
+  alive.
 
 ### 3. Expiry
 
-- If the turn is still `running` when the deadline passes, the registry calls
-  `beginAbort` once. It coalesces with a manual abort or a close abort already
-  in flight; expiry never issues a second abort.
-- **Abort succeeds** (`handle.abort()` resolves): the turn ends `aborted`
-  through the normal path, with one terminal notice. The turn view gains an
-  additive field `abortReason: "deadline"`; a manual abort leaves it absent.
-  `aborted` means what it means today: the adapter's abort call returned. It
-  is not proof that the provider stopped generating.
-- **Completion wins:** if the turn completes before or while the expiry abort
+- **No turn left.** When the deadline passes and the turn is no longer
+  `running`, expiry does nothing. The same holds when the turn awaits its
+  lease check (`turn.finalizing` is set): it has already completed on the
+  Pi side.
+- **Otherwise.** The registry runs its own serialized abort path, the one
+  `pi_session_abort` uses. The wait is bounded by the same named deadline,
+  `handle.deadlines?.abortMs ?? abortDeadlineMs`.
+  - It coalesces with a manual abort or a close abort already in flight.
+  - Expiry never issues a second abort.
+- **Abort succeeds** (`handle.abort()` resolves):
+  - The turn ends `aborted` through the normal path, with one terminal
+    notice.
+  - The turn view gains an additive field `abortReason: "deadline"`. A
+    manual abort leaves it absent.
+  - `aborted` means what it means today: the adapter's abort call returned.
+    It is not proof that the provider stopped generating.
+- **Completion wins.** If the turn completes before or while the expiry abort
   runs, it stays `completed` (first writer wins). No `abortReason` is set.
-- **Abort rejected or timed out:** nothing is claimed. The turn stays
-  `running` until it settles; the session becomes **not reusable**: further
-  prompts are refused with a new code `turn_deadline_uncertain`, while
-  `pi_session_get`, `pi_turn_get` and `pi_session_close` keep working. A late
-  settlement ends the turn once as usual, but the session stays not reusable;
-  the controller closes it. This mirrors `writer_session_lost`.
-- **Container writers:** the inner server enforces. An inner expiry reaches the
-  outer server as an ordinary `aborted` turn through the relay poll. If the
-  inner abort fails, the inner session refuses prompts, and the writer stays
-  fenced by its lease as today; expiry never collects, discards, resets or
-  reallocates a clone.
-- **Turn events:** unchanged. An expiry abort emits `state: "aborted"`,
-  `via: "registry"`. No new `via` value, so the spool contract stays as it is.
+- **Abort rejected or timed out.** Nothing is claimed.
+  - The turn stays `running` until it settles.
+  - The session becomes **not reusable**. Once the expiry abort has rejected,
+    or has timed out, further prompts are refused with a new code,
+    `turn_deadline_uncertain`.
+  - `pi_session_get`, `pi_turn_get` and `pi_session_close` keep working.
+  - A late settlement ends the turn once, as usual, but the session stays not
+    reusable. The controller closes it. This mirrors `writer_session_lost`.
+- **Refusal order.** `prompt()` refuses in this order:
+  1. `writer_session_lost`;
+  2. `session_running`, while the turn runs or an abort is pending;
+  3. `turn_deadline_uncertain`.
 
-### 4. What is not guaranteed
+  So a controller that prompts while a timed-out expiry abort is still
+  pending sees `session_running` first.
+- **Turn events.** Unchanged. An expiry abort emits `state: "aborted"`,
+  `via: "registry"`. There is no new `via` value, so the spool contract stays
+  as it is.
 
-Termination of a provider request, rollback of side effects a turn already
-caused (file edits, tool calls), and any cost cap. Exact enforcement to the
-second: expiry lands within the timer resolution plus the abort deadline.
+### 4. Container writers
 
-### 5. Controller skill
+The inner server enforces the limit. Three relay changes carry its outcome
+to the outer controller unchanged:
+
+- **Abort reason.**
+  - `PiTurnOutcome`'s `aborted` case gains an optional
+    `abortReason: "deadline"` (`src/pi-adapter.ts`).
+  - The relay's inner-turn parsing reads the field, and `observe` passes it
+    on.
+  - The outer registry copies it into the outer turn view.
+- **Refusal code.**
+  - An inner prompt refusal with `turn_deadline_uncertain` stops being a
+    generic `prompt_rejected`.
+  - The relay reports it as `turn_deadline_uncertain`, and the outer session
+    becomes not reusable as well.
+  - Other inner refusal codes keep today's mapping.
+- **Writer state.** An inner expiry never collects, discards, resets or
+  reallocates a clone. If the inner abort fails, the writer stays fenced by
+  its lease, as today.
+
+### 5. What is not guaranteed
+
+- **Not stopped:** a provider request is not guaranteed to terminate.
+- **Not undone:** side effects a turn already caused (file edits, tool calls)
+  are not rolled back.
+- **No cost cap.**
+- **No exact timing.** Expiry is not enforced to the second. After the
+  deadline, the turn becomes terminal within:
+  - the abort deadline (5 s) on a host session;
+  - plus up to the lease check (30 s) on a snapshot session;
+  - for a relayed session, the inner bound plus one relay poll (1 s) before
+    the outer view shows it.
+
+### 6. Controller skill
 
 The skill keeps per-task budgets: the server limit is a backstop for an
-unsupervised turn, not a replacement for supervision. It gains one paragraph:
-read `maxTurnSeconds` from capabilities, treat `abortReason: "deadline"` like
-an aborted turn, and close a session that answers `turn_deadline_uncertain`.
+unsupervised turn, not a replacement for supervision. It gains one paragraph
+that tells the controller to:
+
+- read `maxTurnSeconds` from capabilities;
+- treat `abortReason: "deadline"` like an aborted turn;
+- close a session that answers `turn_deadline_uncertain`.
 
 ## Evidence
 
 A development-only supervisor (`eval/turn-deadline/supervisor.ts`) wraps the
-real `SessionRegistry` from outside and applies the deadline as decided above,
-with fake-timer tests (`test/turn-deadline-prototype.test.ts`) and one relayed
-session through the existing fake inner server (`test/writer-relay.test.ts`).
+real `SessionRegistry` from outside. On expiry, it calls the public
+`registry.abort()`, which is the serialized path that section 3 now uses. It
+is covered by:
+
+- fake-timer tests (`test/turn-deadline-prototype.test.ts`);
+- one relayed session through the existing fake inner server
+  (`test/writer-relay.test.ts`).
+
 Run records and the test list are in
 [the evaluation record](../evaluation/turn-deadline-2026-10-31/README.md).
 
-The prototype proves, against today's registry, that an external deadline
-using only `beginAbort` cannot produce a second terminal transition or a
-second supervisor abort in the tested races, that an abort failure or timeout
-leaves the turn `running` without a cancellation claim, and that a parallel
-session is unaffected. It does not prove the in-registry anchor (it anchors
-when `registry.prompt` resolves, microtasks later), `unref`, the capability
-field, or the relay comparison, and it covers no real child-process
-termination.
+Against today's registry, the prototype proves four things for the tested
+races:
 
-A cross-family review (Sonnet 5.5) of the prototype found no race defect. It
-named two test weaknesses that the controller confirmed with mutations (a
-Date-based clock and a missing publication guard both left every test green);
-a fix round made each mutation fail a test. See the evaluation record.
+- the expiry abort produces no second terminal transition;
+- the supervisor issues no second abort;
+- an abort failure or timeout leaves the turn `running`, without a
+  cancellation claim;
+- a parallel session is unaffected.
+
+It does not prove the following:
+
+- the in-registry anchor (it anchors when `registry.prompt` resolves,
+  microtasks later);
+- `unref`;
+- the skip during `turn.finalizing`;
+- the capability field, the verifier change or the relay comparison;
+- real child-process termination.
+
+The relayed test runs the supervisor on the **outer** registry, so its abort
+travels through the relay. That is Option C's shape. It shows that an outer
+abort reaches the inner turn. It does not exercise Option B's inner
+enforcement, the `abortReason` propagation or the refusal-code pass-through.
+
+A cross-family review of the prototype (Sonnet 5.5) found no race defect. It
+named two test weaknesses, which the controller confirmed with mutations: a
+Date-based clock and a missing publication guard both left every test green.
+A fix round made each mutation fail a test. See the evaluation record.
 
 ## Contract change and versioning
 
-Additive but public: a new profile configuration field, an eleventh published
-profile field in `pi_capabilities_get`, an additive turn-view field
-`abortReason`, and a new error code `turn_deadline_uncertain`. Under ADR 0003
-this needs a minor release. Strict configuration means a configuration that
-uses the field cannot be loaded by an older release (downgrade breaks), which
-the release notes must say. Doctor validates the field offline. The setup
-verifier's 65,536-byte capability-frame bound must be rechecked with the
-extra field.
+Additive but public:
 
-Files to change on implementation: `src/config.ts`, `src/execution-profile.ts`,
-`src/capabilities.ts`, `src/tool-schemas.ts`, `src/session-registry.ts`,
-`src/writer-relay.ts` (comparison), Doctor checks,
-`docs/tool-contracts.md`, `docs/installation.md`, `docs/client-setup.md`,
-`docs/execution-modes.md`, `pi-session-mcp.example.json`, the controller
-skill and the changelog.
+- a new profile configuration field;
+- an eleventh published profile field in `pi_capabilities_get`;
+- an additive turn-view field, `abortReason`;
+- a new error code, `turn_deadline_uncertain`.
 
-Test matrix for the implementation: the prototype cases moved into registry
-tests; schema bounds; capability projection and relay `settingsChanged`;
-`unref`; a real stdio test that an expired turn on a fake adapter ends
-`aborted` and refuses no further prompt; a relayed expiry through a real
-inner server; an inner abort failure leading to `turn_deadline_uncertain`
-inside and `writer_session_lost` or `turn_deadline_uncertain` outside.
+Under ADR 0003, this needs a minor release.
+
+- **Downgrade.** Configuration is strict, so a configuration that uses the
+  field cannot be loaded by an older release. The release notes must say so.
+- **Re-provisioning.** Writers must be provisioned again after the field is
+  set (section 1).
+- **Doctor and verifier.** Doctor validates the field offline. The setup
+  verifier's 65,536-byte bound on the capability frame must be rechecked with
+  the extra field.
+
+Files to change on implementation:
+
+- configuration and profiles: `src/config.ts`, `src/execution-profile.ts`,
+  `src/capabilities.ts`;
+- schemas: `src/tool-schemas.ts` (turn view, and the relay's inner-turn
+  parsing);
+- adapter: `src/pi-adapter.ts` (`abortReason` on `PiTurnOutcome`);
+- registry: `src/session-registry.ts`;
+- relay: `src/writer-relay.ts` (admission comparison, prompt refusal
+  pass-through, `observe`);
+- verifier: `src/client-adapters/mcp-verifier.ts` (eleventh key);
+- Doctor checks;
+- docs: `docs/tool-contracts.md`, `docs/installation.md`,
+  `docs/client-setup.md`, `docs/execution-modes.md`;
+- `pi-session-mcp.example.json`, the controller skill and the changelog.
+
+Test matrix for the implementation:
+
+- **Prototype cases** moved into registry tests, including:
+  - early timer firing and re-arming;
+  - successive turns;
+  - a manual abort that starts before the expiry.
+- **Configuration:** schema bounds, the capability projection and verifier
+  acceptance.
+- **Relay admission:** a `settingsChanged` refusal on a mismatch, and on a
+  writer provisioned without the field.
+- **Timer:** `unref`.
+- **Expiry edge cases:**
+  - no abort call while `turn.finalizing` is set;
+  - the named abort deadline on expiry;
+  - the refusal order (`session_running` before `turn_deadline_uncertain`);
+  - close during a pending expiry abort.
+- **Stdio:** a real stdio test in which an expired turn on a fake adapter
+  ends `aborted` and the session accepts the next prompt.
+- **Relay route**, through a real inner server:
+  - an inner expiry that reaches the outer view as `aborted` with
+    `abortReason: "deadline"`;
+  - no outer deadline armed for the relayed session;
+  - an inner abort failure that answers `turn_deadline_uncertain` both
+    inside and outside, never `prompt_rejected`.
 
 ## Consequences
 
-- An operator can bound unsupervised turns per profile; profiles without the
+- An operator can bound unsupervised turns per profile. Profiles without the
   field behave as today.
-- An `aborted` turn can now also come from the server; `abortReason`
-  distinguishes it, but the outcome of a concurrent manual abort and expiry is
-  attributed to whichever `beginAbort` started first.
+- An `aborted` turn can now also come from the server. `abortReason`
+  distinguishes it, but when a manual abort and an expiry run concurrently,
+  the outcome is attributed to whichever `beginAbort` started first.
 - Anchoring at publication excludes preflight (at most 5 s, relay 15 s) from
-  the budget. Anchoring at admission would include it and was rejected for
-  that reason; the difference is small against a 60 s minimum.
-- A snapshot session's completed turn becomes terminal only after the lease
-  check; an expiry in that window can call abort on a turn that the inner side
-  already finished. The turn still ends once; the docs must not promise "no
-  abort call when the turn completes at the deadline".
-- The existing early `aborted` in `close()` stays a known overstatement; a
+  the budget. Anchoring at admission would include it, and was rejected for
+  that reason. The difference is small against a 60 s minimum.
+- Skipping expiry during a snapshot session's lease check avoids aborting a
+  turn that has already completed on the Pi side. If the lease check then
+  fails, the turn ends `failed` as today, not `aborted`.
+- The existing early `aborted` in `close()` stays a known overstatement. A
   separate issue can decide it.
 
 ## Open questions
 
-- Whether a minimum of 60 s is right for review profiles that are expected to
-  finish in seconds. Lower bounds risk aborting legitimate tool-heavy turns.
-- Whether `turn_deadline_uncertain` should instead reuse a generic
-  "session not reusable" code shared with `writer_session_lost`.
+- Is a minimum of 60 s right for review profiles that are expected to finish
+  in seconds? A lower bound risks aborting legitimate tool-heavy turns.
+- Should `turn_deadline_uncertain` reuse a generic "session not reusable"
+  code shared with `writer_session_lost` instead?

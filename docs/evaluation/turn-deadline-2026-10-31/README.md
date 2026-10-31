@@ -79,6 +79,40 @@ In the container writers, the full suite showed the eight lock, skill
 concurrency and wake-hook timeouts that AGENTS.md expects there; they are not
 related to these files.
 
+## Review of ADR 0017
+
+Two independent read-only reviews of the ADR, one from a Pi `review` session
+(OpenAI `gpt-6.1-sol`) and one from a Claude reviewer, both returned
+`BLOCKING_FINDINGS`. The controller checked each finding against the code
+before revising the ADR.
+
+- **Container route.** The route did not deliver what the ADR promised.
+  - An inner `turn_deadline_uncertain` refusal reaches the outer controller
+    as `prompt_rejected`: the relay's `InnerError` path calls
+    `preflight(false)`.
+  - `abortReason` is lost: the relay reduces an inner `aborted` turn to
+    `{ status }`, and `PiTurnOutcome` has no reason field.
+  - The ADR did not say whether the outer registry also arms a deadline.
+  - The revision states that only the owning server arms. It adds the
+    refusal-code pass-through and the `abortReason` propagation, and lists
+    `src/pi-adapter.ts`.
+- **Evidence wording.** The prototype calls the public, serialized
+  `registry.abort()`, not `beginAbort` directly. The revision makes that
+  path the decision, which also names its abort deadline. The relayed test
+  runs the supervisor on the outer registry, so it shows Option C's shape,
+  not Option B's inner enforcement. The ADR now says so.
+- **Snapshot sessions.** An expiry during the lease check (`turn.finalizing`)
+  could make a healthy session unusable. Expiry now skips that window. The
+  timing bound now counts the 30 s lease check and the 1 s relay poll.
+- **Wrong facts.** These have been corrected:
+  - relay admission compares eight fields, not ten;
+  - the setup verifier requires exactly ten keys and must accept the
+    eleventh;
+  - writers provisioned before the field is set are refused until they are
+    provisioned again;
+  - the refusal order puts `session_running` before
+    `turn_deadline_uncertain`.
+
 ## Limits
 
 - An external supervisor, not the in-registry design: its deadline starts
