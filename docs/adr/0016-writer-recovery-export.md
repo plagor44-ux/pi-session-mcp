@@ -45,9 +45,11 @@ Facts that shape the design:
   2. takes the writer lease;
   3. fences: `ensureWriterAbsent` stops and removes a container that outlived
      its launcher (`src/writer-fence.ts:15`);
-  4. checks state and alias, then runs the Doctor gate.
+  4. runs the Doctor gate (`src/setup-writers.ts:111`).
 
-  A dry run only resolves the workspace alias (`src/setup-writers.ts:101`).
+  The lifecycle function then checks the writer state and its alias
+  (`requiredState`). A blocking Doctor finding therefore answers
+  `doctor_failed` before a missing state is noticed. A dry run only resolves the workspace alias (`src/setup-writers.ts:101`).
 - **Containers and bundles.**
   - Git on the clone runs in a throwaway, network-free container, with
     scratch space on `/tmp` (`throwawayArgs`, `src/writer-boundary.ts`).
@@ -101,8 +103,9 @@ Option C.
   - fence: a container that outlived its launcher is stopped and removed
     first. This is the only change recovery can cause on the writer side,
     and collect causes the same.
-  - required state, with `state.alias` equal to the configured alias;
-  - Doctor gate.
+  - Doctor gate;
+  - required state, with `state.alias` equal to the configured alias. This
+    is checked after the Doctor gate, as for collect.
 - The throwaway container uses `state.imageId` and mounts the clone
   read-only.
 - Recovery never reads or writes `state.collected`. It never changes the
@@ -148,10 +151,18 @@ it.
 
 ### 3. Host import
 
-The import is create-only and atomic. A non-forced fetch is not create-only:
-Git 2.56 fast-forwards an existing destination ref to a descendant, and
-recovery commits descend from `HEAD`. So the import does not let a fetch
-write refs.
+The import is create-only, never follows a symbolic ref, and marks a
+complete slot by its manifest ref. Three constraints shape it:
+
+- **Fetch is not create-only.** Git 2.56 fast-forwards an existing
+  destination ref to a descendant, and recovery commits descend from `HEAD`.
+  So no fetch is allowed to write refs.
+- **Symbolic refs.** Without `--no-deref`, `update-ref` follows a symbolic
+  ref: Git 2.56.0 created a ref outside the recovery namespace through a
+  dangling symbolic ref at the destination.
+- **Not crash-atomic.** A ref transaction is not atomic across a crash in
+  the files backend. Loose refs are published one by one during `commit`,
+  and concurrent readers can see a subset.
 
 1. **Verify.** Run `bundle verify` and list the bundle's heads. Reject:
    - unknown or duplicate heads;
@@ -169,26 +180,42 @@ write refs.
 4. **Pick the slot.** It is one more than the highest numeric slot under
    `refs/recovery/writer-<name>/`. A slot above a fixed cap (for example
    10,000) is refused rather than wrapped.
-5. **Create the refs.** One `update-ref --stdin` transaction with
-   `start`, then one `create refs/recovery/writer-<name>/<slot>/<part> <oid>`
-   per part, then `prepare` and `commit`. `create` fails if the ref already
-   exists, and the transaction applies all refs or none. With Git 2.56.0, a
-   transaction whose second `create` hit an existing ref failed at
-   `prepare`, and its first ref was not created. A collision ends
-   the recovery with `writer_recover_conflict`, and nothing is imported.
+5. **Create the part refs.** One `update-ref --no-deref --stdin`
+   transaction: `start`, one
+   `create refs/recovery/writer-<name>/<slot>/<part> <oid>` per stage and
+   worktree part, then `prepare` and `commit`.
+   - `create` refuses an existing destination, including a symbolic ref,
+     dangling or not. With Git 2.56.0 and `--no-deref`, both cases failed at
+     `prepare`.
+   - A collision found at `prepare` creates no ref of the transaction. With
+     Git 2.56.0, a transaction whose second `create` collided left its first
+     ref uncreated.
+   - A collision ends the recovery with `writer_recover_conflict`, and
+     nothing is imported.
+   - Any failure during `commit` ends it with `writer_recover_incomplete`,
+     naming the slot.
+6. **Create the manifest ref** in a second transaction of the same form.
+   Only a slot with a manifest ref is complete; it is created after every
+   part ref exists. A failure here also ends with `writer_recover_incomplete`.
+
    Objects fetched for a failed recovery stay unreferenced until Git's
    normal pruning removes them.
-6. **Remove the bundle** on every path.
+7. **Remove the bundle** on every path.
    - If the removal fails, the result says so with
      `writer_recover_bundle_left` alongside the main code, and Doctor
      reports the file as `writer_uncollected_bundle`.
    - The next recovery replaces it.
 
-Because the ref update is one transaction, there is no partial import and
-no rollback. If the transaction's own outcome cannot be determined (the
-process is killed between `prepare` and `commit`), the next recovery or the
-operator sees either a complete slot or none. Git's ref transaction
-guarantees that, and the result is never reported as success.
+**Incomplete slots.** There is no rollback. A slot without a manifest ref
+is incomplete, whatever part refs it holds. It arises from a failure during
+`commit`, or from a process killed between or during the two transactions.
+
+- The next recovery counts it when it picks the next slot, so it is never
+  reused.
+- The next recovery also reports it, with `writer_recover_incomplete` and
+  the slot, alongside its own result.
+- The operator deletes it; recovery never deletes refs.
+- An incomplete slot is never reported as success.
 
 ### 4. Codes
 
@@ -200,7 +227,8 @@ Codes specific to recovery:
 | `writer_recovered` | ok | Slot created; the result names the slot. |
 | `nothing_to_recover` | unchanged | The index has no unmerged entries. |
 | `writer_recover_unsupported` | failed | A gitlink is in conflict or in the worktree export; nothing imported. |
-| `writer_recover_conflict` | failed | A destination ref already exists; nothing imported. |
+| `writer_recover_conflict` | failed | A destination ref already exists, including a symbolic ref; nothing imported. |
+| `writer_recover_incomplete` | failed, or a warning alongside a later result | The slot has part refs but no manifest ref; the result names the slot. |
 | `writer_recover_failed` | failed | Any other failure: missing state, alias mismatch, invalid clone layout, missing object, container failure, invalid bundle, fsck rejection, manifest mismatch, slot above the cap. Nothing imported. |
 | `writer_recover_bundle_left` | warning, alongside the main code | The bundle file could not be removed. |
 
@@ -293,9 +321,10 @@ setup lock, the fence or the Doctor gate.
 The prototype differs from this decision in three ways:
 
 - It imports with per-ref fetches after a pre-check and rolls back on
-  failure. The decision replaces that with the transaction in section 3,
+  failure. The decision replaces that with the ref transactions in section 3,
   because a non-forced fetch fast-forwards an existing ancestor ref and the
-  pre-check races with the fetch.
+  pre-check races with the fetch. Its import also follows symbolic refs and
+  has no completion marker.
 - It does not cross-check the manifest.
 - Its container script uses `node`.
 
@@ -333,6 +362,11 @@ Test matrix for the implementation:
 - the dry-run output;
 - a destination that already exists and is an ancestor of the new commit
   (must give `writer_recover_conflict`, with the ref unchanged);
+- a destination that is a symbolic ref, dangling or not (must give
+  `writer_recover_conflict`, and create no ref anywhere);
+- a process killed between the part and manifest transactions (the next
+  recovery reports the incomplete slot and uses the next one);
+- Doctor-gate precedence over a missing state;
 - a collision created after the slot was picked;
 - an fsck rejection;
 - a bundle whose heads disagree with its manifest;

@@ -170,6 +170,23 @@ or with Git, before revising the ADR.
   - the dry run only resolves the alias.
 - **Versioning.** ADR 0003 covers only the MCP contract. The revised ADR says
   so and recommends a minor release from precedent.
+- **Re-review** (`review`, OpenAI `gpt-6.1-sol`, read-only): seven of the
+  eight earlier findings were resolved and one partly. Three new findings
+  were checked by the controller, two of them with Git 2.56.0:
+  - Without `--no-deref`, `create` followed a dangling symbolic ref at the
+    destination and created `refs/heads/sentinel` outside the recovery
+    namespace, with exit 0.
+  - With `--no-deref`, a dangling and a live symbolic ref were both refused
+    at `prepare`.
+  - A ref transaction is not crash-atomic in the files backend, so "a
+    complete slot or none" was wrong.
+  - The Doctor gate runs before the lifecycle's state and alias check, not
+    after it.
+
+  The second revision imports the parts in one `--no-deref` transaction,
+  then the manifest ref in a second one, as the completion marker. It
+  defines and reports incomplete slots, and states the Doctor-gate order. No
+  third review was run, per the plan's limit of one re-review.
 
 ## Limits
 
