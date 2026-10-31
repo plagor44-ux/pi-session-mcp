@@ -92,14 +92,20 @@ it("bounds admission and post-turn verification and taints the session", async (
 });
 it("waits for bounded snapshot verification after a successful adapter abort", async () => {
   vi.useFakeTimers();
-  let verifyCount = 0;
-  const guard = { isSnapshot: () => true, acquire: async () => ({ binding: { base: "a", head: "b", tree: "c" }, verify: async () => { if (++verifyCount === 2) await new Promise<void>((resolve) => setTimeout(resolve, 50)); }, release: async () => {} }) };
+  let turnAccepted = false;
+  const guard = { isSnapshot: () => true, acquire: async () => ({ binding: { base: "a", head: "b", tree: "c" }, verify: async () => { if (turnAccepted) await new Promise<void>((resolve) => setTimeout(resolve, 50)); }, release: async () => {} }) };
   const adapter = new FakeAdapter(); const notices: TurnTerminalNotice[] = [];
   const registry = new SessionRegistry(adapter, new Map([["review", "/tmp"]]), { snapshotGuard: guard, abortDeadlineMs: 20, snapshotVerifyDeadlineMs: 100, onTurnTerminal: (notice) => notices.push(notice) });
   try {
     const session = await registry.start("review", profile); const { turn } = await registry.prompt(session.id, "test");
-    const aborting = expect(registry.abort(session.id)).resolves.toMatchObject({ id: session.id, state: "idle" });
-    await Promise.all([aborting, vi.advanceTimersByTimeAsync(50)]);
+    turnAccepted = true;
+    let settled = false;
+    const aborting = expect(registry.abort(session.id)).resolves.toMatchObject({ id: session.id, state: "idle" }).then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(settled).toBe(false);
+    expect(registry.getTurn(session.id, turn.turnId).state).toBe("running");
+    await vi.advanceTimersByTimeAsync(30);
+    await aborting;
     expect(registry.getTurn(session.id, turn.turnId).state).toBe("aborted");
     expect(notices).toMatchObject([{ turnId: turn.turnId, state: "aborted", via: "registry" }]);
     expect(notices).toHaveLength(1);

@@ -441,6 +441,45 @@ describe("SessionRegistry Phase 0 regressions", () => {
     const { registry } = setup(); const session = await registry.start("repo", readOnlyProfile); await registry.prompt(session.id, "first");
     await expect(registry.prompt(session.id, "second")).rejects.toMatchObject({ code: "session_running" });
   });
+  it.each([false, true])("bounds abort queue wait and adapter abort with one deadline (release preflight: %s)", async (releasePreflight) => {
+    vi.useFakeTimers();
+    const { registry, adapter } = setup({ abortDeadlineMs: 20, preflightDeadlineMs: 100 });
+    adapter.plans.push({ manualPreflight: true });
+    let releaseAbort!: () => void;
+    try {
+      const session = await registry.start("repo", readOnlyProfile);
+      const prompting = registry.prompt(session.id, "pending preflight");
+      while (!adapter.handles[0]!.preflight) await Promise.resolve();
+      const handle = adapter.handles[0]!;
+      handle.abortGate = new Promise<void>((resolve) => { releaseAbort = resolve; });
+      let abortError: unknown;
+      const aborting = registry.abort(session.id).catch((error: unknown) => { abortError = error; });
+      await vi.advanceTimersByTimeAsync(10);
+      expect(abortError).toBeUndefined();
+      if (releasePreflight) {
+        handle.signalPreflight();
+        await prompting;
+      }
+      await vi.advanceTimersByTimeAsync(9);
+      expect(abortError).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(abortError).toMatchObject({ code: "abort_timeout" });
+      expect(handle.aborted).toBe(releasePreflight ? 1 : 0);
+      handle.signalPreflight();
+      await prompting;
+      releaseAbort();
+      await aborting;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(handle.aborted).toBe(1);
+    } finally {
+      adapter.handles[0]?.signalPreflight();
+      releaseAbort?.();
+      await vi.advanceTimersByTimeAsync(0);
+      await registry.shutdown();
+      vi.useRealTimers();
+    }
+  });
+
   it("makes abort a no-op when idle and aborts when running", async () => {
     const { registry, adapter } = setup(); const session = await registry.start("repo", readOnlyProfile); await registry.abort(session.id); expect(adapter.handles[0]?.aborted).toBe(0);
     await registry.prompt(session.id, "run"); await registry.abort(session.id); expect(adapter.handles[0]?.aborted).toBe(1);
