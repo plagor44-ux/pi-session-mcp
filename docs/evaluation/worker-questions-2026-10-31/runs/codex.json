@@ -1,0 +1,62 @@
+{
+  "client": "Codex CLI",
+  "version": "0.166.0",
+  "invocation": "codex exec --json --ephemeral, sandbox read-only, approval for pi_session_prompt, pi_session_abort and pi_session_close",
+  "model": "client default",
+  "start": "2026-10-31T21:22:09Z",
+  "end": "2026-10-31T21:23:00Z",
+  "exitCode": 0,
+  "sequence": [
+    "pi_capabilities_get",
+    "hindsight_search_knowledge_pages (operator memory)",
+    "shell: read the installed controller skill and an operator routing note",
+    "pi_session_start 7896f13c (explore-fast)",
+    "pi_session_start 31a81d95 (explore-fast)",
+    "pi_session_prompt 7896f13c worker prompt 1 -> turn 6a99211f",
+    "pi_session_prompt 31a81d95 worker prompt 2 -> turn 1a1e5abd",
+    "shell: pwd, ls",
+    "shell: ls of the repository",
+    "shell: codegraph explore of the two constants",
+    "pi_turn_get 1a1e5abd completed STATUS: NEEDS_CONTEXT",
+    "pi_turn_get 6a99211f running",
+    "pi_session_prompt 31a81d95 answer: relay cleanup deadline -> turn 282297cf",
+    "pi_turn_get 6a99211f completed STATUS: NEEDS_CONTEXT",
+    "pi_turn_get 282297cf completed STATUS: DONE (Value: RELAY_CLEANUP_DEADLINE_MS = 10000)",
+    "pi_session_prompt 7896f13c answer: shutdown deadline of the session registry -> turn 83e205b9",
+    "pi_turn_get 83e205b9 completed STATUS: DONE (Value: SHUTDOWN_DEADLINE_MS = 12000)",
+    "pi_session_close 7896f13c",
+    "pi_session_close 31a81d95"
+  ],
+  "workerStatusLines": {
+    "task1": [
+      "STATUS: NEEDS_CONTEXT",
+      "STATUS: DONE"
+    ],
+    "task2": [
+      "STATUS: NEEDS_CONTEXT",
+      "STATUS: DONE"
+    ]
+  },
+  "finalLines": [
+    "TASK 1: 12000",
+    "TASK 2: 10000"
+  ],
+  "measures": {
+    "1_firstTurnNeedsContext": "both",
+    "2_correlation": "pass",
+    "3_answeredOnce": "pass",
+    "4_noSpeculativeResume": "pass",
+    "5_extraPiCalls": 1,
+    "6_cleanup": "pass",
+    "7_acceptance": "pass"
+  },
+  "notes": [
+    "the questions arrived out of order (task 2 first) and each answer went to the session that asked",
+    "the controller could read the source itself (codegraph); its final lines match the worker reports"
+  ],
+  "usage": {
+    "inputTokens": 639560,
+    "cachedInputTokens": 590720,
+    "outputTokens": 1669
+  }
+}
