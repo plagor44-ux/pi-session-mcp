@@ -163,7 +163,7 @@ describe("MCP contracts", () => {
           },
         },
         events: { type: "object", required: ["delivery"], additionalProperties: false, properties: { delivery: { enum: ["spool", "off"] } } },
-        workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only"] } } } },
+        workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only", "snapshot"] } } } },
         executionProfiles: {
           items: {
             required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills"],

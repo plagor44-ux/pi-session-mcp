@@ -10,6 +10,7 @@ export const viewSchema = z.object({
   state: z.enum(["idle", "running", "failed", "closing", "closed"]), createdAt: z.string(), updatedAt: z.string(),
   lastError: z.string().optional(),
   writer: z.string().optional(), base: z.object({ ref: z.string(), commit: z.string() }).optional(),
+  snapshot: z.object({ base: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/), head: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/), tree: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict().optional(),
 });
 export const aliasSchema = z.string().regex(ALIAS_PATTERN);
 // Input IDs: tools/list keeps `format: "uuid"` but omits zod's long repeated `pattern`; the
@@ -35,7 +36,7 @@ export const capabilitiesSchema = z.object({
     reloadPolicy: z.literal(RELOAD_POLICY),
   }).strict(),
   events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
-  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only"]), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
+  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only", "snapshot"]), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,
     default: z.boolean(),

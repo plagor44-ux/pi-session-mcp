@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { WriterGuard } from "./writer-guard.js";
+import { SnapshotError } from "./review-snapshot.js";
+import type { SnapshotGuard, SnapshotSessionLease } from "./snapshot-guard.js";
 import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
@@ -7,7 +9,7 @@ export type TurnState = "running" | "completed" | "failed" | "aborted";
 export interface SessionView {
   id: string; workspace: string; executionProfile: string; profile: PermissionProfile;
   provider: string; model: string; thinkingLevel: ThinkingLevel;
-  writer?: string; base?: { ref: string; commit: string };
+  writer?: string; base?: { ref: string; commit: string }; snapshot?: { base: string; head: string; tree: string };
   state: SessionState; createdAt: string; updatedAt: string; lastError?: string;
 }
 /**
@@ -19,10 +21,13 @@ export interface SessionView {
  */
 export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; assistantText?: string; truncated?: boolean; completion?: TurnCompletion; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
 export interface PromptResult { session: SessionView; turn: TurnView; }
-interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; }
-interface Entry extends SessionView { handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
-export type RegistryErrorCode = "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
+interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; finalizing?: Promise<void> | undefined; }
+interface Entry extends SessionView { lease?: SnapshotSessionLease; tainted?: boolean; handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
+export type RegistryErrorCode = "snapshot_unavailable" | "snapshot_modified" | "snapshot_profile_unsupported" | "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
+  snapshot_unavailable: "Snapshot is unavailable",
+  snapshot_modified: "Snapshot was modified",
+  snapshot_profile_unsupported: "Execution profile is not supported on snapshot workspaces",
   writer_session_lost: "Writer session was lost",
   base_not_applicable: "Base is only applicable to coding sessions on container workspaces",
   unknown_workspace: "Unknown workspace",
@@ -42,6 +47,9 @@ const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
 export class RegistryError extends Error {
   constructor(readonly code: RegistryErrorCode) { super(REGISTRY_ERROR_MESSAGES[code]); this.name = "RegistryError"; }
 }
+function snapshotError(error: unknown): RegistryError {
+  return new RegistryError(error instanceof SnapshotError && ["snapshot_modified", "snapshot_source_unsupported", "snapshot_object_missing", "snapshot_submodule_present"].includes(error.code) ? "snapshot_modified" : "snapshot_unavailable");
+}
 export const MAX_TURNS_PER_SESSION = 20;
 export const MAX_TURN_TEXT_BYTES = 64 * 1024;
 export const MAX_CLOSED_TOMBSTONES = 100;
@@ -55,19 +63,21 @@ const stamp = () => new Date().toISOString();
  * still running turn aborted, otherwise `registry`. The registry read model stays the only truth.
  */
 export interface TurnTerminalNotice { sessionId: string; turnId: string; state: Exclude<TurnState, "running">; via: "registry" | "close"; }
-export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
+export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
   private readonly pendingStarts = new Set<Promise<SessionView>>();
-  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "onTurnTerminal">>;
+  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "snapshotGuard" | "onTurnTerminal">>;
   private readonly writerGuard: WriterGuard | undefined;
+  private readonly snapshotGuard: SnapshotGuard | undefined;
   private readonly onTurnTerminal: ((event: TurnTerminalNotice) => void) | undefined;
   private readonly codingAdmissions = new Map<string, Promise<void>>();
   private stopping = false;
   private readonly shutdownController = new AbortController();
   constructor(private readonly adapter: PiSessionAdapter, private readonly workspaces: ReadonlyMap<string, string>, options: SessionRegistryOptions = {}) {
     this.writerGuard = options.writerGuard;
+    this.snapshotGuard = options.snapshotGuard;
     this.onTurnTerminal = options.onTurnTerminal;
     this.options = { preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
@@ -100,7 +110,16 @@ export class SessionRegistry {
     }
   }
   private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string }): Promise<SessionView> {
-    const handle = await Promise.resolve().then(() => this.adapter.create({ cwd, workspace, ...(options.base === undefined ? {} : { base: options.base }), executionProfile, signal: this.shutdownController.signal }));
+    let lease: SnapshotSessionLease | undefined;
+    if (this.snapshotGuard?.isSnapshot(workspace)) {
+      try { lease = await this.snapshotGuard.acquire(workspace, cwd, this.shutdownController.signal); }
+      catch (error) { throw snapshotError(error); }
+    }
+    let handle: PiSessionHandle;
+    try {
+      if (this.stopping) throw new RegistryError("server_stopping");
+      handle = await Promise.resolve().then(() => this.adapter.create({ cwd, workspace, ...(options.base === undefined ? {} : { base: options.base }), executionProfile, signal: this.shutdownController.signal }));
+    } catch (error) { await lease?.release(); throw error; }
     try {
       if (this.stopping) throw new RegistryError("server_stopping");
       this.verifySelection(handle.appliedSelection, executionProfile);
@@ -110,12 +129,13 @@ export class SessionRegistry {
         provider: handle.appliedSelection.provider, model: handle.appliedSelection.model,
         thinkingLevel: handle.appliedSelection.thinkingLevel, state: "idle", createdAt: time, updatedAt: time,
         ...(handle.placement ? { writer: handle.placement.writer, base: { ...handle.placement.base } } : {}),
+        ...(lease ? { lease, snapshot: { ...lease.binding } } : {}),
         handle, operation: Promise.resolve(), disposed: false, turns: new Map(), order: [],
       };
       this.sessions.set(entry.id, entry);
       return this.view(entry);
     } catch (error) {
-      await this.disposeHandle(handle);
+      await this.disposeHandle(handle, lease);
       throw error;
     }
   }
@@ -133,6 +153,11 @@ export class SessionRegistry {
       if (entry.handle.isLost?.()) throw new RegistryError("writer_session_lost");
       if (entry.state === "running" || entry.abortPromise) throw new RegistryError("session_running");
       if (entry.state === "closing" || entry.state === "closed") throw new RegistryError("unknown_session");
+      if (entry.lease) {
+        if (entry.tainted) throw new RegistryError("snapshot_modified");
+        const error = await this.verifyLease(entry);
+        if (error) { entry.tainted = true; throw error; }
+      }
       const previous = { state: entry.state, updatedAt: entry.updatedAt, lastError: entry.lastError };
       const time = stamp();
       const turn: TurnEntry = { turnId: randomUUID(), sessionId: id, state: "running", startedAt: time, updatedAt: time, terminal: false };
@@ -173,7 +198,7 @@ export class SessionRegistry {
       } catch {
         if (accepted === true) {
           publishAcceptedTurn();
-          this.failTurn(entry, turn);
+          await this.finishTurn(entry, turn, { status: "failed" });
           return { session: this.view(entry), turn: this.turnView(turn) };
         }
         this.restorePreflight(entry, turn, undefined, previous);
@@ -198,7 +223,7 @@ export class SessionRegistry {
       }
 
       publishAcceptedTurn();
-      void operation.then((outcome) => this.completeTurn(entry, turn, outcome), () => this.failTurn(entry, turn));
+      void operation.then((outcome) => this.finishTurn(entry, turn, outcome), () => this.finishTurn(entry, turn, { status: "failed" }));
       return { session: this.view(entry), turn: this.turnView(turn) };
     });
   }
@@ -216,7 +241,7 @@ export class SessionRegistry {
         throw new RegistryError("abort_failed");
       }
       if (entry.turns.has(prepared.turn.turnId) && entry.turn === prepared.turn && !prepared.turn.terminal && !entry.disposed) {
-        this.completeTurn(entry, prepared.turn, { status: "aborted" });
+        await this.finishTurn(entry, prepared.turn, { status: "aborted" });
       }
       return this.view(entry);
     });
@@ -279,6 +304,21 @@ export class SessionRegistry {
       throw new PiSessionCreationError("execution_selection_mismatch");
     }
   }
+  private async verifyLease(entry: Entry): Promise<RegistryError | undefined> {
+    const check = Promise.resolve().then(() => entry.lease!.verify()).then(() => undefined, (error: unknown) => snapshotError(error));
+    return this.withTimeout(check, entry.handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, new RegistryError("snapshot_unavailable"));
+  }
+  private finishTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void | Promise<void> {
+    if (!entry.lease) { this.completeTurn(entry, turn, outcome); return; }
+    if (turn.terminal || entry.disposed) return;
+    if (turn.finalizing) return turn.finalizing;
+    turn.finalizing = (async () => {
+      const error = await this.verifyLease(entry);
+      if (error) entry.tainted = true;
+      this.completeTurn(entry, turn, error && outcome.status === "completed" ? { status: "failed" } : outcome);
+    })();
+    return turn.finalizing;
+  }
   private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.completion = outcome.completion; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
   private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
   /**
@@ -320,7 +360,7 @@ export class SessionRegistry {
       () => {
         if (entry.abortPromise === pending) entry.abortPromise = undefined;
         if (entry.turns.has(turn.turnId) && entry.turn === turn && !turn.terminal && !entry.disposed) {
-          this.completeTurn(entry, turn, { status: "aborted" });
+          void this.finishTurn(entry, turn, { status: "aborted" });
         }
       },
       () => {
@@ -355,17 +395,17 @@ export class SessionRegistry {
   private async dispose(entry: Entry): Promise<void> {
     if (entry.disposed) return;
     entry.disposed = true;
-    await this.disposeHandle(entry.handle);
+    await this.disposeHandle(entry.handle, entry.lease);
   }
-  private async disposeHandle(handle: PiSessionHandle): Promise<void> {
+  private async disposeHandle(handle: PiSessionHandle, lease?: SnapshotSessionLease): Promise<void> {
     try {
-      const cleanup = Promise.resolve(handle.dispose()).then(() => undefined, () => undefined);
+      const cleanup = Promise.resolve().then(() => handle.dispose()).then(() => undefined, () => undefined).then(async () => { await lease?.release(); });
       await this.withTimeout(cleanup, handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
     } catch { /* Cleanup errors must never expose adapter internals. */ }
   }
   private rememberClosed(id: string, view: SessionView): void { this.closed.set(id, view); while (this.closed.size > MAX_CLOSED_TOMBSTONES) this.closed.delete(this.closed.keys().next().value!); }
-  private turnView({ terminal: _terminal, abortPromise: _abortPromise, ...turn }: TurnEntry): TurnView { return { ...turn }; }
-  private view({ handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
+  private turnView({ terminal: _terminal, abortPromise: _abortPromise, finalizing: _finalizing, ...turn }: TurnEntry): TurnView { return { ...turn }; }
+  private view({ lease: _lease, tainted: _tainted, handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T>;
   private async withTimeout<T, F>(promise: Promise<T>, milliseconds: number, fallback: F): Promise<T | F>;
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T> { if (milliseconds <= 0) return fallback; let timer: ReturnType<typeof setTimeout> | undefined; const timeout = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), milliseconds); }); try { return await Promise.race([promise, timeout]); } finally { if (timer !== undefined) clearTimeout(timer); } }
