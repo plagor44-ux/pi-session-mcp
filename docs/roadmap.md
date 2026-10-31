@@ -77,6 +77,13 @@ mean they are implemented or that their gates passed.
   installations run 0.14.3. `npm audit` additionally reports `minimatch`
   10.2.6, pinned by Pi SDK 1.4.0 (recorded in #120). Open: #79, #120, #144,
   and the evaluation issues #209 to #215.
+- 2026-10-31: [Sprint 15](sprints/2026-10-31-s15-completion-kind-review-snapshots.md)
+  reports how a completed turn ended (`completion`: `stop`, `output_limit` or
+  `tool_use`, [#211](https://github.com/plagor44-ux/pi-session-mcp/issues/211))
+  and proposes [ADR 0015](adr/0015-review-snapshots.md) for read-only reviews
+  bound to one commit ([#209](https://github.com/plagor44-ux/pi-session-mcp/issues/209)),
+  with a synthetic real-Git proof, in one pull request without a release.
+  ADR 0015 awaits the maintainer's decision.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
