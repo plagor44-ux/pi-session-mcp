@@ -197,5 +197,8 @@ or with Git, before revising the ADR.
   and no Doctor gate. The prototype takes only the lease.
 - **Lease fd not checked.** `realRunner` ignores `inheritFds`, so nothing
   shows the lease descriptor reaching the commands.
+- **Linux only.** The writer lease is Linux-only, so
+  `test/writer-recover-real-git.test.ts` skips all of its tests on other
+  platforms, as the lease tests do. CI ran them only on `ubuntu-latest`.
 - **Uncovered cases.** There is no D/F conflict, no non-UTF-8 path bytes, no
   worktree larger than the scratch space, and no FIFO in the worktree.

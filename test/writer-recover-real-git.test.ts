@@ -11,6 +11,8 @@ import { removeTemporaryRoots } from "./temporary-roots.js";
 
 vi.mock("../src/setup-writers-common.js", async (original) => ({ ...await original<typeof import("../src/setup-writers-common.js")>(), SETUP_LEASE_WAIT_MS: 50 }));
 
+// The prototype takes the writer lease, which is Linux-only (src/writer-lease.ts).
+const linuxIt = it.skipIf(process.platform !== "linux");
 const fixtures: Array<Awaited<ReturnType<typeof fixture>>> = [];
 afterEach(async () => { for (const f of fixtures.splice(0)) expect(await readdir(f.paths.bundles)).toEqual(["base.bundle"]); });
 afterAll(removeTemporaryRoots);
@@ -68,15 +70,15 @@ async function assertManifest(f: Awaited<ReturnType<typeof fixture>>, expected: 
   expect(await git(f.checkout, "show", `${ref(1, "manifest")}:head.txt`)).toBe(await f.work("rev-parse", "HEAD"));
   expect(await git(f.checkout, "show", `${ref(1, "manifest")}:merge-head.txt`)).toBe((await readFile(join(f.paths.clone, ".git/MERGE_HEAD"), "utf8")).trim());
 }
-it("recovers the worktree and all three index stages into a new slot", async () => {
+linuxIt("recovers the worktree and all three index stages into a new slot", async () => {
   const f = await conflict(); const expected = await unmerged(f); expect(await recoverWriter(f.ctx, "repo-w1", { apply: true })).toMatchObject({ code: "writer_recovered", slot: 1 });
   for (const [stage, text] of [[1, "base"], [2, "SYNTHETIC_CONFLICT_MAIN_3107"], [3, "SYNTHETIC_CONFLICT_OTHER_3107"]] as const) expect(await git(f.checkout, "show", `${ref(1, `stage${stage}`)}:base.txt`)).toBe(text);
   const wt = await git(f.checkout, "show", `${ref(1, "worktree")}:base.txt`); expect(wt).toContain("<<<<<<<"); expect(wt).toContain("SYNTHETIC_CONFLICT_MAIN_3107"); expect(wt).toContain("SYNTHETIC_CONFLICT_OTHER_3107");
   expect(await git(f.checkout, "show", `${ref(1, "worktree")}:notes.txt`)).toBe("notes");
   await assertManifest(f, expected);
 }, 60_000);
-it("leaves the writer byte-identical", async () => { const f = await conflict(); const state = (await readWriterState(f.home, "repo-w1"))!; await writeWriterState(f.home, "repo-w1", { ...state, collected: { digest: `sha256:${"0".repeat(64)}`, at: new Date().toISOString() } }); const before = await snapshot(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); expect(await snapshot(f)).toEqual(before); }, 60_000);
-it("keeps collect, finish, remove, reset and recreate refused after recovery", async () => {
+linuxIt("leaves the writer byte-identical", async () => { const f = await conflict(); const state = (await readWriterState(f.home, "repo-w1"))!; await writeWriterState(f.home, "repo-w1", { ...state, collected: { digest: `sha256:${"0".repeat(64)}`, at: new Date().toISOString() } }); const before = await snapshot(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); expect(await snapshot(f)).toEqual(before); }, 60_000);
+linuxIt("keeps collect, finish, remove, reset and recreate refused after recovery", async () => {
   const f = await conflict();
   expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered");
   const before = await snapshot(f);
@@ -96,10 +98,10 @@ it("keeps collect, finish, remove, reset and recreate refused after recovery", a
   });
   expect(await snapshot(f)).toEqual(before);
 }, 60_000);
-it("adds a second slot without touching the first", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).slot).toBe(1); const before = await git(f.checkout, "for-each-ref", "--format=%(refname) %(objectname)", "refs/recovery/writer-repo-w1/1/"); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).slot).toBe(2); expect(await git(f.checkout, "for-each-ref", "--format=%(refname) %(objectname)", "refs/recovery/writer-repo-w1/1/")).toBe(before); }, 60_000);
-it("plans without writing", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: false })).code).toBe("writer_recover_planned"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
-it("reports nothing_to_recover without an unmerged index", async () => { const f = await make(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("nothing_to_recover"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
-it("records a deleted side", async () => {
+linuxIt("adds a second slot without touching the first", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).slot).toBe(1); const before = await git(f.checkout, "for-each-ref", "--format=%(refname) %(objectname)", "refs/recovery/writer-repo-w1/1/"); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).slot).toBe(2); expect(await git(f.checkout, "for-each-ref", "--format=%(refname) %(objectname)", "refs/recovery/writer-repo-w1/1/")).toBe(before); }, 60_000);
+linuxIt("plans without writing", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: false })).code).toBe("writer_recover_planned"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
+linuxIt("reports nothing_to_recover without an unmerged index", async () => { const f = await make(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("nothing_to_recover"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
+linuxIt("records a deleted side", async () => {
   const f = await conflict("base.txt", "deleted"), expected = await unmerged(f);
   expect(expected.map(e => e.stage)).toEqual([1, 2]);
   expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered");
@@ -107,9 +109,9 @@ it("records a deleted side", async () => {
   expect(await gitPresent(f.checkout, "show-ref", "--verify", ref(1, "stage3"))).toBe(false);
   for (const stage of [1, 2]) expect(await gitPresent(f.checkout, "cat-file", "-e", `${ref(1, `stage${stage}`)}:base.txt`)).toBe(true);
 }, 60_000);
-it("handles conflicted names with spaces and newlines", async () => { const name = "a b\nc.txt"; const f = await conflict(name); const expected = await unmerged(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); await assertManifest(f, expected); for (const s of [1, 2, 3]) expect(await gitPresent(f.checkout, "cat-file", "-e", `${ref(1, `stage${s}`)}:${name}`)).toBe(true); }, 60_000);
-it("recovers a symlink conflict", async () => { const f = await conflict("base.txt", "symlink"); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); for (const s of [1, 2, 3]) expect(await git(f.checkout, "ls-tree", ref(1, `stage${s}`), "base.txt")).toMatch(/^120000 /); }, 60_000);
-it("recovers an add/add conflict without a stage1 ref", async () => {
+linuxIt("handles conflicted names with spaces and newlines", async () => { const name = "a b\nc.txt"; const f = await conflict(name); const expected = await unmerged(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); await assertManifest(f, expected); for (const s of [1, 2, 3]) expect(await gitPresent(f.checkout, "cat-file", "-e", `${ref(1, `stage${s}`)}:${name}`)).toBe(true); }, 60_000);
+linuxIt("recovers a symlink conflict", async () => { const f = await conflict("base.txt", "symlink"); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); for (const s of [1, 2, 3]) expect(await git(f.checkout, "ls-tree", ref(1, `stage${s}`), "base.txt")).toMatch(/^120000 /); }, 60_000);
+linuxIt("recovers an add/add conflict without a stage1 ref", async () => {
   const f = await make();
   await f.work("checkout", "-b", "other");
   await f.commit("other addition", "added.txt", "other\n");
@@ -126,7 +128,7 @@ it("recovers an add/add conflict without a stage1 ref", async () => {
   expect(await git(f.checkout, "show", `${ref(1, "stage3")}:added.txt`)).toBe("other");
   expect(await snapshot(f)).toEqual(before);
 }, 60_000);
-it("recovers two conflicted paths in every applicable stage tree", async () => {
+linuxIt("recovers two conflicted paths in every applicable stage tree", async () => {
   const f = await make();
   await f.commit("second base", "second.txt", "second base\n");
   await f.work("checkout", "-b", "other");
@@ -142,7 +144,7 @@ it("recovers two conflicted paths in every applicable stage tree", async () => {
     expect(await git(f.checkout, "ls-tree", ref(1, `stage${entry.stage}`), "--", entry.path)).toBe(`${entry.mode} blob ${entry.oid}\t${entry.path}`);
   }
 }, 60_000);
-it("does not export staged-only content (known limit)", async () => {
+linuxIt("does not export staged-only content (known limit)", async () => {
   const f = await make();
   await f.commit("tracked base", "tracked.txt", "tracked base\n");
   await f.work("checkout", "-b", "other");
@@ -162,7 +164,7 @@ it("does not export staged-only content (known limit)", async () => {
   expect((await git(f.checkout, "rev-list", "--objects", ...refs)).split("\n").map(line => line.split(" ")[0])).not.toContain(staged);
   expect(await snapshot(f)).toEqual(before);
 }, 60_000);
-it("rejects an alias mismatch without running commands or importing refs", async () => {
+linuxIt("rejects an alias mismatch without running commands or importing refs", async () => {
   const f = await conflict();
   const before = await snapshot(f), run = vi.fn(f.runner.run);
   expect(await recoverWriter({ ...f.ctx, alias: "different", runner: { run } }, "repo-w1", { apply: true })).toEqual({ code: "writer_recover_failed", status: "failed" });
@@ -170,7 +172,7 @@ it("rejects an alias mismatch without running commands or importing refs", async
   expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe("");
   expect(await snapshot(f)).toEqual(before);
 }, 60_000);
-it("rejects missing state without running commands or importing refs", async () => {
+linuxIt("rejects missing state without running commands or importing refs", async () => {
   const f = await conflict();
   await rm(join(f.paths.root, "state.json"));
   const run = vi.fn(f.runner.run);
@@ -178,7 +180,7 @@ it("rejects missing state without running commands or importing refs", async () 
   expect(run).not.toHaveBeenCalled();
   expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe("");
 }, 60_000);
-it("uses the recorded image and imports the manifest last without forced refspecs", async () => {
+linuxIt("uses the recorded image and imports the manifest last without forced refspecs", async () => {
   const f = await conflict(), state = (await readWriterState(f.home, "repo-w1"))!;
   await writeWriterState(f.home, "repo-w1", { ...state, imageId: "b".repeat(64) });
   const imported: string[] = [];
@@ -196,7 +198,7 @@ it("uses the recorded image and imports the manifest last without forced refspec
   expect(imported.at(-1)).toBe(ref(1, "manifest"));
   expect(imported.slice(0, -1).sort()).toEqual(["stage1", "stage2", "stage3", "worktree"].map(part => ref(1, part)));
 }, 60_000);
-it("fails and rolls back rather than overwriting an existing destination", async () => {
+linuxIt("fails and rolls back rather than overwriting an existing destination", async () => {
   const f = await conflict(), before = await snapshot(f);
   const sentinel = await git(f.checkout, "rev-parse", "HEAD");
   const runner = { run: async (...args: Parameters<typeof f.runner.run>) => {
@@ -212,8 +214,8 @@ it("fails and rolls back rather than overwriting an existing destination", async
   expect(await gitPresent(f.checkout, "show-ref", "--verify", ref(1, "manifest"))).toBe(false);
   expect(await snapshot(f)).toEqual(before);
 }, 60_000);
-it("refuses a gitlink in conflict", async () => { const f = await conflict(); const sha = await f.work("rev-parse", "HEAD"); const result = await spawn("sh", ["-c", "printf '160000 %s 2\\tlink\\n' \"$2\" | git -C \"$1\" update-index --index-info", "sh", f.paths.clone, sha]); expect(result.exitCode).toBe(0); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recover_unsupported"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
-it("fails cleanly on a missing stage object", async () => { const f = await conflict(); const sha = await f.work("rev-parse", ":3:base.txt"); await rm(join(f.paths.clone, ".git/objects", sha.slice(0, 2), sha.slice(2))); const before = await snapshot(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recover_failed"); expect(await snapshot(f)).toEqual(before); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
-it("refuses while the writer lease is held", async () => { const f = await conflict(); const lease = await acquireWriterLease(f.home, "repo-w1", { waitMs: 0 }); try { expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_busy"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); } finally { await lease.release(); } }, 30_000);
-it("leaves no bundle behind", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); expect(await readdir(f.paths.bundles)).toEqual(["base.bundle"]); }, 60_000);
-it("rolls back a partial import", async () => { const f = await conflict(); const before = await snapshot(f); let n = 0; const runner = { run: (...args: Parameters<typeof f.runner.run>) => args[0] === "git" && args[1].includes("fetch") && ++n === 3 ? Promise.resolve({ exitCode: 1, stdout: "", stderr: "failed" }) : f.runner.run(...args) }; expect(await recoverWriter({ ...f.ctx, runner }, "repo-w1", { apply: true })).toEqual({ code: "writer_recover_incomplete", status: "failed", slot: 1 }); expect(await gitPresent(f.checkout, "show-ref", "--verify", ref(1, "manifest"))).toBe(false); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); expect(await snapshot(f)).toEqual(before); }, 60_000);
+linuxIt("refuses a gitlink in conflict", async () => { const f = await conflict(); const sha = await f.work("rev-parse", "HEAD"); const result = await spawn("sh", ["-c", "printf '160000 %s 2\\tlink\\n' \"$2\" | git -C \"$1\" update-index --index-info", "sh", f.paths.clone, sha]); expect(result.exitCode).toBe(0); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recover_unsupported"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
+linuxIt("fails cleanly on a missing stage object", async () => { const f = await conflict(); const sha = await f.work("rev-parse", ":3:base.txt"); await rm(join(f.paths.clone, ".git/objects", sha.slice(0, 2), sha.slice(2))); const before = await snapshot(f); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recover_failed"); expect(await snapshot(f)).toEqual(before); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
+linuxIt("refuses while the writer lease is held", async () => { const f = await conflict(); const lease = await acquireWriterLease(f.home, "repo-w1", { waitMs: 0 }); try { expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_busy"); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); } finally { await lease.release(); } }, 30_000);
+linuxIt("leaves no bundle behind", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1", { apply: true })).code).toBe("writer_recovered"); expect(await readdir(f.paths.bundles)).toEqual(["base.bundle"]); }, 60_000);
+linuxIt("rolls back a partial import", async () => { const f = await conflict(); const before = await snapshot(f); let n = 0; const runner = { run: (...args: Parameters<typeof f.runner.run>) => args[0] === "git" && args[1].includes("fetch") && ++n === 3 ? Promise.resolve({ exitCode: 1, stdout: "", stderr: "failed" }) : f.runner.run(...args) }; expect(await recoverWriter({ ...f.ctx, runner }, "repo-w1", { apply: true })).toEqual({ code: "writer_recover_incomplete", status: "failed", slot: 1 }); expect(await gitPresent(f.checkout, "show-ref", "--verify", ref(1, "manifest"))).toBe(false); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); expect(await snapshot(f)).toEqual(before); }, 60_000);
