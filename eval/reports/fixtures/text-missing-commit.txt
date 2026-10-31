@@ -1,0 +1,6 @@
+STATUS: DONE
+Result: The validator was implemented.
+Changed files:
+- eval/reports/validate.ts
+Checks run:
+- npm test — exit 0

@@ -1,0 +1,12 @@
+STATUS: DONE_WITH_CONCERNS
+```json
+{
+  "schema": "receipt-v1",
+  "status": "DONE_WITH_CONCERNS",
+  "base": "e30c3c2f88b61044f9e35aa5bf5b1dc2d01de9f8",
+  "result": { "branch": "s17-210-validator", "commit": "4f3c2a1" },
+  "changedFiles": ["eval/reports/validate.ts"],
+  "checks": [{ "command": "npm test", "exitCode": 0 }],
+  "concerns": []
+}
+```

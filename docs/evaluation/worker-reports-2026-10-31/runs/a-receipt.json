@@ -1,0 +1,29 @@
+{
+  "run": "a-receipt",
+  "profile": "code-deepseek",
+  "base": "41ae1997fae5bc990e9840d1dd6515d34ba6318e",
+  "truncated": false,
+  "completion": "not reported by server 0.14.3",
+  "case": "A",
+  "form": "receipt",
+  "writer": "pi-session-mcp-w2",
+  "session": "f8877e0b",
+  "turns": [
+    {
+      "turn": "b867242a",
+      "purpose": "task",
+      "wallSeconds": 13.0,
+      "statusLine": "STATUS: DONE",
+      "validator": "ok"
+    }
+  ],
+  "followUps": [],
+  "oracle": {
+    "result": "pass",
+    "commits": 1,
+    "filesChanged": [
+      "test/s17-210-probe.test.ts"
+    ],
+    "targetedTest": "2 passed"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "run": "c-text",
+  "profile": "code-deepseek",
+  "base": "41ae1997fae5bc990e9840d1dd6515d34ba6318e",
+  "truncated": false,
+  "completion": "not reported by server 0.14.3",
+  "case": "C",
+  "form": "text",
+  "writer": "pi-session-mcp-w1",
+  "session": "3262203e",
+  "turns": [
+    {
+      "turn": "d2a2f92d",
+      "purpose": "task",
+      "wallSeconds": 6.0,
+      "statusLine": "STATUS: BLOCKED",
+      "validator": "ok"
+    }
+  ],
+  "followUps": [],
+  "oracle": {
+    "result": "pass",
+    "newRef": false
+  }
+}

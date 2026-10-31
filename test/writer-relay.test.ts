@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ChildStdioTransport } from "../src/child-stdio-transport.js";
+import { DeadlineSupervisor } from "../eval/turn-deadline/supervisor.js";
+import { SessionRegistry, type TurnTerminalNotice } from "../src/session-registry.js";
 import { RoutingPiSessionAdapter, WriterRelayAdapter } from "../src/writer-relay.js";
 import { writerPaths } from "../src/writer-state.js";
 import type { WorkspaceModeEntry } from "../src/execution-modes.js";
@@ -139,6 +141,33 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const results = await Promise.allSettled([s.start(), second.create(input).then(handle => { handles.push(handle); return handle; })]);
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
     expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "writer_unavailable", reason: "none_admitted", counts: { busy: 1 } } });
+  });
+  it("expiry on a relayed session aborts the inner turn once", async () => {
+    const s = await setup([{ polls: 1_000_000 }]);
+    const notices: TurnTerminalNotice[] = [];
+    const registry = new SessionRegistry(s.adapter, new Map([["repo", "/unused"]]), {
+      onTurnTerminal(event) { notices.push(event); supervisor.notice(event); },
+    });
+    let now = 0;
+    const supervisor = new DeadlineSupervisor(registry, { maxTurnSeconds: 60, now: () => now });
+    const session = await registry.start("repo", profile);
+    const timers = vi.spyOn(globalThis, "setTimeout");
+    try {
+      // Drive just the deadline callback; child I/O and relay polling stay real.
+      const { turn } = await supervisor.prompt(session.id, "relay deadline fixture");
+      const expiry = timers.mock.calls.find(([, milliseconds]) => milliseconds === 60_000);
+      expect(expiry).toBeDefined();
+      now = 60_000;
+      expiry![0]();
+      await vi.waitFor(() => { expect(supervisor.expiries()).toHaveLength(1); }, { timeout: 10_000 });
+      expect(registry.getTurn(session.id, turn.turnId).state).toBe("aborted");
+      expect(supervisor.expiries()[0]?.outcome).toBe("aborted");
+      expect(notices).toEqual([{ sessionId: session.id, turnId: turn.turnId, state: "aborted", via: "registry" }]);
+      expect((await calls(s.home, 1)).filter((name) => name === "pi_session_abort")).toHaveLength(1);
+    } finally {
+      timers.mockRestore();
+      await registry.shutdown();
+    }
   });
   it("abort racing an inner completion settles completed", async () => {
     const s = await setup([{ completeDuringAbort: true, polls: 1000 }]); const handle = await s.start();

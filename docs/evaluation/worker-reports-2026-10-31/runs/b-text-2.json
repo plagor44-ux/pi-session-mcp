@@ -1,0 +1,44 @@
+{
+  "run": "b-text-2",
+  "profile": "code-deepseek",
+  "base": "41ae1997fae5bc990e9840d1dd6515d34ba6318e",
+  "truncated": false,
+  "completion": "not reported by server 0.14.3",
+  "case": "B",
+  "form": "text",
+  "writer": "pi-session-mcp-w1",
+  "session": "f01f1ab2",
+  "turns": [
+    {
+      "turn": "173d1d3c",
+      "purpose": "task",
+      "wallSeconds": 21.1,
+      "statusLine": "STATUS: DONE_WITH_CONCERNS",
+      "validator": [
+        "commit_missing"
+      ]
+    },
+    {
+      "turn": "f5e4a309",
+      "purpose": "format repair",
+      "wallSeconds": 3.0,
+      "statusLine": "STATUS: DONE_WITH_CONCERNS",
+      "validator": "ok"
+    }
+  ],
+  "followUps": [
+    {
+      "kind": "format repair",
+      "resolved": true
+    }
+  ],
+  "oracle": {
+    "result": "failed check kept",
+    "lintExitReported": 1,
+    "commits": 1,
+    "filesChanged": [
+      "test/s17-210-check.test.ts"
+    ],
+    "targetedTest": "1 passed"
+  }
+}

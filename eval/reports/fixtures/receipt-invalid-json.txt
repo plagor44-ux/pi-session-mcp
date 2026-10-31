@@ -1,0 +1,4 @@
+STATUS: DONE
+```json
+{ "schema": "receipt-v1", "status": "DONE",
+```

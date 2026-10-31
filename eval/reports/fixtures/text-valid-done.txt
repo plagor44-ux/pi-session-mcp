@@ -1,0 +1,11 @@
+STATUS: DONE
+Result: Report validator implemented and its tests pass.
+Commit: 4f3c2a1
+Changed files:
+- eval/reports/validate.ts (new validator)
+- test/report-validator.test.ts (cases)
+Checks run:
+- npx vitest run test/report-validator.test.ts — exit 0 (25 passed)
+- npm run typecheck — exit 0
+Open points:
+- none

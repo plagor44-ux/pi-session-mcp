@@ -1,0 +1,72 @@
+{
+  "client": "Claude Code",
+  "version": "2.1.316",
+  "invocation": "claude -p, stream-json, strict MCP config with only pi-session-mcp",
+  "model": "claude-opus-5-5",
+  "start": "2026-10-31T21:21:53Z",
+  "end": "2026-10-31T21:22:56Z",
+  "exitCode": 0,
+  "sequence": [
+    "Skill pi-session-orchestration",
+    "ToolSearch (load pi tools)",
+    "pi_capabilities_get",
+    "pi_session_start 2e537e69 (explore-fast)",
+    "pi_session_start 990f68a1 (explore-fast)",
+    "pi_session_prompt 2e537e69 worker prompt 1 -> turn ea3eb594",
+    "pi_session_prompt 990f68a1 worker prompt 2 -> turn c2a1012a",
+    "pi_turn_get ea3eb594 completed STATUS: NEEDS_CONTEXT",
+    "pi_turn_get c2a1012a completed STATUS: NEEDS_CONTEXT",
+    "pi_session_prompt 2e537e69 answer: shutdown deadline of the session registry -> turn c91da921",
+    "pi_session_prompt 990f68a1 answer: relay cleanup deadline -> turn abc356ee",
+    "pi_turn_get c91da921 completed STATUS: DONE (reported value recorded under oracle)",
+    "pi_turn_get abc356ee completed STATUS: DONE (reported value recorded under oracle)",
+    "pi_session_close 2e537e69",
+    "pi_session_close 990f68a1",
+    "Bash (verify constants in the checkout) denied by permissions",
+    "Bash (verify constants in the checkout) denied by permissions"
+  ],
+  "workerStatusLines": {
+    "task1": [
+      "STATUS: NEEDS_CONTEXT",
+      "STATUS: DONE"
+    ],
+    "task2": [
+      "STATUS: NEEDS_CONTEXT",
+      "STATUS: DONE"
+    ]
+  },
+  "finalLines": [
+    "TASK 1: 12000",
+    "TASK 2: 10000"
+  ],
+  "measures": {
+    "1_firstTurnNeedsContext": "both",
+    "2_correlation": "pass",
+    "3_answeredOnce": "pass",
+    "4_noSpeculativeResume": "pass",
+    "5_extraPiCalls": 0,
+    "6_cleanup": "pass",
+    "7_acceptance": "pass"
+  },
+  "notes": [
+    "every pi_turn_get found the turn terminal; no wake reminder appears in the client output",
+    "after closing, the controller tried to confirm the values itself; both shell calls were denied and it said so before the final lines"
+  ],
+  "cost": {
+    "totalCostUsd": 0.64
+  },
+  "oracle": {
+    "task1": {
+      "reportedConstant": "SHUTDOWN_DEADLINE_MS",
+      "reportedMs": 12000,
+      "expectedMs": 12000,
+      "pass": true
+    },
+    "task2": {
+      "reportedConstant": "RELAY_CLEANUP_DEADLINE_MS",
+      "reportedMs": 10000,
+      "expectedMs": 10000,
+      "pass": true
+    }
+  }
+}
