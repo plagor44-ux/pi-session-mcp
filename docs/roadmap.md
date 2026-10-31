@@ -72,6 +72,11 @@ mean they are implemented or that their gates passed.
   the command is released only after the server has verified the effective
   cgroup values. Hosts without a systemd user manager or without `memory` and
   `pids` delegation lose the sandboxed shell. Open: #79, #120, #144.
+- 2026-10-31: the published-release Level 2 of 0.14.3 passed
+  ([evidence](acceptance.md#v0143-post-release-evidence)), and both
+  installations run 0.14.3. `npm audit` additionally reports `minimatch`
+  10.2.6, pinned by Pi SDK 1.4.0 (recorded in #120). Open: #79, #120, #144,
+  and the evaluation issues #209 to #215.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
