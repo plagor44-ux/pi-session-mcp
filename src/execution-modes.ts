@@ -7,7 +7,7 @@ import { isSafeRefName } from "./writer-boundary.js";
 
 import { cpusSchema, cpuSharesSchema, memorySchema } from "./writer-limits.js";
 
-export type WorkspaceMode = "unset" | "host" | "container" | "read-only";
+export type WorkspaceMode = "unset" | "host" | "container" | "read-only" | "snapshot";
 
 export interface ContainerSettings {
   readonly writers: number;
@@ -27,6 +27,7 @@ export interface ContainerSettings {
 export interface WorkspaceModeEntry {
   readonly mode: WorkspaceMode;
   readonly container?: ContainerSettings;
+  readonly snapshot?: { readonly source: string };
 }
 
 export const EXECUTION_MODES_FILE = "execution-modes.json";
@@ -49,6 +50,7 @@ export function executionModesPath(configPath: string): string {
 const entrySchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("host"), acceptHostWrites: z.literal(true) }).strict(),
   z.object({ mode: z.literal("read-only") }).strict(),
+  z.object({ mode: z.literal("snapshot"), source: z.string() }).strict(),
   z.object({
     mode: z.literal("container"),
     writers: z.number().int().min(1).max(MAX_WRITERS).default(1),
@@ -98,9 +100,17 @@ export function resolveExecutionModes(
         ...(cpuShares === undefined ? {} : { cpuShares }),
         ...(memory === undefined ? {} : { memory }),
       }) }));
+    } else if (entry.mode === "snapshot") {
+      entries.set(alias, Object.freeze({ mode: entry.mode, snapshot: Object.freeze({ source: entry.source }) }));
     } else {
       entries.set(alias, Object.freeze({ mode: entry.mode }));
     }
+  }
+  for (const [alias, entry] of entries) {
+    if (entry.mode !== "snapshot") continue;
+    const source = entry.snapshot!.source;
+    const mode = entries.get(source)?.mode;
+    if (source === alias || !workspaceAliases.has(source) || (mode !== "host" && mode !== "container")) throw new ConfigError("invalid_execution_modes");
   }
   return new ImmutableMap([...workspaceAliases].map((alias) => [alias, entries.get(alias) ?? Object.freeze({ mode: "unset" })] as const));
 }

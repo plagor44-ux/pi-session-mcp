@@ -97,7 +97,7 @@ async function openLockFile(lockPath: string, platform: SetupPlatform, timeoutMs
   }
 }
 
-export function lockWithFlock(flockPath: string, lockFd: number, timeoutMs: number, signal: AbortSignal | undefined, nonBlocking = false): Promise<void> {
+export function lockWithFlock(flockPath: string, lockFd: number, timeoutMs: number, signal: AbortSignal | undefined, nonBlocking = false, shared = false): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) { reject(new OverrideLockError("override_lock_unavailable")); return; }
     let locker: ChildProcess;
@@ -105,7 +105,7 @@ export function lockWithFlock(flockPath: string, lockFd: number, timeoutMs: numb
       // flock parses fractional seconds with the locale's decimal separator, so only whole
       // seconds go on the command line. The exact bound is the timer below, which stops flock.
       const wholeSeconds = String(Math.max(1, Math.ceil(timeoutMs / 1_000)));
-      locker = spawn(flockPath, ["-E", String(FLOCK_BUSY_EXIT), ...(nonBlocking ? ["-n"] : ["-w", wholeSeconds]), "3"], { stdio: ["ignore", "ignore", "ignore", lockFd], detached: true });
+      locker = spawn(flockPath, ["-E", String(FLOCK_BUSY_EXIT), ...(shared ? ["-s"] : []), ...(nonBlocking ? ["-n"] : ["-w", wholeSeconds]), "3"], { stdio: ["ignore", "ignore", "ignore", lockFd], detached: true });
     } catch { reject(new OverrideLockError("override_lock_unavailable")); return; }
     let expired = false;
     const stop = (): void => { if (locker.pid !== undefined) { try { process.kill(-locker.pid, "SIGKILL"); } catch { /* already gone */ } } };

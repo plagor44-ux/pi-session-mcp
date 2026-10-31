@@ -28,6 +28,21 @@ function expectInvalid(raw: unknown): void {
 }
 
 describe("resolveExecutionModes", () => {
+  it("validates snapshot sources after resolving all entries", () => {
+    for (const source of [{ mode: "host", acceptHostWrites: true }, { mode: "container", profiles: ["code"] }]) {
+      const entry = resolveExecutionModes(modes({ a: { mode: "snapshot", source: "b" }, b: source }), aliases, profiles).get("a")!;
+      expect(entry).toEqual({ mode: "snapshot", snapshot: { source: "b" } });
+      expect(codingAllowed(entry, true)).toBe(false);
+    }
+    for (const workspaces of [
+      { a: { mode: "snapshot", source: "missing" } },
+      { a: { mode: "snapshot", source: "a" } },
+      { a: { mode: "snapshot", source: "b" } },
+      { a: { mode: "snapshot", source: "b" }, b: { mode: "read-only" } },
+      { a: { mode: "snapshot", source: "b" }, b: { mode: "snapshot", source: "a" } },
+      { a: { mode: "snapshot", source: "b", extra: true }, b: { mode: "host", acceptHostWrites: true } },
+    ]) expectInvalid(modes(workspaces));
+  });
   it("round-trips optional limits without adding unset fields", () => {
     for (const limits of [{}, { cpus: 0.01 }, { cpus: 1024, cpuShares: 262144, memory: "9999999g" }]) {
       const raw = modes({ a: { mode: "container", profiles: ["code"], ...limits } });
