@@ -131,13 +131,21 @@ editor of the records.
 
 ## Gates
 
-These ran on the host at `f0ec8fa`. Every later commit changes only
-documentation. Node `v26.12.1`, Git `2.56.0`.
+These ran on the host at `d623cb1`. Later commits change only this record.
+Node `v26.12.1`, Git `2.56.0`.
 
-- `npm run typecheck`: exit 0.
-- `npm run build`: exit 0.
+- `npm run typecheck`: exit 0. `npx tsc --noEmit`: exit 0.
+- `npm run build`: exit 0. `npm run build:cli`: exit 0.
 - `NODE_OPTIONS=--unhandled-rejections=strict npm test`: exit 0, with 153
   files and 4357 tests passed, 14 skipped.
+- `git diff --check main...HEAD`: exit 0. It flagged a trailing blank line in
+  `test/real-git-writer-fixture.ts` first; the line was removed in
+  `d623cb1`, and the two real-Git test files were re-run (52 of 52 passed).
+- No file under `src/`, and neither `package.json` nor `package-lock.json`,
+  differs from `main`.
+- At the end: no open Pi session, and no collected writer refs. Both writers
+  were reset at the default base, and Doctor reports them clean with no
+  leftover bundle. The operator checkout is the only worktree.
 
 ## Not done
 
