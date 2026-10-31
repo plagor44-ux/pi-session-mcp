@@ -237,13 +237,15 @@ export class SessionRegistry {
       return { turn, abortPromise: this.beginAbort(entry, turn) };
     });
     type AbortResult = { kind: "completed"; prepared: Awaited<typeof preparation> } | { kind: "failed" } | { kind: "timeout" };
-    const result = await this.withTimeout<Exclude<AbortResult, { kind: "timeout" }>, AbortResult>(preparation.then<Exclude<AbortResult, { kind: "timeout" }>>((prepared) => {
+    type Settled = Exclude<AbortResult, { kind: "timeout" }>;
+    // One deadline covers the queue wait and the adapter abort; snapshot finalization runs after it (#224).
+    const result = await this.withTimeout<Settled, AbortResult>(preparation.then<Settled, Settled>((prepared) => {
       if (!prepared) return { kind: "completed" as const, prepared };
       return prepared.abortPromise.then(
         () => ({ kind: "completed" as const, prepared }),
         () => ({ kind: "failed" as const }),
       );
-    }), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
+    }, () => ({ kind: "failed" as const })), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
     if (result.kind === "timeout") throw new RegistryError("abort_timeout");
     if (result.kind === "failed") throw new RegistryError("abort_failed");
     const prepared = result.prepared;
