@@ -185,6 +185,7 @@ describe("MCP contracts", () => {
       const branches = schema.anyOf.find((branch) => branch.properties?.turn)?.properties?.turn?.oneOf;
       expect(branches).toHaveLength(4);
       for (const branch of branches!) {
+        expect(branch).toHaveProperty("additionalProperties", false);
         if (branch.properties.state.const === "completed") {
           expect(branch.properties.completion).toEqual({ type: "string", enum: ["stop", "output_limit", "tool_use"] });
           expect(branch.required).toContain("completion");

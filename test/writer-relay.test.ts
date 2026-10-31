@@ -56,9 +56,9 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     expect(handle.appliedSelection).toEqual({ provider: "p", model: "m", thinkingLevel: "off" });
     expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "stop" });
   });
-  it("preserves an output-limit completion", async () => {
-    const handle = await (await setup([{ completion: "output_limit" }])).start();
-    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "output_limit" });
+  it.each(["output_limit", "tool_use"] as const)("preserves a %s completion", async (completion) => {
+    const handle = await (await setup([{ completion }])).start();
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion });
   });
   it.each([{ missingCompletion: true }, { completion: "unknown" }])("loses a writer with invalid completion: %j", async (scenario) => {
     const handle = await (await setup([scenario])).start();
