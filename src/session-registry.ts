@@ -231,30 +231,23 @@ export class SessionRegistry {
   }
   async abort(id: string): Promise<SessionView> {
     const entry = this.require(id);
-    const operation = this.serial(entry, async () => {
+    const prepared = await this.serial(entry, async () => {
       const turn = entry.turn;
       if (entry.state !== "running" || !turn || turn.terminal) return undefined;
       return { turn, abortPromise: this.beginAbort(entry, turn) };
-    }).then(async (prepared) => {
-      if (!prepared) return this.view(entry);
-      try {
-        await prepared.abortPromise;
-      } catch {
-        throw new RegistryError("abort_failed");
-      }
-      if (entry.turns.has(prepared.turn.turnId) && entry.turn === prepared.turn && !prepared.turn.terminal && !entry.disposed) {
-        await this.finishTurn(entry, prepared.turn, { status: "aborted" });
-      }
-      return this.view(entry);
     });
-    type AbortResult = { kind: "completed"; session: SessionView } | { kind: "failed" } | { kind: "timeout" };
-    const result = await this.withTimeout<Exclude<AbortResult, { kind: "timeout" }>, AbortResult>(operation.then(
-      (session) => ({ kind: "completed" as const, session }),
+    if (!prepared) return this.view(entry);
+    type AbortResult = { kind: "completed" } | { kind: "failed" } | { kind: "timeout" };
+    const result = await this.withTimeout<Exclude<AbortResult, { kind: "timeout" }>, AbortResult>(prepared.abortPromise.then(
+      () => ({ kind: "completed" as const }),
       () => ({ kind: "failed" as const }),
     ), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
     if (result.kind === "timeout") throw new RegistryError("abort_timeout");
     if (result.kind === "failed") throw new RegistryError("abort_failed");
-    return result.session;
+    if (entry.turns.has(prepared.turn.turnId) && entry.turn === prepared.turn && !prepared.turn.terminal && !entry.disposed) {
+      await this.finishTurn(entry, prepared.turn, { status: "aborted" });
+    }
+    return this.view(entry);
   }
   async close(id: string): Promise<SessionView> {
     const existing = this.sessions.get(id);
