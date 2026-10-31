@@ -53,7 +53,7 @@ Relevant registry facts (`src/session-registry.ts`):
   then `session_running` while a turn runs or an abort is pending (`:155-156`).
 - **Snapshot sessions.** A completed turn of a snapshot session becomes
   terminal only after the lease check, which can take up to 30 s
-  (`turn.finalizing`, `:311-322`).
+  (`turn.finalizing`, `:313-322`).
 - **Early `aborted` on close.** `close()` marks a running turn `aborted` and
   emits its terminal notice **before** the abort result is known
   (`:266-292`). That is an existing case of a cancellation claim that was not
@@ -82,7 +82,7 @@ Relevant profile and relay facts:
   (`src/client-adapters/mcp-verifier.ts:120`).
 - **Relay prompt errors.** An inner prompt refusal reaches the relay as an
   `InnerError`. The relay calls `preflight(false)`
-  (`src/writer-relay.ts:178-186`), and the outer registry reports
+  (`src/writer-relay.ts:180-186`), and the outer registry reports
   `prompt_rejected` (`src/session-registry.ts:222-224`). The inner code is
   lost.
 - **Relay turn states.** The relay maps an inner `aborted` turn to
@@ -143,7 +143,8 @@ Option B.
   field, `maxTurnSeconds: number | null`, where `null` means no limit.
   Controllers can read the policy from it.
 - **Admission and verifier.**
-  - Relay admission adds it to the exact fields, making nine.
+  - Relay admission adds it to the exact fields: six exact fields and
+    three sets, nine compared fields in all.
   - The setup verifier accepts the eleventh key.
 - **Mismatch.** A mismatch between outer and inner configuration counts as
   `settingsChanged`, like a changed model.
@@ -198,7 +199,9 @@ Option B.
   - The turn ends `aborted` through the normal path, with one terminal
     notice.
   - The turn view gains an additive field `abortReason: "deadline"`. A
-    manual abort leaves it absent.
+    manual abort leaves it absent. A turn that ends `aborted` after an
+    expiry abort timed out also carries `abortReason: "deadline"`, while
+    the session stays not reusable.
   - `aborted` means what it means today: the adapter's abort call returned.
     It is not proof that the provider stopped generating.
 - **Completion wins.** If the turn completes before or while the expiry abort
@@ -280,8 +283,9 @@ that tells the controller to:
 
 A development-only supervisor (`eval/turn-deadline/supervisor.ts`) wraps the
 real `SessionRegistry` from outside. On expiry, it calls the public
-`registry.abort()`, which is the serialized path that section 3 now uses. It
-is covered by:
+`registry.abort()`. That shares section 3's serialization and `beginAbort`,
+but not its timeout: the public `abort()` bounds the adapter abort and
+`finishTurn` together. The prototype is covered by:
 
 - fake-timer tests (`test/turn-deadline-prototype.test.ts`);
 - one relayed session through the existing fake inner server
@@ -305,6 +309,8 @@ It does not prove the following:
   microtasks later);
 - `unref`;
 - the skip during `turn.finalizing`;
+- the adapter-only abort bound of section 3 (the tested abort failure and
+  timeout use the public `abort()` bound);
 - the capability field, the verifier change or the relay comparison;
 - real child-process termination.
 
