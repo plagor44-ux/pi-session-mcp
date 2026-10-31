@@ -92,6 +92,22 @@ mean they are implemented or that their gates passed.
   fence, sessions that hold a shared lease and verify the bound commit at
   start, before every prompt and after every turn, and three Doctor checks,
   Linux only, in one pull request without a release.
+- 2026-10-31: [Sprint 17](sprints/2026-10-31-s17-design-evaluations.md)
+  evaluates four development ideas without changing the runtime, in one pull
+  request without a release:
+  - [#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213):
+    proposes [ADR 0016](adr/0016-writer-recovery-export.md), a recovery
+    export for a writer with an unmerged index.
+  - [#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212):
+    proposes [ADR 0017](adr/0017-turn-duration-limit.md), a per-profile
+    maximum turn duration.
+  - [#210](https://github.com/plagor44-ux/pi-session-mcp/issues/210): defers
+    a structured worker receipt after a live comparison.
+  - [#214](https://github.com/plagor44-ux/pi-session-mcp/issues/214): rejects
+    a separate question channel after a live check with Claude Code and
+    Codex.
+
+  Both ADRs await the maintainer's decision.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
@@ -509,8 +525,8 @@ in-memory state and one trusted local peer.
 | --- | --- |
 | OS isolation | Trigger fired on 2026-10-15 (coding profiles wrote on non-disposable repositories); decision in [#79](https://github.com/plagor44-ux/pi-session-mcp/issues/79) and ADR 0008, interim rules in the [Sprint 4 decision](sprints/2026-10-15-s4-decision.md#interim-operating-rules); profiles/skills are not an OS sandbox |
 | pi_turn_wait | Measured high polling cost per turn with pauses or tool/approval cost; 5–7 polls per invocation is insufficient evidence |
-| Question channel for worker questions (ADR 0011 item 4, undecided) | Demonstrated demand, its own decision, contract tests and a minor release |
-| Worker result channel or report extension (K11) | Sprint 10 shows that the report contract in the skills is not enough; an ADR on either an extension allowance in the writer boundary or a result field in the MCP contract, and a minor release |
+| Question channel for worker questions (ADR 0011 item 4) | Rejected in Sprint 17 ([#214](https://github.com/plagor44-ux/pi-session-mcp/issues/214)): both controllers routed `NEEDS_CONTEXT` correctly through follow-up prompts. Reopen only on a lost or misrouted question, or a speculative resume, that the controller procedure cannot prevent |
+| Worker result channel or report extension (K11) | Deferred in Sprint 17 ([#210](https://github.com/plagor44-ux/pi-session-mcp/issues/210)): in a small live comparison, the text contract and the receipt each had one kind of format failure, each fixed by one follow-up. Revisit with a text-contract failure that one follow-up does not resolve; the validator and fixtures in `eval/reports/` are the basis |
 | `Stop` gate on open sessions, MCP elicitation for worker questions, pi-goal-x, pi-subagents, the `subagent`, `structured-output.ts` and `git-checkpoint.ts` examples | Not planned: each collides with the wake, reaches the human instead of the model, continues outside the turn or loses its result (operator concept of 2026-10-25, consistent with #91 and ADR 0011) |
 | pi-lens on coding profiles | Not planned: no benefit in two ablation waves, 1.47 times the cost |
 | Persistence/resume | Actual loss of useful work on restart |
