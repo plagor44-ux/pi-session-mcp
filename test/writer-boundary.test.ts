@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, readFile, rm, symlink, utimes, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
@@ -29,6 +30,15 @@ const failed: CommandResult = { exitCode: 1, stdout: "", stderr: "SECRET_SENTINE
 function runner(...results: CommandResult[]) {
   return { run: vi.fn<CommandRunner["run"]>().mockImplementation(async () => results.shift() ?? failed) };
 }
+
+it("passes safe.directory literally despite matching worktree files", async () => {
+  const root = await temporaryRoot("pi-writer-glob-");
+  await writeFile(join(root, "safe.directory=x"), "");
+  const script = BOUNDARY_GIT.replace(/^git\b/, "printf '%s\\n'");
+  const args = execFileSync("/bin/sh", ["-c", script], { cwd: root, encoding: "utf8" }).trimEnd().split("\n");
+  expect(args).toContain("safe.directory=*");
+  expect(args).not.toContain("safe.directory=x");
+});
 
 it("builds the restricted serving boundary with explicit environment and Git protection", () => {
   const args = serveArgs(paths, state, ["node", "/opt/pi-session-mcp/dist/main.js"], "/release");
