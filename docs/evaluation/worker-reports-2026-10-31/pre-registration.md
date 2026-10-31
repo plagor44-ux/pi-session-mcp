@@ -147,3 +147,10 @@ repository, no provider error text.
   closed, with at most one corrective follow-up that asks only for the report
   in the agreed form. It counts against the same budget (at most 12 worker
   turns for #210).
+
+### 2026-10-31, after the runs (correction only)
+
+- Case C above names the wrong base as `d32a5fc3`. That prefix is wrong.
+  The commit meant, and the one used in the C prompts, is
+  `d32a5fc81ac30cd310a510adb853ea549aa530b9`, the commit that added
+  ADR 0017. No procedure, measure or rule changes.

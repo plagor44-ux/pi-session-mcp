@@ -3,8 +3,8 @@
 This is the live comparison for
 [issue #210](https://github.com/plagor44-ux/pi-session-mcp/issues/210). The
 procedure, cases, oracles and decision rule were fixed in advance in
-[the pre-registration](pre-registration.md), which also records one
-amendment. The count of earlier cases is in
+[the pre-registration](pre-registration.md), which also records two
+amendments. The count of earlier cases is in
 [the retrospective](retrospective.md).
 
 **Decision: defer.** Keep the validator and its fixtures
@@ -118,10 +118,9 @@ Other receipt observations, all accepted by the validator:
   receipt might help most, were not tried.
 - The validator was written for this sprint; its own strictness is part of
   what was measured.
-- The pre-registration names the wrong base for case C as `d32a5fc3`. That
-  prefix is wrong; the prompts used the full id
-  `d32a5fc81ac30cd310a510adb853ea549aa530b9`, the commit that added
-  ADR 0017.
+- The pre-registration names the wrong base for case C as `d32a5fc3`. Its
+  second amendment corrects that to the full id the prompts used,
+  `d32a5fc81ac30cd310a510adb853ea549aa530b9`.
 
 ## Cleanup
 
