@@ -1,9 +1,20 @@
-# ADR 0015: Immutable read-only review snapshots
+# ADR 0015: Verified read-only review snapshots
 
-**Status:** Proposed (2026-10-31). Issue #209. Planning basis: main
-`2a483c7d19cda65c32de5df781819eb5333b9694`, published 0.14.3. This ADR records
-a design for the maintainer's decision; it changes no production contract and
-authorizes no implementation.
+**Status:** Accepted (2026-10-31, maintainer decision): option C with the
+detect-not-prevent contract of section 3. Not yet implemented; implementation
+is [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217). Issue
+#209. Planning basis: main `2a483c7d19cda65c32de5df781819eb5333b9694`,
+published 0.14.3. This ADR changes no production contract by itself.
+
+**Accepted contract:** #209 asks for an immutable snapshot. This
+design does not provide one. The snapshot tree stays writable by the host
+user; the server only verifies it at session start, before every prompt and
+after every turn (section 3). A change that is made and reverted between two
+checks goes unnoticed, and a failed post-turn check turns a finished review
+into `failed` and closes the session to further prompts. The maintainer
+accepted this weaker, detect-not-prevent contract; an immutable view
+would need an OS-level read-only view for the in-process read tools, which is
+out of scope here.
 
 ## Context
 
@@ -103,10 +114,10 @@ linked worktree.
   materialization if the shared object store or Git-based verification turns
   out to be a problem, not as the default.
 
-## Proposed decision
+## Decision
 
-Adopt option C, materialized as a detached linked worktree, after the
-maintainer accepts this ADR. Until then, option A plus a diff in the prompt
+Adopt option C, materialized as a detached linked worktree. Until #217 is
+released, option A plus a diff in the prompt
 remains the interim procedure, and a controller records the head object ID it
 intended to review.
 
@@ -283,7 +294,7 @@ checkout with `git rev-parse`. No path is reported.
 
 The provider-free synthetic proof in
 [`docs/evaluation/review-snapshots-2026-10-31/`](../evaluation/review-snapshots-2026-10-31/README.md)
-exercises the proposed materialization and verification with real Git and the
+exercises the specified materialization and verification with real Git and the
 real confined read tool, with an empty skill list. A branch that differs from
 `main` is read at its head; later operator commits, checkouts and uncommitted
 edits do not change the snapshot view. Tracked edits, untracked files, ignored
@@ -321,7 +332,7 @@ the same frozen commit runs separately for Claude Code and Codex.
   limited to snapshot verification.
 - Out of scope: reviews of live writer clones, automatic merging, arbitrary
   paths, remote review, session persistence, OS-level immutability.
-- Bounded follow-up, if accepted: one issue that implements sections 1 to 5
+- Bounded follow-up: [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217) implements sections 1 to 5
   with provider-free unit and real-Git tests (including the recovery with an existing and a missing worktree, the refusal of smudge-only and worktree-conditional filters,
   fencing and post-turn cases), Doctor checks, the skill update, the Level 2
   setup acceptance and the two real-controller review checks, in one minor
