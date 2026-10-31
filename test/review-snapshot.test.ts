@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
-import { assertNoConversionDrivers, ensureSnapshotRoot, lockSnapshotExclusive, lockSnapshotShared, readSnapshotState, removeSnapshotState, snapshotPaths, trustedGit, verifyClean, verifySnapshot, writeSnapshotState } from "../src/review-snapshot.js";
+import { assertNoConversionDrivers, guardedGit, ensureSnapshotRoot, lockSnapshotExclusive, lockSnapshotShared, readSnapshotState, removeSnapshotState, snapshotPaths, trustedGit, verifyClean, verifySnapshot, writeSnapshotState } from "../src/review-snapshot.js";
 import { isTrustedSystemBinary } from "../src/setup-platform.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -29,6 +29,19 @@ async function fixture() {
 }
 const modified = (promise: Promise<unknown>) => expect(promise).rejects.toMatchObject({ code: "snapshot_modified" });
 
+it("runs hardened Git through the guardian runner and fails closed", async () => {
+  const calls: unknown[][] = [];
+  let exitCode = 0, stderr = "";
+  const runner = { async run(...args: Parameters<import("../src/client-adapters/types.js").CommandRunner["run"]>) { calls.push(args); return { exitCode, stdout: "ok", stderr }; } };
+  const options = { candidates: ["/git"], envCandidates: ["/env"], isTrustedBinary: () => true, env: { HOME: "/home/test", EXTRA: "yes" } };
+  const git = guardedGit(runner, options)!;
+  expect(await git.run("/repo", ["worktree", "remove", "x"])).toEqual({ code: 0, stdout: "ok" });
+  expect(calls[0]).toEqual(["/env", ["-i", "PATH=/usr/bin:/bin", "HOME=/home/test", "LANG=C", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "EXTRA=yes", "/git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", "/repo", "worktree", "remove", "x"], undefined]);
+  for (const code of [124, 125, 126, 127]) { exitCode = code; await expect(git.run("/repo", [])).rejects.toMatchObject({ code: "snapshot_unavailable" }); }
+  exitCode = 0; stderr = "output_limit"; await expect(git.run("/repo", [])).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  expect(() => guardedGit(runner, { ...options, env: { "bad=name": "x" } })).toThrow(expect.objectContaining({ code: "snapshot_unavailable" }));
+  expect(guardedGit(runner, { ...options, envCandidates: [] })).toBeUndefined();
+});
 it("derives paths and rejects invalid aliases", async () => {
   const home = await temporaryRoot("snapshot-path-");
   const root = join(home, ".local", "state", "pi-session-mcp", "snapshots", "review");

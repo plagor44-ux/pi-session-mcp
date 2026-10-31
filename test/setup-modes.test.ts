@@ -19,6 +19,20 @@ async function fixture() {
 const request = (overrides: Partial<ModeRequest> = {}): ModeRequest => ({ alias: "a", mode: "read-only", acceptHostWrites: false, apply: false, ...overrides });
 const probe = (usable: boolean) => ({ containerRuntime: async () => usable });
 describe("setup execution modes", () => {
+  it("plans and applies a snapshot mode only for a valid source", async () => {
+    const { config, path } = await fixture();
+    await writeFile(path, JSON.stringify({ schemaVersion: 1, workspaces: { b: { mode: "host", acceptHostWrites: true } } }));
+    const before = await readFile(path, "utf8");
+    const input = request({ mode: "snapshot", source: "b" });
+    expect(await changeExecutionMode(config, input)).toMatchObject({ status: "planned", findings: [{ code: "mode_planned" }] });
+    expect(await readFile(path, "utf8")).toBe(before);
+    for (const source of ["a", "missing"]) {
+      expect(await changeExecutionMode(config, { ...input, source, apply: true })).toMatchObject({ exitCode: 1, findings: [{ code: "modes_file_invalid" }] });
+      expect(await readFile(path, "utf8")).toBe(before);
+    }
+    expect((await changeExecutionMode(config, { ...input, apply: true })).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ mode: "snapshot", source: "b" });
+  });
   it("allows writer preflight to refuse before a mode write or reconciliation", async () => {
     const { config, path } = await fixture();
     let after = false;

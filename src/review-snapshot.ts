@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { CommandRunner } from "./client-adapters/types.js";
 import { randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
 import { chmod, lstat, mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
@@ -104,6 +105,22 @@ export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undef
       child.once("error", () => { stop(); finish(undefined); });
       child.once("close", (code) => { finish(failed || code === null ? undefined : { code, stdout: Buffer.concat(chunks).toString("utf8") }); });
     });
+  } };
+}
+export function guardedGit(runner: CommandRunner, options: TrustedGitOptions & { envCandidates?: readonly string[] } = {}): SnapshotGit | undefined {
+  const trusted = options.isTrustedBinary ?? ((candidate: string) => isTrustedSystemBinary(candidate));
+  const binary = (options.candidates ?? ["/usr/bin/git", "/bin/git"]).find(trusted);
+  const envBinary = (options.envCandidates ?? ["/usr/bin/env", "/bin/env"]).find(trusted);
+  if (!binary || !envBinary) return undefined;
+  const env = { PATH: "/usr/bin:/bin", HOME: options.env?.HOME ?? homedir(), LANG: "C", LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...options.env };
+  const pairs = Object.entries(env).map(([key, value]) => {
+    if (!key || /[=\0]/.test(key) || value.includes("\0")) throw new SnapshotError("snapshot_unavailable");
+    return `${key}=${value}`;
+  });
+  return { async run(cwd, args, runOptions = {}) {
+    const output = await runner.run(envBinary, ["-i", ...pairs, binary, "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], runOptions.signal);
+    if ([124, 125, 126, 127].includes(output.exitCode) || output.stderr === "output_limit") throw new SnapshotError("snapshot_unavailable");
+    return { code: output.exitCode, stdout: output.stdout };
   } };
 }
 export async function assertNoConversionDrivers(git: SnapshotGit, cwd: string): Promise<void> {
