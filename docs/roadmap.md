@@ -107,7 +107,19 @@ mean they are implemented or that their gates passed.
     a separate question channel after a live check with Claude Code and
     Codex.
 
-  Both ADRs await the maintainer's decision.
+  The maintainer accepted both ADRs the same day and closed #214 and #79.
+- 2026-10-31: [Sprint 18](sprints/2026-10-31-s18-abort-boundary-skill.md)
+  fixes the Sprint 17 follow-ups in one pull request without a release:
+  `abort_timeout` on snapshot sessions
+  ([#224](https://github.com/plagor44-ux/pi-session-mcp/issues/224)), the
+  quoted `safe.directory` in the writer boundary after a live probe that
+  showed a worker cannot configure Git filter or include drivers
+  ([#222](https://github.com/plagor44-ux/pi-session-mcp/issues/222)), and the
+  controller skill's `NEEDS_CONTEXT` wording
+  ([#223](https://github.com/plagor44-ux/pi-session-mcp/issues/223)). A minor
+  release 0.15.0 with #211 and #217 follows, then the snapshot acceptance
+  [#220](https://github.com/plagor44-ux/pi-session-mcp/issues/220). Open:
+  #120, #144, #212, #213, #215, #220, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
