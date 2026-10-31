@@ -113,6 +113,20 @@ before revising the ADR.
   - the refusal order puts `session_running` before
     `turn_deadline_uncertain`.
 
+Re-review (`review`, read-only): six of the seven earlier findings were
+resolved and one partly. Two new findings were confirmed against the code:
+
+- `SessionRegistry.abort()` awaits `finishTurn`, including a snapshot's
+  lease check of up to 30 s, inside its 5 s abort deadline
+  (`src/session-registry.ts:240-254`, `:313-322`). An expiry built on it
+  would mark a healthy snapshot session uncertain.
+- The timing statement held only for a resolved abort. It also left out the
+  relay's 10 s call timeout per poll (`src/writer-relay.ts:16`).
+
+The second revision bounds only the adapter abort on expiry and makes the
+timing statement conditional. It notes that today's `pi_session_abort` has
+the same conflation. No third review was run, per the plan.
+
 ## Limits
 
 - An external supervisor, not the in-registry design: its deadline starts

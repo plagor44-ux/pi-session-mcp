@@ -176,11 +176,24 @@ Option B.
   `running`, expiry does nothing. The same holds when the turn awaits its
   lease check (`turn.finalizing` is set): it has already completed on the
   Pi side.
-- **Otherwise.** The registry runs its own serialized abort path, the one
-  `pi_session_abort` uses. The wait is bounded by the same named deadline,
-  `handle.deadlines?.abortMs ?? abortDeadlineMs`.
+- **Otherwise.** Inside the session's serialized section, as
+  `pi_session_abort` does, the registry starts or joins the adapter abort
+  (`beginAbort`).
   - It coalesces with a manual abort or a close abort already in flight.
   - Expiry never issues a second abort.
+- **What the deadline bounds.** Expiry waits on the adapter abort alone,
+  bounded by `handle.deadlines?.abortMs ?? abortDeadlineMs`. It does not
+  reuse the public `abort()` result as is.
+  - The public `abort()` also waits for `finishTurn`, and on a snapshot
+    session that includes the lease check, up to 30 s
+    (`src/session-registry.ts:240-254`, `:313-322`).
+  - A healthy lease check that takes longer than the abort deadline must not
+    count as abort uncertainty.
+  - Once the adapter abort has resolved, the turn finishes through the normal
+    path, including the lease check, without a further deadline from expiry.
+  - Today's `pi_session_abort` has the same conflation. A snapshot session
+    can answer `abort_timeout` although its abort resolved. This ADR records
+    that and does not change it.
 - **Abort succeeds** (`handle.abort()` resolves):
   - The turn ends `aborted` through the normal path, with one terminal
     notice.
@@ -190,7 +203,8 @@ Option B.
     It is not proof that the provider stopped generating.
 - **Completion wins.** If the turn completes before or while the expiry abort
   runs, it stays `completed` (first writer wins). No `abortReason` is set.
-- **Abort rejected or timed out.** Nothing is claimed.
+- **Adapter abort rejected, or not resolved within the abort deadline.**
+  Nothing is claimed.
   - The turn stays `running` until it settles.
   - The session becomes **not reusable**. Once the expiry abort has rejected,
     or has timed out, further prompts are refused with a new code,
@@ -236,12 +250,21 @@ to the outer controller unchanged:
 - **Not undone:** side effects a turn already caused (file edits, tool calls)
   are not rolled back.
 - **No cost cap.**
-- **No exact timing.** Expiry is not enforced to the second. After the
-  deadline, the turn becomes terminal within:
+- **No terminal time when the abort fails.** If the adapter abort rejects or
+  does not resolve within the abort deadline, the turn stays `running` until
+  it settles on its own, which may never happen. Only the session's refusal
+  of further prompts is guaranteed (section 3).
+- **No exact timing otherwise.** Expiry is not enforced to the second. Only
+  when the adapter abort resolves does the turn become terminal, after the
+  deadline, within about:
   - the abort deadline (5 s) on a host session;
   - plus up to the lease check (30 s) on a snapshot session;
-  - for a relayed session, the inner bound plus one relay poll (1 s) before
-    the outer view shows it.
+  - for a relayed session, the inner bound, then until the outer view shows
+    it: one poll interval (1 s), plus the `pi_turn_get` call to the inner
+    server, which can take up to its 10 s timeout
+    (`src/writer-relay.ts:16`). A poll already in flight when the inner turn
+    ended can return the earlier `running` state, and that costs one more
+    round.
 
 ### 6. Controller skill
 
@@ -344,6 +367,9 @@ Test matrix for the implementation:
 - **Expiry edge cases:**
   - no abort call while `turn.finalizing` is set;
   - the named abort deadline on expiry;
+  - a snapshot session whose adapter abort resolves at once while a healthy
+    lease check takes longer than the abort deadline: the turn ends
+    `aborted`, and the session stays reusable;
   - the refusal order (`session_running` before `turn_deadline_uncertain`);
   - close during a pending expiry abort.
 - **Stdio:** a real stdio test in which an expired turn on a fake adapter
