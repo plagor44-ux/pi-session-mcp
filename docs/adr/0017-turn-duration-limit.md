@@ -1,13 +1,14 @@
 # ADR 0017: Per-profile maximum turn duration
 
-**Status:** Proposed (2026-10-31), revised the same day after two independent
-reviews. Issue
+**Status:** Accepted (2026-10-31, maintainer decision), after two
+independent reviews and two revisions. Issue
 [#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212).
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
-- This ADR changes no production contract by itself. Implementation follows
-  only if the maintainer accepts it.
+- This ADR changes no production contract by itself. The accepted decision
+  is implemented under its issue; the contract changes only with that
+  implementation.
 
 ## Context
 
@@ -126,7 +127,7 @@ A `maxSeconds` argument on `pi_session_prompt`. Rejected:
 - A per-call value adds a contract surface without solving the
   unsupervised-controller case.
 
-## Decision (proposed)
+## Decision
 
 Option B.
 
