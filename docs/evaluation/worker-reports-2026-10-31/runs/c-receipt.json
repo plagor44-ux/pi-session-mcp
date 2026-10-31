@@ -1,0 +1,42 @@
+{
+  "run": "c-receipt",
+  "profile": "code-deepseek",
+  "base": "41ae1997fae5bc990e9840d1dd6515d34ba6318e",
+  "truncated": false,
+  "completion": "not reported by server 0.14.3",
+  "case": "C",
+  "form": "receipt",
+  "writer": "pi-session-mcp-w2",
+  "session": "2091588b",
+  "turns": [
+    {
+      "turn": "cc1cf38b",
+      "purpose": "task",
+      "wallSeconds": 7.0,
+      "statusLine": "STATUS: BLOCKED (not the first line)",
+      "validator": [
+        "status_missing"
+      ]
+    },
+    {
+      "turn": "a4c4c714",
+      "purpose": "format repair",
+      "wallSeconds": 2.0,
+      "statusLine": "STATUS: BLOCKED",
+      "validator": "ok"
+    }
+  ],
+  "followUps": [
+    {
+      "kind": "format repair",
+      "resolved": true
+    }
+  ],
+  "notes": [
+    "receipt \"base\" names the base the prompt required, not the clone's actual base"
+  ],
+  "oracle": {
+    "result": "pass",
+    "newRef": false
+  }
+}
