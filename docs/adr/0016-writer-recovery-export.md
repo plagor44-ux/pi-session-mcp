@@ -307,7 +307,9 @@ Status after acceptance (Sprint 18, #222):
   read-only bind mount, a direct append fails with `Read-only file system`,
   and collection of a clone whose `.gitattributes` names undefined drivers
   ran no filter. `test/writer-boundary.test.ts` pins the read-only mounts of
-  `.git/config` and `.git/hooks`. The configuration refusal was therefore not
+  `.git/config` and `.git/hooks`, and `verifyCloneLayout` refuses
+  `commondir`, `gitdir` and `config.worktree`, the other routes to a
+  configuration Git would read. The configuration refusal was therefore not
   added to collect and inspect; the recommendation above stays as
   defense in depth for the recovery implementation.
 
