@@ -42,6 +42,7 @@ import {
   type PiSessionCreationErrorCode,
   type PiSessionHandle,
   type PiTurnOutcome,
+  type TurnCompletion,
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
@@ -205,11 +206,19 @@ export type SdkStopReason = SdkAssistantMessage["stopReason"];
 export function normalizeAssistantOutcome(message: unknown): PiTurnOutcome {
   if (!isAssistantMessage(message)) return { status: "failed" };
   const stopReason = message.stopReason as SdkStopReason;
+  const completed = (completion: TurnCompletion): PiTurnOutcome => ({
+    status: "completed", assistantText: message.content.filter(isTextBlock).map((block) => block.text).join(""), completion,
+  });
   switch (stopReason) {
     case "stop":
-    case "length": // SDK output limit, independent of the registry text cap.
-    case "toolUse": // The tool batch terminated the agent loop.
-      return { status: "completed", assistantText: message.content.filter(isTextBlock).map((block) => block.text).join(""), completion: stopReason === "length" ? "output_limit" : stopReason === "toolUse" ? "tool_use" : "stop" };
+      return completed("stop");
+    // Cut off by the model's output limit; the text is still the turn's answer. Independent
+    // of the registry's 64 KiB cap, which `truncated` reports.
+    case "length":
+      return completed("output_limit");
+    // The agent loop ends on a tool call only when the tool batch terminated the run.
+    case "toolUse":
+      return completed("tool_use");
     case "aborted":
       return { status: "aborted" };
     case "error":
