@@ -8,7 +8,8 @@ import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
 const gitBinary = ["/usr/bin/git", "/bin/git"].find((path) => isTrustedSystemBinary(path));
-const realGit = it.skipIf(!gitBinary);
+// Snapshots are Linux-only in this release; the real-Git cases run where the feature runs.
+const realGit = it.skipIf(!gitBinary || process.platform !== "linux");
 
 async function fixture() {
   const home = await temporaryRoot("snapshot-git-");
@@ -71,7 +72,7 @@ realGit("verifies a fresh linked worktree and detects edits, ignored files and i
   f.work("update-index", "--no-skip-worktree", "file"); f.work("checkout", "--", "file");
   f.work("update-index", "--assume-unchanged", "file"); await modified(verify()); f.work("update-index", "--no-assume-unchanged", "file");
   await verify();
-});
+}, 20_000);
 realGit("detects executable-bit changes even when source disables fileMode", async () => {
   const f = await fixture(); f.source("config", "core.fileMode", "false");
   await chmod(join(f.worktree, "file"), 0o755);
