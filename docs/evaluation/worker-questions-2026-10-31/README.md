@@ -6,7 +6,8 @@ question is whether a worker's question needs its own channel, or whether
 the existing route is enough: a `STATUS: NEEDS_CONTEXT` report, then the
 controller's answer as a follow-up prompt in the same session. The tasks,
 prompts, oracle, measures and decision rule were fixed in advance in
-[the pre-registration](pre-registration.md). It has no amendments.
+[the pre-registration](pre-registration.md), which has one clarifying
+amendment.
 
 **Decision: reject** a separate question channel. Two procedure gaps that
 the runs did not exercise are recorded as skill follow-ups (see the end of
@@ -14,8 +15,9 @@ this document).
 
 ## Basis without a provider
 
-`test/needs-context-route.test.ts` has seven fixtures against the real
-session registry. They pin the server facts the route relies on:
+`test/needs-context-route.test.ts` has seven fixtures: six against the real
+session registry and one that runs report strings through the #210
+validators. They pin the facts the route relies on:
 
 - a question is answered in the same session, as a new turn;
 - two concurrent questions stay apart;
@@ -36,7 +38,7 @@ was only in the controller prompt, to be given out only when a worker asked.
 
 | Measure | Claude Code 2.1.316 (`claude -p`) | Codex CLI 0.166.0 (`codex exec`) |
 | --- | --- | --- |
-| Wall time, exit code | 63 s, 0 | 51 s, 0 |
+| Interval (UTC), wall time, exit code | 21:21:53–21:22:56, 63 s, 0 | 21:22:09–21:23:00, 51 s, 0 |
 | 1. Both first turns `NEEDS_CONTEXT` with a question | yes | yes |
 | 2. Each answer to the session that asked, with its own decision | yes | yes; the questions arrived out of order (task 2 first) |
 | 3. Each question answered once | yes | yes |
@@ -46,10 +48,14 @@ was only in the controller prompt, to be given out only when a worker asked.
 | 7. Final lines `TASK 1: 12000` and `TASK 2: 10000` | yes | yes |
 
 Worker status lines, the same in all four sessions: `STATUS: NEEDS_CONTEXT`,
-then `STATUS: DONE` with `Value: SHUTDOWN_DEADLINE_MS = 12000` (task 1) or
-`Value: RELAY_CLEANUP_DEADLINE_MS = 10000` (task 2).
+then `STATUS: DONE`. The reported constants and values are recorded as
+oracle measurements in [`runs/`](runs/): `SHUTDOWN_DEADLINE_MS`, 12000, for
+task 1, and `RELAY_CLEANUP_DEADLINE_MS`, 10000, for task 2. The files also
+hold the sanitized tool-call sequences.
 
-Sanitized tool-call sequences are in [`runs/`](runs/).
+Shared budget: both controller runs together took under two minutes of the
+120 minutes shared with #210 (whose runs took 21:25:40–21:33:37 UTC), and
+used 8 of 12 worker turns.
 
 ## Observations
 

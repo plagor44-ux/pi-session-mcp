@@ -21,9 +21,9 @@
     "pi_turn_get 6a99211f running",
     "pi_session_prompt 31a81d95 answer: relay cleanup deadline -> turn 282297cf",
     "pi_turn_get 6a99211f completed STATUS: NEEDS_CONTEXT",
-    "pi_turn_get 282297cf completed STATUS: DONE (Value: RELAY_CLEANUP_DEADLINE_MS = 10000)",
+    "pi_turn_get 282297cf completed STATUS: DONE (reported value recorded under oracle)",
     "pi_session_prompt 7896f13c answer: shutdown deadline of the session registry -> turn 83e205b9",
-    "pi_turn_get 83e205b9 completed STATUS: DONE (Value: SHUTDOWN_DEADLINE_MS = 12000)",
+    "pi_turn_get 83e205b9 completed STATUS: DONE (reported value recorded under oracle)",
     "pi_session_close 7896f13c",
     "pi_session_close 31a81d95"
   ],
@@ -58,5 +58,19 @@
     "inputTokens": 639560,
     "cachedInputTokens": 590720,
     "outputTokens": 1669
+  },
+  "oracle": {
+    "task1": {
+      "reportedConstant": "SHUTDOWN_DEADLINE_MS",
+      "reportedMs": 12000,
+      "expectedMs": 12000,
+      "pass": true
+    },
+    "task2": {
+      "reportedConstant": "RELAY_CLEANUP_DEADLINE_MS",
+      "reportedMs": 10000,
+      "expectedMs": 10000,
+      "pass": true
+    }
   }
 }

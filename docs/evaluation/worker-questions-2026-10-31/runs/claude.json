@@ -18,8 +18,8 @@
     "pi_turn_get c2a1012a completed STATUS: NEEDS_CONTEXT",
     "pi_session_prompt 2e537e69 answer: shutdown deadline of the session registry -> turn c91da921",
     "pi_session_prompt 990f68a1 answer: relay cleanup deadline -> turn abc356ee",
-    "pi_turn_get c91da921 completed STATUS: DONE (Value: SHUTDOWN_DEADLINE_MS = 12000)",
-    "pi_turn_get abc356ee completed STATUS: DONE (Value: RELAY_CLEANUP_DEADLINE_MS = 10000)",
+    "pi_turn_get c91da921 completed STATUS: DONE (reported value recorded under oracle)",
+    "pi_turn_get abc356ee completed STATUS: DONE (reported value recorded under oracle)",
     "pi_session_close 2e537e69",
     "pi_session_close 990f68a1",
     "Bash (verify constants in the checkout) denied by permissions",
@@ -54,5 +54,19 @@
   ],
   "cost": {
     "totalCostUsd": 0.64
+  },
+  "oracle": {
+    "task1": {
+      "reportedConstant": "SHUTDOWN_DEADLINE_MS",
+      "reportedMs": 12000,
+      "expectedMs": 12000,
+      "pass": true
+    },
+    "task2": {
+      "reportedConstant": "RELAY_CLEANUP_DEADLINE_MS",
+      "reportedMs": 10000,
+      "expectedMs": 10000,
+      "pass": true
+    }
   }
 }

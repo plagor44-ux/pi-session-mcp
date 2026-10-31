@@ -136,4 +136,9 @@ raw client output stays in the harness scratchpad and is not committed.
 
 ## Amendments
 
-None.
+### 2026-10-31, after the runs (clarification only)
+
+"Seven fixtures against the real registry" under "Source binding" is
+imprecise. Six of the seven tests in `test/needs-context-route.test.ts` run
+against the real registry. The seventh runs report strings through the #210
+validators. No procedure, measure or rule changes.
