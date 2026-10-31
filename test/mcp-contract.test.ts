@@ -178,6 +178,25 @@ describe("MCP contracts", () => {
     for (const name of ["pi_session_prompt", "pi_session_abort", "pi_session_close"]) expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it("advertises completion only on completed turn branches", async () => {
+    const tools = (await (await client()).client.listTools()).tools;
+    for (const name of ["pi_turn_get", "pi_session_prompt"]) {
+      const schema = tools.find((tool) => tool.name === name)!.outputSchema as unknown as { anyOf: Array<{ properties?: { turn?: { oneOf: Array<{ properties: { state: { const: string }; completion?: unknown }; required: string[] }> } } }> };
+      const branches = schema.anyOf.find((branch) => branch.properties?.turn)?.properties?.turn?.oneOf;
+      expect(branches).toHaveLength(4);
+      for (const branch of branches!) {
+        expect(branch).toHaveProperty("additionalProperties", false);
+        if (branch.properties.state.const === "completed") {
+          expect(branch.properties.completion).toEqual({ type: "string", enum: ["stop", "output_limit", "tool_use"] });
+          expect(branch.required).toContain("completion");
+        } else {
+          expect(branch.properties).not.toHaveProperty("completion");
+          expect(branch.required).not.toContain("completion");
+        }
+      }
+    }
+  });
+
   it("requires extension tool grants in the advertised capabilities output schema", async () => {
     const connected = await client({}, { profiles: new Map([["safe", {
       alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off",
@@ -351,6 +370,15 @@ describe("MCP contracts", () => {
     const session = await connected.client.callTool({ name: "pi_session_get", arguments: { sessionId } }); expect(session.structuredContent).toMatchObject({ ok: true, session: { state: "running" } });
     const second = await connected.client.callTool({ name: "pi_session_prompt", arguments: { sessionId, prompt: "must remain blocked" } }); expect(second).toMatchObject({ isError: true, structuredContent: { error: { code: "session_running" } } });
     connected.adapter.handles[0]!.complete("eventual completion"); await new Promise((resolve) => setTimeout(resolve, 0)); const completed = await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId } }); expect(completed.structuredContent).toMatchObject({ ok: true, turn: { state: "completed", assistantText: "eventual completion" } });
+  });
+
+  it.each(["output_limit", "tool_use"] as const)("serializes completion %s through tools/call independently of truncated", async (completion) => {
+    const connected = await client(); connected.adapter.plans.push({ completion, assistantText: "short report" }); const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } }); const sessionId = (started.structuredContent as { session: { id: string } }).session.id;
+    const prompted = await connected.client.callTool({ name: "pi_session_prompt", arguments: { sessionId, prompt: "report" } }); const turnId = (prompted.structuredContent as { turn: { turnId: string } }).turn.turnId;
+    connected.adapter.handles[0]!.complete(); await new Promise((resolve) => setTimeout(resolve, 0));
+    const terminal = await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId } });
+    expect(terminal.isError).toBeFalsy();
+    expect(terminal.structuredContent).toMatchObject({ ok: true, turn: { state: "completed", assistantText: "short report", truncated: false, completion } });
   });
 
   it("projects distinct sanitized preflight and abort deadline errors", async () => {

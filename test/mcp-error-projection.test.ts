@@ -258,7 +258,8 @@ async function correctedWorkflow(errorResult: unknown, expected: string, existin
   assert.equal(publicViews.includes(LARGE_MARKER), false);
   assert.equal(publicViews.includes(RESULT_LIMIT_MESSAGE), false, "local tool failures add no public turn/session error field");
   assert.equal(publicViews.includes("SOURCE_TOO_LARGE"), false, "internal recoverable code adds no public turn/session field");
-  assert.deepEqual(Object.keys(terminal).sort(), ["assistantText", "completedAt", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
+  assert.deepEqual(Object.keys(terminal).sort(), ["assistantText", "completedAt", "completion", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
+  assert.equal(terminal.completion, "stop");
   return { contexts, publicViews };
 }
 

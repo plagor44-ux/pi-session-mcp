@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { WriterGuard } from "./writer-guard.js";
-import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome } from "./pi-adapter.js";
+import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
 export type TurnState = "running" | "completed" | "failed" | "aborted";
@@ -17,7 +17,7 @@ export interface SessionView {
  * internal work without a public event stays invisible. It is a liveness lower bound, not a
  * progress count, and does not prove that a silent turn is healthy.
  */
-export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; assistantText?: string; truncated?: boolean; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
+export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; assistantText?: string; truncated?: boolean; completion?: TurnCompletion; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
 export interface PromptResult { session: SessionView; turn: TurnView; }
 interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; }
 interface Entry extends SessionView { handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
@@ -279,7 +279,7 @@ export class SessionRegistry {
       throw new PiSessionCreationError("execution_selection_mismatch");
     }
   }
-  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
+  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.completion = outcome.completion; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
   private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
   /**
    * Called once per terminal transition, after the turn is final. Only a published turn is reported:

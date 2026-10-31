@@ -398,6 +398,7 @@ describe("terminal model errors in a real embedded session", () => {
       const turn = await terminalTurn(registry, session.id, accepted.turn.turnId);
       assert.equal(turn.state, "completed", "an error-classified assistant message is not necessarily terminal");
       assert.equal(turn.assistantText, "recovered after retry");
+      assert.equal(turn.completion, "stop", "classified by the final outcome after the retry");
       assert.equal(turn.error, undefined);
       assert.equal(calls.length, 2, "the real SDK retried once");
       assert.equal(only(journal, "auto_retry_start").length, 1);
@@ -525,9 +526,10 @@ describe("controlled context overflow through the public session API", () => {
       const turn = await terminalTurn(registry, session.id, second.turn.turnId);
       assert.equal(turn.state, "completed", "a recoverable overflow is not a failed turn");
       assert.equal(turn.assistantText, "recovered after compaction");
+      assert.equal(turn.completion, "stop", "classified by the final outcome after compaction and retry");
       assert.equal(turn.error, undefined);
       assert.deepEqual(Object.keys(turn).sort(),
-        ["assistantText", "completedAt", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
+        ["assistantText", "completedAt", "completion", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
 
       const starts = only(journal, "compaction_start");
       const ends = only(journal, "compaction_end");

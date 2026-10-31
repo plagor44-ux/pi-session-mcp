@@ -19,7 +19,7 @@ async function until(condition: () => boolean, label = "condition", ms = 2000): 
 const terminals = (events: BridgeEvent[]) => events.filter((e): e is Extract<BridgeEvent, { kind: "turn_terminal" }> => e.kind === "turn_terminal");
 const opened = (events: BridgeEvent[]) => events.filter((e): e is Extract<BridgeEvent, { kind: "question_opened" }> => e.kind === "question_opened");
 const hang: ScriptedSessionPlan = { prompts: [[{ hang: true }]] };
-const completedBy = (text: string) => ({ status: "completed" as const, assistantText: text });
+const completedBy = (text: string) => ({ status: "completed" as const, assistantText: text, completion: "stop" as const });
 
 const live: BridgedRegistry[] = [];
 function setup(options: SessionRegistryOptions = {}, brokerOptions: { maxOpenPerSession?: number; maxOpenPerInstance?: number } = {}) {

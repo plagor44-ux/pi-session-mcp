@@ -2,8 +2,10 @@ import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from 
 
 export type { PermissionProfile };
 
+export type TurnCompletion = "stop" | "output_limit" | "tool_use";
+
 export type PiTurnOutcome =
-  | { status: "completed"; assistantText: string; truncated?: boolean }
+  | { status: "completed"; assistantText: string; truncated?: boolean; completion: TurnCompletion }
   | { status: "failed" }
   | { status: "aborted" };
 

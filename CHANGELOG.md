@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- Completed turns expose `completion` to distinguish normal stops, output limits,
+  and tool use (#211). This additive public result field requires a minor release
+  under ADR 0003.
+
 ## 0.14.3 — 2026-10-30
 
 Patch release under ADR 0003 for Sprint 14. The MCP tool contract, result

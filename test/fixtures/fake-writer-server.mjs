@@ -13,7 +13,7 @@ const id = randomUUID(), turnId = randomUUID();
 const session = { id, workspace: "repo", executionProfile: "code", profile: "coding", provider: "p", model: "m", thinkingLevel: "off", state: "idle", createdAt: "0", updatedAt: "0" };
 let polls = 0, aborted = false;
 const running = () => ({ turnId, sessionId: id, startedAt: "0", updatedAt: scenario.activity ? String(Math.floor(polls / 2)) : "0", state: "running" });
-const completed = () => ({ ...running(), state: "completed", completedAt: "1", assistantText: scenario.oversized ? "x".repeat(600000) : "done", truncated: !!scenario.truncated });
+const completed = () => ({ ...running(), state: "completed", completedAt: "1", assistantText: scenario.oversized ? "x".repeat(600000) : "done", truncated: !!scenario.truncated, ...(scenario.missingCompletion ? {} : { completion: scenario.completion ?? "stop" }) });
 const tools = ["pi_capabilities_get", "pi_session_start", "pi_session_prompt", "pi_turn_get", "pi_session_abort", "pi_session_close"].map(name => ({ name, inputSchema: { type: "object" } }));
 // The real server's input schemas are strict; reject what it would reject.
 const required = { pi_session_start: ["workspace", "executionProfile"], pi_session_prompt: ["sessionId", "prompt"], pi_turn_get: ["sessionId", "turnId"], pi_session_abort: ["sessionId"], pi_session_close: ["sessionId"] };

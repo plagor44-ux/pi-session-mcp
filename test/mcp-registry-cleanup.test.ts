@@ -15,7 +15,7 @@ const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 function fixture(dispose: () => void | Promise<void>) {
   const handle: PiSessionHandle = {
     sdkSessionId: "fake", appliedSelection: { provider: "fake", model: "fake", thinkingLevel: "off" },
-    async prompt(_text, preflight) { preflight(true); return { status: "completed", assistantText: "done" }; },
+    async prompt(_text, preflight) { preflight(true); return { status: "completed", assistantText: "done", completion: "stop" }; },
     async abort() {}, dispose,
   };
   const adapter: PiSessionAdapter = { async create() { return handle; } };

@@ -9,6 +9,29 @@ function setup(options?: SessionRegistryOptions) { const adapter = new FakeAdapt
 async function settle() { await new Promise((resolve) => setTimeout(resolve, 0)); }
 
 describe("observable Pi turns", () => {
+  it.each([
+    { completion: "output_limit" as const, text: "short", truncated: false },
+    { completion: "stop" as const, text: "x".repeat(65537), truncated: true },
+    { completion: "output_limit" as const, text: "x".repeat(65537), truncated: true },
+  ])("reports completion independently of truncation: $completion / $truncated", async ({ completion, text, truncated }) => {
+    const { registry, adapter } = setup(); adapter.plans.push({ completion });
+    const session = await registry.start("repo", readOnlyProfile);
+    const accepted = await registry.prompt(session.id, "run");
+    expect(accepted.turn).not.toHaveProperty("completion");
+    adapter.handles[0]!.complete(text); await settle();
+    const turn = registry.getTurn(session.id, accepted.turn.turnId);
+    expect(turn).toMatchObject({ state: "completed", completion, truncated });
+    expect(registry.getTurn(session.id, accepted.turn.turnId)).toEqual(turn);
+  });
+
+  it.each(["failed", "aborted"] as const)("omits completion on %s turns", async (state) => {
+    const { registry, adapter } = setup(); const session = await registry.start("repo", readOnlyProfile);
+    const accepted = await registry.prompt(session.id, "run");
+    if (state === "failed") adapter.handles[0]!.fail(); else await registry.abort(session.id);
+    await settle(); const turn = registry.getTurn(session.id, accepted.turn.turnId);
+    expect(turn.state).toBe(state); expect(turn).not.toHaveProperty("completion");
+    expect(registry.getTurn(session.id, accepted.turn.turnId)).toEqual(turn);
+  });
   it("returns a stable turnId only after accepted preflight", async () => {
     const { registry, adapter } = setup(); const session = await registry.start("repo", readOnlyProfile);
     const result = await registry.prompt(session.id, "read package.json");
@@ -474,7 +497,7 @@ describe("relay session contract", () => {
   it("completed outcome with truncated true sets truncated", async () => {
     const { registry, adapter } = setup();
     const session = await registry.start("repo", codingProfile);
-    adapter.handles[0]!.prompt = (_text, preflight) => { preflight(true); return Promise.resolve({ status: "completed", assistantText: "short", truncated: true }); };
+    adapter.handles[0]!.prompt = (_text, preflight) => { preflight(true); return Promise.resolve({ status: "completed", assistantText: "short", truncated: true, completion: "stop" }); };
     const result = await registry.prompt(session.id, "run");
     await settle();
     expect(registry.getTurn(session.id, result.turn.turnId)).toMatchObject({ truncated: true, assistantText: "short" });

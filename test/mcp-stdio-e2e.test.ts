@@ -663,8 +663,9 @@ describe("running-turn liveness in a real embedded session", () => {
       const terminal = await terminalState(accepted.turn.turnId);
       assert.equal(terminal.state, "completed");
       assert.equal(terminal.assistantText, "first turn");
+      assert.equal(terminal.completion, "stop");
       assert.deepEqual(Object.keys(terminal).sort(),
-        ["assistantText", "completedAt", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
+        ["assistantText", "completedAt", "completion", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
       assert.ok(Date.parse(terminal.completedAt!) >= Date.parse(completedToolStamp));
 
       // Positive control for the negative assertions below: the marker really was transported

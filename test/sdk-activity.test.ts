@@ -504,7 +504,7 @@ describe("running-turn activity from the public SDK stream", () => {
     };
     try {
       const outcome = await handle.prompt("use the tool", () => undefined, () => { activity++; });
-      assert.deepEqual(outcome, { status: "completed", assistantText: "after the tool" });
+      assert.deepEqual(outcome, { status: "completed", assistantText: "after the tool", completion: "stop" });
     } finally {
       await handle.dispose();
     }

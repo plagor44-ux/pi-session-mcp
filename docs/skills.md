@@ -163,7 +163,7 @@ checks with exit codes, failures, blockers, risks and repository-relative
 evidence references, without full diffs or logs by default. A failed check,
 blocker or risk is never dropped to save space. `truncated: true` means the
 report the controller receives is incomplete; `truncated: false` does not prove
-that it is complete or correct.
+that it is complete or correct. Completed turns also carry `completion`: `stop`, `output_limit`, or `tool_use`, from the final SDK stop reason. Other states omit it. `output_limit` indicates a cutoff independently of `truncated`; both can apply, and neither field proves task success.
 
 The orchestration skill is a small skill tree: `SKILL.md` plus
 `references/start-errors.md`, the classification of `pi_session_start` error

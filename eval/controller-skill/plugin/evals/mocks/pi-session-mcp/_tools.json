@@ -32,7 +32,7 @@
               },
               "version": {
                 "type": "string",
-                "const": "0.11.5"
+                "const": "0.14.3"
               }
             },
             "required": [
@@ -91,6 +91,17 @@
                     "host",
                     "container",
                     "read-only"
+                  ]
+                },
+                "writers": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "defaultBase": {
+                  "type": [
+                    "string",
+                    "null"
                   ]
                 }
               },
@@ -206,6 +217,9 @@
           "executionProfile": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+          },
+          "base": {
+            "type": "string"
           }
         },
         "required": [
@@ -285,6 +299,25 @@
                   },
                   "lastError": {
                     "type": "string"
+                  },
+                  "writer": {
+                    "type": "string"
+                  },
+                  "base": {
+                    "type": "object",
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "commit"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -323,6 +356,40 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "none_ready",
+                      "none_at_base",
+                      "none_admitted"
+                    ]
+                  },
+                  "counts": {
+                    "type": "object",
+                    "properties": {
+                      "busy": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notAtBaseline": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "settingsChanged": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "busy",
+                      "notAtBaseline",
+                      "settingsChanged"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -436,6 +503,25 @@
                   },
                   "lastError": {
                     "type": "string"
+                  },
+                  "writer": {
+                    "type": "string"
+                  },
+                  "base": {
+                    "type": "object",
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "commit"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -518,6 +604,14 @@
                       },
                       "truncated": {
                         "type": "boolean"
+                      },
+                      "completion": {
+                        "type": "string",
+                        "enum": [
+                          "stop",
+                          "output_limit",
+                          "tool_use"
+                        ]
                       }
                     },
                     "required": [
@@ -528,7 +622,8 @@
                       "state",
                       "completedAt",
                       "assistantText",
-                      "truncated"
+                      "truncated",
+                      "completion"
                     ],
                     "additionalProperties": false
                   },
@@ -650,6 +745,40 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "none_ready",
+                      "none_at_base",
+                      "none_admitted"
+                    ]
+                  },
+                  "counts": {
+                    "type": "object",
+                    "properties": {
+                      "busy": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notAtBaseline": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "settingsChanged": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "busy",
+                      "notAtBaseline",
+                      "settingsChanged"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -757,6 +886,25 @@
                   },
                   "lastError": {
                     "type": "string"
+                  },
+                  "writer": {
+                    "type": "string"
+                  },
+                  "base": {
+                    "type": "object",
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "commit"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -795,6 +943,40 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "none_ready",
+                      "none_at_base",
+                      "none_admitted"
+                    ]
+                  },
+                  "counts": {
+                    "type": "object",
+                    "properties": {
+                      "busy": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notAtBaseline": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "settingsChanged": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "busy",
+                      "notAtBaseline",
+                      "settingsChanged"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -902,6 +1084,25 @@
                   },
                   "lastError": {
                     "type": "string"
+                  },
+                  "writer": {
+                    "type": "string"
+                  },
+                  "base": {
+                    "type": "object",
+                    "properties": {
+                      "ref": {
+                        "type": "string"
+                      },
+                      "commit": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "ref",
+                      "commit"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -940,6 +1141,40 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "none_ready",
+                      "none_at_base",
+                      "none_admitted"
+                    ]
+                  },
+                  "counts": {
+                    "type": "object",
+                    "properties": {
+                      "busy": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notAtBaseline": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "settingsChanged": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "busy",
+                      "notAtBaseline",
+                      "settingsChanged"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -1063,6 +1298,14 @@
                       },
                       "truncated": {
                         "type": "boolean"
+                      },
+                      "completion": {
+                        "type": "string",
+                        "enum": [
+                          "stop",
+                          "output_limit",
+                          "tool_use"
+                        ]
                       }
                     },
                     "required": [
@@ -1073,7 +1316,8 @@
                       "state",
                       "completedAt",
                       "assistantText",
-                      "truncated"
+                      "truncated",
+                      "completion"
                     ],
                     "additionalProperties": false
                   },
@@ -1194,6 +1438,40 @@
                   },
                   "message": {
                     "type": "string"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "none_ready",
+                      "none_at_base",
+                      "none_admitted"
+                    ]
+                  },
+                  "counts": {
+                    "type": "object",
+                    "properties": {
+                      "busy": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "notAtBaseline": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "settingsChanged": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "busy",
+                      "notAtBaseline",
+                      "settingsChanged"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [

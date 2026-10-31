@@ -63,4 +63,4 @@ Keep the report concise:
 - Cite evidence by relative reference (repository-relative paths, line numbers, commands). Do not paste full diffs, whole files or full logs by default. The controlling agent fetches them when needed.
 - For a failed check, quote only the failing lines, and give each check with its exit code.
 - Never drop a failed check, blocker or risk to save space. If required evidence does not fit, say so explicitly.
-- `truncated: true` means the report the controlling agent receives is incomplete. `truncated: false` does not prove the report is complete or correct, and does not prove that no SDK-side output limit applied.
+- `truncated: true` means the report the controlling agent receives is incomplete. `truncated: false` does not prove the report is complete or correct. `completion: "output_limit"` also signals a cutoff.

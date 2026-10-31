@@ -54,7 +54,16 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const s = await setup(); const handle = await s.start();
     expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });
     expect(handle.appliedSelection).toEqual({ provider: "p", model: "m", thinkingLevel: "off" });
-    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false });
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "stop" });
+  });
+  it.each(["output_limit", "tool_use"] as const)("preserves a %s completion", async (completion) => {
+    const handle = await (await setup([{ completion }])).start();
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion });
+  });
+  it.each([{ missingCompletion: true }, { completion: "unknown" }])("loses a writer with invalid completion: %j", async (scenario) => {
+    const handle = await (await setup([scenario])).start();
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "failed" });
+    expect(handle.isLost?.()).toBe(true);
   });
   it("base selects only writers on that branch; none matches → none_at_base", async () => {
     const s = await setup([{}, {}]); await change(s.home, 2, { base: { ref: "refs/heads/dev", commit: "b".repeat(40) } });
@@ -135,7 +144,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const s = await setup([{ completeDuringAbort: true, polls: 1000 }]); const handle = await s.start();
     let accepted!: () => void; const ready = new Promise<void>(resolve => { accepted = resolve; });
     const turn = handle.prompt("hello", () => accepted()); await ready; await handle.abort();
-    expect(await turn).toMatchObject({ status: "completed", assistantText: "done" });
+    expect(await turn).toMatchObject({ status: "completed", assistantText: "done", completion: "stop" });
   });
   it("writer state base changed after the inner start → inner close, next candidate", async () => {
     const s = await setup([{}, {}]); const paths = writerPaths(s.home, "repo-w1"); const log = join(paths.root, "calls");
