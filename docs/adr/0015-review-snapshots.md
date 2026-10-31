@@ -351,9 +351,23 @@ the same frozen commit runs separately for Claude Code and Codex.
   so the Git process holds the slot lock descriptor and is covered by the
   guardian's process-group scan. Read-only Git (pre-checks and verification)
   runs directly: it sets `GIT_OPTIONAL_LOCKS=0` and writes nothing, and the
-  guardian's 64 KiB output cap would truncate large listings. The guardian's
-  10 second command bound also applies to `worktree add`; a timeout leaves an
+  guardian's 64 KiB output cap would truncate large listings. Mutations run
+  with a 120 second bound (the guardian's maximum); a timeout leaves an
   incomplete slot that `--discard` recovers.
+- Materialization is `worktree add --no-checkout --detach`, then the
+  conversion-driver check in the new worktree's own Git context, then a
+  guarded `reset --hard <head>`, so a driver that applies only to linked
+  worktrees (for example through `includeIf "gitdir:**/worktrees/**"`) is
+  refused before any content is checked out.
+- Recovery honours Git's worktree lock: a registration locked with Git's own
+  `initializing` marker (a killed `worktree add`) is removed with
+  `worktree remove --force --force` only under `--discard`; any other lock is
+  an operator's and the slot stays `snapshot_incomplete`.
+- `--head` and `--base` must be commit object IDs; an annotated tag's object
+  ID is refused as `snapshot_object_missing`.
+- A dispose that rejects or does not finish keeps the slot lease until the
+  process ends. Verification at prompt admission and after a turn has its own
+  30 second deadline; a timeout counts as a failed verification.
 - A missing worktree whose registration remains is recovered by removing that
   one administrative entry in-process after the back-pointer and `commondir`
   checks, because Git has no targeted prune; no Git command runs for it.

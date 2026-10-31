@@ -335,9 +335,11 @@ trusted util-linux `flock`. Git comes from `/usr/bin/git` or
 Sessions take a shared lease on the slot and verify it at start, before every
 prompt and after every turn; see [Tool contracts](tool-contracts.md#session-start).
 This detects changes at those points but does not prevent them: the tree stays
-writable by the host user. Guardian commands are bounded to 10 seconds, so
+writable by the host user. Snapshot mutations are bounded to 120 seconds, so
 materializing a very large tree can fail with `snapshot_unavailable`; rerun
-with `--discard` to drop the partial slot.
+with `--discard` to drop the partial slot. A registration that the operator
+locked with `git worktree lock` is never removed, even with `--discard`.
+`--head` and `--base` must be commit object IDs, not tag objects.
 
 | Code | Meaning |
 | --- | --- |
