@@ -2598,6 +2598,81 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.14.3 post-release evidence
+
+Recorded on 2026-10-31 for the published release `0.14.3`.
+
+Tag binding: a fresh clone of the annotated tag `v0.14.3` (tag object
+`4b64dd96e46692fa9fcca048d2b4455bac4778ff`) peels to the merge commit
+`2a483c7d19cda65c32de5df781819eb5333b9694` of #208, and
+`git describe --tags --exact-match` reports `v0.14.3`. CI on the merge commit
+(run 41174652131) and on the tag (run 41175154682) passed. The npm package
+records `gitHead` `2a483c7`.
+
+- Level 1 on the tag clone after `npm ci`, from 06:15 to 06:16 UTC with
+  Node.js `26.12.1` and npm `12.2.1`: typecheck, `build:cli`, the test run
+  (144 files, 4183 passed, 14 skipped, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` and report three findings, all
+  through `@earendil-works/pi-coding-agent` 1.4.0, still the newest SDK
+  release: the known `undici` 8.10.2 finding with the same eight advisories
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)), and,
+  new since the pre-release acceptance, the moderate advisory
+  GHSA-g3hv-75wg-m249 for the SDK's nested `minimatch` 10.2.6 (affected below
+  11.0.1, no fix available through the SDK). Level 1 is therefore not
+  unrestricted. Doctor reported `packageVersion` `0.14.3` and exited with `2`
+  because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.14.3` on npm: 941 files, shasum
+  `49cb5643f6176395ee24c68fcba697d5af1768e5`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `0f53f0e12268be6efa21bd25b9c5f01c34a02db8` because later commits change the
+  packaged `docs/acceptance.md` and the Sprint 14 record.
+- Published release, Level 2 on the tag clone, 06:16 to 06:17 UTC: 160 of 160
+  with delivery off and 228 of 228 with `--events spool`. The manifests and
+  the 190 built runtime files were byte-identical before and after the client
+  cycles.
+- Published npm package, Level 2 from a fresh prefix, 06:17 to 06:18 UTC:
+  160 of 160 with delivery off and 228 of 228 with `--events spool` (189 built
+  files unchanged). The install smoke on the published package, from another
+  fresh prefix, reported `smoke_passed` with version `0.14.3`.
+- In every Level 2 run the real client registrations were unchanged, no process
+  remained, the leak check passed and the disposable directories and prefixes
+  were removed. Clients: Codex CLI `0.166.0` and Claude Code `2.1.314`.
+
+Installations, upgraded on 2026-10-31 from 06:19 to 06:23 UTC after the runs
+above, following [Installation](installation.md#container-writers): both
+client targets removed with `0.14.2`, `npm install -g pi-session-mcp@0.14.3`,
+each container repository's provisioning command repeated with `--apply`,
+Doctor, then client-target `--apply` and `--verify` and
+`--writer <name> --verify` for every writer. One idle client session on each
+machine was still open during the upgrade.
+
+- Workstation: five container repositories with 18 writers reported
+  `mode_unchanged`, `writer_accepted` for every writer and
+  `controllers_restart_required`. Doctor with the real configuration reported
+  no error and `sandbox_unavailable` as passed for every workspace; warnings
+  were the known `workspace_gitfile` and `workspace_mode_unset`, and
+  `writer_off_default_base` for one `workflow-artifact-copilot` writer whose
+  base is a feature branch of that repository. `--verify` passed for
+  `claude-code:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`,
+  `hook_verified`) and `codex:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`), and `--writer <name> --verify` reported `mcp_verified`
+  for all 18 writers.
+- Second machine (Node.js `24.22.2`): four container repositories with 14
+  writers reported `mode_unchanged` and `writer_accepted` for every writer.
+  Its user manager delegates the `cpu`, `memory` and `pids` controllers and
+  exposes `memory.swap.max`. Doctor reported no error and
+  `sandbox_unavailable` as passed for every workspace, only the warning
+  `workspace_mode_unset` for one workspace without a mode. `--verify` passed
+  for both client targets (`mcp_verified`, both `skill_verified`), and
+  `--writer <name> --verify` reported `mcp_verified` for all 14 writers.
+- No session was started on the upgraded installations in this record, and no
+  reconnected server's version was observed.
+
+Not established for `0.14.3`: a Level 3 cycle, and a live client run with the
+task limit 512.
+
 ### v0.14.3 pre-release acceptance
 
 `v0.14.3` was accepted on 2026-10-30 from 20:56 to 21:01 UTC on its release
