@@ -30,7 +30,7 @@ npx vitest run test/writer-recover-real-git.test.ts test/writer-collect-real-git
 
 ## Recorded runs
 
-**Run 1.** The implementing worker was `code` (OpenAI `gpt-6.1-sol`) in
+**Run 1.** The implementing worker was `code-terra` (OpenAI `gpt-6.1-terra`) in
 container writer `pi-session-mcp-w1`, on base `614a8db`.
 
 - The first turn ended `BLOCKED`. The worker had read the boundary rule as
