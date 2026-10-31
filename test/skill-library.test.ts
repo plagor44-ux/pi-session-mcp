@@ -175,4 +175,12 @@ describe("skill library", () => {
       expect(text).toContain("`truncated: false` does not prove the report is complete or correct");
     }
   });
+
+  it("asks reviewers for the verdict tokens the review skill emits (#210)", async () => {
+    const orchestration = await readFile(join(shippedSkillsDirectory(), "pi-session-orchestration", "SKILL.md"), "utf8");
+    expect(orchestration).toContain("exactly one of `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`");
+    expect(orchestration).not.toContain("`CLEAN`");
+    const review = await readFile(join(shippedSkillsDirectory(), "pi-session-review", "SKILL.md"), "utf8");
+    for (const token of ["`BLOCKING_FINDINGS`", "`NON_BLOCKING_ONLY`", "`NO_FINDINGS`"]) expect(review).toContain(token);
+  });
 });

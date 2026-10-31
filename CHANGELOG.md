@@ -26,6 +26,13 @@
   Snapshot mutation is Linux-only. Additive public fields and codes: minor
   release under ADR 0003.
 
+### Fixed
+
+- The controller skill now asks reviewers for the verdict tokens the review
+  skill emits: `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`
+  ([#210](https://github.com/plagor44-ux/pi-session-mcp/issues/210)). Before,
+  it asked for `BLOCKING`, `NON_BLOCKING_ONLY` or `CLEAN`.
+
 ## 0.14.3 — 2026-10-30
 
 Patch release under ADR 0003 for Sprint 14. The MCP tool contract, result

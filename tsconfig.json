@@ -16,6 +16,9 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "eval/profiles/**/*.ts",
-    "eval/bridge/**/*.ts"
+    "eval/bridge/**/*.ts",
+    "eval/recovery/**/*.ts",
+    "eval/turn-deadline/**/*.ts",
+    "eval/reports/**/*.ts"
   ]
 }
