@@ -326,7 +326,10 @@ including ignored files and index flags; a modified one fails with
 crash) is recovered only when its directory is a linked worktree of the source
 whose administrative entry names it; setup never runs `git worktree prune` and
 never deletes an unrecognized occupant of the derived path. The state is written
-last. Mutation is Linux-only in this release. Git comes from `/usr/bin/git` or
+last. Snapshots are Linux-only in this release: setup mutation fails
+elsewhere with `snapshot_unsupported_platform`, and a session start on another
+platform fails with `snapshot_unavailable`, because the slot lease needs the
+trusted util-linux `flock`. Git comes from `/usr/bin/git` or
 `/bin/git` with hooks, fsmonitor and replace refs disabled.
 
 Sessions take a shared lease on the slot and verify it at start, before every
