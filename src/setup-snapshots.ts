@@ -57,7 +57,10 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
     if (request.apply && (deps.platform ?? process.platform) !== "linux") fail("snapshot_unsupported_platform");
     let tree: string | undefined;
     if (!request.remove) {
-      for (const id of [request.head!, request.base!]) if ((await git.run(source, ["cat-file", "-e", "--end-of-options", `${id}^{commit}`])).code !== 0) fail("snapshot_object_missing");
+      for (const id of [request.head!, request.base!]) {
+        const commit = await git.run(source, ["rev-parse", "--verify", "--end-of-options", `${id}^{commit}`]);
+        if (commit.code !== 0 || commit.stdout.trim() !== id) fail("snapshot_object_missing");
+      }
       const listing = await command(git, source, ["ls-tree", "-r", "-z", "--end-of-options", request.head!]);
       if (listing.split("\0").some((item) => item.startsWith("160000 "))) fail("snapshot_submodule_present");
       await assertNoConversionDrivers(git, source);
@@ -69,12 +72,24 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
       try { state = await readSnapshotState(pathsHere); } catch (e) { if (!(e instanceof SnapshotError) || e.code !== "snapshot_incomplete") throw e; }
       const present = await exists(pathsHere.worktree);
       if (state && present && state.source === sourceAlias && !request.remove && state.head === request.head && state.base === request.base && state.tree === tree) {
-        try { await verifySnapshot(git, pathsHere.worktree, state); check(); return done("unchanged", "unchanged"); } catch (e) { if (!(e instanceof SnapshotError) || e.code !== "snapshot_modified") throw e; }
+        try { await verifySnapshot(git, pathsHere.worktree, state); check(); return done("unchanged", "unchanged"); } catch (e) { if (!(e instanceof SnapshotError) || e.code !== "snapshot_modified") throw e; if (!mutation && !request.discard) throw e; }
       }
-      if (!mutation) return done("planned", "snapshot_planned");
+      if (!mutation) {
+        if (state && present && !request.discard) await verifySnapshot(git, pathsHere.worktree, state);
+        return done("planned", "snapshot_planned");
+      }
       check();
       const entries = await registrations(git, source, pathsHere.worktree);
       if (entries.length > 1) fail("snapshot_incomplete");
+      let initializing = false;
+      if (entries.length === 1) {
+        const locked = join(entries[0]!, "locked");
+        try {
+          if (!(await lstat(locked)).isFile()) fail("snapshot_incomplete");
+          if ((await readFile(locked, "utf8")).replace(/\n$/, "") !== "initializing" || !request.discard) fail("snapshot_incomplete");
+          initializing = true;
+        } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+      }
       let discarded = false;
       if (present) {
         if (!(await lstat(pathsHere.worktree)).isDirectory() || entries.length !== 1) fail("snapshot_incomplete");
@@ -88,7 +103,7 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
         // Never run Git removal in a context with a conversion driver, even with discard.
         await assertNoConversionDrivers(git, pathsHere.worktree);
         check();
-        await command(mutation, source, ["worktree", "remove", ...(modified ? ["--force"] : []), pathsHere.worktree], deps.signal);
+        await command(mutation, source, ["worktree", "remove", ...(initializing ? ["--force", "--force"] : modified ? ["--force"] : []), pathsHere.worktree], deps.signal);
         check(); discarded = modified;
       } else if (entries.length === 1) {
         // Git has no targeted prune for a missing worktree: remove its checked administrative entry only.
@@ -97,7 +112,15 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
       await removeSnapshotState(pathsHere); check();
       if (request.remove) return done(present || entries.length || state ? "ok" : "absent", present || entries.length || state ? "snapshot_removed" : "absent", discarded);
       await assertNoConversionDrivers(git, source); check();
-      await command(mutation, source, ["worktree", "add", "--detach", pathsHere.worktree, request.head!], deps.signal); check();
+      await command(mutation, source, ["worktree", "add", "--no-checkout", "--detach", pathsHere.worktree, request.head!], deps.signal); check();
+      try { await assertNoConversionDrivers(git, pathsHere.worktree); }
+      catch (e) {
+        if (e instanceof SnapshotError && e.code === "snapshot_source_unsupported") {
+          check(); await command(mutation, source, ["worktree", "remove", "--force", pathsHere.worktree], deps.signal); check();
+        }
+        throw e;
+      }
+      check(); await command(mutation, pathsHere.worktree, ["reset", "--hard", request.head!, "--"], deps.signal); check();
       await verifySnapshot(git, pathsHere.worktree, { head: request.head!, base: request.base!, tree: tree! }); check();
       await writeSnapshotState(pathsHere, { v: 1, source: sourceAlias, head: request.head!, base: request.base!, tree: tree!, at: new Date().toISOString() }); check();
       return done("ok", "snapshot_applied", discarded);

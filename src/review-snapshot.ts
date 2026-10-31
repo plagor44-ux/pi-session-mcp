@@ -81,7 +81,7 @@ export async function removeSnapshotState(paths: SnapshotPaths): Promise<void> {
 }
 export interface GitResult { readonly code: number; readonly stdout: string; }
 export interface SnapshotGit { run(cwd: string, args: readonly string[], options?: { readonly signal?: AbortSignal; readonly inheritFds?: readonly number[] }): Promise<GitResult>; }
-export interface TrustedGitOptions { readonly candidates?: readonly string[]; readonly isTrustedBinary?: (path: string) => boolean; readonly env?: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; }
+export interface TrustedGitOptions { readonly candidates?: readonly string[]; readonly isTrustedBinary?: (path: string) => boolean; readonly env?: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly mutationTimeoutMs?: number; }
 export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undefined {
   const binary = (options.candidates ?? ["/usr/bin/git", "/bin/git"]).find((path) => (options.isTrustedBinary ?? ((candidate: string) => isTrustedSystemBinary(candidate)))(path));
   if (!binary) return undefined;
@@ -118,7 +118,7 @@ export function guardedGit(runner: CommandRunner, options: TrustedGitOptions & {
     return `${key}=${value}`;
   });
   return { async run(cwd, args, runOptions = {}) {
-    const output = await runner.run(envBinary, ["-i", ...pairs, binary, "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], runOptions.signal);
+    const output = await runner.run(envBinary, ["-i", ...pairs, binary, "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], runOptions.signal, { timeoutMs: options.mutationTimeoutMs ?? 120_000 });
     if ([124, 125, 126, 127].includes(output.exitCode) || output.stderr === "output_limit") throw new SnapshotError("snapshot_unavailable");
     return { code: output.exitCode, stdout: output.stdout };
   } };

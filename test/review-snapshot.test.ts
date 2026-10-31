@@ -36,7 +36,9 @@ it("runs hardened Git through the guardian runner and fails closed", async () =>
   const options = { candidates: ["/git"], envCandidates: ["/env"], isTrustedBinary: () => true, env: { HOME: "/home/test", EXTRA: "yes" } };
   const git = guardedGit(runner, options)!;
   expect(await git.run("/repo", ["worktree", "remove", "x"])).toEqual({ code: 0, stdout: "ok" });
-  expect(calls[0]).toEqual(["/env", ["-i", "PATH=/usr/bin:/bin", "HOME=/home/test", "LANG=C", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "EXTRA=yes", "/git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", "/repo", "worktree", "remove", "x"], undefined]);
+  expect(calls[0]).toEqual(["/env", ["-i", "PATH=/usr/bin:/bin", "HOME=/home/test", "LANG=C", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "EXTRA=yes", "/git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", "/repo", "worktree", "remove", "x"], undefined, { timeoutMs: 120_000 }]);
+  await guardedGit(runner, { ...options, mutationTimeoutMs: 1234 })!.run("/repo", []);
+  expect(calls[1]?.[3]).toEqual({ timeoutMs: 1234 });
   for (const code of [124, 125, 126, 127]) { exitCode = code; await expect(git.run("/repo", [])).rejects.toMatchObject({ code: "snapshot_unavailable" }); }
   exitCode = 0; stderr = "output_limit"; await expect(git.run("/repo", [])).rejects.toMatchObject({ code: "snapshot_unavailable" });
   expect(() => guardedGit(runner, { ...options, env: { "bad=name": "x" } })).toThrow(expect.objectContaining({ code: "snapshot_unavailable" }));

@@ -49,6 +49,55 @@ real("refuses missing objects and source filters before making the slot", async 
   f.at("config", "filter.foo.smudge", "false"); expect(await f.run()).toMatchObject({ findings: [{ code: "snapshot_source_unsupported" }] });
   await expect(stat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 });
+real("refuses annotated tag object IDs before creating a slot", async () => {
+  const f = await fixture(); f.at("tag", "-a", "tag", "-m", "tag"); const tag = f.at("rev-parse", "tag");
+  for (const change of [{ head: tag }, { base: tag }]) expect(await f.run(change)).toMatchObject({ findings: [{ code: "snapshot_object_missing" }] });
+  await expect(stat(f.paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+});
+real("refuses a worktree-only smudge before checkout and cleans its registration", async () => {
+  const f = await fixture();
+  await writeFile(join(f.source, ".gitattributes"), "*.txt filter=mark\n"); await writeFile(join(f.source, "marked.txt"), "test\n");
+  f.at("add", "."); f.at("commit", "-m", "attributes"); const head = f.at("rev-parse", "HEAD");
+  const global = join(f.home, "global"), filter = join(f.home, "filter"), marker = join(f.home, "marker");
+  await writeFile(global, `[includeIf "gitdir:**/worktrees/**"]\n path = ${filter}\n`);
+  await writeFile(filter, `[filter "mark"]\n smudge = touch ${marker}\n`);
+  const result = await runSnapshotOperation(join(f.home, "config.json"), { alias: "review", apply: true, remove: false, discard: false, base: f.base, head }, { home: f.home, gitOptions: { env: { ...f.env, GIT_CONFIG_GLOBAL: global } } });
+  expect(result).toMatchObject({ findings: [{ code: "snapshot_source_unsupported" }] });
+  await expect(stat(marker)).rejects.toMatchObject({ code: "ENOENT" }); await expect(stat(f.paths.worktree)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(f.at("worktree", "list", "--porcelain")).not.toContain(f.paths.worktree);
+});
+real("dry-run refuses a modified matching slot unless discard is requested", async () => {
+  const f = await fixture(); expect((await f.run()).exitCode).toBe(0); await writeFile(join(f.paths.worktree, "file"), "modified");
+  expect(await f.run({ apply: false })).toMatchObject({ exitCode: 1, findings: [{ code: "snapshot_modified" }] });
+  expect(await f.run({ apply: false, discard: true })).toMatchObject({ status: "planned", findings: [{ code: "snapshot_planned" }] });
+});
+real("recovers initializing locks only with discard and preserves operator locks", async () => {
+  const f = await fixture(); expect((await f.run()).exitCode).toBe(0); await rm(f.paths.state);
+  const entry = f.git(f.paths.worktree, "rev-parse", "--absolute-git-dir"); await writeFile(join(entry, "locked"), "initializing\n");
+  expect(await f.run()).toMatchObject({ findings: [{ code: "snapshot_incomplete" }] });
+  expect((await f.run({ discard: true })).exitCode).toBe(0);
+  f.at("worktree", "lock", "--reason", "keep", f.paths.worktree); await rm(f.paths.state);
+  expect(await f.run({ discard: true })).toMatchObject({ findings: [{ code: "snapshot_incomplete" }] });
+  await rm(f.paths.worktree, { recursive: true });
+  expect(await f.run({ discard: true })).toMatchObject({ findings: [{ code: "snapshot_incomplete" }] });
+  expect(f.at("worktree", "list", "--porcelain")).toContain(f.paths.worktree);
+});
+real("routes mutations through the guardian and stops without state when its fence aborts", async () => {
+  const f = await fixture(); const calls: string[][] = []; const controller = new AbortController(); let abortOnAdd = false;
+  const guardian: NonNullable<import("../src/setup-snapshots.js").SnapshotDependencies["guardian"]> = async () => ({
+    signal: controller.signal, release: async () => {}, runner: { async run(command, args) {
+      const argv = [...args]; calls.push(argv);
+      try { const stdout = execFileSync(command, argv, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); if (abortOnAdd && argv.includes("add")) controller.abort(); return { exitCode: 0, stdout, stderr: "" }; }
+      catch { return { exitCode: 1, stdout: "", stderr: "" }; }
+    } },
+  });
+  const request: SnapshotRequest = { alias: "review", apply: true, remove: false, discard: false, base: f.base, head: f.head };
+  const run = (change: Partial<SnapshotRequest> = {}) => runSnapshotOperation(join(f.home, "config.json"), { ...request, ...change }, { home: f.home, gitOptions: { env: f.env }, guardian });
+  expect((await run()).exitCode).toBe(0); await writeFile(join(f.paths.worktree, "file"), "changed");
+  expect((await run({ discard: true, head: f.base })).exitCode).toBe(0); expect((await run({ remove: true })).exitCode).toBe(0);
+  expect(calls.filter((args) => args.includes("add"))).toHaveLength(2); expect(calls.filter((args) => args.includes("reset"))).toHaveLength(2); expect(calls.filter((args) => args.includes("remove"))).toHaveLength(2);
+  abortOnAdd = true; expect(await run()).toMatchObject({ findings: [{ code: "snapshot_unavailable" }] }); await expect(stat(f.paths.state)).rejects.toMatchObject({ code: "ENOENT" });
+});
 real("rejects gitlinks before creating a slot", async () => {
   const f = await fixture(); f.at("update-index", "--add", "--cacheinfo", `160000,${f.base},sub`); f.at("commit", "-m", "gitlink");
   expect(await f.run({ head: f.at("rev-parse", "HEAD") })).toMatchObject({ findings: [{ code: "snapshot_submodule_present" }] });

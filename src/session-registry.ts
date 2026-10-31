@@ -57,13 +57,15 @@ export const PREFLIGHT_DEADLINE_MS = 5_000;
 export const ABORT_DEADLINE_MS = 5_000;
 export const CLOSE_CLEANUP_DEADLINE_MS = 5_000;
 export const SHUTDOWN_DEADLINE_MS = 12_000;
+// Retain unfinished or rejected disposals until process exit, including across registry shutdown.
+const disposalLeases = new Set<SnapshotSessionLease>();
 const stamp = () => new Date().toISOString();
 /**
  * Content-free notice that a published turn became terminal. `via` is `close` when `close` marked a
  * still running turn aborted, otherwise `registry`. The registry read model stays the only truth.
  */
 export interface TurnTerminalNotice { sessionId: string; turnId: string; state: Exclude<TurnState, "running">; via: "registry" | "close"; }
-export interface SessionRegistryOptions { preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
+export interface SessionRegistryOptions { snapshotVerifyDeadlineMs?: number; preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
@@ -79,7 +81,7 @@ export class SessionRegistry {
     this.writerGuard = options.writerGuard;
     this.snapshotGuard = options.snapshotGuard;
     this.onTurnTerminal = options.onTurnTerminal;
-    this.options = { preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
+    this.options = { snapshotVerifyDeadlineMs: options.snapshotVerifyDeadlineMs ?? 30_000, preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
   async start(workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string } = {}): Promise<SessionView> {
     if (this.stopping) throw new RegistryError("server_stopping");
@@ -306,7 +308,7 @@ export class SessionRegistry {
   }
   private async verifyLease(entry: Entry): Promise<RegistryError | undefined> {
     const check = Promise.resolve().then(() => entry.lease!.verify()).then(() => undefined, (error: unknown) => snapshotError(error));
-    return this.withTimeout(check, entry.handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, new RegistryError("snapshot_unavailable"));
+    return this.withTimeout(check, this.options.snapshotVerifyDeadlineMs, new RegistryError("snapshot_unavailable"));
   }
   private finishTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void | Promise<void> {
     if (!entry.lease) { this.completeTurn(entry, turn, outcome); return; }
@@ -399,7 +401,8 @@ export class SessionRegistry {
   }
   private async disposeHandle(handle: PiSessionHandle, lease?: SnapshotSessionLease): Promise<void> {
     try {
-      const cleanup = Promise.resolve().then(() => handle.dispose()).then(() => undefined, () => undefined).then(async () => { await lease?.release(); });
+      if (lease) disposalLeases.add(lease);
+      const cleanup = Promise.resolve().then(() => handle.dispose()).then(async () => { if (lease) { await lease.release(); disposalLeases.delete(lease); } });
       await this.withTimeout(cleanup, handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
     } catch { /* Cleanup errors must never expose adapter internals. */ }
   }

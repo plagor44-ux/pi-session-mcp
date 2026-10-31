@@ -67,6 +67,43 @@ for (const outcome of ["failed", "aborted"] as const) realGit(`keeps a ${outcome
   await writeFile(join(f.paths.worktree, "file"), "modified"); if (outcome === "failed") f.adapter.handles[0]!.fail(); else await f.registry.abort(s.id);
   expect((await terminal(f.registry, s.id, p.turn.turnId)).state).toBe(outcome); expect(f.notices[0]?.state).toBe(outcome); await f.registry.close(s.id);
 });
+realGit("retains a lease when dispose rejects", async () => {
+  const f = await fixture(); const s = await f.registry.start("review", profile); f.adapter.handles[0]!.disposeError = new Error("dispose failed");
+  await f.registry.close(s.id); await expect(lockSnapshotExclusive(f.paths)).rejects.toMatchObject({ code: "snapshot_busy" });
+});
+realGit("releases the lease when selection verification fails", async () => {
+  const f = await fixture();
+  const adapter = new FakeAdapter(); const original = adapter.create.bind(adapter);
+  adapter.create = async (input) => { const handle = await original(input); Object.assign(handle.appliedSelection, { model: "wrong" }); return handle; };
+  const guard = createSnapshotGuard({ home: f.paths.root.split("/.local/")[0]!, workspaceModes: f.modes, git: trustedGit({ env: { HOME: f.paths.root.split("/.local/")[0]!, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } }) });
+  const registry = new SessionRegistry(adapter, f.workspaces, { snapshotGuard: guard });
+  await expect(registry.start("review", profile)).rejects.toThrow(); await unlocked(f.paths);
+});
+it("bounds admission and post-turn verification and taints the session", async () => {
+  let verify = 0; let hangAt = 1;
+  const guard = { isSnapshot: () => true, acquire: async () => ({ binding: { base: "a", head: "b", tree: "c" }, verify: () => ++verify >= hangAt ? new Promise<void>(() => {}) : Promise.resolve(), release: async () => {} }) };
+  const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, new Map([["review", "/tmp"]]), { snapshotGuard: guard, snapshotVerifyDeadlineMs: 10 });
+  const first = await registry.start("review", profile);
+  await expect(registry.prompt(first.id, "test")).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  await expect(registry.prompt(first.id, "again")).rejects.toMatchObject({ code: "snapshot_modified" }); await registry.close(first.id);
+  verify = 0; hangAt = 2; const second = await registry.start("review", profile); const turn = await registry.prompt(second.id, "test"); adapter.handles[1]!.complete();
+  expect((await terminal(registry, second.id, turn.turn.turnId)).state).toBe("failed");
+  await expect(registry.prompt(second.id, "again")).rejects.toMatchObject({ code: "snapshot_modified" }); await registry.close(second.id);
+});
+for (const action of ["abort", "close"] as const) it(`${action} during post-turn verification publishes one terminal notice`, async () => {
+  let verifyCount = 0; let release!: () => void; let entered!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; }); const started = new Promise<void>((resolve) => { entered = resolve; });
+  const guard = { isSnapshot: () => true, acquire: async () => ({ binding: { base: "a", head: "b", tree: "c" }, verify: async () => { if (++verifyCount === 2) { entered(); await pending; } }, release: async () => {} }) };
+  const adapter = new FakeAdapter(); const notices: TurnTerminalNotice[] = [];
+  const registry = new SessionRegistry(adapter, new Map([["review", "/tmp"]]), { snapshotGuard: guard, onTurnTerminal: (notice) => notices.push(notice) });
+  const s = await registry.start("review", profile); const turn = await registry.prompt(s.id, "test"); adapter.handles[0]!.complete(); await started;
+  const operation = action === "abort" ? registry.abort(s.id) : registry.close(s.id);
+  if (action === "close") await operation;
+  release(); await operation; await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(notices).toHaveLength(1);
+  if (action === "close") expect(notices[0]).toMatchObject({ state: "aborted", via: "close" });
+  else expect(registry.getTurn(s.id, turn.turn.turnId).state).not.toBe("running");
+});
 realGit("exposes binding and snapshot capability through tools and rejects unsafe profiles", async () => {
   const f = await fixture();
   const base = { ...profile, default: true };

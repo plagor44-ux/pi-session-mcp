@@ -15,7 +15,7 @@ import { formatSetupHuman, formatSetupResult, parseSetupArgs, type SetupCliReque
 import { result, type SetupOperation, type SetupResult, type SetupTarget } from "./setup-result.js";
 
 /** Executable entry point for client registrations, skill customization and `--repo <alias>` execution modes. */
-export interface SetupMainDependencies { readonly createSetup?: typeof createProductionSetup; readonly packageRoot?: string; }
+export interface SetupMainDependencies { readonly createSetup?: typeof createProductionSetup; readonly packageRoot?: string; readonly runSnapshot?: typeof runSnapshotOperation; }
 export async function main(argv: readonly string[] = process.argv.slice(2), dependencies: SetupMainDependencies = {}): Promise<number> {
   let json = argv.includes("--json");
   let request: SetupCliRequest;
@@ -47,7 +47,10 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
   let setup;
   try {
     if (request.probe) return await (await import("./setup-probe-main.js")).runProbe(request.probe, request.json, resolve(config), controller.signal, { packageRoot: root });
-    if (request.snapshot) return write(await runSnapshotOperation(resolve(config), request.snapshot, { signal: controller.signal }), request.json);
+    if (request.snapshot) {
+      const output = await (dependencies.runSnapshot ?? runSnapshotOperation)(resolve(config), request.snapshot, { signal: controller.signal });
+      return write(interrupted ? cliFailure(operation, failureTargets, "operation_interrupted", interrupted) : output, request.json);
+    }
     const writerDeps = { configPath: resolve(config), releaseRoot: root, signal: controller.signal };
     if (request.repo !== undefined) {
       try { return write(await changeWriterMode(resolve(config), request.repo, writerDeps), request.json); }
