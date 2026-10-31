@@ -1,10 +1,10 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, NODE_IMAGE_REF, isSafeRefName, throwawayArgs, verifyCloneLayout } from "../../src/writer-boundary.js";
+import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, isSafeRefName, throwawayArgs, verifyCloneLayout } from "../../src/writer-boundary.js";
 import { acquireWriterLease, WriterLeaseError } from "../../src/writer-lease.js";
 import type { WriterContext } from "../../src/writer-lifecycle.js";
 import { SETUP_LEASE_WAIT_MS } from "../../src/setup-writers-common.js";
-import { writerPaths } from "../../src/writer-state.js";
+import { readWriterState, writerPaths } from "../../src/writer-state.js";
 
 export const RECOVERY_REF_ROOT = "refs/recovery";
 export type RecoverCode = "writer_recover_planned" | "writer_recovered" | "nothing_to_recover" | "writer_recover_unsupported" | "writer_recover_failed" | "writer_recover_incomplete" | "writer_busy";
@@ -45,10 +45,15 @@ for (const stage of [1,2,3]) {
   save('stage'+stage,run(['write-tree'],undefined,index));
 }
 run(['read-tree',head],undefined,'/tmp/wt'); run(['add','-A'],undefined,'/tmp/wt'); save('worktree',run(['write-tree'],undefined,'/tmp/wt'));
-const manifest=cp.execFileSync('git',[...base,'ls-files','-u'],{env:{...process.env,GIT_INDEX_FILE:'/tmp/orig'}});
-const blob=run(['hash-object','-w','--stdin'],manifest);
 run(['read-tree','--empty'],undefined,'/tmp/manifest');
-run(['update-index','--add','--cacheinfo','100644,'+blob+',unmerged-index.txt'],undefined,'/tmp/manifest');
+function manifestFile(name, content) {
+  const blob=run(['hash-object','-w','--stdin'],content);
+  run(['update-index','--add','--cacheinfo','100644,'+blob+','+name],undefined,'/tmp/manifest');
+}
+manifestFile('unmerged-index.txt',data);
+manifestFile('head.txt',head+'\\n');
+const mergeHead=run(['rev-parse','--git-path','MERGE_HEAD']);
+if (fs.existsSync(mergeHead)) manifestFile('merge-head.txt',fs.readFileSync(mergeHead));
 save('manifest',run(['write-tree'],undefined,'/tmp/manifest'));
 run(['--git-dir=/tmp/scratch','bundle','create','/bundles/recover.bundle','--all']);
 console.log('recovered');
@@ -60,13 +65,15 @@ export async function recoverWriter(ctx: WriterContext, name: string, options: {
   try { lease = await acquireWriterLease(ctx.home, name, { waitMs: SETUP_LEASE_WAIT_MS }); }
   catch (error) { return { code: error instanceof WriterLeaseError && error.code === "writer_busy" ? "writer_busy" : "writer_recover_failed", status: "failed" }; }
   try {
+    const state = await readWriterState(ctx.home, name);
+    if (!state || state.alias !== ctx.alias) return { code: "writer_recover_failed", status: "failed" };
     const paths = writerPaths(ctx.home, name), bundle = join(paths.bundles, "recover.bundle");
     const run = (command: string, args: readonly string[]) => ctx.runner.run(command, args, AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS), { inheritFds: [lease.fd] });
     const git = async (...args: string[]) => { const result = await run("git", ["-c", "core.hooksPath=/dev/null", "-C", ctx.checkout, ...args]); if (result.exitCode !== 0) throw Error("git failed"); return result.stdout; };
     try {
       await verifyCloneLayout(paths.clone);
       await rm(bundle, { force: true });
-      const result = await run("podman", throwawayArgs(name, paths, NODE_IMAGE_REF, { clone: "ro", bundles: true }, script, [paths.clone]));
+      const result = await run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone]));
       if (result.exitCode !== 0) throw Error("container failed");
       if (result.stdout.trim() === "nothing_to_recover") return { code: "nothing_to_recover", status: "unchanged" };
       if (result.stdout.trim() === "writer_recover_unsupported") return { code: "writer_recover_unsupported", status: "failed" };
@@ -84,10 +91,17 @@ export async function recoverWriter(ctx: WriterContext, name: string, options: {
       if (!Number.isSafeInteger(slot)) throw Error("invalid slot");
       const imported: typeof heads = [];
       try {
-        for (const head of heads) { const dest = `${root}/${slot}/${head.part}`; if (!isSafeRefName(dest)) throw Error("invalid destination"); imported.push(head); await git("fetch", "--no-tags", "--end-of-options", bundle, `+${head.source}:${dest}`); }
+        for (const head of [...heads].sort((a, b) => Number(a.part === "manifest") - Number(b.part === "manifest"))) {
+          const dest = `${root}/${slot}/${head.part}`;
+          if (!isSafeRefName(dest)) throw Error("invalid destination");
+          // Fetch outside refs/heads permits some non-fast-forward updates even without '+'.
+          if ((await git("for-each-ref", "--format=%(refname)", dest)).trim()) throw Error("destination exists");
+          imported.push(head);
+          await git("fetch", "--no-tags", "--end-of-options", bundle, `${head.source}:${dest}`);
+        }
       } catch {
         for (const h of imported) { try { await git("update-ref", "-d", `${root}/${slot}/${h.part}`, h.oid); } catch { /* report incomplete even if rollback is indeterminate */ } }
-        return { code: "writer_recover_incomplete", status: "failed" };
+        return { code: "writer_recover_incomplete", status: "failed", slot };
       }
       return { code: "writer_recovered", status: "ok", slot };
     } finally { await rm(bundle, { force: true }); }
