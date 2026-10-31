@@ -40,7 +40,9 @@ function materialize(operatorRepo, snapDir, binding) {
 function verifySnapshot(dir, binding) {
   if (at(dir, 'rev-parse', 'HEAD') !== binding.head) return { ok: false, code: 'snapshot_head_changed' };
   if (at(dir, 'rev-parse', `${binding.head}^{tree}`) !== binding.tree) return { ok: false, code: 'snapshot_tree_mismatch' };
-  if (at(dir, 'status', '--porcelain=v1', '--untracked-files=all') !== '') return { ok: false, code: 'snapshot_modified' };
+  // Read-only check: no optional index refresh, and ignored files and index flags count as changes.
+  if (at(dir, '--no-optional-locks', 'status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching') !== '') return { ok: false, code: 'snapshot_modified' };
+  if (at(dir, '--no-optional-locks', 'ls-files', '-v').split('\n').some(line => line !== '' && !line.startsWith('H '))) return { ok: false, code: 'snapshot_modified' };
   if (at(dir, 'ls-tree', '-r', binding.head).split('\n').some(line => line.startsWith('160000 '))) return { ok: false, code: 'snapshot_submodule_present' };
   if (!hasObject(dir, binding.base)) return { ok: false, code: 'snapshot_object_missing' };
   return { ok: true };
@@ -79,6 +81,7 @@ try {
     at(repo, 'checkout', '-b', 'feature');
     await writeFile(join(repo, 'src/value.txt'), 'feature\n');
     await writeFile(join(repo, 'src/added.txt'), 'added\n');
+    await writeFile(join(repo, '.gitignore'), '*.log\n');
     at(repo, 'add', '.'); at(repo, 'commit', '-m', 'feature');
     binding = { base, head: at(repo, 'rev-parse', 'HEAD'), tree: at(repo, 'rev-parse', 'HEAD^{tree}') };
     assert.equal(at(repo, 'branch', '--show-current'), 'feature');
@@ -110,6 +113,50 @@ try {
     await rm(join(snap, 'untracked'));
     assert.deepEqual(verifySnapshot(snap, binding), { ok: true });
     return result;
+  });
+  await runCase('ignored-file-detected', 'snapshot_modified', async () => {
+    await writeFile(join(snap, 'review.log'), 'not part of head\n');
+    // Plain status, as in the first ADR draft, does not see it.
+    assert.equal(at(snap, 'status', '--porcelain=v1', '--untracked-files=all'), '');
+    const result = verifySnapshot(snap, binding).code;
+    await rm(join(snap, 'review.log'));
+    assert.deepEqual(verifySnapshot(snap, binding), { ok: true });
+    return result;
+  });
+  await runCase('index-flag-detected', 'snapshot_modified', async () => {
+    at(snap, 'update-index', '--skip-worktree', 'src/value.txt');
+    await writeFile(join(snap, 'src/value.txt'), 'hidden edit\n');
+    assert.equal(at(snap, 'status', '--porcelain=v1', '--untracked-files=all', '--ignored=matching'), '');
+    const result = verifySnapshot(snap, binding).code;
+    at(snap, 'update-index', '--no-skip-worktree', 'src/value.txt');
+    at(snap, 'checkout', '--', '.');
+    assert.deepEqual(verifySnapshot(snap, binding), { ok: true });
+    return result;
+  });
+  await runCase('verification-does-not-write-git-metadata', 'unchanged;control=rewritten', async () => {
+    const indexFile = at(snap, 'rev-parse', '--path-format=absolute', '--git-path', 'index');
+    const before = await readFile(indexFile);
+    const beforeStat = await lstat(indexFile);
+    // Touch a tracked file so that a refreshing status would rewrite the index.
+    await writeFile(join(snap, 'src/value.txt'), 'feature\n');
+    assert.deepEqual(verifySnapshot(snap, binding), { ok: true });
+    const afterStat = await lstat(indexFile);
+    assert.ok(before.equals(await readFile(indexFile)));
+    assert.equal(afterStat.mtimeMs, beforeStat.mtimeMs);
+    // Control: an ordinary status in the same situation refreshes (rewrites) the index.
+    at(snap, 'status', '--porcelain=v1');
+    const control = (await lstat(indexFile)).mtimeMs !== beforeStat.mtimeMs ? 'rewritten' : 'not-rewritten';
+    return `unchanged;control=${control}`;
+  });
+  await runCase('plain-remove-deletes-ignored-work', 'removed', async () => {
+    // Why setup must verify (including ignored files) before removing: Git alone does not refuse.
+    const probe = join(root, 'probe');
+    assert.equal(materialize(repo, probe, binding), 'ok');
+    await writeFile(join(probe, 'operator-notes.log'), 'would be lost\n');
+    assert.equal(verifySnapshot(probe, binding).code, 'snapshot_modified');
+    assert.equal(gitResult('-C', repo, 'worktree', 'remove', probe).status, 0);
+    await assert.rejects(() => lstat(probe), { code: 'ENOENT' });
+    return 'removed';
   });
   await runCase('head-moved-detected', 'snapshot_head_changed', async () => {
     at(snap, 'checkout', '--detach', binding.base);
