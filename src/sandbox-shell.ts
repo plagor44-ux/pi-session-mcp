@@ -27,7 +27,7 @@ export const SYSTEMD_RUN_PATH = "/usr/bin/systemd-run";
 /** `memory.max` of each run's scope (1 GiB); the overlays and tmpfs mounts count against it. Swap is 0. */
 export const SANDBOX_MEMORY_BYTES = 1_073_741_824;
 /** `pids.max` of each run's scope: processes and threads of bubblewrap and all its descendants. */
-export const SANDBOX_TASKS = 128;
+export const SANDBOX_TASKS = 512;
 export interface SandboxLimits { readonly memoryBytes: number; readonly tasks: number; }
 export const SANDBOX_LIMITS: SandboxLimits = { memoryBytes: SANDBOX_MEMORY_BYTES, tasks: SANDBOX_TASKS };
 const GITFILE_LIMIT_BYTES = 4096;

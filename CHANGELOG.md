@@ -11,7 +11,7 @@ codes and configuration schema are unchanged. **Upgrade note:** a profile with
 delegated to the user manager and swap accounting enabled; without them the
 start fails with `sandbox_unavailable` and Doctor reports it per workspace.
 Run Doctor after the upgrade. Commands in that shell are now limited to 1 GiB
-of memory without swap and 128 processes and threads.
+of memory without swap and 512 processes and threads.
 `npm audit` still reports `undici` 8.10.2, pinned by Pi SDK 1.4.0, the latest
 SDK release ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
 
@@ -19,7 +19,7 @@ SDK release ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
   ([#195](https://github.com/plagor44-ux/pi-session-mcp/issues/195),
   ADR 0013 amendment 2026-10-30). Every probe and command runs through
   `/usr/bin/systemd-run --user --scope` in its own transient scope with
-  `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 128, and bubblewrap
+  `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 512, and bubblewrap
   holds the command until the server has verified the scope's cgroup
   membership and those values. A run that fails before that ends the whole
   scope before the command could start, the launcher's diagnostics never reach
@@ -34,7 +34,7 @@ SDK release ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
   now also needs a running systemd user manager, a trusted
   `/usr/bin/systemd-run` and cgroup v2 with the `memory` and `pids`
   controllers delegated to the user manager, with swap accounting enabled.
-  Commands that need more than 1 GiB of memory or more than 128 processes and
+  Commands that need more than 1 GiB of memory or more than 512 processes and
   threads, for example a large parallel build or test run, now end with exit
   137 or fail to fork instead of running unbounded, and a filled overlay ends
   the command the same way rather than with `ENOSPC`. Where these are missing, a

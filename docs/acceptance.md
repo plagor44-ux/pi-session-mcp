@@ -2600,21 +2600,26 @@ workspace without a mode.
 
 ### v0.14.3 pre-release acceptance
 
-`v0.14.3` was accepted on 2026-10-30 from 20:02 to 20:07 UTC on its release
-candidate `c72e8d3`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`v0.14.3` was accepted on 2026-10-30 from 20:56 to 21:01 UTC on its release
+candidate `7ebbb32`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
 `26.12.1`, npm `12.2.1`, systemd `262`, bubblewrap `0.13.1`, Podman `6.1.4`,
 Codex CLI `0.166.0` and Claude Code `2.1.314`, cgroup v2 with `memory` and
 `pids` delegated to the user manager. Level 2 passed in the working tree and
 for the packed tarball, each with delivery off and with delivery on. Level 1
-passed except `npm audit`. Later commits on the release pull request change
-only this record.
+passed except `npm audit`. Later commits change only this record.
 
-The patch release ships #195 (PR #206) from `main` at `9d8b3e9`; the candidate
-adds only the version, the changelog heading and the roadmap line. The MCP
-tool contract, result codes and configuration schema are unchanged. The #195
-source changes were accepted on their branch before the merge, including the
-live interop with both clients, see
-[Issue #195 candidate acceptance](#issue-195-candidate-acceptance-2026-10-30).
+The patch release ships #195 (PR #206). The version, the changelog heading and
+the roadmap line were merged in PR #207 (`main` at `c1ed011`) while the task
+limit was still 128, before the raise had been pushed to it; the raise from
+128 to 512 (`20e74f5`, reasons and measurements in the
+[Sprint 14 record](sprints/2026-10-30-s14-sandbox-resource-limits.md)) follows
+in its own pull request. The candidate `7ebbb32` is `main` at `c1ed011` plus
+that raise, with the same tree. No tag was made at `c1ed011`.
+The MCP tool contract, result codes and configuration schema are unchanged.
+The other #195 source changes were accepted on their branch before the merge,
+see [Issue #195 candidate acceptance](#issue-195-candidate-acceptance-2026-10-30);
+its live interop ran with the task limit 128, and no live client run was
+repeated with 512.
 
 - Level 1 in the checkout of the candidate after `npm ci`: every command exited
   with `0`, except `npm audit`; `git status --short` printed nothing.
@@ -2625,25 +2630,27 @@ live interop with both clients, see
     1.4.0, the latest SDK release
     ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
   - `npm pack` listed 941 files (tarball shasum
-    `91bf7f76db82efc136c91131eca1e550595e2217`). A scan of the unpacked files
+    `0f53f0e12268be6efa21bd25b9c5f01c34a02db8`). A scan of the unpacked files
     for private names, hosts and the maintainer's home path found none.
   - Doctor reported `packageVersion` `0.14.3`. It exited with `2` because no
     configuration was set (`config_missing`).
 - Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
-  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped.
+  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped, including the
+  default limits of 1 GiB and 512 tasks.
 - Podman-gated writer tests: 10 of 10 passed (9 lifecycle tests and 1
   boundary test).
 - Level 2 in the working tree: 160 of 160 checks passed with delivery off and
   228 of 228 with `--events spool`.
 - Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
   228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
-  with version `0.14.3`.
+  with version `0.14.3`, and the installed package carries the task limit 512.
 - In every Level 2 run the built files and the real client registrations were
   unchanged, no process remained and the leak check passed. No transient shell
   scope remained afterwards, and the disposable prefixes were removed.
 
-Not established for `0.14.3`: a Level 3 cycle on the release candidate, and the
-published-release Level 2 and upgrades, which follow after publishing.
+Not established for `0.14.3`: a Level 3 cycle on the release candidate, a live
+client run with the task limit 512, and the published-release Level 2 and
+upgrades, which follow after publishing.
 
 ### v0.14.2 post-release evidence
 

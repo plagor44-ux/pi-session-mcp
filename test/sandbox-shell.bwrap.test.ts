@@ -306,10 +306,10 @@ describe.skipIf(!available)("real bubblewrap sandbox", () => {
     /** Allocates about 200 MB in the Bash process itself, without an extra interpreter. */
     const BASH_MEMORY_HOG = "printf -v x '%*s' 209715200 ''";
 
-    it("documents the default limits of one GiB and 128 tasks", () => {
+    it("documents the default limits of one GiB and 512 tasks", () => {
       expect(SANDBOX_LIMITS).toEqual({ memoryBytes: SANDBOX_MEMORY_BYTES, tasks: SANDBOX_TASKS });
       expect(SANDBOX_MEMORY_BYTES).toBe(1_073_741_824);
-      expect(SANDBOX_TASKS).toBe(128);
+      expect(SANDBOX_TASKS).toBe(512);
     }, 5_000);
 
     it.skipIf(!gitAvailable)("runs Git commands and a test script under the default limits without changing the host workspace", async () => {

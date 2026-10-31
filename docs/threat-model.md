@@ -34,7 +34,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   as a temporary overlay whose writes vanish with the command. The operator's
   home, `PI_*` variables and the server's environment never reach the command.
   Each run starts through `/usr/bin/systemd-run` (fixed, trusted) in its own
-  transient systemd user scope limited to 1 GiB memory without swap and 128
+  transient systemd user scope limited to 1 GiB memory without swap and 512
   tasks; bubblewrap holds the command until the server has read the scope's
   effective `memory.max`, `memory.swap.max` and `pids.max` and the cgroup
   membership of both sandbox processes (ADR 0013, amendment 2026-10-30).
@@ -57,7 +57,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     network allowlists inside the sandbox are out of scope. One command is
     bounded to 1 GiB of memory without swap, which also bounds the RAM-backed
     overlay upper layers of the workspace and Git directory, the root tmpfs and
-    `/tmp` (512 MiB on its own), and to 128 processes and threads; a command
+    `/tmp` (512 MiB on its own), and to 512 processes and threads; a command
     defaults to a 600 second timeout. CPU time and I/O bandwidth are not limited,
     concurrent commands each have their own scope, and a filled overlay ends the
     command through the out-of-memory handling rather than `ENOSPC`. A process

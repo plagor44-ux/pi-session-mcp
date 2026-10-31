@@ -81,7 +81,7 @@ the same arguments.
   with swap accounting enabled in the kernel so that each scope has a
   `memory.swap.max` file.
   Every command runs in its own transient scope limited to 1 GiB memory
-  without swap and 128 processes and threads; the overlays, `/tmp` and the
+  without swap and 512 processes and threads; the overlays, `/tmp` and the
   sandbox's other tmpfs count against that memory. Without these the probe
   fails with `sandbox_unavailable`: a host where the sandboxed shell worked
   without a user manager or delegation loses it rather than running it without

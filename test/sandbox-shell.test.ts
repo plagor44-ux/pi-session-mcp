@@ -28,7 +28,7 @@ describe("scopeArgs", () => {
   it("wraps bubblewrap in the fixed limited scope", () => {
     expect(scopeArgs("unit", SANDBOX_LIMITS, ["arg"], 600)).toEqual([
       "--user", "--scope", "--quiet", "--collect", "--unit=unit", "--description=pi-session-mcp sandboxed shell",
-      "-p", "MemoryMax=1073741824", "-p", "MemorySwapMax=0", "-p", "TasksMax=128", "-p", "RuntimeMaxSec=630",
+      "-p", "MemoryMax=1073741824", "-p", "MemorySwapMax=0", "-p", "TasksMax=512", "-p", "RuntimeMaxSec=630",
       "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", "arg",
     ]);
   });
