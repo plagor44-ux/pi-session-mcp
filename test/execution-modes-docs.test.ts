@@ -44,3 +44,22 @@ it("documents literal writer findings and Doctor writer ids", () => {
   expect(ids.size).toBe(7);
   for (const id of ids) expect(doctorDocs.split("\n").filter((line) => line.startsWith(`| \`${id}\` |`)), id).toHaveLength(1);
 });
+
+it("documents review snapshot findings and Doctor snapshot ids", () => {
+  const docs = read("docs/execution-modes.md");
+  const source = read("src/setup-snapshots.ts");
+  const codes = new Set<string>([...source.matchAll(/fail\("([a-z][a-z0-9_]+)"\)|done\("[a-z]+",\s*"([a-z][a-z0-9_]+)"/g)].map((match) => match[1] ?? match[2]!));
+  for (const code of ["snapshot_busy", "snapshot_modified", "snapshot_incomplete", "snapshot_source_unsupported", "snapshot_discarded"]) codes.add(code);
+  codes.delete("config_invalid"); codes.delete("usage_invalid");
+  expect(codes.size).toBeGreaterThan(10);
+  for (const code of codes) expect(docs.split("\n").filter((line) => line.startsWith(`| \`${code}\` |`)), code).toHaveLength(1);
+  const doctorDocs = read("docs/doctor-design.md");
+  const ids = new Set([...read("src/doctor.ts").matchAll(/(?:failure|warning|ok)\("(snapshot_[^"]+)"/g)].map((match) => match[1]!));
+  expect(ids.size).toBe(3);
+  for (const id of ids) expect(doctorDocs.split("\n").filter((line) => line.startsWith(`| \`${id}\` |`)), id).toHaveLength(1);
+  const contract = read("docs/tool-contracts.md");
+  for (const code of ["snapshot_unavailable", "snapshot_modified", "snapshot_profile_unsupported"]) {
+    expect(contract.split("\n").filter((line) => line.startsWith(`| \`${code}\` |`)), code).toHaveLength(1);
+    expect(read("skills/pi-session-orchestration/references/start-errors.md"), code).toContain(`\`${code}\``);
+  }
+});

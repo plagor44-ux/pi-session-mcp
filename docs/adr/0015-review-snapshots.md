@@ -1,8 +1,10 @@
 # ADR 0015: Verified read-only review snapshots
 
 **Status:** Accepted (2026-10-31, maintainer decision): option C with the
-detect-not-prevent contract of section 3. Not yet implemented; implementation
-is [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217). Issue
+detect-not-prevent contract of section 3. Implemented in
+[#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217) (unreleased);
+see "Implementation notes" at the end for the decisions this ADR left open
+and two deviations. Issue
 #209. Planning basis: main `2a483c7d19cda65c32de5df781819eb5333b9694`,
 published 0.14.3. This ADR changes no production contract by itself.
 
@@ -337,3 +339,27 @@ the same frozen commit runs separately for Claude Code and Codex.
   fencing and post-turn cases), Doctor checks, the skill update, the Level 2
   setup acceptance and the two real-controller review checks, in one minor
   release.
+
+## Implementation notes (#217)
+
+- Host Git comes from a trusted fixed path (`/usr/bin/git` or `/bin/git`,
+  checked like `flock`), with a scrubbed environment (`PATH=/usr/bin:/bin`,
+  `LANG=C`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`), the hardening of
+  section 2, a 10 second timeout and a bounded output.
+- Setup routes every mutating Git command (`worktree add`, `worktree remove`)
+  through the setup guardian's runner as `env -i <fixed environment> <git>`,
+  so the Git process holds the slot lock descriptor and is covered by the
+  guardian's process-group scan. Read-only Git (pre-checks and verification)
+  runs directly: it sets `GIT_OPTIONAL_LOCKS=0` and writes nothing, and the
+  guardian's 64 KiB output cap would truncate large listings. The guardian's
+  10 second command bound also applies to `worktree add`; a timeout leaves an
+  incomplete slot that `--discard` recovers.
+- A missing worktree whose registration remains is recovered by removing that
+  one administrative entry in-process after the back-pointer and `commondir`
+  checks, because Git has no targeted prune; no Git command runs for it.
+- Deviation: `--discard` reports `snapshot_discarded` without counts of what
+  was dropped.
+- Deviation: the tree is materialized with ordinary permission bits; the
+  optional removal of write bits (section 3) is not implemented.
+- `--snapshot <alias> --remove` mutates without `--apply`, like
+  `--writer <name> --remove`.

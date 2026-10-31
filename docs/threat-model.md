@@ -6,6 +6,18 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 
 ## Threats and mitigations
 
+- **Review of a moving tree ([ADR 0015](adr/0015-review-snapshots.md)):** a
+  reviewer on a host alias reads whatever the operator's checkout holds at
+  each tool call. A `snapshot` workspace binds a session to one commit in a
+  setup-managed slot and verifies it at start, before every prompt and after
+  every turn; a failed check fails the prompt or turns a `completed` turn into
+  `failed` and taints the session. Profiles with extensions or external MCP
+  servers are refused there, because those run unconfined and could change
+  the tree after a check. Residual risk: this detects, it does not prevent.
+  The tree stays writable by the host user, and a change made and reverted
+  between two checks is not detected. Setup refuses filter drivers and
+  fsmonitor before every Git command, but a configuration change between the
+  check and the command is outside the guarantee.
 - **Read-only file disclosure and the sandboxed shell ([ADR 0013](adr/0013-hardened-read-only-profiles.md)):**
   read-only sessions run in the host server process. `read`, `grep`, `find` and
   `ls` of every read-only profile therefore accept only paths inside the
