@@ -134,6 +134,43 @@ In the container writer, the full suite showed the eight lock,
 skill-concurrency and wake-hook timeouts that AGENTS.md expects there. They
 are unrelated to these files.
 
+## Review of ADR 0016
+
+Two independent read-only reviews of the ADR, one from a Pi `review` session
+(OpenAI `gpt-6.1-sol`) and one from a Claude reviewer, both returned
+`BLOCKING_FINDINGS`. The controller checked each finding against the code,
+or with Git, before revising the ADR.
+
+- **Create-only import.** The ADR claimed that a fetch without `+` fails on
+  an existing ref. It does not. With Git 2.56.0, the controller made a
+  non-forced fetch into a ref that held an ancestor of the fetched commit,
+  and Git fast-forwarded it with exit 0. The prototype's test "fails and
+  rolls back rather than overwriting an existing destination" passes only
+  because `recover.ts` checks each destination before fetching, and that
+  check races with the fetch.
+- **Revised import.** The ADR now fetches objects only, by bundle head name
+  with no destination and `--no-write-fetch-head`, and creates all refs in
+  one `update-ref --stdin` transaction of `create` commands. The controller
+  checked both with Git 2.56.0:
+  - the fetch wrote no ref and no `FETCH_HEAD`;
+  - a transaction whose second `create` hit an existing ref failed at
+    `prepare` and left the first ref uncreated.
+- **Gaps closed in the ADR.** The ADR had left these open:
+  - the manifest cross-check had no defined place before the import;
+  - an untracked nested repository becomes a gitlink under `add -A`;
+  - the rollback outcome was undefined;
+  - the inherited codes were not listed;
+  - the bundle-removal failure was not covered;
+  - the script's `node` requirement was not stated.
+- **Wrong facts.** These have been corrected:
+  - finish collects without inspecting;
+  - the digest is cleared at `writer-lifecycle.ts:396`;
+  - Doctor ignores `base.bundle`;
+  - reset and create mount the clone read-write;
+  - the dry run only resolves the alias.
+- **Versioning.** ADR 0003 covers only the MCP contract. The revised ADR says
+  so and recommends a minor release from precedent.
+
 ## Limits
 
 - **No real container boundary.** The harness runs the script on the host,
