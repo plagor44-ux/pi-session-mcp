@@ -39,6 +39,7 @@ function materialize(operatorRepo, snapDir, binding) {
 }
 function verifySnapshot(dir, binding) {
   if (at(dir, 'rev-parse', 'HEAD') !== binding.head) return { ok: false, code: 'snapshot_head_changed' };
+  if (at(dir, 'rev-parse', `${binding.head}^{tree}`) !== binding.tree) return { ok: false, code: 'snapshot_tree_mismatch' };
   if (at(dir, 'status', '--porcelain=v1', '--untracked-files=all') !== '') return { ok: false, code: 'snapshot_modified' };
   if (at(dir, 'ls-tree', '-r', binding.head).split('\n').some(line => line.startsWith('160000 '))) return { ok: false, code: 'snapshot_submodule_present' };
   if (!hasObject(dir, binding.base)) return { ok: false, code: 'snapshot_object_missing' };
@@ -117,6 +118,9 @@ try {
     assert.deepEqual(verifySnapshot(snap, binding), { ok: true });
     return result;
   });
+  await runCase('tree-binding-checked', 'snapshot_tree_mismatch', async () => {
+    return verifySnapshot(snap, { ...binding, tree: at(repo, 'rev-parse', `${binding.base}^{tree}`) }).code;
+  });
   await runCase('missing-object-fails-before-start', 'snapshot_object_missing', async () => {
     const target = join(root, 'missing');
     const missing = '0'.repeat(40);
@@ -134,7 +138,7 @@ try {
     await symlink('../../outside.txt', join(builder, 'up'));
     await symlink('src/value.txt', join(builder, 'inside'));
     at(builder, 'add', '.'); at(builder, 'commit', '-m', 'links');
-    linksBinding = { ...binding, head: at(builder, 'rev-parse', 'HEAD') };
+    linksBinding = { ...binding, head: at(builder, 'rev-parse', 'HEAD'), tree: at(builder, 'rev-parse', 'HEAD^{tree}') };
     at(repo, 'worktree', 'remove', builder);
     assert.equal(materialize(repo, snapLinks, linksBinding), 'ok');
     assert.deepEqual(verifySnapshot(snapLinks, linksBinding), { ok: true });
@@ -160,7 +164,7 @@ try {
     at(builder, 'update-index', '--add', '--cacheinfo', `160000,${binding.base},sub`);
     at(builder, 'commit', '-m', 'gitlink');
     await mkdir(join(builder, 'sub'));
-    const subBinding = { ...binding, head: at(builder, 'rev-parse', 'HEAD') };
+    const subBinding = { ...binding, head: at(builder, 'rev-parse', 'HEAD'), tree: at(builder, 'rev-parse', 'HEAD^{tree}') };
     at(repo, 'worktree', 'remove', builder);
     assert.equal(materialize(repo, snapSub, subBinding), 'ok');
     return verifySnapshot(snapSub, subBinding).code;
