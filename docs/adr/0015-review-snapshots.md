@@ -345,7 +345,20 @@ the same frozen commit runs separately for Claude Code and Codex.
 - Host Git comes from a trusted fixed path (`/usr/bin/git` or `/bin/git`,
   checked like `flock`), with a scrubbed environment (`PATH=/usr/bin:/bin`,
   `LANG=C`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`), the hardening of
-  section 2, a 10 second timeout and a bounded output.
+  section 2 plus `core.fileMode=true` (mode changes count as changes) and
+  `worktree.useRelativePaths=false` (the back-pointers stay absolute, so
+  recovery can compare them), a 10 second timeout for read-only commands and
+  a bounded output.
+- Verification first checks that it inspects the directory that is read: the
+  slot's `.git` must be a regular file, Git's top level must equal the slot's
+  real path, and no `core.worktree` may be set in the slot's context; a
+  worktree-specific `core.worktree` would otherwise point `git status` at
+  another directory. Any violation is `snapshot_modified`.
+- Setup and Doctor accept the configured path if it equals the derived one or
+  names the same entry in the same real parent directory, so a home directory
+  reached through a symlinked parent (for example `/home` to `/var/home`)
+  works the same in both. The session guard also refuses a non-directory at
+  the slot path.
 - Setup routes every mutating Git command (`worktree add`, `worktree remove`)
   through the setup guardian's runner as `env -i <fixed environment> <git>`,
   so the Git process holds the slot lock descriptor and is covered by the

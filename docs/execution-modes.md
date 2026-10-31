@@ -330,7 +330,8 @@ last. Snapshots are Linux-only in this release: setup mutation fails
 elsewhere with `snapshot_unsupported_platform`, and a session start on another
 platform fails with `snapshot_unavailable`, because the slot lease needs the
 trusted util-linux `flock`. Git comes from `/usr/bin/git` or
-`/bin/git` with hooks, fsmonitor and replace refs disabled.
+`/bin/git` with hooks, fsmonitor and replace refs disabled, file modes
+compared and absolute worktree back-pointers.
 
 Sessions take a shared lease on the slot and verify it at start, before every
 prompt and after every turn; see [Tool contracts](tool-contracts.md#session-start).
