@@ -29,8 +29,8 @@ tasks.
 | 14 | 7 | 0 | 1 / 0 | 2 | 0 | 0 / 1 | 1 |
 | 15 | 5 | 0 | 0 / 1 | 1 | 0 | 0 / 0 | 1 |
 | 16 | 6 | 0 | 0 / 1 | 1 | 0 | 0 / 1 | 0 |
-| 17 (this sprint, before the live comparison) | 7 | 0 | 1 / 0 | 1 | 0 | 0 / 0 | 0 |
-| **Total** | **48** | **0** | **2 / 2** | **5** | **0** | **0 / 4** | **4** |
+| 17 (this sprint, before the live comparison) | 8 | 0 | 1 / 0 | 1 | 0 | 0 / 0 | 0 |
+| **Total** | **49** | **0** | **2 / 2** | **5** | **0** | **0 / 4** | **4** |
 
 ## Cases
 
@@ -52,7 +52,7 @@ Early stops and BLOCKED:
 - S16 T3: first turn stopped after the guard only; follow-up delivered
   (`docs/sprints/2026-10-31-s16-review-snapshots.md:38`). Borderline early
   stop: status and runtime not recorded.
-- S17 #213 (`code`): first turn `BLOCKED` because the worker read the
+- S17 #213 (`code-terra`): first turn `BLOCKED` because the worker read the
   boundary rule as forbidding host Git in a test fixture; clarified in the
   same session. The next turn ended after about 70 s with only the fixture
   extracted (early stop); one follow-up restating the goal produced the
@@ -72,12 +72,13 @@ controller's verification or a cross-family review, not by the report shape.
 
 ## Observations
 
-- No recorded format repair and no recorded `NEEDS_CONTEXT` in 48 tasks. The
+- No recorded format repair and no recorded `NEEDS_CONTEXT` in 49 tasks. The
   only firm problems with reports are early stops and `BLOCKED` turns, each
   resolved by one follow-up or taken over by the controller.
-- The defects that mattered were wrong or weak work behind a well-formed
-  report. A receipt would not have caught them; only the independent
-  verification did.
+- The defects that mattered were wrong or weak work, found only by the
+  independent verification or a cross-family review. The records do not
+  show whether those reports were well-formed. Nothing in them suggests that
+  a receipt would have caught the defects.
 - Most records do not state the status token, so this retrospective cannot
   rule out unrecorded format repairs. Pre-sprint evaluation runs mention
   receipt failures and status spelling issues without counts

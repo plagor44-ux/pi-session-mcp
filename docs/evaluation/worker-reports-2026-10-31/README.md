@@ -37,7 +37,12 @@ the receipt now, and do not reject it.
 
 All turns completed, and none was `truncated`. Server 0.14.3 does not report
 `completion` on a turn view, so the controller passed `completion: "stop"`
-to the validator. Budget: 9 of 12 worker turns (seven runs, two follow-ups).
+to the validator.
+
+Budget: 9 of 12 worker turns (seven runs, two follow-ups). The runs took
+21:25:40–21:33:37 UTC, from the first start to the last close, against the
+120 minutes shared with #214, whose controller runs took
+21:21:53–21:23:00 UTC.
 
 ## Per form
 
