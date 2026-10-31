@@ -8,6 +8,7 @@ import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
+import { readSnapshotState, snapshotPaths, SnapshotError } from "./review-snapshot.js";
 import { ConfigError, loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -30,6 +31,7 @@ export type DoctorCheckId =
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "sandbox_unavailable" | "workspace_git_unavailable"
+  | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
   | "event_spool_root";
 
 export interface DoctorCheck {
@@ -108,7 +110,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "workspace_git_unavailable", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -251,6 +253,39 @@ async function eventSpoolCheck(env: NodeJS.ProcessEnv, probe: (path: string) => 
     if ((info.mode & 0o077) !== 0) return failure("event_spool_root", "event spool", `remove group and other permissions from the ${label} directory (chmod 700)`);
   }
   return ok("event_spool_root", "event spool");
+}
+
+/**
+ * Offline checks of each snapshot alias's slot: the configured path must be the derived one, and the
+ * slot is either absent (a warning: nothing to review yet) or a worktree directory with valid state.
+ * Doctor runs no Git here; whether the tree still matches its binding is checked by the server and
+ * by setup before they use or replace it.
+ */
+async function snapshotChecks(config: AppConfig, home: string): Promise<DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
+  for (const [alias, entry] of [...config.workspaceModes].sort(([a], [b]) => a.localeCompare(b))) {
+    if (entry.mode !== "snapshot") continue;
+    const paths = snapshotPaths(home, alias);
+    const configured = config.workspaces.get(alias);
+    const same = configured !== undefined && (configured === paths.worktree
+      || await Promise.all([realpath(configured), realpath(paths.worktree)]).then(([a, b]) => a === b, () => false));
+    if (!same) { checks.push(failure("snapshot_path_mismatch", alias, `point the workspace alias to the derived snapshot directory ~/${[".local", "state", "pi-session-mcp", "snapshots", alias, "worktree"].join("/")}`)); continue; }
+    checks.push(ok("snapshot_path_mismatch", alias));
+    const remediation = `run pi-session-mcp-setup --snapshot ${alias} --head <oid> --base <oid> --apply; for a slot left by an interrupted setup, the same command recovers it`;
+    let state;
+    try { state = await readSnapshotState(paths); }
+    catch (error) {
+      if (!(error instanceof SnapshotError)) throw error;
+      checks.push(failure("snapshot_incomplete", alias, remediation));
+      continue;
+    }
+    let worktree = false;
+    try { worktree = (await lstat(paths.worktree)).isDirectory(); } catch (error) { if (!isMissing(error)) worktree = true; }
+    if (state === undefined && !worktree) { checks.push(ok("snapshot_incomplete", alias), warning("snapshot_unavailable", alias, remediation)); continue; }
+    if (state === undefined || !worktree || state.source !== entry.snapshot?.source) { checks.push(failure("snapshot_incomplete", alias, remediation)); continue; }
+    checks.push(ok("snapshot_incomplete", alias), ok("snapshot_unavailable", alias));
+  }
+  return checks;
 }
 
 async function defaultWriterRuntime() {
@@ -396,6 +431,8 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   }
   if (config) {
     for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {
+      // A snapshot slot is setup-managed and may legitimately be absent; its own checks follow.
+      if (config.workspaceModes.get(alias)?.mode === "snapshot") continue;
       try {
         const info = await fs.stat(path);
         if (!info.isDirectory()) checks.push(failure("workspace_not_directory", alias, "point the workspace alias to a directory"));
@@ -572,6 +609,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     }
   }
+  if (config) checks.push(...await snapshotChecks(config, home));
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
   const lease = await writerLeaseCheck(home, dependencies.writerLeaseRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.());
   if (lease) checks.push(lease);
