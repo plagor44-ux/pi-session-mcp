@@ -14,6 +14,8 @@ import { SdkPiSessionAdapter, type SdkPiAdapterDiagnostic } from "./sdk-pi-adapt
 import { shutdownAndTerminate } from "./shutdown.js";
 import { EVENTS_DIR_ENV, eventsRoot } from "./turn-events.js";
 import { createWriterGuard } from "./writer-guard.js";
+import { createSnapshotGuard } from "./snapshot-guard.js";
+import { trustedGit } from "./review-snapshot.js";
 
 type ProcessDiagnostic = SdkPiAdapterDiagnostic | StartupDiagnostic | EventSpoolDiagnostic | {
   readonly level: "warn";
@@ -77,6 +79,7 @@ async function main(): Promise<void> {
       home: homedir(), workspaceModes: config.workspaceModes, executionProfiles: config.executionProfiles,
     }), config.workspaceModes) : hostAdapter;
     registry = new SessionRegistry(adapter, config.workspaces, {
+      snapshotGuard: createSnapshotGuard({ home: homedir(), workspaceModes: config.workspaceModes, git: trustedGit() }),
       ...(guardPath === undefined ? {} : { writerGuard: createWriterGuard(guardPath, config.workspaces) }),
       ...(events === undefined ? {} : {
         onTurnTerminal: (event) => events.write({ kind: "turn_terminal", session: event.sessionId, turn: event.turnId, state: event.state, via: event.via }),

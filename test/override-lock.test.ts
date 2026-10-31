@@ -1,7 +1,7 @@
-import { mkdir, readdir, stat, symlink, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, stat, symlink, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { acquireOverrideLock, OverrideLockError, SKILL_BASES_LOCK_FILE } from "../src/override-lock.js";
+import { acquireOverrideLock, flockBinary, lockWithFlock, OverrideLockError, SKILL_BASES_LOCK_FILE } from "../src/override-lock.js";
 import { waitForBlockedWaiter } from "./lock-wait.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -37,6 +37,16 @@ describe("platform gate", () => {
 });
 
 describe.skipIf(process.platform !== "linux")("kernel lock", () => {
+  it("permits shared holders and excludes a nonblocking exclusive holder", async () => {
+    const root = await directory(); const path = join(root, "shared.lock");
+    const a = await open(path, "w+"); const b = await open(path, "r+"); const c = await open(path, "r+");
+    try {
+      const binary = flockBinary({}); expect(binary).toBeDefined();
+      await lockWithFlock(binary!, a.fd, 0, undefined, true, true);
+      await lockWithFlock(binary!, b.fd, 0, undefined, true, true);
+      expect(await failure(lockWithFlock(binary!, c.fd, 0, undefined, true))).toBe("override_lock_busy");
+    } finally { await Promise.all([a.close(), b.close(), c.close()]); }
+  });
   it("creates a private, stable lock file that release does not delete", async () => {
     const root = await directory();
     const lock = await acquireOverrideLock(root);

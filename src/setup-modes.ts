@@ -14,7 +14,8 @@ import { skillOverrideDirectory } from "./skill-library.js";
 
 export interface ModeRequest {
   readonly alias: string;
-  readonly mode?: "host" | "container" | "read-only";
+  readonly mode?: "host" | "container" | "read-only" | "snapshot";
+  readonly source?: string;
   readonly acceptHostWrites: boolean;
   readonly container?: Partial<ContainerSettings>;
   readonly apply: boolean;
@@ -73,7 +74,7 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
         return value === undefined ? [] : [[key, value]];
       }));
       return { ...request.container, ...limits, mode, ...(base === undefined ? {} : { base }) };
-    })() : { mode };
+    })() : mode === "snapshot" ? { mode, source: request.source } : { mode };
     let proposed;
     try {
       proposed = executionModesSchema.parse({ schemaVersion: 1, workspaces: { ...raw.workspaces, [request.alias]: entry } });

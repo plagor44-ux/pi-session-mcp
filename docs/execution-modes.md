@@ -18,6 +18,11 @@ does not itself prove a live rollout or acceptance on your machine.
   not containment: each writer needs successful acceptance.
 - **`read-only`:** the host refuses coding; read-only profiles remain available.
   This is tool policy, not an OS sandbox for provider runtimes or child processes.
+- **`snapshot`:** a read-only review slot that setup materializes from the
+  operator checkout of a `source` alias (`host` or `container`) at a fixed
+  commit ([ADR 0015](adr/0015-review-snapshots.md)). Coding is refused; only
+  read-only profiles without extensions, granted extension tools or external
+  MCP servers may start. See [Review snapshots](#review-snapshots).
 - **`unset`:** a missing entry retains host coding for backward compatibility.
   Doctor warns if a coding profile exists. This is a migration state, not a
   selectable mode or an acknowledged host-write choice.
@@ -289,6 +294,72 @@ field of the writer's profile with the host profile: `permissionProfile`,
 entry counts as `settingsChanged`, starts no inner session and moves on to the
 next writer; if no writer is admitted, the start fails with
 `writer_unavailable` and reason `none_admitted`.
+
+## Review snapshots
+
+A `snapshot` workspace lets a reviewer read exactly one commit while the
+operator keeps working in the source checkout. The workspace path is derived,
+never chosen: configure the alias with the path
+`~/.local/state/pi-session-mcp/snapshots/<alias>/worktree` (Doctor reports any
+other path as `snapshot_path_mismatch`), then:
+
+```sh
+# Records the mode; dry-run without --apply.
+pi-session-mcp-setup --repo my-review --mode snapshot --source my-project --apply
+# Plans, then materializes the slot at a full commit ID (never a ref name).
+pi-session-mcp-setup --snapshot my-review --head <commit-oid> --base <commit-oid>
+pi-session-mcp-setup --snapshot my-review --head <commit-oid> --base <commit-oid> --apply
+# Removes a clean slot (mutates without --apply, like --writer --remove).
+pi-session-mcp-setup --snapshot my-review --remove
+```
+
+Before anything is created, the source checkout must contain both commits, the
+head tree must contain no gitlink, and the source's effective Git
+configuration must define no `filter.*.clean`, `filter.*.smudge` or
+`filter.*.process` driver and no enabled `core.fsmonitor`. Apply takes the
+slot's exclusive lock (`snapshot_busy` while any session holds the slot) and
+the setup guardian; every mutating Git command runs through the guardian with
+the lock descriptor, so a killed setup cannot let a second apply overlap a
+surviving Git child. An existing slot is replaced only if it verifies clean,
+including ignored files and index flags; a modified one fails with
+`snapshot_modified` until `--discard` is added. An incomplete slot (left by a
+crash) is recovered only when its directory is a linked worktree of the source
+whose administrative entry names it; setup never runs `git worktree prune` and
+never deletes an unrecognized occupant of the derived path. The state is written
+last. Snapshots are Linux-only in this release: setup mutation fails
+elsewhere with `snapshot_unsupported_platform`, and a session start on another
+platform fails with `snapshot_unavailable`, because the slot lease needs the
+trusted util-linux `flock`. Git comes from `/usr/bin/git` or
+`/bin/git` with hooks, fsmonitor and replace refs disabled, file modes
+compared and absolute worktree back-pointers.
+
+Sessions take a shared lease on the slot and verify it at start, before every
+prompt and after every turn; see [Tool contracts](tool-contracts.md#session-start).
+This detects changes at those points but does not prevent them: the tree stays
+writable by the host user. Snapshot mutations are bounded to 120 seconds, so
+materializing a very large tree can fail with `snapshot_unavailable`; rerun
+with `--discard` to drop the partial slot. A registration that the operator
+locked with `git worktree lock` is never removed, even with `--discard`.
+`--head` and `--base` must be commit object IDs, not tag objects.
+
+| Code | Meaning |
+| --- | --- |
+| `snapshot_planned` | Dry-run: the slot would be (re)materialized |
+| `unchanged` | The slot already verifies against the same head, base and tree |
+| `snapshot_applied` | The slot was materialized, verified and its state written |
+| `snapshot_discarded` | A modified or unrecognized-but-registered slot was dropped because of `--discard` |
+| `snapshot_removed` | `--remove` removed the slot, its registration and its state |
+| `absent` | `--remove` found nothing to remove |
+| `snapshot_alias_invalid` | The alias is not a `snapshot` workspace, or its source is missing or not a `host` or `container` workspace |
+| `snapshot_path_mismatch` | The configured workspace path is not the derived slot worktree |
+| `snapshot_unsupported_platform` | Mutation requires Linux |
+| `snapshot_unavailable` | No trusted Git or `env`, a Git command failed or timed out, or the guardian fence was lost |
+| `snapshot_object_missing` | The head or base commit is missing in the source checkout |
+| `snapshot_submodule_present` | The head tree contains a gitlink |
+| `snapshot_source_unsupported` | The source or slot Git configuration defines a conversion driver or an enabled fsmonitor |
+| `snapshot_busy` | A session or another setup holds the slot |
+| `snapshot_modified` | The recorded slot changed; nothing was removed (add `--discard` to drop it) |
+| `snapshot_incomplete` | A slot without valid state is not a clean, recognized worktree of the source, or more than one registration names it; kept until `--discard` |
 
 ## Reports and finding codes
 

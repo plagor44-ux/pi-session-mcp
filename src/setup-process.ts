@@ -298,7 +298,7 @@ export async function acquireSetupGuardian(lockFd: number, timeoutMs: number, si
         const abort = (): void => { if (child.connected) child.send({ type: "abort", id }, undefined, undefined, () => undefined); };
         pending = { id, resolve, ...(runSignal ? { signal: runSignal } : {}), abort };
         runSignal?.addEventListener("abort", abort, { once: true });
-        child.send({ type: "run", id, command, args: [...args], timeoutMs: DEFAULT_TIMEOUT, maxOutputBytes: DEFAULT_MAX, ...(runOptions?.cwd !== undefined ? { cwd: runOptions.cwd } : {}) }, undefined, undefined, (error) => { if (error) failPending(); });
+        child.send({ type: "run", id, command, args: [...args], timeoutMs: Math.min(Math.max(runOptions?.timeoutMs ?? DEFAULT_TIMEOUT, 1), 120_000), maxOutputBytes: DEFAULT_MAX, ...(runOptions?.cwd !== undefined ? { cwd: runOptions.cwd } : {}) }, undefined, undefined, (error) => { if (error) failPending(); });
       });
     },
   };

@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { main } from "../src/setup-main.js";
 import { formatSetupHuman, formatSetupResult, parseSetupArgs } from "../src/setup-cli.js";
 import type { SetupResult } from "../src/setup-result.js";
 
@@ -21,7 +22,37 @@ describe("setup CLI", () => {
   it("projects the same sanitized result in JSON", () => { const json = formatSetupResult(sample); expect(JSON.parse(json)).toEqual(sample); expect(json).not.toContain("/home/"); expect(json).not.toContain("sk_"); });
   it("rejects unsupported, repeated, and malformed arguments", () => { expect(() => parseSetupArgs(["--wat"])).toThrow("argument_unsupported"); expect(() => parseSetupArgs(["--apply", "--verify"])).toThrow("operation_repeated"); expect(() => parseSetupArgs(["--target", "codex:user"])).toThrow("target_invalid"); });
   it("does not echo secret or path sentinels from a target projection", () => { const result: SetupResult = { ...sample, findings: [{ ...sample.findings[0]!, target: { client: "codex", scope: "user", alias: "SAFE_ALIAS" }, code: "setup_failed" }] }; const rendered = `${formatSetupResult(result)}\n${formatSetupHuman(result)}`; expect(rendered).not.toContain("SECRET_SENTINEL"); expect(rendered).not.toContain("/tmp/secret"); });
+  it.each([["SIGINT", 130], ["SIGTERM", 143]] as const)("reports snapshot interruption by %s", async (signal, code) => {
+    const previous = process.env.PI_SESSION_MCP_CONFIG; process.env.PI_SESSION_MCP_CONFIG = "/tmp/test-config";
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const runSnapshot: NonNullable<import("../src/setup-main.js").SetupMainDependencies["runSnapshot"]> = async () => { process.emit(signal); return sample; };
+      expect(await main(["--snapshot", "review", "--head", "a".repeat(40), "--base", "b".repeat(40), "--json"], { runSnapshot })).toBe(code);
+      expect(JSON.parse(String(output.mock.calls[0]![0]))).toMatchObject({ exitCode: code, findings: [{ code: "operation_interrupted" }] });
+    } finally { output.mockRestore(); if (previous === undefined) delete process.env.PI_SESSION_MCP_CONFIG; else process.env.PI_SESSION_MCP_CONFIG = previous; }
+  });
+  describe("--snapshot", () => {
+    const oid = "a".repeat(40), other = "b".repeat(64);
+    it("parses planning, apply, discard and removal", () => {
+      expect(parseSetupArgs(["--snapshot", "review", "--head", oid, "--base", other]).snapshot).toEqual({ alias: "review", head: oid, base: other, apply: false, remove: false, discard: false });
+      expect(parseSetupArgs(["--snapshot", "review", "--head", oid, "--base", other, "--discard", "--apply"]).snapshot).toMatchObject({ apply: true, discard: true });
+      expect(parseSetupArgs(["--snapshot", "review", "--remove", "--discard"]).snapshot).toEqual({ alias: "review", apply: true, remove: true, discard: true });
+    });
+    it.each([
+      ["--snapshot", "review"], ["--snapshot", "review", "--head", "main", "--base", oid], ["--snapshot", "review", "--head", oid, "--base", "abc"],
+      ["--snapshot", "review", "--remove", "--head", oid], ["--snapshot", "review", "--head", oid, "--base", other, "--writer", "a-w1"],
+      ["--snapshot", "review", "--head", oid, "--base", other, "--repo", "a"], ["--snapshot", "review", "--head", oid, "--base", other, "--client", "codex"],
+      ["--snapshot", "review", "--head", oid, "--base", other, "--target", "codex:user:pi-session-mcp"], ["--head", oid],
+    ])("rejects invalid snapshot arguments %j", (...args) => { expect(() => parseSetupArgs(args)).toThrow(); });
+  });
   describe("--repo", () => {
+    it("parses snapshot mode with a source and rejects unrelated flags", () => {
+      expect(parseSetupArgs(["--repo", "a", "--mode", "snapshot", "--source", "b", "--apply"]).repo).toMatchObject({ alias: "a", mode: "snapshot", source: "b", apply: true });
+      for (const args of [["--repo", "a", "--mode", "snapshot"], ["--repo", "a", "--source", "b"], ["--repo", "a", "--mode", "snapshot", "--source", "b", "--writers", "1"]]) expect(() => parseSetupArgs(args)).toThrow();
+    });
+    it("rejects invalid and self-referential snapshot source aliases", () => {
+      for (const source of ["Bad", "../x", "a"]) expect(() => parseSetupArgs(["--repo", "a", "--mode", "snapshot", "--source", source])).toThrow("repo_argument_invalid");
+    });
     it("parses optional resource limits", () => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "1.25", "--cpu-shares", "256", "--memory", "512m"]).repo?.container).toMatchObject({ cpus: 1.25, cpuShares: 256, memory: "512m" });
       const cleared = parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "none", "--cpu-shares", "none", "--memory", "none"]).repo;

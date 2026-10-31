@@ -86,6 +86,12 @@ mean they are implemented or that their gates passed.
   The maintainer accepted ADR 0015 with its detect-not-prevent contract the
   same day; implementation is
   [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217).
+- 2026-10-31: [Sprint 16](sprints/2026-10-31-s16-review-snapshots.md)
+  implements ADR 0015 ([#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217)):
+  the `snapshot` execution mode, setup-managed snapshot slots with a guardian
+  fence, sessions that hold a shared lease and verify the bound commit at
+  start, before every prompt and after every turn, and three Doctor checks,
+  Linux only, in one pull request without a release.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

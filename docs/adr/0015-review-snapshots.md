@@ -1,8 +1,10 @@
 # ADR 0015: Verified read-only review snapshots
 
 **Status:** Accepted (2026-10-31, maintainer decision): option C with the
-detect-not-prevent contract of section 3. Not yet implemented; implementation
-is [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217). Issue
+detect-not-prevent contract of section 3. Implemented in
+[#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217) (unreleased);
+see "Implementation notes" at the end for the decisions this ADR left open
+and two deviations. Issue
 #209. Planning basis: main `2a483c7d19cda65c32de5df781819eb5333b9694`,
 published 0.14.3. This ADR changes no production contract by itself.
 
@@ -337,3 +339,54 @@ the same frozen commit runs separately for Claude Code and Codex.
   fencing and post-turn cases), Doctor checks, the skill update, the Level 2
   setup acceptance and the two real-controller review checks, in one minor
   release.
+
+## Implementation notes (#217)
+
+- Host Git comes from a trusted fixed path (`/usr/bin/git` or `/bin/git`,
+  checked like `flock`), with a scrubbed environment (`PATH=/usr/bin:/bin`,
+  `LANG=C`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`), the hardening of
+  section 2 plus `core.fileMode=true` (mode changes count as changes) and
+  `worktree.useRelativePaths=false` (the back-pointers stay absolute, so
+  recovery can compare them), a 10 second timeout for read-only commands and
+  a bounded output.
+- Verification first checks that it inspects the directory that is read: the
+  slot's `.git` must be a regular file, Git's top level must equal the slot's
+  real path, and no `core.worktree` may be set in the slot's context; a
+  worktree-specific `core.worktree` would otherwise point `git status` at
+  another directory. Any violation is `snapshot_modified`.
+- Setup and Doctor accept the configured path if it equals the derived one or
+  names the same entry in the same real parent directory, so a home directory
+  reached through a symlinked parent (for example `/home` to `/var/home`)
+  works the same in both. The session guard also refuses a non-directory at
+  the slot path.
+- Setup routes every mutating Git command (`worktree add`, `worktree remove`)
+  through the setup guardian's runner as `env -i <fixed environment> <git>`,
+  so the Git process holds the slot lock descriptor and is covered by the
+  guardian's process-group scan. Read-only Git (pre-checks and verification)
+  runs directly: it sets `GIT_OPTIONAL_LOCKS=0` and writes nothing, and the
+  guardian's 64 KiB output cap would truncate large listings. Mutations run
+  with a 120 second bound (the guardian's maximum); a timeout leaves an
+  incomplete slot that `--discard` recovers.
+- Materialization is `worktree add --no-checkout --detach`, then the
+  conversion-driver check in the new worktree's own Git context, then a
+  guarded `reset --hard <head>`, so a driver that applies only to linked
+  worktrees (for example through `includeIf "gitdir:**/worktrees/**"`) is
+  refused before any content is checked out.
+- Recovery honours Git's worktree lock: a registration locked with Git's own
+  `initializing` marker (a killed `worktree add`) is removed with
+  `worktree remove --force --force` only under `--discard`; any other lock is
+  an operator's and the slot stays `snapshot_incomplete`.
+- `--head` and `--base` must be commit object IDs; an annotated tag's object
+  ID is refused as `snapshot_object_missing`.
+- A dispose that rejects or does not finish keeps the slot lease until the
+  process ends. Verification at prompt admission and after a turn has its own
+  30 second deadline; a timeout counts as a failed verification.
+- A missing worktree whose registration remains is recovered by removing that
+  one administrative entry in-process after the back-pointer and `commondir`
+  checks, because Git has no targeted prune; no Git command runs for it.
+- Deviation: `--discard` reports `snapshot_discarded` without counts of what
+  was dropped.
+- Deviation: the tree is materialized with ordinary permission bits; the
+  optional removal of write bits (section 3) is not implemented.
+- `--snapshot <alias> --remove` mutates without `--apply`, like
+  `--writer <name> --remove`.

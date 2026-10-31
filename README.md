@@ -177,6 +177,7 @@ Contract and design:
 - [ADR 0011: turn events and controller wake](docs/adr/0011-turn-events-and-controller-wake.md)
 - [ADR 0012: one registration with a leased writer pool](docs/adr/0012-leased-writer-pool.md)
 - [ADR 0013: hardened read-only profiles](docs/adr/0013-hardened-read-only-profiles.md)
+- [ADR 0015: verified read-only review snapshots](docs/adr/0015-review-snapshots.md)
 
 Maintain:
 

@@ -7,6 +7,24 @@
 - Completed turns expose `completion` to distinguish normal stops, output limits,
   and tool use (#211). This additive public result field requires a minor release
   under ADR 0003.
+- Verified read-only review snapshots ([#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217),
+  [ADR 0015](docs/adr/0015-review-snapshots.md)). A new execution mode
+  `snapshot` with a `source` alias, set with
+  `pi-session-mcp-setup --repo <alias> --mode snapshot --source <alias>`.
+  `pi-session-mcp-setup --snapshot <alias> --head <oid> --base <oid> [--apply]`
+  materializes the commit as a detached linked worktree in the derived slot
+  `~/.local/state/pi-session-mcp/snapshots/<alias>/worktree`; `--remove` and
+  `--discard` remove a clean or modified slot. Sessions on a snapshot
+  workspace hold a shared lease, verify the slot at start, before every
+  prompt and after every turn, publish a `completed` turn as `failed` when the
+  tree changed during it, and refuse further prompts with `snapshot_modified`.
+  New start errors `snapshot_unavailable`, `snapshot_modified` and
+  `snapshot_profile_unsupported`; `SessionView` gains `snapshot: { base, head,
+  tree }`; capabilities report `mode: "snapshot"`; Doctor checks
+  `snapshot_path_mismatch`, `snapshot_incomplete` and `snapshot_unavailable`.
+  The contract detects changes at those points and does not prevent them.
+  Snapshot mutation is Linux-only. Additive public fields and codes: minor
+  release under ADR 0003.
 
 ## 0.14.3 — 2026-10-30
 

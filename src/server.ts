@@ -56,6 +56,9 @@ export function createServer(
     if (configured.permissionProfile === "coding" && !codingAllowed(mode, relay)) {
       throw new RegistryError("workspace_mode_forbids_coding");
     }
+    if (mode.mode === "snapshot" && ((configured.extensions?.length ?? 0) > 0 || (configured.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(configured.mcpServers ?? {}).length > 0)) {
+      throw new RegistryError("snapshot_profile_unsupported");
+    }
     return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), base === undefined ? {} : { base }) };
   }));
   server.registerTool("pi_session_list", {
