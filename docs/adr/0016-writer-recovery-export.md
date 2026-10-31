@@ -312,7 +312,9 @@ The prototype shows three things:
 - the stage trees, worktree and manifest can be built from a copy of the
   index without changing the clone;
 - collect, finish, remove, reset and recreate stay refused afterwards;
-- a failed import leaves no ref.
+- in the tested, non-concurrent cases, a failed import of the prototype's
+  own import path leaves no ref. The decided import of section 3 rests on
+  the Git 2.56.0 checks cited there instead.
 
 It does not exercise the real container boundary: the harness runs the
 script on the host, without the read-only mount. Nor does it exercise the
