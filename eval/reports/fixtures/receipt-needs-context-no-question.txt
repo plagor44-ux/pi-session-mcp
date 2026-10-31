@@ -1,0 +1,12 @@
+STATUS: NEEDS_CONTEXT
+```json
+{
+  "schema": "receipt-v1",
+  "status": "NEEDS_CONTEXT",
+  "base": "e30c3c2f88b61044f9e35aa5bf5b1dc2d01de9f8",
+  "result": { "branch": "s17-210-validator", "commit": null },
+  "changedFiles": [],
+  "checks": [],
+  "concerns": []
+}
+```

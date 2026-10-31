@@ -1,0 +1,9 @@
+STATUS: DONE
+Result: Everything is implemented and verified.
+Commit: 0123456789abcdef0123456789abcdef01234567
+Changed files:
+- eval/reports/validate.ts
+Checks run:
+- npm test — exit 0 (999 passed)
+Open points:
+- none

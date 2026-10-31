@@ -1,0 +1,5 @@
+STATUS: DONE
+Result: The validator was implemented, but no receipt was emitted.
+Commit: 4f3c2a1
+Checks run:
+- npm test — exit 0

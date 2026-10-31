@@ -1,0 +1,9 @@
+STATUS: DONE_WITH_CONCERNS
+Result: The validator was implemented.
+Commit: 4f3c2a1
+Changed files:
+- eval/reports/validate.ts
+Checks run:
+- npm test — exit 0
+Open points:
+- none

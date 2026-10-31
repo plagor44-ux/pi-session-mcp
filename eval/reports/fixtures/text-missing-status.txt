@@ -1,0 +1,4 @@
+Result: The validator was implemented.
+Commit: 4f3c2a1
+Checks run:
+- npm test — exit 0
