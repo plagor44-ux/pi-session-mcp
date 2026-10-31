@@ -70,7 +70,8 @@ editor of the records.
     fails one test after it.
   - Proposed ADR `d32a5fc`, revised `f0ec8fa`.
 - **#210 validator** (`e6af800`): 33 fixtures.
-- **#214 fixtures** (`b23d979`): seven tests against the real registry.
+- **#214 fixtures** (`b23d979`): seven tests, six of them against the real
+  registry.
 - **Pre-registrations** (`80a11f0`) of both live evaluations, before the
   first model turn, plus the retrospective of recorded report outcomes.
 - **#213.**
@@ -116,6 +117,17 @@ editor of the records.
   - The #213 run 1 worker was `code-terra`, not `code` (`a0839e6`).
   - The Sprint 17 row of the retrospective now counts the #213 fix round:
     8 tasks, 49 in total.
+
+- **Whole-branch review** (Claude `reviewer`, read-only, on `62e4a5c`):
+  `NON_BLOCKING_ONLY`. No runtime change. Every cited ADR line was checked,
+  the Git behavior the ADR 0016 import relies on was reproduced, and the
+  records match `runs/*.json`. Its findings were all fixed:
+  - ADR 0017's evidence named the public `abort()` as the decided path;
+  - an over-broad "no ref" claim in ADR 0016;
+  - this record's fixture count;
+  - the `d32a5fc3` correction, now a pre-registration amendment;
+  - the Sprint 14 `BLOCKED` count, now one task (total 4);
+  - three nits.
 
 ## Gates
 
