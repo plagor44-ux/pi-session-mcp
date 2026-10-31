@@ -6,7 +6,7 @@ import { ALIAS_PATTERN } from "./execution-profile.js";
 import { acquireSetupGuardian } from "./setup-process.js";
 import { result, type SetupResult, type SetupStatus } from "./setup-result.js";
 import { makeTreeRemovable } from "./writer-tree-removal.js";
-import { assertNoConversionDrivers, ensureSnapshotRoot, guardedGit, isObjectId, lockSnapshotExclusive, readSnapshotState, removeSnapshotState, SnapshotError, snapshotPaths, trustedGit, verifyClean, verifySnapshot, writeSnapshotState, type SnapshotGit, type SnapshotPaths, type TrustedGitOptions } from "./review-snapshot.js";
+import { assertNoConversionDrivers, ensureSnapshotRoot, guardedGit, isObjectId, lockSnapshotExclusive, readSnapshotState, removeSnapshotState, SnapshotError, snapshotPathMatches, snapshotPaths, trustedGit, verifyClean, verifySnapshot, writeSnapshotState, type SnapshotGit, type SnapshotPaths, type TrustedGitOptions } from "./review-snapshot.js";
 
 export interface SnapshotRequest { readonly alias: string; readonly apply: boolean; readonly remove: boolean; readonly discard: boolean; readonly head?: string; readonly base?: string; }
 export interface SnapshotDependencies { readonly home?: string; readonly platform?: NodeJS.Platform; readonly signal?: AbortSignal; readonly gitOptions?: TrustedGitOptions & { readonly envCandidates?: readonly string[] }; readonly guardian?: typeof acquireSetupGuardian; }
@@ -52,7 +52,7 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
     const sourceAlias = mode.snapshot.source, source = config.workspaces.get(sourceAlias), sourceMode = config.workspaceModes.get(sourceAlias)?.mode;
     if (!source || (sourceMode !== "host" && sourceMode !== "container")) fail("snapshot_alias_invalid");
     const paths = snapshotPaths(deps.home ?? homedir(), request.alias);
-    if (resolve(configured) !== resolve(paths.worktree)) fail("snapshot_path_mismatch");
+    if (!await snapshotPathMatches(configured, paths.worktree)) fail("snapshot_path_mismatch");
     const git = trustedGit(deps.gitOptions); if (!git) fail("snapshot_unavailable");
     if (request.apply && (deps.platform ?? process.platform) !== "linux") fail("snapshot_unsupported_platform");
     let tree: string | undefined;
@@ -103,10 +103,12 @@ export async function runSnapshotOperation(configPath: string, request: Snapshot
         // Never run Git removal in a context with a conversion driver, even with discard.
         await assertNoConversionDrivers(git, pathsHere.worktree);
         check();
+        await removeSnapshotState(pathsHere); check();
         await command(mutation, source, ["worktree", "remove", ...(initializing ? ["--force", "--force"] : modified ? ["--force"] : []), pathsHere.worktree], deps.signal);
         check(); discarded = modified;
       } else if (entries.length === 1) {
         // Git has no targeted prune for a missing worktree: remove its checked administrative entry only.
+        await removeSnapshotState(pathsHere); check();
         await makeTreeRemovable(entries[0]!); await rm(entries[0]!, { recursive: true }); check();
       }
       await removeSnapshotState(pathsHere); check();

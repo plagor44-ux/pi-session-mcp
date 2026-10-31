@@ -8,7 +8,7 @@ import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
-import { readSnapshotState, snapshotPaths, SnapshotError } from "./review-snapshot.js";
+import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError } from "./review-snapshot.js";
 import { ConfigError, loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -267,8 +267,7 @@ async function snapshotChecks(config: AppConfig, home: string): Promise<DoctorCh
     if (entry.mode !== "snapshot") continue;
     const paths = snapshotPaths(home, alias);
     const configured = config.workspaces.get(alias);
-    const same = configured !== undefined && (configured === paths.worktree
-      || await Promise.all([realpath(configured), realpath(paths.worktree)]).then(([a, b]) => a === b, () => false));
+    const same = configured !== undefined && await snapshotPathMatches(configured, paths.worktree);
     if (!same) { checks.push(failure("snapshot_path_mismatch", alias, `point the workspace alias to the derived snapshot directory ~/${[".local", "state", "pi-session-mcp", "snapshots", alias, "worktree"].join("/")}`)); continue; }
     checks.push(ok("snapshot_path_mismatch", alias));
     const remediation = `run pi-session-mcp-setup --snapshot ${alias} --head <oid> --base <oid> --apply; for a slot left by an interrupted setup, the same command recovers it`;
@@ -280,7 +279,10 @@ async function snapshotChecks(config: AppConfig, home: string): Promise<DoctorCh
       continue;
     }
     let worktree = false;
-    try { worktree = (await lstat(paths.worktree)).isDirectory(); } catch (error) { if (!isMissing(error)) worktree = true; }
+    try {
+      if (!(await lstat(paths.worktree)).isDirectory()) { checks.push(failure("snapshot_incomplete", alias, remediation)); continue; }
+      worktree = true;
+    } catch (error) { if (!isMissing(error)) { checks.push(failure("snapshot_incomplete", alias, remediation)); continue; } }
     if (state === undefined && !worktree) { checks.push(ok("snapshot_incomplete", alias), warning("snapshot_unavailable", alias, remediation)); continue; }
     if (state === undefined || !worktree || state.source !== entry.snapshot?.source) { checks.push(failure("snapshot_incomplete", alias, remediation)); continue; }
     checks.push(ok("snapshot_incomplete", alias), ok("snapshot_unavailable", alias));

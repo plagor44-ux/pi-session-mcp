@@ -36,7 +36,7 @@ it("runs hardened Git through the guardian runner and fails closed", async () =>
   const options = { candidates: ["/git"], envCandidates: ["/env"], isTrustedBinary: () => true, env: { HOME: "/home/test", EXTRA: "yes" } };
   const git = guardedGit(runner, options)!;
   expect(await git.run("/repo", ["worktree", "remove", "x"])).toEqual({ code: 0, stdout: "ok" });
-  expect(calls[0]).toEqual(["/env", ["-i", "PATH=/usr/bin:/bin", "HOME=/home/test", "LANG=C", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "EXTRA=yes", "/git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", "/repo", "worktree", "remove", "x"], undefined, { timeoutMs: 120_000 }]);
+  expect(calls[0]).toEqual(["/env", ["-i", "PATH=/usr/bin:/bin", "HOME=/home/test", "LANG=C", "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0", "EXTRA=yes", "/git", "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-c", "core.fileMode=true", "-c", "worktree.useRelativePaths=false", "-C", "/repo", "worktree", "remove", "x"], undefined, { timeoutMs: 120_000 }]);
   await guardedGit(runner, { ...options, mutationTimeoutMs: 1234 })!.run("/repo", []);
   expect(calls[1]?.[3]).toEqual({ timeoutMs: 1234 });
   for (const code of [124, 125, 126, 127]) { exitCode = code; await expect(git.run("/repo", [])).rejects.toMatchObject({ code: "snapshot_unavailable" }); }
@@ -71,6 +71,11 @@ realGit("verifies a fresh linked worktree and detects edits, ignored files and i
   f.work("update-index", "--no-skip-worktree", "file"); f.work("checkout", "--", "file");
   f.work("update-index", "--assume-unchanged", "file"); await modified(verify()); f.work("update-index", "--no-assume-unchanged", "file");
   await verify();
+});
+realGit("detects executable-bit changes even when source disables fileMode", async () => {
+  const f = await fixture(); f.source("config", "core.fileMode", "false");
+  await chmod(join(f.worktree, "file"), 0o755);
+  await modified(verifySnapshot(f.git, f.worktree, f.binding));
 });
 realGit("detects moved HEAD, wrong tree, missing base and gitlinks", async () => {
   const f = await fixture(); const verify = () => verifySnapshot(f.git, f.worktree, f.binding);

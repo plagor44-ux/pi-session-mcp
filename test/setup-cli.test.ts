@@ -50,6 +50,9 @@ describe("setup CLI", () => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "snapshot", "--source", "b", "--apply"]).repo).toMatchObject({ alias: "a", mode: "snapshot", source: "b", apply: true });
       for (const args of [["--repo", "a", "--mode", "snapshot"], ["--repo", "a", "--source", "b"], ["--repo", "a", "--mode", "snapshot", "--source", "b", "--writers", "1"]]) expect(() => parseSetupArgs(args)).toThrow();
     });
+    it("rejects invalid and self-referential snapshot source aliases", () => {
+      for (const source of ["Bad", "../x", "a"]) expect(() => parseSetupArgs(["--repo", "a", "--mode", "snapshot", "--source", source])).toThrow("repo_argument_invalid");
+    });
     it("parses optional resource limits", () => {
       expect(parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "1.25", "--cpu-shares", "256", "--memory", "512m"]).repo?.container).toMatchObject({ cpus: 1.25, cpuShares: 256, memory: "512m" });
       const cleared = parseSetupArgs(["--repo", "a", "--mode", "container", "--profiles", "code", "--cpus", "none", "--cpu-shares", "none", "--memory", "none"]).repo;

@@ -178,6 +178,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   if (modeFlags.size > 0) {
     if (repo === undefined || targets.length > 0 || customizeSkill !== undefined || (operation !== undefined && operation !== "dry-run" && operation !== "apply")) throw new Error("repo_combination");
     if ((mode === "host" || mode === "read-only" || mode === "snapshot") && (Object.keys(container).length > 0 || clearLimits.length > 0)) throw new Error("repo_combination");
+    if (source !== undefined && (!ALIAS_PATTERN.test(source) || source === repo)) throw new Error("repo_argument_invalid");
     if ((source !== undefined && mode !== "snapshot") || (mode === "snapshot" && (source === undefined || acceptHostWrites || discard || codex || baseRef))) throw new Error("repo_combination");
     const request: ModeRequest = { alias: repo, acceptHostWrites, apply: operation === "apply", discard, codex, ...(baseRef ? { baseRef } : {}), ...(source === undefined ? {} : { source }), ...(mode === undefined ? {} : { mode }), ...(Object.keys(container).length === 0 ? {} : { container }), ...(clearLimits.length === 0 ? {} : { clearLimits }) };
     return { ...(operation === undefined ? {} : { operation }), targets, json, repo: request };

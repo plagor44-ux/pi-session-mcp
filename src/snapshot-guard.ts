@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import type { WorkspaceModeEntry } from "./execution-modes.js";
 import { lockSnapshotShared, readSnapshotState, snapshotPaths, SnapshotError, verifySnapshot, type SnapshotBinding, type SnapshotGit } from "./review-snapshot.js";
 
@@ -24,6 +24,7 @@ export function createSnapshotGuard(options: {
       if (mode?.mode !== "snapshot" || !mode.snapshot || !options.git || signal?.aborted) throw new SnapshotError("snapshot_unavailable");
       const paths = snapshotPaths(options.home, workspace);
       try {
+        if (!(await lstat(paths.worktree)).isDirectory()) throw new Error();
         if (await realpath(cwd) !== await realpath(paths.worktree)) throw new Error();
       } catch { throw new SnapshotError("snapshot_unavailable"); }
       const lock = await lockSnapshotShared(paths, { ...options.lockOptions, ...(signal ? { signal } : {}) });

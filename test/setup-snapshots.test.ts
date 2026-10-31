@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { isTrustedSystemBinary } from "../src/setup-platform.js";
 import { lockSnapshotShared, readSnapshotState, snapshotPaths, trustedGit, verifySnapshot } from "../src/review-snapshot.js";
+import { createSnapshotGuard } from "../src/snapshot-guard.js";
 import { runSnapshotOperation, type SnapshotRequest } from "../src/setup-snapshots.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -36,6 +37,31 @@ real("plans without writes, applies under a real guardian, verifies and retarget
   expect(await f.run({ head: f.base })).toMatchObject({ exitCode: 0, findings: [{ code: "snapshot_applied" }] });
   expect((await readSnapshotState(f.paths))?.head).toBe(f.base);
   const result = await f.run({ remove: true }); expect(result).toMatchObject({ findings: [{ code: "snapshot_removed" }] }); expect(JSON.stringify(result)).not.toContain(f.home);
+});
+real("overrides global relative worktree paths throughout the lifecycle", async () => {
+  const f = await fixture(); const global = join(f.home, "global"); await writeFile(global, "[worktree]\n useRelativePaths = true\n");
+  const request: SnapshotRequest = { alias: "review", apply: true, remove: false, discard: false, base: f.base, head: f.head };
+  const run = (change: Partial<SnapshotRequest> = {}) => runSnapshotOperation(join(f.home, "config.json"), { ...request, ...change }, { home: f.home, gitOptions: { env: { ...f.env, GIT_CONFIG_GLOBAL: global } } });
+  expect((await run()).exitCode).toBe(0);
+  expect(await run()).toMatchObject({ findings: [{ code: "unchanged" }] });
+  expect((await run({ head: f.base })).exitCode).toBe(0);
+  expect((await run({ remove: true })).exitCode).toBe(0);
+});
+real("invalidates state before a failed removal", async () => {
+  const f = await fixture(); expect((await f.run()).exitCode).toBe(0);
+  const guardian: NonNullable<import("../src/setup-snapshots.js").SnapshotDependencies["guardian"]> = async () => ({ signal: new AbortController().signal, release: async () => {}, runner: { async run() { return { exitCode: 1, stdout: "", stderr: "" }; } } });
+  const result = await runSnapshotOperation(join(f.home, "config.json"), { alias: "review", apply: true, remove: true, discard: false }, { home: f.home, gitOptions: { env: f.env }, guardian });
+  expect(result.exitCode).toBe(1); expect(await readSnapshotState(f.paths)).toBeUndefined();
+  const guard = createSnapshotGuard({ home: f.home, workspaceModes: new Map([["review", { mode: "snapshot", snapshot: { source: "repo" } }]]), git: trustedGit({ env: f.env }) });
+  await expect(guard.acquire("review", f.paths.worktree)).rejects.toMatchObject({ code: "snapshot_unavailable" });
+});
+real("accepts a configured slot through a symlinked home parent", async () => {
+  const f = await fixture(); const link = join(f.home, "home-link"); await symlink(f.home, link);
+  const config = join(f.home, "config.json"); const data = JSON.parse(await readFile(config, "utf8")) as { workspaces: { review: string } };
+  data.workspaces.review = snapshotPaths(link, "review").worktree; await writeFile(config, JSON.stringify(data));
+  // The slot parent must exist to compare its canonical path.
+  await mkdir(f.paths.root, { recursive: true, mode: 0o700 });
+  expect((await f.run()).exitCode).toBe(0);
 });
 real.each(["tracked", "ignored", "skip"])("keeps %s modifications without discard and replaces them with discard", async (kind) => {
   const f = await fixture(); expect((await f.run()).exitCode).toBe(0);

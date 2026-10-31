@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import type { CommandRunner } from "./client-adapters/types.js";
 import { randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
-import { chmod, lstat, mkdir, open, rename, unlink, type FileHandle } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, realpath, rename, unlink, type FileHandle } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { z } from "zod";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { flockBinary, lockWithFlock, OverrideLockError } from "./override-lock.js";
@@ -20,6 +20,11 @@ export function snapshotPaths(home: string, alias: string): SnapshotPaths {
   if (!ALIAS_PATTERN.test(alias)) throw new SnapshotError("snapshot_unavailable");
   const root = join(home, ...SNAPSHOT_DIRECTORY, alias);
   return { root, worktree: join(root, "worktree"), state: join(root, "state.json"), lock: join(root, "slot.lock") };
+}
+export async function snapshotPathMatches(configured: string, derived: string): Promise<boolean> {
+  if (resolve(configured) === resolve(derived)) return true;
+  if (basename(configured) !== basename(derived)) return false;
+  try { return await realpath(dirname(configured)) === await realpath(dirname(derived)); } catch { return false; }
 }
 export interface SnapshotBinding { readonly base: string; readonly head: string; readonly tree: string; }
 export interface SnapshotState extends SnapshotBinding { readonly v: 1; readonly source: string; readonly at: string; }
@@ -89,7 +94,7 @@ export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undef
     return new Promise((resolve, reject) => {
       if (runOptions.signal?.aborted) { reject(new SnapshotError("snapshot_unavailable")); return; }
       let child;
-      try { child = spawn(binary, ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore", ...(runOptions.inheritFds ?? [])], env: { PATH: "/usr/bin:/bin", HOME: options.env?.HOME ?? homedir(), LANG: "C", LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...options.env } }); }
+      try { child = spawn(binary, ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-c", "core.fileMode=true", "-c", "worktree.useRelativePaths=false", "-C", cwd, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore", ...(runOptions.inheritFds ?? [])], env: { PATH: "/usr/bin:/bin", HOME: options.env?.HOME ?? homedir(), LANG: "C", LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...options.env } }); }
       catch { reject(new SnapshotError("snapshot_unavailable")); return; }
       let failed = false; let settled = false; let size = 0; const chunks: Buffer[] = [];
       const stop = (): void => { failed = true; if (child.pid) try { process.kill(-child.pid, "SIGKILL"); } catch { /* exited */ } };
@@ -118,7 +123,7 @@ export function guardedGit(runner: CommandRunner, options: TrustedGitOptions & {
     return `${key}=${value}`;
   });
   return { async run(cwd, args, runOptions = {}) {
-    const output = await runner.run(envBinary, ["-i", ...pairs, binary, "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], runOptions.signal, { timeoutMs: options.mutationTimeoutMs ?? 120_000 });
+    const output = await runner.run(envBinary, ["-i", ...pairs, binary, "--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-c", "core.fileMode=true", "-c", "worktree.useRelativePaths=false", "-C", cwd, ...args], runOptions.signal, { timeoutMs: options.mutationTimeoutMs ?? 120_000 });
     if ([124, 125, 126, 127].includes(output.exitCode) || output.stderr === "output_limit") throw new SnapshotError("snapshot_unavailable");
     return { code: output.exitCode, stdout: output.stdout };
   } };
@@ -134,6 +139,12 @@ export async function assertNoConversionDrivers(git: SnapshotGit, cwd: string): 
   }
 }
 async function checkContext(git: SnapshotGit, worktree: string): Promise<void> {
+  let root: string;
+  try { if (!(await lstat(join(worktree, ".git"))).isFile()) throw new Error(); root = await realpath(worktree); }
+  catch { throw new SnapshotError("snapshot_modified"); }
+  const top = await git.run(worktree, ["rev-parse", "--path-format=absolute", "--show-toplevel"]);
+  const configured = await git.run(worktree, ["config", "--get", "core.worktree"]);
+  if (top.code !== 0 || top.stdout.trim() !== root || configured.code !== 1 || configured.stdout !== "") throw new SnapshotError("snapshot_modified");
   try { await assertNoConversionDrivers(git, worktree); } catch (e) { if (e instanceof SnapshotError && e.code === "snapshot_source_unsupported") throw new SnapshotError("snapshot_modified"); throw e; }
   const result = await git.run(worktree, ["rev-parse", "--is-inside-work-tree"]);
   if (result.code !== 0 || result.stdout.trim() !== "true") throw new SnapshotError("snapshot_unavailable");

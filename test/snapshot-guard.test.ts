@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rename, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { createSnapshotGuard } from "../src/snapshot-guard.js";
@@ -23,7 +23,7 @@ async function fixture() {
   const state = { v: 1 as const, source: "repo", base: head, head, tree, at: "now" };
   const modes = new Map([["review", { mode: "snapshot" as const, snapshot: { source: "repo" } }]]);
   const guard = createSnapshotGuard({ home, workspaceModes: modes, git: trustedGit({ env }) });
-  return { home, repo, paths, state, modes, guard };
+  return { home, repo, paths, state, modes, guard, git, env };
 }
 realGit("acquires and verifies a binding, then releases the shared lease", async () => {
   const f = await fixture(); await writeSnapshotState(f.paths, f.state);
@@ -34,6 +34,24 @@ realGit("acquires and verifies a binding, then releases the shared lease", async
   await writeFile(join(f.paths.worktree, "file"), "edit");
   await expect(lease.verify()).rejects.toMatchObject({ code: "snapshot_modified" });
   await lease.release(); await lease.release(); const lock = await lockSnapshotExclusive(f.paths); await lock.release();
+});
+realGit("rejects worktree config redirection during verification", async () => {
+  const f = await fixture(); await writeSnapshotState(f.paths, f.state);
+  const lease = await f.guard.acquire("review", f.paths.worktree);
+  try {
+    const other = join(f.home, "other"); await mkdir(other); await writeFile(join(other, "file"), "clean");
+    f.git("config", "extensions.worktreeConfig", "true");
+    execFileSync(binary!, ["-C", f.paths.worktree, "config", "--worktree", "core.worktree", other], { env: f.env });
+    await writeFile(join(f.paths.worktree, "file"), "modified");
+    const git = trustedGit({ env: f.env })!;
+    await expect((await import("../src/review-snapshot.js")).verifySnapshot(git, f.paths.worktree, f.state)).rejects.toMatchObject({ code: "snapshot_modified" });
+    await expect(lease.verify()).rejects.toMatchObject({ code: "snapshot_modified" });
+  } finally { await lease.release(); }
+});
+realGit("rejects a symlink occupant even when it resolves to the requested tree", async () => {
+  const f = await fixture(); await writeSnapshotState(f.paths, f.state);
+  const other = join(f.home, "other"); await rename(f.paths.worktree, other); await symlink(other, f.paths.worktree);
+  await expect(f.guard.acquire("review", other)).rejects.toMatchObject({ code: "snapshot_unavailable" });
 });
 realGit("rejects mismatch, absent or incomplete state, wrong source, busy and missing Git", async () => {
   const f = await fixture(); const acquire = () => f.guard.acquire("review", f.paths.worktree);

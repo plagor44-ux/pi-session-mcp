@@ -83,6 +83,22 @@ describe.skipIf(process.platform !== "linux")("Doctor snapshot slots", () => {
     expect(result.ok).toBe(false);
   });
 
+  it.each(["file", "link"])("reports a %s occupant with and without state", async (kind) => {
+    const home = await temporaryRoot("doctor-occupant-"); const paths = snapshotPaths(home, "review");
+    await ensureSnapshotRoot(paths);
+    if (kind === "file") await writeFile(paths.worktree, "x"); else await symlink(home, paths.worktree);
+    for (const withState of [false, true]) {
+      if (withState) await writeSnapshotState(paths, state);
+      expect(snapshotChecks(await runDoctor(dependencies(home, paths.worktree)))).toContainEqual({ id: "snapshot_incomplete", severity: "error", subject: "review" });
+    }
+  });
+  it("accepts a symlinked home parent before the worktree exists", async () => {
+    const home = await temporaryRoot("doctor-home-"); const link = `${home}-link`; await symlink(home, link);
+    try {
+      const paths = snapshotPaths(home, "review"); await ensureSnapshotRoot(paths);
+      expect(snapshotChecks(await runDoctor(dependencies(home, snapshotPaths(link, "review").worktree)))).toContainEqual({ id: "snapshot_path_mismatch", severity: "ok", subject: "review" });
+    } finally { await rm(link); }
+  });
   it("reports state recorded for another source", async () => {
     const home = await temporaryRoot("doctor-snapshot-");
     const paths = snapshotPaths(home, "review");
