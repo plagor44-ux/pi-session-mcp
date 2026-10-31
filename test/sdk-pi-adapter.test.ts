@@ -394,15 +394,15 @@ describe("Pi resource policy", () => {
       { type: "toolCall", name: "bash", arguments: { command: "secret" } },
       { type: "text", text: " world" },
       { type: "errorMessage", message: "provider detail" },
-    ], stopReason: "stop" })).toEqual({ status: "completed", assistantText: "hello world" });
+    ], stopReason: "stop" })).toEqual({ status: "completed", assistantText: "hello world", completion: "stop" });
   });
 
   it("maps every SDK stop reason to a turn outcome", () => {
     // Keyed by the SDK union: a stop reason added by a future SDK fails the typecheck here too.
     const expected: Readonly<Record<SdkStopReason, PiTurnOutcome>> = {
-      stop: { status: "completed", assistantText: "partial" },
-      length: { status: "completed", assistantText: "partial" },
-      toolUse: { status: "completed", assistantText: "partial" },
+      stop: { status: "completed", assistantText: "partial", completion: "stop" },
+      length: { status: "completed", assistantText: "partial", completion: "output_limit" },
+      toolUse: { status: "completed", assistantText: "partial", completion: "tool_use" },
       error: { status: "failed" },
       aborted: { status: "aborted" },
       pending: { status: "failed" },
@@ -511,7 +511,7 @@ describe("running-turn activity signals", () => {
     expect(onActivity.mock.calls.every((call) => call.length === 0)).toBe(true);
 
     fixture.settle();
-    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "all done" });
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "all done", completion: "stop" });
     expect(fixture.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
@@ -526,7 +526,16 @@ describe("running-turn activity signals", () => {
     fixture.emit({ type: "message_update", message: { role: "assistant", content: [{ type: "text", text: "STREAMED_PARTIAL" }] }, assistantMessageEvent: { type: "text_delta", delta: "STREAMED_PARTIAL" } });
     fixture.settle();
     // No terminal assistant message_end for the second message: the earlier one stays the answer.
-    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "first" });
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "first", completion: "tool_use" });
+  });
+
+  it.each([["length", "stop", "stop"], ["stop", "length", "output_limit"]] as const)("uses the final stop reason after %s then %s", async (first, last, completion) => {
+    const fixture = activitySessionFixture();
+    const handle = await createWithSession(fixture.session);
+    const outcome = handle.prompt("work", () => undefined);
+    for (const stopReason of [first, last]) fixture.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "answer" }], stopReason } });
+    fixture.settle();
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "answer", completion });
   });
 
   it("isolates observer failures from SDK event dispatch and the terminal outcome", async () => {
@@ -540,7 +549,7 @@ describe("running-turn activity signals", () => {
     expect(onActivity).toHaveBeenCalledTimes(2);
 
     fixture.settle();
-    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "survived" });
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "survived", completion: "stop" });
   });
 
   it("unsubscribes once per prompt on success, failure, and disposal without late signals", async () => {
@@ -550,7 +559,7 @@ describe("running-turn activity signals", () => {
     const success = succeedingHandle.prompt("work", () => undefined, successObserver);
     succeeded.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "settled" }], stopReason: "stop" } });
     succeeded.settle();
-    await expect(success).resolves.toEqual({ status: "completed", assistantText: "settled" });
+    await expect(success).resolves.toEqual({ status: "completed", assistantText: "settled", completion: "stop" });
     expect(succeeded.unsubscribe).toHaveBeenCalledTimes(1);
     succeeded.emit({ type: "tool_execution_end", toolCallId: "call_1", toolName: "read", result: {}, isError: false });
     expect(successObserver).toHaveBeenCalledTimes(1);
@@ -586,7 +595,7 @@ describe("running-turn activity signals", () => {
     fixture.emit({ type: "tool_execution_end", toolCallId: "call_1", toolName: "read", result: {}, isError: false });
     fixture.emit({ type: "message_end", message: { role: "assistant", content: [{ type: "text", text: "no observer" }], stopReason: "stop" } });
     fixture.settle();
-    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "no observer" });
+    await expect(outcome).resolves.toEqual({ status: "completed", assistantText: "no observer", completion: "stop" });
     expect(fixture.unsubscribe).toHaveBeenCalledTimes(1);
   });
 });

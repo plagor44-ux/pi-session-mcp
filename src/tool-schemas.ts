@@ -19,7 +19,7 @@ export const successSchema = z.object({ ok: z.literal(true), session: viewSchema
 export const turnBase = { turnId: z.string().uuid(), sessionId: z.string().uuid(), startedAt: z.string(), updatedAt: z.string() };
 export const turnSchema = z.discriminatedUnion("state", [
   z.object({ ...turnBase, state: z.literal("running") }),
-  z.object({ ...turnBase, state: z.literal("completed"), completedAt: z.string(), assistantText: z.string(), truncated: z.boolean() }),
+  z.object({ ...turnBase, state: z.literal("completed"), completedAt: z.string(), assistantText: z.string(), truncated: z.boolean(), completion: z.enum(["stop", "output_limit", "tool_use"]) }),
   z.object({ ...turnBase, state: z.literal("failed"), completedAt: z.string(), error: z.object({ code: z.literal("turn_failed"), message: z.literal("Pi turn failed") }) }),
   z.object({ ...turnBase, state: z.literal("aborted"), completedAt: z.string() }),
 ]);

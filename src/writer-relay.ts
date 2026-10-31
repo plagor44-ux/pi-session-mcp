@@ -159,7 +159,7 @@ class RelayHandle implements PiSessionHandle {
     if (!active || turn.turnId !== active.turnId || turn.sessionId !== this.sdkSessionId) { this.lose(); return; }
     if (active.updatedAt !== undefined && active.updatedAt !== turn.updatedAt) active.activity?.();
     active.updatedAt = turn.updatedAt;
-    if (turn.state === "completed") this.settle({ status: "completed", assistantText: turn.assistantText, truncated: turn.truncated });
+    if (turn.state === "completed") this.settle({ status: "completed", assistantText: turn.assistantText, truncated: turn.truncated, completion: turn.completion });
     else if (turn.state === "aborted" || turn.state === "failed") this.settle({ status: turn.state });
   }
   async prompt(text: string, preflight: (accepted: boolean) => void, onActivity?: () => void): Promise<PiTurnOutcome> {

@@ -207,11 +207,9 @@ export function normalizeAssistantOutcome(message: unknown): PiTurnOutcome {
   const stopReason = message.stopReason as SdkStopReason;
   switch (stopReason) {
     case "stop":
-    // Cut off by the output limit; the truncated text is still the turn's answer.
-    case "length":
-    // The agent loop ends on a tool call only when the tool batch terminated the run.
-    case "toolUse":
-      return { status: "completed", assistantText: message.content.filter(isTextBlock).map((block) => block.text).join("") };
+    case "length": // SDK output limit, independent of the registry text cap.
+    case "toolUse": // The tool batch terminated the agent loop.
+      return { status: "completed", assistantText: message.content.filter(isTextBlock).map((block) => block.text).join(""), completion: stopReason === "length" ? "output_limit" : stopReason === "toolUse" ? "tool_use" : "stop" };
     case "aborted":
       return { status: "aborted" };
     case "error":

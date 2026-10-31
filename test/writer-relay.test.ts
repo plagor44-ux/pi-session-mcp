@@ -54,7 +54,16 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const s = await setup(); const handle = await s.start();
     expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });
     expect(handle.appliedSelection).toEqual({ provider: "p", model: "m", thinkingLevel: "off" });
-    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false });
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "stop" });
+  });
+  it("preserves an output-limit completion", async () => {
+    const handle = await (await setup([{ completion: "output_limit" }])).start();
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "output_limit" });
+  });
+  it.each([{ missingCompletion: true }, { completion: "unknown" }])("loses a writer with invalid completion: %j", async (scenario) => {
+    const handle = await (await setup([scenario])).start();
+    expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "failed" });
+    expect(handle.isLost?.()).toBe(true);
   });
   it("base selects only writers on that branch; none matches → none_at_base", async () => {
     const s = await setup([{}, {}]); await change(s.home, 2, { base: { ref: "refs/heads/dev", commit: "b".repeat(40) } });

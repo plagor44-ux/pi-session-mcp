@@ -527,7 +527,7 @@ describe("controlled context overflow through the public session API", () => {
       assert.equal(turn.assistantText, "recovered after compaction");
       assert.equal(turn.error, undefined);
       assert.deepEqual(Object.keys(turn).sort(),
-        ["assistantText", "completedAt", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
+        ["assistantText", "completedAt", "completion", "sessionId", "startedAt", "state", "truncated", "turnId", "updatedAt"]);
 
       const starts = only(journal, "compaction_start");
       const ends = only(journal, "compaction_end");

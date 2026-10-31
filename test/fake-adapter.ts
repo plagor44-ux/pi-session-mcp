@@ -1,7 +1,7 @@
-import type { PiSessionAdapter, PiSessionHandle, PiTurnOutcome } from "../src/pi-adapter.js";
+import type { PiSessionAdapter, PiSessionHandle, PiTurnOutcome, TurnCompletion } from "../src/pi-adapter.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 
-export type FakePlan = { accepted?: boolean; manualPreflight?: boolean; assistantText?: string; synchronous?: boolean; rejectDetail?: string; prompts?: FakePlan[]; creationError?: Error; creationGate?: Promise<void> };
+export type FakePlan = { accepted?: boolean; manualPreflight?: boolean; assistantText?: string; completion?: TurnCompletion; synchronous?: boolean; rejectDetail?: string; prompts?: FakePlan[]; creationError?: Error; creationGate?: Promise<void> };
 
 export class FakeAdapter implements PiSessionAdapter {
   handles: FakeHandle[] = [];
@@ -46,7 +46,7 @@ export class FakeHandle implements PiSessionHandle {
     else if (this.activePlan.synchronous) this.complete(this.activePlan.assistantText ?? "sync result");
     return completion;
   }
-  complete(assistantText = this.activePlan.assistantText ?? "completed result"): void { this.settle({ status: "completed", assistantText }); }
+  complete(assistantText = this.activePlan.assistantText ?? "completed result"): void { this.settle({ status: "completed", assistantText, completion: this.activePlan.completion ?? "stop" }); }
   fail(): void { this.settle({ status: "failed" }); }
   rejectPrompt(reason: unknown): void { this.reject(reason); }
   signalPreflight(accepted = this.activePlan.accepted ?? true): void { this.preflight?.(accepted); }

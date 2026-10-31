@@ -75,7 +75,7 @@ describe("read-only context file confinement", () => {
     await writeFile(join(child, "AGENTS.md"), "SYNTHETIC_INSIDE_CONTEXT");
     workspace = child;
     const test = await harness();
-    expect(await test.handle.prompt("Say ok", () => undefined)).toEqual({ status: "completed", assistantText: "ok" });
+    expect(await test.handle.prompt("Say ok", () => undefined)).toEqual({ status: "completed", assistantText: "ok", completion: "stop" });
     expect(test.calls()).toBe(1);
     expect(test.context()).toContain("SYNTHETIC_INSIDE_CONTEXT");
     expect(test.context()).not.toContain("SYNTHETIC_OUTSIDE_CONTEXT");
@@ -118,7 +118,7 @@ describe("read-only context file confinement", () => {
     expect(contents(test.loader)).not.toContain("SYNTHETIC_OUTSIDE_CONTEXT");
     await test.loader.reload();
     expect(contents(test.loader)).not.toContain("SYNTHETIC_OUTSIDE_CONTEXT");
-    expect(await test.handle.prompt("Say ok", () => undefined)).toEqual({ status: "completed", assistantText: "ok" });
+    expect(await test.handle.prompt("Say ok", () => undefined)).toEqual({ status: "completed", assistantText: "ok", completion: "stop" });
     expect(test.calls()).toBe(1);
     expect(test.context()).not.toContain("SYNTHETIC_OUTSIDE_CONTEXT");
   });

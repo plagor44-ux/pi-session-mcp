@@ -121,7 +121,7 @@ describe("orchestration skill start-error classification", () => {
 
   it("states the terminal-turn, cadence and cost rules", () => {
     expect(skill).toMatch(/`completed`, `failed` and `aborted` are terminal and immutable/);
-    expect(skill).toMatch(/record `state`, `assistantText` and `truncated` in the ledger/);
+    expect(skill).toMatch(/record `state`, `assistantText`, `truncated` and `completion` in the ledger/);
     expect(skill).toMatch(/do not fetch that turn again/);
     expect(skill).toMatch(/first poll about 10 s after the prompt, then every 15 to 30 s/);
     expect(skill).toMatch(/Poll only tasks that are still running/);

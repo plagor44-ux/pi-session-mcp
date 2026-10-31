@@ -1,4 +1,4 @@
-import type { PiAppliedSelection, PiSessionAdapter, PiSessionHandle, PiTurnOutcome } from "../../src/pi-adapter.js";
+import type { PiAppliedSelection, PiSessionAdapter, PiSessionHandle, PiTurnOutcome, TurnCompletion } from "../../src/pi-adapter.js";
 import type { ResolvedExecutionProfile } from "../../src/execution-profile.js";
 import type { AskOutcome, QuestionSpec } from "./questions.js";
 
@@ -7,7 +7,7 @@ export type ScriptStep =
   | { activity: number } // calls onActivity n times: models agent_end/retry activity, never a terminal signal
   | { sleepMs: number }
   | { ask: QuestionSpec; deadlineMs: number }
-  | { complete: string }
+  | { complete: string; completion?: TurnCompletion }
   | { fail: true }
   | { hang: true }; // settles only on abort or release()
 export type PromptPlan = ScriptStep[];
@@ -75,11 +75,11 @@ export class ScriptedHandle implements PiSessionHandle {
         const outcome = await this.asker({ handle: this, spec: step.ask, deadlineMs: step.deadlineMs, signal: run.controller.signal }).catch((): AskOutcome => ({ status: "refused", code: "ask_failed" }));
         this.askOutcomes.push(outcome);
       }
-      else if ("complete" in step) return run.settle({ status: "completed", assistantText: step.complete });
+      else if ("complete" in step) return run.settle({ status: "completed", assistantText: step.complete, completion: step.completion ?? "stop" });
       else if ("fail" in step) return run.settle({ status: "failed" });
       else if ("hang" in step) return; // only abort/release()/dispose() settle it
     }
-    run.settle({ status: "completed", assistantText: "scripted" });
+    run.settle({ status: "completed", assistantText: "scripted", completion: "stop" });
   }
   private sleep(ms: number, run: { controller: AbortController }): Promise<void> {
     return new Promise<void>((resolve) => {

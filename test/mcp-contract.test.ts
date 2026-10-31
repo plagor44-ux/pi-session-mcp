@@ -178,6 +178,24 @@ describe("MCP contracts", () => {
     for (const name of ["pi_session_prompt", "pi_session_abort", "pi_session_close"]) expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it("advertises completion only on completed turn branches", async () => {
+    const tools = (await (await client()).client.listTools()).tools;
+    for (const name of ["pi_turn_get", "pi_session_prompt"]) {
+      const schema = tools.find((tool) => tool.name === name)!.outputSchema as unknown as { anyOf: Array<{ properties?: { turn?: { oneOf: Array<{ properties: { state: { const: string }; completion?: unknown }; required: string[] }> } } }> };
+      const branches = schema.anyOf.find((branch) => branch.properties?.turn)?.properties?.turn?.oneOf;
+      expect(branches).toHaveLength(4);
+      for (const branch of branches!) {
+        if (branch.properties.state.const === "completed") {
+          expect(branch.properties.completion).toEqual({ type: "string", enum: ["stop", "output_limit", "tool_use"] });
+          expect(branch.required).toContain("completion");
+        } else {
+          expect(branch.properties).not.toHaveProperty("completion");
+          expect(branch.required).not.toContain("completion");
+        }
+      }
+    }
+  });
+
   it("requires extension tool grants in the advertised capabilities output schema", async () => {
     const connected = await client({}, { profiles: new Map([["safe", {
       alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off",
