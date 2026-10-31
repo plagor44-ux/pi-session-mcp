@@ -1,9 +1,19 @@
-# ADR 0015: Immutable read-only review snapshots
+# ADR 0015: Verified read-only review snapshots
 
 **Status:** Proposed (2026-10-31). Issue #209. Planning basis: main
 `2a483c7d19cda65c32de5df781819eb5333b9694`, published 0.14.3. This ADR records
 a design for the maintainer's decision; it changes no production contract and
 authorizes no implementation.
+
+**Decision point for acceptance:** #209 asks for an immutable snapshot. This
+design does not provide one. The snapshot tree stays writable by the host
+user; the server only verifies it at session start, before every prompt and
+after every turn (section 3). A change that is made and reverted between two
+checks goes unnoticed, and a failed post-turn check turns a finished review
+into `failed` and closes the session to further prompts. Accepting this ADR
+means accepting that weaker, detect-not-prevent contract; an immutable view
+would need an OS-level read-only view for the in-process read tools, which is
+out of scope here.
 
 ## Context
 
