@@ -133,4 +133,17 @@ repository, no provider error text.
 
 ## Amendments
 
-None.
+### 2026-10-31, after runs A and B
+
+- Deviation in run B-text: the controller closed the session before
+  validating the report, against step 2-4 of the procedure. The text
+  validator then rejected the report with `commit_missing`: the `Commit:`
+  line starts with the hash in backticks, and the validator accepts a hash
+  only as the first token. No corrective follow-up could be sent. The run is
+  recorded as it happened; the validator is not changed during the
+  comparison.
+- Added run B-text-2: the same case B text prompt once more, in a fresh
+  session on branch `s17-210-b-text-2`, validated **before** the session is
+  closed, with at most one corrective follow-up that asks only for the report
+  in the agreed form. It counts against the same budget (at most 12 worker
+  turns for #210).
