@@ -100,4 +100,3 @@ export async function fixture() {
   };
   return { ctx, home, checkout, paths, baseCommit, runner, work, commit };
 }
-
