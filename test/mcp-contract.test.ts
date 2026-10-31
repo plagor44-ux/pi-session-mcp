@@ -371,6 +371,15 @@ describe("MCP contracts", () => {
     connected.adapter.handles[0]!.complete("eventual completion"); await new Promise((resolve) => setTimeout(resolve, 0)); const completed = await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId } }); expect(completed.structuredContent).toMatchObject({ ok: true, turn: { state: "completed", assistantText: "eventual completion" } });
   });
 
+  it.each(["output_limit", "tool_use"] as const)("serializes completion %s through tools/call independently of truncated", async (completion) => {
+    const connected = await client(); connected.adapter.plans.push({ completion, assistantText: "short report" }); const started = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } }); const sessionId = (started.structuredContent as { session: { id: string } }).session.id;
+    const prompted = await connected.client.callTool({ name: "pi_session_prompt", arguments: { sessionId, prompt: "report" } }); const turnId = (prompted.structuredContent as { turn: { turnId: string } }).turn.turnId;
+    connected.adapter.handles[0]!.complete(); await new Promise((resolve) => setTimeout(resolve, 0));
+    const terminal = await connected.client.callTool({ name: "pi_turn_get", arguments: { sessionId, turnId } });
+    expect(terminal.isError).toBeFalsy();
+    expect(terminal.structuredContent).toMatchObject({ ok: true, turn: { state: "completed", assistantText: "short report", truncated: false, completion } });
+  });
+
   it("projects distinct sanitized preflight and abort deadline errors", async () => {
     vi.useFakeTimers();
     try {

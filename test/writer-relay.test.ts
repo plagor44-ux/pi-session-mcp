@@ -144,7 +144,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const s = await setup([{ completeDuringAbort: true, polls: 1000 }]); const handle = await s.start();
     let accepted!: () => void; const ready = new Promise<void>(resolve => { accepted = resolve; });
     const turn = handle.prompt("hello", () => accepted()); await ready; await handle.abort();
-    expect(await turn).toMatchObject({ status: "completed", assistantText: "done" });
+    expect(await turn).toMatchObject({ status: "completed", assistantText: "done", completion: "stop" });
   });
   it("writer state base changed after the inner start → inner close, next candidate", async () => {
     const s = await setup([{}, {}]); const paths = writerPaths(s.home, "repo-w1"); const log = join(paths.root, "calls");
