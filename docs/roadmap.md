@@ -83,7 +83,9 @@ mean they are implemented or that their gates passed.
   and proposes [ADR 0015](adr/0015-review-snapshots.md) for read-only reviews
   bound to one commit ([#209](https://github.com/plagor44-ux/pi-session-mcp/issues/209)),
   with a synthetic real-Git proof, in one pull request without a release.
-  ADR 0015 awaits the maintainer's decision.
+  The maintainer accepted ADR 0015 with its detect-not-prevent contract the
+  same day; implementation is
+  [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217).
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

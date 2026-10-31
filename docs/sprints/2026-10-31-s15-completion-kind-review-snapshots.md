@@ -109,6 +109,12 @@ change, wrote the follow-up commits and is the only editor of the records.
   already been closed by `b46fd97`. Not adopted: `.strict()` on the relay's
   `turnSchema` parse; the parse already ignored unknown fields before #211,
   and making it strict is a separate relay contract change.
+- After the merge of PR #216 (2026-10-31): a side note pointed out that the
+  ADR's title promised an immutable snapshot while the design only verifies
+  it; the ADR is renamed "Verified read-only review snapshots" and states the
+  contract in its status block. The maintainer then accepted ADR 0015 with
+  that detect-not-prevent contract; implementation is
+  [#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217).
 - Writers: both collected, their refs compared with the integrated commits
   (identical content) and finished (`writer_reset`); the collected refs were
   deleted afterwards.
