@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeadlineSupervisor, MAX_TURN_SECONDS_MAX, MAX_TURN_SECONDS_MIN, parseMaxTurnSeconds } from "../eval/turn-deadline/supervisor.js";
-import { SessionRegistry, type TurnTerminalNotice } from "../src/session-registry.js";
+import { RegistryError, SessionRegistry, type TurnTerminalNotice } from "../src/session-registry.js";
 import { FakeAdapter, type FakeHandle } from "./fake-adapter.js";
 
 const profile = { alias: "safe", permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const };
@@ -162,6 +162,28 @@ describe("development-only turn deadline", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("an unexpected expiry read failure records uncertainty without an unhandled rejection", async () => {
+    const s = await running();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const getTurn = vi.spyOn(s.registry, "getTurn").mockImplementation(() => { throw new RegistryError("unknown_turn"); });
+    try {
+      await advance(60_000);
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(s.supervisor.expiries()).toEqual([{ sessionId: s.session.id, turnId: s.turn.turnId, outcome: "abort_failed" }]);
+      expect(s.supervisor.usable(s.session.id)).toBe(false);
+      await expect(s.supervisor.prompt(s.session.id, "refused")).rejects.toThrow("turn_deadline_uncertain");
+      expect(s.handle.aborted).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await advance(60_000);
+      expect(s.supervisor.expiries()).toHaveLength(1);
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      getTurn.mockRestore();
+      process.off("unhandledRejection", unhandled);
+    }
+  });
+
   it("an expiry abort timeout claims nothing until it settles", async () => {
     const s = await running();
     const release = gate(s.handle);
@@ -181,7 +203,7 @@ describe("development-only turn deadline", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("close racing expiry yields one notice", async () => {
+  it("a close notice before expiry clears the deadline", async () => {
     const s = setup();
     const session = await s.registry.start("repo", profile);
     let closing!: Promise<unknown>;
@@ -194,6 +216,25 @@ describe("development-only turn deadline", () => {
     expect(s.adapter.handles[0]!.aborted).toBe(1);
     expect(s.supervisor.expiries()).toEqual([]);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("shutdown before expiry clears the deadline", async () => {
+    const s = await running();
+    const second = await s.registry.start("repo", profile);
+    const secondTurn = (await s.supervisor.prompt(second.id, "parallel shutdown")).turn;
+    const abort = vi.spyOn(s.registry, "abort");
+    await s.registry.shutdown();
+    expect(vi.getTimerCount()).toBe(0);
+    await advance(60_001);
+    expect(abort).not.toHaveBeenCalled();
+    expect(s.notices).toEqual([
+      { sessionId: s.session.id, turnId: s.turn.turnId, state: "aborted", via: "close" },
+      { sessionId: second.id, turnId: secondTurn.turnId, state: "aborted", via: "close" },
+    ]);
+    expect(s.adapter.handles.map((handle) => handle.aborted)).toEqual([1, 1]);
+    expect(s.supervisor.expiries()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+    abort.mockRestore();
   });
 
   it("shutdown racing expiry yields one notice per turn", async () => {
@@ -233,10 +274,10 @@ describe("development-only turn deadline", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("a wall-clock jump does not move the deadline", async () => {
+  it.each([3_600_000, -3_600_000])("a wall-clock jump of %i ms does not move the deadline", async (jump) => {
     const s = await running();
     await advance(10_000);
-    vi.setSystemTime(Date.now() + 3_600_000);
+    vi.setSystemTime(Date.now() + jump);
     await advance(49_999);
     expect(s.handle.aborted).toBe(0);
     expect(s.supervisor.expiries()).toEqual([]);
@@ -266,6 +307,7 @@ describe("development-only turn deadline", () => {
     s.adapter.plans.push({ synchronous: true });
     const session = await s.registry.start("repo", profile);
     await s.supervisor.prompt(session.id, "immediate completion");
+    expect(vi.getTimerCount()).toBe(0);
     await advance(60_000);
     expect(s.adapter.handles[0]!.aborted).toBe(0);
     expect(s.supervisor.expiries()).toEqual([]);

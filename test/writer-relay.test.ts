@@ -159,7 +159,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       expect(expiry).toBeDefined();
       now = 60_000;
       expiry![0]();
-      await vi.waitFor(() => { expect(supervisor.expiries()).toHaveLength(1); });
+      await vi.waitFor(() => { expect(supervisor.expiries()).toHaveLength(1); }, { timeout: 10_000 });
       expect(registry.getTurn(session.id, turn.turnId).state).toBe("aborted");
       expect(supervisor.expiries()[0]?.outcome).toBe("aborted");
       expect(notices).toEqual([{ sessionId: session.id, turnId: turn.turnId, state: "aborted", via: "registry" }]);

@@ -72,14 +72,22 @@ export class DeadlineSupervisor {
       this.clear(deadline);
       // Timer time and the injected monotonic clock must agree. Never use Date.
       if (this.now() < deadline.at) { this.arm(deadline); return; }
-      void this.expire(deadline);
+      void this.expire(deadline).catch(() => {
+        this.clear(deadline);
+        this.deadlines.delete(deadline.turnId);
+        this.uncertain.add(deadline.sessionId);
+        this.outcomes.push({ sessionId: deadline.sessionId, turnId: deadline.turnId, outcome: "abort_failed" });
+      });
     }, Math.max(0, deadline.at - this.now()));
   }
 
   private async expire(deadline: Deadline): Promise<void> {
     const { sessionId, turnId } = deadline;
     try {
-      if (this.registry.getTurn(sessionId, turnId).state !== "running") return;
+      if (this.registry.getTurn(sessionId, turnId).state !== "running") {
+        this.deadlines.delete(turnId);
+        return;
+      }
     } catch (error) {
       // Close removes the read model; it also emits a terminal notice first.
       if (error instanceof RegistryError && error.code === "unknown_session") {
