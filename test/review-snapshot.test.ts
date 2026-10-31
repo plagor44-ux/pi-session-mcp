@@ -109,3 +109,28 @@ it.skipIf(process.platform !== "linux")("shares locks, excludes other holders an
   await expect(lockSnapshotShared(paths)).rejects.toMatchObject({ code: "snapshot_unavailable" }); await c.release(); await c.release();
   const d = await lockSnapshotShared(paths); await d.release(); const e = await lockSnapshotExclusive(paths); await e.release();
 });
+it("accepts shared ancestors with ordinary modes but keeps the product's components private", async () => {
+  const home = await temporaryRoot("snapshot-root-");
+  await mkdir(join(home, ".local", "state"), { recursive: true, mode: 0o755 });
+  await chmod(join(home, ".local"), 0o755); await chmod(join(home, ".local", "state"), 0o755);
+  const paths = snapshotPaths(home, "review");
+  await ensureSnapshotRoot(paths);
+  for (const path of [join(home, ".local", "state", "pi-session-mcp"), join(home, ".local", "state", "pi-session-mcp", "snapshots"), paths.root]) {
+    expect((await stat(path)).mode & 0o7777).toBe(0o700);
+  }
+  await ensureSnapshotRoot(paths);
+  await chmod(join(home, ".local", "state", "pi-session-mcp"), 0o755);
+  await expect(ensureSnapshotRoot(paths)).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  await chmod(join(home, ".local", "state", "pi-session-mcp"), 0o700);
+  await chmod(join(home, ".local"), 0o777);
+  await expect(ensureSnapshotRoot(paths)).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  await chmod(join(home, ".local"), 0o755);
+  const linked = await temporaryRoot("snapshot-root-link-");
+  await mkdir(join(linked, "real"), { mode: 0o700 }); await symlink(join(linked, "real"), join(linked, ".local"));
+  await expect(ensureSnapshotRoot(snapshotPaths(linked, "review"))).rejects.toMatchObject({ code: "snapshot_unavailable" });
+});
+it("rejects at once when the Git binary cannot be spawned", async () => {
+  const home = await temporaryRoot("snapshot-spawn-");
+  const git = trustedGit({ candidates: [join(home, "missing-git")], isTrustedBinary: () => true, env: { HOME: home } })!;
+  await expect(git.run(home, ["status"])).rejects.toMatchObject({ code: "snapshot_unavailable" });
+});

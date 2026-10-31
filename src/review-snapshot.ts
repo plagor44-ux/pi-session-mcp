@@ -28,20 +28,30 @@ const stateSchema = z.object({ v: z.literal(1), source: z.string().regex(ALIAS_P
 function secure(info: Stats, directory: boolean): boolean {
   return (directory ? info.isDirectory() : info.isFile()) && info.uid === process.getuid?.() && (info.mode & 0o7777) === (directory ? 0o700 : 0o600);
 }
+/**
+ * Creates the slot root below the home directory. `~/.local` and `~/.local/state` are shared with
+ * other software: they must be directories owned by this user that no one else can write to, with
+ * any mode. The product's own components (`pi-session-mcp`, `snapshots`, the slot) must be private
+ * directories (`0700`), and none of these components may be a link. The home directory itself and
+ * its ancestors are not inspected: they may legitimately be links (for example `/home`).
+ */
 export async function ensureSnapshotRoot(paths: SnapshotPaths): Promise<void> {
   try {
-    const components: string[] = []; let current = paths.root;
-    while (dirname(current) !== current) { components.push(current); current = dirname(current); }
-    for (const path of components.reverse()) {
-      try { if (!(await lstat(path)).isDirectory()) throw new Error(); }
+    // root = <home>/.local/state/pi-session-mcp/snapshots/<alias>
+    let home = paths.root;
+    for (let i = 0; i <= SNAPSHOT_DIRECTORY.length; i++) home = dirname(home);
+    const components = [...SNAPSHOT_DIRECTORY.map((_, i) => join(home, ...SNAPSHOT_DIRECTORY.slice(0, i + 1))), paths.root];
+    const sharedCount = 2; // `.local` and `.local/state`
+    for (const [index, path] of components.entries()) {
+      const owned = index >= sharedCount;
+      try { await lstat(path); }
       catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         await mkdir(path, { mode: 0o700 }); await chmod(path, 0o700);
       }
+      const info = await lstat(path);
+      if (owned ? !secure(info, true) : !info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o022) !== 0) throw new Error();
     }
-    // Check all snapshot components, not unrelated pre-existing home ancestors.
-    let path = paths.root;
-    for (let i = 0; i <= SNAPSHOT_DIRECTORY.length; i++, path = dirname(path)) if (!secure(await lstat(path), true)) throw new Error();
   } catch { throw new SnapshotError("snapshot_unavailable"); }
 }
 export async function readSnapshotState(paths: SnapshotPaths): Promise<SnapshotState | undefined> {
@@ -80,13 +90,19 @@ export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undef
       let child;
       try { child = spawn(binary, ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-C", cwd, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore", ...(runOptions.inheritFds ?? [])], env: { PATH: "/usr/bin:/bin", HOME: options.env?.HOME ?? homedir(), LANG: "C", LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...options.env } }); }
       catch { reject(new SnapshotError("snapshot_unavailable")); return; }
-      let failed = false; let size = 0; const chunks: Buffer[] = [];
+      let failed = false; let settled = false; let size = 0; const chunks: Buffer[] = [];
       const stop = (): void => { failed = true; if (child.pid) try { process.kill(-child.pid, "SIGKILL"); } catch { /* exited */ } };
       const timer = setTimeout(stop, options.timeoutMs ?? 10_000);
       runOptions.signal?.addEventListener("abort", stop, { once: true });
+      const finish = (outcome: GitResult | undefined): void => {
+        if (settled) return;
+        settled = true; clearTimeout(timer); runOptions.signal?.removeEventListener("abort", stop);
+        if (outcome === undefined) reject(new SnapshotError("snapshot_unavailable")); else resolve(outcome);
+      };
       child.stdout!.on("data", (data: Buffer) => { size += data.length; if (size > (options.maxOutputBytes ?? 4 * 1024 * 1024)) stop(); else chunks.push(data); });
-      child.once("error", () => { failed = true; });
-      child.once("close", (code) => { clearTimeout(timer); runOptions.signal?.removeEventListener("abort", stop); if (failed || code === null) reject(new SnapshotError("snapshot_unavailable")); else resolve({ code, stdout: Buffer.concat(chunks).toString("utf8") }); });
+      // A spawn failure may emit only `error`; settle on it instead of waiting for `close`.
+      child.once("error", () => { stop(); finish(undefined); });
+      child.once("close", (code) => { finish(failed || code === null ? undefined : { code, stdout: Buffer.concat(chunks).toString("utf8") }); });
     });
   } };
 }
