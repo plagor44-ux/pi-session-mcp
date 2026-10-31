@@ -1,13 +1,14 @@
 # ADR 0016: Recovery export for a writer with an unmerged index
 
-**Status:** Proposed (2026-10-31), revised the same day after two
-independent reviews. Issue
+**Status:** Accepted (2026-10-31, maintainer decision), after two
+independent reviews and two revisions. Issue
 [#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213).
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
-- This ADR changes no production contract by itself. Implementation follows
-  only if the maintainer accepts it.
+- This ADR changes no production contract by itself. The accepted decision
+  is implemented under its issue; the contract changes only with that
+  implementation.
 
 ## Context
 
@@ -87,7 +88,7 @@ A new, explicit operation that does three things:
 - leaves the clone, its index, refs and worktree, and the writer state
   unchanged.
 
-## Decision (proposed)
+## Decision
 
 Option C.
 
