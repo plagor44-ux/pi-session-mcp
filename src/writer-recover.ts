@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
 import { readWriterState, writerPaths } from "./writer-state.js";
-import { probeRecoveryRefTransactions, recoveryTransactionArgs } from "./writer-recovery-capability.js";
+import { isolatedGitEnvironment, probeRecoveryRefTransactions, recoveryTransactionArgs } from "./writer-recovery-capability.js";
 
 export const RECOVERY_SLOT_CAP = 10_000;
 export type RecoveryFinding = WriterOutcome & { slot?: number };
@@ -105,8 +105,11 @@ export async function recoverWriter(ctx: WriterContext, name: string): Promise<R
   const paths = writerPaths(ctx.home, name), bundle = join(paths.bundles, "recover.bundle");
   const warnings: RecoveryFinding[] = [];
   const run = (command: string, args: readonly string[]) => ctx.runner.run(command, args, AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS), ctx.leaseFd === undefined ? undefined : { inheritFds: [ctx.leaseFd] });
-  const rawGit = (...args: string[]) => run("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.useReplaceRefs=false", "-C", ctx.checkout, ...args]);
-  const git = async (...args: string[]) => { const r = await rawGit(...args); if (r.exitCode !== 0) throw Error("git failed"); return r.stdout; };
+  // Same isolated environment as the capability probe, so the import runs the Git that was probed.
+  const gitEnv = isolatedGitEnvironment();
+  const rawGit = (...args: string[]) => ctx.runner.run("git", ["-c", "core.hooksPath=/dev/null", "-c", "core.useReplaceRefs=false", "-C", ctx.checkout, ...args], AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS), { env: gitEnv, ...(ctx.leaseFd === undefined ? {} : { inheritFds: [ctx.leaseFd] }) });
+  // A truncated listing (the runner keeps the exit code and reports output_limit) must not pass as complete.
+  const git = async (...args: string[]) => { const r = await rawGit(...args); if (r.exitCode !== 0 || r.stderr === "output_limit") throw Error("git failed"); return r.stdout; };
   const execute = async (): Promise<RecoveryFinding> => {
     const state = await readWriterState(ctx.home, name);
     if (!state || state.alias !== ctx.alias) throw Error("state refused");
@@ -145,7 +148,7 @@ export async function recoverWriter(ctx: WriterContext, name: string): Promise<R
     const parts = new Set(heads.map(h => h.part));
     if (parts.size !== heads.length || !parts.has("manifest") || !parts.has("worktree")) throw Error("invalid heads");
     if (!await probeRecoveryRefTransactions(ctx)) throw Error("unsafe host ref transactions");
-    await git("-c", "transfer.fsckObjects=true", "fetch", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", "--end-of-options", bundle, ...heads.map(h => h.source));
+    await git("-c", "transfer.fsckObjects=true", "-c", "fetch.fsckObjects=true", "fetch", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", "--end-of-options", bundle, ...heads.map(h => h.source));
     const manifest = heads.find(h => h.part === "manifest")!.oid;
     const head = (await git("show", `${manifest}:head.txt`)).trim();
     if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(head)) throw Error("invalid parent");

@@ -358,8 +358,15 @@ importIt("uses the recorded image and fetches objects without destinations or FE
       expect(args[1]).toContain("--no-write-fetch-head");
       expect(args[1]).toContain("--no-recurse-submodules");
       expect(args[1]).toContain("transfer.fsckObjects=true");
+      // fetch.fsckObjects takes precedence over transfer.fsckObjects; repository config must not disable it.
+      expect(args[1]).toContain("fetch.fsckObjects=true");
       expect(args[1].filter(a => a.startsWith("refs/"))).toEqual(expect.arrayContaining(["refs/heads/recovery/manifest", "refs/heads/recovery/worktree"]));
       expect(args[1].some(a => a.startsWith("refs/") && a.includes(":"))).toBe(false);
+    }
+    if (args[0] === "git") {
+      // Import and probe share one isolated environment: no inherited GIT_* redirection or global config.
+      expect(args[3]?.env).toMatchObject({ GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
+      expect(Object.keys(args[3]?.env ?? {}).filter(key => key.startsWith("GIT_") && args[3]?.env?.[key] !== undefined).sort()).toEqual(["GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_SYSTEM"]);
     }
     return f.runner.run(...args);
   });
@@ -388,3 +395,15 @@ linuxIt("refuses a gitlink in conflict", async () => { const f = await conflict(
 linuxIt("fails cleanly on a missing stage object", async () => { const f = await conflict(); const sha = await f.work("rev-parse", ":3:base.txt"); await rm(join(f.paths.clone, ".git/objects", sha.slice(0, 2), sha.slice(2))); const before = await snapshot(f); expect((await recoverWriter(f.ctx, "repo-w1")).code).toBe("writer_recover_failed"); expect(await snapshot(f)).toEqual(before); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); }, 60_000);
 importIt("leaves no bundle behind", async () => { const f = await conflict(); expect((await recoverWriter(f.ctx, "repo-w1")).code).toBe("writer_recovered"); expect(await readdir(f.paths.bundles)).toEqual(["base.bundle"]); }, 60_000);
 importIt("imports no refs on fsck rejection", async () => { const f = await conflict(); const before = await snapshot(f); let n = 0; const runner = { run: (...args: Parameters<typeof f.runner.run>) => args[0] === "git" && args[1].includes("fetch") && ++n === 1 ? Promise.resolve({ exitCode: 1, stdout: "", stderr: "failed" }) : f.runner.run(...args) }; expect(await recoverWriter({ ...f.ctx, runner }, "repo-w1")).toEqual({ code: "writer_recover_failed", status: "failed" }); expect(await gitPresent(f.checkout, "show-ref", "--verify", ref(1, "manifest"))).toBe(false); expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe(""); expect(await snapshot(f)).toEqual(before); }, 60_000);
+
+importIt("treats a truncated ref listing as a failure instead of a complete scan", async () => {
+  const f = await conflict(), before = await snapshot(f);
+  const run = vi.fn(async (...args: Parameters<typeof f.runner.run>) => {
+    const result = await f.runner.run(...args);
+    if (args[0] === "git" && args[1].includes("for-each-ref")) return { ...result, stderr: "output_limit" };
+    return result;
+  });
+  expect((await recoverWriter({ ...f.ctx, runner: { run } }, "repo-w1")).code).toBe("writer_recover_failed");
+  expect(await git(f.checkout, "for-each-ref", "refs/recovery")).toBe("");
+  expect(await snapshot(f)).toEqual(before);
+}, 60_000);

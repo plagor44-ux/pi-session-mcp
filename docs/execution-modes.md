@@ -267,7 +267,7 @@ are removed on success and failure; a leftover is also visible to Doctor as
 | `writer_recover_unsupported` | Gitlink refused; nothing imported |
 | `writer_recover_conflict` | Existing destination (including symbolic refs) refused |
 | `writer_recover_incomplete` | Failed/incomplete slot, with its number; earlier incomplete slots are warnings alongside the current result |
-| `writer_recover_failed` | Other failure, including state/alias/layout, objects, bundle verification, manifest mismatch, fsck or the slot cap |
+| `writer_recover_failed` | Other failure, including state/alias/layout, a clone configuration that defines `filter.*` or `include*`, a failed host-Git capability probe, objects, bundle verification, manifest mismatch, fsck, a truncated ref listing or the slot cap |
 | `writer_recover_bundle_left` | Warning alongside the main result: bundle removal failed |
 
 Shared setup failures remain unchanged: `usage_invalid`, `platform_unsupported`,

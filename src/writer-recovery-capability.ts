@@ -11,6 +11,16 @@ export function recoveryTransactionArgs(creates: readonly string[]): string[] {
   return ["-c", `alias.writer-recovery=!LC_ALL=C git update-ref --no-deref --stdin <<'RECOVERY_REFS'\n${commands}\nRECOVERY_REFS`, "writer-recovery"];
 }
 
+/**
+ * The Git environment for the probe and the host import alike: no inherited `GIT_*` redirection
+ * (`GIT_DIR`, `GIT_EXEC_PATH`, object directories, templates) and no global or system configuration.
+ * Repository-local configuration still applies to the import; callers pin what matters with `-c`.
+ */
+export function isolatedGitEnvironment(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.keys(process.env).filter(key => key.startsWith("GIT_")).map(key => [key, undefined]));
+  return Object.assign(env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" });
+}
+
 /** Offline behavioral check, never in the operator checkout and never cached across operations. */
 export async function probeRecoveryRefTransactions(ctx: Pick<WriterContext, "runner" | "checkout" | "leaseFd">): Promise<boolean> {
   let directory: string | undefined;
@@ -20,8 +30,7 @@ export async function probeRecoveryRefTransactions(ctx: Pick<WriterContext, "run
     const fromCheckout = relative(await realpath(ctx.checkout), await realpath(directory));
     if (fromCheckout === "" || (!isAbsolute(fromCheckout) && fromCheckout !== ".." && !fromCheckout.startsWith("../"))) throw Error("probe location refused");
     // Do not inherit Git redirection, object storage, templates, identity or configuration from the host.
-    const env: NodeJS.ProcessEnv = Object.fromEntries(Object.keys(process.env).filter(key => key.startsWith("GIT_")).map(key => [key, undefined]));
-    Object.assign(env, { GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" });
+    const env = isolatedGitEnvironment();
     const run = (...args: string[]) => ctx.runner.run("git", [
       "-c", "core.hooksPath=/dev/null", "-c", "core.useReplaceRefs=false", "-C", directory!, ...args,
     ], AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS), { env, ...(ctx.leaseFd === undefined ? {} : { inheritFds: [ctx.leaseFd] }) });
@@ -40,6 +49,9 @@ export async function probeRecoveryRefTransactions(ctx: Pick<WriterContext, "run
       const symbolic = await run("symbolic-ref", "--quiet", ref);
       if (transaction.exitCode === 0 || symbolic.exitCode !== 0 || symbolic.stdout.trim() !== target) throw Error("unsafe ref transactions");
     }
+    // Neither refusal may have written through the symbolic refs.
+    if ((await run("rev-parse", "--quiet", "--verify", "refs/heads/missing")).exitCode === 0) throw Error("unsafe ref transactions");
+    if (await git("rev-parse", "refs/heads/probe") !== oid) throw Error("unsafe ref transactions");
     supported = true;
   } catch { /* All probe failures refuse import; no diagnostics expose temporary paths. */ }
   finally {

@@ -9,13 +9,13 @@ import { removeTemporaryRoots } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
 const oid = "a".repeat(40);
-function simulatedProbe(mode: "refuses" | "succeeds" | "replaces" | "throws") {
+function simulatedProbe(mode: "refuses" | "succeeds" | "replaces" | "throws" | "writesThrough") {
   const directories = new Set<string>(), symbolic = new Map<string, string>();
   const run = vi.fn<CommandRunner["run"]>(async (_command, args) => {
     const directory = args[args.indexOf("-C") + 1]!;
     directories.add(directory);
     if (args.includes("commit") && mode === "throws") throw Error("probe interrupted");
-    if (args.includes("rev-parse")) return { exitCode: 0, stdout: oid, stderr: "" };
+    if (args.includes("rev-parse")) return args.includes("refs/heads/missing") ? { exitCode: mode === "writesThrough" ? 0 : 1, stdout: mode === "writesThrough" ? oid : "", stderr: "" } : { exitCode: 0, stdout: oid, stderr: "" };
     if (args.includes("writer-recovery")) {
       expect(args.some(arg => /start\ncreate refs\/heads\/probe-(dangling|existing) [a-f0-9]+\nprepare\ncommit/.test(arg))).toBe(true);
       return { exitCode: mode === "succeeds" ? 0 : 128, stdout: "", stderr: "" };
@@ -62,4 +62,18 @@ it.each(["succeeds", "replaces"] as const)("fails recovery before any import fet
   expect(await git(f.checkout, "for-each-ref", "--format=%(refname) %(objectname)")).toBe(before);
   await expect(lstat(join(f.paths.bundles, "recover.bundle"))).rejects.toMatchObject({ code: "ENOENT" });
   await expectRemoved(probe.directories, f.checkout);
+});
+
+it("refuses a host Git whose refused transaction still wrote through the symbolic ref", async () => {
+  const { run } = simulatedProbe("writesThrough");
+  expect(await probeRecoveryRefTransactions({ runner: { run }, checkout: process.cwd() })).toBe(false);
+});
+
+// The import tests skip when the live probe fails. On a Git release known to refuse `create` onto
+// symbolic refs (verified with 2.53.0 and 2.56.0), a failing probe is a regression, not a skip.
+const gitVersion = (await git(process.cwd(), "--version")).match(/(\d+)\.(\d+)/);
+const knownGood = gitVersion !== null && (Number(gitVersion[1]) > 2 || (Number(gitVersion[1]) === 2 && Number(gitVersion[2]) >= 53));
+it.skipIf(process.platform !== "linux" || !knownGood)("passes the live probe on a Git release known to refuse symbolic-ref creates", async () => {
+  const { recoveryProbeRunner } = await import("./recovery-capability-fixture.js");
+  expect(await probeRecoveryRefTransactions({ runner: recoveryProbeRunner, checkout: process.cwd() })).toBe(true);
 });
