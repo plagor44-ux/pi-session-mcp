@@ -130,6 +130,12 @@ After taking over the result and closing its coding session, before the next tas
 3. A coding start needs the writer's clone at its baseline, even after a complete collection; otherwise it fails with the controller-action code for uncollected work in [references/start-errors.md](references/start-errors.md). To let a fresh session continue from collected work, for example after a failed turn or for a review fix round, create a local branch at the collected ref and run `pi-session-mcp-setup --writer <name> --reset --base <branch> --apply`, then call `pi_session_start` on `pi-session-mcp` with the coding profile and `base: "<branch>"`. Read `writer` from that result for collection. Default starts cannot use a writer moved to the fix branch.
 4. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
 
+If collect is refused because of an unmerged index, the operator can export it
+with `pi-session-mcp-setup --writer <name> --recover --apply` and review
+`refs/recovery/writer-<name>/<slot>/…` in their own checkout before any `--discard`.
+Recovery does not authorize cleanup or export all local state; decide whether
+anything outside its preserved set matters before discarding.
+
 ## Limits to remember
 
 - Each client process has its own server process and its own in-memory sessions. Separate Claude Code and Codex processes do not share sessions.

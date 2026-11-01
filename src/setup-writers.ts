@@ -13,6 +13,7 @@ import { result, type SetupOperation, type SetupResult } from "./setup-result.js
 import { verifyMcpCapabilities } from "./client-adapters/mcp-verifier.js";
 import { podmanCgroupControllers } from "./writer-boundary.js";
 import * as lifecycle from "./writer-lifecycle.js";
+import { recoverWriter } from "./writer-recover.js";
 import * as acceptance from "./writer-acceptance.js";
 import { writerName, writerPaths, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 import { codeFor, context, DoctorGateError, doctorGate, FENCE_CODES, fenced, GLOBAL_ERRORS, locked, modesTarget, plan, preflight, remove, services, targetFor, type WriterSetupDependencies } from "./setup-writers-common.js";
@@ -25,7 +26,7 @@ import { reconcileUnlocked } from "./setup-writers-reconcile.js";
  */
 
 export { SETUP_LEASE_WAIT_MS, type WriterSetupDependencies } from "./setup-writers-common.js";
-export type WriterOperation = "collect" | "reset" | "recreate" | "finish" | "remove" | "verify";
+export type WriterOperation = "collect" | "recover" | "reset" | "recreate" | "finish" | "remove" | "verify";
 export interface WriterOptions { apply: boolean; discard: boolean; baseRef?: string; }
 
 /** Serializes planning, destructive-work refusal, mode commit and writer reconciliation. */
@@ -112,6 +113,10 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
       catch (error) {
         if (error instanceof DoctorGateError) return result(reportOperation, [...done({ status: "failed", code: error.message }).findings, ...error.findings]);
         throw error;
+      }
+      if (operation === "recover") {
+        const { warnings = [], ...outcome } = await recoverWriter(ctx, name);
+        return result(reportOperation, [{ target, ...outcome }, ...warnings.map(warning => ({ target, ...warning }))]);
       }
       const entry = (await loadConfig(deps.configPath)).workspaceModes.get(alias);
       const baseRef = opts.baseRef ?? entry?.container?.base;

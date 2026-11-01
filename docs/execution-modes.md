@@ -191,6 +191,88 @@ an unconditional token rotation. The launcher then re-copies boundary credential
 even if the refresh failed. API-key entries are copied, not refreshed; Cursor
 credentials are excluded.
 
+## Recover an unmerged writer
+
+When collection fails because the writer has an unmerged index, recovery exports
+an inspection snapshot without authorizing cleanup:
+
+```sh
+# Dry run: resolves the configured workspace alias only; checks no writer state.
+pi-session-mcp-setup --writer my-project-w1 --recover
+# Close the coding session first. Runs under setup lock, writer lease, fence and Doctor gate.
+pi-session-mcp-setup --writer my-project-w1 --recover --apply
+```
+
+Recovery runs Git in the recorded image, with no network and the clone mounted
+read-only. It never changes the clone's index, refs or worktree, `state.json`, or
+an earlier collected digest. The fence can stop and remove a container left by
+its launcher. Host Git imports a verified bundle into the operator's checkout,
+not from the clone. No provider is used. A clone defining `filter.*` or `include*`
+configuration is refused; external attributes are disabled.
+
+A successful report names a numeric **slot**. Review these untrusted refs in your
+own checkout: `refs/recovery/writer-<name>/<slot>/{stage1,stage2,stage3,worktree,manifest}`.
+A stage ref exists only if that stage has conflict entries. Its tree is **HEAD
+with the conflicted paths at that stage**, deleting a path missing at that stage;
+it is not the full corresponding side of a merge. Cleanly merged paths from the
+other side are not in it. The manifest contains the raw NUL-delimited
+`unmerged-index.txt`, `head.txt`, and `merge-head.txt` when present. Every recovery
+commit has the recorded HEAD as its parent.
+
+**Preserved:**
+
+- Conflict markers and untracked, non-ignored worktree files.
+- Index stages 1, 2 and 3 of conflicted paths, including modes and symlinks.
+- HEAD, MERGE_HEAD and the raw unmerged index entries in the manifest.
+- HEAD history, through commit parents.
+
+**Not exported:**
+
+- Staged-only (stage-0) content that differs from the worktree.
+- Other local branches, tags, notes and any other refs.
+- The stash.
+- Ignored files.
+- Reflogs and unreachable objects.
+- Rebase or cherry-pick sequencer state.
+
+Gitlinks in the index or export, including an untracked nested repository that
+`add -A` would turn into a gitlink, refuse the entire recovery.
+**`--discard` after a recovery destroys everything in the not-exported list.**
+Recovery is not a complete backup and does not authorize discarding work.
+
+Slots are create-only and never reused; the next slot is one above the highest
+numeric slot (cap 10,000). Part refs are created in a no-dereference transaction,
+then the manifest ref in a second transaction. Only a slot with its manifest ref
+is complete. A killed or failed commit can leave incomplete part refs: the next
+recovery reports those slots and uses a new one, never deletes or rolls back refs.
+The operator owns all recovery refs and decides when to delete them. Bundle files
+are removed on success and failure; a leftover is also visible to Doctor as
+`writer_uncollected_bundle` and is replaced by the next recovery.
+
+| Code | Meaning |
+| --- | --- |
+| `writer_recover_planned` | Alias resolved; nothing else ran |
+| `writer_recovered` | Complete slot created; report names the slot |
+| `nothing_to_recover` | No unmerged entries; unchanged |
+| `writer_recover_unsupported` | Gitlink refused; nothing imported |
+| `writer_recover_conflict` | Existing destination (including symbolic refs) refused |
+| `writer_recover_incomplete` | Failed/incomplete slot, with its number; earlier incomplete slots are warnings alongside the current result |
+| `writer_recover_failed` | Other failure, including state/alias/layout, objects, bundle verification, manifest mismatch, fsck or the slot cap |
+| `writer_recover_bundle_left` | Warning alongside the main result: bundle removal failed |
+
+Shared setup failures remain unchanged: `usage_invalid`, `platform_unsupported`,
+`alias_unknown`, `writer_busy`, `writer_lease_unavailable`, `writer_fenced`,
+`doctor_failed` (followed by findings), setup-lock codes and
+`writer_operation_failed`. Doctor runs before checking required writer state.
+Warnings accompany the main finding without turning a later complete slot into
+an incomplete one. JSON reports carry the numeric `slot`; human reports name it.
+
+Collect, finish, reset, recreate and remove remain refused without `--discard`,
+before and after recovery. Resolve the conflict in your own checkout from the
+recovery refs, decide whether anything outside the preserved set matters, and
+only then run `--reset --discard --apply` (or recreate) on the writer. Recovery
+refs are yours to delete. See [ADR 0016](adr/0016-writer-recovery-export.md).
+
 ## Collect, finish and reuse
 
 Close the writer's coding session before lifecycle mutation. Take over and review
@@ -211,8 +293,9 @@ that exists only in the index is recovered too; the same name rules apply. An
 index that cannot be evaluated, such as an unmerged conflict, makes inspection
 and collection fail closed and every non-`--discard` cleanup refuse. Such a
 writer is not at its baseline, so it is not admitted to a new session either;
-its work stays in the clone until the operator decides on `--discard`. Have the
-worker resolve or abort a merge before its session ends. A clean detached HEAD whose commit no branch in
+its work stays in the clone. Use [recovery export](#recover-an-unmerged-writer)
+for review before deciding on `--discard`, or have the worker resolve or abort
+a merge before its session ends. A clean detached HEAD whose commit no branch in
 the clone reaches is exported as `<base>-detached` (for example `main-detached`,
 imported as `refs/remotes/writer-<name>/main-detached`); a dirty detached HEAD
 keeps the `<base>-wip` export. A `<base>-detached`, `<branch>-wip` or `<branch>-index` name that
