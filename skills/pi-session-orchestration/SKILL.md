@@ -43,7 +43,9 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 ## 4. Keep a ledger
 
-Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status, and once the turn is terminal its `state`, `assistantText`, `truncated` and `completion`. Update it after every tool call. Decide the time budget per task and one fixed cleanup and observation budget (see section 9) when you start the run. A cap on concurrent sessions and per-task budgets are your own policy for this run; the server enforces neither. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
+Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status, and once the turn is terminal its `state`, `assistantText`, `truncated` and `completion`. Update it after every tool call. Decide the time budget per task and one fixed cleanup and observation budget (see section 9) when you start the run. A cap on concurrent sessions and per-task budgets are your own policy for this run. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
+
+Read each profile's `maxTurnSeconds` from capabilities (`null` means no server limit). Keep your per-task budgets: the server limit is a backstop for an unsupervised turn, not a replacement for supervision. Treat `abortReason: "deadline"` like any other aborted turn and inspect the work before reuse. If a session answers `turn_deadline_uncertain`, close it; the deadline abort was not confirmed and the session is not reusable.
 
 ## 5. Start in parallel, wait on the first
 

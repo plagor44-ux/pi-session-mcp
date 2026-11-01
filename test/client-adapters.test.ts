@@ -14,7 +14,7 @@ import type { CommandRunner } from "../src/client-adapters/index.js";
 const intent = { scope: "user" as const, nodePath: "/usr/bin/node", entryPath: "/srv/pi-session-mcp/dist/main.js", configPath: "/etc/pi-session-mcp.json" };
 const TOOL_NAMES = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"] as const;
 const VERIFIED_CONFIGURATION = { fingerprint: `sha256:${"0".repeat(64)}`, reloadPolicy: "restart-required" };
-const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [], grantedExtensionTools: [], shell: "none", skills: [] };
+const VERIFIED_PROFILE = { alias: "safe", default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "off", extensions: [], grantedExtensionTools: [], shell: "none", skills: [], maxTurnSeconds: null };
 const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   ok: true,
   server: { name: "pi-session-mcp", version: PACKAGE_VERSION },

@@ -19,12 +19,13 @@ export interface SessionView {
  * internal work without a public event stays invisible. It is a liveness lower bound, not a
  * progress count, and does not prove that a silent turn is healthy.
  */
-export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; assistantText?: string; truncated?: boolean; completion?: TurnCompletion; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
+export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; abortReason?: "deadline"; assistantText?: string; truncated?: boolean; completion?: TurnCompletion; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
 export interface PromptResult { session: SessionView; turn: TurnView; }
-interface TurnEntry extends TurnView { terminal: boolean; abortPromise?: Promise<void> | undefined; finalizing?: Promise<void> | undefined; }
-interface Entry extends SessionView { lease?: SnapshotSessionLease; tainted?: boolean; handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
-export type RegistryErrorCode = "snapshot_unavailable" | "snapshot_modified" | "snapshot_profile_unsupported" | "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
+interface TurnEntry extends TurnView { deadlineTimer?: ReturnType<typeof setTimeout> | undefined; deadlineAt?: number; deadlineAbort?: boolean; terminal: boolean; abortPromise?: Promise<void> | undefined; finalizing?: Promise<void> | undefined; }
+interface Entry extends SessionView { maxTurnSeconds?: number; deadlineUncertain?: boolean; lease?: SnapshotSessionLease; tainted?: boolean; handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
+export type RegistryErrorCode = "turn_deadline_uncertain" | "snapshot_unavailable" | "snapshot_modified" | "snapshot_profile_unsupported" | "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
+  turn_deadline_uncertain: "Turn deadline abort is uncertain; close the session",
   snapshot_unavailable: "Snapshot is unavailable",
   snapshot_modified: "Snapshot was modified",
   snapshot_profile_unsupported: "Execution profile is not supported on snapshot workspaces",
@@ -132,6 +133,7 @@ export class SessionRegistry {
         thinkingLevel: handle.appliedSelection.thinkingLevel, state: "idle", createdAt: time, updatedAt: time,
         ...(handle.placement ? { writer: handle.placement.writer, base: { ...handle.placement.base } } : {}),
         ...(lease ? { lease, snapshot: { ...lease.binding } } : {}),
+        ...(executionProfile.maxTurnSeconds === undefined ? {} : { maxTurnSeconds: executionProfile.maxTurnSeconds }),
         handle, operation: Promise.resolve(), disposed: false, turns: new Map(), order: [],
       };
       this.sessions.set(entry.id, entry);
@@ -154,6 +156,7 @@ export class SessionRegistry {
     return this.serial(entry, async () => {
       if (entry.handle.isLost?.()) throw new RegistryError("writer_session_lost");
       if (entry.state === "running" || entry.abortPromise) throw new RegistryError("session_running");
+      if (entry.deadlineUncertain || entry.handle.isDeadlineUncertain?.()) throw new RegistryError("turn_deadline_uncertain");
       if (entry.state === "closing" || entry.state === "closed") throw new RegistryError("unknown_session");
       if (entry.lease) {
         if (entry.tainted) throw new RegistryError("snapshot_modified");
@@ -204,7 +207,7 @@ export class SessionRegistry {
           return { session: this.view(entry), turn: this.turnView(turn) };
         }
         this.restorePreflight(entry, turn, undefined, previous);
-        throw new RegistryError("prompt_rejected");
+        throw new RegistryError(entry.handle.isDeadlineUncertain?.() ? "turn_deadline_uncertain" : "prompt_rejected");
       }
       entry.turnPromise = operation;
       void operation.then(() => undefined, () => undefined);
@@ -221,7 +224,8 @@ export class SessionRegistry {
       }
       if (result.kind === "operation" || result.value === false) {
         this.restorePreflight(entry, turn, operation, previous);
-        throw new RegistryError("prompt_rejected");
+        if (entry.handle.isDeadlineUncertain?.()) entry.deadlineUncertain = true;
+        throw new RegistryError(entry.deadlineUncertain ? "turn_deadline_uncertain" : "prompt_rejected");
       }
 
       publishAcceptedTurn();
@@ -267,6 +271,7 @@ export class SessionRegistry {
       existing.state = "closing";
       existing.updatedAt = stamp();
       const turn = existing.turn;
+      if (turn) this.clearTurnDeadline(turn);
       if (turn && !turn.terminal) {
         turn.terminal = true;
         turn.state = "aborted";
@@ -293,6 +298,7 @@ export class SessionRegistry {
   async shutdown(): Promise<void> {
     this.stopping = true;
     this.shutdownController.abort();
+    for (const entry of this.sessions.values()) if (entry.turn) this.clearTurnDeadline(entry.turn);
     const cleanup = Promise.all([
       Promise.allSettled([...this.sessions.keys()].map((id) => this.close(id))),
       Promise.allSettled([...this.pendingStarts]),
@@ -320,8 +326,8 @@ export class SessionRegistry {
     })();
     return turn.finalizing;
   }
-  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.completion = outcome.completion; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") turn.state = "aborted"; else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
-  private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
+  private completeTurn(entry: Entry, turn: TurnEntry, outcome: PiTurnOutcome): void { if (turn.terminal || entry.disposed) return; turn.terminal = true; this.clearTurnDeadline(turn); turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; if (outcome.status === "completed") { const normalized = normalize(outcome.assistantText); turn.state = "completed"; turn.assistantText = normalized.text; turn.completion = outcome.completion; turn.truncated = normalized.truncated || outcome.truncated === true; } else if (outcome.status === "aborted") { turn.state = "aborted"; if (outcome.abortReason === "deadline" || turn.deadlineAbort) turn.abortReason = "deadline"; } else { turn.state = "failed"; turn.error = { code: "turn_failed", message: "Pi turn failed" }; entry.lastError = "Pi turn failed"; } if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = turn.state === "failed" ? "failed" : "idle"; entry.updatedAt = turn.updatedAt; this.notifyTerminal(entry, turn, "registry"); }
+  private failTurn(entry: Entry, turn: TurnEntry): void { if (turn.terminal) return; turn.terminal = true; this.clearTurnDeadline(turn); turn.state = "failed"; turn.updatedAt = this.advance(turn.updatedAt); turn.completedAt = turn.updatedAt; turn.error = { code: "turn_failed", message: "Pi turn failed" }; if (entry.turn === turn) entry.turn = undefined; if (entry.turnPromise) entry.turnPromise = undefined; entry.state = "failed"; entry.updatedAt = turn.updatedAt; entry.lastError = "Pi turn failed"; this.notifyTerminal(entry, turn, "registry"); }
   /**
    * Called once per terminal transition, after the turn is final. Only a published turn is reported:
    * a preflight that was rejected, timed out or restored never had a public turn id. A throwing
@@ -349,11 +355,36 @@ export class SessionRegistry {
   }
   /** The registry's own clock: never earlier than `current`, even across a wall-clock step. */
   private advance(current: string, observedAt = stamp()): string { return observedAt > current ? observedAt : current; }
-  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); }
+  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); if (entry.maxTurnSeconds !== undefined && !entry.handle.placement) { turn.deadlineAt = performance.now() + entry.maxTurnSeconds * 1000; this.armTurnDeadline(entry, turn); } }
+  private clearTurnDeadline(turn: TurnEntry): void {
+    clearTimeout(turn.deadlineTimer);
+    turn.deadlineTimer = undefined;
+  }
+  private armTurnDeadline(entry: Entry, turn: TurnEntry): void {
+    turn.deadlineTimer = setTimeout(() => {
+      turn.deadlineTimer = undefined;
+      if (turn.terminal || turn.finalizing || entry.disposed || this.stopping) return;
+      if (performance.now() < turn.deadlineAt!) { this.armTurnDeadline(entry, turn); return; }
+      void this.expireTurn(entry, turn);
+    }, Math.max(0, turn.deadlineAt! - performance.now()));
+    turn.deadlineTimer.unref();
+  }
+  private async expireTurn(entry: Entry, turn: TurnEntry): Promise<void> {
+    const prepared = await this.serial(entry, async () => {
+      if (this.stopping || entry.disposed || entry.turn !== turn || turn.terminal || turn.finalizing || turn.state !== "running") return undefined;
+      return { abort: this.beginAbort(entry, turn, true) };
+    });
+    if (!prepared) return;
+    // Bound only the adapter call, never snapshot finalization. Late success still settles normally.
+    const observed = prepared.abort.then(() => true, () => false);
+    const certain = await this.withTimeout(observed, entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, false);
+    if (!certain) entry.deadlineUncertain = true;
+  }
   private restorePreflight(entry: Entry, turn: TurnEntry, operation: Promise<PiTurnOutcome> | undefined, previous: { state: SessionState; updatedAt: string; lastError: string | undefined }): void { turn.terminal = true; if (entry.turn === turn) entry.turn = undefined; if (!operation || entry.turnPromise === operation) entry.turnPromise = undefined; entry.state = previous.state; entry.updatedAt = previous.updatedAt; if (previous.lastError === undefined) delete entry.lastError; else entry.lastError = previous.lastError; }
   private trim(entry: Entry): void { while (entry.order.length > MAX_TURNS_PER_SESSION) { const old = entry.order.shift(); if (old) entry.turns.delete(old); } }
-  private beginAbort(entry: Entry, turn: TurnEntry): Promise<void> {
+  private beginAbort(entry: Entry, turn: TurnEntry, deadline = false): Promise<void> {
     if (turn.abortPromise) return turn.abortPromise;
+    turn.deadlineAbort = deadline;
     const pending = Promise.resolve().then(() => entry.handle.abort());
     turn.abortPromise = pending;
     entry.abortPromise = pending;
@@ -406,8 +437,8 @@ export class SessionRegistry {
     } catch { /* Cleanup errors must never expose adapter internals. */ }
   }
   private rememberClosed(id: string, view: SessionView): void { this.closed.set(id, view); while (this.closed.size > MAX_CLOSED_TOMBSTONES) this.closed.delete(this.closed.keys().next().value!); }
-  private turnView({ terminal: _terminal, abortPromise: _abortPromise, finalizing: _finalizing, ...turn }: TurnEntry): TurnView { return { ...turn }; }
-  private view({ lease: _lease, tainted: _tainted, handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
+  private turnView({ deadlineTimer: _timer, deadlineAt: _deadlineAt, deadlineAbort: _deadlineAbort, terminal: _terminal, abortPromise: _abortPromise, finalizing: _finalizing, ...turn }: TurnEntry): TurnView { return { ...turn }; }
+  private view({ maxTurnSeconds: _maxTurnSeconds, deadlineUncertain: _deadlineUncertain, lease: _lease, tainted: _tainted, handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T>;
   private async withTimeout<T, F>(promise: Promise<T>, milliseconds: number, fallback: F): Promise<T | F>;
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T> { if (milliseconds <= 0) return fallback; let timer: ReturnType<typeof setTimeout> | undefined; const timeout = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), milliseconds); }); try { return await Promise.race([promise, timeout]); } finally { if (timer !== undefined) clearTimeout(timer); } }

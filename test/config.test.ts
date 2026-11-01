@@ -61,6 +61,16 @@ describe("loadConfig", () => {
     expect(loaded.executionProfiles.get("safe")).toMatchObject({ alias: "safe", permissionProfile: "read-only" });
   });
 
+  it.each([60, 86_400, undefined])("preserves optional maxTurnSeconds %s", async maxTurnSeconds => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, maxTurnSeconds } } });
+    const loaded = await loadConfig(path); const profile = loaded.executionProfiles.get("safe")!;
+    expect(profile.maxTurnSeconds).toBe(maxTurnSeconds);
+    expect(toResolvedExecutionProfile(profile).maxTurnSeconds).toBe(maxTurnSeconds);
+  });
+  it.each([0, -1, 59, 86_401, 60.5, "60", null])("rejects invalid maxTurnSeconds %s without clamping", async maxTurnSeconds => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, maxTurnSeconds } } });
+    await expect(loadConfig(path)).rejects.toMatchObject({ code: "invalid_execution_profile_config" });
+  });
   const validProfile = { default: true, permissionProfile: "read-only", provider: "fake-provider", model: "fake-model", thinkingLevel: "medium" };
   async function writeConfig(value: unknown): Promise<string> {
     const root = await temporaryRoot("pi-session-mcp-config-"); const path = join(root, "config.json");

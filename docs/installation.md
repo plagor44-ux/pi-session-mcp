@@ -287,6 +287,18 @@ Rules:
 - `provider` and `model` must name a pair from the local Pi configuration. Pi
   SDK `1.0.3` renamed the Azure provider key from `azure-openai-responses` to
   `azure`; a profile that names the old key must be changed.
+- Optional `maxTurnSeconds` sets a per-turn supervision backstop: a strict integer
+  from 60 to 86,400 seconds. Absent means no limit. Fractions, strings, zero,
+  negative and out-of-range values fail startup with `invalid_execution_profile_config`
+  (Doctor validates offline); there is no clamping. Capabilities publish the
+  number or `null`. Only the server owning Pi enforces it, starting at turn
+  publication, including inside container writers. A confirmed expiry abort
+  adds `abortReason: "deadline"` to the aborted turn; an unconfirmed abort
+  makes the session non-reusable (`turn_deadline_uncertain`), so close it.
+  It guarantees neither provider termination, rollback nor a cost cap; keep
+  controller budgets. See [Tool contracts](tool-contracts.md#optional-turn-duration-policy).
+  Older releases reject this configuration field. Re-provision existing writers
+  after setting or changing it, or admission refuses them as `settingsChanged`.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
 - A `read-only` profile may add `"shell": "sandboxed"` to get a `bash` tool

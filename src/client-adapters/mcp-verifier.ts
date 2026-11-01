@@ -117,9 +117,10 @@ function validCapabilities(value: unknown): boolean {
   if (!profiles.every((profile) => {
     if (!profile || typeof profile !== "object") return false;
     const record = profile as Record<string, unknown>;
-    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills"])
+    return exactKeys(record, ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds"])
       && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
       && typeof record.default === "boolean"
+      && (record.maxTurnSeconds === null || (typeof record.maxTurnSeconds === "number" && Number.isInteger(record.maxTurnSeconds) && record.maxTurnSeconds >= 60 && record.maxTurnSeconds <= 86_400))
       && (record.permissionProfile === "read-only" || record.permissionProfile === "coding")
       && typeof record.provider === "string" && record.provider.length > 0 && record.provider.length <= 256
       && typeof record.model === "string" && record.model.length > 0 && record.model.length <= 256

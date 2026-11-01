@@ -308,7 +308,7 @@ Create an unversioned JSON configuration file such as `pi-session-mcp.json`:
 }
 ```
 
-Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions`, `grantedExtensionTools`, `shell` and `skills` described in [Installation](installation.md), [Pi skills](skills.md) and [ADR 0013](adr/0013-hardened-read-only-profiles.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. An optional top-level `events` field, exactly `{ "delivery": "spool" }` or `{ "delivery": "off" }`, controls turn-event delivery for the Claude Code wake (`spool` enables it; `off`, the default when the field is absent, writes nothing); any other shape fails startup with `invalid_event_delivery`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
+Configuration is strict. A profile has exactly `default`, `permissionProfile`, `provider`, `model`, and `thinkingLevel`, plus the optional `mcpServers`, `extensions`, `grantedExtensionTools`, `shell`, `skills` and `maxTurnSeconds` described in [Installation](installation.md), [Pi skills](skills.md) and [ADR 0013](adr/0013-hardened-read-only-profiles.md); aliases follow the configured alias naming rules. At least one profile and exactly one default are required, and that default must be `read-only`. `thinkingLevel` is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. An optional top-level `events` field, exactly `{ "delivery": "spool" }` or `{ "delivery": "off" }`, controls turn-event delivery for the Claude Code wake (`spool` enables it; `off`, the default when the field is absent, writes nothing); any other shape fails startup with `invalid_event_delivery`. Workspace paths resolve relative to the configuration file. Clients can select only configured aliases, never an arbitrary working directory.
 
 Use placeholders until a locally available provider/model pair is known. Do not put keys, tokens, credential objects, headers, base URLs, or authentication paths in this file.
 
@@ -386,6 +386,18 @@ Claude Code enforces each tool's declared JSON Schema (`additionalProperties: fa
 5. Call `pi_session_close` when the session is no longer needed.
 
 Capability discovery sorts both arrays by alias and returns no workspace paths. It reports configured provider/model intent without checking authentication, provider availability, the filesystem, or the network. Session start remains the first runtime check.
+
+An optional profile `maxTurnSeconds` is a strict integer from 60 to 86,400;
+absent means unlimited, published as `null` in capabilities. Doctor validates it
+offline; invalid values fail startup with `invalid_execution_profile_config`.
+The owning server (inner server for a container writer) starts the deadline at
+turn publication. A successful expiry abort adds `abortReason: "deadline"`;
+treat it like an aborted turn. A rejected/timed-out expiry abort claims no stop
+and permanently refuses reuse with `turn_deadline_uncertain` after the running
+turn/abort settles; close the session. This is no provider-stop, rollback or cost
+guarantee, and controller task budgets still apply. Re-provision existing writers
+after setting or changing the field (`settingsChanged` otherwise). Older releases
+reject configurations using it. See [Tool contracts](tool-contracts.md#optional-turn-duration-policy).
 
 Server deadlines are profile-specific authentication/catalog work 5,000 ms per operation, session creation 10,000 ms, preflight 5,000 ms, abort 5,000 ms, close cleanup 5,000 ms, registry shutdown 12,000 ms, and process shutdown on a signal or stdin EOF 15,000 ms. A preflight timeout returns `prompt_timeout` (`Pi prompt preflight timed out`) without a public turn. An abort timeout returns `abort_timeout` (`Pi abort timed out`) without claiming abortion; rejection/failure remain `prompt_rejected`/`abort_failed`. Close removes the public entry after best-effort cleanup and remains idempotent for retained tombstones. Shutdown rejects new starts with `server_stopping`; process shutdown explicitly exits the process after its bounded cleanup window. These limits do not prove graceful cancellation of a blocked provider request. Late SDK promises cannot publish a turn or revive a removed session. At most 100 closed tombstones are retained FIFO.
 

@@ -28,6 +28,7 @@ const profileSchema = z.object({
   extensions: z.array(extensionSpec).max(MAX_PROFILE_EXTENSIONS).optional(),
   grantedExtensionTools: z.array(z.string().refine(isAcceptableExtensionToolName)).max(MAX_GRANTED_EXTENSION_TOOLS).optional(),
   shell: z.literal("sandboxed").optional(),
+  maxTurnSeconds: z.number().int().min(60).max(86_400).optional(),
   skills: z.array(alias).max(MAX_PROFILE_SKILLS).optional(),
 }).strict().superRefine((profile, context) => {
   if (profile.mcpServers !== undefined && !isMcpServers(profile.mcpServers, profile.permissionProfile)) {
@@ -230,7 +231,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const overrideDirectory = skillOverrideDirectory(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
   const catalog = parsed.skillCatalog ?? {};
-  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, shell, skills, ...value }]) => {
+  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, shell, skills, maxTurnSeconds, ...value }]) => {
     const selection = resolveSkillSelection(skills, catalog, base, overrideDirectory);
     return [key, Object.freeze({
       alias: key, ...value,
@@ -238,6 +239,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       ...(extensions === undefined ? {} : { extensions: Object.freeze(extensions.map((spec) => parseExtensionSpec(spec)!)) }),
       ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...grantedExtensionTools]) }),
       ...(shell === undefined ? {} : { shell }),
+      ...(maxTurnSeconds === undefined ? {} : { maxTurnSeconds }),
       ...(selection === undefined ? {} : { skills: selection }),
     })] as const;
   }));

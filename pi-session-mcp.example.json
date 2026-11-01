@@ -21,6 +21,7 @@
       "provider": "another-example-provider",
       "model": "another-example-model",
       "thinkingLevel": "high",
+      "maxTurnSeconds": 3600,
       "skills": ["pi-session-implementation"]
     }
   }

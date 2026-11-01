@@ -148,6 +148,18 @@ writable; clone hooks/config, boundary config and release installation are
 read-only mounts. Host Git never runs in the clone. Throwaway lifecycle
 containers use no network and validate clone redirect metadata before export.
 
+Optional profile `maxTurnSeconds` (strict integer 60..86,400, absent = no limit)
+is copied into the contained configuration. Only the inner server owns and arms
+the turn deadline; the outer registry never arms one for a writer placement.
+The relay preserves `abortReason: "deadline"` on aborted turns and the
+`turn_deadline_uncertain` refusal code, which makes the outer session non-reusable
+as well: close it. Expiry never collects, discards, resets or reallocates the
+writer. The lease continues fencing it after an uncertain abort. This is not a
+provider-stop, rollback or cost guarantee. Keep controller per-task budgets.
+Re-provision existing writers after setting or changing the policy; an old inner
+profile without the field mismatches the new host policy (`settingsChanged`).
+Older releases reject configurations with the field.
+
 Each contained config has only its workspace and selected coding profiles,
 plus the synthetic default **`boundary-read-only`**. Coding sessions must name
 their coding profile explicitly. The clone's internal mode is acknowledged host
@@ -323,7 +335,7 @@ sanitized refusal, with no host fallback. See [Tool contracts](tool-contracts.md
 
 Before the relay starts an inner session it compares every public capability
 field of the writer's profile with the host profile: `permissionProfile`,
-`provider`, `model`, `thinkingLevel` and `shell` exactly, and `skills`,
+`provider`, `model`, `thinkingLevel`, `shell` and `maxTurnSeconds` exactly, and `skills`,
 `extensions` and `grantedExtensionTools` as sets. A mismatch or a missing
 entry counts as `settingsChanged`, starts no inner session and moves on to the
 next writer; if no writer is admitted, the start fails with
