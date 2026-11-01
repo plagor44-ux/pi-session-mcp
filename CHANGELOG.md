@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.15.1 — 2026-11-01
+
+Patch release under ADR 0003. It keeps the public MCP contract and ships three
+writer fixes: the boundary ignores a worker-written Git graft file (#228),
+index flags no longer hide work from inspect and collect (#231), and writer
+setup no longer fails closed on a slow host (#229). Existing configurations
+stay valid and need no migration. **Upgrade note:** as for every release,
+repeat the provisioning command of each container repository with `--apply`
+before the client targets, as described in
+[Installation](docs/installation.md#upgrade). `npm audit` still reports
+`undici` 8.10.2 and the nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249), both
+through Pi SDK 1.4.0
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 ### Fixed
 
 - The writer boundary ignores a worker-written Git graft file
@@ -20,8 +34,10 @@
   `<branch>-wip`. Inspect and collect now clear `assume-unchanged` on the copy
   and `skip-worktree` on every entry whose file exists (an absent
   skip-worktree file keeps its index blob), and they ignore a sparse-checkout
-  setting of the clone, which made `add -A` skip paths and fail. Reset clears
-  both flags on the clone's own index so that the checkout of the base succeeds.
+  setting of the clone, which made `add -A` skip paths and fail. Reset first
+  rebuilds the clone's own index from HEAD, so an unmerged index no longer
+  blocks a discard, then clears both flags so that the checkout of the base
+  succeeds.
 - Writer setup no longer fails closed on a slow host
   ([#229](https://github.com/plagor44-ux/pi-session-mcp/issues/229)): the rootless
   Podman probe is repeated once after a timeout, the Doctor gate of a writer
