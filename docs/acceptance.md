@@ -2598,6 +2598,67 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.15.0 post-release evidence
+
+Recorded on 2026-11-01 for the published release `0.15.0`.
+
+Tag binding: a fresh clone of the annotated tag `v0.15.0` (tag object
+`780a05fa1e80b2121919fb2421abf7476057c12a`) peels to the merge commit
+`4f5cadbeb1aa0852b20261e74907eaf2d9cde1b4` of #227, and
+`git describe --tags --exact-match` reports `v0.15.0`. CI on the merge commit
+(run 41287413205) passed on its second attempt: the first attempt failed one
+test on `macos-26` at the 5,000 ms test timeout ("refuses untrusted binaries
+and bounds runtime and output" in `test/review-snapshot.test.ts`), with the
+same tree that passed twice on the pull request. CI on the tag (run
+41289283377) passed. The npm package records `gitHead` `4f5cadb`.
+
+All runs below took place on 2026-11-01 from 08:36 to 08:40 UTC.
+
+- Level 1 on the tag clone after `npm ci`, with Node.js `26.12.1` and npm
+  `12.2.1`: typecheck, `build:cli`, the test run (153 files, 4362 passed,
+  14 skipped, with `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` with the findings known from the
+  pre-release acceptance, all through `@earendil-works/pi-coding-agent` 1.4.0:
+  `undici` 8.10.2
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)) and the
+  nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249). Level 1 is therefore not
+  unrestricted. Doctor reported `packageVersion` `0.15.0` and exited with `2`
+  because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.15.0` on npm: 973 files, shasum
+  `c98fcade31c76f586ccf683c5f54d6007752782c`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `f01e9b10e2c0cce2f210b28f789e7e689a6873f5` because a later commit changes the
+  packaged `docs/acceptance.md` and `docs/roadmap.md`.
+- Published release, Level 2 on the tag clone: 160 of 160 with delivery off
+  and 228 of 228 with `--events spool`. The 197 built runtime files were
+  byte-identical before and after the client cycles.
+- Published npm package, installed into a fresh prefix: the install smoke
+  reported `smoke_passed` with version `0.15.0`, and Level 2 passed 160 of 160
+  with delivery off and 228 of 228 with `--events spool` (196 built files
+  unchanged).
+- In every Level 2 run the real client registrations were unchanged, no
+  process remained and the leak check passed. Clients: Codex CLI `0.166.0` and
+  Claude Code `2.1.316`.
+
+Installations, upgraded on 2026-11-01 after the runs above, following
+[Installation](installation.md#container-writers): both client targets
+removed with `0.14.3`, `npm install -g pi-session-mcp@0.15.0`, each container
+repository's provisioning command repeated with `--apply`, Doctor, then
+client-target `--apply` and `--verify` and `--writer <name> --verify` for
+every writer.
+
+- Workstation, from 11:24 to 11:28 UTC: five container repositories with 18
+  writers reported `mode_unchanged`, `writer_accepted` for every writer and
+  `controllers_restart_required`. Doctor with the real configuration reported
+  no error and `sandbox_unavailable` and `writer_off_default_base` as passed;
+  warnings were the known `workspace_gitfile` and `workspace_mode_unset`.
+  `--verify` passed for `claude-code:user:pi-session-mcp` (`mcp_verified`,
+  both `skill_verified`, `hook_verified`) and `codex:user:pi-session-mcp`
+  (`mcp_verified`, both `skill_verified`), and `--writer <name> --verify`
+  reported `mcp_verified` for all 18 writers. Five idle client server
+  processes were still running during the upgrade; no writer container ran.
+
 ### v0.15.0 pre-release acceptance
 
 `v0.15.0` was accepted on 2026-11-01 from 07:53 to 07:58 UTC on its release
