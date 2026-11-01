@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { BOUNDARY_GIT, IMAGE_PULL_TIMEOUT_MS, throwawayArgs, verifyCloneLayout } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
 import { readWriterState, writerPaths } from "./writer-state.js";
+import { probeRecoveryRefTransactions, recoveryTransactionArgs } from "./writer-recovery-capability.js";
 
 export const RECOVERY_SLOT_CAP = 10_000;
 export type RecoveryFinding = WriterOutcome & { slot?: number };
@@ -143,6 +144,7 @@ export async function recoverWriter(ctx: WriterContext, name: string): Promise<R
     });
     const parts = new Set(heads.map(h => h.part));
     if (parts.size !== heads.length || !parts.has("manifest") || !parts.has("worktree")) throw Error("invalid heads");
+    if (!await probeRecoveryRefTransactions(ctx)) throw Error("unsafe host ref transactions");
     await git("-c", "transfer.fsckObjects=true", "fetch", "--no-tags", "--no-write-fetch-head", "--no-recurse-submodules", "--end-of-options", bundle, ...heads.map(h => h.source));
     const manifest = heads.find(h => h.part === "manifest")!.oid;
     const head = (await git("show", `${manifest}:head.txt`)).trim();
@@ -171,10 +173,7 @@ export async function recoverWriter(ctx: WriterContext, name: string): Promise<R
       if (symbolic.exitCode !== 1) throw Error("ref inspection failed");
     }
     const transact = async (selected: Head[]) => {
-      // CommandRunner has no stdin channel. A Git shell alias supplies a fixed here-document;
-      // all interpolated tokens are validated OIDs, fixed part names and a configured writer name.
-      const commands = ["start", ...selected.map(h => `create ${root}${slot}/${h.part} ${h.oid}`), "prepare", "commit"].join("\n");
-      return rawGit("-c", `alias.writer-recovery=!LC_ALL=C git update-ref --no-deref --stdin <<'RECOVERY_REFS'\n${commands}\nRECOVERY_REFS`, "writer-recovery");
+      return rawGit(...recoveryTransactionArgs(selected.map(h => `create ${root}${slot}/${h.part} ${h.oid}`)));
     };
     try {
       const partResult = await transact(heads.filter(h => h.part !== "manifest"));

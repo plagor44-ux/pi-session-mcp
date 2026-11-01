@@ -210,6 +210,16 @@ its launcher. Host Git imports a verified bundle into the operator's checkout,
 not from the clone. No provider is used. A clone defining `filter.*` or `include*`
 configuration is refused; external attributes are disabled.
 
+Recovery requires a host Git whose ref transactions refuse `create` onto an
+existing symbolic ref, including a dangling one. This capability is checked at
+run time with the same Git in a fresh temporary repository outside the operator
+checkout, without network access and before any import fetch or ref write. The
+probe repository is removed afterwards on every path. Recovery fails closed with
+`writer_recover_failed` if the probe fails; no refs or objects are imported.
+This behavior has been verified with Git 2.53.0 and 2.56.0, but not 2.39.5 (which
+replaces the dangling symbolic ref). This is a behavioral requirement, not a
+version-number check.
+
 A successful report names a numeric **slot**. Review these untrusted refs in your
 own checkout: `refs/recovery/writer-<name>/<slot>/{stage1,stage2,stage3,worktree,manifest}`.
 A stage ref exists only if that stage has conflict entries. Its tree is **HEAD

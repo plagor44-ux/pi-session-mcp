@@ -5,6 +5,7 @@ import { runWriterOperation, type WriterSetupDependencies } from "../src/setup-w
 import { parseSetupArgs, formatSetupHuman } from "../src/setup-cli.js";
 import { result } from "../src/setup-result.js";
 import { fixture } from "./real-git-writer-fixture.js";
+import { recoveryRefTransactionsSupported } from "./recovery-capability-fixture.js";
 import { removeTemporaryRoots } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
@@ -64,7 +65,7 @@ it("reports missing state only after the Doctor gate", async () => {
   expect(out.findings[0]?.code).toBe("writer_recover_failed");
   expect(f.order).toEqual(["lock", "lease", "fence", "doctor", "release", "unlock"]);
 });
-it("reports a complete recovery and earlier incomplete slots through setup", async () => {
+it.skipIf(!recoveryRefTransactionsSupported)("reports a complete recovery and earlier incomplete slots through setup", async () => {
   const f = await setup();
   await f.work("checkout", "-b", "other"); await f.commit("other", "base.txt", "other\n");
   await f.work("checkout", "main"); await f.commit("main", "base.txt", "main\n");

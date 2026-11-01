@@ -1,6 +1,7 @@
 # ADR 0016: Recovery export for a writer with an unmerged index
 
 **Status:** Accepted; implemented under [#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213).
+Recovery fails closed unless an offline host-Git capability probe confirms that the specified ref transactions refuse existing symbolic refs.
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
