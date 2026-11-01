@@ -164,6 +164,25 @@ describe("client adapters", () => {
     expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "failed", capabilitiesGet: false });
   });
 
+  it("accepts a snapshot workspace with exactly alias and mode (#235)", async () => {
+    const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode: "snapshot" });
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "verified", capabilitiesGet: true });
+  });
+
+  it.each([
+    ["writers", { writers: 1 }],
+    ["defaultBase", { defaultBase: null }],
+    ["an unknown key", { extra: true }],
+  ])("rejects a snapshot workspace with %s (#235)", async (_label, fields) => {
+    const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode: "snapshot", ...fields });
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "failed", capabilitiesGet: false });
+  });
+
+  it("rejects an unknown workspace mode (#235)", async () => {
+    const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode: "mirror" });
+    expect(await verifyCapabilityPayload(capabilities)).toMatchObject({ status: "failed", capabilitiesGet: false });
+  });
+
   it.each(["unset", "host", "read-only"])("rejects container fields on a %s workspace", async (mode) => {
     for (const fields of [{ writers: 1 }, { defaultBase: null }]) {
       const capabilities = capabilitiesWithWorkspace({ alias: "repo", mode, ...fields });

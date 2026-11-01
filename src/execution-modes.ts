@@ -7,7 +7,9 @@ import { isSafeRefName } from "./writer-boundary.js";
 
 import { cpusSchema, cpuSharesSchema, memorySchema } from "./writer-limits.js";
 
-export type WorkspaceMode = "unset" | "host" | "container" | "read-only" | "snapshot";
+/** Workspace mode names: the single source for the type, the capabilities schema and the setup verifier. */
+export const WORKSPACE_MODES = ["unset", "host", "container", "read-only", "snapshot"] as const;
+export type WorkspaceMode = (typeof WORKSPACE_MODES)[number];
 
 export interface ContainerSettings {
   readonly writers: number;
