@@ -2598,6 +2598,54 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.16.0 pre-release acceptance
+
+`v0.16.0` was accepted on 2026-11-01 from 21:48 to 21:54 UTC on its release
+candidate `a484dd1`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.12.1`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`. Level 2 passed
+in the working tree and for the packed tarball, each with delivery off and
+with delivery on. Level 1 passed except `npm audit`. Later commits change only
+this record and the roadmap.
+
+The minor release adds #212 (ADR 0017) and #213 (ADR 0016) and the `undici`
+override for #120 (PR #238). The candidate is `main` at `b664487` plus the
+version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    158 files, 4479 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249) through
+    `@earendil-works/pi-coding-agent` 1.4.0, still the latest SDK release. The
+    repository install no longer reports `undici`, because the override
+    resolves it to `8.12.3`.
+  - `npm pack` listed 978 files (tarball shasum
+    `1cb915e0159a699b0e23e1b9526921b55d2f9061`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.16.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
+  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped.
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.16.0`. The global install resolves `undici` `8.10.2` under
+  the SDK, as documented in [Releasing](releasing.md): the override does not
+  reach `npm install -g`
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. The disposable
+  prefixes and the candidate clone were removed.
+
+Not established for `0.16.0`: a Level 3 cycle on the release candidate, a live
+`--recover --apply` against a real conflicted writer, a turn deadline against
+a real provider, and the published-release Level 2 and upgrades, which follow
+after publishing.
+
 ### v0.15.2 pre-release acceptance
 
 `v0.15.2` was accepted on 2026-11-01 from 17:24 to 17:29 UTC on its release

@@ -2,12 +2,24 @@
 
 ## Unreleased
 
-Additive public contract changes; under ADR 0003 the next release is a minor
-release. **Downgrade note:** profile configuration is strict, so a
-configuration that sets `maxTurnSeconds` cannot be loaded by an older release.
-**Upgrade note:** setting or changing `maxTurnSeconds` on a coding profile is
-a profile change; provision the container writers of every repository that
-selects it again, or relay admission refuses them with `settingsChanged`.
+## 0.16.0 — 2026-11-01
+
+Minor release under ADR 0003. It adds to the public contract: an optional
+per-profile turn deadline (#212, ADR 0017) and a setup operation that exports
+a conflicted writer clone for review (#213, ADR 0016). Existing
+configurations stay valid and need no migration; profiles without
+`maxTurnSeconds` behave as before. **Upgrade note:** as for every release,
+repeat the provisioning command of each container repository with `--apply`
+before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Setting or changing
+`maxTurnSeconds` on a coding profile later is a profile change: provision the
+container writers of every repository that selects it again, or relay
+admission refuses them with `settingsChanged`. **Downgrade note:** profile
+configuration is strict, so a configuration that sets `maxTurnSeconds` cannot
+be loaded by an older release. `npm audit` still reports the nested
+`minimatch` 10.2.6 (GHSA-g3hv-75wg-m249) through Pi SDK 1.4.0, and an npm
+installation still resolves `undici` 8.10.2 under the SDK (see Security
+below and [#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
 
 ### Added
 
