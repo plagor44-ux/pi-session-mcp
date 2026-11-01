@@ -1,6 +1,8 @@
 # ADR 0017: Per-profile maximum turn duration
 
-**Status:** Accepted (2026-10-31); implemented under [#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212).
+**Status:** Accepted (2026-10-31, maintainer decision), after two
+independent reviews and two revisions; implemented under issue
+[#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212).
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.

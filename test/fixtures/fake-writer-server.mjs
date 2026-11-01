@@ -30,7 +30,7 @@ async function call(name, args = {}) {
   }
   if (name === "pi_session_close" && scenario.slowClose) await new Promise(resolve => setTimeout(resolve, scenario.slowClose));
   if (name === "pi_session_prompt") {
-    if (scenario.promptError) return { ok: false, error: { code: "prompt_rejected", message: "Refused" } };
+    if (scenario.promptError) return { ok: false, error: { code: scenario.promptError === true ? "prompt_rejected" : scenario.promptError, message: "Refused" } };
     if (scenario.slowPrompt) await new Promise(resolve => setTimeout(resolve, scenario.slowPrompt));
     if (scenario.exitMidTurn) setTimeout(() => process.exit(0), 20);
     return { ok: true, session: { ...session, state: "running" }, turn: running() };

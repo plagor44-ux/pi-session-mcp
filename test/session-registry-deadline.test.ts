@@ -84,6 +84,7 @@ describe("registry turn deadline", () => {
   });
   it.each([false, true])("close or shutdown before expiry clears timers: shutdown=%s", async shutdown => {
     const s = await running(); if (shutdown) await s.registry.shutdown(); else await s.registry.close(s.session.id);
+    expect(vi.getTimerCount()).toBe(0);
     await advance(120_000); expect(s.handle.aborted).toBe(1); expect(s.notices).toHaveLength(1); expect(vi.getTimerCount()).toBe(0);
   });
   it("shutdown racing expiry settles once", async () => {

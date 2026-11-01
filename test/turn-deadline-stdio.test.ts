@@ -1,17 +1,18 @@
-import { execFileSync } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 import { ChildStdioTransport } from "../src/child-stdio-transport.js";
 import { errorSchema, promptSuccessSchema, successSchema, turnSuccessSchema } from "../src/tool-schemas.js";
+import { compileServerEntry } from "./compiled-entry.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
-beforeAll(() => { execFileSync("npm", ["run", "build"], { stdio: "pipe" }); }, 30_000);
+let built: string;
+beforeAll(async () => { built = dirname(await compileServerEntry()); }, 120_000);
 afterAll(removeTemporaryRoots);
 it.each([false, true])("real stdio exposes fake-adapter expiry, abort failure=%s", async abortFailure => {
   const dir = await temporaryRoot("deadline-stdio-"); const scenario = join(dir, "scenario.json"); await writeFile(scenario, JSON.stringify({ abortFailure }));
   const client = new Client({ name: "test", version: "1" }, { capabilities: {} });
-  await client.connect(new ChildStdioTransport(process.execPath, {}, [resolve("test/fixtures/turn-deadline-server.mjs"), scenario]));
+  await client.connect(new ChildStdioTransport(process.execPath, {}, [resolve("test/fixtures/turn-deadline-server.mjs"), scenario, built]));
   const tools = (await client.listTools()).tools;
   const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args }, { toolDefinition: tools.find(tool => tool.name === name)! })).structuredContent;
   try {

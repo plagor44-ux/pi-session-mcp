@@ -2,8 +2,12 @@
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
-import { createServer } from "../../dist/server.js";
-import { SessionRegistry } from "../../dist/session-registry.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+// argv[3]: directory of a private build; without it, the repository's dist/ (built by the caller).
+const built = process.argv[3] ?? fileURLToPath(new URL("../../dist/", import.meta.url));
+const { createServer } = await import(pathToFileURL(join(built, "server.js")).href);
+const { SessionRegistry } = await import(pathToFileURL(join(built, "session-registry.js")).href);
 const scenario = JSON.parse(await readFile(process.argv[2], "utf8"));
 const nativeTimeout = globalThis.setTimeout;
 const nativeNow = performance.now.bind(performance);

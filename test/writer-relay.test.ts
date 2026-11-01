@@ -151,7 +151,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const timers = vi.spyOn(globalThis, "setTimeout");
     try {
       const { turn } = await registry.prompt(session.id, "relay deadline fixture");
-      expect(timers.mock.calls.some(([, ms]) => ms === 60_000)).toBe(false);
+      expect(timers.mock.calls.some(([, ms]) => typeof ms === "number" && ms >= 59_000 && ms <= 60_000)).toBe(false);
       await vi.waitFor(() => expect(registry.getTurn(session.id, turn.turnId).state).toBe(abortFailure ? "completed" : "aborted"), { timeout: 10_000 });
       if (abortFailure) {
         await expect(registry.prompt(session.id, "inner refusal")).rejects.toMatchObject({ code: "turn_deadline_uncertain" });
@@ -162,6 +162,15 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       }
       expect(notices[0]).toMatchObject({ state: abortFailure ? "completed" : "aborted", via: "registry" });
     } finally { timers.mockRestore(); await registry.shutdown(); }
+  });
+  it.each(["session_running", "snapshot_modified", "writer_busy"])("inner prompt refusal %s keeps prompt_rejected and leaves the session reusable", async code => {
+    const s = await setup([{ promptError: code }]);
+    const registry = new SessionRegistry(s.adapter, new Map([["repo", "/unused"]]));
+    const session = await registry.start("repo", profile);
+    try {
+      await expect(registry.prompt(session.id, "first")).rejects.toMatchObject({ code: "prompt_rejected" });
+      await expect(registry.prompt(session.id, "second")).rejects.toMatchObject({ code: "prompt_rejected" });
+    } finally { await registry.shutdown(); }
   });
   it.each([null, 61])("maxTurnSeconds drift %s refuses a stale writer", async maxTurnSeconds => {
     const s = await setup([{ profile: { maxTurnSeconds } }], { executionProfile: { ...profile, maxTurnSeconds: 60 } });
