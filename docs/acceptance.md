@@ -2598,6 +2598,53 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.15.0 pre-release acceptance
+
+`v0.15.0` was accepted on 2026-11-01 from 07:53 to 07:58 UTC on its release
+candidate `a5f6a23`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.12.1`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`, cgroup v2 with `memory` and `pids` delegated to the user manager. Level 2
+passed in the working tree and for the packed tarball, each with delivery off
+and with delivery on. Level 1 passed except `npm audit`. Later commits change
+only this record and the roadmap.
+
+The minor release ships #211 and #217 (additive public fields, an execution
+mode and result codes, see the changelog) and the Sprint 18 fixes from PR
+#226 (`main` at `aed783e`). The candidate is `main` at `aed783e` plus the
+version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    153 files, 4362 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` 8.10.2 finding and the nested `minimatch` 10.2.6
+    (GHSA-g3hv-75wg-m249), both through `@earendil-works/pi-coding-agent`
+    1.4.0, the latest SDK release
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 973 files (tarball shasum
+    `f01e9b10e2c0cce2f210b28f789e7e689a6873f5`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.15.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
+  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped.
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.15.0`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. No transient shell
+  scope remained afterwards, and the disposable prefixes were removed.
+
+Not established for `0.15.0`: a Level 3 cycle on the release candidate, the
+snapshot setup acceptance and real-controller reviews
+([#220](https://github.com/plagor44-ux/pi-session-mcp/issues/220)), which run
+on the installed release, and the published-release Level 2 and upgrades,
+which follow after publishing.
+
 ### v0.14.3 post-release evidence
 
 Recorded on 2026-10-31 for the published release `0.14.3`.

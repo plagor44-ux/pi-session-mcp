@@ -116,8 +116,10 @@ mean they are implemented or that their gates passed.
   showed a worker cannot configure Git filter or include drivers
   ([#222](https://github.com/plagor44-ux/pi-session-mcp/issues/222)), and the
   controller skill's `NEEDS_CONTEXT` wording
-  ([#223](https://github.com/plagor44-ux/pi-session-mcp/issues/223)). A minor
-  release 0.15.0 with #211 and #217 follows, then the snapshot acceptance
+  ([#223](https://github.com/plagor44-ux/pi-session-mcp/issues/223)). The
+  minor release 0.15.0 with #211 and #217 follows in its own release pull
+  request (pre-release record in [Acceptance](acceptance.md#v0150-pre-release-acceptance)),
+  then the snapshot acceptance
   [#220](https://github.com/plagor44-ux/pi-session-mcp/issues/220). Open:
   #120, #144, #212, #213, #215, #220, #221.
 
