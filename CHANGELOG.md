@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- The writer boundary ignores a worker-written Git graft file
+  ([#228](https://github.com/plagor44-ux/pi-session-mcp/issues/228)). A line in
+  `.git/info/grafts` could make a detached commit that no branch reaches look
+  reachable, so collect did not export it as `<base>-detached` and a reset or
+  finish discarded it. Every Git command of the throwaway-container scripts
+  (inspect, collect, reset, clone and finish) and of the recovery export now runs
+  with `GIT_GRAFT_FILE=/dev/null`, next to the existing replace-ref
+  neutralization from #193.
+
 ## 0.15.0 — 2026-11-01
 
 Minor release under ADR 0003. It adds public result fields, an execution

@@ -13,6 +13,8 @@ type Result = { code: RecoverCode; status: "ok" | "planned" | "unchanged" | "fai
 // All Git operations on the clone run here, with the original index copied and objects written to scratch.
 const script = `set -eu
 export GIT_CONFIG_NOSYSTEM=1
+# The Node step below runs git without BOUNDARY_GIT; it inherits this (#228).
+export GIT_GRAFT_FILE=/dev/null
 export GIT_AUTHOR_NAME=pi-writer GIT_AUTHOR_EMAIL=pi-writer@example.invalid
 export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
 mkdir -p /tmp/objects
