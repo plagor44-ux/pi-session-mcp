@@ -311,6 +311,28 @@ async function missingObjects(ctx: WriterContext, objects: readonly string[]): P
   return missing;
 }
 
+// Git for the temporary worktree index (`GIT_INDEX_FILE=/tmp/index`, never the clone's own index). A sparse-checkout setting in the clone
+// config makes `add -A` skip, and exit non-zero for, paths outside the cone, so both settings are overridden on these calls only (#231).
+const INDEX_GIT = `${BOUNDARY_GIT} -c core.sparseCheckout=false -c index.sparse=false`;
+
+/**
+ * Shell lines that record the whole worktree in the temporary index (`/tmp/index`) with `add -A`, and that run after the staged tree is
+ * written. The worker controls the `assume-unchanged` and `skip-worktree` flags of its own index, and `add -A` skips flagged entries, so
+ * edits to tracked files could stay out of the tree (#231). On the copy only, `assume-unchanged` is cleared everywhere and `skip-worktree`
+ * is cleared on every entry whose path exists in the worktree. An entry whose file is absent (a sparse checkout) keeps its index blob:
+ * its flag is set again, so it is neither a deletion nor lost work. Paths travel NUL-separated through git alone (POSIX sh, no other tool).
+ */
+function worktreeIndexScript(): string {
+  return `${INDEX_GIT} ls-files -z > /tmp/all-paths
+${INDEX_GIT} update-index -z --no-assume-unchanged --stdin < /tmp/all-paths
+${INDEX_GIT} ls-files -z --deleted > /tmp/deleted-paths
+${INDEX_GIT} update-index -z --no-skip-worktree --stdin < /tmp/all-paths
+${INDEX_GIT} update-index -z --force-remove --stdin < /tmp/deleted-paths
+${INDEX_GIT} ls-files -z --deleted > /tmp/absent-paths
+${INDEX_GIT} update-index -z --skip-worktree --stdin < /tmp/absent-paths
+${INDEX_GIT} add -A`;
+}
+
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   baseline: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
   stashes: readonly string[]; unknownRefs: number; indexTree: string; tree: string; headTree: string;
@@ -320,7 +342,7 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
-  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${BOUNDARY_GIT} add -A\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)'\nif stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then\n  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)\n  printf 'stash %s\\n' "$stash" $log\nfi\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
+  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${worktreeIndexScript()}\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)'\nif stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then\n  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)\n  printf 'stash %s\\n' "$stash" $log\nfi\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
   const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
@@ -424,7 +446,7 @@ cp .git/index /tmp/index
 cp .git/index /tmp/staged-index
 export GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/scratch/objects
 staged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)
-${BOUNDARY_GIT} add -A
+${worktreeIndexScript()}
 tree=$(${BOUNDARY_GIT} write-tree)
 export GIT_AUTHOR_NAME=pi-writer GIT_AUTHOR_EMAIL=pi-writer@example.invalid
 export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
@@ -538,6 +560,12 @@ export async function resetWriter(ctx: WriterContext, name: string, opts: { disc
     await baseBundle(ctx, paths, base.ref, base.commit, state.tags);
     const script = `set -eu
 export GIT_CONFIG_NOSYSTEM=1
+# Index flags the worker set make checkout and reset skip or refuse flagged entries ("not uptodate"); the work is collected by now (#231).
+# Rebuild the index from HEAD first: unmerged stages would make update-index fail before the checkout.
+${BOUNDARY_GIT} read-tree --reset HEAD
+${BOUNDARY_GIT} ls-files -z > /tmp/all-paths
+${BOUNDARY_GIT} update-index -z --no-assume-unchanged --stdin < /tmp/all-paths
+${BOUNDARY_GIT} update-index -z --no-skip-worktree --stdin < /tmp/all-paths
 ${BOUNDARY_GIT} checkout -f --detach
 ${BOUNDARY_GIT} for-each-ref --format='%(refname)' refs/tags | while read -r ref; do ${BOUNDARY_GIT} update-ref -d "$ref"; done
 ${state.tags === "reachable" ? `${BOUNDARY_GIT} fetch --no-tags /bundles/base.bundle '+refs/tags/*:refs/tags/*'` : ""}

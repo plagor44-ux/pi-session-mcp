@@ -1,4 +1,4 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
@@ -481,4 +481,110 @@ it("refuses cleanup when refs/stash names a non-commit object (#202)", async () 
   expect(collected).toMatchObject({ status: "failed", code: "writer_collect_incomplete" });
   expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+}, 60_000);
+
+it("collects edits to tracked files hidden by assume-unchanged and skip-worktree index flags (#231)", async () => {
+  const f = await fixture();
+  await f.commit("second tracked file", "second.txt", "second\n");
+  const head = await f.work("rev-parse", "HEAD");
+  await writeFile(join(f.paths.clone, "base.txt"), "SYNTHETIC_ASSUME_UNCHANGED_3107\n");
+  await writeFile(join(f.paths.clone, "second.txt"), "SYNTHETIC_SKIP_WORKTREE_3107\n");
+  await f.work("update-index", "--assume-unchanged", "base.txt");
+  await f.work("update-index", "--skip-worktree", "second.txt");
+  expect(await f.work("status", "--porcelain"), "the flags hide both edits from git status").toBe("");
+  const inspected = await inspectWork(f.ctx, "repo-w1");
+  expect(inspected.baseline).toBe(false);
+  expect(inspected.dirty).toBe(true);
+  expect(inspected.tree).not.toBe(inspected.headTree);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0, findings: [] });
+  expect(collected.refs).toContain(WIP_REF);
+  expect(await git(f.checkout, "show", `${WIP_REF}:base.txt`)).toBe("SYNTHETIC_ASSUME_UNCHANGED_3107");
+  expect(await git(f.checkout, "show", `${WIP_REF}:second.txt`)).toBe("SYNTHETIC_SKIP_WORKTREE_3107");
+  expect(await git(f.checkout, "rev-parse", `${WIP_REF}^`)).toBe(head);
+  // The real index of the clone keeps its flags: only the temporary copy is neutralized.
+  expect(await f.work("ls-files", "-v")).toMatch(/^h base\.txt$/m);
+  expect(await f.work("ls-files", "-v")).toMatch(/^S second\.txt$/m);
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await git(f.checkout, "show", `${WIP_REF}:base.txt`)).toBe("SYNTHETIC_ASSUME_UNCHANGED_3107");
+  expect(await git(f.checkout, "show", `${WIP_REF}:second.txt`)).toBe("SYNTHETIC_SKIP_WORKTREE_3107");
+}, 60_000);
+
+it("keeps the index blob of a skip-worktree entry whose file is absent and does not collect a deletion (#231)", async () => {
+  const f = await fixture();
+  await f.work("update-index", "--skip-worktree", "base.txt");
+  await rm(join(f.paths.clone, "base.txt"));
+  expect(await f.work("status", "--porcelain")).toBe("");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, dirty: false });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [] });
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await f.work("show", "HEAD:base.txt")).toBe("base");
+}, 60_000);
+
+it("collects flagged edits under a sparse checkout and a sparse index configured in the clone (#231)", async () => {
+  const f = await fixture();
+  await mkdir(join(f.paths.clone, "kept"));
+  await mkdir(join(f.paths.clone, "outside"));
+  await writeFile(join(f.paths.clone, "kept/in.txt"), "in\n");
+  await writeFile(join(f.paths.clone, "outside/out.txt"), "out\n");
+  await f.work("add", "kept", "outside");
+  await f.work("commit", "-m", "directories");
+  // Configure the sparse checkout by hand: `git sparse-checkout` writes config.worktree, which clone verification rejects.
+  await f.work("config", "core.sparseCheckout", "true");
+  await f.work("config", "core.sparseCheckoutCone", "true");
+  await f.work("config", "index.sparse", "true");
+  await writeFile(join(f.paths.clone, ".git/info/sparse-checkout"), "/*\n!/*/\n/kept/\n");
+  await f.work("read-tree", "-mu", "HEAD");
+  expect(await stat(join(f.paths.clone, "outside")).catch(() => undefined), "the sparse checkout removed the directory").toBeUndefined();
+  expect(await f.work("config", "core.sparseCheckout")).toBe("true");
+  await writeFile(join(f.paths.clone, "kept/in.txt"), "SYNTHETIC_SPARSE_EDIT_3107\n");
+  await f.work("update-index", "--assume-unchanged", "kept/in.txt");
+  // New work outside the cone: plain `add -A` skips these paths and exits non-zero.
+  await mkdir(join(f.paths.clone, "outside"));
+  await writeFile(join(f.paths.clone, "outside/new.txt"), "SYNTHETIC_OUTSIDE_NEW_3107\n");
+  await writeFile(join(f.paths.clone, "outside/out.txt"), "SYNTHETIC_OUTSIDE_EDIT_3107\n");
+  expect((await spawn("git", ["-C", f.paths.clone, "add", "-n", "-A"])).exitCode, "plain add -A fails under the sparse config").not.toBe(0);
+  expect((await inspectWork(f.ctx, "repo-w1")).dirty).toBe(true);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0, findings: [] });
+  expect(await git(f.checkout, "show", `${WIP_REF}:kept/in.txt`)).toBe("SYNTHETIC_SPARSE_EDIT_3107");
+  expect(await git(f.checkout, "show", `${WIP_REF}:outside/out.txt`)).toBe("SYNTHETIC_OUTSIDE_EDIT_3107");
+  expect(await git(f.checkout, "show", `${WIP_REF}:outside/new.txt`)).toBe("SYNTHETIC_OUTSIDE_NEW_3107");
+  expect(await git(f.checkout, "show", `${WIP_REF}:base.txt`)).toBe("base");
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+}, 60_000);
+
+it("neutralizes index flags on tracked paths with spaces, newlines and a leading dash (#231)", async () => {
+  const f = await fixture();
+  const odd = ["-dash name.txt", "line\nbreak.txt"];
+  for (const path of odd) await writeFile(join(f.paths.clone, path), "tracked\n");
+  await f.work("add", "--", ...odd);
+  await f.work("commit", "-m", "odd names");
+  for (const path of odd) await writeFile(join(f.paths.clone, path), "SYNTHETIC_ODD_NAME_EDIT_3107\n");
+  await f.work("update-index", "--assume-unchanged", "--", odd[0]!);
+  await f.work("update-index", "--skip-worktree", "--", odd[1]!);
+  expect((await inspectWork(f.ctx, "repo-w1")).dirty).toBe(true);
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected" });
+  for (const path of odd) expect(await git(f.checkout, "show", `${WIP_REF}:${path}`)).toBe("SYNTHETIC_ODD_NAME_EDIT_3107");
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+}, 60_000);
+
+it("resets a conflicted writer with flagged entries only on explicit discard (#231)", async () => {
+  const f = await fixture();
+  await f.commit("second tracked file", "second.txt", "second\n");
+  await f.work("checkout", "-b", "other");
+  await f.commit("other side", "base.txt", "SYNTHETIC_CONFLICT_OTHER_3107\n");
+  await f.work("checkout", "main");
+  await f.commit("main side", "base.txt", "SYNTHETIC_CONFLICT_MAIN_3107\n");
+  const merge = await spawn("git", ["-C", f.paths.clone, "merge", "other"]);
+  expect(merge.exitCode, "merge must conflict").not.toBe(0);
+  expect((await f.work("ls-files", "-u")).split("\n").filter(Boolean)).toHaveLength(3);
+  await writeFile(join(f.paths.clone, "second.txt"), "SYNTHETIC_SKIP_WORKTREE_3107\n");
+  await f.work("update-index", "--skip-worktree", "second.txt");
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_inspect_failed" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await f.work("ls-files", "-v")).not.toMatch(/^[a-zS]/m);
+  expect(await f.work("ls-files", "-u")).toBe("");
+  expect(await f.work("status", "--porcelain")).toBe("");
 }, 60_000);

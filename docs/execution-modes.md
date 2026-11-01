@@ -222,6 +222,20 @@ including a change to the index alone, invalidates that authorization. A digest
 recorded by 0.14.1 or earlier never matches the versioned digest, so collect
 such a writer again before a destructive operation.
 
+Index flags the worker sets (`assume-unchanged`, `skip-worktree`) never hide
+edits from inspect and collect ([#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231),
+same class as #193 and #228). Both scripts work on a copy of the index: they
+clear `assume-unchanged` on every entry and `skip-worktree` on every entry whose
+path exists in the worktree, and they ignore a sparse-checkout setting of the
+clone. An entry whose file is absent (a sparse checkout) keeps its index blob, so
+it is neither a deletion nor lost work. Reset clears both flags on the clone's
+own index before it checks out the base, because Git refuses to replace a
+modified flagged file. It first rebuilds the index from HEAD, so an unmerged
+index does not block a discard. [ADR 0015](adr/0015-review-snapshots.md) refuses any
+index flag when it verifies a review snapshot. Writers neutralize instead: a
+refusal would make every sparse or flagged writer impossible to reset or finish
+without `--discard`, and the work is exported by collect either way.
+
 Every stash entry is exported as `<base>-stash-<n>`, numbered like
 `stash@{n}` (newest first; for example `main-stash-0`), with its index and
 untracked parts as the commit's parents; `git stash apply` accepts the imported

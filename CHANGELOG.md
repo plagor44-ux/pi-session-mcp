@@ -12,6 +12,16 @@
   (inspect, collect, reset, clone and finish) and of the recovery export now runs
   with `GIT_GRAFT_FILE=/dev/null`, next to the existing replace-ref
   neutralization from #193.
+- Index flags no longer hide work from writer inspect and collect
+  ([#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231)). A worker
+  could set `assume-unchanged` or `skip-worktree` on a tracked file it had edited,
+  so `git add -A` on the temporary index copy skipped it, the writer looked
+  clean, and a reset or finish discarded the edit without exporting it as
+  `<branch>-wip`. Inspect and collect now clear `assume-unchanged` on the copy
+  and `skip-worktree` on every entry whose file exists (an absent
+  skip-worktree file keeps its index blob), and they ignore a sparse-checkout
+  setting of the clone, which made `add -A` skip paths and fail. Reset clears
+  both flags on the clone's own index so that the checkout of the base succeeds.
 - Writer setup no longer fails closed on a slow host
   ([#229](https://github.com/plagor44-ux/pi-session-mcp/issues/229)): the rootless
   Podman probe is repeated once after a timeout, the Doctor gate of a writer
