@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.15.2 — 2026-11-01
+
+Patch release under ADR 0003. It keeps the public MCP contract and ships one
+setup fix: client-target `--verify` accepts a configuration with a `snapshot`
+workspace again (#235), which failed with `mcp_failed` on 0.15.0 and 0.15.1.
+Existing configurations stay valid and need no migration. **Upgrade note:** as
+for every release, repeat the provisioning command of each container repository
+with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). `npm audit` still reports
+`undici` 8.10.2 and the nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249), both
+through Pi SDK 1.4.0
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 ### Fixed
 
 - `pi-session-mcp-setup --verify --target <client-target>` accepts a
