@@ -131,8 +131,12 @@ mean they are implemented or that their gates passed.
   before a prompt fails it with `snapshot_modified` and taints the session,
   and a turn with an edit made at its start ended `failed` while a clean
   control run of the same prompt completed
-  ([record](evaluation/review-snapshots-2026-11-01/README.md)). Open: #120,
-  #144, #212, #213, #215, #221, #228, #229.
+  ([record](evaluation/review-snapshots-2026-11-01/README.md)). Fixed since:
+  [#228](https://github.com/plagor44-ux/pi-session-mcp/issues/228) and
+  [#229](https://github.com/plagor44-ux/pi-session-mcp/issues/229)
+  ([#232](https://github.com/plagor44-ux/pi-session-mcp/pull/232)), and
+  [#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231). Open: #120,
+  #144, #212, #213, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
