@@ -163,6 +163,32 @@ Patch transitive advisories in the lockfile only:
 4. Name every patched package, its versions, its advisory and whether it is in
    the production install path in the changelog.
 
+### Overrides and what they reach
+
+`package.json` carries one npm `overrides` entry: `undici` at `8.12.3`
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Pi SDK
+1.4.0 pins `undici` exactly at `8.10.2`, which has open advisories fixed in
+`8.12.2`, so neither `npm audit fix` nor step 2 above can resolve it. The SDK
+then runs on an `undici` patch release it was not released with; the SDK
+contract tests and the Level 1 checks must pass on it.
+
+npm applies `overrides` only from the root project. The entry therefore
+reaches this repository's lockfile, CI, `npm audit` in the repository and an
+installation from a [release checkout](installation.md#release-checkout)
+(`npm ci`). It does **not** reach `npm install -g pi-session-mcp`: npm
+resolves the package's dependencies there without its overrides, and the SDK
+gets `undici` `8.10.2` again (checked with npm 12.2.1 by packing the package
+and installing it globally into a temporary prefix). npm 12.2.1 also does not
+pack an `npm-shrinkwrap.json`, so a shrinkwrap is no way around it.
+
+Consequences:
+
+- A clean `npm audit` in the repository does not prove a clean npm
+  installation. Release notes keep naming `undici` `8.10.2` in the npm install
+  path until the SDK lifts its pin.
+- Remove the override in the same change that moves the SDK to a release whose
+  own `undici` is fixed; keep it no longer than needed.
+
 ## Prepare a release
 
 A release travels in the pull request of the change it ships. That pull
