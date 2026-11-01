@@ -2658,6 +2658,12 @@ every writer.
   (`mcp_verified`, both `skill_verified`), and `--writer <name> --verify`
   reported `mcp_verified` for all 18 writers. Five idle client server
   processes were still running during the upgrade; no writer container ran.
+- Server: a separate session upgraded it the same day, and
+  `npm ls -g pi-session-mcp` there reports `0.15.0`. That session's Doctor,
+  verify and writer results are not part of this record.
+
+The review snapshot acceptance on the installed release (#220) is recorded in
+[Review snapshot acceptance](evaluation/review-snapshots-2026-11-01/README.md).
 
 ### v0.15.0 pre-release acceptance
 

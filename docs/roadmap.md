@@ -122,6 +122,17 @@ mean they are implemented or that their gates passed.
   then the snapshot acceptance
   [#220](https://github.com/plagor44-ux/pi-session-mcp/issues/220). Open:
   #120, #144, #212, #213, #215, #220, #221.
+- 2026-11-01: 0.15.0 released and installed
+  ([post-release record](acceptance.md#v0150-post-release-evidence)). The
+  review snapshot acceptance
+  ([#220](https://github.com/plagor44-ux/pi-session-mcp/issues/220)) passed
+  on the installed release on Linux: Level 2 setup, one review each from
+  Claude Code and Codex on the same frozen head, and negative checks: an edit
+  before a prompt fails it with `snapshot_modified` and taints the session,
+  and a turn with an edit made at its start ended `failed` while a clean
+  control run of the same prompt completed
+  ([record](evaluation/review-snapshots-2026-11-01/README.md)). Open: #120,
+  #144, #212, #213, #215, #221, #228, #229.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
