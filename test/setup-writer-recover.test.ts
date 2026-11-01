@@ -36,7 +36,8 @@ it("dry run resolves only the alias, without state, lock, lease, fence or Doctor
   expect(f.order).toEqual([]);
   expect((await runWriterOperation("unknown-w1", "recover", { apply: false, discard: false }, f.deps)).findings[0]?.code).toBe("alias_unknown");
 });
-it("fences a leftover container before Doctor and recovery, and holds both locks", async () => {
+// Writer leases and the fence are Linux-only, as for the other writer operations in setup-writers.test.ts.
+it.skipIf(process.platform !== "linux")("fences a leftover container before Doctor and recovery, and holds both locks", async () => {
   const f = await setup();
   let leftover = true;
   const runner = { run: vi.fn(async (...args: Parameters<typeof f.runner.run>) => {
