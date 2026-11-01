@@ -142,6 +142,12 @@ mean they are implemented or that their gates passed.
   own release pull request (pre-release record in
   [Acceptance](acceptance.md#v0151-pre-release-acceptance)), then the upgrade
   of both installations.
+- 2026-11-01: 0.15.1 released; the workstation is upgraded
+  ([post-release record](acceptance.md#v0151-post-release-evidence)). The
+  upgrade found that client-target `--verify` fails with `mcp_failed` when a
+  `snapshot` workspace is configured
+  ([#235](https://github.com/plagor44-ux/pi-session-mcp/issues/235)). Fixed
+  since: #235. Open: #120, #144, #212, #213, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
