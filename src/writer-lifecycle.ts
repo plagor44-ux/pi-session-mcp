@@ -561,6 +561,8 @@ export async function resetWriter(ctx: WriterContext, name: string, opts: { disc
     const script = `set -eu
 export GIT_CONFIG_NOSYSTEM=1
 # Index flags the worker set make checkout and reset skip or refuse flagged entries ("not uptodate"); the work is collected by now (#231).
+# Rebuild the index from HEAD first: unmerged stages would make update-index fail before the checkout.
+${BOUNDARY_GIT} read-tree --reset HEAD
 ${BOUNDARY_GIT} ls-files -z > /tmp/all-paths
 ${BOUNDARY_GIT} update-index -z --no-assume-unchanged --stdin < /tmp/all-paths
 ${BOUNDARY_GIT} update-index -z --no-skip-worktree --stdin < /tmp/all-paths

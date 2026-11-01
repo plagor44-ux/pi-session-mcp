@@ -230,7 +230,8 @@ path exists in the worktree, and they ignore a sparse-checkout setting of the
 clone. An entry whose file is absent (a sparse checkout) keeps its index blob, so
 it is neither a deletion nor lost work. Reset clears both flags on the clone's
 own index before it checks out the base, because Git refuses to replace a
-modified flagged file. [ADR 0015](adr/0015-review-snapshots.md) refuses any
+modified flagged file. It first rebuilds the index from HEAD, so an unmerged
+index does not block a discard. [ADR 0015](adr/0015-review-snapshots.md) refuses any
 index flag when it verifies a review snapshot. Writers neutralize instead: a
 refusal would make every sparse or flagged writer impossible to reset or finish
 without `--discard`, and the work is exported by collect either way.

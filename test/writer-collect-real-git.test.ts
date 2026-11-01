@@ -569,3 +569,22 @@ it("neutralizes index flags on tracked paths with spaces, newlines and a leading
   for (const path of odd) expect(await git(f.checkout, "show", `${WIP_REF}:${path}`)).toBe("SYNTHETIC_ODD_NAME_EDIT_3107");
   expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
 }, 60_000);
+
+it("resets a conflicted writer with flagged entries only on explicit discard (#231)", async () => {
+  const f = await fixture();
+  await f.commit("second tracked file", "second.txt", "second\n");
+  await f.work("checkout", "-b", "other");
+  await f.commit("other side", "base.txt", "SYNTHETIC_CONFLICT_OTHER_3107\n");
+  await f.work("checkout", "main");
+  await f.commit("main side", "base.txt", "SYNTHETIC_CONFLICT_MAIN_3107\n");
+  const merge = await spawn("git", ["-C", f.paths.clone, "merge", "other"]);
+  expect(merge.exitCode, "merge must conflict").not.toBe(0);
+  expect((await f.work("ls-files", "-u")).split("\n").filter(Boolean)).toHaveLength(3);
+  await writeFile(join(f.paths.clone, "second.txt"), "SYNTHETIC_SKIP_WORKTREE_3107\n");
+  await f.work("update-index", "--skip-worktree", "second.txt");
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_inspect_failed" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await f.work("ls-files", "-v")).not.toMatch(/^[a-zS]/m);
+  expect(await f.work("ls-files", "-u")).toBe("");
+  expect(await f.work("status", "--porcelain")).toBe("");
+}, 60_000);
