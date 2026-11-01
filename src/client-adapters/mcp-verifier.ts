@@ -1,4 +1,4 @@
-import { isShortBranchName, MAX_WRITERS } from "../execution-modes.js";
+import { isShortBranchName, MAX_WRITERS, WORKSPACE_MODES } from "../execution-modes.js";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "../extension-spec.js";
 import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS } from "../session-tools.js";
 import { MAX_PROFILE_SKILLS } from "../skill-catalog.js";
@@ -108,7 +108,7 @@ function validCapabilities(value: unknown): boolean {
     const record = workspace as Record<string, unknown>;
     return exactKeys(record, record.mode === "container" ? ["alias", "mode", "writers", "defaultBase"] : ["alias", "mode"])
       && typeof record.alias === "string" && ALIAS_PATTERN.test(record.alias)
-      && typeof record.mode === "string" && ["unset", "host", "container", "read-only"].includes(record.mode)
+      && typeof record.mode === "string" && (WORKSPACE_MODES as readonly string[]).includes(record.mode)
       && (record.mode !== "container" || (
         typeof record.writers === "number" && Number.isInteger(record.writers) && record.writers >= 1 && record.writers <= MAX_WRITERS
         && (record.defaultBase === null || (typeof record.defaultBase === "string" && isShortBranchName(record.defaultBase)))

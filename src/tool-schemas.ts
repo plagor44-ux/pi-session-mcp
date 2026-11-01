@@ -2,6 +2,7 @@ import { z } from "zod";
 import packageMetadata from "../package.json" with { type: "json" };
 import { CONFIGURATION_FINGERPRINT_PATTERN, RELOAD_POLICY } from "./config.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
+import { WORKSPACE_MODES } from "./execution-modes.js";
 
 export const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export const viewSchema = z.object({
@@ -36,7 +37,7 @@ export const capabilitiesSchema = z.object({
     reloadPolicy: z.literal(RELOAD_POLICY),
   }).strict(),
   events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
-  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(["unset", "host", "container", "read-only", "snapshot"]), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
+  workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(WORKSPACE_MODES), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,
     default: z.boolean(),

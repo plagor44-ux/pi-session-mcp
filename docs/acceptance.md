@@ -2598,6 +2598,73 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.15.1 post-release evidence
+
+Recorded on 2026-11-01 for the published release `0.15.1`.
+
+Tag binding: the annotated tag `v0.15.1` (tag object
+`01d8ebe7fbbe033928d2a40de5516a515d7ec2d2`) peels to the merge commit
+`00588c8a44888f4fb88b4b1043539646042234b6` of #234. CI on the merge commit
+(run 41326021065) and on the tag (run 41326540361) passed. The package was
+published before the tag existed, so the npm package records `gitHead`
+`b89cc0c`, the head of the release branch. That commit has the same source
+tree as the merge commit (`204f364e990593515c285ea8daa1c46312980f52`).
+
+All runs below took place on 2026-11-01 from 16:26 to 16:30 UTC, in a fresh
+clone of the merge commit.
+
+- Level 1 after `npm ci`, with Node.js `26.12.1` and npm `12.2.1`:
+  typecheck, `build:cli`, the test run (154 files, 4384 passed, 14 skipped,
+  with `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` with the findings known from the
+  pre-release acceptance, all through `@earendil-works/pi-coding-agent` 1.4.0:
+  `undici` 8.10.2
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)) and the
+  nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249). Level 1 is therefore not
+  unrestricted. Doctor reported `packageVersion` `0.15.1` and exited with `2`
+  because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.15.1` on npm: 974 files, shasum
+  `7ef0765093867a2298925a5f4c75fe86ace72ea9`; `npm pack` of the clone gives
+  the same shasum and file count. It differs from the candidate's
+  `e7dd40f65bfa095c2f6ad3a740c1b4feec15c5ae` because a later commit changes the
+  packaged `docs/acceptance.md` and `docs/roadmap.md`.
+- Published release, Level 2 on the clone: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`.
+- Published npm package, installed into a fresh prefix: the install smoke
+  reported `smoke_passed` with version `0.15.1`, and Level 2 passed 160 of 160
+  with delivery off and 228 of 228 with `--events spool`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. Clients: Codex CLI
+  `0.166.0` and Claude Code `2.1.316`.
+
+Workstation upgrade on 2026-11-01 from 16:33 to 16:38 UTC, following
+[Installation](installation.md#container-writers): both client targets
+removed with `0.15.0`, `npm install -g pi-session-mcp@0.15.1`, each container
+repository's provisioning command repeated with `--apply`, Doctor, then
+client-target `--apply` and `--verify` and `--writer <name> --verify` for
+every writer.
+
+- Five container repositories with 18 writers reported `mode_unchanged`,
+  `writer_accepted` for every writer and `controllers_restart_required`.
+- Doctor with the real configuration reported no error; warnings were
+  `snapshot_unavailable` for the snapshot workspace without a prepared slot
+  and the known `workspace_gitfile` and `workspace_mode_unset`.
+- Client-target `--apply` reported `applied`, `skill_installed` and
+  `hook_added`. `--verify` failed for `claude-code:user:pi-session-mcp` and
+  `codex:user:pi-session-mcp` with `mcp_failed`, while the skills and the hook
+  verified: the verifier rejected the `snapshot` workspace in the
+  capabilities ([#235](https://github.com/plagor44-ux/pi-session-mcp/issues/235)).
+  The direct handshake reported `initialize` and `tools/list` and failed only
+  the capabilities check.
+- `--writer <name> --verify` reported `mcp_verified` for all 18 writers.
+- Seven idle client server processes were running during the upgrade; no
+  writer container ran and no Pi session was open.
+
+Not established for `0.15.1`: a Level 3 cycle, a passing client-target
+`--verify` with the snapshot workspace (#235), and the upgrade of the second
+installation.
+
 ### v0.15.1 pre-release acceptance
 
 `v0.15.1` was accepted on 2026-11-01 from 15:58 to 16:03 UTC on its release

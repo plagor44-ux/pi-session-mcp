@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed
+
+- `pi-session-mcp-setup --verify --target <client-target>` accepts a
+  configuration with a workspace in mode `snapshot`
+  ([#235](https://github.com/plagor44-ux/pi-session-mcp/issues/235)). The
+  direct verifier rejected the `pi_capabilities_get` result for such a
+  workspace and reported `mcp_failed`, although the server lists it as exactly
+  `{"alias":…,"mode":"snapshot"}`. The verifier and the capabilities schema now
+  share one list of workspace modes. This affected 0.15.0 and 0.15.1.
+
 ## 0.15.1 — 2026-11-01
 
 Patch release under ADR 0003. It keeps the public MCP contract and ships three
