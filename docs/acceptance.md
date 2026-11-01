@@ -2598,6 +2598,52 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.15.2 pre-release acceptance
+
+`v0.15.2` was accepted on 2026-11-01 from 17:24 to 17:29 UTC on its release
+candidate `e5a7aeb`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.12.1`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`, cgroup v2 with
+`memory` and `pids` delegated to the user manager. Level 2 passed in the
+working tree and for the packed tarball, each with delivery off and with
+delivery on. Level 1 passed except `npm audit`. Later commits change only this
+record and the roadmap.
+
+The patch release keeps the public contract and ships #235 (PR #236). The
+candidate is `main` at `65dff40` plus the version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`, except `npm audit`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    154 files, 4389 passed and 14 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+    known `undici` 8.10.2 finding and the nested `minimatch` 10.2.6
+    (GHSA-g3hv-75wg-m249), both through `@earendil-works/pi-coding-agent`
+    1.4.0, still the latest SDK release
+    ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+  - `npm pack` listed 974 files (tarball shasum
+    `99a90bebee6996e398eb1e5a7c8358a3eaef9c67`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.15.2`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- The direct verifier handshake of the candidate build against the
+  workstation's real configuration, which contains one `snapshot` workspace,
+  reported `verified`; the installed `0.15.1` reports `failed` there (#235).
+- Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
+  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped.
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.15.2`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. The disposable
+  prefixes and the candidate clone were removed.
+
+Not established for `0.15.2`: a Level 3 cycle on the release candidate, and the
+published-release Level 2 and upgrades, which follow after publishing.
+
 ### v0.15.1 post-release evidence
 
 Recorded on 2026-11-01 for the published release `0.15.1`.
