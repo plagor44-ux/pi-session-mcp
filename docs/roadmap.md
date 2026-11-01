@@ -135,8 +135,13 @@ mean they are implemented or that their gates passed.
   [#228](https://github.com/plagor44-ux/pi-session-mcp/issues/228) and
   [#229](https://github.com/plagor44-ux/pi-session-mcp/issues/229)
   ([#232](https://github.com/plagor44-ux/pi-session-mcp/pull/232)), and
-  [#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231). Open: #120,
+  [#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231)
+  ([#233](https://github.com/plagor44-ux/pi-session-mcp/pull/233)). Open: #120,
   #144, #212, #213, #215, #221.
+- 2026-11-01: the patch release 0.15.1 with #228, #229 and #231 follows in its
+  own release pull request (pre-release record in
+  [Acceptance](acceptance.md#v0151-pre-release-acceptance)), then the upgrade
+  of both installations.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
