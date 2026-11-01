@@ -40,7 +40,7 @@ records name the package version and the build they ran on, see
 ```json
 {
   "ok": true,
-  "server": { "name": "pi-session-mcp", "version": "0.14.3" },
+  "server": { "name": "pi-session-mcp", "version": "0.15.0" },
   "configuration": {
     "fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     "reloadPolicy": "restart-required"
