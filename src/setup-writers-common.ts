@@ -5,7 +5,7 @@ import { loadConfig } from "./config.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { runDoctor } from "./doctor.js";
 import { MAX_WRITERS, type WorkspaceModeEntry } from "./execution-modes.js";
-import { acquireOverrideLock, OverrideLockError } from "./override-lock.js";
+import { acquireOverrideLock, MAX_OVERRIDE_LOCK_TIMEOUT_MS, OverrideLockError } from "./override-lock.js";
 import { createCommandMcpStdioLauncher, createProcessRunner } from "./setup-process.js";
 import { DurableOwnershipStore, type OwnershipAccess, type OwnershipStore } from "./setup-ownership.js";
 import { localHookNeededByOthers, ownsWakeHook, runWakeHook, type WakeHookOutcome } from "./setup-hooks.js";
@@ -68,11 +68,16 @@ export async function context(alias: string, deps: WriterSetupDependencies): Pro
   const { home, runner } = services(deps);
   return { home, runner, checkout, alias, releaseRoot: deps.releaseRoot, nodePath: process.execPath };
 }
+/**
+ * One global lock serializes every writer setup operation: they share the execution-modes file, writer state, writer
+ * leases, ownership and hook state. It waits the longest bound the lock allows, because under load other repositories'
+ * operations run long (#229). Skill customization and the modes step keep the default bound.
+ */
 export async function locked<T>(deps: WriterSetupDependencies, action: () => Promise<T>): Promise<T> {
   const directory = writersRoot(deps.home ?? homedir());
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(directory, 0o700);
-  const lock = await (deps.lock ?? acquireOverrideLock)(directory, { ...(deps.signal ? { signal: deps.signal } : {}) });
+  const lock = await (deps.lock ?? acquireOverrideLock)(directory, { timeoutMs: MAX_OVERRIDE_LOCK_TIMEOUT_MS, ...(deps.signal ? { signal: deps.signal } : {}) });
   try { return await action(); } finally { await lock.release(); }
 }
 export async function fenced<T>(ctx: lifecycle.WriterContext, name: string, deps: WriterSetupDependencies, action: (ctx: lifecycle.WriterContext) => Promise<T>): Promise<T> {
@@ -116,9 +121,13 @@ export async function doctorGate(ctx: lifecycle.WriterContext, deps: WriterSetup
   // A refused profile of this repository is its own finding: collect, finish and the profile change that fixes it must stay possible (#141).
   // Another repository's writer that is not ready is untouched by this step and expected after an upgrade; counting it would deadlock
   // the repository steps of two container repositories (#148).
+  // The container runtime probe is host-wide, so `container_runtime_unavailable` of another repository says nothing about it
+  // that this step does not see itself: the step uses Podman for its own repository and fails closed with its own code when
+  // Podman is really unusable. A slow host must not block it on the others' findings (#229).
   const own = (check: { id: string; subject: string }) => ownSubjects.has(check.subject)
     || (check.id === "container_profile_refused" && check.subject.startsWith(`${ctx.alias}:`))
-    || (check.id === "writer_not_ready" && WRITER_NAME_PATTERN.test(check.subject));
+    || (check.id === "writer_not_ready" && WRITER_NAME_PATTERN.test(check.subject))
+    || check.id === "container_runtime_unavailable";
   const blocking = doctor.checks.filter((check) => check.severity === "error" && !own(check));
   // One finding per check and alias: several `config_invalid` locations (#173) all map to the alias `invalid`.
   const findings = blocking.map((check) => ({ status: "failed" as const, code: check.id, target: { client: "doctor", scope: "check", alias: gateAlias(check.id, check.subject) } }));

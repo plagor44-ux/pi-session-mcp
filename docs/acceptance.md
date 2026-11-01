@@ -3096,7 +3096,11 @@ Recorded on 2026-10-29 and 2026-10-30 for the unreleased branch
   `test/writer-lifecycle.podman.test.ts` 7 of 7, including the new clean
   detached-HEAD case, which fails against the source of `9d9cf8c`. In the image,
   `core.useReplaceRefs=false` makes a graft-hidden detached commit visible
-  again.
+  again. Correction (2026-11-01,
+  [#228](https://github.com/plagor44-ux/pi-session-mcp/issues/228)): this
+  holds for replace refs, not for the legacy graft file. With
+  `core.useReplaceRefs=false` a line in `.git/info/grafts` still hides the
+  commit; only `GIT_GRAFT_FILE=/dev/null` restores it.
 - Level 2 on `npm pack` of `896e29d`, installed into a fresh prefix below the
   home directory: 160 of 160 with delivery off and 228 of 228 with
   `--events spool`; real registrations and built files unchanged, no process

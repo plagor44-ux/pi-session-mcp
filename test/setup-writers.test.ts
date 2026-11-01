@@ -657,7 +657,7 @@ describe("writer setup reconciliation", () => {
     const output = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, { ...f.deps, lock });
     expect(output.findings[0]?.code).toBe("override_lock_busy");
     expect(f.calls).toEqual([]);
-    expect(lock).toHaveBeenCalledWith(join(f.home, ".local", "state", "pi-session-mcp", "writers"), {});
+    expect(lock).toHaveBeenCalledWith(join(f.home, ".local", "state", "pi-session-mcp", "writers"), { timeoutMs: 120_000 });
   });
   it.each(["repository", "writer"])("names and sanitizes every blocking Doctor check for a %s step", async (step) => {
     const f = await fixture();
@@ -748,6 +748,42 @@ describe("writer setup reconciliation", () => {
     const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
       : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
     expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
+  });
+
+  it.each(["repository", "writer"])("does not block a %s step on another repository's unavailable container runtime (#229)", async (step) => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
+      { id: "container_runtime_unavailable", severity: "error", subject: "x" },
+      { id: "container_runtime_unavailable", severity: "error", subject: "other" },
+      { id: "container_runtime_unavailable", severity: "error", subject: "another" },
+    ] });
+    const deps = { ...f.deps, doctor };
+    const output = step === "repository" ? await changeWriterMode(f.configPath, mode, deps)
+      : await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings.some((finding) => finding.code === "doctor_failed")).toBe(false);
+  });
+
+  it("still blocks on another repository's other errors next to its unavailable container runtime (#229)", async () => {
+    const f = await fixture();
+    const doctor: WriterSetupDependencies["doctor"] = async () => ({ schemaVersion: 1, ok: false, exitCode: 2, checks: [
+      { id: "container_runtime_unavailable", severity: "error", subject: "other" },
+      { id: "workspace_missing", severity: "error", subject: "other" },
+    ] });
+    const output = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, { ...f.deps, doctor });
+    expect(output.findings[0]?.code).toBe("doctor_failed");
+    expect(output.findings.filter((finding) => finding.target.client === "doctor")).toEqual([
+      { status: "failed", code: "workspace_missing", target: { client: "doctor", scope: "check", alias: "other" } },
+    ]);
+    expect(f.calls).toEqual([]);
+  });
+
+  it("takes the global setup lock with the longest wait the lock allows (#229)", async () => {
+    const f = await fixture();
+    const output = await runWriterOperation("x-w1", "finish", { apply: true, discard: false }, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(f.deps.lock).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(f.deps.lock!).mock.calls[0]?.[1]).toMatchObject({ timeoutMs: 120_000 });
   });
 
   it("still blocks on other error checks with writer subjects and on a malformed writer subject", async () => {

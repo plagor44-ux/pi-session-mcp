@@ -134,6 +134,22 @@ it("ignores clone replace refs that would make a detached commit look reachable"
   expect((await readWriterState(f.ctx.home, "repo-w1"))!.collected).toBeUndefined();
 }, 60_000);
 
+it("ignores a clone graft file that would make a detached commit look reachable (#228)", async () => {
+  const f = await fixture();
+  await f.work("checkout", "--detach", "main");
+  const detached = await f.commit("detached work", "detached.txt", "detached\n");
+  // The worker can write the legacy graft file: it claims the detached commit as the parent of main's tip.
+  await writeFile(join(f.paths.clone, ".git/info/grafts"), `${f.baseCommit} ${detached}\n`);
+  expect(await spawn("git", ["-c", "core.useReplaceRefs=false", "-C", f.paths.clone, "rev-list", "-n", "1", detached, "--not", "--branches"]).then((r) => r.stdout.trim()), "the graft hides the commit from the check").toBe("");
+  const collected = await collectWriter(f.ctx, "repo-w1");
+  expect(collected).toMatchObject({ status: "ok", code: "writer_collected", refused: 0, findings: [] });
+  expect(collected.refs).toContain(DETACHED_REF);
+  expect(await git(f.checkout, "rev-parse", "--verify", DETACHED_REF)).toBe(detached);
+  expect(await gitPresent(f.checkout, "cat-file", "-e", `${detached}^{commit}`)).toBe(true);
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await git(f.checkout, "rev-parse", "--verify", DETACHED_REF)).toBe(detached);
+}, 60_000);
+
 it("refuses a derived name that conflicts with an exported branch path and still exports that branch", async () => {
   const f = await fixture();
   await f.work("checkout", "--detach", "main");

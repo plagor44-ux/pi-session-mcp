@@ -34,7 +34,7 @@ function runner(...results: CommandResult[]) {
 it("passes safe.directory literally despite matching worktree files", async () => {
   const root = await temporaryRoot("pi-writer-glob-");
   await writeFile(join(root, "safe.directory=x"), "");
-  const script = BOUNDARY_GIT.replace(/^git\b/, "printf '%s\\n'");
+  const script = BOUNDARY_GIT.replace(/\bgit\b/, "printf '%s\\n'");
   const args = execFileSync("/bin/sh", ["-c", script], { cwd: root, encoding: "utf8" }).trimEnd().split("\n");
   expect(args).toContain("safe.directory=*");
   expect(args).not.toContain("safe.directory=x");
