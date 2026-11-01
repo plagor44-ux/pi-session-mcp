@@ -177,7 +177,7 @@ projection, the container lifetime, refresh and cleanup. The directory is 0700
 and the file 0600; it is opened without following links, checked for type,
 owner and mode, and never deleted. Do not remove lease files to clear busy state.
 
-Every mutating operation, including collect, reset, finish, recreate, remove,
+Every mutating operation, including collect, recover, reset, finish, recreate, remove,
 acceptance and provisioning reconciliation, takes the same fence. Setup waits
 up to 10 seconds, then returns `writer_busy`. Mutating host children inherit
 the locked descriptor; nested acceptance launchers validate and adopt it.
@@ -230,6 +230,32 @@ Collect with `--writer <name> --collect --apply`, then review
 `main-detached`), and every stash entry at `<base>-stash-<n>`. Tags, notes and
 other refs are not exported; one that names an object only the clone has makes
 collection incomplete. Imported refs are untrusted until reviewed.
+
+If collection is refused because of an unmerged index, use
+`pi-session-mcp-setup --writer <name> --recover` to plan (alias resolution only),
+then `--recover --apply` after closing the session. Recovery uses the setup lock,
+writer lease, fence and Doctor gate, then validates state and alias. It exports
+from the recorded image with a read-only clone and no network, and imports into
+`refs/recovery/writer-<name>/<slot>/…` in your own checkout. It changes neither
+the clone nor `state.json` nor a collected digest. A slot is complete only when
+its `manifest` ref exists; incomplete slots are retained and reported on the next
+recovery, never reused. Recovery refs belong to the operator to delete.
+
+Recovery preserves conflict markers, untracked non-ignored worktree files,
+conflicted index stages 1–3 (modes and symlinks included), HEAD/MERGE_HEAD and raw
+unmerged entries in the manifest, and HEAD history as parents. Stage trees are
+HEAD with conflicted paths set to that stage or removed, not full merge sides.
+Gitlinks, including untracked nested repositories, are refused.
+
+Recovery does **not** export staged-only stage-0 content different from the
+worktree; other local branches, tags, notes or any other refs; the stash; ignored
+files; reflogs or unreachable objects; or rebase/cherry-pick sequencer state.
+**`--discard` after a recovery destroys everything in this not-exported list.**
+Collect, finish and non-discard cleanup remain refused after recovery. Resolve
+in your own checkout from the recovery refs, decide whether anything outside the
+preserved set matters, and only then use `--reset --discard --apply` (or recreate).
+See [recovery results and limitations](execution-modes.md#recover-an-unmerged-writer)
+for slot reporting, the cap, failure codes and leftover-bundle warnings.
 
 After taking over the result and closing its coding session, run
 `pi-session-mcp-setup --writer <name> --finish --apply` before another task.

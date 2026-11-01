@@ -1,14 +1,13 @@
 # ADR 0016: Recovery export for a writer with an unmerged index
 
 **Status:** Accepted (2026-10-31, maintainer decision), after two
-independent reviews and two revisions. Issue
-[#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213).
+independent reviews and two revisions; implemented under issue
+[#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213), with the
+host-Git capability probe of the amendment below.
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
-- This ADR changes no production contract by itself. The accepted decision
-  is implemented under its issue; the contract changes only with that
-  implementation.
+- This ADR's accepted decision is implemented under #213.
 
 ## Context
 
@@ -154,6 +153,30 @@ it.
 
 The import is create-only, never follows a symbolic ref, and marks a
 complete slot by its manifest ref. Three constraints shape it:
+
+**Amendment (2026-11-01, implementation of #213).** The "symbolic refs"
+constraint below holds for Git 2.53.0 and 2.56.0, but not for Git 2.39.5: its
+`update-ref --no-deref --stdin` `create` replaces an existing symbolic ref,
+dangling or not. A version floor would be guesswork, so the import checks the
+behavior instead:
+
+- Before step 2 (any fetch or ref write), recovery runs a capability probe
+  with the same Git binary in a fresh temporary repository outside the
+  operator checkout: one commit, a dangling and a non-dangling symbolic ref,
+  and the exact transaction form of step 5 with `create` onto each. If either
+  transaction succeeds, a symbolic ref is no longer a symbolic ref, or a
+  target was written through, recovery ends with `writer_recover_failed` and
+  imports nothing. The probe needs no network and removes its directory on
+  every path.
+- The probe and every Git command of the import run in the same isolated
+  environment: no inherited `GIT_*` variables and no global or system
+  configuration. The fetch also pins `fetch.fsckObjects=true`, which takes
+  precedence over `transfer.fsckObjects`.
+- Step 5 additionally refuses a destination that is a symbolic ref before the
+  transaction (`writer_recover_conflict`); the transaction stays the
+  authoritative collision check.
+- A ref listing that the setup runner truncated counts as a failure, not as a
+  complete slot scan.
 
 - **Fetch is not create-only.** Git 2.56 fast-forwards an existing
   destination ref to a descendant, and recovery commits descend from `HEAD`.

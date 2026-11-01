@@ -12,6 +12,7 @@ export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhi
 export interface ConfiguredExecutionProfile {
   readonly alias: string;
   readonly default: boolean;
+  readonly maxTurnSeconds?: number;
   readonly permissionProfile: PermissionProfile;
   readonly provider: string;
   readonly model: string;
@@ -27,6 +28,7 @@ export interface ConfiguredExecutionProfile {
 
 /** The immutable, server-side selection passed to the Pi adapter. */
 export interface ResolvedExecutionProfile {
+  readonly maxTurnSeconds?: number;
   readonly alias: string;
   readonly permissionProfile: PermissionProfile;
   readonly provider: string;
@@ -42,6 +44,7 @@ export interface ResolvedExecutionProfile {
 export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile): ResolvedExecutionProfile {
   return Object.freeze({
     alias: profile.alias,
+    ...(profile.maxTurnSeconds === undefined ? {} : { maxTurnSeconds: profile.maxTurnSeconds }),
     permissionProfile: profile.permissionProfile,
     provider: profile.provider,
     model: profile.model,

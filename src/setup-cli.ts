@@ -49,7 +49,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       else { if (head || !isObjectId(value)) throw new Error("usage_invalid"); head = value; }
       continue;
     }
-    if (["--collect", "--reset", "--recreate", "--finish"].includes(argument!)) {
+    if (["--collect", "--recover", "--reset", "--recreate", "--finish"].includes(argument!)) {
       if (writerOperation) throw new Error("operation_repeated");
       writerOperation = argument!.slice(2) as WriterOperation; continue;
     }
@@ -195,4 +195,4 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
 export function formatSetupResult(setupResult: SetupResult): string {
   return JSON.stringify(setupResult);
 }
-export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code})`)].join("\n"); }
+export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code}${x.slot === undefined ? "" : `, slot ${x.slot}`})`)].join("\n"); }

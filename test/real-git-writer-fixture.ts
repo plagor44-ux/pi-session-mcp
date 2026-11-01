@@ -38,8 +38,8 @@ export async function gitPresent(dir: string, ...args: string[]): Promise<boolea
 
 /** Forwards `git` to real git and runs every throwaway `podman run` script with `sh -c` in the clone. */
 export function realRunner(paths: { clone: string; bundles: string }): CommandRunner {
-  return { async run(command, args, signal) {
-    if (command === "git") return spawn("git", args, { signal });
+  return { async run(command, args, signal, options) {
+    if (command === "git") return spawn("git", args, { signal, env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", ...options?.env } });
     if (command !== "podman" || args[0] !== "run") return { exitCode: 1, stdout: "", stderr: `unexpected command: ${command} ${args[0] ?? ""}` };
     // throwawayArgs shape: [...flags, imageId, "sh", "-c", script, "sh", ...positional]
     const cIndex = args.indexOf("-c");

@@ -7,7 +7,7 @@ export type TurnCompletion = "stop" | "output_limit" | "tool_use";
 export type PiTurnOutcome =
   | { status: "completed"; assistantText: string; truncated?: boolean; completion: TurnCompletion }
   | { status: "failed" }
-  | { status: "aborted" };
+  | { status: "aborted"; abortReason?: "deadline" };
 
 export interface PiAppliedSelection {
   readonly provider: string;
@@ -82,6 +82,8 @@ export interface PiSessionHandle {
   readonly placement?: { writer: string; base: { ref: string; commit: string } } | undefined;
   readonly deadlines?: { preflightMs?: number; abortMs?: number; cleanupMs?: number } | undefined;
   isLost?(): boolean;
+  /** Sticky inner-registry refusal: preserve deadline uncertainty across relay preflight. */
+  isDeadlineUncertain?(): boolean;
   readonly sdkSessionId: string;
   /** Only whitelisted, post-verified selection metadata may cross the adapter boundary. */
   readonly appliedSelection: PiAppliedSelection;

@@ -3,7 +3,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ChildStdioTransport } from "../src/child-stdio-transport.js";
-import { DeadlineSupervisor } from "../eval/turn-deadline/supervisor.js";
 import { SessionRegistry, type TurnTerminalNotice } from "../src/session-registry.js";
 import { RoutingPiSessionAdapter, WriterRelayAdapter } from "../src/writer-relay.js";
 import { writerPaths } from "../src/writer-state.js";
@@ -28,8 +27,9 @@ async function setup(scenarios: Record<string, unknown>[] = [{}], extra: { now?:
     await writeFile(join(paths.root, "scenario.json"), JSON.stringify({ log: join(paths.root, "calls"), ...scenarios[i], home, name }));
   }
   const closed: string[] = [];
+  const iForWrapper = (wrapper: string) => scenarios.findIndex((_, i) => wrapper.startsWith(writerPaths(home, `repo-w${i + 1}`).root + "/"));
   const options: ConstructorParameters<typeof WriterRelayAdapter>[0] = { home, workspaceModes: modes(scenarios.length), executionProfiles: new Map([["code", executionProfile]]), pollIntervalMs: 5, ...adapterExtra, spawn: { spawn(wrapper, env) {
-    const transport = new ChildStdioTransport(process.execPath, env, [resolve("test/fixtures/fake-writer-server.mjs"), join(wrapper, "..", "scenario.json")]);
+    const transport = new ChildStdioTransport(process.execPath, env, [resolve(scenarios[iForWrapper(wrapper)]?.realDeadline ? "test/fixtures/turn-deadline-server.mjs" : "test/fixtures/fake-writer-server.mjs"), join(wrapper, "..", "scenario.json")]);
     const close = transport.close.bind(transport);
     transport.close = async () => {
       closed.push(wrapper); await close();
@@ -142,32 +142,40 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     expect(results.filter(r => r.status === "fulfilled")).toHaveLength(1);
     expect(results.find(r => r.status === "rejected")).toMatchObject({ reason: { code: "writer_unavailable", reason: "none_admitted", counts: { busy: 1 } } });
   });
-  it("expiry on a relayed session aborts the inner turn once", async () => {
-    const s = await setup([{ polls: 1_000_000 }]);
+  it.each([false, true])("real inner registry expiry, abort failure=%s", async abortFailure => {
+    const limited = { ...profile, maxTurnSeconds: 60 };
+    const s = await setup([{ realDeadline: true, abortFailure }], { executionProfile: limited });
     const notices: TurnTerminalNotice[] = [];
-    const registry = new SessionRegistry(s.adapter, new Map([["repo", "/unused"]]), {
-      onTurnTerminal(event) { notices.push(event); supervisor.notice(event); },
-    });
-    let now = 0;
-    const supervisor = new DeadlineSupervisor(registry, { maxTurnSeconds: 60, now: () => now });
-    const session = await registry.start("repo", profile);
+    const registry = new SessionRegistry(s.adapter, new Map([["repo", "/unused"]]), { onTurnTerminal: event => notices.push(event) });
+    const session = await registry.start("repo", limited);
     const timers = vi.spyOn(globalThis, "setTimeout");
     try {
-      // Drive just the deadline callback; child I/O and relay polling stay real.
-      const { turn } = await supervisor.prompt(session.id, "relay deadline fixture");
-      const expiry = timers.mock.calls.find(([, milliseconds]) => milliseconds === 60_000);
-      expect(expiry).toBeDefined();
-      now = 60_000;
-      expiry![0]();
-      await vi.waitFor(() => { expect(supervisor.expiries()).toHaveLength(1); }, { timeout: 10_000 });
-      expect(registry.getTurn(session.id, turn.turnId).state).toBe("aborted");
-      expect(supervisor.expiries()[0]?.outcome).toBe("aborted");
-      expect(notices).toEqual([{ sessionId: session.id, turnId: turn.turnId, state: "aborted", via: "registry" }]);
-      expect((await calls(s.home, 1)).filter((name) => name === "pi_session_abort")).toHaveLength(1);
-    } finally {
-      timers.mockRestore();
-      await registry.shutdown();
-    }
+      const { turn } = await registry.prompt(session.id, "relay deadline fixture");
+      expect(timers.mock.calls.some(([, ms]) => typeof ms === "number" && ms >= 59_000 && ms <= 60_000)).toBe(false);
+      await vi.waitFor(() => expect(registry.getTurn(session.id, turn.turnId).state).toBe(abortFailure ? "completed" : "aborted"), { timeout: 10_000 });
+      if (abortFailure) {
+        await expect(registry.prompt(session.id, "inner refusal")).rejects.toMatchObject({ code: "turn_deadline_uncertain" });
+        await expect(registry.prompt(session.id, "outer refusal")).rejects.toMatchObject({ code: "turn_deadline_uncertain" });
+      } else {
+        expect(registry.getTurn(session.id, turn.turnId)).toMatchObject({ abortReason: "deadline" });
+        await expect(registry.prompt(session.id, "next")).resolves.toBeDefined();
+      }
+      expect(notices[0]).toMatchObject({ state: abortFailure ? "completed" : "aborted", via: "registry" });
+    } finally { timers.mockRestore(); await registry.shutdown(); }
+  });
+  it.each(["session_running", "snapshot_modified", "writer_busy"])("inner prompt refusal %s keeps prompt_rejected and leaves the session reusable", async code => {
+    const s = await setup([{ promptError: code }]);
+    const registry = new SessionRegistry(s.adapter, new Map([["repo", "/unused"]]));
+    const session = await registry.start("repo", profile);
+    try {
+      await expect(registry.prompt(session.id, "first")).rejects.toMatchObject({ code: "prompt_rejected" });
+      await expect(registry.prompt(session.id, "second")).rejects.toMatchObject({ code: "prompt_rejected" });
+    } finally { await registry.shutdown(); }
+  });
+  it.each([null, 61])("maxTurnSeconds drift %s refuses a stale writer", async maxTurnSeconds => {
+    const s = await setup([{ profile: { maxTurnSeconds } }], { executionProfile: { ...profile, maxTurnSeconds: 60 } });
+    await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { settingsChanged: 1 } });
+    expect(await calls(s.home, 1)).not.toContain("pi_session_start");
   });
   it("abort racing an inner completion settles completed", async () => {
     const s = await setup([{ completeDuringAbort: true, polls: 1000 }]); const handle = await s.start();

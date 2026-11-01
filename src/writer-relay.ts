@@ -74,7 +74,7 @@ const creationCodes = new Set<PiSessionCreationErrorCode>([
 ]);
 /** The public profile shape `pi_capabilities_get` publishes; `alias` and `default` are not admission fields. */
 type PublishedProfile = z.infer<typeof capabilitiesSchema>["executionProfiles"][number];
-const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell"] as const;
+const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell", "maxTurnSeconds"] as const;
 const setFields = ["skills", "extensions", "grantedExtensionTools"] as const;
 const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
   const a = new Set(left), b = new Set(right);
@@ -145,6 +145,7 @@ class RelayHandle implements PiSessionHandle {
   readonly deadlines = { preflightMs: RELAY_PREFLIGHT_DEADLINE_MS, abortMs: RELAY_ABORT_DEADLINE_MS, cleanupMs: RELAY_CLEANUP_DEADLINE_MS };
   private active: { turnId?: string; settle: (outcome: PiTurnOutcome) => void; activity?: (() => void) | undefined; updatedAt?: string } | undefined;
   private disposed = false;
+  private deadlineUncertain = false;
   private disposal?: Promise<void>;
   constructor(private readonly connection: Connection, session: z.infer<typeof successSchema>["session"], readonly placement: NonNullable<PiSessionHandle["placement"]>, private readonly pollIntervalMs: number) {
     this.sdkSessionId = session.id;
@@ -152,6 +153,7 @@ class RelayHandle implements PiSessionHandle {
     connection.onLost = () => this.settle({ status: "failed" });
   }
   isLost(): boolean { return this.connection.lost; }
+  isDeadlineUncertain(): boolean { return this.deadlineUncertain; }
   private settle(outcome: PiTurnOutcome): void { const active = this.active; this.active = undefined; active?.settle(outcome); }
   private lose(): void { this.connection.lost = true; this.settle({ status: "failed" }); }
   private observe(turn: InnerTurn): void {
@@ -160,7 +162,8 @@ class RelayHandle implements PiSessionHandle {
     if (active.updatedAt !== undefined && active.updatedAt !== turn.updatedAt) active.activity?.();
     active.updatedAt = turn.updatedAt;
     if (turn.state === "completed") this.settle({ status: "completed", assistantText: turn.assistantText, truncated: turn.truncated, completion: turn.completion });
-    else if (turn.state === "aborted" || turn.state === "failed") this.settle({ status: turn.state });
+    else if (turn.state === "aborted") this.settle({ status: "aborted", ...(turn.abortReason ? { abortReason: turn.abortReason } : {}) });
+    else if (turn.state === "failed") this.settle({ status: "failed" });
   }
   async prompt(text: string, preflight: (accepted: boolean) => void, onActivity?: () => void): Promise<PiTurnOutcome> {
     if (this.isLost() || this.disposed) throw new RegistryError("writer_session_lost");
@@ -178,6 +181,7 @@ class RelayHandle implements PiSessionHandle {
         void this.poll(active);
       } else preflight(false);
     } catch (error) {
+      if (error instanceof InnerError && error.code === "turn_deadline_uncertain") this.deadlineUncertain = true;
       preflight(false);
       if (!(error instanceof InnerError) && !this.isLost()) {
         // Acceptance is uncertain: ask the inner registry to settle before returning failure.

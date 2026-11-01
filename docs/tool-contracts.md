@@ -57,19 +57,23 @@ records name the package version and the build they ran on, see
     "extensions": [],
     "grantedExtensionTools": [],
     "shell": "none",
-    "skills": []
+    "skills": [],
+    "maxTurnSeconds": null
   }]
 }
 ```
 
 `events.delivery` is `spool` when the loaded configuration enables turn-event delivery (`"events": { "delivery": "spool" }`) and `off` otherwise. It reports configured intent, except that it is `off` when the server found no spool location at startup (no `PI_SESSION_MCP_EVENTS_DIR` and no absolute `XDG_RUNTIME_DIR`, as under Codex); it makes no claim that the spool directory is writable, and it carries no path.
 
-The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, the event delivery setting, configured aliases and workspace modes, and the ten documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, `read-only`, or `snapshot`; a missing modes entry is reported as `unset`. A `snapshot` entry carries no source alias, slot state or path. Container entries also carry `writers` (configured count, not free capacity) and `defaultBase` (short branch name, or `null` if not yet recorded), not writer names or other writers' branches. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `grantedExtensionTools`, directly after `extensions`, lists the configured extension tool grants in configured order, `[]` when absent. It is configuration intent only, not proof of registration, activation or declaration to the model. `shell`, directly after `grantedExtensionTools`, is `none` or `sandboxed` ([ADR 0013](adr/0013-hardened-read-only-profiles.md)). `sandboxed` means the profile is configured to get a `bash` tool that runs each command in a network-less bubblewrap sandbox; it is configuration intent only and no claim that the sandbox works on this host (a failing sandbox surfaces as `sandbox_unavailable` at session start, and Doctor checks it offline). `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
+The server sorts both arrays by alias with a deterministic code-point comparison. It copies only loaded configuration fingerprint/reload policy, the event delivery setting, configured aliases and workspace modes, and the eleven documented profile fields. Each workspace has a required `mode`: `unset`, `host`, `container`, `read-only`, or `snapshot`; a missing modes entry is reported as `unset`. A `snapshot` entry carries no source alias, slot state or path. Container entries also carry `writers` (configured count, not free capacity) and `defaultBase` (short branch name, or `null` if not yet recorded), not writer names or other writers' branches. `extensions` lists the configured extension specs (`npm:<name>@<version>`), empty when a profile loads none; it makes no claim that the package is installed. `grantedExtensionTools`, directly after `extensions`, lists the configured extension tool grants in configured order, `[]` when absent. It is configuration intent only, not proof of registration, activation or declaration to the model. `shell`, directly after `grantedExtensionTools`, is `none` or `sandboxed` ([ADR 0013](adr/0013-hardened-read-only-profiles.md)). `sandboxed` means the profile is configured to get a `bash` tool that runs each command in a network-less bubblewrap sandbox; it is configuration intent only and no claim that the sandbox works on this host (a failing sandbox surfaces as `sandbox_unavailable` at session start, and Doctor checks it offline). `skills` lists the skill-catalog aliases that the profile selects, in configured order, `[]` when it selects none. It contains no paths, file names, contents or SDK diagnostics, and it is configuration intent only: it makes no claim that a skill file exists, loads, or will be read by the model. See [Pi skills](skills.md). It never copies the configuration path or contents, workspace paths, authentication state, SDK data, session/turn data, prompts, transcripts, or tool arguments/results. The handler reads the in-memory loaded snapshot only and does not call the registry, Pi adapter, provider, filesystem, or network. The fingerprint identifies the exact loaded bytes, not current-file freshness; provider/model fields describe configured intent and make no availability claim.
 
-Setup verify accepts and validates `grantedExtensionTools` and `shell` in its bounded direct
+`maxTurnSeconds` is the optional operator turn-duration policy in seconds, or `null` for no limit.
+
+Setup verify accepts and validates `grantedExtensionTools`, `shell` and `maxTurnSeconds` in its bounded direct
 MCP capabilities check, without starting a session or using a provider.
 **Verifier limit:** at maximum field sizes (8 extension specs of 256 characters,
-32 grants of 64 characters, provider and model of 256 characters each), at most
+32 grants of 64 characters, provider and model of 256 characters each, and
+`maxTurnSeconds: 86400`), at most
 6 such profiles fit the verifier's 65,536-byte frame bound. Real configurations
 with short values fit far more.
 
@@ -113,6 +117,37 @@ tools: registered-but-inactive tools fail closed too. Lazy registration in
 `session_start` or later is unsupported. A grant is the operator's trust
 decision: third-party tools may write, and workspace modes `container` and
 `read-only` do not restrict them. See [ADR 0010](adr/0010-read-only-extension-tools.md).
+
+### Optional turn-duration policy
+
+A profile may set `maxTurnSeconds`, a strict integer from 60 through 86,400.
+Absent means no limit. Strings, fractions, zero, negative and out-of-range
+values fail startup with `invalid_execution_profile_config`; nothing is clamped.
+The policy is not a prompt argument. Doctor validates it offline.
+
+Only the server owning the Pi session arms the monotonic, unref'd deadline,
+at publication after accepted preflight. For container sessions this is the inner
+server, never the outer registry. Expiry skips a turn already terminal or awaiting
+snapshot verification; otherwise it starts or joins the normal coalesced abort.
+It bounds only the adapter abort (5 s on the owning server), not the snapshot
+lease check. Successful abort produces `state: "aborted"` with additive
+`abortReason: "deadline"`; manual abort leaves that field absent. The first
+abort initiator determines attribution. Completion that wins stays completed,
+without an abort reason. Terminal events are unchanged (`via: "registry"`).
+
+Rejected or timed-out expiry aborts claim nothing: the turn stays running until
+it settles and the session stays non-reusable, even after late success. Prompt
+refusal order is `writer_session_lost`, then `session_running` while running or
+an abort is pending, then `turn_deadline_uncertain`. Get and close still work;
+close that session. Inner `turn_deadline_uncertain` refusals and deadline abort
+reasons pass through the relay unchanged. Expiry does not collect or reset a writer.
+
+This is a supervision backstop, not a provider-stop guarantee, rollback or cost
+cap. Abort may never settle. Successful expiry is not exact to the second: allow
+abort time, snapshot verification (up to 30 s), and for relay views polling and
+inner RPC latency. Keep controller per-task budgets. A configured field requires
+a release supporting it (older strict schemas reject it). Re-provision existing
+writers after setting or changing it; a mismatch counts as `settingsChanged`.
 
 ### Read-only confinement and the sandboxed shell
 
@@ -209,7 +244,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `snapshot_unavailable` | The snapshot slot is absent, incomplete, held by setup, not at its derived path, recorded for another source, or could not be verified in time. Operator needed: run `pi-session-mcp-setup --snapshot <alias> --head <oid> --base <oid> --apply`, then retry once. |
 | `snapshot_modified` | The snapshot tree, index flags or Git context no longer match the recorded binding. On start no session was created; on a prompt the session is tainted and refuses further prompts. Close the session and ask the operator to re-materialize the slot (`--discard` drops a modified one). |
 
-Lifecycle errors include `unknown_workspace`, `unknown_session`, `unknown_turn`, `session_running`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.
+Lifecycle errors include `unknown_workspace`, `unknown_session`, `unknown_turn`, `session_running`, `turn_deadline_uncertain`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.
 
 Invalid execution-profile configuration prevents startup, so it cannot be an MCP response. In that case stderr receives a structured, sanitized `startup_failed` diagnostic with one of these stable codes; it contains no raw parser message or configuration path.
 
@@ -256,7 +291,7 @@ The stop reason of the final assistant message is the only SDK field that select
 | `length` | `completed` | `assistantText`, `completion: "output_limit"` | unchanged; `truncated` reports only Pi Session MCP's own 64 KiB cap |
 | `toolUse` | `completed` | `assistantText` (possibly empty), `completion: "tool_use"` | unchanged; the agent loop ends on a tool call only when the tool batch terminates the run |
 | `error` | `failed` | `turn_failed` / `Pi turn failed` | unchanged |
-| `aborted` | `aborted` | `completedAt` | unchanged |
+| `aborted` | `aborted` | `completedAt`, optional `abortReason: "deadline"` | deadline reason is additive |
 | `pending` | `failed` | `turn_failed` / `Pi turn failed` | new in SDK 0.99; marks a message that is still streaming, not a finished answer (previously `completed`) |
 | `deferred` | `failed` | `turn_failed` / `Pi turn failed` | new in SDK 0.99; the provider has not delivered the response (previously `completed`) |
 | missing or outside the union | `failed` | `turn_failed` / `Pi turn failed` | fail closed (previously `completed`); the SDK types require the field |

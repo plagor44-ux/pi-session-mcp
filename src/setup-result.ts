@@ -13,6 +13,8 @@ export interface SetupFinding {
   readonly target: SetupTarget;
   readonly status: SetupStatus;
   readonly code: string;
+  /** Recovery slot, never a filesystem path. */
+  readonly slot?: number;
 }
 
 export interface SetupResult {
@@ -33,6 +35,7 @@ export function result(
     target: Object.freeze({ ...finding.target }),
     status: finding.status,
     code: /^[a-z][a-z0-9_]{0,63}$/.test(finding.code) ? finding.code : "operation_failed",
+    ...(Number.isSafeInteger(finding.slot) && finding.slot! >= 0 ? { slot: finding.slot } : {}),
   }));
   return Object.freeze({ schemaVersion: 1, operation, status, findings: Object.freeze(normalized), exitCode });
 }

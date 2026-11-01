@@ -43,7 +43,9 @@ Split work so tasks do not overlap. If two tasks need the same files, run them o
 
 ## 4. Keep a ledger
 
-Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status, and once the turn is terminal its `state`, `assistantText`, `truncated` and `completion`. Update it after every tool call. Decide the time budget per task and one fixed cleanup and observation budget (see section 9) when you start the run. A cap on concurrent sessions and per-task budgets are your own policy for this run; the server enforces neither. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
+Keep an internal ledger with one row per task: task, workspace alias, profile alias, `sessionId`, `turnId`, start time and time budget, status, and once the turn is terminal its `state`, `assistantText`, `truncated` and `completion`. Update it after every tool call. Decide the time budget per task and one fixed cleanup and observation budget (see section 9) when you start the run. A cap on concurrent sessions and per-task budgets are your own policy for this run. Two concurrent workers is the first tested scope, not a limit of the server; choose a cap you can supervise.
+
+Read each profile's `maxTurnSeconds` from capabilities (`null` means no server limit). Keep your per-task budgets: the server limit is a backstop for an unsupervised turn, not a replacement for supervision. Treat `abortReason: "deadline"` like any other aborted turn and inspect the work before reuse. If a session answers `turn_deadline_uncertain`, close it; the deadline abort was not confirmed and the session is not reusable.
 
 ## 5. Start in parallel, wait on the first
 
@@ -127,6 +129,12 @@ After taking over the result and closing its coding session, before the next tas
 2. Run `pi-session-mcp-setup --writer <name> --finish --apply`. It collects again, then resets a persistent writer or recreates an ephemeral writer. Do not reuse it until this succeeds. A refused branch name makes collection incomplete and finish stops: ask the operator to resolve it by renaming inside the boundary or explicitly discarding with `--reset --discard --apply`. Finish returns it to the workspace default base. No reconnect is needed after reset, finish or recreate. A setup operation on a writer held by a session fails with `writer_busy` after a short wait; close the session and allow launcher cleanup to finish.
 3. A coding start needs the writer's clone at its baseline, even after a complete collection; otherwise it fails with the controller-action code for uncollected work in [references/start-errors.md](references/start-errors.md). To let a fresh session continue from collected work, for example after a failed turn or for a review fix round, create a local branch at the collected ref and run `pi-session-mcp-setup --writer <name> --reset --base <branch> --apply`, then call `pi_session_start` on `pi-session-mcp` with the coding profile and `base: "<branch>"`. Read `writer` from that result for collection. Default starts cannot use a writer moved to the fix branch.
 4. Never run Git inside the writer's clone as the host user, including direct fetch from that clone. Use setup's bundle collection and inspect the imported refs in your own checkout. Never discard unreviewed work just to admit the next task.
+
+If collect is refused because of an unmerged index, the operator can export it
+with `pi-session-mcp-setup --writer <name> --recover --apply` and review
+`refs/recovery/writer-<name>/<slot>/…` in their own checkout before any `--discard`.
+Recovery does not authorize cleanup or export all local state; decide whether
+anything outside its preserved set matters before discarding.
 
 ## Limits to remember
 

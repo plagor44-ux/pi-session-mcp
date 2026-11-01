@@ -1,14 +1,12 @@
 # ADR 0017: Per-profile maximum turn duration
 
 **Status:** Accepted (2026-10-31, maintainer decision), after two
-independent reviews and two revisions. Issue
+independent reviews and two revisions; implemented under issue
 [#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212).
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
-- This ADR changes no production contract by itself. The accepted decision
-  is implemented under its issue; the contract changes only with that
-  implementation.
+- The production contract implements this accepted decision under #212.
 
 ## Context
 

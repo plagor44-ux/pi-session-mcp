@@ -33,6 +33,7 @@ function capabilities(profiles = 1) {
       extensions: Array.from({ length: 8 }, (_, i) => `npm:e${i}${"x".repeat(244)}@1.0.0`),
       grantedExtensionTools: Array.from({ length: 32 }, (_, i) => `t${i}`.padEnd(64, "x")),
       shell: "sandboxed",
+      maxTurnSeconds: 86_400,
       skills: [],
     })),
   };
@@ -54,6 +55,14 @@ async function verifyPayload(value: unknown) {
 }
 
 describe("setup verifier grant validation", () => {
+  it.each([null, 60, 86_400])("accepts maxTurnSeconds %s", async maxTurnSeconds => {
+    const payload = capabilities(); Object.assign(payload.executionProfiles[0]!, { maxTurnSeconds });
+    expect(await verifyPayload(payload)).toMatchObject({ status: "verified" });
+  });
+  it.each([undefined, 0, 59, 86_401, 60.5, "60"]) ("rejects maxTurnSeconds %s", async maxTurnSeconds => {
+    const payload = capabilities(); Object.assign(payload.executionProfiles[0]!, { maxTurnSeconds });
+    expect(await verifyPayload(payload)).toMatchObject({ status: "failed" });
+  });
   it("accepts two configured grants", async () => {
     const payload = capabilities();
     payload.executionProfiles[0]!.grantedExtensionTools = ["zeta_lookup", "alpha_lookup"];

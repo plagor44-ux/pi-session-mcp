@@ -2,6 +2,56 @@
 
 ## Unreleased
 
+Additive public contract changes; under ADR 0003 the next release is a minor
+release. **Downgrade note:** profile configuration is strict, so a
+configuration that sets `maxTurnSeconds` cannot be loaded by an older release.
+**Upgrade note:** setting or changing `maxTurnSeconds` on a coding profile is
+a profile change; provision the container writers of every repository that
+selects it again, or relay admission refuses them with `settingsChanged`.
+
+### Added
+
+- Optional per-profile turn deadline `maxTurnSeconds` (integer, 60 to 86,400)
+  ([#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212),
+  ADR 0017). The server that owns the Pi session arms one monotonic deadline
+  per published turn and, on expiry, runs the same abort path as
+  `pi_session_abort`; container writers enforce it inside the writer.
+  `pi_capabilities_get` publishes it as an eleventh profile field
+  (`maxTurnSeconds: number | null`), an expired turn ends `aborted` with the
+  additive turn-view field `abortReason: "deadline"`, and a session whose
+  expiry abort failed or timed out refuses further prompts with the new code
+  `turn_deadline_uncertain`. Absent means no limit, as before. Turn events and
+  the event spool are unchanged.
+- `pi-session-mcp-setup --writer <name> --recover [--apply]` exports the
+  conflicted state of a writer clone with an unmerged index
+  ([#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213),
+  ADR 0016): index stages, a worktree commit and a manifest are imported
+  create-only under `refs/recovery/writer-<name>/<slot>/` in the operator
+  checkout. The clone, its index, refs and worktree and the writer state stay
+  unchanged, and collect, finish, reset, recreate and remove stay refused.
+  New result codes: `writer_recover_planned`, `writer_recovered`,
+  `nothing_to_recover`, `writer_recover_unsupported`,
+  `writer_recover_conflict`, `writer_recover_incomplete`,
+  `writer_recover_failed` and `writer_recover_bundle_left`. Recovery needs a
+  host Git whose ref transactions refuse `create` onto an existing symbolic
+  ref; it checks this at run time (passes on Git 2.53.0 and 2.56.0, fails on
+  2.39.5) and fails closed otherwise.
+
+### Security
+
+- `undici` is overridden from `8.10.2` to `8.12.3` under Pi SDK 1.4.0
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)): in the
+  production dependency path, it fixes GHSA-4qv8-2p9j-2685,
+  GHSA-f72v-6w45-q472, GHSA-xjj6-f33q-929c, GHSA-4w7w-5xrc-9h26,
+  GHSA-2m5v-pch6-74hx, GHSA-qrxm-fqhp-jwvm, GHSA-9fm3-97px-rjf6 and
+  GHSA-55wc-3pg8-jfw6. **Limit:** npm applies `overrides` only from the root
+  project, so the override reaches the repository lockfile, CI and
+  release-checkout installs, but **not** `npm install -g pi-session-mcp`,
+  which still resolves `undici` `8.10.2` until the SDK lifts its pin (see
+  [Releasing](docs/releasing.md#overrides-and-what-they-reach)). `npm audit`
+  still reports the nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249) through
+  Pi SDK 1.4.0.
+
 ## 0.15.2 — 2026-11-01
 
 Patch release under ADR 0003. It keeps the public MCP contract and ships one
