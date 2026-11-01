@@ -257,6 +257,26 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 | `--remove` | Explicit mutation: unregister owned registrations before removing writer state; read-only directories inside the writer root (such as Go's module cache) are made removable first, and `state.json` is removed last |
 | `--verify` | Doctor and bounded relay-path MCP handshake/tools/list/capabilities; verify the host registration with client-target verify too; no session or provider request |
 
+### Setup under load
+
+Writer setup stays fail-closed on a healthy but slow host (#229). Three rules apply:
+
+- **Runtime probe.** Doctor's rootless Podman probe (`podman info`, 10 seconds
+  per attempt) is repeated once when the first attempt ended by its timeout. An
+  error or an answer other than `true` stays unusable at once, and a runtime
+  that times out twice is still `container_runtime_unavailable`.
+- **Doctor gate.** A repository step or mutating writer operation no longer
+  counts another repository's `container_runtime_unavailable` as blocking. The
+  probe is host-wide, and the step uses Podman for its own repository and fails
+  closed with its own code when Podman is really unusable. Every other blocking
+  error of another repository still blocks with `doctor_failed`.
+- **Global lock.** All mutating writer setup operations take one global lock in
+  the writers state directory and wait up to 120 seconds for it, then report
+  `override_lock_busy`. The lock stays global because it serializes what the
+  operations share: the execution-modes file, writer state, writer leases,
+  ownership and hook state. Other users of the lock (skill customization and the
+  modes step) keep their 30 second wait. The lock records no holder information.
+
 Other than explicit `--remove` and `--verify`, omitting apply only plans.
 Reset/recreate/remove refuse changed uncollected work unless given `--discard`.
 Every mutating writer operation holds the host-only lease and container fence,

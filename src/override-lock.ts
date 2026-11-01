@@ -15,7 +15,8 @@ import { assertSupportedFilesystem, currentSetupPlatform, isTrustedSystemBinary,
 export const SKILL_BASES_LOCK_FILE = ".pi-session-mcp-bases.lock";
 export const DEFAULT_OVERRIDE_LOCK_TIMEOUT_MS = 30_000;
 const MIN_LOCK_TIMEOUT_MS = 50;
-const MAX_LOCK_TIMEOUT_MS = 120_000;
+/** Longest acquisition bound; a larger request is clamped to it. */
+export const MAX_OVERRIDE_LOCK_TIMEOUT_MS = 120_000;
 /** Exit status of `flock -E` when the lock stayed busy for the whole wait. */
 const FLOCK_BUSY_EXIT = 75;
 const FLOCK_CANDIDATES: readonly string[] = ["/usr/bin/flock", "/bin/flock"];
@@ -52,7 +53,7 @@ export interface OverrideLock {
 export async function acquireOverrideLock(overrideDirectory: string, options: OverrideLockOptions = {}): Promise<OverrideLock> {
   const platform = currentSetupPlatform(options.platform);
   if (!platform) throw new OverrideLockError("override_lock_unavailable");
-  const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(MIN_LOCK_TIMEOUT_MS, Math.min(options.timeoutMs!, MAX_LOCK_TIMEOUT_MS)) : DEFAULT_OVERRIDE_LOCK_TIMEOUT_MS;
+  const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(MIN_LOCK_TIMEOUT_MS, Math.min(options.timeoutMs!, MAX_OVERRIDE_LOCK_TIMEOUT_MS)) : DEFAULT_OVERRIDE_LOCK_TIMEOUT_MS;
   const flockPath = platform === "linux" ? flockBinary(options) : undefined;
   if (platform === "linux" && flockPath === undefined) throw new OverrideLockError("override_lock_unavailable");
   try { await assertSupportedFilesystem(overrideDirectory, platform, options.readStatfs); }

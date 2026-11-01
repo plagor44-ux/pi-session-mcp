@@ -12,6 +12,12 @@
   (inspect, collect, reset, clone and finish) and of the recovery export now runs
   with `GIT_GRAFT_FILE=/dev/null`, next to the existing replace-ref
   neutralization from #193.
+- Writer setup no longer fails closed on a slow host
+  ([#229](https://github.com/plagor44-ux/pi-session-mcp/issues/229)): the rootless
+  Podman probe is repeated once after a timeout, the Doctor gate of a writer
+  step ignores another repository's `container_runtime_unavailable`, and
+  mutating writer setup operations wait up to 120 seconds (was 30) for the
+  global setup lock before `override_lock_busy`.
 
 ## 0.15.0 — 2026-11-01
 

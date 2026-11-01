@@ -235,6 +235,14 @@ describe("default local container runtime probe", () => {
 
   it("times out a hung probe even after it prints true", async () => {
     await fakePodman("printf true; exec /bin/sleep 30");
-    expect(await containerRuntimeUsable()).toBe(false);
+    expect(await containerRuntimeUsable({ timeoutMs: 300 })).toBe(false);
+  }, 15_000);
+
+  it("retries a probe that timed out once and accepts a later answer (#229)", async () => {
+    const directory = await temporaryRoot("pi-session-mcp-podman-");
+    const marker = join(directory, "first");
+    await writeFile(join(directory, "podman"), `#!/bin/sh\nif [ ! -e '${marker}' ]; then : > '${marker}'; exec /bin/sleep 30; fi\nprintf true\n`, { mode: 0o700 });
+    vi.stubEnv("PATH", directory);
+    expect(await containerRuntimeUsable({ timeoutMs: 500 })).toBe(true);
   }, 15_000);
 });
