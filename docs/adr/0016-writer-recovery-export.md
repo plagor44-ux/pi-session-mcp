@@ -1,13 +1,14 @@
 # ADR 0016: Recovery export for a writer with an unmerged index
 
-**Status:** Proposed (2026-10-31), revised the same day after two
-independent reviews. Issue
+**Status:** Accepted (2026-10-31, maintainer decision), after two
+independent reviews and two revisions. Issue
 [#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213).
 
 - Planning basis: branch `feat/s17-design-evaluations` on main `41ae199`,
   published 0.14.3.
-- This ADR changes no production contract by itself. Implementation follows
-  only if the maintainer accepts it.
+- This ADR changes no production contract by itself. The accepted decision
+  is implemented under its issue; the contract changes only with that
+  implementation.
 
 ## Context
 
@@ -87,7 +88,7 @@ A new, explicit operation that does three things:
 - leaves the clone, its index, refs and worktree, and the writer state
   unchanged.
 
-## Decision (proposed)
+## Decision
 
 Option C.
 
@@ -296,6 +297,21 @@ separately.
   its contents. A recovery implementation should set
   `core.attributesFile=/dev/null` and refuse a clone whose config defines
   `filter.*` or `include*`.
+
+Status after acceptance (Sprint 18, #222):
+
+- The glob is quoted (`-c 'safe.directory=*'`), with a regression test in
+  `test/writer-boundary.test.ts`.
+- A live probe on a container writer showed that a worker cannot define a
+  filter or include driver: `git config` fails because `.git/config` is a
+  read-only bind mount, a direct append fails with `Read-only file system`,
+  and collection of a clone whose `.gitattributes` names undefined drivers
+  ran no filter. `test/writer-boundary.test.ts` pins the read-only mounts of
+  `.git/config` and `.git/hooks`, and `verifyCloneLayout` refuses
+  `commondir`, `gitdir` and `config.worktree`, the other routes to a
+  configuration Git would read. The configuration refusal was therefore not
+  added to collect and inspect; the recommendation above stays as
+  defense in depth for the recovery implementation.
 
 ## Evidence
 

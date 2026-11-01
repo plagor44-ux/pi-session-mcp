@@ -231,30 +231,29 @@ export class SessionRegistry {
   }
   async abort(id: string): Promise<SessionView> {
     const entry = this.require(id);
-    const operation = this.serial(entry, async () => {
+    const preparation = this.serial(entry, async () => {
       const turn = entry.turn;
       if (entry.state !== "running" || !turn || turn.terminal) return undefined;
       return { turn, abortPromise: this.beginAbort(entry, turn) };
-    }).then(async (prepared) => {
-      if (!prepared) return this.view(entry);
-      try {
-        await prepared.abortPromise;
-      } catch {
-        throw new RegistryError("abort_failed");
-      }
-      if (entry.turns.has(prepared.turn.turnId) && entry.turn === prepared.turn && !prepared.turn.terminal && !entry.disposed) {
-        await this.finishTurn(entry, prepared.turn, { status: "aborted" });
-      }
-      return this.view(entry);
     });
-    type AbortResult = { kind: "completed"; session: SessionView } | { kind: "failed" } | { kind: "timeout" };
-    const result = await this.withTimeout<Exclude<AbortResult, { kind: "timeout" }>, AbortResult>(operation.then(
-      (session) => ({ kind: "completed" as const, session }),
-      () => ({ kind: "failed" as const }),
-    ), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
+    type AbortResult = { kind: "completed"; prepared: Awaited<typeof preparation> } | { kind: "failed" } | { kind: "timeout" };
+    type Settled = Exclude<AbortResult, { kind: "timeout" }>;
+    // One deadline covers the queue wait and the adapter abort; snapshot finalization runs after it (#224).
+    const result = await this.withTimeout<Settled, AbortResult>(preparation.then<Settled, Settled>((prepared) => {
+      if (!prepared) return { kind: "completed" as const, prepared };
+      return prepared.abortPromise.then(
+        () => ({ kind: "completed" as const, prepared }),
+        () => ({ kind: "failed" as const }),
+      );
+    }, () => ({ kind: "failed" as const })), entry.handle.deadlines?.abortMs ?? this.options.abortDeadlineMs, { kind: "timeout" });
     if (result.kind === "timeout") throw new RegistryError("abort_timeout");
     if (result.kind === "failed") throw new RegistryError("abort_failed");
-    return result.session;
+    const prepared = result.prepared;
+    if (!prepared) return this.view(entry);
+    if (entry.turns.has(prepared.turn.turnId) && entry.turn === prepared.turn && !prepared.turn.terminal && !entry.disposed) {
+      await this.finishTurn(entry, prepared.turn, { status: "aborted" });
+    }
+    return this.view(entry);
   }
   async close(id: string): Promise<SessionView> {
     const existing = this.sessions.get(id);

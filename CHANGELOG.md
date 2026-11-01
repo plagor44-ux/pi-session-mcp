@@ -28,6 +28,25 @@
 
 ### Fixed
 
+- `pi_session_abort` reports `abort_timeout` only when the session's pending
+  operation and the adapter abort did not finish within the abort deadline
+  ([#224](https://github.com/plagor44-ux/pi-session-mcp/issues/224)). Before,
+  a successful abort on a snapshot session answered `abort_timeout` when the
+  bounded post-turn snapshot verification took longer than the abort
+  deadline. That verification now runs outside the abort deadline, bounded
+  by its own 30,000 ms limit. The deadline still covers the wait for an in-progress
+  prompt or close of the same session.
+- The writer boundary passes `safe.directory=*` to Git literally
+  ([#222](https://github.com/plagor44-ux/pi-session-mcp/issues/222)). The
+  unquoted value was a shell glob in the throwaway-container scripts, so a
+  worker-created file whose name matched it changed the argument. The
+  observed effect was fail-closed. A live probe also confirmed that a worker
+  cannot define a Git filter or include driver in its clone: `.git/config`
+  and `.git/hooks` are read-only bind mounts, and the clone layout check
+  refuses `commondir`, `gitdir` and `config.worktree`.
+- The controller skill bounds `NEEDS_CONTEXT` to two rounds per task, answers
+  only a question that is still open, and asks workers for the bare commit
+  hash ([#223](https://github.com/plagor44-ux/pi-session-mcp/issues/223)).
 - The controller skill now asks reviewers for the verdict tokens the review
   skill emits: `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`
   ([#210](https://github.com/plagor44-ux/pi-session-mcp/issues/210)). Before,

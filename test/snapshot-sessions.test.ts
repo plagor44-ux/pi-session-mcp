@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { createSnapshotGuard } from "../src/snapshot-guard.js";
 import { ensureSnapshotRoot, lockSnapshotExclusive, snapshotPaths, trustedGit, writeSnapshotState } from "../src/review-snapshot.js";
@@ -89,6 +89,41 @@ it("bounds admission and post-turn verification and taints the session", async (
   verify = 0; hangAt = 2; const second = await registry.start("review", profile); const turn = await registry.prompt(second.id, "test"); adapter.handles[1]!.complete();
   expect((await terminal(registry, second.id, turn.turn.turnId)).state).toBe("failed");
   await expect(registry.prompt(second.id, "again")).rejects.toMatchObject({ code: "snapshot_modified" }); await registry.close(second.id);
+});
+it("waits for bounded snapshot verification after a successful adapter abort", async () => {
+  vi.useFakeTimers();
+  let turnAccepted = false;
+  const guard = { isSnapshot: () => true, acquire: async () => ({ binding: { base: "a", head: "b", tree: "c" }, verify: async () => { if (turnAccepted) await new Promise<void>((resolve) => setTimeout(resolve, 50)); }, release: async () => {} }) };
+  const adapter = new FakeAdapter(); const notices: TurnTerminalNotice[] = [];
+  const registry = new SessionRegistry(adapter, new Map([["review", "/tmp"]]), { snapshotGuard: guard, abortDeadlineMs: 20, snapshotVerifyDeadlineMs: 100, onTurnTerminal: (notice) => notices.push(notice) });
+  try {
+    const session = await registry.start("review", profile); const { turn } = await registry.prompt(session.id, "test");
+    turnAccepted = true;
+    let settled = false;
+    const aborting = expect(registry.abort(session.id)).resolves.toMatchObject({ id: session.id, state: "idle" }).then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(settled).toBe(false);
+    expect(registry.getTurn(session.id, turn.turnId).state).toBe("running");
+    await vi.advanceTimersByTimeAsync(30);
+    await aborting;
+    expect(registry.getTurn(session.id, turn.turnId).state).toBe("aborted");
+    expect(notices).toMatchObject([{ turnId: turn.turnId, state: "aborted", via: "registry" }]);
+    expect(notices).toHaveLength(1);
+  } finally { vi.useRealTimers(); await registry.shutdown(); }
+});
+it("returns abort_timeout at the abort deadline when the adapter abort never resolves", async () => {
+  vi.useFakeTimers();
+  const adapter = new FakeAdapter();
+  const registry = new SessionRegistry(adapter, new Map([["review", "/tmp"]]), { abortDeadlineMs: 20, closeCleanupDeadlineMs: 10 });
+  try {
+    const session = await registry.start("review", profile); const { turn } = await registry.prompt(session.id, "test");
+    adapter.handles[0]!.abortGate = new Promise<void>(() => {});
+    const aborting = expect(registry.abort(session.id)).rejects.toMatchObject({ code: "abort_timeout" });
+    await vi.advanceTimersByTimeAsync(20);
+    await aborting;
+    expect(adapter.handles[0]!.aborted).toBe(1);
+    expect(registry.getTurn(session.id, turn.turnId).state).toBe("running");
+  } finally { vi.useRealTimers(); await registry.shutdown(); }
 });
 for (const action of ["abort", "close"] as const) it(`${action} during post-turn verification publishes one terminal notice`, async () => {
   let verifyCount = 0; let release!: () => void; let entered!: () => void;
