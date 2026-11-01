@@ -152,6 +152,17 @@ mean they are implemented or that their gates passed.
   pull request (pre-release record in
   [Acceptance](acceptance.md#v0152-pre-release-acceptance)), then the upgrade
   of both installations.
+- 2026-11-01: 0.15.2 released; both installations are upgraded. Sprint 22
+  merged the per-profile turn deadline
+  ([#212](https://github.com/plagor44-ux/pi-session-mcp/issues/212),
+  ADR 0017), the writer recovery export
+  ([#213](https://github.com/plagor44-ux/pi-session-mcp/issues/213),
+  ADR 0016) and an `undici` override for #120 that does not reach global
+  installs ([#238](https://github.com/plagor44-ux/pi-session-mcp/pull/238)).
+  The minor release 0.16.0 follows in its own release pull request
+  (pre-release record in
+  [Acceptance](acceptance.md#v0160-pre-release-acceptance)), then the upgrade
+  of both installations. Open: #120, #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
