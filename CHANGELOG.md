@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.15.0 — 2026-11-01
+
+Minor release under ADR 0003. It adds public result fields, an execution
+mode and result codes: the turn `completion` field (#211) and verified
+read-only review snapshots (#217, ADR 0015). It also ships the Sprint 18
+fixes (#222, #223, #224) and the review verdict wording (#210). Existing
+configurations stay valid and need no migration; snapshot workspaces are
+opt-in and Linux-only. **Upgrade note:** as for every release, repeat the
+provisioning command of each container repository with `--apply` before the
+client targets, as described in [Installation](docs/installation.md#upgrade).
+`npm audit` still reports `undici` 8.10.2 and the nested `minimatch` 10.2.6
+(GHSA-g3hv-75wg-m249), both through Pi SDK 1.4.0, the latest SDK release
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)).
+
 ### Added
 
 - Completed turns expose `completion` to distinguish normal stops, output limits,
