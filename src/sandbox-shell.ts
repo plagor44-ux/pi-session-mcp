@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
-import { constants as osConstants } from "node:os";
+import { constants as osConstants, homedir, userInfo } from "node:os";
 import { constants, lstatSync, readFileSync, readlinkSync, writeFileSync, type Stats } from "node:fs";
-import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, open, readFile, readlink, realpath, stat, type FileHandle } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
 import { isTrustedSystemBinary } from "./setup-platform.js";
@@ -16,6 +16,8 @@ const SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin";
 const SANDBOX_HOME = "/tmp/home";
 export const SANDBOX_GO_MODULE_CACHE = "/go/pkg/mod";
 export const SANDBOX_GO_BUILD_CACHE = "/tmp/go-build";
+/** The child's file descriptor number of the Go module cache directory; fds 3 and 4 are the info and block pipes. */
+export const SANDBOX_GO_CACHE_FD = 5;
 /** Directories of a merged-`/usr` host that the sandbox recreates as symlinks or binds read-only. */
 const ROOT_ENTRIES = ["/bin", "/lib", "/lib64", "/sbin"] as const;
 export const PROBE_TIMEOUT_MS = 5_000;
@@ -41,7 +43,8 @@ export type RootEntry =
 export interface SandboxArgsInput {
   /** Real path of the workspace, mounted at the same path as an overlay with a temporary upper layer. */
   readonly workspace: string;
-  readonly goModuleCache?: string | undefined;
+  /** Child fd number of the opened Go module cache directory, bound read-only at `SANDBOX_GO_MODULE_CACHE`. */
+  readonly goModuleCacheFd?: number | undefined;
   /** Real path of a linked worktree's main Git directory, mounted the same way. */
   readonly gitCommonDir?: string | undefined;
   readonly cwd: string;
@@ -56,7 +59,7 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
     "--unshare-all", "--unshare-user", "--disable-userns", "--die-with-parent", "--new-session", "--clearenv",
     "--setenv", "PATH", SANDBOX_PATH, "--setenv", "HOME", SANDBOX_HOME,
   ];
-  if (input.goModuleCache !== undefined) args.push("--setenv", "GOMODCACHE", SANDBOX_GO_MODULE_CACHE, "--setenv", "GOCACHE", SANDBOX_GO_BUILD_CACHE, "--setenv", "GOPROXY", "off", "--setenv", "GOSUMDB", "off", "--setenv", "GOTOOLCHAIN", "local", "--setenv", "GOENV", "off");
+  if (input.goModuleCacheFd !== undefined) args.push("--setenv", "GOMODCACHE", SANDBOX_GO_MODULE_CACHE, "--setenv", "GOCACHE", SANDBOX_GO_BUILD_CACHE, "--setenv", "GOPROXY", "off", "--setenv", "GOSUMDB", "off", "--setenv", "GOTOOLCHAIN", "local", "--setenv", "GOENV", "off");
   args.push("--ro-bind", "/usr", "/usr");
   for (const entry of input.rootEntries) {
     if (entry.kind === "symlink") args.push("--symlink", entry.target, entry.path);
@@ -65,7 +68,7 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
   args.push(
     "--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--size", String(SANDBOX_TMP_BYTES), "--tmpfs", "/tmp", "--dir", SANDBOX_HOME,
   );
-  if (input.goModuleCache !== undefined) args.push("--ro-bind", input.goModuleCache, SANDBOX_GO_MODULE_CACHE);
+  if (input.goModuleCacheFd !== undefined) args.push("--ro-bind-fd", String(input.goModuleCacheFd), SANDBOX_GO_MODULE_CACHE);
   args.push("--overlay-src", input.workspace, "--tmp-overlay", input.workspace);
   if (input.gitCommonDir !== undefined) args.push("--overlay-src", input.gitCommonDir, "--tmp-overlay", input.gitCommonDir);
   args.push("--chdir", input.cwd, "--", ...input.argv);
@@ -110,26 +113,59 @@ export type GoModuleCacheProblem = "missing" | "not_directory" | "unreadable" | 
 export interface SandboxProtection { readonly home: string; readonly secretPaths: readonly string[] }
 export interface SandboxSelection { readonly goModuleCache?: string | undefined; readonly protection?: SandboxProtection }
 
-export async function resolveGoModuleCache(source: string, protection: SandboxProtection): Promise<{ ok: true; path: string } | { ok: false; problem: GoModuleCacheProblem }> {
-  try {
-    let path: string;
-    try { path = await realpath(source); } catch (error) {
-      const code = (error as NodeJS.ErrnoException)?.code;
-      return { ok: false, problem: code === "ENOENT" || code === "ENOTDIR" ? "missing" : "unreadable" };
+/** The account database's home directory, not `$HOME`, which a caller's environment could point elsewhere. */
+export function accountHome(): string { try { return userInfo().homedir; } catch { return homedir(); } }
+
+/** The protection of a Go module cache: neither the home nor a secret path may be inside it, and no secret path may contain it. */
+export function sandboxProtection(home: string, agentDir: string, extraSecretPaths: readonly string[] = []): SandboxProtection {
+  return { home, secretPaths: [join(home, ".pi"), agentDir, ...extraSecretPaths] };
+}
+
+export type OpenedGoModuleCache = { ok: true; handle: FileHandle; path: string } | { ok: false; problem: GoModuleCacheProblem };
+
+/**
+ * Opens the Go module cache directory and checks it through the descriptor, so that a later swap of a path
+ * component cannot redirect the mount: the real path comes from `/proc/self/fd/<fd>` and every check runs
+ * against that path. On success the handle stays open and the caller closes it; on failure it is closed here.
+ */
+export async function openGoModuleCache(source: string, protection: SandboxProtection): Promise<OpenedGoModuleCache> {
+  let handle: FileHandle;
+  try { handle = await open(source, constants.O_RDONLY | constants.O_DIRECTORY); } catch (error) {
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === "ENOENT") return { ok: false, problem: "missing" };
+    if (code === "ENOTDIR") {
+      try { if (!(await stat(source)).isDirectory()) return { ok: false, problem: "not_directory" }; } catch { /* a missing or non-directory component */ }
+      return { ok: false, problem: "missing" };
     }
-    try { if (!(await stat(path)).isDirectory()) return { ok: false, problem: "not_directory" }; await access(path, constants.R_OK | constants.X_OK); }
-    catch { return { ok: false, problem: "unreadable" }; }
-    try { if (!(await stat(join(path, "cache", "download"))).isDirectory()) return { ok: false, problem: "unsuitable" }; }
-    catch { return { ok: false, problem: "unsuitable" }; }
+    return { ok: false, problem: "unreadable" };
+  }
+  try {
+    const via = `/proc/self/fd/${handle.fd}`;
+    let path: string;
+    try { path = await readlink(via); if (!isAbsolute(path)) return await fail(handle, "unreadable"); } catch { return await fail(handle, "unreadable"); }
+    try { await access(via, constants.R_OK | constants.X_OK); } catch { return await fail(handle, "unreadable"); }
+    try { if (!(await stat(join(via, "cache", "download"))).isDirectory()) return await fail(handle, "unsuitable"); } catch { return await fail(handle, "unsuitable"); }
     const canonical = async (value: string): Promise<string> => { try { return await realpath(value); } catch { return resolve(value); } };
     const home = await canonical(protection.home);
-    if (within(home, path)) return { ok: false, problem: "protected" };
+    if (within(home, path)) return await fail(handle, "protected");
     for (const secret of protection.secretPaths) {
       const target = await canonical(secret);
-      if (within(target, path) || within(path, target)) return { ok: false, problem: "protected" };
+      if (within(target, path) || within(path, target)) return await fail(handle, "protected");
     }
-    return { ok: true, path };
-  } catch { return { ok: false, problem: "unreadable" }; }
+    return { ok: true, handle, path };
+  } catch { return await fail(handle, "unreadable"); }
+}
+
+async function fail(handle: FileHandle, problem: GoModuleCacheProblem): Promise<{ ok: false; problem: GoModuleCacheProblem }> {
+  await handle.close().catch(() => undefined);
+  return { ok: false, problem };
+}
+
+export async function resolveGoModuleCache(source: string, protection: SandboxProtection): Promise<{ ok: true; path: string } | { ok: false; problem: GoModuleCacheProblem }> {
+  const opened = await openGoModuleCache(source, protection);
+  if (!opened.ok) return opened;
+  await opened.handle.close().catch(() => undefined);
+  return { ok: true, path: opened.path };
 }
 
 async function readSmall(path: string): Promise<string | undefined> {
@@ -246,7 +282,7 @@ export interface SandboxChild {
   once(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): unknown;
   kill(signal?: NodeJS.Signals): unknown;
 }
-export type SandboxSpawn = (file: string, args: readonly string[], options: { env: Record<string, string>; stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] }) => SandboxChild;
+export type SandboxSpawn = (file: string, args: readonly string[], options: { env: Record<string, string>; stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] | ["ignore", "pipe", "pipe", "pipe", "pipe", number] }) => SandboxChild;
 
 export interface SandboxDependencies {
   readonly spawn?: SandboxSpawn;
@@ -280,18 +316,24 @@ export function sandboxBinaryTrusted(dependencies: SandboxDependencies = {}): bo
   try { const trusted = dependencies.trusted ?? defaultTrusted; return trusted(BWRAP_PATH) && trusted(SYSTEMD_RUN_PATH); } catch { return false; }
 }
 
-/** The complete argument list for one run; refuses when the fixed binary is not trusted. */
-async function prepare(workspace: string, cwd: string, argv: readonly string[], dependencies: SandboxDependencies, selection?: SandboxSelection): Promise<string[]> {
+/** The complete argument list for one run, plus the open Go module cache handle when opted in; refuses when the fixed binary is not trusted. */
+async function prepare(workspace: string, cwd: string, argv: readonly string[], dependencies: SandboxDependencies, selection?: SandboxSelection): Promise<{ args: string[]; cache?: FileHandle }> {
   if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-  let goModuleCache: string | undefined;
+  let cache: FileHandle | undefined;
   if (selection?.goModuleCache !== undefined) {
     if (!selection.protection) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-    const result = await resolveGoModuleCache(selection.goModuleCache, selection.protection);
+    const result = await openGoModuleCache(selection.goModuleCache, selection.protection);
     if (!result.ok) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-    goModuleCache = result.path;
+    cache = result.handle;
   }
-  const gitCommonDir = await (dependencies.gitCommonDir ?? resolveWorktreeGitDir)(workspace);
-  return sandboxArgs({ workspace, gitCommonDir, goModuleCache, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
+  try {
+    const gitCommonDir = await (dependencies.gitCommonDir ?? resolveWorktreeGitDir)(workspace);
+    const args = sandboxArgs({ workspace, gitCommonDir, goModuleCacheFd: cache ? SANDBOX_GO_CACHE_FD : undefined, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
+    return cache ? { args, cache } : { args };
+  } catch (error) {
+    await cache?.close().catch(() => undefined);
+    throw error;
+  }
 }
 
 /** Node fires a longer timer at once, so a longer delay is waited for in pieces of at most this length. */
@@ -311,13 +353,25 @@ interface Running {
 }
 
 /** Starts a scoped bubblewrap, holding its payload until the effective limits are verified. */
-function start(args: readonly string[], dependencies: SandboxDependencies, deadlineSeconds: number): Running {
-  if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-  const dir = (dependencies.runtimeDir ?? (() => validatedRuntimeDir(process.getuid?.())))();
-  if (dir === undefined) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
-  const unit = (dependencies.unitName ?? (() => `pi-session-mcp-shell-${randomUUID()}`))();
-  const limits = dependencies.limits ?? SANDBOX_LIMITS;
-  const child = (dependencies.spawn ?? defaultSpawn)(SYSTEMD_RUN_PATH, scopeArgs(unit, limits, args, deadlineSeconds), { env: { XDG_RUNTIME_DIR: dir }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
+function start(prepared: { args: readonly string[]; cache?: FileHandle }, dependencies: SandboxDependencies, deadlineSeconds: number): Running {
+  const { args, cache } = prepared;
+  let child: SandboxChild;
+  let unit: string;
+  let limits: SandboxLimits;
+  try {
+    if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+    const dir = (dependencies.runtimeDir ?? (() => validatedRuntimeDir(process.getuid?.())))();
+    if (dir === undefined) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+    unit = (dependencies.unitName ?? (() => `pi-session-mcp-shell-${randomUUID()}`))();
+    limits = dependencies.limits ?? SANDBOX_LIMITS;
+    child = (dependencies.spawn ?? defaultSpawn)(SYSTEMD_RUN_PATH, scopeArgs(unit, limits, args, deadlineSeconds), {
+      env: { XDG_RUNTIME_DIR: dir },
+      stdio: cache ? ["ignore", "pipe", "pipe", "pipe", "pipe", cache.fd] : ["ignore", "pipe", "pipe", "pipe", "pipe"],
+    });
+  } finally {
+    // The child has its own copy of the descriptor once spawn returned; the parent's must not outlive the call.
+    void cache?.close().catch(() => undefined);
+  }
   const info = child.stdio[3] as Readable | undefined;
   const block = child.stdio[4] as Writable | undefined;
   let stopped = false;

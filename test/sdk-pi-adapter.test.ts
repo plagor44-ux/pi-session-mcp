@@ -833,6 +833,29 @@ describe("sandboxed shell", () => {
     expect(JSON.stringify(diagnostics)).not.toContain(cache);
   });
 
+  it("gives the opted-in cache to the probe and to every sandboxed bash command", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const cache = join(await temporaryRoot("sdk-adapter-go-cache-"), "mod");
+    await mkdir(join(cache, "cache/download"), { recursive: true });
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox });
+    await createIn(adapter, { ...shellProfile, goModuleCache: cache });
+    const bash = createSession.mock.calls[0]![0].customTools!.find((tool) => tool.name === "bash")!;
+    await (bash.execute as unknown as (...args: unknown[]) => Promise<unknown>)("call", { command: "go list ./..." }, undefined, undefined, undefined);
+    expect(sandbox.spawned).toHaveLength(2);
+    for (const args of sandbox.spawned) expect(args.join(" ")).toContain("--ro-bind-fd 5 /go/pkg/mod");
+    expect(sandbox.spawned[1]!.slice(-3)).toEqual(["/usr/bin/bash", "-c", "go list ./..."]);
+    expect(JSON.stringify(sandbox.spawned)).not.toContain(cache);
+
+    const plain = workingSandbox();
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox: plain }));
+    const plainBash = createSession.mock.calls[1]![0].customTools!.find((tool) => tool.name === "bash")!;
+    await (plainBash.execute as unknown as (...args: unknown[]) => Promise<unknown>)("call", { command: "true" }, undefined, undefined, undefined);
+    expect(plain.spawned).toHaveLength(2);
+    expect(JSON.stringify(plain.spawned)).not.toContain("/go/pkg/mod");
+  });
+
   it("fails the start when the session resolves another definition for bash", async () => {
     const fixture = runtimeFixture();
     const { session, dispose } = sessionFixture();

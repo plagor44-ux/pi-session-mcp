@@ -1,9 +1,8 @@
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
-import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
-import { probeSandbox, resolveGoModuleCache, resolveWorktreeGitDir, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
+import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
@@ -376,7 +375,7 @@ async function writerDirty(clone: string, state: WriterState): Promise<boolean> 
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
   const fs = dependencies.fileSystem ?? defaultFileSystem;
   const root = dependencies.packageRoot ?? process.cwd();
-  const home = dependencies.home ?? homedir();
+  const home = dependencies.home ?? accountHome();
   const checks: DoctorCheck[] = [];
   let metadata: DoctorPackageMetadata | undefined;
   try {
@@ -610,22 +609,28 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           ? ok("sandbox_unavailable", alias)
           : failure("sandbox_unavailable", alias, "install a bubblewrap with --overlay-src, --tmp-overlay and --disable-userns support at /usr/bin/bwrap (root-owned, not group- or world-writable) and allow unprivileged user namespaces, keep the workspace on a filesystem that can be an overlay lower layer, and run a systemd user manager at /usr/bin/systemd-run with cgroup v2 memory and pids delegated, so that the memory, swap and task limits take effect; see docs/installation.md"));
       }
-      const env = dependencies.env ?? process.env;
-      const secretPaths = [join(home, ".pi"), env.PI_CODING_AGENT_DIR || join(home, ".pi", "agent")];
-      if (configPath) {
-        secretPaths.push(dirname(configPath));
-        try { secretPaths.push(dirname(await (fs.realpath ?? realpath)(configPath))); } catch { /* already protects the configured directory */ }
-      }
-      const protection = { home, secretPaths };
-      for (const [alias, profile] of [...config.executionProfiles].sort(([a], [b]) => a.localeCompare(b))) {
-        if (profile.goModuleCache === undefined) continue;
-        const result = await resolveGoModuleCache(profile.goModuleCache, protection);
-        if (!result.ok) { checks.push(failure("sandbox_go_cache_unavailable", alias, GO_CACHE_REMEDIATION[result.problem])); continue; }
-        let usable = true;
-        if (passingWorkspace !== undefined) {
+      if (sandboxed.some((alias) => config.executionProfiles.get(alias)?.goModuleCache !== undefined)) {
+        const cacheProfiles = [...config.executionProfiles].filter(([, profile]) => profile.shell === "sandboxed" && profile.goModuleCache !== undefined).sort(([a], [b]) => a.localeCompare(b));
+        let protection: SandboxProtection | undefined;
+        try {
+          // Load the SDK only here, so a broken install cannot stop Doctor from loading.
+          const agentDir = dependencies.agentDir ?? (await import("@earendil-works/pi-coding-agent")).getAgentDir();
+          const extra: string[] = [];
+          if (configPath) {
+            extra.push(dirname(configPath));
+            try { extra.push(dirname(await (fs.realpath ?? realpath)(configPath))); } catch { /* already protects the configured directory */ }
+          }
+          protection = sandboxProtection(home, agentDir, extra);
+        } catch { protection = undefined; }
+        for (const [alias, profile] of cacheProfiles) {
+          if (passingWorkspace === undefined) { checks.push(failure("sandbox_go_cache_unavailable", alias, "make the sandboxed shell available first (see sandbox_unavailable), then rerun Doctor")); continue; }
+          if (protection === undefined) { checks.push(failure("sandbox_go_cache_unavailable", alias, "make Pi's agent directory resolvable, then rerun Doctor")); continue; }
+          const result = await resolveGoModuleCache(profile.goModuleCache!, protection);
+          if (!result.ok) { checks.push(failure("sandbox_go_cache_unavailable", alias, GO_CACHE_REMEDIATION[result.problem])); continue; }
+          let usable = false;
           try { usable = await (dependencies.sandboxProbe ?? defaultSandboxProbe)(passingWorkspace, { goModuleCache: profile.goModuleCache, protection }); } catch { usable = false; }
+          checks.push(usable ? ok("sandbox_go_cache_unavailable", alias) : failure("sandbox_go_cache_unavailable", alias, "make the Go module cache available to the sandbox"));
         }
-        checks.push(usable ? ok("sandbox_go_cache_unavailable", alias) : failure("sandbox_go_cache_unavailable", alias, "make the Go module cache available to the sandbox"));
       }
       // Without a usable worktree pointer Git commands fail inside the sandbox; the read tools are unaffected.
       for (const [alias, path] of [...config.workspaces].sort(([a], [b]) => a.localeCompare(b))) {

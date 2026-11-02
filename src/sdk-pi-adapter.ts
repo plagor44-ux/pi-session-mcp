@@ -22,7 +22,6 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { readFileSync, realpathSync } from "node:fs";
-import { homedir, userInfo } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -46,7 +45,7 @@ import {
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
-import { createSandboxedBashOperations, probeSandbox, type SandboxDependencies, type SandboxProtection } from "./sandbox-shell.js";
+import { accountHome, createSandboxedBashOperations, probeSandbox, sandboxProtection, type SandboxDependencies, type SandboxProtection } from "./sandbox-shell.js";
 import { composeSessionTools, profileTools } from "./session-tools.js";
 
 export { PROFILE_TOOLS } from "./session-tools.js";
@@ -450,10 +449,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     this.resolveExtension = options.resolveExtension ?? ((extension) => resolvePiExtension(extension));
     this.extensionSdk = options.extensionSdk ?? DEFAULT_EXTENSION_SDK;
     this.sandbox = options.sandbox ?? {};
-    // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
-    const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
+    const home = accountHome();
     // Pi's agent directory holds its credentials; the SDK resolves it from `PI_CODING_AGENT_DIR` or below `~/.pi`.
-    this.sandboxProtection = { home, secretPaths: [join(home, ".pi"), getAgentDir(), ...(options.protectedReadPaths ?? [])] };
+    this.sandboxProtection = sandboxProtection(home, getAgentDir(), options.protectedReadPaths ?? []);
     this.protectedReadPaths = [home, ...this.sandboxProtection.secretPaths];
   }
 
