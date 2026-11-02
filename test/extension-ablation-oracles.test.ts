@@ -563,7 +563,8 @@ describe("scoreImplementation", () => {
     expect(r.testsPassed).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 2500));
     expect(existsSync(marker)).toBe(false);
-  });
+  // About 3 s fixed by design (500 ms command timeout plus 2.5 s wait); full-suite load reached the 5 s default (#240).
+  }, 20_000);
 
   it("kills a background grandchild after a normal exit", async () => {
     const { repo, base } = makeBase();

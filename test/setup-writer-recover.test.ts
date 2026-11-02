@@ -80,7 +80,8 @@ it.skipIf(!recoveryRefTransactionsSupported)("reports a complete recovery and ea
     { target: { client: "writer", scope: "repo", alias: "repo-w1" }, status: "ok", code: "writer_recovered", slot: 2 },
     { target: { client: "writer", scope: "repo", alias: "repo-w1" }, status: "unchanged", code: "writer_recover_incomplete", slot: 1 },
   ]);
-});
+// Real Git merge, fixture clone and recovery import take about 3 s unloaded; CI load reached the 5 s default (#240).
+}, 20_000);
 it("exposes a sanitized numeric slot in both report formats", () => {
   const out = result("apply", [{ target: { client: "writer", scope: "repo", alias: "repo-w1" }, status: "ok", code: "writer_recovered", slot: 7 }]);
   expect(out.findings[0]?.slot).toBe(7);

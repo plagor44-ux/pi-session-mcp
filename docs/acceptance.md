@@ -2598,6 +2598,83 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.16.0 post-release evidence
+
+Recorded on 2026-11-02 for the published release `0.16.0`.
+
+Tag binding: the annotated tag `v0.16.0` (tag object
+`108ef58e66d68af825598d11f6af59851da26523`) peels to the merge commit
+`7c28a4b5ccdeff41c36941ae134067cbbef34851` of #239. CI on the merge commit
+(run 41355167734) passed on `ubuntu-latest`, `macos-15`, `macos-26` and
+verify. CI on the tag (run 41355697000) passed on its second attempt: the
+first attempt failed one test on `macos-26` at the 5,000 ms test timeout
+("reports a complete recovery and earlier incomplete slots through setup" in
+`test/setup-writer-recover.test.ts`, 5,050 ms; 2,988 ms on the merge-commit
+run) and the verify job that depends on it; the rerun of the failed jobs
+passed ([#240](https://github.com/plagor44-ux/pi-session-mcp/issues/240)).
+The package was published from a fresh clone of the tag, so the npm package
+records `gitHead` `7c28a4b`.
+
+Runs on a fresh clone of the tag on 2026-11-01 from 22:10 to 22:14 UTC:
+
+- Level 1 after `npm ci`, with Node.js `26.12.1`, npm `12.2.1` and Git
+  `2.56.0`: typecheck, `build:cli`, `build` and `git diff --check` exited with
+  `0`, and the status stayed clean. The test run, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`, reported 1 failed,
+  4478 passed and 15 skipped: "kills the whole process group on timeout" in
+  `test/extension-ablation-oracles.test.ts` ended at the 5,000 ms test
+  timeout under full-suite load and passed 5 of 5 isolated runs on the same
+  commit ([#240](https://github.com/plagor44-ux/pi-session-mcp/issues/240)).
+  `npm audit` and `npm audit --omit=dev` exited with `1` and name only the
+  nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249) through
+  `@earendil-works/pi-coding-agent` 1.4.0. Level 1 is therefore not
+  unrestricted. Doctor reported `packageVersion` `0.16.0` and exited with `2`
+  because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.16.0` on npm: 978 files, shasum
+  `f803b9b766f80181b4359de5e7fd9670b873426c`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `1cb915e0159a699b0e23e1b9526921b55d2f9061` because a later commit changes the
+  packaged `docs/acceptance.md` and `docs/roadmap.md`.
+- Published release, Level 2 on the tag clone: 160 of 160 with delivery off
+  and 228 of 228 with `--events spool`.
+
+After publishing, the published npm package was installed into a fresh
+prefix: the install smoke reported `smoke_passed` with version `0.16.0`, and
+Level 2 passed 160 of 160 with delivery off and 228 of 228 with
+`--events spool`. That global install resolves `undici` `8.10.2` under the
+SDK, as documented in [Releasing](releasing.md)
+([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Clients:
+Codex CLI `0.166.0` and Claude Code `2.1.316`.
+
+Installations, upgraded on 2026-11-02 following
+[Installation](installation.md#container-writers): both client targets
+removed with `0.15.2`, `npm install -g pi-session-mcp@0.16.0`, each container
+repository's provisioning command repeated with `--apply`, Doctor, then
+client-target `--apply` and `--verify` and `--writer <name> --verify` for
+every writer.
+
+- Workstation, from 06:19 to 06:24 UTC: eight idle client server processes
+  were running and no turn was in progress. Five container repositories with
+  18 writers reported `mode_unchanged` and `writer_accepted` for every
+  writer. Doctor with the real configuration reported no error; warnings were
+  `snapshot_unavailable` for the snapshot workspace without a prepared slot
+  and the known `workspace_gitfile` and `workspace_mode_unset`. `--verify`
+  passed for `claude-code:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`, `hook_verified`) and `codex:user:pi-session-mcp`
+  (`mcp_verified`, both `skill_verified`), and `--writer <name> --verify`
+  reported `mcp_verified` for all 18 writers.
+- Server, from 06:24 to 06:30 UTC: five container repositories with 16
+  writers reported `mode_unchanged`, `writer_accepted` for every writer and
+  `controllers_restart_required`. Doctor reported no error and one
+  `workspace_mode_unset` warning. `--verify` passed for both client targets
+  (`mcp_verified`, both `skill_verified`), and `--writer <name> --verify`
+  reported `mcp_verified` for all 16 writers.
+- No execution profile on either installation sets `maxTurnSeconds`.
+
+Not established for `0.16.0`: a Level 3 cycle, a live `--recover --apply`
+against a real conflicted writer, and a turn deadline against a real
+provider.
+
 ### v0.16.0 pre-release acceptance
 
 `v0.16.0` was accepted on 2026-11-01 from 21:48 to 21:54 UTC on its release
@@ -2645,6 +2722,79 @@ Not established for `0.16.0`: a Level 3 cycle on the release candidate, a live
 `--recover --apply` against a real conflicted writer, a turn deadline against
 a real provider, and the published-release Level 2 and upgrades, which follow
 after publishing.
+
+### v0.15.2 post-release evidence
+
+Recorded on 2026-11-02 for the published release `0.15.2`.
+
+Tag binding: the annotated tag `v0.15.2` (tag object
+`ed130884a13b1e5a42b8b37fc892e9b790c5bc32`) peels to the merge commit
+`a9c02cebc68f24f0a264ad8ff6478f01b8853866` of #237. CI on the merge commit
+(run 41333090058) and on the tag (run 41333620209) passed. The package was
+published before the tag existed, so the npm package records `gitHead`
+`467d98c`, the head of the release branch. That commit has the same source
+tree as the merge commit (`7e8de74821752ad41c4498d49fe9dbd5adb00b64`).
+
+Runs on a fresh clone of the tag on 2026-11-01 from 17:58 to 18:00 UTC:
+
+- Level 1 after `npm ci`, with Node.js `26.12.1` and npm `12.2.1`:
+  typecheck, `build:cli`, the test run (154 files, 4389 passed, 14 skipped,
+  with `NODE_OPTIONS=--unhandled-rejections=strict`), `build` and
+  `git diff --check` exited with `0`, and the status stayed clean. `npm audit`
+  and `npm audit --omit=dev` exited with `1` with the findings known from the
+  pre-release acceptance, all through `@earendil-works/pi-coding-agent` 1.4.0:
+  `undici` 8.10.2
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)) and the
+  nested `minimatch` 10.2.6 (GHSA-g3hv-75wg-m249). Level 1 is therefore not
+  unrestricted. Doctor reported `packageVersion` `0.15.2` and exited with `2`
+  because no configuration was set (`config_missing`).
+- `pi-session-mcp@0.15.2` on npm: 974 files, shasum
+  `6a19a4d8609aa3a8b08926b8afd1a57a2cfb61b1`; `npm pack` of the tag clone gives
+  the same shasum and file count. It differs from the candidate's
+  `99a90bebee6996e398eb1e5a7c8358a3eaef9c67` because a later commit changes the
+  packaged `docs/acceptance.md` and `docs/roadmap.md`.
+- Published release, Level 2 on the tag clone: 160 of 160 with delivery off
+  and 228 of 228 with `--events spool`.
+- Published npm package, installed into a fresh prefix from 18:44 to
+  18:46 UTC: the install smoke reported `smoke_passed` with version `0.15.2`,
+  and Level 2 passed 160 of 160 with delivery off and 228 of 228 with
+  `--events spool`.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. Clients: Codex CLI
+  `0.166.0` and Claude Code `2.1.316`.
+
+Installations, upgraded following
+[Installation](installation.md#container-writers): both client targets
+removed with the installed release, `npm install -g pi-session-mcp@0.15.2`,
+each container repository's provisioning command repeated with `--apply`,
+Doctor, then client-target `--apply` and `--verify` and
+`--writer <name> --verify` for every writer.
+
+- Workstation, on 2026-11-01 from 18:46 to 18:51 UTC, from `0.15.1`: five
+  container repositories with 18 writers reported `mode_unchanged`,
+  `writer_accepted` for every writer and `controllers_restart_required`.
+  Doctor with the real configuration reported no error; warnings were
+  `snapshot_unavailable` for the snapshot workspace without a prepared slot
+  and the known `workspace_gitfile` and `workspace_mode_unset`. `--verify`
+  passed for `claude-code:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`, `hook_verified`) and `codex:user:pi-session-mcp`
+  (`mcp_verified`, both `skill_verified`), which confirms the fix of
+  [#235](https://github.com/plagor44-ux/pi-session-mcp/issues/235) with the
+  snapshot workspace configured. `--writer <name> --verify` reported
+  `mcp_verified` for all 18 writers. Eight idle client server processes were
+  running; no writer container ran and no Pi session was open.
+- Server, on 2026-11-01 from 19:30 to 19:36 UTC, directly from `0.15.0`:
+  Doctor before the provisioning step reported `writer_not_ready` for the
+  writers, as expected after an upgrade. Five container repositories with 16
+  writers then reported `mode_unchanged` and `writer_accepted` for every
+  writer. Doctor reported no error and one `workspace_mode_unset` warning.
+  `--verify` passed for both client targets (`mcp_verified`, both
+  `skill_verified`), and `--writer <name> --verify` reported `mcp_verified`
+  for all 16 writers. npm reported that the install scripts of two transitive
+  dependencies did not run under its `allow-scripts` policy; Doctor and
+  verify were unaffected.
+
+Not established for `0.15.2`: a Level 3 cycle.
 
 ### v0.15.2 pre-release acceptance
 

@@ -115,15 +115,19 @@ describe("bubblewrap containment (R46)", () => {
   });
 
   /** A host with a merged-usr root, a resolv.conf that is a plain file, and a user bundle of codegraph below the home. */
-  const fakeHost = (over: Partial<PlanHost> & { present?: readonly string[]; realMap?: Record<string, string>; kinds?: Record<string, "link" | "dir" | "file"> } = {}): Partial<PlanHost> => {
+  /** An Arch-style merged-usr root; Debian and Ubuntu link /lib64 to usr/lib64 and /sbin to usr/sbin instead (#242). */
+  const ARCH_LINKS: Record<string, string> = { "/bin": "usr/bin", "/lib": "usr/lib", "/lib64": "usr/lib", "/sbin": "usr/bin" };
+  const fakeHost = (over: Partial<PlanHost> & { present?: readonly string[]; realMap?: Record<string, string>; kinds?: Record<string, "link" | "dir" | "file">; links?: Record<string, string> } = {}): Partial<PlanHost> => {
     const present = new Set(over.present ?? ["/opt", ...ETC_ENTRIES.map((entry) => `/etc/${entry}`)]);
     const kinds = { "/bin": "link", "/lib": "link", "/lib64": "link", "/sbin": "link", "/etc/resolv.conf": "file", ...over.kinds };
+    const links = over.links ?? ARCH_LINKS;
     return {
       exists: async (path) => present.has(path),
       lstat: async (path) => {
         const kind = (kinds as Record<string, string | undefined>)[path];
         return kind === undefined ? null : { isSymbolicLink: () => kind === "link", isDirectory: () => kind === "dir" };
       },
+      readlink: async (path) => links[path] ?? null,
       real: async (path) => over.realMap?.[path] ?? path,
       trackedSkills: async () => ["skills/a/SKILL.md", "skills/a/references/r.md", "skills/b/SKILL.md", "skills/loose.md"],
       ...(over.exists === undefined ? {} : { exists: over.exists }),
@@ -136,6 +140,12 @@ describe("bubblewrap containment (R46)", () => {
   it("plans the allowlist root: merged-usr links by lstat, /opt only when present, and the /etc entries that exist", async () => {
     const full = await planOf({}, fakeHost());
     expect(full.rootLinks).toEqual([{ path: "/bin", target: "usr/bin" }, { path: "/lib", target: "usr/lib" }, { path: "/lib64", target: "usr/lib" }, { path: "/sbin", target: "usr/bin" }]);
+    // Each link keeps the host's own target: on Debian and Ubuntu the loader is found only through /lib64 -> usr/lib64 (#242).
+    const debian = await planOf({}, fakeHost({ links: { "/bin": "usr/bin", "/lib": "usr/lib", "/lib64": "usr/lib64", "/sbin": "usr/sbin" } }));
+    expect(debian.rootLinks).toEqual([{ path: "/bin", target: "usr/bin" }, { path: "/lib", target: "usr/lib" }, { path: "/lib64", target: "usr/lib64" }, { path: "/sbin", target: "usr/sbin" }]);
+    // A link that vanishes between lstat and readlink is left out, like an absent entry.
+    const vanished = await planOf({}, fakeHost({ links: { "/bin": "usr/bin", "/lib": "usr/lib", "/sbin": "usr/bin" } }));
+    expect(vanished.rootLinks.map((link) => link.path)).toEqual(["/bin", "/lib", "/sbin"]);
     expect(full.rootReadOnly).toEqual(["/opt"]);
     expect(full.etcReadOnly).toEqual(ETC_ENTRIES.map((entry) => `/etc/${entry}`));
     // The brief's list, once, in one place.
