@@ -11,6 +11,9 @@ import { overlapsGoModuleCache,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
+// The Go module cache resolution reads /proc/self/fd, so it runs on Linux only, like the sandbox.
+const onLinux = it.skipIf(process.platform !== "linux");
+
 afterAll(removeTemporaryRoots);
 
 const MERGED: RootEntry[] = [
@@ -95,7 +98,7 @@ describe("sandboxArgs", () => {
 });
 
 describe("resolveGoModuleCache", () => {
-  it("resolves and protects canonical paths and classifies invalid caches", async () => {
+  onLinux("resolves and protects canonical paths and classifies invalid caches", async () => {
     const root = await temporaryRoot("go-cache-");
     const cache = join(root, "cache"); const home = join(root, "home"); const secret = join(root, "secret");
     await mkdir(join(cache, "cache/download"), { recursive: true });
@@ -321,7 +324,7 @@ describe("createSandboxedBashOperations", () => {
     expect(JSON.stringify(call)).not.toMatch(/SECRET_TOKEN|PI_SESSION_ID/);
   });
 
-  it("re-resolves the cache for every execution and matches the probe mounts", async () => {
+  onLinux("re-resolves the cache for every execution and matches the probe mounts", async () => {
     const root = await temporaryRoot("go-cache-run-");
     const cache = join(root, "mod"); const link = join(root, "link");
     await mkdir(join(cache, "cache/download"), { recursive: true });
@@ -367,7 +370,7 @@ describe("createSandboxedBashOperations", () => {
     for (const path of [undefined, "/gopher", "/go/pkgs", "/go/pkg/modx", "/home/go/pkg/mod", "/tmp/go"]) expect(overlapsGoModuleCache(path)).toBe(false);
   });
 
-  it("refuses a workspace or Git directory overlay that overlaps the cache target", async () => {
+  onLinux("refuses a workspace or Git directory overlay that overlaps the cache target", async () => {
     const root = await temporaryRoot("go-cache-overlap-");
     const cache = join(root, "mod");
     await mkdir(join(cache, "cache/download"), { recursive: true });
@@ -390,7 +393,7 @@ describe("createSandboxedBashOperations", () => {
     }
   });
 
-  it("closes the parent's cache descriptor after spawn and after a failing spawn", async () => {
+  onLinux("closes the parent's cache descriptor after spawn and after a failing spawn", async () => {
     const root = await temporaryRoot("go-cache-fd-");
     const cache = join(root, "mod");
     await mkdir(join(cache, "cache/download"), { recursive: true });

@@ -1,11 +1,11 @@
 /**
  * The opt-in Go module cache of the sandboxed shell (#243) against the real bubblewrap, systemd-run and Go
- * toolchain. Skipped unless the sandbox probe passes and `/usr/bin/go` exists. Every module, proxy and cache
+ * toolchain. Skipped unless the sandbox probe passes and `/usr/bin/go` resolves inside `/usr`. Every module, proxy and cache
  * here is synthetic: a file proxy built in the test fills a separate module cache, never the operator's own.
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { cp, lstat, mkdir, readdir, readFile, readlink, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -23,7 +23,9 @@ afterAll(removeTemporaryRoots);
 const run = promisify(execFile);
 const GO = "/usr/bin/go";
 const probeRoot = await temporaryRoot("go-cache-probe-");
-const available = sandboxBinaryTrusted() && existsSync(GO) && await probeSandbox(probeRoot);
+// The sandbox binds /usr only, so a /usr/bin/go that resolves elsewhere (a CI tool cache) cannot run inside it.
+const goInUsr = existsSync(GO) && realpathSync(GO).startsWith("/usr/");
+const available = sandboxBinaryTrusted() && goInUsr && await probeSandbox(probeRoot);
 
 /** A stored (uncompressed) zip archive, enough for a Go module zip. */
 function storedZip(files: readonly { name: string; data: Buffer }[]): Buffer {

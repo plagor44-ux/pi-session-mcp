@@ -6,6 +6,9 @@ import type { AppConfig, ConfigurationMetadata } from "../src/config.js";
 import { renderDoctorHuman, runDoctor } from "../src/doctor.js";
 import type { ConfiguredExecutionProfile } from "../src/execution-profile.js";
 
+// The Go module cache resolution reads /proc/self/fd, so it runs on Linux only, like the sandbox.
+const onLinux = it.skipIf(process.platform !== "linux");
+
 afterAll(removeTemporaryRoots);
 
 const CONFIGURATION: ConfigurationMetadata = {
@@ -59,7 +62,7 @@ describe("doctor sandbox checks", () => {
     expect(resolver).not.toHaveBeenCalled();
   });
 
-  it("checks opted-in caches without reporting their paths", async () => {
+  onLinux("checks opted-in caches without reporting their paths", async () => {
     const cache = await temporaryRoot("doctor-cache-");
     await mkdir(join(cache, "cache/download"), { recursive: true });
     const repo = await workspace();
@@ -79,7 +82,7 @@ describe("doctor sandbox checks", () => {
     expect(JSON.stringify(noWorkspace.result)).not.toContain(cache);
   });
 
-  it("reports cache classification failures with fixed remediation", async () => {
+  onLinux("reports cache classification failures with fixed remediation", async () => {
     const root = await temporaryRoot("doctor-cache-classify-");
     const file = join(root, "file"); await writeFile(file, "x");
     const empty = join(root, "empty"); await mkdir(empty);
@@ -92,7 +95,7 @@ describe("doctor sandbox checks", () => {
     }
   });
 
-  it("refuses a cache that equals, contains or lies inside the configuration or agent directory", async () => {
+  onLinux("refuses a cache that equals, contains or lies inside the configuration or agent directory", async () => {
     const root = await temporaryRoot("doctor-cache-protected-");
     const home = join(root, "home"); await mkdir(home);
     const configDir = join(root, "cfg"); const agentDir = join(root, "agent");

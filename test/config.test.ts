@@ -77,7 +77,8 @@ describe("loadConfig", () => {
     await writeFile(path, JSON.stringify(value)); return path;
   }
 
-  it("preserves a sandbox Go module cache through resolution", async () => {
+  it.skipIf(process.platform !== "linux")("preserves a sandbox Go module cache through resolution", async () => {
+    // A sandboxed shell is accepted on Linux only.
     const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, shell: "sandboxed", goModuleCache: "/cache/mod" } } });
     const profile = (await loadConfig(path)).executionProfiles.get("safe")!;
     expect(toResolvedExecutionProfile(profile).goModuleCache).toBe("/cache/mod");

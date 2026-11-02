@@ -16,6 +16,9 @@ import type { PiTurnOutcome } from "../src/pi-adapter.js";
 import { AUTH_OPERATION_TIMEOUT_MS, SESSION_CREATION_TIMEOUT_MS, createPhase0ResourceLoader, normalizeAssistantOutcome, PROFILE_TOOLS, SdkPiSessionAdapter, type SdkPiAdapterDiagnostic, type SdkStopReason } from "../src/sdk-pi-adapter.js";
 import type { ExtensionSdk } from "../src/sdk-pi-adapter.js";
 
+// The Go module cache resolution reads /proc/self/fd, so it runs on Linux only, like the sandbox.
+const onLinux = it.skipIf(process.platform !== "linux");
+
 afterAll(removeTemporaryRoots);
 
 /** A real directory: read-only sessions resolve their confined read roots from the session directory. */
@@ -833,7 +836,7 @@ describe("sandboxed shell", () => {
     expect(JSON.stringify(diagnostics)).not.toContain(cache);
   });
 
-  it("gives the opted-in cache to the probe and to every sandboxed bash command", async () => {
+  onLinux("gives the opted-in cache to the probe and to every sandboxed bash command", async () => {
     const fixture = runtimeFixture();
     const createSession = createSessionFixture(sessionFixture().session);
     const sandbox = workingSandbox();
