@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { readdirSync, readlinkSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import {
+import { overlapsGoModuleCache,
   BWRAP_PATH, SYSTEMD_RUN_PATH, SANDBOX_LIMITS, SANDBOX_UNAVAILABLE_MESSAGE, scopeArgs, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS,
   endScope, openGoModuleCache, probeSandbox, resolveGoModuleCache, SANDBOX_GO_CACHE_FD, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
@@ -360,6 +360,11 @@ describe("createSandboxedBashOperations", () => {
     h.children[0]!.close(0); await running;
     expect((h.calls[0]!.options as { stdio: unknown }).stdio).toEqual(["ignore", "pipe", "pipe", "pipe", "pipe"]);
     expect(h.calls[0]!.args).not.toContain("--ro-bind-fd");
+  });
+
+  it("treats a path at, above or below /go/pkg/mod as overlapping, and nothing else", () => {
+    for (const path of ["/", "/go", "/go/pkg", "/go/pkg/mod", "/go/pkg/mod/x/y"]) expect(overlapsGoModuleCache(path)).toBe(true);
+    for (const path of [undefined, "/gopher", "/go/pkgs", "/go/pkg/modx", "/home/go/pkg/mod", "/tmp/go"]) expect(overlapsGoModuleCache(path)).toBe(false);
   });
 
   it("refuses a workspace or Git directory overlay that overlaps the cache target", async () => {
