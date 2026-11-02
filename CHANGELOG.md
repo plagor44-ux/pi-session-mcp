@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.17.0 — 2026-11-02
+
+Minor release by maintainer decision. It adds the opt-in read-only Go module
+cache for the sandboxed shell (#243, ADR 0018, accepted 2026-11-02). The MCP
+contract is unchanged, so ADR 0003 would allow a patch; the release is a minor
+because the configuration schema gains a field that older releases reject at
+startup. Configurations without `goModuleCache` need no migration.
+**Upgrade note:** as for every release, repeat the provisioning command of
+each container repository with `--apply` before the client targets, as
+described in [Installation](docs/installation.md#upgrade). **Rollback note:**
+remove `goModuleCache` from every profile before reinstalling 0.16.1 or older.
+
 ### Added
 
 - Read-only profiles with `"shell": "sandboxed"` can bind a host Go module
