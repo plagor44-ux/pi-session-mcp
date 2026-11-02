@@ -153,6 +153,9 @@ the version or authorize publication.
   their own sandbox still fail.
 - The configuration field and the descriptor handling are Linux-only, like
   the sandboxed shell.
-- CI has neither bubblewrap nor Go, so the native test
-  `test/sandbox-shell.go-cache.bwrap.test.ts` skips there and must be run on a
-  host that has both before a release.
+- The native test `test/sandbox-shell.go-cache.bwrap.test.ts` needs a working
+  sandbox and a `/usr/bin/go` that resolves inside `/usr`, the only toolchain
+  tree the sandbox binds. CI's Go lives in a tool cache outside `/usr`, so the
+  test skips there and must be run on a host that has both before a release.
+  The unit tests of the cache resolution read `/proc/self/fd` and skip outside
+  Linux.

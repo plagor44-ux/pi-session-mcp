@@ -69,9 +69,15 @@ Work and review:
    `sandbox_unavailable` message of the contract, and new codes are out of
    scope.
 
-Not covered: macOS (the sandbox is Linux-only), CI (no bubblewrap or Go
-there, so the native test skips), toolchains outside `/usr`, and nested user
+Not covered: macOS (the sandbox is Linux-only), CI (its Go lives outside
+`/usr`, so the native test skips), toolchains outside `/usr`, and nested user
 namespaces, which `--disable-userns` keeps refused.
+
+The first CI run of the pull request failed: the native test ran on Ubuntu,
+where `/usr/bin/go` resolves to a tool cache that the sandbox does not bind,
+and seven unit tests of the cache resolution ran on macOS, which has no
+`/proc/self/fd`. The local gates had run on Linux only. The native test now
+requires a toolchain inside `/usr`, and those unit tests skip outside Linux.
 
 ## Rollout and rollback
 
