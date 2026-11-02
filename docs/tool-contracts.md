@@ -172,7 +172,7 @@ server runs a probe through the same sandbox; if the binary is untrusted or the
 probe fails, start fails with `sandbox_unavailable` and no session exists. There
 is no unsandboxed fallback. For a linked worktree the main repository's Git
 directory is mounted as a second temporary overlay when its pointers are
-consistent, so `git log` and `git blame` work. The sandbox's `/tmp` is limited to 512 MiB, and a command without a `timeout` argument is killed after 600 seconds. Each probe and command runs in its own systemd user scope limited to 1 GiB memory without swap and 512 processes and threads, and is released only after the server has verified those limits; when they cannot be applied or verified, start fails with `sandbox_unavailable` and a command fails, never running unlimited.
+consistent, so `git log` and `git blame` work. The sandbox's `/tmp` is limited to 512 MiB, and a command without a `timeout` argument is killed after 600 seconds. Each probe and command runs in its own systemd user scope limited to 1 GiB memory without swap and 512 processes and threads, and is released only after the server has verified those limits; when they cannot be applied or verified, start fails with `sandbox_unavailable` and a command fails, never running unlimited. A profile may also bind a read-only Go module cache at `/go/pkg/mod` with the configuration field `goModuleCache` ([ADR 0018](adr/0018-sandbox-go-module-cache.md)); capabilities do not show it, and a cache that is missing or refused at start fails with `sandbox_unavailable` like any other sandbox failure.
 
 ## Automated writer boundary (Plan B)
 

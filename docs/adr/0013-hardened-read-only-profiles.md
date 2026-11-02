@@ -138,6 +138,10 @@ directly after `grantedExtensionTools`. This is configured intent only.
 
 ## Amendments
 
+- [ADR 0018](0018-sandbox-go-module-cache.md) (proposed, 2026-11-02): an
+  opt-in profile field `goModuleCache` adds a read-only Go module cache at
+  `/go/pkg/mod` and fixed Go variables to the argument list of section 2.
+  Without the field the arguments are unchanged.
 - ADR 0006: read-only profiles have `read`, `grep`, `find` and `ls`, and
   additionally `bash` with `shell: "sandboxed"`. The read tools are
   workspace-confined.

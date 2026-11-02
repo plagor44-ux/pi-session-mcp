@@ -307,6 +307,22 @@ Rules:
   only and cannot be combined with `grantedExtensionTools`; the start fails
   with `sandbox_unavailable` when the sandbox does not work. Without the field
   the profile has no shell.
+- Such a profile may add `goModuleCache`, the absolute path of a Go module
+  cache (`GOMODCACHE`, a directory with `cache/download`), to run offline
+  `go test`, `go vet` and `go build` in the sandbox. The server binds the
+  directory read-only at `/go/pkg/mod` and sets `GOPROXY=off`, `GOSUMDB=off`,
+  `GOTOOLCHAIN=local`, `GOENV=off` and a build cache in the sandbox's `/tmp`;
+  `GOFLAGS` stays unset, so a missing `go.sum` entry still fails. Go must come
+  from `/usr`. The worker, and through it the model provider, can read every
+  module in that cache: use a dedicated cache that holds only modules you
+  accept to disclose, written only by you, not a writer's cache. The home
+  directory, `~/.pi`, Pi's agent directory and the configuration directory
+  are refused, and so is a directory that contains one of them. The field is
+  Linux only and allowed only with `"shell": "sandboxed"` on a `read-only`
+  profile; a cache that is missing or refused at session start fails the start
+  with `sandbox_unavailable`, and Doctor reports `sandbox_go_cache_unavailable`.
+  See [ADR 0018](adr/0018-sandbox-go-module-cache.md). Older releases reject
+  this configuration field.
 - The `read`, `grep`, `find` and `ls` tools of every `read-only` profile accept
   only paths inside the workspace and the directories of the profile's selected
   skill files; there is no field to change that.

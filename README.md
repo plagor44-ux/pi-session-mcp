@@ -115,7 +115,7 @@ The [installation guide](docs/installation.md) also covers installing from a rel
 ```
 
 - A workspace alias maps to a directory. Clients can select aliases only.
-- An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`. A read-only profile can add `shell: "sandboxed"` on Linux.
+- An execution profile binds a permission profile (`read-only` or `coding`), a provider, a model and a thinking level. Exactly one profile is the default, and it must be `read-only`. A read-only profile can add `shell: "sandboxed"` on Linux, and then `goModuleCache` to run offline Go tests against a read-only module cache ([ADR 0018](docs/adr/0018-sandbox-go-module-cache.md)).
 - A profile can grant individual tools of local stdio MCP servers to its sessions; see [External MCP tools in embedded sessions](docs/session-mcp.md).
 - An optional top-level `skillCatalog` maps skill aliases to `builtin:<name>` (a skill of the package or of your override directory) or to a `SKILL.md` file, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
 - An optional top-level `"events": { "delivery": "spool" }` turns on content-free turn events, so that a Claude Code hook can wake the controller when a turn ends instead of polling. It is off by default and changes nothing for Codex. See [Wake the controller](docs/installation.md#wake-the-controller-claude-code).
