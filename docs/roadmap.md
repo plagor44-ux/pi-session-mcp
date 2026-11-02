@@ -191,6 +191,10 @@ mean they are implemented or that their gates passed.
   [ADR 0018](adr/0018-sandbox-go-module-cache.md), which the maintainer
   accepted on 2026-11-02 after the merge of #247 (unreleased). Open: #144,
   #215, #221.
+- 2026-11-02: minor release 0.17.0, by maintainer decision, ships #243 in
+  the pull request that records the ADR acceptance (pre-release record in
+  [Acceptance](acceptance.md#v0170-pre-release-acceptance)); publishing and
+  the upgrade of both installations follow. Open: #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

@@ -2600,6 +2600,50 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.17.0 pre-release acceptance
+
+`v0.17.0` was accepted on 2026-11-02 from 19:47 to 19:53 UTC on its release
+candidate `e540e42`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`. Level 1 passed
+without restriction, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. Later commits change only
+this record and the roadmap.
+
+The minor release, decided by the maintainer, ships the read-only Go module
+cache for the sandboxed shell (#243, ADR 0018) from PR #247. The candidate is
+`main` at `23b6da3` plus the ADR acceptance record and the version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    159 files, 4514 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack` listed 982 files (tarball shasum
+    `290aa067b3e2bfa5b513106b8c95ef5ea76bbd2a`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.17.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix with real `systemd-run` and bubblewrap: 48 of 48
+  passed, none skipped (`test/sandbox-shell.bwrap.test.ts` and the Go module
+  cache tests in `test/sandbox-shell.go-cache.bwrap.test.ts`, with Go from
+  `/usr`).
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The build digest was the same before and
+  after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.17.0`. The global install resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3`.
+- In every Level 2 run the leak check passed. The disposable prefix and the
+  tarball were removed.
+
+Not established for `0.17.0`: a Level 3 cycle on the release candidate, a live
+review turn that uses `goModuleCache` with a real provider, and the
+published-release Level 2 and upgrades, which follow after publishing.
+
 ### v0.16.1 post-release evidence
 
 Recorded on 2026-11-02 for the published release `0.16.1`.
