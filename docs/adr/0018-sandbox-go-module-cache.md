@@ -1,8 +1,9 @@
 # ADR 0018: Read-only Go module cache in the sandboxed shell
 
-**Status:** Proposed (2026-11-02), implemented as a candidate under issue
-[#243](https://github.com/plagor44-ux/pi-session-mcp/issues/243). The
-maintainer decides acceptance and the release line.
+**Status:** Accepted (2026-11-02, maintainer decision); implemented under
+issue [#243](https://github.com/plagor44-ux/pi-session-mcp/issues/243) in
+pull request [#247](https://github.com/plagor44-ux/pi-session-mcp/pull/247)
+(unreleased). The maintainer decides the release line.
 
 - Planning basis: main `6c533ac` (published 0.16.1).
 - Amends the fixed argument list of
