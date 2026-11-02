@@ -25,6 +25,16 @@
   names its model; Zhipu usage-limit errors (code `1308`) are no longer
   retried as transient. Live acceptance on 1.5.0 (Level 3) is not done yet.
 
+### Security
+
+- Removed the npm `overrides` entry for `undici`
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Pi SDK
+  1.5.0 pins `undici` 8.12.3 itself, so the override is no longer needed, and
+  an npm installation now resolves 8.12.3 too (checked by packing the package
+  and installing it globally into a temporary prefix). The SDK also moves
+  `minimatch` from 10.2.6 (GHSA-g3hv-75wg-m249) to 11.0.3. `npm audit` and
+  `npm audit --omit=dev` report no vulnerabilities.
+
 ### Fixed
 
 - Gave two tests that run real Git or real child processes an explicit 20 s
