@@ -1,6 +1,7 @@
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
@@ -375,7 +376,7 @@ async function writerDirty(clone: string, state: WriterState): Promise<boolean> 
 export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<DoctorResult> {
   const fs = dependencies.fileSystem ?? defaultFileSystem;
   const root = dependencies.packageRoot ?? process.cwd();
-  const home = dependencies.home ?? accountHome();
+  const home = dependencies.home ?? homedir();
   const checks: DoctorCheck[] = [];
   let metadata: DoctorPackageMetadata | undefined;
   try {
@@ -620,7 +621,8 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
             extra.push(dirname(configPath));
             try { extra.push(dirname(await (fs.realpath ?? realpath)(configPath))); } catch { /* already protects the configured directory */ }
           }
-          protection = sandboxProtection(home, agentDir, extra);
+          // The adapter protects the account home, not `$HOME`; match it so both refuse the same caches.
+          protection = sandboxProtection(dependencies.home ?? accountHome(), agentDir, extra);
         } catch { protection = undefined; }
         for (const [alias, profile] of cacheProfiles) {
           if (passingWorkspace === undefined) { checks.push(failure("sandbox_go_cache_unavailable", alias, "make the sandboxed shell available first (see sandbox_unavailable), then rerun Doctor")); continue; }
