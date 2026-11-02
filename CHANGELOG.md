@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### Changed
+
+- Updated the Pi SDK family from 1.4.0 to 1.5.0: `pi-coding-agent`, `pi-ai`,
+  `pi-agent-core`, `pi-codemode`, `pi-mcp`, `pi-telemetry` and `pi-tui`, plus
+  the new family member `@earendil-works/pi-schema` 1.5.0, which `pi-ai` and
+  `pi-agent-core` declare and which is pinned exactly like the others. The
+  canary for 1.5.0 failed only because `pi-ai` no longer re-exports TypeBox;
+  the evaluation-only `ask_controller` tool (`eval/bridge/ask-tool.ts`) now
+  imports `Type` from `typebox`, pinned as a development dependency at
+  `1.3.27`, the version the SDK pins. No product source change was needed.
+  Checked against the upstream changelog: no change to stop reasons, prompt
+  dispositions, the tools declared to the model or MCP naming (`isMcpToolName`
+  still reserves `mcp__` and the three resource tools). Upstream changes
+  operators may notice: tool arguments are validated by `pi-schema` instead of
+  TypeBox, so plain JSON Schema tools, including the MCP bridge tools, get the
+  same argument coercion as TypeBox tools (numeric strings to numbers, a
+  single value to a one-item array), and validation errors read like
+  `- path: missing`; the built-in model catalog moves to models.dev v2 and now
+  includes GPT-6.1 Terra for `openai` and `openai-codex`; the default OpenAI
+  model changes to `gpt-6.1-sol`, which does not affect profiles because each
+  names its model; Zhipu usage-limit errors (code `1308`) are no longer
+  retried as transient. Live acceptance on 1.5.0 (Level 3) is not done yet.
+
+### Security
+
+- Removed the npm `overrides` entry for `undici`
+  ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Pi SDK
+  1.5.0 pins `undici` 8.12.3 itself, so the override is no longer needed, and
+  an npm installation now resolves 8.12.3 too (checked by packing the package
+  and installing it globally into a temporary prefix). The SDK also moves
+  `minimatch` from 10.2.6 (GHSA-g3hv-75wg-m249) to 11.0.3. `npm audit` and
+  `npm audit --omit=dev` report no vulnerabilities.
+
 ### Fixed
 
 - Gave two tests that run real Git or real child processes an explicit 20 s

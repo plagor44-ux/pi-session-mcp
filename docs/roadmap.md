@@ -172,6 +172,11 @@ mean they are implemented or that their gates passed.
   1.4.0 is still the latest release, so #120 stays open. Not yet established:
   a live `--recover --apply` and a turn deadline against a real provider.
   Open: #120, #144, #215, #221.
+- 2026-11-02: Pi SDK 1.5.0 released upstream; the SDK family moves from 1.4.0
+  to 1.5.0, with the new member `pi-schema`. The only incompatibility was the
+  evaluation-only tool's TypeBox import from `pi-ai`. 1.5.0 pins `undici`
+  8.12.3, so the override and #120 close. Not yet established: live
+  acceptance on 1.5.0. Open: #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

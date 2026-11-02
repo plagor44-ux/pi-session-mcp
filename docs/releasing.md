@@ -36,17 +36,17 @@ SDK's own packages are pinned directly (see [Update the Pi SDK](#update-the-pi-s
 
 The Pi SDK is pinned exactly, together with the SDK's internal
 `@earendil-works` packages: `pi-ai`, `pi-mcp`, `pi-tui`, `pi-codemode` and
-`pi-agent-core`, which the SDK declares, and `pi-telemetry`, which `pi-ai`
-declares. Up to `1.2.0` they were declared with caret ranges, and npm does not
-ship our lockfile inside the package, so a consumer install resolved those
-ranges fresh. A newer family member could then break the pinned SDK, as in
+`pi-agent-core`, which the SDK declares, and `pi-telemetry` and `pi-schema`
+(since 1.5.0), which `pi-ai` and `pi-agent-core` declare. Up to `1.2.0` they
+were declared with caret ranges, and npm does not ship our lockfile inside the
+package, so a consumer install resolved those ranges fresh. A newer family member could then break the pinned SDK, as in
 [#78](https://github.com/plagor44-ux/pi-session-mcp/issues/78), where
 `pi-codemode` 1.2.0 removed an export that `pi-coding-agent` 1.1.0 imports.
 Since `1.3.0` the SDK pins its family exactly. We do not import the family
 members; they stay direct, exactly pinned dependencies as a guard, so that a
 fresh install resolves to the tested versions even if upstream returns to
 ranges.
-The SDK and the six packages therefore always move together, each to the
+The SDK and the seven packages therefore always move together, each to the
 version the canary resolves from the declared ranges.
 
 A nightly canary (`.github/workflows/pi-sdk-canary.yml`) checks the unchanged
@@ -78,18 +78,18 @@ update is possible. It is not an update and not an acceptance.
    `src/session-tools.ts`. That function is not a root export, so no test
    notices when the SDK reserves another name.
 
-3. Move the pins, the SDK and its six family packages in one command:
+3. Move the pins, the SDK and its seven family packages in one command:
 
    ```bash
    npm install --save-exact \
      @earendil-works/pi-coding-agent@<version> @earendil-works/pi-ai@<ai> \
      @earendil-works/pi-mcp@<mcp> @earendil-works/pi-tui@<tui> \
      @earendil-works/pi-codemode@<codemode> @earendil-works/pi-agent-core@<core> \
-     @earendil-works/pi-telemetry@<telemetry>
+     @earendil-works/pi-telemetry@<telemetry> @earendil-works/pi-schema@<schema>
    ```
 
    Use the versions the canary reported. `package.json` must change in exactly
-   seven lines, one per package, and keep an exact version without a range
+   eight lines, one per package, and keep an exact version without a range
    prefix. Check with `npm ls` that exactly one copy of each family package
    exists.
    Review the lockfile diff: only the SDK family and their dependencies should
@@ -165,29 +165,29 @@ Patch transitive advisories in the lockfile only:
 
 ### Overrides and what they reach
 
-`package.json` carries one npm `overrides` entry: `undici` at `8.12.3`
-([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)). Pi SDK
-1.4.0 pins `undici` exactly at `8.10.2`, which has open advisories fixed in
-`8.12.2`, so neither `npm audit fix` nor step 2 above can resolve it. The SDK
-then runs on an `undici` patch release it was not released with; the SDK
-contract tests and the Level 1 checks must pass on it.
+`package.json` carries no npm `overrides`. Until 0.16.0 it overrode `undici`
+to `8.12.3` ([#120](https://github.com/plagor44-ux/pi-session-mcp/issues/120)),
+because Pi SDK 1.4.0 pinned `undici` exactly at `8.10.2`, which has open
+advisories. Pi SDK 1.5.0 pins `undici` `8.12.3` itself, so the override was
+removed with the move to 1.5.0.
 
-npm applies `overrides` only from the root project. The entry therefore
-reaches this repository's lockfile, CI, `npm audit` in the repository and an
-installation from a [release checkout](installation.md#release-checkout)
-(`npm ci`). It does **not** reach `npm install -g pi-session-mcp`: npm
-resolves the package's dependencies there without its overrides, and the SDK
-gets `undici` `8.10.2` again (checked with npm 12.2.1 by packing the package
-and installing it globally into a temporary prefix). npm 12.2.1 also does not
-pack an `npm-shrinkwrap.json`, so a shrinkwrap is no way around it.
+If an override is needed again, keep in mind what it reaches. npm applies
+`overrides` only from the root project. An entry reaches this repository's
+lockfile, CI, `npm audit` in the repository and an installation from a
+[release checkout](installation.md#release-checkout) (`npm ci`). It does
+**not** reach `npm install -g pi-session-mcp`: npm resolves the package's
+dependencies there without its overrides (checked with npm 12.2.1 by packing
+the package and installing it globally into a temporary prefix). npm 12.2.1
+also does not pack an `npm-shrinkwrap.json`, so a shrinkwrap is no way around
+it.
 
 Consequences:
 
 - A clean `npm audit` in the repository does not prove a clean npm
-  installation. Release notes keep naming `undici` `8.10.2` in the npm install
-  path until the SDK lifts its pin.
-- Remove the override in the same change that moves the SDK to a release whose
-  own `undici` is fixed; keep it no longer than needed.
+  installation while an override is in place. Release notes then name the
+  overridden version that the npm install path still resolves.
+- Remove an override in the same change that moves the parent package to a
+  release whose own pin is fixed; keep it no longer than needed.
 
 ## Prepare a release
 
