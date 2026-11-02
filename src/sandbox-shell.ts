@@ -328,6 +328,9 @@ async function prepare(workspace: string, cwd: string, argv: readonly string[], 
   }
   try {
     const gitCommonDir = await (dependencies.gitCommonDir ?? resolveWorktreeGitDir)(workspace);
+    // A later overlay at or above /go/pkg/mod would hide the cache bind, and one below it cannot be mounted.
+    const overlaps = (path: string | undefined): boolean => path !== undefined && (within(SANDBOX_GO_MODULE_CACHE, path) || within(path, SANDBOX_GO_MODULE_CACHE));
+    if (cache && (overlaps(workspace) || overlaps(gitCommonDir))) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
     const args = sandboxArgs({ workspace, gitCommonDir, goModuleCacheFd: cache ? SANDBOX_GO_CACHE_FD : undefined, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
     return cache ? { args, cache } : { args };
   } catch (error) {

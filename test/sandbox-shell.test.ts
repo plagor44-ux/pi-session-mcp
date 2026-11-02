@@ -362,6 +362,29 @@ describe("createSandboxedBashOperations", () => {
     expect(h.calls[0]!.args).not.toContain("--ro-bind-fd");
   });
 
+  it("refuses a workspace or Git directory overlay that overlaps the cache target", async () => {
+    const root = await temporaryRoot("go-cache-overlap-");
+    const cache = join(root, "mod");
+    await mkdir(join(cache, "cache/download"), { recursive: true });
+    const selection = { goModuleCache: cache, protection: { home: join(root, "home"), secretPaths: [] } };
+    for (const gitDir of ["/go", "/go/pkg", "/go/pkg/mod", "/go/pkg/mod/x"]) {
+      const h = harness();
+      const dependencies: SandboxDependencies = { ...h.dependencies, gitCommonDir: async () => gitDir };
+      await expect(exec(createSandboxedBashOperations(workspace, dependencies, selection), "x", workspace)).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+      expect(await probeSandbox(workspace, dependencies, undefined, selection)).toBe(false);
+      expect(h.calls).toHaveLength(0);
+    }
+    // A sibling path is not an overlap, and without the opt-in a Git directory at /go is not refused.
+    for (const [gitDir, sel] of [["/gopher", selection], ["/go", undefined]] as const) {
+      const h = harness({ gitCommonDir: async () => gitDir });
+      const running = exec(createSandboxedBashOperations(workspace, h.dependencies, sel), "x", workspace);
+      await vi.waitFor(() => expect(h.children).toHaveLength(1));
+      await vi.waitFor(() => expect(h.children[0]!.released).toEqual(["1"]));
+      h.children[0]!.close(0); await running;
+      expect(h.calls[0]!.args).toContain(gitDir);
+    }
+  });
+
   it("closes the parent's cache descriptor after spawn and after a failing spawn", async () => {
     const root = await temporaryRoot("go-cache-fd-");
     const cache = join(root, "mod");

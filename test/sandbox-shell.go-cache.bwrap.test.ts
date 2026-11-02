@@ -234,6 +234,29 @@ describe.skipIf(!available)("Go module cache in the real sandbox", { timeout: 12
     expect(await probeSandbox(main, {}, undefined, linked)).toBe(false);
   });
 
+  it("mounts the directory it checked when the source is swapped after the check", async () => {
+    const secret = join(root, "secret");
+    await mkdir(join(secret, "cache", "download"), { recursive: true });
+    await writeFile(join(secret, "SECRET-MARK"), "secret\n");
+    const link = join(root, "race-link");
+    await symlink(cache, link);
+    const guarded = { goModuleCache: link, protection: { home, secretPaths: [...protection.secretPaths, secret] } };
+    let swapped = false;
+    // The Git directory lookup runs after the cache was opened and checked, and before the spawn.
+    const swap = async (): Promise<undefined> => { await unlink(link); await symlink(secret, link); swapped = true; return undefined; };
+    let output = "";
+    const { exitCode } = await createSandboxedBashOperations(main, { gitCommonDir: swap }, guarded).exec(
+      "test -e /go/pkg/mod/SECRET-MARK && echo LEAKED; test -d /go/pkg/mod/cache/download/example.invalid && echo ORIGINAL",
+      main, { onData: (data) => { output += data.toString(); }, env: process.env, timeout: 120 },
+    );
+    expect(swapped).toBe(true);
+    expect(exitCode).toBe(0);
+    expect(output).toContain("ORIGINAL");
+    expect(output).not.toContain("LEAKED");
+    // The next run checks the swapped target and refuses it.
+    expect(await probeSandbox(main, {}, undefined, guarded)).toBe(false);
+  });
+
   it("fails the probe for a missing cache and passes it for the valid one", async () => {
     expect(await probeSandbox(main, {}, undefined, selection)).toBe(true);
     expect(await probeSandbox(main, {}, undefined, { goModuleCache: join(root, "absent"), protection })).toBe(false);

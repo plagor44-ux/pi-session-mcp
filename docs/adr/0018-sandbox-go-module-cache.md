@@ -145,8 +145,9 @@ the version or authorize publication.
 - The bind's source path is visible inside the sandbox in
   `/proc/self/mountinfo`, as the workspace path already is. Capabilities,
   diagnostics and error messages never contain it.
-- A workspace at `/go` or above it would shadow the bind with its overlay;
-  such a workspace is not a supported layout.
+- A workspace or worktree Git directory at, above or below `/go/pkg/mod`
+  would hide the bind with its overlay or could not be mounted; with the
+  field set, such a run is refused with `sandbox_unavailable`.
 - Toolchains under `~` or `/opt` stay unavailable; Go must come from `/usr`.
 - Nested user namespaces stay refused by `--disable-userns`; tests that start
   their own sandbox still fail.
