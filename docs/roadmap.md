@@ -177,6 +177,10 @@ mean they are implemented or that their gates passed.
   evaluation-only tool's TypeBox import from `pi-ai`. 1.5.0 pins `undici`
   8.12.3, so the override and #120 close. Not yet established: live
   acceptance on 1.5.0. Open: #144, #215, #221.
+- 2026-11-02: patch release 0.16.1 ships the SDK move (PR #245) in its own
+  release pull request (pre-release record in
+  [Acceptance](acceptance.md#v0161-pre-release-acceptance)); publishing and
+  the upgrade of both installations follow. Open: #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
