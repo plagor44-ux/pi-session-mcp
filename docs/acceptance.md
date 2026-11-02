@@ -2598,6 +2598,49 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.16.1 pre-release acceptance
+
+`v0.16.1` was accepted on 2026-11-02 from 17:25 to 17:30 UTC on its release
+candidate `f09ad5d`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`. Level 1 passed
+without restriction, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. Later commits change only
+this record and the roadmap.
+
+The patch release moves the Pi SDK family to 1.5.0 (#244) and removes the
+`undici` override (#120), both from PR #245. The candidate is `main` at
+`4f2c549` plus the version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    158 files, 4479 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities, for the
+    first time since Pi SDK 1.4.0.
+  - `npm pack` listed 978 files (tarball shasum
+    `00fdcd5523419ada152b6f91b6c31a8fbc39fb61`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.16.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix (`test/sandbox-shell.bwrap.test.ts`, real
+  `systemd-run` and bubblewrap): 35 of 35 passed, none skipped.
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.16.1`. The global install resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3` without an override.
+- In every Level 2 run the built files and the real client registrations were
+  unchanged, no process remained and the leak check passed. The disposable
+  prefixes and the candidate clone were removed.
+
+Not established for `0.16.1`: a Level 3 cycle on the release candidate, a live
+turn on Pi SDK 1.5.0 against a real provider, and the published-release Level 2
+and upgrades, which follow after publishing.
+
 ### v0.16.0 post-release evidence
 
 Recorded on 2026-11-02 for the published release `0.16.0`.

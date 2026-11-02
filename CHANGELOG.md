@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.16.1 — 2026-11-02
+
+Patch release under ADR 0003. It moves the Pi SDK family to 1.5.0 (#244) and
+removes the `undici` override (#120); the public contract of Pi Session MCP is
+unchanged and configurations need no migration. **Upgrade note:** as for every
+release, repeat the provisioning command of each container repository with
+`--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Workers then run on Pi SDK 1.5.0:
+tool arguments are validated by `pi-schema` (see Changed below), and the
+built-in model catalog changes. An npm installation now resolves `undici`
+8.12.3 and `minimatch` 11.0.3, and `npm audit` reports no vulnerabilities.
+
 ### Changed
 
 - Updated the Pi SDK family from 1.4.0 to 1.5.0: `pi-coding-agent`, `pi-ai`,
