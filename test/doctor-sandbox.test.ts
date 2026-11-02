@@ -6,6 +6,9 @@ import type { AppConfig, ConfigurationMetadata } from "../src/config.js";
 import { renderDoctorHuman, runDoctor } from "../src/doctor.js";
 import type { ConfiguredExecutionProfile } from "../src/execution-profile.js";
 
+// The Go module cache resolution reads /proc/self/fd, so it runs on Linux only, like the sandbox.
+const onLinux = it.skipIf(process.platform !== "linux");
+
 afterAll(removeTemporaryRoots);
 
 const CONFIGURATION: ConfigurationMetadata = {
@@ -57,6 +60,60 @@ describe("doctor sandbox checks", () => {
     expect(git).toEqual([]);
     expect(probe).not.toHaveBeenCalled();
     expect(resolver).not.toHaveBeenCalled();
+  });
+
+  onLinux("checks opted-in caches without reporting their paths", async () => {
+    const cache = await temporaryRoot("doctor-cache-");
+    await mkdir(join(cache, "cache/download"), { recursive: true });
+    const repo = await workspace();
+    const probe = vi.fn(async (_path: string, selection?: unknown) => selection === undefined);
+    const { result } = await run([profile("p0", { shell: "sandboxed", goModuleCache: cache })], { repo }, { sandboxProbe: probe });
+    expect(result.checks.find(check => check.id === "sandbox_go_cache_unavailable")).toMatchObject({ severity: "error", subject: "p0" });
+    expect(JSON.stringify(result)).not.toContain(cache);
+    expect(JSON.stringify(result)).not.toContain(repo);
+    expect(probe).toHaveBeenCalledTimes(2);
+    const success = await run([profile("p0", { shell: "sandboxed", goModuleCache: cache })], { repo }, { sandboxProbe: async () => true });
+    expect(success.result.checks.find(check => check.id === "sandbox_go_cache_unavailable")?.severity).toBe("ok");
+    const missing = await run([profile("p0", { shell: "sandboxed", goModuleCache: join(cache, "missing") })], { repo }, { sandboxProbe: async () => true });
+    expect(missing.result.checks.find(check => check.id === "sandbox_go_cache_unavailable")).toMatchObject({ severity: "error", remediation: expect.stringContaining("create") });
+    const noWorkspace = await run([profile("p0", { shell: "sandboxed", goModuleCache: cache })], { repo }, { sandboxProbe: async () => false });
+    const noPass = noWorkspace.result.checks.find(check => check.id === "sandbox_go_cache_unavailable");
+    expect(noPass).toMatchObject({ severity: "error", subject: "p0", remediation: expect.stringContaining("sandbox_unavailable") });
+    expect(JSON.stringify(noWorkspace.result)).not.toContain(cache);
+  });
+
+  onLinux("reports cache classification failures with fixed remediation", async () => {
+    const root = await temporaryRoot("doctor-cache-classify-");
+    const file = join(root, "file"); await writeFile(file, "x");
+    const empty = join(root, "empty"); await mkdir(empty);
+    const home = join(root, "home"); await mkdir(join(home, "cache/download"), { recursive: true });
+    const repo = await workspace();
+    for (const [cache, remediation] of [[file, "directory"], [empty, "cache/download"], [home, "dedicated"]] as const) {
+      const result = await runDoctor({ packageRoot: await packageRoot(), home, agentDir: join(home, ".pi/agent"), sandboxProbe: async () => true, loadConfig: configFor({ repo }, [profile("p0", { shell: "sandboxed", goModuleCache: cache })]) });
+      expect(result.checks.find(check => check.id === "sandbox_go_cache_unavailable")).toMatchObject({ severity: "error", remediation: expect.stringContaining(remediation) });
+      expect(JSON.stringify(result)).not.toContain(root);
+    }
+  });
+
+  onLinux("refuses a cache that equals, contains or lies inside the configuration or agent directory", async () => {
+    const root = await temporaryRoot("doctor-cache-protected-");
+    const home = join(root, "home"); await mkdir(home);
+    const configDir = join(root, "cfg"); const agentDir = join(root, "agent");
+    for (const dir of [configDir, agentDir]) {
+      await mkdir(join(dir, "inner/cache/download"), { recursive: true });
+      await mkdir(join(dir, "cache/download"), { recursive: true });
+    }
+    await mkdir(join(root, "cache/download"), { recursive: true });
+    const configPath = join(configDir, "pi-session-mcp.json"); await writeFile(configPath, "{}");
+    const repo = await workspace();
+    const probe = vi.fn(async () => true);
+    for (const cache of [configDir, join(configDir, "inner"), root, agentDir, join(agentDir, "inner")]) {
+      const result = await runDoctor({ packageRoot: await packageRoot(), home, agentDir, configPath, sandboxProbe: probe, loadConfig: configFor({ repo }, [profile("p0", { shell: "sandboxed", goModuleCache: cache })]) });
+      expect(result.checks.find(check => check.id === "sandbox_go_cache_unavailable"), cache).toMatchObject({ severity: "error", remediation: expect.stringContaining("dedicated") });
+    }
+    const fine = join(root, "dedicated"); await mkdir(join(fine, "cache/download"), { recursive: true });
+    const result = await runDoctor({ packageRoot: await packageRoot(), home, agentDir, configPath, sandboxProbe: probe, loadConfig: configFor({ repo }, [profile("p0", { shell: "sandboxed", goModuleCache: fine })]) });
+    expect(result.checks.find(check => check.id === "sandbox_go_cache_unavailable")?.severity).toBe("ok");
   });
 
   it("probes each existing workspace directory, reporting per workspace alias", async () => {

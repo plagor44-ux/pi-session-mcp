@@ -22,6 +22,7 @@ export interface ConfiguredExecutionProfile {
   readonly grantedExtensionTools?: readonly string[];
   /** `sandboxed` adds a bubblewrap-confined `bash` to a read-only profile (ADR 0013); absent means no shell. */
   readonly shell?: ShellMode;
+  readonly goModuleCache?: string;
   /** The selected catalog skills in configured order; absent when the profile selects none. */
   readonly skills?: readonly SkillSelection[];
 }
@@ -38,6 +39,7 @@ export interface ResolvedExecutionProfile {
   readonly extensions?: readonly ExtensionSpec[];
   readonly grantedExtensionTools?: readonly string[];
   readonly shell?: ShellMode;
+  readonly goModuleCache?: string;
   readonly skills?: readonly SkillSelection[];
 }
 
@@ -53,6 +55,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
     ...(profile.extensions === undefined ? {} : { extensions: profile.extensions }),
     ...(profile.grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...profile.grantedExtensionTools]) }),
     ...(profile.shell === undefined ? {} : { shell: profile.shell }),
+    ...(profile.goModuleCache === undefined ? {} : { goModuleCache: profile.goModuleCache }),
     ...(profile.skills === undefined ? {} : { skills: profile.skills }),
   });
 }

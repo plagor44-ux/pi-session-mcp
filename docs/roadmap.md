@@ -181,6 +181,15 @@ mean they are implemented or that their gates passed.
   release pull request (pre-release record in
   [Acceptance](acceptance.md#v0161-pre-release-acceptance)); publishing and
   the upgrade of both installations follow. Open: #144, #215, #221.
+- 2026-11-02: 0.16.1 published. Its post-release record
+  ([Acceptance](acceptance.md#v0161-post-release-evidence)) adds the first
+  ten-task Level 3 cycle on Pi SDK `1.x` (10 of 10) and live checks of the
+  turn deadline and the recovery export. Both installations still run 0.16.0.
+  [Sprint 24](sprints/2026-11-02-s24-go-module-cache.md) implements
+  [#243](https://github.com/plagor44-ux/pi-session-mcp/issues/243), a
+  read-only Go module cache for the sandboxed shell, as a candidate under the
+  proposed [ADR 0018](adr/0018-sandbox-go-module-cache.md). Open: #144, #215,
+  #221, #243.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

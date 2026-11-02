@@ -760,6 +760,8 @@ even where they used a real controller or a real model. The wording "passed all
 three levels" refers to earlier private cycles only; the full ten-task Level 3
 cycle has not been repeated on Pi SDK `1.x`. This note adds no result and
 changes none.
+On 2026-11-02 one full ten-task cycle passed on the published `0.16.1`
+with Pi SDK `1.5.0`; see [its record](evaluation/level3-2026-11-02/README.md).
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The
@@ -2597,6 +2599,76 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.16.1 post-release evidence
+
+Recorded on 2026-11-02 for the published release `0.16.1`.
+
+Tag binding: the annotated tag `v0.16.1` (tag object
+`6c8576c7b94744c1549ef8e2c2c707487a600fa7`) peels to the merge commit
+`6c533ac1f3f37c1ab1c4072412f7f2e318416b44` of #246, which is also the
+package's `gitHead`. CI on the merge commit (run 41493273481) and on the tag
+(run 41494265554) passed. The GitHub release `v0.16.1` is marked latest and
+has no assets; npm `latest` is `0.16.1`.
+
+Runs on a fresh clone of the tag between 18:00 and 19:10 UTC, with Node.js
+`26.13.0`, npm `12.2.1`, Git `2.56.0`, Go `1.27.3`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.316`. Unrelated jobs
+kept the 16-core host at a load average of 23 to 32 for most of the runs.
+
+- Level 1 after `npm ci`: typecheck, `build:cli`, `build`, `npm audit`,
+  `npm audit --omit=dev` (0 vulnerabilities each) and `git diff --check`
+  exited with `0`, and the status stayed clean. Doctor reported
+  `packageVersion` `0.16.1` and exited with `2` (`config_missing`).
+  SHA-256 of `dist/main.js`:
+  `236a99968d7d68d75f5f21a9e118c6ffe0d95d84da033d38aa730d0ec6691864`.
+  - First test run, `npm test` with
+    `NODE_OPTIONS=--unhandled-rejections=strict` and the default worker count:
+    exit `1`, 158 files, 4474 passed, 4 failed and 16 skipped. All four were
+    5000 ms timeouts: one in `test/multi-session-acceptance-runs.test.ts`,
+    two in `test/setup-snapshots.test.ts` and one in
+    `test/writer-lifecycle.podman.test.ts`. Run alone, the three files passed
+    (88 of 88; 88 of 88; 79 passed and 9 skipped).
+  - Second test run, `npx vitest run --maxWorkers=4` without
+    `NODE_OPTIONS`: exit `0`, 158 files, 4479 passed and 15 skipped.
+  - Third test run, the same with
+    `NODE_OPTIONS=--unhandled-rejections=strict` at a load average of 9 to
+    17: exit `0`, 158 files, 4479 passed and 15 skipped, no unhandled error;
+    the status stayed clean. These counts equal the pre-release run.
+- Pi SDK canary `bash scripts/pi-sdk-canary.sh 1.5.0`: candidate and pin
+  `1.5.0`, siblings `pi-agent-core`, `pi-ai`, `pi-codemode`, `pi-mcp`,
+  `pi-schema`, `pi-telemetry` and `pi-tui` at `1.5.0`; typecheck passed and
+  the 18 SDK-facing test files passed (428 passed, 1 skipped); exit `0`.
+  `npm ci` afterwards restored the pinned tree and the status stayed clean.
+- Dependency tree of the clone: one version each of the eight
+  `@earendil-works` family packages (`1.5.0`), `undici` `8.12.3`,
+  `minimatch` `11.0.3` and `zod` `4.6.7`.
+- Published package: `npm install` into a fresh prefix exited with `0`, and
+  the install smoke reported `smoke_passed` with version `0.16.1`. The
+  installed tree has one copy of each family package at `1.5.0`, `undici`
+  `8.12.3` and `minimatch` `11.0.3`. `npm pack` of the tag clone gives the
+  published shasum `b43cd089721a8a05543551a6966b0d927da3db80` with 978 files.
+  A global prefix has no lockfile to audit, so a consumer fixture depending on
+  `pi-session-mcp@0.16.1` (`npm install --ignore-scripts`) was audited:
+  0 vulnerabilities with and without `--omit=dev`, and its production tree
+  (130 packages) equals the prefix tree.
+- Published-release Level 2 from the tag clone: 160 of 160 checks with
+  delivery off and 228 of 228 with `--events spool`. Published-package
+  Level 2 from the npm prefix: 160 of 160 and 228 of 228. In every run the
+  built files and the real client registrations were unchanged, no process
+  remained and the leak check passed.
+- Level 3: one ten-task cycle passed the gate, 10 of 10 tasks; see
+  [Level 3 cycle on v0.16.1](evaluation/level3-2026-11-02/README.md).
+- Live turn deadline (host sandbox and container writer) and recovery
+  export against a real conflicted writer passed; see
+  [Live turn deadline and recovery export](evaluation/live-deadline-recovery-2026-11-02/README.md).
+
+The pre-release tarball shasum differs from the published one because the
+release record commit `81adad1` changed `docs/acceptance.md`, which the
+package ships.
+
+Not established for `0.16.1`: production upgrades of the installations (they
+still run `0.16.0`), the Claude Code wake in a Level 3 cycle, and macOS.
 
 ### v0.16.1 pre-release acceptance
 

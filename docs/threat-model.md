@@ -56,6 +56,17 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   limits cannot be verified fails; there is no unsandboxed or unlimited
   fallback. It is not allowed together with granted extension
   tools, which may write.
+  - **Go module cache (opt-in, ADR 0018):** `goModuleCache` binds one host
+    directory read-only at `/go/pkg/mod`. It is a deliberate read disclosure:
+    the worker and its provider can read every module in it, private modules
+    included. The server opens the directory, checks the opened directory
+    (not a path string) against the home directory, `~/.pi`, Pi's agent
+    directory and the configuration directory, and binds that descriptor, so
+    a writer that owns the path cannot swap it between check and mount. A
+    writer-owned cache still holds contents that writer chose; they run only
+    inside the sandbox. Network, toolchain download and checksum database
+    stay off, and `GOFLAGS` is unset so a missing `go.sum` entry is not
+    silently written into the overlay.
   - **Residual:** the confinement checks a path when the call starts, so a
     concurrent writer in the same workspace (for example a host-mode coding
     session) could swap a checked directory for a symlink before `rg` or `fd`

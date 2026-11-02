@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- Read-only profiles with `"shell": "sandboxed"` can bind a host Go module
+  cache read-only into the sandbox with the new profile field
+  `goModuleCache`, so reviewers can run offline `go test`, `go vet` and
+  `go build` (#243, [ADR 0018](docs/adr/0018-sandbox-go-module-cache.md)).
+  The server checks the opened directory each run and binds that descriptor,
+  sets `GOPROXY=off`, `GOSUMDB=off`, `GOTOOLCHAIN=local` and `GOENV=off`, and
+  leaves `GOFLAGS` unset. Doctor adds the check
+  `sandbox_go_cache_unavailable`. The MCP contract is unchanged; profiles
+  without the field behave exactly as before. Older releases reject a
+  configuration that sets the field.
+
 ## 0.16.1 — 2026-11-02
 
 Patch release under ADR 0003. It moves the Pi SDK family to 1.5.0 (#244) and

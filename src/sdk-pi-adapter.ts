@@ -22,7 +22,6 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { readFileSync, realpathSync } from "node:fs";
-import { homedir, userInfo } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { allowedReadRoots, createConfinedReadOnlyTools } from "./confined-tools.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -46,7 +45,7 @@ import {
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
-import { createSandboxedBashOperations, probeSandbox, type SandboxDependencies } from "./sandbox-shell.js";
+import { accountHome, createSandboxedBashOperations, probeSandbox, sandboxProtection, type SandboxDependencies, type SandboxProtection } from "./sandbox-shell.js";
 import { composeSessionTools, profileTools } from "./session-tools.js";
 
 export { PROFILE_TOOLS } from "./session-tools.js";
@@ -440,6 +439,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
   private readonly extensionSdk: ExtensionSdk;
   private readonly sandbox: SandboxDependencies;
   private readonly protectedReadPaths: readonly string[];
+  private readonly sandboxProtection: SandboxProtection;
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
     this.modelRuntimeFactory = options.modelRuntimeFactory ?? defaultModelRuntimeFactory;
@@ -449,10 +449,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     this.resolveExtension = options.resolveExtension ?? ((extension) => resolvePiExtension(extension));
     this.extensionSdk = options.extensionSdk ?? DEFAULT_EXTENSION_SDK;
     this.sandbox = options.sandbox ?? {};
-    // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
-    const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
+    const home = accountHome();
     // Pi's agent directory holds its credentials; the SDK resolves it from `PI_CODING_AGENT_DIR` or below `~/.pi`.
-    this.protectedReadPaths = [home, join(home, ".pi"), getAgentDir(), ...(options.protectedReadPaths ?? [])];
+    this.sandboxProtection = sandboxProtection(home, getAgentDir(), options.protectedReadPaths ?? []);
+    this.protectedReadPaths = [home, ...this.sandboxProtection.secretPaths];
   }
 
   async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {
@@ -636,9 +636,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     const tools = createConfinedReadOnlyTools(input.cwd, roots);
     if (executionProfile.shell === "sandboxed") {
       // The first root is the real path of the workspace.
-      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
+      const selection = { goModuleCache: executionProfile.goModuleCache, protection: this.sandboxProtection };
+      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal, selection))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
       tools.push(createBashToolDefinition(input.cwd, {
-        operations: createSandboxedBashOperations(roots[0]!, this.sandbox),
+        operations: createSandboxedBashOperations(roots[0]!, this.sandbox, selection),
         exposeSessionEnvironment: false,
       }) as unknown as ToolDefinition);
     }
