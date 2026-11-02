@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- Gave two tests that run real Git or real child processes an explicit 20 s
+  test timeout: "reports a complete recovery and earlier incomplete slots
+  through setup" (`test/setup-writer-recover.test.ts`) and "kills the whole
+  process group on timeout" (`test/extension-ablation-oracles.test.ts`). Each
+  ended once at the 5 s default under CI or full-suite load during the 0.16.0
+  release and passed on rerun or in isolation
+  ([#240](https://github.com/plagor44-ux/pi-session-mcp/issues/240)). Tests
+  only; no runtime or contract change.
+
 ## 0.16.0 — 2026-11-01
 
 Minor release under ADR 0003. It adds to the public contract: an optional
