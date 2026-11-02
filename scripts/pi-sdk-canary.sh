@@ -5,7 +5,8 @@
 # Usage: bash scripts/pi-sdk-canary.sh [version-or-dist-tag]
 #
 # The SDK and the @earendil-works packages it pulls in (today pi-ai, pi-mcp, pi-tui,
-# pi-codemode, pi-agent-core and, declared by pi-ai, pi-telemetry) move together. The
+# pi-codemode, pi-agent-core and, declared by pi-ai or pi-agent-core, pi-telemetry and
+# pi-schema) move together. The
 # family is resolved transitively: the candidate's declared @earendil-works/*
 # dependencies, then the declared @earendil-works/* dependencies of each resolved
 # member, and so on until the set is stable. Each member gets the highest published
