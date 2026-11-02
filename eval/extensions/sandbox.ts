@@ -1,4 +1,4 @@
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { runHelper } from "./helpers.js";
 import { realHome, resolveTool, type ToolPaths } from "./tools.js";
@@ -35,8 +35,11 @@ export const ETC_ENTRIES = [
   "ssl", "ca-certificates", "pki", "os-release", "gitconfig", "mime.types", "protocols", "services",
 ] as const;
 
-/** The merged-usr links of the root, as `[path, target]`; a real directory at the path is bound instead of linked. */
-export const MERGED_USR_LINKS = [["/bin", "usr/bin"], ["/lib", "usr/lib"], ["/lib64", "usr/lib"], ["/sbin", "usr/bin"]] as const;
+/**
+ * The merged-usr entries of the root. A link is recreated with the host's own target (Arch links /lib64 to usr/lib, Debian and Ubuntu to
+ * usr/lib64, where the dynamic loader lives; #242); a real directory at the path is bound instead of linked.
+ */
+export const MERGED_USR_PATHS = ["/bin", "/lib", "/lib64", "/sbin"] as const;
 
 export interface SandboxLink { path: string; target: string }
 
@@ -72,6 +75,8 @@ const within = (inner: string, outer: string): boolean => inner !== outer && inn
 export interface PlanHost {
   exists: (path: string) => Promise<boolean>;
   lstat: (path: string) => Promise<{ isSymbolicLink: () => boolean; isDirectory: () => boolean } | null>;
+  /** The target of a symbolic link as stored, or null when it cannot be read. */
+  readlink: (path: string) => Promise<string | null>;
   real: (path: string) => Promise<string | null>;
   /** Repo-relative paths of the tracked files below `skills/` (`git ls-files`). */
   trackedSkills: (repoRoot: string, git: string | undefined) => Promise<string[]>;
@@ -80,6 +85,7 @@ export interface PlanHost {
 const defaultHost: PlanHost = {
   exists: (path) => lstat(path).then(() => true, () => false),
   lstat: (path) => lstat(path).catch(() => null),
+  readlink: (path) => readlink(path).catch(() => null),
   real: (path) => realpath(path).then((p) => p, () => null),
   trackedSkills: async (repoRoot, git) => {
     try { return (await runHelper(git ?? await resolveTool("git", process.env.PATH ?? ""), ["-C", repoRoot, "ls-files", "-z", "--", "skills/"], { env: { PATH: process.env.PATH ?? "" } })).stdout.split("\0").filter((path) => path !== ""); } catch { throw new Error("skills_listing_failed"); }
@@ -112,11 +118,13 @@ export async function planSandbox(input: PlanInput, overrides: Partial<PlanHost>
   const rootLinks: SandboxLink[] = [];
   const rootReadOnly: string[] = [];
   if (await host.exists("/opt")) rootReadOnly.push("/opt");
-  for (const [path, target] of MERGED_USR_LINKS) {
+  for (const path of MERGED_USR_PATHS) {
     const stat = await host.lstat(path);
     if (stat === null) continue;
-    if (stat.isSymbolicLink()) rootLinks.push({ path, target });
-    else if (stat.isDirectory()) rootReadOnly.push(path);
+    if (stat.isSymbolicLink()) {
+      const target = await host.readlink(path);
+      if (target !== null) rootLinks.push({ path, target });
+    } else if (stat.isDirectory()) rootReadOnly.push(path);
   }
   const etcReadOnly: string[] = [];
   for (const entry of ETC_ENTRIES) if (await host.exists(`/etc/${entry}`)) etcReadOnly.push(`/etc/${entry}`);
