@@ -163,6 +163,15 @@ mean they are implemented or that their gates passed.
   (pre-release record in
   [Acceptance](acceptance.md#v0160-pre-release-acceptance)), then the upgrade
   of both installations. Open: #120, #144, #215, #221.
+- 2026-11-02: 0.16.0 released; both installations are upgraded, and no
+  profile sets `maxTurnSeconds` yet. The post-release records for 0.15.2 and
+  0.16.0 are in [Acceptance](acceptance.md#v0160-post-release-evidence). Two
+  real-Git and process tests that hit the 5 s default under load during the
+  release get explicit timeouts
+  ([#240](https://github.com/plagor44-ux/pi-session-mcp/issues/240)). Pi SDK
+  1.4.0 is still the latest release, so #120 stays open. Not yet established:
+  a live `--recover --apply` and a turn deadline against a real provider.
+  Open: #120, #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
