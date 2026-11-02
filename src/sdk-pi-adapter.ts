@@ -46,7 +46,7 @@ import {
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
-import { createSandboxedBashOperations, probeSandbox, type SandboxDependencies } from "./sandbox-shell.js";
+import { createSandboxedBashOperations, probeSandbox, type SandboxDependencies, type SandboxProtection } from "./sandbox-shell.js";
 import { composeSessionTools, profileTools } from "./session-tools.js";
 
 export { PROFILE_TOOLS } from "./session-tools.js";
@@ -440,6 +440,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
   private readonly extensionSdk: ExtensionSdk;
   private readonly sandbox: SandboxDependencies;
   private readonly protectedReadPaths: readonly string[];
+  private readonly sandboxProtection: SandboxProtection;
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
     this.modelRuntimeFactory = options.modelRuntimeFactory ?? defaultModelRuntimeFactory;
@@ -452,7 +453,8 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     // The account database's home, not `$HOME`, which a caller's environment could point elsewhere.
     const home = (() => { try { return userInfo().homedir; } catch { return homedir(); } })();
     // Pi's agent directory holds its credentials; the SDK resolves it from `PI_CODING_AGENT_DIR` or below `~/.pi`.
-    this.protectedReadPaths = [home, join(home, ".pi"), getAgentDir(), ...(options.protectedReadPaths ?? [])];
+    this.sandboxProtection = { home, secretPaths: [join(home, ".pi"), getAgentDir(), ...(options.protectedReadPaths ?? [])] };
+    this.protectedReadPaths = [home, ...this.sandboxProtection.secretPaths];
   }
 
   async create(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle> {
@@ -636,9 +638,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     const tools = createConfinedReadOnlyTools(input.cwd, roots);
     if (executionProfile.shell === "sandboxed") {
       // The first root is the real path of the workspace.
-      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
+      const selection = { goModuleCache: executionProfile.goModuleCache, protection: this.sandboxProtection };
+      if (!(await probeSandbox(roots[0]!, this.sandbox, input.signal, selection))) throw this.failure(executionProfile, "sandbox", "sandbox_unavailable");
       tools.push(createBashToolDefinition(input.cwd, {
-        operations: createSandboxedBashOperations(roots[0]!, this.sandbox),
+        operations: createSandboxedBashOperations(roots[0]!, this.sandbox, selection),
         exposeSessionEnvironment: false,
       }) as unknown as ToolDefinition);
     }

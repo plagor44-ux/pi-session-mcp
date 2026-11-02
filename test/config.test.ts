@@ -77,6 +77,21 @@ describe("loadConfig", () => {
     await writeFile(path, JSON.stringify(value)); return path;
   }
 
+  it("preserves a sandbox Go module cache through resolution", async () => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, shell: "sandboxed", goModuleCache: "/cache/mod" } } });
+    const profile = (await loadConfig(path)).executionProfiles.get("safe")!;
+    expect(toResolvedExecutionProfile(profile).goModuleCache).toBe("/cache/mod");
+  });
+
+  it.each([
+    { goModuleCache: "/cache/mod" },
+    { shell: "sandboxed", permissionProfile: "coding", goModuleCache: "/cache/mod" },
+    ...["relative", "/cache/../mod", "/cache/", "/cache/\0mod", "/", `/${"a".repeat(4096)}`].map(goModuleCache => ({ shell: "sandboxed", goModuleCache })),
+  ])("rejects invalid Go cache settings %#", async (extra) => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, ...extra } } });
+    await expect(loadConfig(path)).rejects.toMatchObject({ code: "invalid_execution_profile_config", locations: expect.arrayContaining([expect.stringContaining("goModuleCache")]) });
+  });
+
   it("requires exactly one read-only default execution profile", async () => {
     const base = { workspaces: { repo: "." } };
     await expect(loadConfig(await writeConfig({ ...base, executionProfiles: {} }))).rejects.toThrow();

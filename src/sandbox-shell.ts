@@ -2,8 +2,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Readable, Writable } from "node:stream";
 import { constants as osConstants } from "node:os";
-import { lstatSync, readFileSync, readlinkSync, writeFileSync, type Stats } from "node:fs";
-import { lstat, readFile, realpath, stat } from "node:fs/promises";
+import { constants, lstatSync, readFileSync, readlinkSync, writeFileSync, type Stats } from "node:fs";
+import { access, lstat, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { BashOperations } from "@earendil-works/pi-coding-agent";
 import { isTrustedSystemBinary } from "./setup-platform.js";
@@ -14,6 +14,8 @@ export const SANDBOX_BASH_PATH = "/usr/bin/bash";
 const SANDBOX_TRUE_PATH = "/usr/bin/true";
 const SANDBOX_PATH = "/usr/local/bin:/usr/bin:/bin";
 const SANDBOX_HOME = "/tmp/home";
+export const SANDBOX_GO_MODULE_CACHE = "/go/pkg/mod";
+export const SANDBOX_GO_BUILD_CACHE = "/tmp/go-build";
 /** Directories of a merged-`/usr` host that the sandbox recreates as symlinks or binds read-only. */
 const ROOT_ENTRIES = ["/bin", "/lib", "/lib64", "/sbin"] as const;
 export const PROBE_TIMEOUT_MS = 5_000;
@@ -39,6 +41,7 @@ export type RootEntry =
 export interface SandboxArgsInput {
   /** Real path of the workspace, mounted at the same path as an overlay with a temporary upper layer. */
   readonly workspace: string;
+  readonly goModuleCache?: string | undefined;
   /** Real path of a linked worktree's main Git directory, mounted the same way. */
   readonly gitCommonDir?: string | undefined;
   readonly cwd: string;
@@ -52,16 +55,18 @@ export function sandboxArgs(input: SandboxArgsInput): string[] {
   const args = [
     "--unshare-all", "--unshare-user", "--disable-userns", "--die-with-parent", "--new-session", "--clearenv",
     "--setenv", "PATH", SANDBOX_PATH, "--setenv", "HOME", SANDBOX_HOME,
-    "--ro-bind", "/usr", "/usr",
   ];
+  if (input.goModuleCache !== undefined) args.push("--setenv", "GOMODCACHE", SANDBOX_GO_MODULE_CACHE, "--setenv", "GOCACHE", SANDBOX_GO_BUILD_CACHE, "--setenv", "GOPROXY", "off", "--setenv", "GOSUMDB", "off", "--setenv", "GOTOOLCHAIN", "local", "--setenv", "GOENV", "off");
+  args.push("--ro-bind", "/usr", "/usr");
   for (const entry of input.rootEntries) {
     if (entry.kind === "symlink") args.push("--symlink", entry.target, entry.path);
     else args.push("--ro-bind", entry.path, entry.path);
   }
   args.push(
     "--ro-bind", "/etc", "/etc", "--dev", "/dev", "--proc", "/proc", "--size", String(SANDBOX_TMP_BYTES), "--tmpfs", "/tmp", "--dir", SANDBOX_HOME,
-    "--overlay-src", input.workspace, "--tmp-overlay", input.workspace,
   );
+  if (input.goModuleCache !== undefined) args.push("--ro-bind", input.goModuleCache, SANDBOX_GO_MODULE_CACHE);
+  args.push("--overlay-src", input.workspace, "--tmp-overlay", input.workspace);
   if (input.gitCommonDir !== undefined) args.push("--overlay-src", input.gitCommonDir, "--tmp-overlay", input.gitCommonDir);
   args.push("--chdir", input.cwd, "--", ...input.argv);
   return args;
@@ -100,6 +105,32 @@ export function hostRootEntries(): RootEntry[] {
 }
 
 const within = (path: string, root: string): boolean => path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
+
+export type GoModuleCacheProblem = "missing" | "not_directory" | "unreadable" | "protected" | "unsuitable";
+export interface SandboxProtection { readonly home: string; readonly secretPaths: readonly string[] }
+export interface SandboxSelection { readonly goModuleCache?: string | undefined; readonly protection?: SandboxProtection }
+
+export async function resolveGoModuleCache(source: string, protection: SandboxProtection): Promise<{ ok: true; path: string } | { ok: false; problem: GoModuleCacheProblem }> {
+  try {
+    let path: string;
+    try { path = await realpath(source); } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      return { ok: false, problem: code === "ENOENT" || code === "ENOTDIR" ? "missing" : "unreadable" };
+    }
+    try { if (!(await stat(path)).isDirectory()) return { ok: false, problem: "not_directory" }; await access(path, constants.R_OK | constants.X_OK); }
+    catch { return { ok: false, problem: "unreadable" }; }
+    try { if (!(await stat(join(path, "cache", "download"))).isDirectory()) return { ok: false, problem: "unsuitable" }; }
+    catch { return { ok: false, problem: "unsuitable" }; }
+    const canonical = async (value: string): Promise<string> => { try { return await realpath(value); } catch { return resolve(value); } };
+    const home = await canonical(protection.home);
+    if (within(home, path)) return { ok: false, problem: "protected" };
+    for (const secret of protection.secretPaths) {
+      const target = await canonical(secret);
+      if (within(target, path) || within(path, target)) return { ok: false, problem: "protected" };
+    }
+    return { ok: true, path };
+  } catch { return { ok: false, problem: "unreadable" }; }
+}
 
 async function readSmall(path: string): Promise<string | undefined> {
   try {
@@ -250,10 +281,17 @@ export function sandboxBinaryTrusted(dependencies: SandboxDependencies = {}): bo
 }
 
 /** The complete argument list for one run; refuses when the fixed binary is not trusted. */
-async function prepare(workspace: string, cwd: string, argv: readonly string[], dependencies: SandboxDependencies): Promise<string[]> {
+async function prepare(workspace: string, cwd: string, argv: readonly string[], dependencies: SandboxDependencies, selection?: SandboxSelection): Promise<string[]> {
   if (!sandboxBinaryTrusted(dependencies)) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+  let goModuleCache: string | undefined;
+  if (selection?.goModuleCache !== undefined) {
+    if (!selection.protection) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+    const result = await resolveGoModuleCache(selection.goModuleCache, selection.protection);
+    if (!result.ok) throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
+    goModuleCache = result.path;
+  }
   const gitCommonDir = await (dependencies.gitCommonDir ?? resolveWorktreeGitDir)(workspace);
-  return sandboxArgs({ workspace, gitCommonDir, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
+  return sandboxArgs({ workspace, gitCommonDir, goModuleCache, cwd, rootEntries: (dependencies.rootEntries ?? hostRootEntries)(), argv });
 }
 
 /** Node fires a longer timer at once, so a longer delay is waited for in pieces of at most this length. */
@@ -340,14 +378,14 @@ function start(args: readonly string[], dependencies: SandboxDependencies, deadl
  * Runs `/usr/bin/true` through the same sandbox as a command, bounded by `PROBE_TIMEOUT_MS`.
  * False for an untrusted binary, a spawn failure, a non-zero exit or a timeout.
  */
-export async function probeSandbox(workspace: string, dependencies: SandboxDependencies = {}, signal?: AbortSignal): Promise<boolean> {
+export async function probeSandbox(workspace: string, dependencies: SandboxDependencies = {}, signal?: AbortSignal, selection?: SandboxSelection): Promise<boolean> {
   let running: Running | undefined;
   let timer: NodeJS.Timeout | undefined;
   let onAbort: (() => void) | undefined;
   try {
     if (signal?.aborted) return false;
     const workspaceReal = await realpath(workspace);
-    running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies), dependencies, PROBE_TIMEOUT_MS / 1000);
+    running = start(await prepare(workspaceReal, workspaceReal, [SANDBOX_TRUE_PATH], dependencies, selection), dependencies, PROBE_TIMEOUT_MS / 1000);
     const { child, closed, gate, kill } = running;
     child.stdout?.resume(); child.stderr?.resume();
     const deadline = new Promise<null>((resolvePromise) => {
@@ -374,7 +412,7 @@ export async function probeSandbox(workspace: string, dependencies: SandboxDepen
  * `env` is ignored, a working directory outside the workspace is refused and there is no unsandboxed
  * fallback: a sandbox that cannot start fails the command.
  */
-export function createSandboxedBashOperations(workspace: string, dependencies: SandboxDependencies = {}): BashOperations {
+export function createSandboxedBashOperations(workspace: string, dependencies: SandboxDependencies = {}, selection?: SandboxSelection): BashOperations {
   return {
     exec: async (command, cwd, { onData, signal, timeout }) => {
       if (signal?.aborted) throw new Error("aborted");
@@ -394,7 +432,7 @@ export function createSandboxedBashOperations(workspace: string, dependencies: S
       }
       let running: Running;
       try {
-        running = start(await prepare(workspaceReal, cwdReal, [SANDBOX_BASH_PATH, "-c", command], dependencies), dependencies, timeoutMs / 1000);
+        running = start(await prepare(workspaceReal, cwdReal, [SANDBOX_BASH_PATH, "-c", command], dependencies, selection), dependencies, timeoutMs / 1000);
       } catch {
         throw new Error(SANDBOX_UNAVAILABLE_MESSAGE);
       }

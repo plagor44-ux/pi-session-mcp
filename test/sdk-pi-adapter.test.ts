@@ -820,6 +820,19 @@ describe("sandboxed shell", () => {
     expect(JSON.stringify(diagnostics)).not.toContain(WORKSPACE_DIR);
   });
 
+  it("fails closed at start when the opted-in cache is missing", async () => {
+    const fixture = runtimeFixture();
+    const createSession = createSessionFixture(sessionFixture().session);
+    const sandbox = workingSandbox();
+    const diagnostics: SdkPiAdapterDiagnostic[] = [];
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession, sandbox, diagnosticSink: value => diagnostics.push(value) });
+    const cache = "/nonexistent-go-cache-sentinel/mod";
+    await expect(createIn(adapter, { ...shellProfile, goModuleCache: cache })).rejects.toMatchObject({ code: "sandbox_unavailable" });
+    expect(sandbox.spawned).toHaveLength(0);
+    expect(createSession).not.toHaveBeenCalled();
+    expect(JSON.stringify(diagnostics)).not.toContain(cache);
+  });
+
   it("fails the start when the session resolves another definition for bash", async () => {
     const fixture = runtimeFixture();
     const { session, dispose } = sessionFixture();

@@ -73,6 +73,12 @@ describe("configuration capability projection", () => {
     expect(capabilities.executionProfiles.map((entry) => [entry.alias, entry.shell])).toEqual([["a", "none"], ["b", "sandboxed"]]);
   });
 
+  it("does not project the Go module cache", () => {
+    const profile: ConfiguredExecutionProfile = { alias: "safe", default: true, permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off", shell: "sandboxed" };
+    const project = (p: ConfiguredExecutionProfile) => projectCapabilities(new Map(), new Map([["safe", p]]), configuration);
+    expect(project({ ...profile, goModuleCache: "/secret/cache" })).toEqual(project(profile));
+  });
+
   it("reports the event delivery it is given", () => {
     expect(projectCapabilities(new Map(), new Map(), configuration, new Map(), "spool").events).toEqual({ delivery: "spool" });
     expect(projectCapabilities(new Map(), new Map(), configuration).events).toEqual({ delivery: "off" });

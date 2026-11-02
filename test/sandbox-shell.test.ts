@@ -1,12 +1,12 @@
 import { EventEmitter } from "node:events";
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, symlink, unlink, writeFile } from "node:fs/promises";
 import { constants as osConstants } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   BWRAP_PATH, SYSTEMD_RUN_PATH, SANDBOX_LIMITS, SANDBOX_UNAVAILABLE_MESSAGE, scopeArgs, createSandboxedBashOperations, DEFAULT_COMMAND_TIMEOUT_SECONDS, PROBE_TIMEOUT_MS,
-  endScope, probeSandbox, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
+  endScope, probeSandbox, resolveGoModuleCache, resolveWorktreeGitDir, sandboxArgs, validatedRuntimeDir, verifyScope, type RootEntry, type SandboxChild, type SandboxDependencies, type SandboxSpawn,
 } from "../src/sandbox-shell.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -49,6 +49,15 @@ describe("sandboxArgs", () => {
     ]);
   });
 
+  it("adds the offline Go environment and read-only cache mount", () => {
+    expect(sandboxArgs({ workspace: "/w", cwd: "/w", rootEntries: [], argv: ["true"], goModuleCache: "/cache" })).toEqual([
+      ...FIXED_HEAD.slice(0, -3),
+      "--setenv", "GOMODCACHE", "/go/pkg/mod", "--setenv", "GOCACHE", "/tmp/go-build", "--setenv", "GOPROXY", "off", "--setenv", "GOSUMDB", "off", "--setenv", "GOTOOLCHAIN", "local", "--setenv", "GOENV", "off",
+      "--ro-bind", "/usr", "/usr", ...FIXED_MIDDLE, "--ro-bind", "/cache", "/go/pkg/mod",
+      "--overlay-src", "/w", "--tmp-overlay", "/w", "--chdir", "/w", "--", "true",
+    ]);
+  });
+
   it("binds the root directories read-only on a host without merged /usr and skips absent ones", () => {
     const args = sandboxArgs({ workspace: "/w/ws", cwd: "/w/ws", rootEntries: SPLIT, argv: ["/usr/bin/true"] });
     expect(args).toEqual([
@@ -81,6 +90,35 @@ describe("sandboxArgs", () => {
   it("keeps a command that looks like an option after the separator", () => {
     const args = sandboxArgs({ workspace: "/w/ws", cwd: "/w/ws", rootEntries: [], argv: ["/usr/bin/bash", "-c", "--bind / /"] });
     expect(args.slice(args.indexOf("--") + 1)).toEqual(["/usr/bin/bash", "-c", "--bind / /"]);
+  });
+});
+
+describe("resolveGoModuleCache", () => {
+  it("resolves and protects canonical paths and classifies invalid caches", async () => {
+    const root = await temporaryRoot("go-cache-");
+    const cache = join(root, "cache"); const home = join(root, "home"); const secret = join(root, "secret");
+    await mkdir(join(cache, "cache/download"), { recursive: true });
+    await mkdir(join(home, "cache/download"), { recursive: true });
+    await mkdir(join(secret, "nested/cache/download"), { recursive: true });
+    const protection = { home, secretPaths: [secret] };
+    expect(await resolveGoModuleCache(join(root, "missing"), protection)).toEqual({ ok: false, problem: "missing" });
+    const file = join(root, "file"); await writeFile(file, "x");
+    expect(await resolveGoModuleCache(file, protection)).toEqual({ ok: false, problem: "not_directory" });
+    const unsuitable = join(root, "unsuitable"); await mkdir(unsuitable);
+    expect(await resolveGoModuleCache(unsuitable, protection)).toEqual({ ok: false, problem: "unsuitable" });
+    expect(await resolveGoModuleCache(home, protection)).toEqual({ ok: false, problem: "protected" });
+    await mkdir(join(root, "cache/download"), { recursive: true });
+    expect(await resolveGoModuleCache(root, protection)).toEqual({ ok: false, problem: "protected" });
+    expect(await resolveGoModuleCache(join(secret, "nested"), protection)).toEqual({ ok: false, problem: "protected" });
+    expect(await resolveGoModuleCache(cache, { home, secretPaths: [join(cache, "cache")] })).toEqual({ ok: false, problem: "protected" });
+    const link = join(root, "link"); await symlink(cache, link);
+    expect(await resolveGoModuleCache(link, protection)).toEqual({ ok: true, path: cache });
+    const homeLink = join(root, "home-link"); await symlink(home, homeLink);
+    expect(await resolveGoModuleCache(homeLink, protection)).toEqual({ ok: false, problem: "protected" });
+    if (process.getuid?.() !== 0) {
+      await chmod(cache, 0);
+      try { expect(await resolveGoModuleCache(cache, protection)).toEqual({ ok: false, problem: "unreadable" }); } finally { await chmod(cache, 0o700); }
+    }
   });
 });
 
@@ -274,6 +312,30 @@ describe("createSandboxedBashOperations", () => {
     expect(call.options).toEqual({ env: { XDG_RUNTIME_DIR: "/run/user/test" }, stdio: ["ignore", "pipe", "pipe", "pipe", "pipe"] });
     expect(call.args).toEqual(scopeArgs("test-unit", SANDBOX_LIMITS, sandboxArgs({ workspace, cwd: join(workspace, "src"), rootEntries: MERGED, argv: ["/usr/bin/bash", "-c", "echo hi"] }), DEFAULT_COMMAND_TIMEOUT_SECONDS));
     expect(JSON.stringify(call)).not.toMatch(/SECRET_TOKEN|PI_SESSION_ID/);
+  });
+
+  it("re-resolves the cache for every execution and matches the probe mounts", async () => {
+    const root = await temporaryRoot("go-cache-run-");
+    const cache = join(root, "mod"); const link = join(root, "link");
+    await mkdir(join(cache, "cache/download"), { recursive: true });
+    await symlink(cache, link);
+    const selection = { goModuleCache: link, protection: { home: join(root, "home"), secretPaths: [] } };
+    const h = harness();
+    const probing = probeSandbox(workspace, h.dependencies, undefined, selection);
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+    await vi.waitFor(() => expect(h.children[0]!.released).toEqual(["1"]));
+    h.children[0]!.close(0);
+    expect(await probing).toBe(true);
+    const ops = createSandboxedBashOperations(workspace, h.dependencies, selection);
+    const first = exec(ops, "x", workspace);
+    await vi.waitFor(() => expect(h.calls).toHaveLength(2));
+    await vi.waitFor(() => expect(h.children[1]!.released).toEqual(["1"]));
+    h.children[1]!.close(0); await first;
+    const tail = (args: readonly string[]) => args.slice(args.indexOf("--unshare-all"), args.indexOf("--chdir"));
+    expect(tail(h.calls[0]!.args)).toEqual(tail(h.calls[1]!.args));
+    await unlink(link); await symlink(join(root, "missing"), link);
+    await expect(exec(ops, "x", workspace)).rejects.toThrow(SANDBOX_UNAVAILABLE_MESSAGE);
+    expect(h.calls).toHaveLength(2);
   });
 
   it("adds the worktree Git directory the resolver returns", async () => {

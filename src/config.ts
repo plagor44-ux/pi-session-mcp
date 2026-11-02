@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, isAbsolute, normalize } from "node:path";
 import { z } from "zod";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "./extension-spec.js";
 import { isMcpServers, snapshotMcpServers, type McpServers } from "./mcp-config.js";
@@ -28,6 +28,7 @@ const profileSchema = z.object({
   extensions: z.array(extensionSpec).max(MAX_PROFILE_EXTENSIONS).optional(),
   grantedExtensionTools: z.array(z.string().refine(isAcceptableExtensionToolName)).max(MAX_GRANTED_EXTENSION_TOOLS).optional(),
   shell: z.literal("sandboxed").optional(),
+  goModuleCache: z.string().refine((value) => value.length >= 2 && value.length <= 4096 && !value.includes("\0") && isAbsolute(value) && normalize(value) === value && !value.endsWith("/")).optional(),
   maxTurnSeconds: z.number().int().min(60).max(86_400).optional(),
   skills: z.array(alias).max(MAX_PROFILE_SKILLS).optional(),
 }).strict().superRefine((profile, context) => {
@@ -54,6 +55,9 @@ const profileSchema = z.object({
     if (profile.grantedExtensionTools.some((name) => builtins.has(name))) {
       context.addIssue({ code: "custom", path: ["grantedExtensionTools"], message: "Extension tool grants must not name built-in tools" });
     }
+  }
+  if (profile.goModuleCache !== undefined && (profile.shell !== "sandboxed" || profile.permissionProfile !== "read-only")) {
+    context.addIssue({ code: "custom", path: ["goModuleCache"], message: "Go module cache requires a sandboxed shell" });
   }
   if (profile.shell !== undefined) {
     // Granted extension tools may write, so the sandbox's read-only guarantee would not hold (ADR 0013).
@@ -231,7 +235,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const overrideDirectory = skillOverrideDirectory(absoluteConfig);
   const workspaces = new ImmutableMap(Object.entries(parsed.workspaces).map(([key, value]) => [key, resolve(base, value)] as const));
   const catalog = parsed.skillCatalog ?? {};
-  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, shell, skills, maxTurnSeconds, ...value }]) => {
+  const executionProfiles = new ImmutableMap(Object.entries(parsed.executionProfiles).map(([key, { mcpServers, extensions, grantedExtensionTools, shell, goModuleCache, skills, maxTurnSeconds, ...value }]) => {
     const selection = resolveSkillSelection(skills, catalog, base, overrideDirectory);
     return [key, Object.freeze({
       alias: key, ...value,
@@ -239,6 +243,7 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       ...(extensions === undefined ? {} : { extensions: Object.freeze(extensions.map((spec) => parseExtensionSpec(spec)!)) }),
       ...(grantedExtensionTools === undefined ? {} : { grantedExtensionTools: Object.freeze([...grantedExtensionTools]) }),
       ...(shell === undefined ? {} : { shell }),
+      ...(goModuleCache === undefined ? {} : { goModuleCache }),
       ...(maxTurnSeconds === undefined ? {} : { maxTurnSeconds }),
       ...(selection === undefined ? {} : { skills: selection }),
     })] as const;
