@@ -27,7 +27,7 @@ per topic, no release. The post-release records of 0.16.1 ride along, as
 | Turn deadline, live | Host sandbox 60.03 s and container writer 60.49 s, `abortReason: "deadline"`, session reusable ([record](../evaluation/live-deadline-recovery-2026-11-02/README.md)). |
 | Recovery export, live | `writer_recovered` against a real conflicted writer, all five refs and their content as ADR 0016 describes (same record). |
 | `/compact` with running read-only workers | Blocked: it needs an operator to type `/compact` in an interactive Claude Code session. |
-| #243 | Implemented as a candidate under [ADR 0018](../adr/0018-sandbox-go-module-cache.md) (Proposed). |
+| #243 | Implemented under [ADR 0018](../adr/0018-sandbox-go-module-cache.md), merged in #247; the maintainer accepted the ADR on 2026-11-02. Unreleased. |
 
 ## #243
 
@@ -82,7 +82,8 @@ requires a toolchain inside `/usr`, and those unit tests skip outside Linux.
 ## Rollout and rollback
 
 - Release line: the MCP contract is unchanged, so ADR 0003 allows a patch;
-  the maintainer decides between patch and minor after accepting ADR 0018.
+  the maintainer accepted ADR 0018 on 2026-11-02 and decides between patch
+  and minor.
 - Rollout: after a release, upgrade as in
   [Installation](../installation.md#upgrade); then add `goModuleCache` to one
   sandboxed review profile, point it at a dedicated cache, run Doctor and one

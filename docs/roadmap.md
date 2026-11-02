@@ -187,9 +187,10 @@ mean they are implemented or that their gates passed.
   turn deadline and the recovery export. Both installations still run 0.16.0.
   [Sprint 24](sprints/2026-11-02-s24-go-module-cache.md) implements
   [#243](https://github.com/plagor44-ux/pi-session-mcp/issues/243), a
-  read-only Go module cache for the sandboxed shell, as a candidate under the
-  proposed [ADR 0018](adr/0018-sandbox-go-module-cache.md). Open: #144, #215,
-  #221, #243.
+  read-only Go module cache for the sandboxed shell, under
+  [ADR 0018](adr/0018-sandbox-go-module-cache.md), which the maintainer
+  accepted on 2026-11-02 after the merge of #247 (unreleased). Open: #144,
+  #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
