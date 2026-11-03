@@ -2600,6 +2600,83 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.17.0 post-release evidence
+
+Recorded on 2026-11-03 for the published release `0.17.0`.
+
+Tag binding: the annotated tag `v0.17.0` (tag object
+`35c7712f4a829b94b4692823e13061fbe68b4d55`) peels to the merge commit
+`ae498091d4fa0bb49755c2b9e34cfa422b713806` of #248, which is also the
+package's `gitHead`. CI on the merge commit (run 41527000450) and on the tag
+(run 41528642150) passed; the scheduled install smoke against
+`pi-session-mcp@latest` (run 41640695959) and the Pi SDK canary (run
+41632700215) passed on 2026-11-03. The GitHub release `v0.17.0` is marked
+latest; npm `latest` is `0.17.0`.
+
+Runs on a fresh clone of the tag between 17:27 and 17:35 UTC on Linux 7.3
+(`x64`), with Node.js `26.13.0`, npm `12.2.1`, Git `2.56.0`, Go `1.27.3`,
+bubblewrap `0.13.1`, Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code
+`2.1.317`, at a load average of 1 to 3.
+
+- Level 1 after `npm ci`: typecheck, `build:cli`, `build`, `npm audit`,
+  `npm audit --omit=dev` (0 vulnerabilities each) and `git diff --check`
+  exited with `0`, and the status stayed clean. Doctor without a
+  configuration exited with `2` (`config_missing`). SHA-256 of
+  `dist/main.js`:
+  `236a99968d7d68d75f5f21a9e118c6ffe0d95d84da033d38aa730d0ec6691864`.
+  The test run, `npx vitest run --maxWorkers=4` with
+  `NODE_OPTIONS=--unhandled-rejections=strict`, exited with `0`: 159 files,
+  4514 passed and 15 skipped, no unhandled error. These counts equal the
+  pre-release run.
+- Pi SDK canary `bash scripts/pi-sdk-canary.sh 1.5.0`: compatible with the
+  pin `1.5.0`; typecheck passed and the 18 SDK-facing test files passed
+  (430 passed, 1 skipped); exit `0`. `npm ci` afterwards restored the pinned
+  tree and the status stayed clean.
+- `npm pack` of the tag clone gives the published shasum
+  `47c4cc262b34024e63cebc596a8b60f7401cd82b` with 982 files.
+- Published package: `npm install` into a fresh prefix exited with `0`, and
+  the install smoke reported `smoke_passed` with version `0.17.0`. The
+  installed tree has the eight `@earendil-works` family packages at `1.5.0`,
+  `undici` `8.12.3`, `minimatch` `11.0.3` and `zod` `4.6.7`.
+- Published-package Level 2 from the npm prefix: 160 of 160 checks with
+  delivery off and 228 of 228 with `--events spool`.
+- Published-release Level 2 from the tag clone: the first two runs reported
+  159 of 160 and 227 of 228; the only failed check was the process check
+  (`leftoverCount` 1). The check matches every process whose command line
+  names `pi-session-mcp-setup` or `setup-main.js`, and during these runs the
+  operator ran `pi-session-mcp-setup --writer <name> --verify` for the real
+  installation in a separate shell. Repeated at 17:34 UTC with no other setup
+  process on the host, the tag clone passed 160 of 160 and 228 of 228.
+- In every Level 2 run the real client registrations and the built files
+  were unchanged, the disposable directory was removed and the leak check
+  passed (36 reports, 0 hits).
+
+Installations: both run `0.17.0`. The upgrade on the evening of 2026-11-02
+followed the steps used for `0.16.0` (both client targets removed,
+`npm install -g pi-session-mcp@0.17.0`, each container repository's
+provisioning command repeated with `--apply`, then client-target `--apply`);
+both machines keep a backup of the configuration and the execution modes
+named for `0.17.0`. The outcome was checked again on 2026-11-03 between 17:25
+and 17:32 UTC:
+
+- Workstation: Doctor with the real configuration reported `packageVersion`
+  `0.17.0` and no error; warnings were `snapshot_unavailable` for the
+  snapshot workspace without a prepared slot, the known `workspace_gitfile`
+  and `workspace_mode_unset` of the worktree aliases, and for one container
+  repository `writer_off_default_base` and `writer_dirty` on two writers that
+  hold uncollected work from an earlier session. `--verify` passed for
+  `claude-code:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`,
+  `hook_verified`) and `codex:user:pi-session-mcp` (`mcp_verified`, both
+  `skill_verified`), and `--writer <name> --verify` reported `mcp_verified`
+  for all 18 writers.
+- Server: Doctor reported `packageVersion` `0.17.0`, no error and one
+  `workspace_mode_unset` warning. `--verify` passed for both client targets,
+  and `--writer <name> --verify` reported `mcp_verified` for all 16 writers.
+- No execution profile on either installation sets `goModuleCache`.
+
+Not established for `0.17.0`: a Level 3 cycle, a live review turn that uses
+`goModuleCache` with a real provider, and macOS.
+
 ### v0.17.0 pre-release acceptance
 
 `v0.17.0` was accepted on 2026-11-02 from 19:47 to 19:53 UTC on its release
