@@ -195,6 +195,11 @@ mean they are implemented or that their gates passed.
   the pull request that records the ADR acceptance (pre-release record in
   [Acceptance](acceptance.md#v0170-pre-release-acceptance)); publishing and
   the upgrade of both installations follow. Open: #144, #215, #221.
+- 2026-11-03: 0.17.0 is published and both installations are upgraded; the
+  post-release record is in
+  [Acceptance](acceptance.md#v0170-post-release-evidence). No profile sets
+  `goModuleCache` yet. Not yet established: a live review turn with
+  `goModuleCache` against a real provider. Open: #144, #215, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
