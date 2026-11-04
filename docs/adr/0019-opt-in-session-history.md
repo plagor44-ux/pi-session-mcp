@@ -1,9 +1,10 @@
 # ADR 0019: Opt-in session history
 
-**Status:** Proposed (2026-11-04); implemented under issue
-[#215](https://github.com/plagor44-ux/pi-session-mcp/issues/215) in the same
-pull request. The maintainer accepts or rejects it in that review; it is set
-to Accepted before merge.
+**Status:** Accepted (2026-11-04, maintainer decision, after the merge);
+implemented under issue
+[#215](https://github.com/plagor44-ux/pi-session-mcp/issues/215) in pull
+request [#250](https://github.com/plagor44-ux/pi-session-mcp/pull/250)
+(unreleased). The maintainer decides the release line.
 
 - Planning basis: main `ecdbadf` (published 0.17.0), Pi SDK
   `@earendil-works/pi-coding-agent` 1.5.0.
@@ -42,8 +43,8 @@ pi-session-mcp gets an opt-in, per-machine session history.
   themselves stay `SessionManager.inMemory`.
 - **Capture.** At each turn's terminal transition (completed, failed,
   aborted, deadline) the new entries are read through the public
-  `ReadonlySessionManager` surface and written in one transaction. Container
-  writers page their entries to the host through an inner-only tool on the
+  `ReadonlySessionManager` surface and written in one transaction, or in
+  several for a very long turn (see **Size**). Container writers page their entries to the host through an inner-only tool on the
   existing relay connection; the host treats them as untrusted input and
   records them with provenance `writer-relay`.
 - **Redaction** runs on the host before every write and is irreversible:
