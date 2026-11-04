@@ -23,6 +23,7 @@
     "pi-session-mcp": "dist/main.js",
     "pi-session-mcp-setup": "dist/setup-main.js",
     "pi-session-mcp-wake": "dist/wake-main.js",
+    "pi-session-mcp-history": "dist/history-main.js",
     "pi-session-mcp-doctor": "scripts/doctor.mjs"
   },
   "files": [

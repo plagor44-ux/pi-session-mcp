@@ -42,6 +42,7 @@ import {
   type PiSessionHandle,
   type PiTurnOutcome,
   type TurnCompletion,
+  type HistoryPage,
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
@@ -275,6 +276,17 @@ class SdkHandle implements PiSessionHandle {
   ) {}
 
   get sdkSessionId(): string { return this.session.sessionId; }
+
+  /** Reads the in-memory session through the documented `getHeader`/`getEntries`/`getEntryCount` surface (ADR 0019). */
+  async readHistory(cursor: number): Promise<HistoryPage> {
+    // Both creation paths give the session its own `SessionManager.inMemory`, exposed as `AgentSession.sessionManager`.
+    const manager = (this.session as { sessionManager?: SessionManager }).sessionManager;
+    if (manager === undefined || !Number.isInteger(cursor) || cursor < 0) return { entries: [], next: Math.max(0, Number.isInteger(cursor) ? cursor : 0), more: false };
+    const next = manager.getEntryCount();
+    const entries = cursor >= next ? [] : manager.getEntries().slice(cursor, next);
+    const header = cursor === 0 ? manager.getHeader() : null;
+    return { ...(header === null ? {} : { header }), entries, next: Math.max(cursor, next), more: false };
+  }
 
   prompt(text: string, preflight: (accepted: boolean) => void, onActivity?: () => void): Promise<PiTurnOutcome> {
     if (this.disposed) return Promise.resolve({ status: "failed" });

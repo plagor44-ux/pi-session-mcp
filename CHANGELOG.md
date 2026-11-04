@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Opt-in session history (#215, [ADR 0019](docs/adr/0019-opt-in-session-history.md)). With `"history": { "enabled": true }`, the server stores the redacted metadata, turns and Pi session entries of every session, including container writer sessions, in `~/.local/state/pi-session-mcp/history/history.sqlite`. Redaction runs on the host before storage: known environment values, credential patterns and a path rule that keeps `read`, `grep`, `edit` and `write` content of protected paths out of the file. A history failure never changes a session; it becomes a gap.
+- `pi_session_start` accepts an optional `task` label for the history. `pi_capabilities_get` reports `history.enabled`. The configuration accepts an optional `history` block; an invalid one fails startup with `invalid_history`.
+- New `pi-session-mcp-history` CLI: `list`, `show`, `export` (Pi JSONL v3), `verdict`, `prune`, `reconcile` and a read-only `query`.
+- Doctor checks the history file when history is enabled: `history_storage`, `history_schema`, `history_integrity`, `history_gaps`.
+- Inner writer servers gain the writer-internal `pi_history_read`. **Upgrade note:** repeat each container repository's provisioning command with `--apply` for this release, as for every release; the host admits only an inner server of its own version, so writer sessions start, and are recorded, only after that step.
+
 ## 0.17.0 — 2026-11-02
 
 Minor release by maintainer decision. It adds the opt-in read-only Go module

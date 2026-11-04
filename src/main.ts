@@ -16,12 +16,25 @@ import { EVENTS_DIR_ENV, eventsRoot } from "./turn-events.js";
 import { createWriterGuard } from "./writer-guard.js";
 import { createSnapshotGuard } from "./snapshot-guard.js";
 import { trustedGit } from "./review-snapshot.js";
+import { openHistoryStore, classifyStoreError, type HistoryStore } from "./history/store.js";
+import { createHistoryRecorder, type HistoryRecorder } from "./history/recorder.js";
+import { defaultIsAlive, procStartOf, reconcileInstances } from "./history/reconcile.js";
+import { knownValuesFromEnv, Redactor } from "./history/redact.js";
+import { compilePathRule } from "./history/path-rule.js";
+import type { GapCode } from "./history/constants.js";
+import type { AppConfig } from "./config.js";
+import { PACKAGE_VERSION } from "./package-metadata.js";
 
 type ProcessDiagnostic = SdkPiAdapterDiagnostic | StartupDiagnostic | EventSpoolDiagnostic | {
   readonly level: "warn";
   readonly event: "event_delivery_inactive";
   readonly stage: "startup";
   readonly code: "event_runtime_dir_missing";
+} | {
+  readonly level: "warn";
+  readonly event: "history_inactive" | "history_gap_unrecorded";
+  readonly stage: "startup" | "history";
+  readonly code: GapCode;
 } | {
   readonly level: "error";
   readonly event: "mcp_transport_error";
@@ -50,8 +63,45 @@ function eventSpoolDirectory(env: NodeJS.ProcessEnv): string | undefined {
   return explicit;
 }
 
+/**
+ * Opens the opt-in history (ADR 0019). Any failure leaves history inactive with a content-free
+ * diagnostic; sessions start either way.
+ */
+async function openHistory(config: AppConfig): Promise<{ store: HistoryStore; recorder: HistoryRecorder } | undefined> {
+  const history = config.history;
+  if (history?.enabled !== true) return undefined;
+  let store: HistoryStore | undefined;
+  try {
+    store = await openHistoryStore({});
+    reconcileInstances(store, defaultIsAlive);
+  } catch (error) {
+    try { store?.close(); } catch { /* already reported below */ }
+    writeDiagnostic({ level: "warn", event: "history_inactive", stage: "startup", code: classifyStoreError(error) });
+    return undefined;
+  }
+  const knownValues = knownValuesFromEnv(process.env);
+  const redactors = new Map<string, Redactor>();
+  const recorder = createHistoryRecorder({
+    store,
+    redactorFor: (workspace) => {
+      let redactor = redactors.get(workspace);
+      if (redactor === undefined) {
+        redactor = new Redactor({ knownValues, pathRule: compilePathRule([...history.redactPaths, ...(history.workspaces.get(workspace) ?? [])]) });
+        redactors.set(workspace, redactor);
+      }
+      return redactor;
+    },
+    configurationFingerprint: config.configuration.fingerprint,
+    packageVersion: PACKAGE_VERSION,
+    instance: { pid: process.pid, procStart: procStartOf(process.pid) },
+    diagnostic: (code) => writeDiagnostic({ level: "warn", event: "history_gap_unrecorded", stage: "history", code }),
+  });
+  return { store, recorder };
+}
+
 async function main(): Promise<void> {
   let registry: SessionRegistry | undefined;
+  let historyStore: HistoryStore | undefined;
   let spool: TurnEventSpool | undefined;
   let handle: ReturnType<typeof serveStdio> | undefined;
   try {
@@ -66,6 +116,8 @@ async function main(): Promise<void> {
       } else spool = TurnEventSpool.open(directory, { diagnostic: writeDiagnostic });
     }
     const events = spool;
+    const history = await openHistory(config);
+    historyStore = history?.store;
     // The configuration directory must never become readable through a skill directory: the directory
     // named by the variable and, for a symlinked configuration file, the directory of its target.
     // loadConfig has read the file, so the variable is set and the path exists.
@@ -81,12 +133,13 @@ async function main(): Promise<void> {
     registry = new SessionRegistry(adapter, config.workspaces, {
       snapshotGuard: createSnapshotGuard({ home: homedir(), workspaceModes: config.workspaceModes, git: trustedGit() }),
       ...(guardPath === undefined ? {} : { writerGuard: createWriterGuard(guardPath, config.workspaces) }),
+      ...(history === undefined ? {} : { history: history.recorder }),
       ...(events === undefined ? {} : {
         onTurnTerminal: (event) => events.write({ kind: "turn_terminal", session: event.sessionId, turn: event.turnId, state: event.state, via: event.via }),
       }),
     });
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay, { history: { enabled: history !== undefined }, innerHistory: guardPath !== undefined }),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),
@@ -94,6 +147,7 @@ async function main(): Promise<void> {
     );
   } catch (error) {
     spool?.close("shutdown");
+    try { historyStore?.close(); } catch { /* startup already failed */ }
     writeDiagnostic(startupFailureDiagnostic(error));
     process.exitCode = 1;
     return;
@@ -106,7 +160,10 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     const registryShutdown = async (): Promise<void> => {
-      try { await registry!.shutdown(); } finally { spool?.close(reason); }
+      try { await registry!.shutdown(); } finally {
+        spool?.close(reason);
+        try { historyStore?.close(); } catch { /* history never affects shutdown */ }
+      }
     };
     await shutdownAndTerminate(registryShutdown, () => handle!.close(), exitCode, {
       report: (outcome) => {

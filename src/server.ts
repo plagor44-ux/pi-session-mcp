@@ -7,7 +7,8 @@ import { codingAllowed, isShortBranchName, type WorkspaceModeEntry } from "./exe
 import { PiSessionCreationError, WriterUnavailableError } from "./pi-adapter.js";
 import { toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
 import { RegistryError, type SessionRegistry } from "./session-registry.js";
-import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema } from "./tool-schemas.js";
+import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema, taskLabelSchema, historyPageSuccessSchema } from "./tool-schemas.js";
+import { HISTORY_RELAY_PAGE_BYTES } from "./history/constants.js";
 
 function result<T extends Record<string, unknown>>(value: T, isError = false) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value) }], structuredContent: value, ...(isError ? { isError: true } : {}) };
@@ -32,6 +33,7 @@ export function createServer(
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
   relay = false,
+  options: { history?: { enabled: boolean }; innerHistory?: boolean } = {},
 ): McpServer {
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
@@ -39,12 +41,12 @@ export function createServer(
     inputSchema: z.object({}).strict(),
     outputSchema: capabilitiesSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery)));
+  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery, options.history ?? { enabled: false })));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
-    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional(), task: taskLabelSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, ({ workspace, executionProfile, base }) => safe(async () => {
+  }, ({ workspace, executionProfile, base, task }) => safe(async () => {
     const alias = executionProfile ?? defaultExecutionProfile;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
@@ -59,7 +61,7 @@ export function createServer(
     if (mode.mode === "snapshot" && ((configured.extensions?.length ?? 0) > 0 || (configured.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(configured.mcpServers ?? {}).length > 0)) {
       throw new RegistryError("snapshot_profile_unsupported");
     }
-    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), base === undefined ? {} : { base }) };
+    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), { ...(base === undefined ? {} : { base }), ...(task === undefined ? {} : { task }) }) };
   }));
   server.registerTool("pi_session_list", {
     description: "List local Pi sessions and their state.", inputSchema: z.object({}).strict(), outputSchema: z.union([listSchema, errorSchema]),
@@ -85,5 +87,13 @@ export function createServer(
     description: "Get the normalized observable result of a Pi turn. completed, failed and aborted are terminal and never change: read a terminal turn once. completed is not task success.", inputSchema: z.object({ sessionId: idInputSchema, turnId: idInputSchema }).strict(), outputSchema: z.union([turnSuccessSchema, errorSchema]),
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, ({ sessionId, turnId }) => safe(() => ({ ok: true, turn: registry.getTurn(sessionId, turnId) })));
+  // Only an inner writer server pages its entries to the host relay; the host registration never has this tool.
+  if (options.innerHistory === true && !relay) {
+    server.registerTool("pi_history_read", {
+      description: "Writer relay only: read one page of raw Pi session entries from a cursor for the host's session history.",
+      inputSchema: z.object({ sessionId: idInputSchema, cursor: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }).strict(), outputSchema: z.union([historyPageSuccessSchema, errorSchema]),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    }, ({ sessionId, cursor }) => safe(async () => ({ ok: true, sessionId, ...(await registry.historyPage(sessionId, cursor, HISTORY_RELAY_PAGE_BYTES)) })));
+  }
   return server;
 }

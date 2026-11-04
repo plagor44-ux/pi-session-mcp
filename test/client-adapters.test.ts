@@ -20,6 +20,7 @@ const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   server: { name: "pi-session-mcp", version: PACKAGE_VERSION },
   configuration: VERIFIED_CONFIGURATION,
   events: { delivery: "off" },
+  history: { enabled: false },
   workspaces: [],
   executionProfiles: [VERIFIED_PROFILE],
 };
@@ -199,6 +200,9 @@ describe("client adapters", () => {
     ["missing events", (({ events: _events, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
     ["unknown events delivery", { ...VERIFIED_CAPABILITIES, events: { delivery: "socket" } }],
     ["unknown events key", { ...VERIFIED_CAPABILITIES, events: { delivery: "off", path: "/run/x" } }],
+    ["missing history", (({ history: _history, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
+    ["non-boolean history", { ...VERIFIED_CAPABILITIES, history: { enabled: "yes" } }],
+    ["unknown history key", { ...VERIFIED_CAPABILITIES, history: { enabled: true, path: "/x" } }],
     ["non-object events", { ...VERIFIED_CAPABILITIES, events: "off" }],
     ["unknown configuration key", capabilitiesWith({ ...VERIFIED_CONFIGURATION, stale: false })],
     ["uppercase fingerprint", capabilitiesWith({ ...VERIFIED_CONFIGURATION, fingerprint: `sha256:${"A".repeat(64)}` })],
@@ -242,6 +246,7 @@ describe("client adapters", () => {
 
   it("accepts spool event delivery", async () => {
     expect((await verifyCapabilityPayload({ ...VERIFIED_CAPABILITIES, events: { delivery: "spool" } })).status).toBe("verified");
+    expect((await verifyCapabilityPayload({ ...VERIFIED_CAPABILITIES, history: { enabled: true } })).status).toBe("verified");
   });
 
   it("accepts the maximum number of profile skills", async () => {

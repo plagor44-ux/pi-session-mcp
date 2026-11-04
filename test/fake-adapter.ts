@@ -1,4 +1,4 @@
-import type { PiSessionAdapter, PiSessionHandle, PiTurnOutcome, TurnCompletion } from "../src/pi-adapter.js";
+import type { HistoryPage, PiSessionAdapter, PiSessionHandle, PiTurnOutcome, TurnCompletion } from "../src/pi-adapter.js";
 import type { ResolvedExecutionProfile } from "../src/execution-profile.js";
 
 export type FakePlan = { accepted?: boolean; manualPreflight?: boolean; assistantText?: string; completion?: TurnCompletion; synchronous?: boolean; rejectDetail?: string; prompts?: FakePlan[]; creationError?: Error; creationGate?: Promise<void> };
@@ -54,4 +54,13 @@ export class FakeHandle implements PiSessionHandle {
   reportActivity(): void { this.onActivity?.(); }
   async abort(): Promise<void> { this.aborted += 1; await this.abortGate; if (this.abortError) throw this.abortError; if (this.abortSettlesPrompt) this.settle({ status: "aborted" }); }
   dispose(): void { this.disposeCalls += 1; this.disposed = true; if (this.disposeError) throw this.disposeError; }
+  /** Scripted Pi session entries for the history recorder; `historyGate` delays every read. */
+  history: unknown[] = [];
+  historyGate?: Promise<void>;
+  historyReads: number[] = [];
+  async readHistory(cursor: number): Promise<HistoryPage> {
+    this.historyReads.push(cursor);
+    await this.historyGate;
+    return { ...(cursor === 0 ? { header: { type: "session", version: 3, id: this.sdkSessionId, timestamp: "2026-11-04T10:00:00.000Z", cwd: "/safe/repo" } } : {}), entries: this.history.slice(cursor), next: this.history.length, more: false };
+  }
 }

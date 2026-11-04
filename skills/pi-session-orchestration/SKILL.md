@@ -50,6 +50,7 @@ Read each profile's `maxTurnSeconds` from capabilities (`null` means no server l
 ## 5. Start in parallel, wait on the first
 
 - Start all independent tasks (`pi_session_start`, then `pi_session_prompt`) before you wait on any of them.
+- When `pi_capabilities_get` reports `history.enabled: true`, pass a short `task` label to `pi_session_start`, such as the issue or plan id (`#215`), so the session can be found later.
 - A prompt call returns a running turn at once. Do not block on one task while others sit unstarted.
 - A session accepts one running turn. A second prompt on a running session fails with `session_running`.
 - Put the full task in the prompt: goal, base commit, change area, checks, expected report. Add nothing the task does not ask for. The worker cannot see your conversation.
@@ -94,6 +95,8 @@ Before you close a task or integrate anything:
 - run the relevant tests and checks yourself,
 - compare the result with the scope you wrote down,
 - reject or send back work that is outside the change area or unverified.
+- When `history.enabled` is true, record your verdict after your own verification: `pi-session-mcp-history verdict <session> accepted|rejected|reworked --reason "<one sentence>"`.
+- Never pass history content (`show`, `export` or `query` output) to Pi workers, agy or other models. It is redacted, not clean.
 
 Review every code task before you integrate it:
 
@@ -113,7 +116,7 @@ You integrate. Workers never integrate each other's changes. Resolve conflicts b
 - `abort_timeout` is not a successful abort. The turn may still be running or may finish normally. Decide an observation and cleanup budget before you abort, for example a fixed number of polling rounds within a few minutes. Poll `pi_turn_get` until the turn is terminal or the budget is spent, then close the session with `pi_session_close`. If the close fails or does not finish, stop using that workspace, treat it as unverified and report it. Never wait without a bound.
 - If `pi_session_start` fails, classify the error by its `code` alone. Never decide by the message, provider text or any other free text, and never infer a cause. Read [references/start-errors.md](references/start-errors.md) only now; it lists each known code in exactly one class. Any code not listed there is Unknown. Until the code is classified, do not retry and do not switch profiles. If the reference cannot be read, do not retry at all: report the code and stop that task. Always report the code.
 - `writer_unavailable` is a capacity/state signal, not a reason to switch profiles. Wait for sessions/cleanup or collect and finish writers; use its structured reason and counts as described in the error reference. A lost writer session must be closed and its work inspected before a fresh start.
-- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`config_path_required`, `invalid_execution_profile_config`, `invalid_thinking_level`, `invalid_execution_modes`, `invalid_event_delivery` or `event_spool_unavailable`). No MCP server is available; the operator must fix the configuration.
+- If the pi-session-mcp tools are missing entirely, the server did not start. Its stderr names a `startup_failed` diagnostic (`config_path_required`, `invalid_execution_profile_config`, `invalid_thinking_level`, `invalid_execution_modes`, `invalid_event_delivery`, `invalid_history` or `event_spool_unavailable`). No MCP server is available; the operator must fix the configuration.
 
 ## 10. Close every session
 

@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { WriterGuard } from "./writer-guard.js";
 import { SnapshotError } from "./review-snapshot.js";
 import type { SnapshotGuard, SnapshotSessionLease } from "./snapshot-guard.js";
-import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
+import { HISTORY_SETTLE_DEADLINE_MS } from "./history/constants.js";
+import { NOOP_HISTORY_RECORDER, type HistoryReader, type HistoryRecorder } from "./history/recorder.js";
+import { capJson, type Json } from "./history/redact.js";
+import { PiSessionCreationError, type HistoryPage, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
 export type TurnState = "running" | "completed" | "failed" | "aborted";
@@ -22,7 +25,7 @@ export interface SessionView {
 export interface TurnView { turnId: string; sessionId: string; state: TurnState; startedAt: string; updatedAt: string; completedAt?: string; abortReason?: "deadline"; assistantText?: string; truncated?: boolean; completion?: TurnCompletion; error?: { code: "turn_failed"; message: "Pi turn failed" }; }
 export interface PromptResult { session: SessionView; turn: TurnView; }
 interface TurnEntry extends TurnView { deadlineTimer?: ReturnType<typeof setTimeout> | undefined; deadlineAt?: number; deadlineAbort?: boolean; terminal: boolean; abortPromise?: Promise<void> | undefined; finalizing?: Promise<void> | undefined; }
-interface Entry extends SessionView { maxTurnSeconds?: number; deadlineUncertain?: boolean; lease?: SnapshotSessionLease; tainted?: boolean; handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
+interface Entry extends SessionView { maxTurnSeconds?: number; task?: string; deadlineUncertain?: boolean; lease?: SnapshotSessionLease; tainted?: boolean; handle: PiSessionHandle; turn?: TurnEntry | undefined; turnPromise?: Promise<PiTurnOutcome> | undefined; abortPromise?: Promise<void> | undefined; operation: Promise<void>; disposed: boolean; turns: Map<string, TurnEntry>; order: string[]; }
 export type RegistryErrorCode = "turn_deadline_uncertain" | "snapshot_unavailable" | "snapshot_modified" | "snapshot_profile_unsupported" | "writer_session_lost" | "base_not_applicable" | "unknown_workspace" | "unknown_session" | "session_running" | "prompt_rejected" | "prompt_timeout" | "abort_failed" | "abort_timeout" | "unknown_turn" | "unknown_execution_profile" | "workspace_mode_forbids_coding" | "writer_uncollected" | "writer_busy" | "server_stopping";
 const REGISTRY_ERROR_MESSAGES: Record<RegistryErrorCode, string> = {
   turn_deadline_uncertain: "Turn deadline abort is uncertain; close the session",
@@ -66,12 +69,15 @@ const stamp = () => new Date().toISOString();
  * still running turn aborted, otherwise `registry`. The registry read model stays the only truth.
  */
 export interface TurnTerminalNotice { sessionId: string; turnId: string; state: Exclude<TurnState, "running">; via: "registry" | "close"; }
-export interface SessionRegistryOptions { snapshotVerifyDeadlineMs?: number; preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
+export interface SessionRegistryOptions { snapshotVerifyDeadlineMs?: number; preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; history?: HistoryRecorder; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
+/** `task` is an externally supplied label kept for the history recorder only; it never reaches the adapter or the view. */
+export interface StartOptions { base?: string; task?: string }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
   private readonly pendingStarts = new Set<Promise<SessionView>>();
-  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "snapshotGuard" | "onTurnTerminal">>;
+  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "snapshotGuard" | "onTurnTerminal" | "history">>;
+  private readonly history: HistoryRecorder;
   private readonly writerGuard: WriterGuard | undefined;
   private readonly snapshotGuard: SnapshotGuard | undefined;
   private readonly onTurnTerminal: ((event: TurnTerminalNotice) => void) | undefined;
@@ -82,9 +88,10 @@ export class SessionRegistry {
     this.writerGuard = options.writerGuard;
     this.snapshotGuard = options.snapshotGuard;
     this.onTurnTerminal = options.onTurnTerminal;
+    this.history = options.history ?? NOOP_HISTORY_RECORDER;
     this.options = { snapshotVerifyDeadlineMs: options.snapshotVerifyDeadlineMs ?? 30_000, preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
-  async start(workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string } = {}): Promise<SessionView> {
+  async start(workspace: string, executionProfile: ResolvedExecutionProfile, options: StartOptions = {}): Promise<SessionView> {
     if (this.stopping) throw new RegistryError("server_stopping");
     const cwd = this.workspaces.get(workspace);
     if (!cwd) throw new RegistryError("unknown_workspace");
@@ -95,7 +102,7 @@ export class SessionRegistry {
     this.pendingStarts.add(start);
     try { return await start; } finally { this.pendingStarts.delete(start); }
   }
-  private async guardedCreate(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string }): Promise<SessionView> {
+  private async guardedCreate(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: StartOptions): Promise<SessionView> {
     const previous = this.codingAdmissions.get(workspace) ?? Promise.resolve();
     let release!: () => void;
     const admission = new Promise<void>((resolve) => { release = resolve; });
@@ -112,7 +119,7 @@ export class SessionRegistry {
       if (this.codingAdmissions.get(workspace) === admission) this.codingAdmissions.delete(workspace);
     }
   }
-  private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: { base?: string }): Promise<SessionView> {
+  private async createAndRegister(cwd: string, workspace: string, executionProfile: ResolvedExecutionProfile, options: StartOptions): Promise<SessionView> {
     let lease: SnapshotSessionLease | undefined;
     if (this.snapshotGuard?.isSnapshot(workspace)) {
       try { lease = await this.snapshotGuard.acquire(workspace, cwd, this.shutdownController.signal); }
@@ -134,16 +141,50 @@ export class SessionRegistry {
         ...(handle.placement ? { writer: handle.placement.writer, base: { ...handle.placement.base } } : {}),
         ...(lease ? { lease, snapshot: { ...lease.binding } } : {}),
         ...(executionProfile.maxTurnSeconds === undefined ? {} : { maxTurnSeconds: executionProfile.maxTurnSeconds }),
+        ...(options.task === undefined ? {} : { task: options.task }),
         handle, operation: Promise.resolve(), disposed: false, turns: new Map(), order: [],
       };
       this.sessions.set(entry.id, entry);
-      return this.view(entry);
+      const view = this.view(entry);
+      this.observe(() => this.history.sessionStarted({ view, sdkSessionId: handle.sdkSessionId, ...(options.task === undefined ? {} : { task: options.task }), source: handle.placement ? "writer-relay" : "host" }));
+      return view;
     } catch (error) {
       await this.disposeHandle(handle, lease);
       throw error;
     }
   }
   list(): SessionView[] { return [...this.sessions.values()].map((e) => this.view(e)); }
+  /**
+   * One page of the session's Pi entries from `cursor`, for the host's history (ADR 0019). The page's
+   * JSON stays within `maxBytes`; a single entry larger than that is cut, never skipped.
+   */
+  async historyPage(sessionId: string, cursor: number, maxBytes: number): Promise<HistoryPage> {
+    const handle = this.require(sessionId).handle;
+    if (!handle.readHistory) throw new Error("History is not readable for this session");
+    const page = await handle.readHistory(cursor);
+    const envelope = (entries: unknown[], more: boolean, truncated: number[] = []): HistoryPage => ({
+      ...(page.header === undefined ? {} : { header: page.header }), entries, ...(truncated.length === 0 ? {} : { truncated }), next: cursor + entries.length, more,
+    });
+    // Room for the envelope and the one-element `truncated` list a cut entry adds.
+    const base = Buffer.byteLength(JSON.stringify(envelope([], true, [0]))) + 16;
+    const entries: unknown[] = [];
+    const truncated: number[] = [];
+    let size = base;
+    for (const raw of page.entries) {
+      let item = raw;
+      let bytes = Buffer.byteLength(JSON.stringify(raw) ?? "null") + 1;
+      if (size + bytes > maxBytes) {
+        if (entries.length > 0) break;
+        const capped = capJson(structuredClone(raw) as Json, Math.max(0, maxBytes - base - 1));
+        item = JSON.parse(capped.json) as unknown;
+        bytes = Buffer.byteLength(JSON.stringify(item)) + 1;
+        if (capped.truncated) truncated.push(0);
+      }
+      entries.push(item);
+      size += bytes;
+    }
+    return envelope(entries, entries.length < page.entries.length || page.more, truncated);
+  }
   get(id: string): SessionView { return this.view(this.require(id)); }
   getTurn(sessionId: string, turnId: string): TurnView {
     const entry = this.require(sessionId);
@@ -281,7 +322,10 @@ export class SessionRegistry {
         this.notifyTerminal(existing, turn, "close");
         const abortPromise = this.beginAbort(existing, turn);
         await this.withTimeout(abortPromise.then(() => undefined, () => undefined), existing.handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
+        // The aborted turn's entries are read once the abort settled or timed out, before the handle goes away.
+        if (existing.turns.get(turn.turnId) === turn) this.recordTurnEnd(existing, turn);
       }
+      await this.settleHistory(existing.id);
       existing.turn = undefined;
       existing.turnPromise = undefined;
       existing.turns.clear();
@@ -290,12 +334,14 @@ export class SessionRegistry {
       existing.state = "closed";
       existing.updatedAt = stamp();
       const view = this.view(existing);
+      this.observe(() => this.history.sessionClosed(view));
       this.rememberClosed(id, view);
       this.sessions.delete(id);
       return view;
     });
   }
   async shutdown(): Promise<void> {
+    const end = performance.now() + this.options.shutdownDeadlineMs;
     this.stopping = true;
     this.shutdownController.abort();
     for (const entry of this.sessions.values()) if (entry.turn) this.clearTurnDeadline(entry.turn);
@@ -304,6 +350,7 @@ export class SessionRegistry {
       Promise.allSettled([...this.pendingStarts]),
     ]).then(() => undefined);
     await this.withTimeout(cleanup, this.options.shutdownDeadlineMs, undefined);
+    try { await this.history.flush(Math.max(0, end - performance.now())); } catch { /* History never affects shutdown. */ }
   }
   private require(id: string): Entry { const entry = this.sessions.get(id); if (!entry) throw new RegistryError("unknown_session"); return entry; }
   private verifySelection(applied: PiAppliedSelection, expected: ResolvedExecutionProfile): void {
@@ -334,7 +381,10 @@ export class SessionRegistry {
    * listener is swallowed and can neither change registry state nor reach a caller.
    */
   private notifyTerminal(entry: Entry, turn: TurnEntry, via: "registry" | "close"): void {
-    if (!this.onTurnTerminal || turn.state === "running" || entry.turns.get(turn.turnId) !== turn) return;
+    if (turn.state === "running" || entry.turns.get(turn.turnId) !== turn) return;
+    // A turn ended by `close` is recorded by `close` after its abort wait, not here.
+    if (via === "registry") this.recordTurnEnd(entry, turn);
+    if (!this.onTurnTerminal) return;
     try { this.onTurnTerminal({ sessionId: entry.id, turnId: turn.turnId, state: turn.state, via }); } catch { /* A listener must never affect the registry. */ }
   }
   /**
@@ -355,7 +405,7 @@ export class SessionRegistry {
   }
   /** The registry's own clock: never earlier than `current`, even across a wall-clock step. */
   private advance(current: string, observedAt = stamp()): string { return observedAt > current ? observedAt : current; }
-  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); if (entry.maxTurnSeconds !== undefined && !entry.handle.placement) { turn.deadlineAt = performance.now() + entry.maxTurnSeconds * 1000; this.armTurnDeadline(entry, turn); } }
+  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); const started = this.turnView(turn); this.observe(() => this.history.turnStarted(entry.id, started)); if (entry.maxTurnSeconds !== undefined && !entry.handle.placement) { turn.deadlineAt = performance.now() + entry.maxTurnSeconds * 1000; this.armTurnDeadline(entry, turn); } }
   private clearTurnDeadline(turn: TurnEntry): void {
     clearTimeout(turn.deadlineTimer);
     turn.deadlineTimer = undefined;
@@ -436,9 +486,20 @@ export class SessionRegistry {
       await this.withTimeout(cleanup, handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
     } catch { /* Cleanup errors must never expose adapter internals. */ }
   }
+  /** History is an observer (ADR 0019): a throwing recorder can neither change state nor reach a caller. */
+  private observe(call: () => void): void { try { call(); } catch { /* History never affects the registry. */ } }
+  private recordTurnEnd(entry: Entry, turn: TurnEntry): void {
+    const handle = entry.handle;
+    const read: HistoryReader | undefined = handle.readHistory ? (cursor) => handle.readHistory!(cursor) : undefined;
+    const view = this.turnView(turn);
+    this.observe(() => this.history.turnEnded(entry.id, view, read));
+  }
+  private async settleHistory(id: string): Promise<void> {
+    try { await this.history.settle(id, HISTORY_SETTLE_DEADLINE_MS); } catch { /* History never affects close. */ }
+  }
   private rememberClosed(id: string, view: SessionView): void { this.closed.set(id, view); while (this.closed.size > MAX_CLOSED_TOMBSTONES) this.closed.delete(this.closed.keys().next().value!); }
   private turnView({ deadlineTimer: _timer, deadlineAt: _deadlineAt, deadlineAbort: _deadlineAbort, terminal: _terminal, abortPromise: _abortPromise, finalizing: _finalizing, ...turn }: TurnEntry): TurnView { return { ...turn }; }
-  private view({ maxTurnSeconds: _maxTurnSeconds, deadlineUncertain: _deadlineUncertain, lease: _lease, tainted: _tainted, handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
+  private view({ maxTurnSeconds: _maxTurnSeconds, task: _task, deadlineUncertain: _deadlineUncertain, lease: _lease, tainted: _tainted, handle: _handle, turn: _turn, turnPromise: _turnPromise, abortPromise: _abortPromise, operation: _operation, disposed: _disposed, turns: _turns, order: _order, ...view }: Entry): SessionView { return { ...view }; }
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T>;
   private async withTimeout<T, F>(promise: Promise<T>, milliseconds: number, fallback: F): Promise<T | F>;
   private async withTimeout<T>(promise: Promise<T>, milliseconds: number, fallback: T): Promise<T> { if (milliseconds <= 0) return fallback; let timer: ReturnType<typeof setTimeout> | undefined; const timeout = new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), milliseconds); }); try { return await Promise.race([promise, timeout]); } finally { if (timer !== undefined) clearTimeout(timer); } }

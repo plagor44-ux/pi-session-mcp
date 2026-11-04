@@ -191,6 +191,50 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("history", () => {
+    const base = { workspaces: { repo: "." }, executionProfiles: { safe: validProfile } };
+
+    it("history absent means disabled", async () => {
+      expect((await loadConfig(await writeConfig(base))).history).toEqual({ enabled: false });
+    });
+
+    it("accepts enabled with globs", async () => {
+      const loaded = await loadConfig(await writeConfig({ ...base, history: { enabled: true, redactPaths: ["config/prod/*.yaml"], workspaces: { repo: { redactPaths: ["clusters/**/secret*.yaml"] } } } }));
+      const history = loaded.history;
+      if (history?.enabled !== true) throw new Error("history is not enabled");
+      expect(history.redactPaths).toEqual(["config/prod/*.yaml"]);
+      expect(history.workspaces.get("repo")).toEqual(["clusters/**/secret*.yaml"]);
+    });
+
+    it("an explicit enabled false stays disabled", async () => {
+      expect((await loadConfig(await writeConfig({ ...base, history: { enabled: false, redactPaths: ["x"] } }))).history).toEqual({ enabled: false });
+    });
+
+    it.each([
+      ["unknown workspace key", { enabled: true, workspaces: { other: { redactPaths: ["a"] } } }],
+      ["a glob with ..", { enabled: true, redactPaths: ["a/../b"] }],
+      ["a leading slash", { enabled: true, redactPaths: ["/SECRET_HISTORY_SENTINEL/x"] }],
+      ["an empty glob", { enabled: true, redactPaths: [""] }],
+      ["a NUL", { enabled: true, redactPaths: ["a\u0000b"] }],
+      ["an overlong glob", { enabled: true, redactPaths: ["a".repeat(257)] }],
+      ["an unknown key", { enabled: true, path: "/SECRET_HISTORY_SENTINEL" }],
+      ["missing enabled", { redactPaths: ["a"] }],
+      ["non-object", true],
+    ])("rejects %s with invalid_history", async (_label, history) => {
+      let thrown: unknown;
+      try { await loadConfig(await writeConfig({ ...base, history })); } catch (error) { thrown = error; }
+      expect(thrown).toBeInstanceOf(ConfigError);
+      expect(thrown).toMatchObject({ code: "invalid_history", message: "History configuration is invalid" });
+      expect(JSON.stringify(thrown)).not.toContain("SECRET_HISTORY_SENTINEL");
+    });
+
+    it("history block changes the fingerprint", async () => {
+      const off = await loadConfig(await writeConfig(base));
+      const on = await loadConfig(await writeConfig({ ...base, history: { enabled: true } }));
+      expect(on.configuration.fingerprint).not.toBe(off.configuration.fingerprint);
+    });
+  });
+
   it("returns immutable execution aliases with all selected values", async () => {
     const loaded = await loadConfig(await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: validProfile } }));
     expect(loaded.executionProfiles.get("safe")).toEqual({ alias: "safe", ...validProfile });

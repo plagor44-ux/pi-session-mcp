@@ -99,7 +99,16 @@ export interface PiSessionHandle {
   abort(): Promise<void>;
   /** May await bounded external-resource cleanup; synchronous fakes remain supported. */
   dispose(): void | Promise<void>;
+  /**
+   * Session entries from position `cursor` on, for the opt-in history (ADR 0019). Entries are raw
+   * Pi session entries; the history recorder validates and redacts them and never trusts their shape.
+   */
+  readHistory?(cursor: number): Promise<HistoryPage>;
 }
+
+/** One page of Pi session entries. `next` is the cursor after this page; `more` asks for another read. */
+/** `truncated` lists the indices of entries a relay already cut to fit its page (ADR 0019). */
+export interface HistoryPage { header?: unknown; entries: readonly unknown[]; truncated?: readonly number[]; next: number; more: boolean }
 
 export interface PiSessionAdapter {
   create(input: { cwd: string; workspace: string; base?: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle>;

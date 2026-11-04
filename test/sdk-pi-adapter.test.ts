@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ModelRuntime, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionRuntime, AgentSessionServices, CreateAgentSessionRuntimeFactory } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -103,6 +103,34 @@ function deferred<T>() {
 async function create(adapter: SdkPiSessionAdapter) {
   return adapter.create({ cwd: process.cwd(), executionProfile: profile });
 }
+
+describe("SdkPiSessionAdapter history reads", () => {
+  it("readHistory returns entries after the cursor", async () => {
+    const { session } = sessionFixture();
+    let manager: SessionManager | undefined;
+    const createSession = vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      manager = options.sessionManager;
+      // Like the SDK, the created session exposes the session manager it was given.
+      Object.assign(session as object, { sessionManager: options.sessionManager });
+      exposeCustomTools(session, options);
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => runtimeFixture().runtime, createSession });
+    const handle = await create(adapter);
+    expect(manager).toBeInstanceOf(SessionManager);
+    manager!.appendMessage({ role: "user", content: "first", timestamp: 1 });
+    manager!.appendModelChange("p", "m");
+    manager!.appendMessage({ role: "user", content: "third", timestamp: 3 });
+    const all = await handle.readHistory!(0);
+    expect(all.entries).toHaveLength(3);
+    expect(all).toMatchObject({ next: 3, more: false, header: { type: "session", id: manager!.getSessionId() } });
+    const tail = await handle.readHistory!(1);
+    expect(tail.header).toBeUndefined();
+    expect(tail.entries.map((entry: unknown) => (entry as { type: string }).type)).toEqual(["model_change", "message"]);
+    expect(tail.next).toBe(3);
+    expect((await handle.readHistory!(3)).entries).toEqual([]);
+  });
+});
 
 describe("SdkPiSessionAdapter deterministic selection", () => {
   beforeEach(() => vi.restoreAllMocks());

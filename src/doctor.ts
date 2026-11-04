@@ -1,14 +1,14 @@
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { homedir } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
-import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, type WriterState } from "./writer-state.js";
+import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
-import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError } from "./review-snapshot.js";
+import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError, SNAPSHOT_DIRECTORY } from "./review-snapshot.js";
 import { ConfigError, loadConfig, type AppConfig } from "./config.js";
 import { containerRuntimeUsable } from "./container-runtime.js";
 import { PiExtensionError, type ExtensionSpec } from "./extension-spec.js";
@@ -16,6 +16,9 @@ import { readPackageMetadata } from "./package-metadata.js";
 import { claimsRoot, eventsRoot } from "./turn-events.js";
 import { MAX_SKILL_FILE_BYTES } from "./skill-catalog.js";
 import { readSkillBases, SkillBasesError } from "./skill-customize.js";
+import { HISTORY_SCHEMA_VERSION } from "./history/constants.js";
+import { inspectHistory, type HistoryInspection } from "./history/inspect.js";
+import { historyLocation } from "./history/store.js";
 import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFingerprint, shippedSkillsDirectory, type ReleasedSkillTree } from "./skill-library.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
@@ -32,7 +35,8 @@ export type DoctorCheckId =
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "sandbox_unavailable" | "sandbox_go_cache_unavailable" | "workspace_git_unavailable"
   | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
-  | "event_spool_root";
+  | "event_spool_root"
+  | "history_storage" | "history_schema" | "history_integrity" | "history_gaps";
 
 export interface DoctorCheck {
   readonly id: DoctorCheckId;
@@ -93,6 +97,8 @@ export interface DoctorDependencies {
   readonly sandboxProbe?: (workspace: string, selection?: SandboxSelection) => Promise<boolean>;
   /** The main Git directory of a linked worktree workspace, or `undefined` when the pointer is unusable. */
   readonly worktreeGitDir?: (workspace: string) => Promise<string | undefined>;
+  /** Offline inspection of the history file (ADR 0019); called only when history is enabled. */
+  readonly history?: { inspect(home: string): Promise<HistoryInspection> };
 }
 export interface EventSpoolRootInfo { readonly isDirectory: boolean; readonly uid: number; readonly mode: number }
 
@@ -110,7 +116,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -649,12 +655,62 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
   const lease = await writerLeaseCheck(home, dependencies.writerLeaseRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.());
   if (lease) checks.push(lease);
+  if (config?.history?.enabled === true) {
+    const uid = dependencies.uid ?? process.getuid?.();
+    checks.push(...await historyChecks(config, home, dependencies.history?.inspect ?? ((target) => inspectHistory(target, uid))));
+  }
   if (config) checks.push(...await skillOverrideChecks(config.skillOverrideDirectory, shippedSkillsDirectory(dependencies.packageRoot), dependencies.releasedSkillTrees));
   const rank = new Map(CHECK_ORDER.map((id, index) => [id, index]));
   checks.sort((a, b) => (rank.get(a.id) ?? 999) - (rank.get(b.id) ?? 999) || a.subject.localeCompare(b.subject));
   const hasError = checks.some((check) => check.severity === "error");
   const result: DoctorResult = { schemaVersion: 1, ok: !hasError, ...(metadata ? { packageVersion: metadata.version } : {}), checks: Object.freeze(checks), exitCode: hasError ? 2 : checks.some((check) => check.severity === "warning") ? 1 : 0 };
   return Object.freeze(result);
+}
+
+const HISTORY_SUBJECT = "session history";
+const HISTORY_PLACE = "~/.local/state/pi-session-mcp/history/";
+const STORAGE_REMEDIATION: Record<Exclude<HistoryInspection["storage"], "missing" | "ok">, string> = {
+  symlink: `replace the symbolic link with a real directory and file at ${HISTORY_PLACE}`,
+  not_regular: `keep only a directory with a regular history.sqlite file at ${HISTORY_PLACE}`,
+  bad_owner: `make ${HISTORY_PLACE} and its files owned by the account that runs the server`,
+  bad_mode: `restrict ${HISTORY_PLACE} to mode 0700 and its files to mode 0600`,
+  unreadable: `restore read access to ${HISTORY_PLACE} for the account that runs the server`,
+};
+
+async function canonical(path: string): Promise<string> { try { return await realpath(path); } catch { return path; } }
+function overlaps(a: string, b: string): boolean { return a === b || a.startsWith(b.endsWith(sep) ? b : b + sep) || b.startsWith(a.endsWith(sep) ? a : a + sep); }
+
+/**
+ * Offline history checks (ADR 0019): ownership, modes and symbolic links, a location that no
+ * workspace, writer, snapshot or skill directory can reach, a known schema, a quick integrity check
+ * and gaps of the last seven days (a count only). A missing file is fine: the server creates it.
+ */
+async function historyChecks(config: AppConfig, home: string, inspect: (home: string) => Promise<HistoryInspection>): Promise<DoctorCheck[]> {
+  const directory = await canonical(historyLocation(home).directory);
+  const exposing = [...config.workspaces.values(), writersRoot(home), join(home, ...SNAPSHOT_DIRECTORY), config.skillOverrideDirectory,
+    ...[...config.executionProfiles.values()].flatMap((profile) => (profile.skills ?? []).map((skill) => dirname(skill.path)))];
+  for (const root of exposing) {
+    if (overlaps(directory, await canonical(root))) return [failure("history_storage", HISTORY_SUBJECT, `move workspaces, writer, snapshot and skill directories away from ${HISTORY_PLACE}; no worker-visible directory may contain or lie inside it`)];
+  }
+  let inspection: HistoryInspection;
+  try { inspection = await inspect(home); } catch { inspection = { storage: "unreadable" }; }
+  if (inspection.storage === "missing") return [ok("history_storage", HISTORY_SUBJECT)];
+  if (inspection.storage !== "ok") return [failure("history_storage", HISTORY_SUBJECT, STORAGE_REMEDIATION[inspection.storage])];
+  const checks = [ok("history_storage", HISTORY_SUBJECT)];
+  if (inspection.schemaVersion !== undefined && inspection.schemaVersion > HISTORY_SCHEMA_VERSION) {
+    checks.push(failure("history_schema", HISTORY_SUBJECT, "the history file was written by a newer pi-session-mcp; upgrade this installation or move the file aside"));
+    return checks;
+  }
+  checks.push(ok("history_schema", HISTORY_SUBJECT));
+  if (inspection.integrity !== "ok") {
+    checks.push(failure("history_integrity", HISTORY_SUBJECT, `the history file failed its integrity check; stop the servers and move ${HISTORY_PLACE}history.sqlite aside, a new one is created on the next start`));
+    return checks;
+  }
+  checks.push(ok("history_integrity", HISTORY_SUBJECT));
+  const gaps = inspection.recentGaps ?? 0;
+  checks.push(gaps === 0 ? ok("history_gaps", HISTORY_SUBJECT)
+    : warning("history_gaps", HISTORY_SUBJECT, `${gaps} gap${gaps === 1 ? "" : "s"} recorded in the last 7 days; some turns were not stored, review them with pi-session-mcp-history list and show`));
+  return checks;
 }
 
 export function renderDoctorJson(result: DoctorResult): string { return JSON.stringify(result) + "\n"; }

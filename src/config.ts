@@ -76,7 +76,7 @@ const profileSchema = z.object({
   }
 });
 
-export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level" | "invalid_execution_modes" | "invalid_event_delivery";
+export type ConfigErrorCode = "config_path_required" | "invalid_execution_profile_config" | "invalid_thinking_level" | "invalid_execution_modes" | "invalid_event_delivery" | "invalid_history";
 
 const CONFIG_ERROR_MESSAGES: Record<ConfigErrorCode, string> = {
   config_path_required: "Configuration path is required",
@@ -84,6 +84,7 @@ const CONFIG_ERROR_MESSAGES: Record<ConfigErrorCode, string> = {
   invalid_thinking_level: "Execution profile thinking level is invalid",
   invalid_execution_modes: "Execution modes file is invalid",
   invalid_event_delivery: "Event delivery configuration is invalid",
+  invalid_history: "History configuration is invalid",
 };
 
 export class ConfigError extends Error {
@@ -121,7 +122,7 @@ export const MAX_CONFIG_ISSUE_LOCATIONS = 5;
  * key that is not a schema field name, could be a path or a secret and becomes `<key>`.
  */
 export function issueLocations(issues: readonly z.core.$ZodIssue[]): string[] {
-  const fields = new Set([...Object.keys(configSchema.shape), ...Object.keys(profileSchema.shape), ...Object.keys(eventsSchema.shape)]);
+  const fields = new Set([...Object.keys(configSchema.shape), ...Object.keys(profileSchema.shape), ...Object.keys(eventsSchema.shape), ...Object.keys(historySchema.shape)]);
   const segment = (value: PropertyKey, aliasAllowed: boolean): string =>
     typeof value === "number" ? String(value) : typeof value === "string" && (fields.has(value) || (aliasAllowed && ALIAS_PATTERN.test(value))) ? value : "<key>";
   const locations = issues.flatMap((issue) => {
@@ -133,8 +134,18 @@ export function issueLocations(issues: readonly z.core.$ZodIssue[]): string[] {
 
 const eventsSchema = z.object({ delivery: z.enum(["spool", "off"]) }).strict();
 
+/** A path-rule glob (ADR 0019): relative, bounded, no NUL and no `..` segment. */
+const redactGlob = z.string().min(1).max(256).refine((glob) => !glob.includes("\0") && !glob.startsWith("/") && !glob.split("/").includes(".."));
+const redactPaths = z.array(redactGlob).max(256);
+const historySchema = z.object({
+  enabled: z.boolean(),
+  redactPaths: redactPaths.optional(),
+  workspaces: z.record(alias, z.object({ redactPaths }).strict()).optional(),
+}).strict();
+
 export const configSchema = z.object({
   events: eventsSchema.optional(),
+  history: historySchema.optional(),
   workspaces: z.record(alias, z.string().min(1)),
   skillCatalog: z.record(alias, skillCatalogPath).refine((catalog) => Object.keys(catalog).length <= MAX_SKILL_CATALOG_ENTRIES).optional(),
   executionProfiles: z.record(alias, profileSchema).superRefine((profiles, context) => {
@@ -145,6 +156,9 @@ export const configSchema = z.object({
     if (defaults.length === 1 && defaults[0]![1].permissionProfile !== "read-only") context.addIssue({ code: "custom", message: "The default execution profile must be read-only" });
   }),
 }).strict().superRefine((config, context) => {
+  for (const alias of Object.keys(config.history?.workspaces ?? {})) {
+    if (!Object.hasOwn(config.workspaces, alias)) context.addIssue({ code: "custom", path: ["history", "workspaces", alias], message: "History workspace keys must be configured workspace aliases" });
+  }
   // A profile may select only cataloged skills; there is no implicit or default skill.
   const catalog = config.skillCatalog ?? {};
   // The catalog serves Pi workers, which are never the controlling agent (#188).
@@ -181,7 +195,11 @@ export interface AppConfig {
   readonly eventDelivery: "spool" | "off";
   /** Absolute skill override directory next to the configuration file. Internal; never projected. */
   readonly skillOverrideDirectory: string;
+  /** Opt-in session history (ADR 0019); off when the field is absent. Globs add to the path-rule defaults. */
+  readonly history?: HistoryConfig;
 }
+
+export type HistoryConfig = { readonly enabled: false } | { readonly enabled: true; readonly redactPaths: readonly string[]; readonly workspaces: ReadonlyMap<string, readonly string[]> };
 
 function configurationFingerprint(bytes: Uint8Array): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
@@ -227,7 +245,8 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
       const thinkingLevelIssue = error.issues.some((issue) => issue.path.at(-1) === "thinkingLevel");
       // Only the events field's own issues map to the delivery code; an unknown top-level key stays a profile-config error.
       const eventsIssue = error.issues.some((issue) => issue.path[0] === "events");
-      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : "invalid_execution_profile_config", issueLocations(error.issues), controllerSkillAliases(error.issues));
+      const historyIssue = error.issues.some((issue) => issue.path[0] === "history");
+      throw new ConfigError(thinkingLevelIssue ? "invalid_thinking_level" : eventsIssue ? "invalid_event_delivery" : historyIssue ? "invalid_history" : "invalid_execution_profile_config", issueLocations(error.issues), controllerSkillAliases(error.issues));
     }
     throw error;
   }
@@ -251,5 +270,14 @@ export async function loadConfig(path = process.env.PI_SESSION_MCP_CONFIG): Prom
   const workspaceModes = await loadExecutionModes(absoluteConfig, new Set(workspaces.keys()), executionProfiles);
   const defaultEntry = [...executionProfiles].find(([, profile]) => profile.default);
   if (!defaultEntry) throw new Error("Execution profile configuration is invalid");
-  return { workspaces, workspaceModes, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, eventDelivery: parsed.events?.delivery ?? "off", skillOverrideDirectory: overrideDirectory };
+  return { workspaces, workspaceModes, executionProfiles, defaultExecutionProfile: defaultEntry[0], configuration, eventDelivery: parsed.events?.delivery ?? "off", skillOverrideDirectory: overrideDirectory, history: historyConfig(parsed.history) };
+}
+
+function historyConfig(history: z.infer<typeof historySchema> | undefined): HistoryConfig {
+  if (history?.enabled !== true) return Object.freeze({ enabled: false as const });
+  return Object.freeze({
+    enabled: true as const,
+    redactPaths: Object.freeze([...(history.redactPaths ?? [])]),
+    workspaces: new ImmutableMap(Object.entries(history.workspaces ?? {}).map(([key, value]) => [key, Object.freeze([...value.redactPaths])] as const)),
+  });
 }
