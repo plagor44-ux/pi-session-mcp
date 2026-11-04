@@ -110,6 +110,22 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       expect(await completedTurn(h.registry, session.id, "second")).toMatchObject({ state: "completed" });
     } finally { await h.done(); }
   });
+  it("a history read that times out is history_relay_invalid, and its late response leaves the relay healthy", async () => {
+    const s = await setup([{ history: "slow" }]); const handle = await s.start();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const read = handle.readHistory!(0);
+      const outcome = expect(read).rejects.toMatchObject({ code: "history_relay_invalid" });
+      await vi.advanceTimersByTimeAsync(10_001);
+      await outcome;
+    } finally { vi.useRealTimers(); }
+    expect(handle.isLost?.()).toBe(false);
+    await new Promise(done => setTimeout(done, 800));
+    expect(await calls(s.home, 1)).toContain("pi_history_read");
+    expect(handle.isLost?.()).toBe(false);
+    expect(await handle.prompt("still works", () => undefined)).toMatchObject({ status: "completed" });
+    expect(handle.isLost?.()).toBe(false);
+  });
   it("starts on the first ready relay writer at the default base and reports placement", async () => {
     const s = await setup(); const handle = await s.start();
     expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });

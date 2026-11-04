@@ -49,6 +49,8 @@ async function call(name, args = {}) {
     if (scenario.invalid) return { ok: true, turn: { state: "completed" } };
     return { ok: true, turn: aborted ? (scenario.completeDuringAbort ? completed() : { ...running(), state: "aborted", completedAt: "1" }) : (polls >= (scenario.polls ?? 1) ? completed() : running()) };
   }
+  // `history: "slow"` answers after the host's local read timeout has passed.
+  if (name === "pi_history_read" && scenario.history === "slow") await new Promise(done => setTimeout(done, 300));
   if (name === "pi_history_read") return typeof args.cursor === "number" ? historyPage(args.cursor) : { ok: false, error: { code: "invalid_arguments", message: "Refused" } };
   if (name === "pi_session_abort") aborted = true;
   return { ok: true, session };

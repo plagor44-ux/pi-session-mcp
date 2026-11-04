@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HISTORY_ENTRY_CAP_BYTES, PATH_RULE_MARKER } from "../src/history/constants.js";
 import { compilePathRule, DEFAULT_REDACT_PATHS } from "../src/history/path-rule.js";
-import { knownValuesFromEnv, Redactor, type ToolCallIndex } from "../src/history/redact.js";
+import { capJson, knownValuesFromEnv, Redactor, type ToolCallIndex } from "../src/history/redact.js";
 import { SECRET_PARTS, SENTINELS, alnum, b64url } from "./history-sentinels.js";
 
 const env = { MY_API_KEY: SENTINELS.known, TOKEN: "abc", PATH: "/usr/bin:/bin", HOME: "/home/someone" };
@@ -204,6 +204,24 @@ describe("history redaction", () => {
     expect(Buffer.byteLength(result!.json)).toBeLessThanOrEqual(HISTORY_ENTRY_CAP_BYTES);
     expect(result!.json).toContain(`[TRUNCATED:${big.length}]`);
     expect(() => JSON.parse(result!.json)).not.toThrow();
+  });
+
+  it("drops the content past the cap, not only its size", () => {
+    const big = `HEAD_KEPT_ZZZ ${"x".repeat(5 * 1024 * 1024)} TAIL_DROPPED_ZZZ`;
+    const [, result] = run(redactor(), [toolCall("t", "bash", { command: "cat big" }), toolResult("t", "bash", big)]);
+    expect(result!.truncated).toBe(true);
+    expect(result!.json).toContain("HEAD_KEPT_ZZZ");
+    expect(result!.json).not.toContain("TAIL_DROPPED_ZZZ");
+  });
+
+  it("replaces an entry of many small strings with its envelope when cutting cannot fit it", () => {
+    const value = { type: "message", id: "many", parentId: "root", timestamp: "2026-11-04T10:00:00.000Z", blob: Array.from({ length: 50 }, (_, index) => `MANY_DROPPED_${index}`) };
+    const bytes = Buffer.byteLength(JSON.stringify(value));
+    const capped = capJson(value, 200);
+    expect(capped.truncated).toBe(true);
+    expect(Buffer.byteLength(capped.json)).toBeLessThanOrEqual(200);
+    expect(capped.json).not.toContain("MANY_DROPPED_");
+    expect(JSON.parse(capped.json)).toEqual({ type: "message", id: "many", parentId: "root", timestamp: "2026-11-04T10:00:00.000Z", omitted: "oversized", bytes });
   });
 
   it("keeps entries below the cap untouched apart from redaction", () => {
