@@ -31,7 +31,7 @@ Assumptions: use continues to be single-operator and local. No remote or mobile 
 | A: no new feature phase | **Chosen** | Both clients complete real workflows reliably; the observed problems are maintenance items. |
 | B: local diagnostics and install lifecycle | Delivered; no further phase | Doctor and `setup` exist. Stale supported client versions are maintenance. |
 | C: bounded turn waiting | Rejected | 1 to 3 polls per turn; no client limit or approval cost observed. |
-| D: persistence and resume | Rejected | No lost work observed. Persistence would make Pi Session MCP a sensitive data store. |
+| D: persistence and resume | Rejected | No lost work observed. Persistence would make Pi Session MCP a sensitive data store. Amended by [ADR 0019](0019-opt-in-session-history.md): an opt-in session history is adopted; resume stays rejected. |
 | E: Linux OS isolation | Deferred | Coding profiles have only run on disposable fixtures; see the revisit triggers. |
 | F: remote transport | Rejected | No concrete use case. It would need a separate product and threat-model decision. |
 

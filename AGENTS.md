@@ -34,6 +34,9 @@
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be
   sanitized and must not contain secrets, paths, or complete prompts.
+  Exception: `pi-session-mcp-history show --full`, `export` and `query` print
+  redacted session content by purpose (ADR 0019); their other output follows
+  this rule.
 - Doctor is offline-only. Setup mutations require explicit `--apply`,
   `--rollback`, or `--remove`; default to dry-run, never pin client versions but
   reject a client whose public command output does not match the expected
@@ -55,12 +58,12 @@
   handshake/tools/list/capabilities check, without starting sessions or using a
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
-- The current product boundary is local stdio, in-memory state, and one trusted local MCP peer. HTTP, a web UI, persistence/resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), and one trusted local MCP peer. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
 - Pi extensions load only from an execution profile's exact
   `npm:<name>@<version>` allowlist, resolved from Pi's install without
   installing. Client prompts never dispatch extension commands, and stdout stays
   reserved for MCP frames through the stdout guard. Extensions may persist their
-  own state; Pi Session MCP itself stays in-memory.
+  own state; Pi Session MCP itself keeps sessions in memory; its only persistent store is the opt-in session history (ADR 0019).
 
 <!-- OPENWIKI:START -->
 
