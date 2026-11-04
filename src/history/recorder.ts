@@ -49,7 +49,8 @@ interface SessionState {
   readonly publicId: string;
   readonly historyId: string;
   readonly record: SessionStartRecord;
-  readonly toolCalls: ToolCallIndex;
+  /** The index as of `cursor`: a page read past it changes only a working copy until it is written. */
+  toolCalls: ToolCallIndex;
   cursor: number;
   started: boolean;
   chain: Promise<void>;
@@ -208,7 +209,10 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     let cursor = state.cursor;
     let position = cursor;
     let header: z.infer<typeof headerSchema> | undefined;
-    let batch: Array<{ entry: z.infer<typeof entrySchema>; cut: boolean; position: number; owner: TurnView; redacted: ReturnType<Redactor["entry"]> }> = [];
+    // Only what the row needs: holding the raw entry would defeat the buffer bound, since redaction can shrink it to a marker.
+    let batch: Array<{ id: string; parentId: string | null; type: string; timestamp: string; cut: boolean; position: number; owner: TurnView; redacted: ReturnType<Redactor["entry"]> }> = [];
+    // Rereading from the cursor after a failure must see the index as it was there, not as later pages left it.
+    const toolCalls: ToolCallIndex = new Map(state.toolCalls);
     let buffered = 0;
 
     /** Writes the batch and moves the cursor even if that fails: the next turn records its own entries, this one is a gap. */
@@ -217,6 +221,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       batch = [];
       buffered = 0;
       state.cursor = cursor;
+      state.toolCalls = new Map(toolCalls);
       const startFailure = ensureStarted(state);
       if (startFailure !== undefined) { state.unread.length = 0; return startFailure; }
       const headerJson = header === undefined ? null : JSON.stringify({ type: "session", version: header.version ?? null, id: safeId(state, redactor, header.id), timestamp: header.timestamp });
@@ -227,16 +232,16 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
           const insert = store.db.prepare(`INSERT OR IGNORE INTO entries (session_id, turn_id, position, pi_entry_id, parent_id, entry_type, timestamp, role, tool_name,
             is_error, redacted_json, redactions, dropped_by_path, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
           for (const row of rows) {
-            const { entry, redacted } = row;
-            insert.run(state.historyId, row.owner.turnId, row.position, safeId(state, redactor, entry.id), entry.parentId === null ? null : safeId(state, redactor, entry.parentId),
-              entry.type, entry.timestamp, safeName(redactor, redacted.role), safeName(redactor, redacted.toolName),
+            const { redacted } = row;
+            insert.run(state.historyId, row.owner.turnId, row.position, safeId(state, redactor, row.id), row.parentId === null ? null : safeId(state, redactor, row.parentId),
+              row.type, row.timestamp, safeName(redactor, redacted.role), safeName(redactor, redacted.toolName),
               redacted.isError === true ? 1 : 0, redacted.json, JSON.stringify(redacted.redactions), redacted.droppedByPath ? 1 : 0, redacted.truncated || row.cut ? 1 : 0);
           }
           for (const each of turns) writeTurn(state, each, final);
           store.db.prepare("UPDATE sessions SET entry_cursor = ?, header_json = COALESCE(?, header_json) WHERE id = ?").run(cursor, headerJson, state.historyId);
           if (final) {
             // The entries of the failed reads arrived after all, so their gaps no longer describe anything missing.
-            const forget = store.db.prepare("DELETE FROM gaps WHERE session_id = ? AND first_turn_id = ? AND code = ?");
+            const forget = store.db.prepare("DELETE FROM gaps WHERE (session_id = ? OR session_id IS NULL) AND first_turn_id = ? AND code = ?");
             for (const failed of earlier) forget.run(state.historyId, failed.turn.turnId, failed.code);
             if (earlier.length > 0) store.db.prepare("UPDATE sessions SET completeness = 'complete' WHERE id = ? AND completeness = 'has_gaps' AND NOT EXISTS (SELECT 1 FROM gaps WHERE session_id = ?)").run(state.historyId, state.historyId);
           }
@@ -264,8 +269,8 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
         if (state.abandoned) return;
         if (cursor === 0 && page.header !== undefined) header = page.header;
         page.entries.forEach((entry, index) => {
-          const redacted = redactor.entry(entry, state.toolCalls);
-          batch.push({ entry, cut: page.truncated.has(index), position, owner: owner(entry.timestamp), redacted });
+          const redacted = redactor.entry(entry, toolCalls);
+          batch.push({ id: entry.id, parentId: entry.parentId, type: entry.type, timestamp: entry.timestamp, cut: page.truncated.has(index), position, owner: owner(entry.timestamp), redacted });
           position += 1;
           buffered += Buffer.byteLength(redacted.json);
         });

@@ -1,3 +1,5 @@
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { compilePathRule } from "../src/history/path-rule.js";
 import { createHistoryRecorder, type HistoryRecorder } from "../src/history/recorder.js";
@@ -303,6 +305,35 @@ describe("history recorder", () => {
       expect(diagnostics).toEqual([]);
     });
 
+    it("removes a gap written before the session row existed once its entries arrive", async () => {
+      let refuseSession = true;
+      const { store, recorder } = await setup({
+        wrap: (real) => ({
+          db: new Proxy(real.db, {
+            get(target, property) {
+              const value = Reflect.get(target, property, target) as unknown;
+              if (property !== "prepare") return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+              return (sql: string) => {
+                if (refuseSession && sql.startsWith("INSERT INTO sessions")) throw Object.assign(new Error("database is locked"), { errcode: 5 });
+                return target.prepare(sql);
+              };
+            },
+          }),
+          readOnly: false, close: () => real.close(),
+          transaction: <T,>(fn: () => T): T => real.transaction(fn),
+        }),
+      });
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, ended(1, 2), failing);
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT session_id, first_turn_id FROM gaps WHERE first_turn_id IS NOT NULL")).toEqual([{ session_id: null, first_turn_id: turn(1).turnId }]);
+      refuseSession = false;
+      recorder.turnEnded(SESSION_ID, ended(2, 6), reader([later("a", 1)]));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT turn_id FROM entries")).toEqual([{ turn_id: turn(1).turnId }]);
+      expect(rows(store, "SELECT count(*) AS n FROM gaps WHERE first_turn_id IS NOT NULL")).toEqual([{ n: 0 }]);
+    });
+
     it("gives an entry with an unreadable timestamp to the later turn", async () => {
       const { store, recorder } = await setup();
       start(recorder, { source: "writer-relay" });
@@ -410,6 +441,49 @@ describe("history recorder", () => {
       expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries ORDER BY position").map((row) => row.pi_entry_id)).toEqual(["a", "b", "c", "d"]);
       expect(rows(store, "SELECT DISTINCT turn_id FROM entries")).toEqual([{ turn_id: turn(1).turnId }]);
       expect(rows(store, "SELECT count(*) AS n FROM gaps")).toEqual([{ n: 0 }]);
+    });
+
+    it("does not keep a page's raw content while it buffers the turn", async () => {
+      setFlagsFromString("--expose-gc");
+      const collect = runInNewContext("gc") as () => void;
+      const { recorder } = await setup();
+      start(recorder, { source: "writer-relay" });
+      let raw: WeakRef<object> | undefined;
+      let released: boolean | undefined;
+      const imagePage = (cursor: number): HistoryPage => {
+        const message = { role: "user", content: [{ type: "image", data: "A".repeat(4_096), mimeType: "image/png" }] };
+        if (cursor === 1) raw = new WeakRef(message);
+        return { entries: [{ type: "message", id: `i${cursor}`, parentId: null, timestamp: "2026-11-04T10:00:01.500Z", message }], next: cursor + 1, more: cursor < 2 };
+      };
+      recorder.turnEnded(SESSION_ID, turn(1), async (cursor) => {
+        if (cursor === 2) {
+          await new Promise((done) => setImmediate(done));
+          collect();
+          await new Promise((done) => setImmediate(done));
+          collect();
+          released = raw!.deref() === undefined;
+        }
+        return imagePage(cursor);
+      });
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(released).toBe(true);
+    });
+
+    it("rolls the tool-call index back with the cursor, so a reread keeps the path rule", async () => {
+      const call = (id: string, path: string, pad = "") => ({ type: "message", id, parentId: null, timestamp: "2026-11-04T10:00:01.500Z", message: { role: "assistant", content: [{ type: "text", text: pad }, { type: "toolCall", id: "c", name: "read", arguments: { path } }] } });
+      const result = { type: "message", id: "r", parentId: null, timestamp: "2026-11-04T10:00:01.500Z", message: { role: "toolResult", toolCallId: "c", toolName: "read", content: [{ type: "text", text: "UNRECOGNIZABLE_VALUE_ZZZ" }], isError: false } };
+      const all = [call("protected", ".env", "x".repeat(1_200)), result, call("reuse", "README.md")];
+      const { store, recorder } = await setup({ turnBufferBytes: 1_000 });
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, turn(1), paged([...all, call("unread", "notes.txt")], [], 3));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT pi_entry_id FROM entries")).toEqual([{ pi_entry_id: "protected" }]);
+      recorder.turnEnded(SESSION_ID, { ...turn(2), completedAt: "2026-11-04T10:00:09.000Z" }, async (cursor) => ({ entries: all.slice(cursor), next: all.length, more: false }));
+      await recorder.settle(SESSION_ID, 5_000);
+      const stored = rows(store, "SELECT redacted_json, dropped_by_path FROM entries WHERE pi_entry_id = 'r'");
+      expect(stored).toHaveLength(1);
+      expect(stored[0]!.dropped_by_path).toBe(1);
+      expect(String(stored[0]!.redacted_json)).not.toContain("UNRECOGNIZABLE_VALUE_ZZZ");
     });
 
     it("stops a page source that never ends at the per-turn bound", async () => {
