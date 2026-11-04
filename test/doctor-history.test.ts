@@ -1,9 +1,9 @@
 import { chmod, mkdir, open, rename, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppConfig, HistoryConfig } from "../src/config.js";
 import { runDoctor, type DoctorDependencies } from "../src/doctor.js";
+import { loadSqlite } from "../src/history/sqlite.js";
 import { historyLocation, openHistoryStore } from "../src/history/store.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -82,6 +82,7 @@ describe("doctor history checks", () => {
 
   it("history_schema on user_version 2", async () => {
     const home = await freshHome();
+    const { DatabaseSync } = await loadSqlite();
     const db = new DatabaseSync(historyLocation(home).file);
     db.exec("PRAGMA user_version = 2");
     db.close();
