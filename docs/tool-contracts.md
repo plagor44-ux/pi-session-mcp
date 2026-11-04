@@ -15,7 +15,7 @@ Every response includes text JSON for broad client compatibility and the same ob
 
 There are exactly eight tools. No `pi_turn_wait` tool or live provider/model inventory exists.
 
-An inner writer server (one started by the writer wrapper with `PI_SESSION_MCP_WRITER_GUARD`) additionally registers the writer-internal `pi_history_read` (`sessionId`, `cursor`; read-only hint). It returns one page of raw Pi session entries, at most 448 KiB, for the host's session history ([ADR 0019](adr/0019-opt-in-session-history.md)). The host registration never lists it, and controllers never call it. The host treats every page as untrusted input: an invalid, mismatched or missing page becomes a `history_relay_invalid` gap in the history and never changes a turn or the writer session.
+An inner writer server (one started by the writer wrapper with `PI_SESSION_MCP_WRITER_GUARD`) additionally registers the writer-internal `pi_history_read` (`sessionId`, `cursor`; read-only hint). It returns one page of raw Pi session entries, at most 448 KiB (a single larger entry is cut and its index listed in `truncated`), for the host's session history ([ADR 0019](adr/0019-opt-in-session-history.md)). The host registration never lists it, and controllers never call it. The host treats every page as untrusted input: an invalid, mismatched or missing page becomes a `history_relay_invalid` gap in the history and never changes a turn or the writer session.
 
 ## Versions
 
