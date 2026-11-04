@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { WriterGuard } from "./writer-guard.js";
 import { SnapshotError } from "./review-snapshot.js";
 import type { SnapshotGuard, SnapshotSessionLease } from "./snapshot-guard.js";
+import { HISTORY_SETTLE_DEADLINE_MS } from "./history/constants.js";
+import { NOOP_HISTORY_RECORDER, type HistoryReader, type HistoryRecorder } from "./history/recorder.js";
 import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
@@ -66,14 +68,15 @@ const stamp = () => new Date().toISOString();
  * still running turn aborted, otherwise `registry`. The registry read model stays the only truth.
  */
 export interface TurnTerminalNotice { sessionId: string; turnId: string; state: Exclude<TurnState, "running">; via: "registry" | "close"; }
-export interface SessionRegistryOptions { snapshotVerifyDeadlineMs?: number; preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; }
+export interface SessionRegistryOptions { snapshotVerifyDeadlineMs?: number; preflightDeadlineMs?: number; abortDeadlineMs?: number; closeCleanupDeadlineMs?: number; shutdownDeadlineMs?: number; writerGuard?: WriterGuard; snapshotGuard?: SnapshotGuard; onTurnTerminal?: (event: TurnTerminalNotice) => void; history?: HistoryRecorder; }
 function normalize(text: string): { text: string; truncated: boolean } { const value = text.trim(); if (Buffer.byteLength(value, "utf8") <= MAX_TURN_TEXT_BYTES) return { text: value, truncated: false }; let out = ""; let size = 0; for (const c of value) { const n = Buffer.byteLength(c, "utf8"); if (size + n > MAX_TURN_TEXT_BYTES) break; out += c; size += n; } return { text: out, truncated: true }; }
 /** `task` is an externally supplied label kept for the history recorder only; it never reaches the adapter or the view. */
 export interface StartOptions { base?: string; task?: string }
 export class SessionRegistry {
   private readonly sessions = new Map<string, Entry>(); private readonly closed = new Map<string, SessionView>();
   private readonly pendingStarts = new Set<Promise<SessionView>>();
-  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "snapshotGuard" | "onTurnTerminal">>;
+  private readonly options: Required<Omit<SessionRegistryOptions, "writerGuard" | "snapshotGuard" | "onTurnTerminal" | "history">>;
+  private readonly history: HistoryRecorder;
   private readonly writerGuard: WriterGuard | undefined;
   private readonly snapshotGuard: SnapshotGuard | undefined;
   private readonly onTurnTerminal: ((event: TurnTerminalNotice) => void) | undefined;
@@ -84,6 +87,7 @@ export class SessionRegistry {
     this.writerGuard = options.writerGuard;
     this.snapshotGuard = options.snapshotGuard;
     this.onTurnTerminal = options.onTurnTerminal;
+    this.history = options.history ?? NOOP_HISTORY_RECORDER;
     this.options = { snapshotVerifyDeadlineMs: options.snapshotVerifyDeadlineMs ?? 30_000, preflightDeadlineMs: options.preflightDeadlineMs ?? PREFLIGHT_DEADLINE_MS, abortDeadlineMs: options.abortDeadlineMs ?? ABORT_DEADLINE_MS, closeCleanupDeadlineMs: options.closeCleanupDeadlineMs ?? CLOSE_CLEANUP_DEADLINE_MS, shutdownDeadlineMs: options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS };
   }
   async start(workspace: string, executionProfile: ResolvedExecutionProfile, options: StartOptions = {}): Promise<SessionView> {
@@ -140,7 +144,9 @@ export class SessionRegistry {
         handle, operation: Promise.resolve(), disposed: false, turns: new Map(), order: [],
       };
       this.sessions.set(entry.id, entry);
-      return this.view(entry);
+      const view = this.view(entry);
+      this.observe(() => this.history.sessionStarted({ view, sdkSessionId: handle.sdkSessionId, ...(options.task === undefined ? {} : { task: options.task }), source: handle.placement ? "writer-relay" : "host" }));
+      return view;
     } catch (error) {
       await this.disposeHandle(handle, lease);
       throw error;
@@ -284,7 +290,10 @@ export class SessionRegistry {
         this.notifyTerminal(existing, turn, "close");
         const abortPromise = this.beginAbort(existing, turn);
         await this.withTimeout(abortPromise.then(() => undefined, () => undefined), existing.handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
+        // The aborted turn's entries are read once the abort settled or timed out, before the handle goes away.
+        if (existing.turns.get(turn.turnId) === turn) this.recordTurnEnd(existing, turn);
       }
+      await this.settleHistory(existing.id);
       existing.turn = undefined;
       existing.turnPromise = undefined;
       existing.turns.clear();
@@ -293,12 +302,14 @@ export class SessionRegistry {
       existing.state = "closed";
       existing.updatedAt = stamp();
       const view = this.view(existing);
+      this.observe(() => this.history.sessionClosed(view));
       this.rememberClosed(id, view);
       this.sessions.delete(id);
       return view;
     });
   }
   async shutdown(): Promise<void> {
+    const end = performance.now() + this.options.shutdownDeadlineMs;
     this.stopping = true;
     this.shutdownController.abort();
     for (const entry of this.sessions.values()) if (entry.turn) this.clearTurnDeadline(entry.turn);
@@ -307,6 +318,7 @@ export class SessionRegistry {
       Promise.allSettled([...this.pendingStarts]),
     ]).then(() => undefined);
     await this.withTimeout(cleanup, this.options.shutdownDeadlineMs, undefined);
+    try { await this.history.flush(Math.max(0, end - performance.now())); } catch { /* History never affects shutdown. */ }
   }
   private require(id: string): Entry { const entry = this.sessions.get(id); if (!entry) throw new RegistryError("unknown_session"); return entry; }
   private verifySelection(applied: PiAppliedSelection, expected: ResolvedExecutionProfile): void {
@@ -337,7 +349,10 @@ export class SessionRegistry {
    * listener is swallowed and can neither change registry state nor reach a caller.
    */
   private notifyTerminal(entry: Entry, turn: TurnEntry, via: "registry" | "close"): void {
-    if (!this.onTurnTerminal || turn.state === "running" || entry.turns.get(turn.turnId) !== turn) return;
+    if (turn.state === "running" || entry.turns.get(turn.turnId) !== turn) return;
+    // A turn ended by `close` is recorded by `close` after its abort wait, not here.
+    if (via === "registry") this.recordTurnEnd(entry, turn);
+    if (!this.onTurnTerminal) return;
     try { this.onTurnTerminal({ sessionId: entry.id, turnId: turn.turnId, state: turn.state, via }); } catch { /* A listener must never affect the registry. */ }
   }
   /**
@@ -358,7 +373,7 @@ export class SessionRegistry {
   }
   /** The registry's own clock: never earlier than `current`, even across a wall-clock step. */
   private advance(current: string, observedAt = stamp()): string { return observedAt > current ? observedAt : current; }
-  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); if (entry.maxTurnSeconds !== undefined && !entry.handle.placement) { turn.deadlineAt = performance.now() + entry.maxTurnSeconds * 1000; this.armTurnDeadline(entry, turn); } }
+  private publishTurn(entry: Entry, turn: TurnEntry): void { if (entry.turns.has(turn.turnId)) return; entry.turns.set(turn.turnId, turn); entry.order.push(turn.turnId); this.trim(entry); const started = this.turnView(turn); this.observe(() => this.history.turnStarted(entry.id, started)); if (entry.maxTurnSeconds !== undefined && !entry.handle.placement) { turn.deadlineAt = performance.now() + entry.maxTurnSeconds * 1000; this.armTurnDeadline(entry, turn); } }
   private clearTurnDeadline(turn: TurnEntry): void {
     clearTimeout(turn.deadlineTimer);
     turn.deadlineTimer = undefined;
@@ -438,6 +453,17 @@ export class SessionRegistry {
       const cleanup = Promise.resolve().then(() => handle.dispose()).then(async () => { if (lease) { await lease.release(); disposalLeases.delete(lease); } });
       await this.withTimeout(cleanup, handle.deadlines?.cleanupMs ?? this.options.closeCleanupDeadlineMs, undefined);
     } catch { /* Cleanup errors must never expose adapter internals. */ }
+  }
+  /** History is an observer (ADR 0019): a throwing recorder can neither change state nor reach a caller. */
+  private observe(call: () => void): void { try { call(); } catch { /* History never affects the registry. */ } }
+  private recordTurnEnd(entry: Entry, turn: TurnEntry): void {
+    const handle = entry.handle;
+    const read: HistoryReader | undefined = handle.readHistory ? (cursor) => handle.readHistory!(cursor) : undefined;
+    const view = this.turnView(turn);
+    this.observe(() => this.history.turnEnded(entry.id, view, read));
+  }
+  private async settleHistory(id: string): Promise<void> {
+    try { await this.history.settle(id, HISTORY_SETTLE_DEADLINE_MS); } catch { /* History never affects close. */ }
   }
   private rememberClosed(id: string, view: SessionView): void { this.closed.set(id, view); while (this.closed.size > MAX_CLOSED_TOMBSTONES) this.closed.delete(this.closed.keys().next().value!); }
   private turnView({ deadlineTimer: _timer, deadlineAt: _deadlineAt, deadlineAbort: _deadlineAbort, terminal: _terminal, abortPromise: _abortPromise, finalizing: _finalizing, ...turn }: TurnEntry): TurnView { return { ...turn }; }
