@@ -8,7 +8,9 @@ import type { WorkspaceModeEntry } from "./execution-modes.js";
 import type { ConfiguredExecutionProfile } from "./execution-profile.js";
 import { PiSessionCreationError, WriterUnavailableError, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type PiSessionCreationErrorCode } from "./pi-adapter.js";
 import { RegistryError } from "./session-registry.js";
-import { capabilitiesSchema, errorSchema, promptSuccessSchema, successSchema, turnSuccessSchema, type turnSchema } from "./tool-schemas.js";
+import { capabilitiesSchema, errorSchema, historyPageSuccessSchema, promptSuccessSchema, successSchema, turnSuccessSchema, type turnSchema } from "./tool-schemas.js";
+import { HistoryStoreError } from "./history/store.js";
+import type { HistoryPage } from "./pi-adapter.js";
 import { writerPaths } from "./writer-state.js";
 
 export const RELAY_START_BUDGET_MS = 60_000;
@@ -19,6 +21,12 @@ export const RELAY_ABORT_DEADLINE_MS = 15_000;
 export const RELAY_CLEANUP_DEADLINE_MS = 10_000;
 // The inner text cap is 64 KiB; JSON escaping can grow it up to sixfold.
 export const RELAY_MAX_RESPONSE_BYTES = 524_288;
+/**
+ * How long the MCP client keeps an untrusted history request registered. The local wait is shorter
+ * (`RELAY_CALL_TIMEOUT_MS`), but the request is not cancelled: a response to a cancelled request would
+ * arrive for an unknown id, which the client reports as a transport error and the relay as lost.
+ */
+export const RELAY_HISTORY_REQUEST_TTL_MS = 600_000;
 
 export interface WriterProcessFactory {
   spawn(wrapperPath: string, env: Record<string, string>): Transport;
@@ -122,6 +130,18 @@ class Connection {
       throw new Error("Invalid writer response");
     }
   }
+  /** Like `call` for untrusted, optional data: any failure throws but never marks the connection lost. */
+  async callUntrusted<T>(name: string, args: Record<string, unknown>, schema: z.ZodType<T>, ms: number): Promise<T> {
+    const toolDefinition = this.tools.find(tool => tool.name === name);
+    if (!toolDefinition) throw new Error("Writer tool missing");
+    const request = this.client.callTool({ name, arguments: args }, { timeout: RELAY_HISTORY_REQUEST_TTL_MS, maxTotalTimeout: RELAY_HISTORY_REQUEST_TTL_MS, resetTimeoutOnProgress: false, toolDefinition });
+    request.catch(() => undefined);
+    const result = await bounded(() => request, ms);
+    const raw = result.structuredContent;
+    const encoded = JSON.stringify(raw);
+    if (encoded === undefined || Buffer.byteLength(encoded) > RELAY_MAX_RESPONSE_BYTES) throw new Error("Invalid writer response");
+    return schema.parse(raw);
+  }
   async cleanup(sessionId?: string, ms = RELAY_CLEANUP_DEADLINE_MS): Promise<void> {
     // One deadline covers the RPC AND transport close, not two consecutive deadlines.
     const end = Date.now() + ms;
@@ -217,6 +237,17 @@ class RelayHandle implements PiSessionHandle {
         if (this.active === active) this.observe(turn);
       }, RELAY_ABORT_DEADLINE_MS);
     } catch { this.lose(); throw new Error("Writer abort failed"); }
+  }
+  /** Untrusted input (ADR 0019): every failure is `history_relay_invalid` and leaves the turn and connection alone. */
+  async readHistory(cursor: number): Promise<HistoryPage> {
+    if (this.isLost() || this.disposed) throw new HistoryStoreError("history_relay_invalid");
+    try {
+      const page = await this.connection.callUntrusted("pi_history_read", { sessionId: this.sdkSessionId, cursor }, historyPageSuccessSchema, RELAY_CALL_TIMEOUT_MS);
+      if (page.sessionId !== this.sdkSessionId) throw new Error("Writer session mismatch");
+      return { ...(page.header === undefined ? {} : { header: page.header }), entries: page.entries, next: page.next, more: page.more };
+    } catch {
+      throw new HistoryStoreError("history_relay_invalid");
+    }
   }
   dispose(): Promise<void> {
     if (!this.disposal) {

@@ -147,7 +147,9 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     let header: z.infer<typeof headerSchema> | undefined;
     if (page.data.header !== undefined && page.data.header !== null) {
       const parsed = headerSchema.safeParse(page.data.header);
-      if (!parsed.success || parsed.data.id !== state.record.sdkSessionId) throw new HistoryStoreError("history_relay_invalid");
+      // A relayed header carries the inner Pi session id, which the host never learns otherwise; the
+      // relay checks the inner public session id instead.
+      if (!parsed.success || (state.record.source === "host" && parsed.data.id !== state.record.sdkSessionId)) throw new HistoryStoreError("history_relay_invalid");
       header = parsed.data;
     }
     return { ...(header === undefined ? {} : { header }), entries, next: page.data.next, more: page.data.more };
@@ -179,7 +181,9 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       }
     } catch (error) {
       if (state.abandoned) return;
-      const code = error instanceof HistoryStoreError ? error.code : state.record.source === "writer-relay" ? "history_relay_invalid" : "history_unavailable";
+      // A page the host's own handle produced is not relay input; its failure is an unavailable read.
+      const relayed = state.record.source === "writer-relay";
+      const code = error instanceof HistoryStoreError && (relayed || error.code !== "history_relay_invalid") ? error.code : relayed ? "history_relay_invalid" : "history_unavailable";
       if (ensureStarted(state) === undefined) tryWriteTurn(state, turn);
       gap(state, turn.turnId, code);
       return;

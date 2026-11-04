@@ -66,7 +66,7 @@ const PATTERNS: readonly Pattern[] = [
   },
 ];
 
-type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 type JsonObject = { [key: string]: Json };
 
 const isObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -227,14 +227,18 @@ function largestString(holder: JsonObject): StringSlot | undefined {
   return best;
 }
 
-/** Cuts the largest strings until the serialized entry fits `HISTORY_ENTRY_CAP_BYTES`. */
-function capEntry(value: Json): { json: string; truncated: boolean } {
+/**
+ * Cuts the largest strings of `value` (in place) until its JSON fits `limit` bytes. Size is never a
+ * gap (design call 14): what cannot be cut down keeps only its entry envelope and an `omitted` marker.
+ */
+export function capJson(value: Json, limit: number): { json: string; truncated: boolean } {
   let json = JSON.stringify(value);
   const originalBytes = Buffer.byteLength(json);
-  if (originalBytes <= HISTORY_ENTRY_CAP_BYTES) return { json, truncated: false };
+  if (originalBytes <= limit) return { json, truncated: false };
+  const envelope = envelopeOf(value);
   const holder = { root: value } as JsonObject;
   const originals = new Map<StringSlot["parent"], Map<string | number, number>>();
-  for (let attempt = 0; attempt < 16 && Buffer.byteLength(json) > HISTORY_ENTRY_CAP_BYTES; attempt += 1) {
+  for (let attempt = 0; attempt < 16 && Buffer.byteLength(json) > limit; attempt += 1) {
     const slot = largestString(holder);
     if (slot === undefined) break;
     const known = originals.get(slot.parent) ?? new Map<string | number, number>();
@@ -244,7 +248,7 @@ function capEntry(value: Json): { json: string; truncated: boolean } {
     const note = ` [TRUNCATED:${original}]`;
     const base = slot.value.endsWith(note) ? slot.value.slice(0, -note.length) : slot.value;
     const escaped = Buffer.byteLength(JSON.stringify(base));
-    const excess = Buffer.byteLength(json) - HISTORY_ENTRY_CAP_BYTES + Buffer.byteLength(note) + 16;
+    const excess = Buffer.byteLength(json) - limit + Buffer.byteLength(note) + 16;
     const target = Math.max(0, escaped - excess);
     let keep = Math.floor((base.length * target) / Math.max(1, escaped));
     if (keep > 0 && /[\uD800-\uDBFF]/.test(base[keep - 1]!)) keep -= 1;
@@ -252,6 +256,19 @@ function capEntry(value: Json): { json: string; truncated: boolean } {
     (slot.parent as Record<string | number, Json>)[slot.key] = cut;
     json = JSON.stringify(holder.root);
   }
-  if (Buffer.byteLength(json) > HISTORY_ENTRY_CAP_BYTES) json = JSON.stringify({ omitted: "oversized", bytes: originalBytes });
+  if (Buffer.byteLength(json) > limit) json = JSON.stringify({ ...envelope, omitted: "oversized", bytes: originalBytes });
   return { json, truncated: true };
 }
+
+/** The identifying fields of a Pi entry, copied only when they are short scalars. */
+function envelopeOf(value: Json): Record<string, Json> {
+  const out: Record<string, Json> = {};
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return out;
+  for (const key of ["type", "id", "parentId", "timestamp"]) {
+    const field = (value as JsonObject)[key];
+    if (field === null || (typeof field === "string" && field.length <= 256)) out[key] = field;
+  }
+  return out;
+}
+
+function capEntry(value: Json): { json: string; truncated: boolean } { return capJson(value, HISTORY_ENTRY_CAP_BYTES); }

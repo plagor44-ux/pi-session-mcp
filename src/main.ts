@@ -139,7 +139,7 @@ async function main(): Promise<void> {
       }),
     });
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay, { history: { enabled: history !== undefined } }),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay, { history: { enabled: history !== undefined }, innerHistory: guardPath !== undefined }),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),

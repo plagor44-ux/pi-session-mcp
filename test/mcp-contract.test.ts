@@ -32,6 +32,7 @@ describe("MCP contracts", () => {
     eventDelivery?: "spool" | "off";
     relay?: boolean;
     history?: { enabled: boolean };
+    innerHistory?: boolean;
   } = {}) {
     const workspaces = fixtures.workspaces ?? new Map([["repo", "/safe/repo"]]);
     const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, workspaces, registryOptions);
@@ -39,7 +40,7 @@ describe("MCP contracts", () => {
       ["safe", { alias: "safe", default: true, permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const }],
       ["coding", { alias: "coding", default: false, permissionProfile: "coding" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "high" as const }],
     ]);
-    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery, fixtures.relay, fixtures.history === undefined ? {} : { history: fixtures.history });
+    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery, fixtures.relay, { ...(fixtures.history === undefined ? {} : { history: fixtures.history }), ...(fixtures.innerHistory ? { innerHistory: true } : {}) });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: "contract-test", version: "1.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); closers.push(async () => { await client.close(); await server.close(); await registry.shutdown(); }); return { client, adapter, registry };
   }
@@ -557,6 +558,20 @@ describe("MCP contracts", () => {
     expect((await off.client.callTool({ name: "pi_capabilities_get", arguments: {} })).structuredContent).toMatchObject({ history: { enabled: false } });
     const on = await client({}, { history: { enabled: true } });
     expect((await on.client.callTool({ name: "pi_capabilities_get", arguments: {} })).structuredContent).toMatchObject({ history: { enabled: true } });
+  });
+  it("pi_history_read is registered only on the inner writer server", async () => {
+    const host = await client({}, { relay: true });
+    expect((await host.client.listTools()).tools.map(({ name }) => name)).not.toContain("pi_history_read");
+    expect((await (await client()).client.listTools()).tools.map(({ name }) => name)).not.toContain("pi_history_read");
+    const inner = await client({}, { innerHistory: true });
+    const tool = (await inner.client.listTools()).tools.find(({ name }) => name === "pi_history_read");
+    expect(tool?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    const session = (await inner.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } })).structuredContent as { session: { id: string } };
+    inner.adapter.handles[0]!.history.push({ type: "message", id: "e1", parentId: null, timestamp: "2026-11-04T10:00:00.000Z" });
+    const page = (await inner.client.callTool({ name: "pi_history_read", arguments: { sessionId: session.session.id, cursor: 0 } })).structuredContent;
+    expect(page).toMatchObject({ ok: true, sessionId: session.session.id, entries: [{ id: "e1" }], next: 1, more: false });
+    const refused = (await inner.client.callTool({ name: "pi_history_read", arguments: { sessionId: "00000000-0000-4000-8000-000000000000", cursor: 0 } })).structuredContent;
+    expect(refused).toMatchObject({ ok: false, error: { code: "unknown_session" } });
   });
 
   it("strictly rejects legacy, raw selection, credential, and unknown start fields", async () => {

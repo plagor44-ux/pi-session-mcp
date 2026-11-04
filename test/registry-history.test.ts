@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { HISTORY_SETTLE_DEADLINE_MS } from "../src/history/constants.js";
+import { HISTORY_RELAY_PAGE_BYTES, HISTORY_SETTLE_DEADLINE_MS } from "../src/history/constants.js";
 import { compilePathRule } from "../src/history/path-rule.js";
 import { createHistoryRecorder, type HistoryRecorder } from "../src/history/recorder.js";
 import { Redactor } from "../src/history/redact.js";
@@ -144,5 +144,40 @@ describe("registry history capture", () => {
     expect(s.rows("SELECT count(*) AS n FROM entries")).toEqual([{ n: 0 }]);
     expect(s.rows("SELECT code FROM gaps")).toEqual([{ code: "history_unavailable" }]);
     expect(s.rows("SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+  });
+  it("historyPage pages by byte budget", async () => {
+    const adapter = new FakeAdapter();
+    const registry = new SessionRegistry(adapter, new Map([["repo", "/safe/repo"]]));
+    const session = await registry.start("repo", profile);
+    adapter.handles[0]!.history.push(...Array.from({ length: 30 }, (_, n) => ({ ...entry(`e${n}`), blob: "y".repeat(40 * 1024) })));
+    const seen: string[] = [];
+    let cursor = 0;
+    for (let guard = 0; guard < 30; guard += 1) {
+      const page = await registry.historyPage(session.id, cursor, HISTORY_RELAY_PAGE_BYTES);
+      expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(HISTORY_RELAY_PAGE_BYTES);
+      expect(page.next).toBe(cursor + page.entries.length);
+      seen.push(...page.entries.map((value) => (value as { id: string }).id));
+      cursor = page.next;
+      if (!page.more) break;
+    }
+    expect(seen).toEqual(Array.from({ length: 30 }, (_, n) => `e${n}`));
+    await registry.shutdown();
+  });
+
+  it("historyPage truncates one oversized entry instead of failing", async () => {
+    const adapter = new FakeAdapter();
+    const registry = new SessionRegistry(adapter, new Map([["repo", "/safe/repo"]]));
+    const session = await registry.start("repo", profile);
+    adapter.handles[0]!.history.push({ ...entry("big"), blob: "z".repeat(2 * 1024 * 1024) }, entry("after"));
+    const first = await registry.historyPage(session.id, 0, HISTORY_RELAY_PAGE_BYTES);
+    expect(Buffer.byteLength(JSON.stringify(first))).toBeLessThanOrEqual(HISTORY_RELAY_PAGE_BYTES);
+    expect(first.entries).toHaveLength(1);
+    expect(first.entries[0]).toMatchObject({ id: "big", type: "message" });
+    expect(JSON.stringify(first.entries[0])).toContain("[TRUNCATED:");
+    expect(first).toMatchObject({ next: 1, more: true });
+    const second = await registry.historyPage(session.id, first.next, HISTORY_RELAY_PAGE_BYTES);
+    expect(second.entries.map((value) => (value as { id: string }).id)).toEqual(["after"]);
+    expect(second.more).toBe(false);
+    await registry.shutdown();
   });
 });

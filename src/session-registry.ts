@@ -4,7 +4,8 @@ import { SnapshotError } from "./review-snapshot.js";
 import type { SnapshotGuard, SnapshotSessionLease } from "./snapshot-guard.js";
 import { HISTORY_SETTLE_DEADLINE_MS } from "./history/constants.js";
 import { NOOP_HISTORY_RECORDER, type HistoryReader, type HistoryRecorder } from "./history/recorder.js";
-import { PiSessionCreationError, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
+import { capJson, type Json } from "./history/redact.js";
+import { PiSessionCreationError, type HistoryPage, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
 export type TurnState = "running" | "completed" | "failed" | "aborted";
@@ -153,6 +154,31 @@ export class SessionRegistry {
     }
   }
   list(): SessionView[] { return [...this.sessions.values()].map((e) => this.view(e)); }
+  /**
+   * One page of the session's Pi entries from `cursor`, for the host's history (ADR 0019). The page's
+   * JSON stays within `maxBytes`; a single entry larger than that is cut, never skipped.
+   */
+  async historyPage(sessionId: string, cursor: number, maxBytes: number): Promise<HistoryPage> {
+    const handle = this.require(sessionId).handle;
+    if (!handle.readHistory) throw new Error("History is not readable for this session");
+    const page = await handle.readHistory(cursor);
+    const envelope = (entries: unknown[], more: boolean): HistoryPage => ({ ...(page.header === undefined ? {} : { header: page.header }), entries, next: cursor + entries.length, more });
+    const base = Buffer.byteLength(JSON.stringify(envelope([], true))) + 16;
+    const entries: unknown[] = [];
+    let size = base;
+    for (const raw of page.entries) {
+      let item = raw;
+      let bytes = Buffer.byteLength(JSON.stringify(raw) ?? "null") + 1;
+      if (size + bytes > maxBytes) {
+        if (entries.length > 0) break;
+        item = JSON.parse(capJson(structuredClone(raw) as Json, Math.max(0, maxBytes - base - 1)).json) as unknown;
+        bytes = Buffer.byteLength(JSON.stringify(item)) + 1;
+      }
+      entries.push(item);
+      size += bytes;
+    }
+    return envelope(entries, entries.length < page.entries.length || page.more);
+  }
   get(id: string): SessionView { return this.view(this.require(id)); }
   getTurn(sessionId: string, turnId: string): TurnView {
     const entry = this.require(sessionId);

@@ -10,6 +10,10 @@ import type { WorkspaceModeEntry } from "../src/execution-modes.js";
 import type { ConfiguredExecutionProfile } from "../src/execution-profile.js";
 import type { PiSessionHandle } from "../src/pi-adapter.js";
 import { temporaryRoot, removeTemporaryRoots } from "./temporary-roots.js";
+import { compilePathRule } from "../src/history/path-rule.js";
+import { createHistoryRecorder } from "../src/history/recorder.js";
+import { Redactor } from "../src/history/redact.js";
+import { openHistoryStore } from "../src/history/store.js";
 
 const profile = { alias: "code", default: true, permissionProfile: "coding" as const, provider: "p", model: "m", thinkingLevel: "off" as const };
 const input = { cwd: "/unused", workspace: "repo", executionProfile: profile };
@@ -50,8 +54,51 @@ async function change(home: string, index: number, values: Record<string, unknow
   const path = writerPaths(home, `repo-w${index}`).state;
   await writeFile(path, JSON.stringify({ ...JSON.parse(await readFile(path, "utf8")), ...values }));
 }
+async function historyRegistry(adapter: WriterRelayAdapter) {
+  const store = await openHistoryStore({ home: await temporaryRoot("relay-history-") });
+  const recorder = createHistoryRecorder({
+    store, redactorFor: () => new Redactor({ knownValues: [], pathRule: compilePathRule([]) }),
+    configurationFingerprint: `sha256:${"a".repeat(64)}`, packageVersion: "0.0.0-test",
+    instance: { pid: process.pid, procStart: null }, diagnostic: () => undefined,
+  });
+  const registry = new SessionRegistry(adapter, new Map([["repo", "/unused"]]), { history: recorder });
+  const rows = (sql: string) => store.db.prepare(sql).all() as Array<Record<string, unknown>>;
+  return { registry, rows, async done() { await registry.shutdown(); store.close(); } };
+}
+async function completedTurn(registry: SessionRegistry, sessionId: string, text: string) {
+  const { turn } = await registry.prompt(sessionId, text);
+  await vi.waitFor(() => expect(registry.getTurn(sessionId, turn.turnId).state).toBe("completed"), { timeout: 10_000 });
+  return registry.getTurn(sessionId, turn.turnId);
+}
 // The relay is Linux-only, like the writer lease and container fence it relies on.
 describe.skipIf(process.platform !== "linux")("writer relay", () => {
+  it("relay records entries with provenance writer-relay", async () => {
+    const s = await setup(); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      await completedTurn(h.registry, session.id, "hello");
+      await h.registry.close(session.id);
+      expect(h.rows("SELECT capture_source, completeness, writer FROM sessions")).toEqual([{ capture_source: "writer-relay", completeness: "complete", writer: "repo-w1" }]);
+      expect(h.rows("SELECT pi_entry_id FROM entries ORDER BY position")).toEqual([{ pi_entry_id: "e1" }, { pi_entry_id: "e2" }]);
+      expect(String(h.rows("SELECT header_json FROM sessions")[0]!.header_json)).not.toContain("/workspace");
+      expect(await calls(s.home, 1)).toContain("pi_history_read");
+    } finally { await h.done(); }
+  });
+  it.each(["malformed", "oversized", "mismatch", "noTool"])("history page %s becomes history_relay_invalid and leaves the writer session usable", async (history) => {
+    const direct = await (await setup([{ history }])).start();
+    await expect(direct.readHistory!(0)).rejects.toMatchObject({ code: "history_relay_invalid" });
+    expect(direct.isLost?.()).toBe(false);
+    expect(await direct.prompt("still works", () => undefined)).toMatchObject({ status: "completed" });
+    const s = await setup([{ history }]); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      expect(await completedTurn(h.registry, session.id, "first")).toMatchObject({ state: "completed", assistantText: "done" });
+      await vi.waitFor(() => expect(h.rows("SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]), { timeout: 10_000 });
+      expect(h.rows("SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+      expect(h.rows("SELECT COUNT(*) AS n FROM entries")).toEqual([{ n: 0 }]);
+      expect(await completedTurn(h.registry, session.id, "second")).toMatchObject({ state: "completed" });
+    } finally { await h.done(); }
+  });
   it("starts on the first ready relay writer at the default base and reports placement", async () => {
     const s = await setup(); const handle = await s.start();
     expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });

@@ -147,7 +147,6 @@ describe("history recorder", () => {
   it.each([
     ["an entry without an id", { entries: [{ type: "message", parentId: null, timestamp: "t" }], next: 1, more: false }],
     ["a next that does not match the entries", { entries: [entry("a")], next: 5, more: false }],
-    ["a header of another session", { header: { ...header, id: "other" }, entries: [entry("a")], next: 1, more: false }],
     ["a non-array entries field", { entries: "x", next: 0, more: false }],
   ])("rejects %s as history_relay_invalid", async (_label, page) => {
     const { store, recorder } = await setup();
@@ -157,6 +156,24 @@ describe("history recorder", () => {
     expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]);
     expect(rows(store, "SELECT count(*) AS n FROM entries")).toEqual([{ n: 0 }]);
     expect(rows(store, "SELECT capture_source, completeness FROM sessions")).toEqual([{ capture_source: "writer-relay", completeness: "has_gaps" }]);
+  });
+
+  it("rejects a host header of another session as history_unavailable", async () => {
+    const { store, recorder } = await setup();
+    start(recorder);
+    recorder.turnEnded(SESSION_ID, turn(1), async () => ({ header: { ...header, id: "other" }, entries: [entry("a")], next: 1, more: false }));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_unavailable" }]);
+    expect(rows(store, "SELECT count(*) AS n FROM entries")).toEqual([{ n: 0 }]);
+  });
+
+  it("accepts a relayed header whose id is the inner Pi session id", async () => {
+    const { store, recorder } = await setup();
+    start(recorder, { source: "writer-relay" });
+    recorder.turnEnded(SESSION_ID, turn(1), async () => ({ header: { ...header, id: "pi-inner" }, entries: [entry("a")], next: 1, more: false }));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT count(*) AS n FROM gaps")).toEqual([{ n: 0 }]);
+    expect(JSON.parse(String(rows(store, "SELECT header_json FROM sessions")[0]!.header_json))).toMatchObject({ id: "pi-inner" });
   });
 
   it("settle gives up after its deadline and records a gap for the pending turn", async () => {
