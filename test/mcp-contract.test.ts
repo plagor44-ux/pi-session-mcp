@@ -31,6 +31,7 @@ describe("MCP contracts", () => {
     workspaceModes?: ReadonlyMap<string, WorkspaceModeEntry>;
     eventDelivery?: "spool" | "off";
     relay?: boolean;
+    history?: { enabled: boolean };
   } = {}) {
     const workspaces = fixtures.workspaces ?? new Map([["repo", "/safe/repo"]]);
     const adapter = new FakeAdapter(); const registry = new SessionRegistry(adapter, workspaces, registryOptions);
@@ -38,7 +39,7 @@ describe("MCP contracts", () => {
       ["safe", { alias: "safe", default: true, permissionProfile: "read-only" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "off" as const }],
       ["coding", { alias: "coding", default: false, permissionProfile: "coding" as const, provider: "fake-provider", model: "fake-model", thinkingLevel: "high" as const }],
     ]);
-    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery, fixtures.relay);
+    const server = createServer(registry, workspaces, profiles, fixtures.defaultExecutionProfile ?? "safe", fixtures.configuration ?? TEST_CONFIGURATION, fixtures.workspaceModes, fixtures.eventDelivery, fixtures.relay, fixtures.history === undefined ? {} : { history: fixtures.history });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair(); const client = new Client({ name: "contract-test", version: "1.0.0" });
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]); closers.push(async () => { await client.close(); await server.close(); await registry.shutdown(); }); return { client, adapter, registry };
   }
@@ -142,14 +143,14 @@ describe("MCP contracts", () => {
     expect(discovery?.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false });
     expect(discovery?.inputSchema).toMatchObject({ type: "object", properties: {}, additionalProperties: false });
     const inputSchemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
-    expect(inputSchemaOf("pi_session_start")).toMatchObject({ type: "object", required: ["workspace"], additionalProperties: false, properties: { workspace: { type: "string" }, executionProfile: { type: "string" }, base: { type: "string" } } });
+    expect(inputSchemaOf("pi_session_start")).toMatchObject({ type: "object", required: ["workspace"], additionalProperties: false, properties: { workspace: { type: "string" }, executionProfile: { type: "string" }, base: { type: "string" }, task: { type: "string", maxLength: 64 } } });
     expect(inputSchemaOf("pi_session_list")).toMatchObject({ type: "object", properties: {}, additionalProperties: false });
     for (const name of ["pi_session_get", "pi_session_abort", "pi_session_close"]) expect(inputSchemaOf(name)).toMatchObject({ type: "object", required: ["sessionId"], additionalProperties: false, properties: { sessionId: { type: "string" } } });
     expect(inputSchemaOf("pi_session_prompt")).toMatchObject({ type: "object", required: ["sessionId", "prompt"], additionalProperties: false, properties: { sessionId: { type: "string" }, prompt: { type: "string" } } });
     expect(inputSchemaOf("pi_turn_get")).toMatchObject({ type: "object", required: ["sessionId", "turnId"], additionalProperties: false, properties: { sessionId: { type: "string" }, turnId: { type: "string" } } });
     expect(discovery?.outputSchema).toMatchObject({
       type: "object",
-      required: ["ok", "server", "configuration", "events", "workspaces", "executionProfiles"],
+      required: ["ok", "server", "configuration", "events", "history", "workspaces", "executionProfiles"],
       additionalProperties: false,
       properties: {
         server: { additionalProperties: false },
@@ -163,6 +164,7 @@ describe("MCP contracts", () => {
           },
         },
         events: { type: "object", required: ["delivery"], additionalProperties: false, properties: { delivery: { enum: ["spool", "off"] } } },
+        history: { type: "object", required: ["enabled"], additionalProperties: false, properties: { enabled: { type: "boolean" } } },
         workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only", "snapshot"] } } } },
         executionProfiles: {
           items: {
@@ -256,6 +258,7 @@ describe("MCP contracts", () => {
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: TEST_CONFIGURATION.fingerprint, reloadPolicy: "restart-required" },
       events: { delivery: "off" },
+      history: { enabled: false },
       workspaces: [{ alias: "alpha-workspace", mode: "container", writers: 2, defaultBase: null }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
@@ -530,6 +533,30 @@ describe("MCP contracts", () => {
     } } });
     expect(JSON.stringify(missing)).not.toContain(unknown);
     expect(connected.adapter.createInputs).toHaveLength(0);
+  });
+
+  it.each(["#215", "sprint-18/pkg-2", "a", "ABC.def_1:2"])("pi_session_start accepts task %j and keeps it on the registry entry", async (task) => {
+    const connected = await client();
+    const start = vi.spyOn(connected.registry, "start");
+    const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", task } });
+    expect(response.isError).not.toBe(true);
+    expect(start).toHaveBeenCalledWith("repo", expect.anything(), { task });
+    // The task label is a history claim, not part of the public session view.
+    expect(Object.keys((response.structuredContent as { session: object }).session)).not.toContain("task");
+  });
+
+  it.each(["/etc/passwd", "../x", "a/../b", "a//b", "a".repeat(65), "a b", "", "-x", "x\n", "ä"])("pi_session_start rejects task %j", async (task) => {
+    const connected = await client();
+    const failed = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo", task } });
+    expect(failed).toMatchObject({ isError: true });
+    expect(connected.adapter.createInputs).toHaveLength(0);
+  });
+
+  it("reports history.enabled from the server options", async () => {
+    const off = await client();
+    expect((await off.client.callTool({ name: "pi_capabilities_get", arguments: {} })).structuredContent).toMatchObject({ history: { enabled: false } });
+    const on = await client({}, { history: { enabled: true } });
+    expect((await on.client.callTool({ name: "pi_capabilities_get", arguments: {} })).structuredContent).toMatchObject({ history: { enabled: true } });
   });
 
   it("strictly rejects legacy, raw selection, credential, and unknown start fields", async () => {

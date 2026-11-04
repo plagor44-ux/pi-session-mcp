@@ -3,6 +3,7 @@ import packageMetadata from "../package.json" with { type: "json" };
 import { CONFIGURATION_FINGERPRINT_PATTERN, RELOAD_POLICY } from "./config.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { WORKSPACE_MODES } from "./execution-modes.js";
+import { TASK_LABEL_MAX } from "./history/constants.js";
 
 export const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export const viewSchema = z.object({
@@ -14,6 +15,9 @@ export const viewSchema = z.object({
   snapshot: z.object({ base: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/), head: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/), tree: z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/) }).strict().optional(),
 });
 export const aliasSchema = z.string().regex(ALIAS_PATTERN);
+/** A short, externally supplied task reference such as `#215` or `sprint-18/pkg-2` (ADR 0019). Never a path. */
+export const TASK_LABEL_PATTERN = /^[A-Za-z0-9#][A-Za-z0-9#._:/-]{0,63}$/;
+export const taskLabelSchema = z.string().max(TASK_LABEL_MAX).regex(TASK_LABEL_PATTERN).refine((label) => !label.includes("..") && !label.includes("//"));
 // Input IDs: tools/list keeps `format: "uuid"` but omits zod's long repeated `pattern`; the
 // server still validates with the unchanged `z.string().uuid()`, so accepted values and issues are identical.
 export const idInputSchema = z.string().meta({ format: "uuid" }).pipe(z.string().uuid());
@@ -37,6 +41,7 @@ export const capabilitiesSchema = z.object({
     reloadPolicy: z.literal(RELOAD_POLICY),
   }).strict(),
   events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
+  history: z.object({ enabled: z.boolean() }).strict(),
   workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(WORKSPACE_MODES), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,

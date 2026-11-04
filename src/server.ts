@@ -7,7 +7,7 @@ import { codingAllowed, isShortBranchName, type WorkspaceModeEntry } from "./exe
 import { PiSessionCreationError, WriterUnavailableError } from "./pi-adapter.js";
 import { toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
 import { RegistryError, type SessionRegistry } from "./session-registry.js";
-import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema } from "./tool-schemas.js";
+import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema, taskLabelSchema } from "./tool-schemas.js";
 
 function result<T extends Record<string, unknown>>(value: T, isError = false) {
   return { content: [{ type: "text" as const, text: JSON.stringify(value) }], structuredContent: value, ...(isError ? { isError: true } : {}) };
@@ -32,6 +32,7 @@ export function createServer(
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
   relay = false,
+  options: { history?: { enabled: boolean } } = {},
 ): McpServer {
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
@@ -39,12 +40,12 @@ export function createServer(
     inputSchema: z.object({}).strict(),
     outputSchema: capabilitiesSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery)));
+  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery, options.history ?? { enabled: false })));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
-    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional(), task: taskLabelSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, ({ workspace, executionProfile, base }) => safe(async () => {
+  }, ({ workspace, executionProfile, base, task }) => safe(async () => {
     const alias = executionProfile ?? defaultExecutionProfile;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
@@ -59,7 +60,7 @@ export function createServer(
     if (mode.mode === "snapshot" && ((configured.extensions?.length ?? 0) > 0 || (configured.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(configured.mcpServers ?? {}).length > 0)) {
       throw new RegistryError("snapshot_profile_unsupported");
     }
-    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), base === undefined ? {} : { base }) };
+    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), { ...(base === undefined ? {} : { base }), ...(task === undefined ? {} : { task }) }) };
   }));
   server.registerTool("pi_session_list", {
     description: "List local Pi sessions and their state.", inputSchema: z.object({}).strict(), outputSchema: z.union([listSchema, errorSchema]),

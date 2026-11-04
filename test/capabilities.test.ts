@@ -37,6 +37,7 @@ describe("configuration capability projection", () => {
       server: { name: packageMetadata.name, version: packageMetadata.version },
       configuration: { fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" },
       events: { delivery: "off" },
+      history: { enabled: false },
       workspaces: [{ alias: "alpha-workspace", mode: "unset" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
@@ -79,6 +80,12 @@ describe("configuration capability projection", () => {
     expect(project({ ...profile, goModuleCache: "/secret/cache" })).toEqual(project(profile));
   });
 
+  it("reports history.enabled", () => {
+    expect(projectCapabilities(new Map(), new Map(), configuration).history).toEqual({ enabled: false });
+    expect(projectCapabilities(new Map(), new Map(), configuration, new Map(), "off", { enabled: true }).history).toEqual({ enabled: true });
+    expect(projectCapabilities(new Map(), new Map(), configuration, new Map(), "off", { enabled: false }).history).toEqual({ enabled: false });
+  });
+
   it("reports the event delivery it is given", () => {
     expect(projectCapabilities(new Map(), new Map(), configuration, new Map(), "spool").events).toEqual({ delivery: "spool" });
     expect(projectCapabilities(new Map(), new Map(), configuration).events).toEqual({ delivery: "off" });
@@ -94,7 +101,7 @@ describe("configuration capability projection", () => {
     const second = projectCapabilities(workspaces, executionProfiles, configuration);
 
     expect(second).toEqual(first);
-    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "workspaces", "executionProfiles"]);
+    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "history", "workspaces", "executionProfiles"]);
     expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds"]);
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");

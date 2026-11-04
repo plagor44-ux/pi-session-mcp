@@ -32,6 +32,7 @@ export function projectCapabilities(
   configuration: ConfigurationMetadata,
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
+  history: { enabled: boolean } = { enabled: false },
 ) {
   return {
     ok: true as const,
@@ -41,6 +42,7 @@ export function projectCapabilities(
       reloadPolicy: configuration.reloadPolicy,
     },
     events: { delivery: eventDelivery },
+    history: { enabled: history.enabled },
     workspaces: [...workspaces.keys()]
       .sort(compareAliases)
       .map((alias) => {

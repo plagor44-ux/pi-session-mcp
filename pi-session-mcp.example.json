@@ -1,4 +1,7 @@
 {
+  "history": {
+    "enabled": false
+  },
   "workspaces": {
     "project": "/absolute/path/to/project"
   },
