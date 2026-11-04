@@ -1,8 +1,9 @@
 # Opt-in session history — design
 
-Date: 2026-11-03. Status: draft. The operator accepted the direction on
-2026-11-03 ("passt erstmal alles"). Three open questions from the builder
-check (end of document) must be answered before the plan is written.
+Date: 2026-11-03. Status: ready for planning. The operator accepted the
+direction on 2026-11-03 ("passt erstmal alles") and answered the three open
+questions from the builder check on 2026-11-04 (see "Operator decisions after
+the builder check").
 Tracking: [#215](https://github.com/plagor44-ux/pi-session-mcp/issues/215).
 Planning basis: main `ecdbadf` (PR #249 merged), published 0.17.0, Pi SDK
 `@earendil-works/pi-coding-agent` 1.5.0.
@@ -79,8 +80,9 @@ operator aid; it omits assistant text by design and cannot answer "why".
 - The database becomes a second configuration source, grants permissions, or
   is treated as authoritative live state.
 - A writer container can read, modify or delete the history file.
-- History content is handed to models outside the operator's own Claude
-  controller (Pi workers, agy, Codex) as a routine part of the workflow.
+- History content is handed to models outside the operator's own controllers
+  on the same machine (Claude Code or Codex), for example to Pi workers or
+  agy, as a routine part of the workflow.
 
 ## Decided by the operator
 
@@ -148,11 +150,12 @@ operator aid; it omits assistant text by design and cannot answer "why".
    must lie outside every workspace, writer clone, writer home, snapshot
    slot and read-only read root; Doctor verifies this. WAL and shared-memory
    files get the same protection.
-6. **Access guidance.** The operator's own Claude controller on the same
-   machine may read the database for comparisons. The controller skill and
+6. **Access guidance.** The operator's own controllers on the same machine
+   (Claude Code and Codex, see operator decision 3 below) may read the
+   database for comparisons and record verdicts. The controller skill and
    docs state that history content is not passed to Pi workers, agy or other
-   foreign models, because it can still contain unrecognized secrets from
-   every repository.
+   models, because it can still contain unrecognized secrets from every
+   repository.
 7. **SQLite binding.** Use Node's built-in `node:sqlite` (no native
    dependency, no new package). If it is not usable without flags on every
    supported Node version (`>=22.19.0`) or emits warnings on stdout, the
@@ -375,7 +378,36 @@ designer settled four of its questions; three remain for the operator.
     `-shm` write. External `sqlite3` stays possible but is not documented
     as the route.
 
-### Open questions for the operator (decide before planning)
+### Operator decisions after the builder check (2026-11-04)
+
+The operator followed the designer's recommendation on all three questions
+("folge hier deiner empfehlung").
+
+17. **Path rule scope.** The path rule covers:
+    - the result of `read` on a matching path;
+    - the `grep` result lines that come from matching files;
+    - both the arguments and the result of `edit` and `write` on matching
+      paths.
+    `bash`, `find`, `ls` and external MCP tools (for example
+    `codegraph_explore`) get the pattern stage only. The timeline still shows
+    each call with its tool name and path, marked
+    `content not stored (path rule)`. Documented limit: a secret written or
+    printed through `bash` (for example a heredoc into `.env`) is caught only
+    if it matches a pattern. This supersedes the path-rule wording in call 4.
+18. **Host-mode coding sessions: residual risk (option A).** A coding session
+    in a workspace with mode `host` or `unset` runs an unconfined `bash`
+    under the operator's account and can read, alter or delete the history
+    file, as it can `auth.json` today. This is accepted and written into
+    ADR 0019 and the threat model. Doctor does not block history for such
+    workspaces.
+19. **Codex may read.** A Codex controller may read history (`list`, `show`,
+    `export`, `query`) and record verdicts, like a Claude controller. The
+    file belongs to the operator's account, so a per-controller restriction
+    could not be enforced, and Codex already sees the same workspaces.
+    Content is redacted. Handing history to Pi workers, agy or other models
+    stays excluded (call 6, anti-goals).
+
+### Questions as asked (answered above)
 
 1. **Scope of the path rule.**
    - Read-only profiles have `read`, `grep`, `find` and `ls`. Coding
