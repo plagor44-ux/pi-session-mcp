@@ -22,4 +22,3 @@ export const SECRET_PARTS = [
   SENTINELS.slack, SENTINELS.jwt, "SENTINELPEMBODYLINE2", "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ",
   "p4ssw0rd", "hunter2hunter2", SENTINELS.known,
 ];
-
