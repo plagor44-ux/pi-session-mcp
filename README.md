@@ -119,7 +119,35 @@ The [installation guide](docs/installation.md) also covers installing from a rel
 - A profile can grant individual tools of local stdio MCP servers to its sessions; see [External MCP tools in embedded sessions](docs/session-mcp.md).
 - An optional top-level `skillCatalog` maps skill aliases to `builtin:<name>` (a skill of the package or of your override directory) or to a `SKILL.md` file, and a profile's optional `skills` selects aliases from it. A profile without `skills` gets no skills. See [Pi skills](docs/skills.md).
 - An optional top-level `"events": { "delivery": "spool" }` turns on content-free turn events, so that a Claude Code hook can wake the controller when a turn ends instead of polling. It is off by default and changes nothing for Codex. See [Wake the controller](docs/installation.md#wake-the-controller-claude-code).
+- An optional top-level `history` block turns on the session history; see below. It is off by default.
 - The server reads the file once at startup. Start a new client session after changing it.
+
+## Session history
+
+An opt-in, local record of every session ([ADR 0019](docs/adr/0019-opt-in-session-history.md)). With history on, the server stores each session's metadata, turns and the Pi session entries in one SQLite file, `~/.local/state/pi-session-mcp/history/history.sqlite`. Content is redacted on the host before it is stored, also for writer sessions. Secrets that match no rule can still be stored; see the [threat model](docs/threat-model.md). History never changes a session: a failure becomes a gap in the record.
+
+```json
+"history": {
+  "enabled": true,
+  "redactPaths": ["config/prod/*.yaml"],
+  "workspaces": { "homelab-infra": { "redactPaths": ["clusters/**/secret*.yaml"] } }
+}
+```
+
+`redactPaths` adds globs to the built-in path rule (`.env`, `.env.*`, `*.sops.*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `kubeconfig*`). For files that match, `read`, `grep`, `edit` and `write` content is never stored. A controller can pass a short `task` label to `pi_session_start`, such as `#215`, to find sessions later.
+
+Read the history with `pi-session-mcp-history`:
+
+```sh
+pi-session-mcp-history list --task '#215'
+pi-session-mcp-history show <session> [--full]
+pi-session-mcp-history verdict <session> accepted --reason "Tests and review passed."
+pi-session-mcp-history query "SELECT workspace, count(*) FROM sessions GROUP BY workspace"
+pi-session-mcp-history export <session> --format jsonl --out session.jsonl
+pi --export session.jsonl session.html
+```
+
+`export` writes Pi's session JSONL; `pi --export` renders it as HTML. `prune --older-than 90d --apply` deletes old sessions, and `reconcile` marks the sessions of crashed servers `incomplete`.
 
 ## Run it by hand
 
