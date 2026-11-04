@@ -27,7 +27,7 @@ const timeline = [
   { type: "message", id: "u1", parentId: null, timestamp: at(1), message: { role: "user", content: "please inspect the configuration" } },
   { type: "message", id: "a1", parentId: "u1", timestamp: at(2), message: { role: "assistant", content: [{ type: "text", text: "Reading it." }, { type: "toolCall", id: "call-1", name: "read", arguments: { path: ".env" } }] } },
   { type: "message", id: "r1", parentId: "a1", timestamp: at(3), message: { role: "toolResult", toolCallId: "call-1", toolName: "read", content: [{ type: "text", text: "API=value" }], isError: false } },
-  { type: "message", id: "a2", parentId: "r1", timestamp: at(4), message: { role: "assistant", content: [{ type: "text", text: `${LONG} token ${SECRET} \u001b[31mred` }] } },
+  { type: "message", id: "a2", parentId: "r1", timestamp: at(4), message: { role: "assistant", content: [{ type: "text", text: `${LONG} token ${SECRET} \u001b[31mred \u009b32mcsi` }] } },
 ];
 
 /** Builds a history file through the real recorder: three sessions with different metadata. */
@@ -155,6 +155,18 @@ describe("pi-session-mcp-history", () => {
     expect(listedIds((await run(home, "list")).stdout)).toEqual(["aaaaaaaa", "cccccccc"]);
     expect((await run(home, "query", "SELECT count(*) AS n FROM entries WHERE session_id NOT IN (SELECT id FROM sessions)")).stdout).toBe("n\n0\n");
     expect((await run(home, "prune", "--older-than", "thirty")).code).toBe(64);
+  });
+
+  it("JSON output escapes DEL and C1 controls and stays equal when parsed", async () => {
+    const { home } = await fixture();
+    const query = await run(home, "query", "SELECT char(155) || '[31m' || char(127) AS v", "--json");
+    expect(query.stdout).not.toMatch(/[\u007f-\u009f]/);
+    expect(JSON.parse(query.stdout)).toEqual({ v: "\u009b[31m\u007f" });
+    const exported = await run(home, "export", ids.a, "--format", "jsonl");
+    expect(exported.stdout).not.toMatch(/[\u007f-\u009f]/);
+    expect(exported.stdout).toContain("\\u009b32mcsi");
+    const lines = exported.stdout.trim().split("\n").map((line) => JSON.parse(line) as { id?: string; message?: { content?: Array<{ text?: string }> } });
+    expect(lines.find((line) => line.id === "a2")!.message!.content![0]!.text).toContain("\u009b32mcsi");
   });
 
   it("query allows SELECT and WITH, refuses INSERT, PRAGMA, ATTACH and two statements", async () => {

@@ -1,3 +1,5 @@
+import { escapeJsonControls } from "./timeline.js";
+
 /** A stored session as the JSONL export needs it. */
 export interface ExportSession { readonly sdk_session_id: string; readonly workspace: string; readonly created_at: string; readonly header_json: string | null; readonly completeness: string }
 
@@ -14,7 +16,7 @@ export function exportJsonl(session: ExportSession, entries: ReadonlyArray<{ red
   const lines = [JSON.stringify({ type: "session", version: 3, id, timestamp, cwd: session.workspace })];
   let truncated = 0;
   for (const entry of entries) {
-    lines.push(entry.redacted_json);
+    lines.push(escapeJsonControls(entry.redacted_json));
     if (entry.truncated === 1) truncated += 1;
   }
   return { text: `${lines.join("\n")}\n`, lossy: truncated > 0 || gapCount > 0 || session.completeness !== "complete", truncated };

@@ -27,6 +27,14 @@ export function printable(text: string, multiline = false): string {
   return multiline ? cleaned.replace(/\r\n?/g, "\n") : cleaned.replace(/[\t\n\r]+/g, " ");
 }
 
+/**
+ * JSON.stringify escapes C0 only. DEL and C1 can drive a terminal, so JSON output escapes them too;
+ * they occur only inside strings, and the parsed value stays the same.
+ */
+export function escapeJsonControls(json: string): string {
+  return json.replace(/[\u007f-\u009f]/g, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+
 function clock(timestamp: string): string {
   return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(timestamp) ? timestamp.slice(11, 19) : "--:--:--";
 }

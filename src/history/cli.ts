@@ -3,7 +3,7 @@ import { VERDICT_REASON_MAX, VERDICTS, type Verdict } from "./constants.js";
 import { exportJsonl, type ExportSession } from "./export.js";
 import { defaultIsAlive, reconcileInstances } from "./reconcile.js";
 import { historyLocation, HistoryStoreError, openHistoryStore, type HistoryStore } from "./store.js";
-import { printable, renderTimeline, type StoredEntry, type StoredGap, type StoredTurn } from "./timeline.js";
+import { escapeJsonControls, printable, renderTimeline, type StoredEntry, type StoredGap, type StoredTurn } from "./timeline.js";
 
 export interface HistoryCliIo { stdout: (text: string) => void; stderr: (text: string) => void; home?: string; now?: () => Date }
 export type HistoryCliExit = 0 | 1 | 64;
@@ -234,7 +234,7 @@ async function query(argv: readonly string[], io: HistoryCliIo): Promise<void> {
     } catch {
       throw new CliError("Query refused or failed");
     }
-    if (args.switches.has("json")) { io.stdout(rows.map((row) => `${JSON.stringify(row, jsonReplacer)}\n`).join("")); return; }
+    if (args.switches.has("json")) { io.stdout(rows.map((row) => `${escapeJsonControls(JSON.stringify(row, jsonReplacer))}\n`).join("")); return; }
     io.stdout(`${[columns.map(cell).join("\t"), ...rows.map((row) => columns.map((column) => cell(row[column])).join("\t"))].join("\n")}\n`);
   });
 }
