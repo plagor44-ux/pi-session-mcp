@@ -13,7 +13,8 @@ function globToRegExp(glob: string): RegExp {
     } else if (char === "?") source += "[^/]";
     else source += char.replace(/[\\^$.|+()[\]{}]/g, "\\$&");
   }
-  return new RegExp(`^${source}$`);
+  // Case-insensitive: on case-insensitive file systems `.ENV` is the same file as `.env`; over-matching only drops more.
+  return new RegExp(`^${source}$`, "i");
 }
 
 function normalize(path: string): string {

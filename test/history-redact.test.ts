@@ -113,6 +113,34 @@ describe("history redaction", () => {
     expect(result!.droppedByPath).toBe(true);
   });
 
+  it("drops grep results whose search root matches and resolves printed paths against the root", () => {
+    // Pi prints paths relative to the search directory, or the basename for a single file.
+    const [, inside] = run(redactor(), [toolCall("g1", "grep", { pattern: "x", path: "secrets" }), toolResult("g1", "grep", "db/creds.txt:1: ROOTSECRET1\nother.txt:2: ROOTSECRET2")]);
+    expect(inside!.droppedByPath).toBe(true);
+    expect(inside!.json).not.toContain("ROOTSECRET");
+    const [, file] = run(redactor(), [toolCall("g2", "grep", { pattern: "x", path: "deploy/.env.prod" }), toolResult("g2", "grep", ".env.prod:1: FILESECRET")]);
+    expect(file!.json).not.toContain("FILESECRET");
+    const [, joined] = run(redactor(["config/prod/*.yaml"]), [toolCall("g3", "grep", { pattern: "x", path: "config/prod" }), toolResult("g3", "grep", "app.yaml:4: JOINEDSECRET\nREADME.md:1: keep-readme")]);
+    expect(joined!.json).not.toContain("JOINEDSECRET");
+    expect(joined!.json).toContain("keep-readme");
+    const [, nospace] = run(redactor(), [toolCall("g4", "grep", { pattern: "x" }), toolResult("g4", "grep", ".env:3:NOSPACESECRET")]);
+    expect(nospace!.json).not.toContain("NOSPACESECRET");
+  });
+
+  it("matches the path rule case-insensitively", () => {
+    const rule = compilePathRule([]);
+    for (const path of [".ENV", "Secrets/x", "server.PEM", "ID_RSA", "KubeConfig"]) expect(rule(path), path).toBe(true);
+    const [, result] = run(redactor(), [toolCall("c", "read", { path: ".Env" }), toolResult("c", "read", "CASESECRET")]);
+    expect(result!.json).not.toContain("CASESECRET");
+  });
+
+  it("redacts the whole userinfo of a URL whose password contains @", () => {
+    const [out] = run(redactor(), [assistantText("clone https://user:p@ssw0rd@example.org/repo and http://a:b@h/")]);
+    expect(out!.json).not.toContain("ssw0rd");
+    expect(out!.json).toContain("[REDACTED:url_credentials]@example.org/repo");
+    expect(out!.json).toContain("[REDACTED:url_credentials]@h/");
+  });
+
   it("drops edit and write arguments and results on matching paths", () => {
     const [call, result] = run(redactor(), [
       toolCall("w", "write", { path: ".env", content: "TOKEN=plainvaluewritten" }),

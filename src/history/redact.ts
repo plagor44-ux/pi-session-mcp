@@ -50,7 +50,7 @@ interface Pattern { kind: RedactionKind; regex: RegExp; replace?: (match: string
 /** Order matters: multi-line blocks first, assignments last so they do not split earlier matches. */
 const PATTERNS: readonly Pattern[] = [
   { kind: "private_key", regex: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g },
-  { kind: "url_credentials", regex: /\b([a-z][a-z0-9+.-]*:\/\/)[^\s:@/]+:[^\s@/]+@/gi, replace: (_match, scheme) => `${scheme}${marker("url_credentials")}@` },
+  { kind: "url_credentials", regex: /\b([a-z][a-z0-9+.-]*:\/\/)[^\s:@/]+:[^\s/]*@/gi, replace: (_match, scheme) => `${scheme}${marker("url_credentials")}@` },
   { kind: "github_token", regex: /\b(?:gh[pousr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})/g },
   { kind: "api_key", regex: /\bsk-[A-Za-z0-9_-]{20,}/g },
   { kind: "aws_access_key", regex: /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/g },
@@ -88,7 +88,7 @@ function replaceOpaque(value: Json): Json {
 /** Splits a grep output line into candidate path prefixes (`path:N: text` for matches, `path-N- text` for context). */
 function grepLinePaths(line: string): string[] {
   const candidates: string[] = [];
-  const separator = /(?::(\d+):|-(\d+)-)(?: |$)/g;
+  const separator = /:\d+:|-\d+-/g;
   for (let match = separator.exec(line); match !== null; match = separator.exec(line)) candidates.push(line.slice(0, match.index));
   return candidates;
 }
@@ -158,11 +158,20 @@ export class Redactor {
       return true;
     }
     if (name !== "grep" || !Array.isArray(message.content)) return false;
+    // Pi prints grep paths relative to the search root (the basename for a single file), so a
+    // protected root drops the whole result and printed paths are also tested joined onto the root.
+    const root = call?.path;
+    if (root !== undefined && this.pathRule(root)) {
+      message.content = [{ type: "text", text: PATH_RULE_MARKER }];
+      delete message.details;
+      return true;
+    }
+    const prefix = root === undefined || root === "." || root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
     let dropped = false;
     for (const block of message.content) {
       if (!isObject(block) || block.type !== "text" || typeof block.text !== "string") continue;
       const kept = block.text.split("\n").filter((line) => {
-        const drop = grepLinePaths(line).some((path) => this.pathRule(path));
+        const drop = grepLinePaths(line).some((path) => this.pathRule(path) || (prefix !== "" && this.pathRule(prefix + path)));
         dropped ||= drop;
         return !drop;
       });
