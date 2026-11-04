@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { chmodSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
@@ -106,6 +107,33 @@ describe("history store", () => {
     });
     for (let n = 0; n < 50; n += 1) { insert(first, n); insert(second, n + 50); }
     expect(first.db.prepare("SELECT count(*) AS n FROM gaps").get()).toEqual(expect.objectContaining({ n: 100 }));
+  });
+
+  it("waits for another process's write lock instead of failing", async () => {
+    const home = await temporaryRoot("history-cross-process-");
+    const store = await openStore(home);
+    const { file } = historyLocation(home);
+    // A second server process holds the write lock for 400 ms, then commits.
+    const child = spawn(process.execPath, ["--no-warnings", "--input-type=module", "-e", `
+      const { DatabaseSync } = await import("node:sqlite");
+      const db = new DatabaseSync(process.argv[1]);
+      db.exec("BEGIN IMMEDIATE");
+      db.prepare("INSERT INTO gaps (session_id, code, recorded_at) VALUES (NULL, 'history_locked', 'other')").run();
+      process.stdout.write("locked\\n");
+      setTimeout(() => { db.exec("COMMIT"); db.close(); }, 400);
+    `, file], { stdio: ["ignore", "pipe", "inherit"] });
+    const exited = new Promise<number | null>((resolve) => child.on("exit", resolve));
+    await new Promise<void>((resolve, reject) => {
+      child.stdout.on("data", (chunk: Buffer) => { if (chunk.toString().includes("locked")) resolve(); });
+      child.on("exit", () => reject(new Error("child exited before locking")));
+    });
+    // WAL: readers are not blocked by the other process's writer.
+    expect(store.db.prepare("SELECT count(*) AS n FROM gaps").get()).toEqual(expect.objectContaining({ n: 0 }));
+    const started = performance.now();
+    store.transaction(() => { store.db.prepare("INSERT INTO gaps (session_id, code, recorded_at) VALUES (NULL, 'history_locked', 'mine')").run(); });
+    expect(performance.now() - started).toBeGreaterThan(200);
+    expect(await exited).toBe(0);
+    expect(store.db.prepare("SELECT count(*) AS n FROM gaps").get()).toEqual(expect.objectContaining({ n: 2 }));
   });
 
   it("read-only open does not migrate or write", async () => {

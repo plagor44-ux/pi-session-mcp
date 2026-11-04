@@ -1,3 +1,5 @@
+import { posix } from "node:path";
+
 /** Default globs whose file content history never stores (design calls 4 and 17). Configuration adds, never removes. */
 export const DEFAULT_REDACT_PATHS: readonly string[] = [".env", ".env.*", "*.sops.*", "secrets/**", "*.pem", "*.key", "id_rsa*", "id_ed25519*", "kubeconfig*"];
 
@@ -17,11 +19,14 @@ function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${source}$`, "i");
 }
 
+/** Resolves `.`, `..` and repeated separators the way the tools resolve them, so an equivalent spelling of a protected path matches too. */
 function normalize(path: string): string {
   let value = path.replace(/\\/g, "/");
   if (value.startsWith("@")) value = value.slice(1);
+  if (value.length === 0) return "";
+  value = posix.normalize(value);
   while (value.startsWith("./")) value = value.slice(2);
-  return value.replace(/\/+$/, "");
+  return value === "." ? "" : value.replace(/\/+$/, "");
 }
 
 /**

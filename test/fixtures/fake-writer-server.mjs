@@ -22,7 +22,9 @@ const historyEntries = [1, 2].map(n => ({ type: "message", id: `e${n}`, parentId
 function historyPage(cursor) {
   if (scenario.history === "malformed") return { ok: true, sessionId: id, entries: "nope", next: 0, more: false };
   const header = { type: "session", version: 3, id: "pi-inner", timestamp: "2026-11-04T10:00:00.000Z", cwd: "/workspace" };
-  return { ok: true, sessionId: scenario.history === "mismatch" ? randomUUID() : id, ...(cursor === 0 ? { header } : {}), entries: historyEntries.slice(cursor), next: historyEntries.length, more: false };
+  // `history: "cut"` models an inner server that had to truncate the second entry to fit its page.
+  const cut = scenario.history === "cut" && cursor <= 1 ? { truncated: [1 - cursor] } : {};
+  return { ok: true, sessionId: scenario.history === "mismatch" ? randomUUID() : id, ...(cursor === 0 ? { header } : {}), entries: historyEntries.slice(cursor), ...cut, next: historyEntries.length, more: false };
 }
 async function call(name, args = {}) {
   if (scenario.log) await appendFile(scenario.log, name + "\n");

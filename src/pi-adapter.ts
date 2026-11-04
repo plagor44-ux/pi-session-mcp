@@ -107,7 +107,8 @@ export interface PiSessionHandle {
 }
 
 /** One page of Pi session entries. `next` is the cursor after this page; `more` asks for another read. */
-export interface HistoryPage { header?: unknown; entries: readonly unknown[]; next: number; more: boolean }
+/** `truncated` lists the indices of entries a relay already cut to fit its page (ADR 0019). */
+export interface HistoryPage { header?: unknown; entries: readonly unknown[]; truncated?: readonly number[]; next: number; more: boolean }
 
 export interface PiSessionAdapter {
   create(input: { cwd: string; workspace: string; base?: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<PiSessionHandle>;

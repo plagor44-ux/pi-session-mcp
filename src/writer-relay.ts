@@ -244,7 +244,7 @@ class RelayHandle implements PiSessionHandle {
     try {
       const page = await this.connection.callUntrusted("pi_history_read", { sessionId: this.sdkSessionId, cursor }, historyPageSuccessSchema, RELAY_CALL_TIMEOUT_MS);
       if (page.sessionId !== this.sdkSessionId) throw new Error("Writer session mismatch");
-      return { ...(page.header === undefined ? {} : { header: page.header }), entries: page.entries, next: page.next, more: page.more };
+      return { ...(page.header === undefined ? {} : { header: page.header }), entries: page.entries, ...(page.truncated === undefined ? {} : { truncated: page.truncated }), next: page.next, more: page.more };
     } catch {
       throw new HistoryStoreError("history_relay_invalid");
     }

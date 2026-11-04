@@ -58,10 +58,13 @@ const PATTERNS: readonly Pattern[] = [
   { kind: "jwt", regex: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g },
   {
     kind: "assignment",
-    regex: /(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_.-]{0,63})(["']?)([ \t]*[:=][ \t]*)(["']?)([^\s"'`<>,;]{4,})/g,
-    replace: (_match, name, q1, separator, q2, value) => {
-      if (!isSecretName(name!) || value!.startsWith("[REDACTED:") || /^\d+$/.test(value!) || /^(?:true|false|null|undefined)$/i.test(value!)) return undefined;
-      return `${name}${q1}${separator}${q2}${marker("assignment")}`;
+    // A quoted value runs to its closing quote (or the end of the line when unterminated), so a
+    // multi-word passphrase is removed whole; a bare value stops at whitespace.
+    regex: /(?<![A-Za-z0-9_])([A-Za-z_][A-Za-z0-9_.-]{0,63})(["']?)([ \t]*[:=][ \t]*)(?:(["'])([^\n]*?)(\4|(?=\n)|$)|([^\s"'`<>,;]{4,}))/g,
+    replace: (_match, name, q1, separator, quote, quoted, closing, bare) => {
+      const value = quote ? quoted! : bare!;
+      if (!isSecretName(name!) || value.trim() === "" || /^(?:\[REDACTED:[a-z_]+\])+$/.test(value) || /^\d+$/.test(value) || /^(?:true|false|null|undefined)$/i.test(value)) return undefined;
+      return `${name}${q1}${separator}${quote ?? ""}${marker("assignment")}${quote ? closing : ""}`;
     },
   },
 ];
@@ -132,6 +135,9 @@ export class Redactor {
     result.truncated = capped.truncated;
     return result;
   }
+
+  /** True when redaction would leave `value` unchanged; used for metadata stored outside the entry JSON. */
+  isClean(value: string): boolean { return this.text(value, {}) === value; }
 
   private assistant(message: JsonObject, toolCalls: ToolCallIndex): boolean {
     if (!Array.isArray(message.content)) return false;

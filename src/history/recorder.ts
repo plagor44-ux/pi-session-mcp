@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { HistoryPage } from "../pi-adapter.js";
 import type { SessionView, TurnView } from "../session-registry.js";
@@ -42,7 +42,7 @@ const entrySchema = z.looseObject({
   parentId: z.string().regex(SAFE_ID).nullable(),
   timestamp: z.string().regex(/^[0-9TZ:.+-]{1,40}$/),
 });
-const pageSchema = z.object({ header: z.unknown().optional(), entries: z.array(z.unknown()), next: z.number().int().nonnegative(), more: z.boolean() });
+const pageSchema = z.object({ header: z.unknown().optional(), entries: z.array(z.unknown()), truncated: z.array(z.number().int().nonnegative()).optional(), next: z.number().int().nonnegative(), more: z.boolean() });
 const headerSchema = z.looseObject({ type: z.literal("session"), version: z.number().int().optional(), id: z.string().regex(SAFE_ID), timestamp: z.string().regex(/^[0-9TZ:.+-]{1,40}$/) });
 
 interface SessionState {
@@ -57,6 +57,8 @@ interface SessionState {
   /** Turns with a reader whose recording has not finished; the next read waits so pages stay contiguous. */
   outstanding: number;
   readonly pending: Set<string>;
+  /** Gaps whose row could not be written yet; retried on every later write so the session never ends `complete`. */
+  readonly lostGaps: Array<{ turnId: string | null; code: GapCode }>;
   abandoned: boolean;
 }
 
@@ -90,22 +92,44 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     diagnose(classifyStoreError(error));
   }
 
-  /** Writes a gap row and marks the session; reports a diagnostic when even that fails. */
+  const writeGap = (state: SessionState | undefined, turnId: string | null, code: GapCode): void => {
+    const sessionId = state?.started ? state.historyId : null;
+    store.db.prepare("INSERT INTO gaps (session_id, first_turn_id, last_turn_id, code, recorded_at) VALUES (?, ?, ?, ?, ?)").run(sessionId, turnId, turnId, code, now());
+    if (sessionId !== null) store.db.prepare("UPDATE sessions SET completeness = 'has_gaps' WHERE id = ? AND completeness = 'complete'").run(sessionId);
+  };
+
+  /** Writes the gaps an earlier failure could not; leaves the rest queued. */
+  const retryLostGaps = (state: SessionState): void => {
+    while (state.lostGaps.length > 0) {
+      const { turnId, code } = state.lostGaps[0]!;
+      try { writeGap(state, turnId, code); } catch { return; }
+      state.lostGaps.shift();
+    }
+  };
+
+  /** Writes a gap row and marks the session; queues it and reports a diagnostic when even that fails. */
   const gap = (state: SessionState | undefined, turnId: string | null, code: GapCode): void => {
+    if (state !== undefined) retryLostGaps(state);
     try {
-      const sessionId = state?.started ? state.historyId : null;
-      store.db.prepare("INSERT INTO gaps (session_id, first_turn_id, last_turn_id, code, recorded_at) VALUES (?, ?, ?, ?, ?)").run(sessionId, turnId, turnId, code, now());
-      if (sessionId !== null) store.db.prepare("UPDATE sessions SET completeness = 'has_gaps' WHERE id = ? AND completeness = 'complete'").run(sessionId);
+      writeGap(state, turnId, code);
     } catch {
+      state?.lostGaps.push({ turnId, code });
       diagnose(code);
     }
   };
 
+  /** Metadata stored outside the redacted JSON: a value redaction would change becomes a keyed surrogate, so links between entries survive. */
+  const safeId = (state: SessionState, redactor: Redactor, value: string): string =>
+    redactor.isClean(value) ? value : `redacted-${createHmac("sha256", state.historyId).update(value).digest("hex").slice(0, 24)}`;
+  const safeName = (redactor: Redactor, value: string | undefined): string | null =>
+    value !== undefined && SAFE_NAME.test(value) && redactor.isClean(value) ? value : null;
+
   /** Inserts the session row if an earlier attempt failed; returns the failure code otherwise. */
   const ensureStarted = (state: SessionState): GapCode | undefined => {
     if (state.started) return undefined;
-    const { view, sdkSessionId, task, source } = state.record;
+    const { view, task, source } = state.record;
     try {
+      const sdkSessionId = safeId(state, options.redactorFor(view.workspace), state.record.sdkSessionId);
       store.db.prepare(`INSERT INTO sessions (id, instance_id, sdk_session_id, public_session_id, workspace, execution_profile, permission_profile,
         provider, model, thinking_level, writer, base_ref, base_commit, snapshot_base, snapshot_head, task, package_version, configuration_fingerprint,
         created_at, completeness, capture_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'complete', ?)`).run(
@@ -136,9 +160,11 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
   const tryWriteTurn = (state: SessionState, turn: TurnView): void => { try { writeTurn(state, turn, 0, false); } catch { /* the gap reports it */ } };
 
   /** Validates one page as untrusted input; throws `history_relay_invalid` on any mismatch. */
-  const validatePage = (state: SessionState, raw: unknown, cursor: number): { header?: z.infer<typeof headerSchema>; entries: z.infer<typeof entrySchema>[]; next: number; more: boolean } => {
+  const validatePage = (state: SessionState, raw: unknown, cursor: number): { header?: z.infer<typeof headerSchema>; entries: z.infer<typeof entrySchema>[]; truncated: ReadonlySet<number>; next: number; more: boolean } => {
     const page = pageSchema.safeParse(raw);
     if (!page.success || page.data.next !== cursor + page.data.entries.length) throw new HistoryStoreError("history_relay_invalid");
+    const truncated = new Set(page.data.truncated ?? []);
+    for (const index of truncated) if (index >= page.data.entries.length) throw new HistoryStoreError("history_relay_invalid");
     const entries = page.data.entries.map((entry) => {
       const parsed = entrySchema.safeParse(entry);
       if (!parsed.success) throw new HistoryStoreError("history_relay_invalid");
@@ -152,7 +178,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       if (!parsed.success || (state.record.source === "host" && parsed.data.id !== state.record.sdkSessionId)) throw new HistoryStoreError("history_relay_invalid");
       header = parsed.data;
     }
-    return { ...(header === undefined ? {} : { header }), entries, next: page.data.next, more: page.data.more };
+    return { ...(header === undefined ? {} : { header }), entries, truncated, next: page.data.next, more: page.data.more };
   };
 
   /**
@@ -169,13 +195,13 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     const first = state.cursor;
     let cursor = first;
     let header: z.infer<typeof headerSchema> | undefined;
-    const collected: z.infer<typeof entrySchema>[] = [];
+    const collected: Array<{ entry: z.infer<typeof entrySchema>; cut: boolean }> = [];
     try {
       for (let pages = 0; ; pages += 1) {
         if (pages >= MAX_PAGES_PER_TURN) throw new HistoryStoreError("history_relay_invalid");
         const page = validatePage(state, await (pages === 0 && early !== undefined ? early : read(cursor)), cursor);
         if (cursor === 0 && page.header !== undefined) header = page.header;
-        collected.push(...page.entries);
+        page.entries.forEach((entry, index) => collected.push({ entry, cut: page.truncated.has(index) }));
         cursor = page.next;
         if (!page.more) break;
       }
@@ -194,21 +220,21 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     const startFailure = ensureStarted(state);
     if (startFailure !== undefined) { gap(state, turn.turnId, startFailure); return; }
     const redactor = options.redactorFor(state.record.view.workspace);
-    const rows = collected.map((entry, index) => ({ entry, position: first + index, redacted: redactor.entry(entry, state.toolCalls) }));
-    const headerJson = header === undefined ? null : JSON.stringify({ type: "session", version: header.version ?? null, id: header.id, timestamp: header.timestamp });
+    const rows = collected.map(({ entry, cut }, index) => ({ entry, cut, position: first + index, redacted: redactor.entry(entry, state.toolCalls) }));
+    const headerJson = header === undefined ? null : JSON.stringify({ type: "session", version: header.version ?? null, id: safeId(state, redactor, header.id), timestamp: header.timestamp });
     try {
       store.transaction(() => {
         writeTurn(state, turn, rows.length, true);
         const insert = store.db.prepare(`INSERT OR IGNORE INTO entries (session_id, turn_id, position, pi_entry_id, parent_id, entry_type, timestamp, role, tool_name,
           is_error, redacted_json, redactions, dropped_by_path, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-        for (const { entry, position, redacted } of rows) {
-          insert.run(state.historyId, turn.turnId, position, entry.id, entry.parentId, entry.type, entry.timestamp,
-            redacted.role !== undefined && SAFE_NAME.test(redacted.role) ? redacted.role : null,
-            redacted.toolName !== undefined && SAFE_NAME.test(redacted.toolName) ? redacted.toolName : null,
-            redacted.isError === true ? 1 : 0, redacted.json, JSON.stringify(redacted.redactions), redacted.droppedByPath ? 1 : 0, redacted.truncated ? 1 : 0);
+        for (const { entry, cut, position, redacted } of rows) {
+          insert.run(state.historyId, turn.turnId, position, safeId(state, redactor, entry.id), entry.parentId === null ? null : safeId(state, redactor, entry.parentId),
+            entry.type, entry.timestamp, safeName(redactor, redacted.role), safeName(redactor, redacted.toolName),
+            redacted.isError === true ? 1 : 0, redacted.json, JSON.stringify(redacted.redactions), redacted.droppedByPath ? 1 : 0, redacted.truncated || cut ? 1 : 0);
         }
         store.db.prepare("UPDATE sessions SET entry_cursor = ?, header_json = COALESCE(?, header_json) WHERE id = ?").run(cursor, headerJson, state.historyId);
       });
+      retryLostGaps(state);
     } catch (error) {
       tryWriteTurn(state, turn);
       gap(state, turn.turnId, classifyStoreError(error));
@@ -233,7 +259,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
         if (sessions.has(input.view.id)) return;
         const state: SessionState = {
           publicId: input.view.id, historyId: randomUUID(), record: input, toolCalls: new Map(), cursor: 0,
-          started: false, chain: Promise.resolve(), busy: 0, outstanding: 0, pending: new Set(), abandoned: false,
+          started: false, chain: Promise.resolve(), busy: 0, outstanding: 0, pending: new Set(), lostGaps: [], abandoned: false,
         };
         sessions.set(input.view.id, state);
         enqueue(state, () => { const failure = ensureStarted(state); if (failure !== undefined) gap(state, null, failure); });
@@ -290,6 +316,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
           sessions.delete(view.id);
           const failure = ensureStarted(state);
           if (failure !== undefined) { gap(state, null, failure); return; }
+          retryLostGaps(state);
           try {
             store.db.prepare("UPDATE sessions SET closed_at = ?, final_state = ? WHERE id = ?").run(now(), view.state, state.historyId);
           } catch (error) {
@@ -304,6 +331,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
         const open = [...sessions.values()];
         const end = performance.now() + Math.max(0, deadlineMs);
         for (const state of open) await settleState(state, end - performance.now());
+        for (const state of open) retryLostGaps(state);
         store.transaction(() => {
           store.db.prepare("UPDATE sessions SET completeness = 'incomplete' WHERE instance_id = ? AND closed_at IS NULL").run(instanceId);
           store.db.prepare("UPDATE instances SET ended_at = ? WHERE id = ?").run(now(), instanceId);

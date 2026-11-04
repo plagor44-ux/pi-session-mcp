@@ -84,6 +84,17 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       expect(await calls(s.home, 1)).toContain("pi_history_read");
     } finally { await h.done(); }
   });
+  it("relay keeps the truncation flag of an entry the inner server cut", async () => {
+    const direct = await (await setup([{ history: "cut" }])).start();
+    expect(await direct.readHistory!(0)).toMatchObject({ truncated: [1], next: 2 });
+    const s = await setup([{ history: "cut" }]); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      await completedTurn(h.registry, session.id, "hello");
+      await h.registry.close(session.id);
+      expect(h.rows("SELECT pi_entry_id, truncated FROM entries ORDER BY position")).toEqual([{ pi_entry_id: "e1", truncated: 0 }, { pi_entry_id: "e2", truncated: 1 }]);
+    } finally { await h.done(); }
+  });
   it.each(["malformed", "oversized", "mismatch", "noTool"])("history page %s becomes history_relay_invalid and leaves the writer session usable", async (history) => {
     const direct = await (await setup([{ history }])).start();
     await expect(direct.readHistory!(0)).rejects.toMatchObject({ code: "history_relay_invalid" });

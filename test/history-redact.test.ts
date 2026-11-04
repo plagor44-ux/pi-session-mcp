@@ -149,6 +149,20 @@ describe("history redaction", () => {
     expect(result!.json).toContain("Wv3bareValue99x");
   });
 
+  it("redacts quoted multi-word assignment values to the closing quote", () => {
+    const output = [
+      `DB_PASSWORD="correct horse battery staple"`,
+      `secret = "my multi word secret"`,
+      `api_token: 'two words'`,
+      `"client_secret": "Kq9 tail words here"`,
+      `PASSWORD="unterminated Zr5tailvalue`,
+    ].join("\n");
+    const [, result] = run(redactor(), [toolCall("q", "bash", { command: "cat config" }), toolResult("q", "bash", output)]);
+    for (const leaked of ["horse", "battery", "staple", "multi word", "two words", "tail words", "Zr5tailvalue"]) expect(result!.json).not.toContain(leaked);
+    expect(result!.json).toContain(`DB_PASSWORD=\\"[REDACTED:assignment]\\"`);
+    expect(result!.json).toContain(`api_token: '[REDACTED:assignment]'`);
+  });
+
   it("PEM block in write to a non-matching path is removed", () => {
     const [call, result] = run(redactor(), [
       toolCall("p", "write", { path: "notes.txt", content: `keep this\n${SENTINELS.pem}\nand this` }),
@@ -202,5 +216,15 @@ describe("history redaction", () => {
     const rule = compilePathRule([]);
     for (const path of [".env", "./.env", "/repo/.env", "a/b/.env.prod", "/repo/secrets/a/b", "secrets/x", "@.env", "~/.kube/kubeconfig"]) expect(rule(path), path).toBe(true);
     for (const path of ["env", "src/env.ts", "secretsx/a", "a.pem.txt", "notes.txt", ""]) expect(rule(path), path).toBe(false);
+  });
+
+  it("compilePathRule matches equivalent spellings with . and .. segments", () => {
+    const rule = compilePathRule(["config/prod/*.yaml"]);
+    for (const path of ["config/prod/./app.yaml", "config/./prod/app.yaml", "config/staging/../prod/app.yaml", "src/../config/prod/app.yaml", "/repo/config//prod/app.yaml", "secrets/./db", "a/../secrets/x", ".\\secrets\\.\\x"]) expect(rule(path), path).toBe(true);
+    for (const path of ["config/prod/../app.yaml", "secrets/../notes.txt", "config/prod/sub/../../app.yaml"]) expect(rule(path), path).toBe(false);
+    const [call, result] = run(redactor(["config/prod/*.yaml"]), [toolCall("n", "read", { path: "config/prod/./app.yaml" }), toolResult("n", "read", "NORMALIZED_SECRET_ZZZ")]);
+    expect(call!.droppedByPath).toBe(false);
+    expect(result!.droppedByPath).toBe(true);
+    expect(result!.json).not.toContain("NORMALIZED_SECRET_ZZZ");
   });
 });

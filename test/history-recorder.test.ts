@@ -196,6 +196,87 @@ describe("history recorder", () => {
     expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "incomplete" }]);
   });
 
+  it("never stores a recognizable secret in metadata columns", async () => {
+    const github = `ghp_${"A1b2C3d4".repeat(5)}`;
+    const apiKey = `sk-${"Zx9".repeat(8)}`;
+    const aws = "AKIAABCDEFGHIJKLMNOP";
+    const slack = "xoxb-123456789012-abcdef";
+    const { store, recorder } = await setup();
+    recorder.sessionStarted({ view, sdkSessionId: aws, source: "writer-relay" });
+    const page: HistoryPage = {
+      header: { ...header, id: aws },
+      entries: [
+        { ...entry(github), parentId: null },
+        { ...entry("child"), parentId: github },
+        { type: "message", id: "tr", parentId: apiKey, timestamp: "2026-11-04T10:00:01.500Z", message: { role: "toolResult", toolCallId: "c", toolName: slack, content: [{ type: "text", text: "ok" }], isError: false } },
+      ],
+      next: 3, more: false,
+    };
+    recorder.turnEnded(SESSION_ID, turn(1), async () => page);
+    await recorder.settle(SESSION_ID, 5_000);
+    recorder.sessionClosed({ ...view, state: "closed" });
+    const stored = JSON.stringify([rows(store, "SELECT * FROM sessions"), rows(store, "SELECT * FROM entries"), rows(store, "SELECT * FROM turns")]);
+    for (const secret of [github, apiKey, aws, slack]) expect(stored).not.toContain(secret);
+    // The parent link survives as the same surrogate.
+    const links = rows(store, "SELECT pi_entry_id, parent_id FROM entries ORDER BY position");
+    expect(links[1]!.parent_id).toBe(links[0]!.pi_entry_id);
+    expect(rows(store, "SELECT count(*) AS n FROM gaps")).toEqual([{ n: 0 }]);
+  });
+
+  it("records a gap that could not be written once the store is writable again", async () => {
+    let locked = false;
+    const lockedError = () => Object.assign(new Error("database is locked"), { errcode: 5 });
+    const { store, recorder, diagnostics } = await setup({
+      wrap: (real) => {
+        const db = new Proxy(real.db, {
+          get(target, property) {
+            if (property === "prepare" && locked) return () => { throw lockedError(); };
+            const value = Reflect.get(target, property, target) as unknown;
+            return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+          },
+        });
+        return {
+          db, readOnly: false, close: () => real.close(),
+          transaction<T>(fn: () => T): T { if (locked) throw lockedError(); return real.transaction(fn); },
+        };
+      },
+    });
+    start(recorder);
+    await recorder.settle(SESSION_ID, 5_000);
+    locked = true;
+    const all = [entry("a")];
+    recorder.turnEnded(SESSION_ID, turn(1), reader(all));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(diagnostics).toEqual(["history_locked"]);
+    locked = false;
+    all.push(entry("b"));
+    recorder.turnEnded(SESSION_ID, turn(2), reader(all));
+    await recorder.settle(SESSION_ID, 5_000);
+    recorder.sessionClosed({ ...view, state: "closed" });
+    expect(rows(store, "SELECT code, first_turn_id FROM gaps")).toEqual([{ code: "history_locked", first_turn_id: turn(1).turnId }]);
+    expect(rows(store, "SELECT completeness, final_state FROM sessions")).toEqual([{ completeness: "has_gaps", final_state: "closed" }]);
+  });
+
+  it("keeps the truncation flag of an entry the relay already cut", async () => {
+    const { store, recorder } = await setup();
+    start(recorder, { source: "writer-relay" });
+    recorder.turnEnded(SESSION_ID, turn(1), async () => ({ entries: [entry("a"), entry("b", "[TRUNCATED:2097152]")], truncated: [1], next: 2, more: false }));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT pi_entry_id, truncated FROM entries ORDER BY position")).toEqual([{ pi_entry_id: "a", truncated: 0 }, { pi_entry_id: "b", truncated: 1 }]);
+  });
+
+  it.each([
+    ["an index outside the page", [2]],
+    ["a negative index", [-1]],
+    ["a non-array value", "1"],
+  ])("rejects a relay truncation list with %s", async (_label, truncated) => {
+    const { store, recorder } = await setup();
+    start(recorder, { source: "writer-relay" });
+    recorder.turnEnded(SESSION_ID, turn(1), async () => ({ entries: [entry("a"), entry("b")], truncated, next: 2, more: false }) as unknown as HistoryPage);
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]);
+  });
+
   it("never throws, even for an unknown session or after the store closed", async () => {
     const { store, recorder } = await setup();
     store.close();

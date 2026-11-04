@@ -162,22 +162,28 @@ export class SessionRegistry {
     const handle = this.require(sessionId).handle;
     if (!handle.readHistory) throw new Error("History is not readable for this session");
     const page = await handle.readHistory(cursor);
-    const envelope = (entries: unknown[], more: boolean): HistoryPage => ({ ...(page.header === undefined ? {} : { header: page.header }), entries, next: cursor + entries.length, more });
-    const base = Buffer.byteLength(JSON.stringify(envelope([], true))) + 16;
+    const envelope = (entries: unknown[], more: boolean, truncated: number[] = []): HistoryPage => ({
+      ...(page.header === undefined ? {} : { header: page.header }), entries, ...(truncated.length === 0 ? {} : { truncated }), next: cursor + entries.length, more,
+    });
+    // Room for the envelope and the one-element `truncated` list a cut entry adds.
+    const base = Buffer.byteLength(JSON.stringify(envelope([], true, [0]))) + 16;
     const entries: unknown[] = [];
+    const truncated: number[] = [];
     let size = base;
     for (const raw of page.entries) {
       let item = raw;
       let bytes = Buffer.byteLength(JSON.stringify(raw) ?? "null") + 1;
       if (size + bytes > maxBytes) {
         if (entries.length > 0) break;
-        item = JSON.parse(capJson(structuredClone(raw) as Json, Math.max(0, maxBytes - base - 1)).json) as unknown;
+        const capped = capJson(structuredClone(raw) as Json, Math.max(0, maxBytes - base - 1));
+        item = JSON.parse(capped.json) as unknown;
         bytes = Buffer.byteLength(JSON.stringify(item)) + 1;
+        if (capped.truncated) truncated.push(0);
       }
       entries.push(item);
       size += bytes;
     }
-    return envelope(entries, entries.length < page.entries.length || page.more);
+    return envelope(entries, entries.length < page.entries.length || page.more, truncated);
   }
   get(id: string): SessionView { return this.view(this.require(id)); }
   getTurn(sessionId: string, turnId: string): TurnView {

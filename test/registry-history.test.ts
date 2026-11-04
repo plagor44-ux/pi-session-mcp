@@ -174,10 +174,11 @@ describe("registry history capture", () => {
     expect(first.entries).toHaveLength(1);
     expect(first.entries[0]).toMatchObject({ id: "big", type: "message" });
     expect(JSON.stringify(first.entries[0])).toContain("[TRUNCATED:");
-    expect(first).toMatchObject({ next: 1, more: true });
+    expect(first).toMatchObject({ next: 1, more: true, truncated: [0] });
     const second = await registry.historyPage(session.id, first.next, HISTORY_RELAY_PAGE_BYTES);
     expect(second.entries.map((value) => (value as { id: string }).id)).toEqual(["after"]);
     expect(second.more).toBe(false);
+    expect(second).not.toHaveProperty("truncated");
     await registry.shutdown();
   });
 });
