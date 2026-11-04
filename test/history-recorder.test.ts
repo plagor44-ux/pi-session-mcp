@@ -33,7 +33,7 @@ function reader(all: unknown[], calls: number[] = []) {
   };
 }
 
-async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore } = {}) {
+async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore; turnBufferBytes?: number } = {}) {
   const home = await temporaryRoot("history-recorder-");
   const store = await openHistoryStore({ home });
   stores.push(store);
@@ -46,6 +46,7 @@ async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore } =
     packageVersion: "0.0.0-test",
     instance: { pid: process.pid, procStart: null },
     diagnostic: (code) => diagnostics.push(code),
+    ...(options.turnBufferBytes === undefined ? {} : { turnBufferBytes: options.turnBufferBytes }),
   });
   return { store, recorder, diagnostics, home };
 }
@@ -275,6 +276,151 @@ describe("history recorder", () => {
     recorder.turnEnded(SESSION_ID, turn(1), async () => ({ entries: [entry("a"), entry("b")], truncated, next: 2, more: false }) as unknown as HistoryPage);
     await recorder.settle(SESSION_ID, 5_000);
     expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]);
+  });
+
+  describe("a failed page read", () => {
+    const later = (id: string, second: number) => ({ ...entry(id), timestamp: `2026-11-04T10:00:${String(second).padStart(2, "0")}.000Z` });
+    const ended = (n: number, second: number): TurnView => ({ ...turn(n), completedAt: `2026-11-04T10:00:${String(second).padStart(2, "0")}.000Z` });
+    const failing = async (): Promise<HistoryPage> => { throw new Error("read failed"); };
+
+    it("is repaired by the next read: entries keep their turn and the gap goes", async () => {
+      const { store, recorder, diagnostics } = await setup();
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, ended(1, 2), failing);
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT code, first_turn_id FROM gaps")).toEqual([{ code: "history_relay_invalid", first_turn_id: turn(1).turnId }]);
+      expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+      recorder.turnEnded(SESSION_ID, ended(2, 6), reader([later("a", 1), later("b", 2), later("c", 5)]));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries ORDER BY position")).toEqual([
+        { pi_entry_id: "a", turn_id: turn(1).turnId }, { pi_entry_id: "b", turn_id: turn(1).turnId }, { pi_entry_id: "c", turn_id: turn(2).turnId },
+      ]);
+      expect(rows(store, "SELECT turn_id, entry_count, recorded FROM turns ORDER BY started_at, turn_id")).toEqual([
+        { turn_id: turn(1).turnId, entry_count: 2, recorded: 1 }, { turn_id: turn(2).turnId, entry_count: 1, recorded: 1 },
+      ]);
+      expect(rows(store, "SELECT count(*) AS n FROM gaps")).toEqual([{ n: 0 }]);
+      expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "complete" }]);
+      expect(diagnostics).toEqual([]);
+    });
+
+    it("gives an entry with an unreadable timestamp to the later turn", async () => {
+      const { store, recorder } = await setup();
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, ended(1, 2), failing);
+      recorder.turnEnded(SESSION_ID, ended(2, 6), reader([{ ...entry("a"), timestamp: "2026" + "1104" }]));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(rows(store, "SELECT turn_id FROM entries")).toEqual([{ turn_id: turn(2).turnId }]);
+    });
+
+    it("keeps the gaps while reads keep failing", async () => {
+      const { store, recorder } = await setup();
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, ended(1, 2), failing);
+      recorder.turnEnded(SESSION_ID, ended(2, 4), failing);
+      await recorder.settle(SESSION_ID, 5_000);
+      recorder.sessionClosed({ ...view, state: "closed" });
+      expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }, { code: "history_relay_invalid" }]);
+      expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+    });
+
+    it("keeps its gap when the repairing write fails, because the entries are then lost", async () => {
+      let failNext = false;
+      const { store, recorder } = await setup({
+        wrap: (real) => ({
+          db: real.db, readOnly: false, close: () => real.close(),
+          transaction<T>(fn: () => T): T {
+            if (failNext) { failNext = false; throw Object.assign(new Error("database is locked"), { errcode: 5 }); }
+            return real.transaction(fn);
+          },
+        }),
+      });
+      start(recorder, { source: "writer-relay" });
+      recorder.turnEnded(SESSION_ID, ended(1, 2), failing);
+      await recorder.settle(SESSION_ID, 5_000);
+      failNext = true;
+      const all = [later("a", 1), later("c", 5)];
+      recorder.turnEnded(SESSION_ID, ended(2, 6), reader(all));
+      await recorder.settle(SESSION_ID, 5_000);
+      all.push(later("d", 7));
+      const calls: number[] = [];
+      recorder.turnEnded(SESSION_ID, ended(3, 8), reader(all, calls));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(calls).toEqual([2]);
+      expect(rows(store, "SELECT code, first_turn_id FROM gaps ORDER BY id")).toEqual([
+        { code: "history_relay_invalid", first_turn_id: turn(1).turnId }, { code: "history_locked", first_turn_id: turn(2).turnId },
+      ]);
+      expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries")).toEqual([{ pi_entry_id: "d", turn_id: turn(3).turnId }]);
+      expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+    });
+  });
+
+  describe("a turn longer than the write buffer", () => {
+    const filler = (id: string) => entry(id, "x".repeat(600));
+    function paged(all: unknown[], calls: number[] = [], bad?: number) {
+      return async (cursor: number): Promise<HistoryPage> => {
+        calls.push(cursor);
+        if (cursor === bad) return { entries: "nope", next: 0, more: false } as unknown as HistoryPage;
+        return { entries: all.slice(cursor, cursor + 1), next: cursor + 1, more: cursor + 1 < all.length };
+      };
+    }
+    const counting = (seen: { transactions: number }) => (real: HistoryStore): HistoryStore => ({
+      db: real.db, readOnly: false, close: () => real.close(),
+      transaction<T>(fn: () => T): T { seen.transactions += 1; return real.transaction(fn); },
+    });
+
+    it("is written in several transactions and loses nothing", async () => {
+      const seen = { transactions: 0 };
+      const { store, recorder } = await setup({ wrap: counting(seen), turnBufferBytes: 1_000 });
+      start(recorder, { source: "writer-relay" });
+      await recorder.settle(SESSION_ID, 5_000);
+      const all = ["a", "b", "c", "d", "e"].map(filler);
+      recorder.turnEnded(SESSION_ID, turn(1), paged(all));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(seen.transactions).toBeGreaterThan(1);
+      expect(rows(store, "SELECT pi_entry_id, position FROM entries ORDER BY position")).toEqual(["a", "b", "c", "d", "e"].map((pi_entry_id, position) => ({ pi_entry_id, position })));
+      expect(rows(store, "SELECT entry_count, recorded FROM turns")).toEqual([{ entry_count: 5, recorded: 1 }]);
+      expect(rows(store, "SELECT entry_cursor, completeness FROM sessions")).toEqual([{ entry_cursor: 5, completeness: "complete" }]);
+    });
+
+    it("stays one transaction below the buffer", async () => {
+      const seen = { transactions: 0 };
+      const { recorder } = await setup({ wrap: counting(seen) });
+      start(recorder, { source: "writer-relay" });
+      await recorder.settle(SESSION_ID, 5_000);
+      recorder.turnEnded(SESSION_ID, turn(1), paged(["a", "b", "c"].map(filler)));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(seen.transactions).toBe(1);
+    });
+
+    it("keeps what it wrote when a later page fails, and the next read continues there", async () => {
+      const { store, recorder } = await setup({ turnBufferBytes: 1_000 });
+      start(recorder, { source: "writer-relay" });
+      const all = ["a", "b", "c", "d"].map(filler);
+      recorder.turnEnded(SESSION_ID, turn(1), paged(all, [], 3));
+      await recorder.settle(SESSION_ID, 5_000);
+      const written = rows(store, "SELECT pi_entry_id FROM entries ORDER BY position").map((row) => row.pi_entry_id);
+      expect(written.length).toBeGreaterThan(0);
+      expect(written.length).toBeLessThan(4);
+      expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]);
+      expect(rows(store, "SELECT entry_count, recorded FROM turns")).toEqual([{ entry_count: written.length, recorded: 0 }]);
+      const calls: number[] = [];
+      recorder.turnEnded(SESSION_ID, { ...turn(2), completedAt: "2026-11-04T10:00:09.000Z" }, paged(all, calls));
+      await recorder.settle(SESSION_ID, 5_000);
+      expect(calls[0]).toBe(written.length);
+      expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries ORDER BY position").map((row) => row.pi_entry_id)).toEqual(["a", "b", "c", "d"]);
+      expect(rows(store, "SELECT DISTINCT turn_id FROM entries")).toEqual([{ turn_id: turn(1).turnId }]);
+      expect(rows(store, "SELECT count(*) AS n FROM gaps")).toEqual([{ n: 0 }]);
+    });
+
+    it("stops a page source that never ends at the per-turn bound", async () => {
+      const { store, recorder } = await setup();
+      start(recorder, { source: "writer-relay" });
+      let calls = 0;
+      recorder.turnEnded(SESSION_ID, turn(1), async (cursor) => { calls += 1; return { entries: [entry(`e${cursor}`)], next: cursor + 1, more: true }; });
+      await recorder.settle(SESSION_ID, 30_000);
+      expect(calls).toBe(4_096);
+      expect(rows(store, "SELECT code FROM gaps")).toEqual([{ code: "history_relay_invalid" }]);
+    });
   });
 
   it("never throws, even for an unknown session or after the store closed", async () => {

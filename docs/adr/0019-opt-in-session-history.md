@@ -54,12 +54,17 @@ pi-session-mcp gets an opt-in, per-machine session history.
   MCP tools get the pattern stage only.
 - **Size.** Images and thinking signatures become size markers; any other
   entry above 1 MiB is truncated and flagged. Relayed pages fit the existing
-  512 KiB relay response cap.
+  512 KiB relay response cap. A turn whose redacted entries pass 64 MiB is
+  written in several transactions instead of one, which bounds what the host
+  holds in memory without losing content.
 - **Failure.** History never fails, delays beyond a bound, or changes a Pi
   session or turn. A failed write becomes a gap with a stable code
   (`history_locked`, `history_full`, `history_corrupt`,
   `history_unavailable`, `history_relay_invalid`), or a structured stderr
-  diagnostic when no gap can be written.
+  diagnostic when no gap can be written. Such a gap is written once the store
+  accepts writes again. After a failed page read the entries stay unread, so
+  the next successful read stores them under their turn by timestamp and
+  removes the gap; a gap in the record therefore means content is missing.
 - **Crash.** Sessions of a server instance that ended without recording a
   close are marked `incomplete` on the next start or by `reconcile`; nothing
   is resumed.

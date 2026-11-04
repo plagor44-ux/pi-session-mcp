@@ -2,6 +2,8 @@
 export const HISTORY_SCHEMA_VERSION = 1;
 /** Bounded wait for a locked database, "low seconds" (design call 2). */
 export const HISTORY_BUSY_TIMEOUT_MS = 2_000;
+/** Redacted bytes of a turn held in memory; a longer turn is written in several transactions. */
+export const HISTORY_TURN_BUFFER_BYTES = 64 * 1024 * 1024;
 /** How long `pi_session_close` waits for a pending history write before it disposes the session. */
 export const HISTORY_SETTLE_DEADLINE_MS = 3_000;
 /** Stored size of one entry above which it is truncated (design call 14). */

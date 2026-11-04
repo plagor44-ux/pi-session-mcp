@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { HistoryPage } from "../pi-adapter.js";
 import type { SessionView, TurnView } from "../session-registry.js";
-import type { CaptureSource, GapCode } from "./constants.js";
+import { HISTORY_TURN_BUFFER_BYTES, type CaptureSource, type GapCode } from "./constants.js";
 import type { Redactor, ToolCallIndex } from "./redact.js";
 import { classifyStoreError, HistoryStoreError, type HistoryStore } from "./store.js";
 
@@ -57,6 +57,8 @@ interface SessionState {
   /** Turns with a reader whose recording has not finished; the next read waits so pages stay contiguous. */
   outstanding: number;
   readonly pending: Set<string>;
+  /** Turns whose page read failed since the cursor last moved; the next successful read still holds their entries. */
+  readonly unread: Array<{ turn: TurnView; code: GapCode }>;
   /** Gaps whose row could not be written yet; retried on every later write so the session never ends `complete`. */
   readonly lostGaps: Array<{ turnId: string | null; code: GapCode }>;
   abandoned: boolean;
@@ -71,6 +73,8 @@ export interface HistoryRecorderOptions {
   /** Called with a gap code when a failure could not be recorded as a gap row. Content-free. */
   diagnostic(code: GapCode): void;
   now?: () => string;
+  /** Overrides HISTORY_TURN_BUFFER_BYTES in tests. */
+  turnBufferBytes?: number;
 }
 
 function delay(ms: number): Promise<false> {
@@ -80,6 +84,7 @@ function delay(ms: number): Promise<false> {
 export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryRecorder {
   const { store } = options;
   const now = options.now ?? (() => new Date().toISOString());
+  const turnBufferBytes = options.turnBufferBytes ?? HISTORY_TURN_BUFFER_BYTES;
   const sessions = new Map<string, SessionState>();
   const instanceId = randomUUID();
 
@@ -150,14 +155,15 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
     state.chain = state.chain.then(task).catch(() => undefined).finally(() => { state.busy -= 1; });
   };
 
-  const writeTurn = (state: SessionState, turn: TurnView, entryCount: number, recorded: boolean): void => {
+  /** `entry_count` always reflects the rows stored for the turn, however many writes that took. */
+  const writeTurn = (state: SessionState, turn: TurnView, recorded: boolean): void => {
     store.db.prepare(`INSERT INTO turns (session_id, turn_id, started_at, ended_at, state, abort_reason, completion, entry_count, recorded)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (session_id, turn_id) DO UPDATE SET ended_at = excluded.ended_at, state = excluded.state,
+      VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT count(*) FROM entries WHERE session_id = ? AND turn_id = ?), ?) ON CONFLICT (session_id, turn_id) DO UPDATE SET ended_at = excluded.ended_at, state = excluded.state,
       abort_reason = excluded.abort_reason, completion = excluded.completion, entry_count = excluded.entry_count, recorded = excluded.recorded`).run(
-      state.historyId, turn.turnId, turn.startedAt, turn.completedAt ?? null, turn.state, turn.abortReason ?? null, turn.completion ?? null, entryCount, recorded ? 1 : 0,
+      state.historyId, turn.turnId, turn.startedAt, turn.completedAt ?? null, turn.state, turn.abortReason ?? null, turn.completion ?? null, state.historyId, turn.turnId, recorded ? 1 : 0,
     );
   };
-  const tryWriteTurn = (state: SessionState, turn: TurnView): void => { try { writeTurn(state, turn, 0, false); } catch { /* the gap reports it */ } };
+  const tryWriteTurn = (state: SessionState, turn: TurnView): void => { try { writeTurn(state, turn, false); } catch { /* the gap reports it */ } };
 
   /** Validates one page as untrusted input; throws `history_relay_invalid` on any mismatch. */
   const validatePage = (state: SessionState, raw: unknown, cursor: number): { header?: z.infer<typeof headerSchema>; entries: z.infer<typeof entrySchema>[]; truncated: ReadonlySet<number>; next: number; more: boolean } => {
@@ -192,18 +198,84 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       if (startFailure !== undefined) { gap(state, turn.turnId, startFailure); return; }
       tryWriteTurn(state, turn); gap(state, turn.turnId, "history_unavailable"); return;
     }
-    const first = state.cursor;
-    let cursor = first;
+    const earlier = [...state.unread];
+    // A repairing read holds the entries of the failed turns too: an entry belongs to the first of them that had not ended yet.
+    const owner = (timestamp: string): TurnView => {
+      const at = Date.parse(timestamp);
+      return earlier.find(({ turn: failed }) => failed.completedAt !== undefined && at <= Date.parse(failed.completedAt))?.turn ?? turn;
+    };
+    const redactor = options.redactorFor(state.record.view.workspace);
+    let cursor = state.cursor;
+    let position = cursor;
     let header: z.infer<typeof headerSchema> | undefined;
-    const collected: Array<{ entry: z.infer<typeof entrySchema>; cut: boolean }> = [];
+    let batch: Array<{ entry: z.infer<typeof entrySchema>; cut: boolean; position: number; owner: TurnView; redacted: ReturnType<Redactor["entry"]> }> = [];
+    let buffered = 0;
+
+    /** Writes the batch and moves the cursor even if that fails: the next turn records its own entries, this one is a gap. */
+    const persist = (final: boolean): GapCode | undefined => {
+      const rows = batch;
+      batch = [];
+      buffered = 0;
+      state.cursor = cursor;
+      const startFailure = ensureStarted(state);
+      if (startFailure !== undefined) { state.unread.length = 0; return startFailure; }
+      const headerJson = header === undefined ? null : JSON.stringify({ type: "session", version: header.version ?? null, id: safeId(state, redactor, header.id), timestamp: header.timestamp });
+      const turns = [...earlier.map((failed) => failed.turn), turn];
+      try {
+        store.transaction(() => {
+          for (const each of turns) writeTurn(state, each, false);
+          const insert = store.db.prepare(`INSERT OR IGNORE INTO entries (session_id, turn_id, position, pi_entry_id, parent_id, entry_type, timestamp, role, tool_name,
+            is_error, redacted_json, redactions, dropped_by_path, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          for (const row of rows) {
+            const { entry, redacted } = row;
+            insert.run(state.historyId, row.owner.turnId, row.position, safeId(state, redactor, entry.id), entry.parentId === null ? null : safeId(state, redactor, entry.parentId),
+              entry.type, entry.timestamp, safeName(redactor, redacted.role), safeName(redactor, redacted.toolName),
+              redacted.isError === true ? 1 : 0, redacted.json, JSON.stringify(redacted.redactions), redacted.droppedByPath ? 1 : 0, redacted.truncated || row.cut ? 1 : 0);
+          }
+          for (const each of turns) writeTurn(state, each, final);
+          store.db.prepare("UPDATE sessions SET entry_cursor = ?, header_json = COALESCE(?, header_json) WHERE id = ?").run(cursor, headerJson, state.historyId);
+          if (final) {
+            // The entries of the failed reads arrived after all, so their gaps no longer describe anything missing.
+            const forget = store.db.prepare("DELETE FROM gaps WHERE session_id = ? AND first_turn_id = ? AND code = ?");
+            for (const failed of earlier) forget.run(state.historyId, failed.turn.turnId, failed.code);
+            if (earlier.length > 0) store.db.prepare("UPDATE sessions SET completeness = 'complete' WHERE id = ? AND completeness = 'has_gaps' AND NOT EXISTS (SELECT 1 FROM gaps WHERE session_id = ?)").run(state.historyId, state.historyId);
+          }
+        });
+      } catch (error) {
+        state.unread.length = 0;
+        tryWriteTurn(state, turn);
+        return classifyStoreError(error);
+      }
+      if (final) {
+        for (const failed of earlier) {
+          const queued = state.lostGaps.findIndex((lost) => lost.turnId === failed.turn.turnId && lost.code === failed.code);
+          if (queued !== -1) state.lostGaps.splice(queued, 1);
+        }
+        state.unread.length = 0;
+      }
+      retryLostGaps(state);
+      return undefined;
+    };
+
     try {
       for (let pages = 0; ; pages += 1) {
         if (pages >= MAX_PAGES_PER_TURN) throw new HistoryStoreError("history_relay_invalid");
         const page = validatePage(state, await (pages === 0 && early !== undefined ? early : read(cursor)), cursor);
+        if (state.abandoned) return;
         if (cursor === 0 && page.header !== undefined) header = page.header;
-        page.entries.forEach((entry, index) => collected.push({ entry, cut: page.truncated.has(index) }));
+        page.entries.forEach((entry, index) => {
+          const redacted = redactor.entry(entry, state.toolCalls);
+          batch.push({ entry, cut: page.truncated.has(index), position, owner: owner(entry.timestamp), redacted });
+          position += 1;
+          buffered += Buffer.byteLength(redacted.json);
+        });
         cursor = page.next;
         if (!page.more) break;
+        // Bounds what an untrusted page source can make the host hold; size alone never loses content.
+        if (buffered >= turnBufferBytes) {
+          const failure = persist(false);
+          if (failure !== undefined) { gap(state, turn.turnId, failure); return; }
+        }
       }
     } catch (error) {
       if (state.abandoned) return;
@@ -212,33 +284,12 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       const code = error instanceof HistoryStoreError && (relayed || error.code !== "history_relay_invalid") ? error.code : relayed ? "history_relay_invalid" : "history_unavailable";
       if (ensureStarted(state) === undefined) tryWriteTurn(state, turn);
       gap(state, turn.turnId, code);
+      state.unread.push({ turn, code });
       return;
     }
     if (state.abandoned) return;
-    // The cursor moves on even if a write fails: the next turn records its own entries, this one is a gap.
-    state.cursor = cursor;
-    const startFailure = ensureStarted(state);
-    if (startFailure !== undefined) { gap(state, turn.turnId, startFailure); return; }
-    const redactor = options.redactorFor(state.record.view.workspace);
-    const rows = collected.map(({ entry, cut }, index) => ({ entry, cut, position: first + index, redacted: redactor.entry(entry, state.toolCalls) }));
-    const headerJson = header === undefined ? null : JSON.stringify({ type: "session", version: header.version ?? null, id: safeId(state, redactor, header.id), timestamp: header.timestamp });
-    try {
-      store.transaction(() => {
-        writeTurn(state, turn, rows.length, true);
-        const insert = store.db.prepare(`INSERT OR IGNORE INTO entries (session_id, turn_id, position, pi_entry_id, parent_id, entry_type, timestamp, role, tool_name,
-          is_error, redacted_json, redactions, dropped_by_path, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-        for (const { entry, cut, position, redacted } of rows) {
-          insert.run(state.historyId, turn.turnId, position, safeId(state, redactor, entry.id), entry.parentId === null ? null : safeId(state, redactor, entry.parentId),
-            entry.type, entry.timestamp, safeName(redactor, redacted.role), safeName(redactor, redacted.toolName),
-            redacted.isError === true ? 1 : 0, redacted.json, JSON.stringify(redacted.redactions), redacted.droppedByPath ? 1 : 0, redacted.truncated || cut ? 1 : 0);
-        }
-        store.db.prepare("UPDATE sessions SET entry_cursor = ?, header_json = COALESCE(?, header_json) WHERE id = ?").run(cursor, headerJson, state.historyId);
-      });
-      retryLostGaps(state);
-    } catch (error) {
-      tryWriteTurn(state, turn);
-      gap(state, turn.turnId, classifyStoreError(error));
-    }
+    const failure = persist(true);
+    if (failure !== undefined) gap(state, turn.turnId, failure);
   };
 
   const abandon = (state: SessionState): void => {
@@ -259,7 +310,7 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
         if (sessions.has(input.view.id)) return;
         const state: SessionState = {
           publicId: input.view.id, historyId: randomUUID(), record: input, toolCalls: new Map(), cursor: 0,
-          started: false, chain: Promise.resolve(), busy: 0, outstanding: 0, pending: new Set(), lostGaps: [], abandoned: false,
+          started: false, chain: Promise.resolve(), busy: 0, outstanding: 0, pending: new Set(), unread: [], lostGaps: [], abandoned: false,
         };
         sessions.set(input.view.id, state);
         enqueue(state, () => { const failure = ensureStarted(state); if (failure !== undefined) gap(state, null, failure); });
