@@ -23,8 +23,8 @@ const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 async function compare({ home, name, checkout, base }: BaseFreshnessRequest, git: SnapshotGit, signal: AbortSignal): Promise<BaseFreshness> {
   if (!COMMIT.test(base.commit)) return "unknown";
-  // Git fetches a missing object on demand through a promisor remote. Not asking is the only way to stay offline on every Git version.
-  const promisor = await git.run(checkout, ["config", "--get-regexp", "^(extensions\\.partialclone|remote\\..*\\.promisor)$"], { signal });
+  // Git fetches a missing object on demand through a promisor remote, and a remote's filter alone makes it one. Not asking stays offline on every Git version.
+  const promisor = await git.run(checkout, ["config", "--get-regexp", "^(extensions\\.partialclone|remote\\..*\\.(promisor|partialclonefilter))$"], { signal });
   if (promisor.code !== 1) return "unknown";
   const heads = await git.run(checkout, ["bundle", "list-heads", join(writerPaths(home, name).bundles, "base.bundle")], { signal });
   const source = writerBaseSource(heads.code === 0 ? heads.stdout : undefined, base.ref);
@@ -42,7 +42,7 @@ async function compare({ home, name, checkout, base }: BaseFreshnessRequest, git
  * that is not an ancestor of the branch, is `unknown`: the answer is advice and never fails its caller.
  */
 export async function writerBaseFreshness(request: BaseFreshnessRequest, options: BaseFreshnessOptions = {}): Promise<BaseFreshness> {
-  const git = "git" in options ? options.git : trustedGit({ timeoutMs: options.deadlineMs ?? BASE_FRESHNESS_DEADLINE_MS });
+  const git = "git" in options ? options.git : trustedGit({ timeoutMs: options.deadlineMs ?? BASE_FRESHNESS_DEADLINE_MS, env: { GIT_NO_LAZY_FETCH: "1" } });
   if (!git) return "unknown";
   const deadline = AbortSignal.timeout(options.deadlineMs ?? BASE_FRESHNESS_DEADLINE_MS);
   const signal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;

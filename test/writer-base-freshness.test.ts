@@ -67,7 +67,11 @@ it("reports unknown when the recorded commit is not an ancestor of the branch", 
   expect(await writerBaseFreshness(input(home, checkout, side), { git: plainGit })).toBe("unknown");
   expect(await writerBaseFreshness(input(home, checkout, "f".repeat(40)), { git: plainGit })).toBe("unknown");
 });
-it("never fetches through a promisor remote for a commit it does not hold", async () => {
+it.each([
+  ["remote.origin.promisor", "true"],
+  ["remote.origin.partialclonefilter", "blob:none"],
+  ["extensions.partialclone", "origin"],
+])("never fetches through a promisor remote configured with %s", async (key, value) => {
   const { home, checkout, first } = await repository();
   const origin = join(home, "origin");
   git(home, "clone", "-q", "--bare", checkout, origin);
@@ -76,10 +80,7 @@ it("never fetches through a promisor remote for a commit it does not hold", asyn
   const missing = commit(elsewhere, "only on the remote");
   git(elsewhere, "push", "-q", "origin", "HEAD:refs/heads/other");
   git(checkout, "remote", "add", "origin", origin);
-  git(checkout, "config", "remote.origin.promisor", "true");
-  git(checkout, "config", "remote.origin.partialclonefilter", "blob:none");
-  // The precondition: without the guard, Git would fetch this commit on demand.
-  expect(git(checkout, "cat-file", "-t", "HEAD")).toBe("commit");
+  git(checkout, "config", key, value);
   expect(await writerBaseFreshness(input(home, checkout, missing), { git: plainGit })).toBe("unknown");
   expect(() => execFileSync("git", ["--no-lazy-fetch", "-C", checkout, "cat-file", "-e", missing], { stdio: "pipe" })).toThrow();
   expect(await writerBaseFreshness(input(home, checkout, first), { git: plainGit })).toBe("unknown");
