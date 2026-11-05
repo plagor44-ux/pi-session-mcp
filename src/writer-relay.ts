@@ -301,6 +301,8 @@ export class WriterRelayAdapter implements PiSessionAdapter {
         if (!state || state.base.ref !== candidate.state.base.ref || state.base.commit !== candidate.state.base.commit) continue;
         // Only a default start is compared: an explicit base names a fix round, not the workspace default (#254).
         const freshness = input.base === undefined ? await this.freshness(candidate.name, input.cwd, state.base, input.signal) : undefined;
+        // The start budget is not checked again here: the comparison alone never fails a start.
+        if (connection.lost) continue;
         input.signal?.throwIfAborted();
         admitted = true;
         return new RelayHandle(connection, result.session, { writer: candidate.name, base: { ...state.base, ...(freshness === undefined ? {} : { freshness }) } }, this.options.pollIntervalMs ?? RELAY_POLL_INTERVAL_MS);

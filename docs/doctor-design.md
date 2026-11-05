@@ -80,7 +80,9 @@ Bundle warnings detect outstanding entries without reading their contents.
 `writer_base_behind` is the one writer check that runs Git, read-only and with no
 network, from a trusted system path and never in a writer's clone: at most two
 seconds per writer, in the operator's checkout, listing the writer's base bundle
-and resolving the branch as a reset does. It changes nothing.
+and resolving the branch as a reset does. It changes nothing, and it does not
+compare in a partial clone, where Git could fetch on demand. Writers are compared
+one after the other, so a Git that hangs can add up to two seconds per writer.
 Each successful check emits an `ok` entry; remediation text contains no paths.
 Acceptance and the disposable-clone control run are explicit setup operations,
 never Doctor actions. Under Plan B, `--isolation-control --repo <alias> --apply`

@@ -146,6 +146,16 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     expect(handle.placement?.base).toEqual({ ref: "refs/heads/main", commit: "a".repeat(40) });
     expect(compared).toBe(false);
   });
+  it("a writer lost during the comparison is not admitted; the next one is tried", async () => {
+    const s = await setup([{}, {}]); const spawn = s.options.spawn!; let first: { close(): Promise<void> } | undefined;
+    s.options.spawn = { spawn: (wrapper, env) => { const transport = spawn.spawn(wrapper, env); first ??= transport; return transport; } };
+    let compared = 0;
+    s.options.baseFreshness = async () => { if (compared++ === 0) await first!.close(); return "current"; };
+    const handle = await new WriterRelayAdapter(s.options).create(input); handles.push(handle);
+    expect(handle.placement?.writer).toBe("repo-w2");
+    expect(handle.isLost?.()).toBe(false);
+    expect(compared).toBe(2);
+  });
   it("a failing comparison never fails the start", async () => {
     const s = await setup();
     s.options.baseFreshness = async () => { throw new Error("comparison failed"); };

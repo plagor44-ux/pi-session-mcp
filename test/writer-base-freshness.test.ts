@@ -67,6 +67,31 @@ it("reports unknown when the recorded commit is not an ancestor of the branch", 
   expect(await writerBaseFreshness(input(home, checkout, side), { git: plainGit })).toBe("unknown");
   expect(await writerBaseFreshness(input(home, checkout, "f".repeat(40)), { git: plainGit })).toBe("unknown");
 });
+it("never fetches through a promisor remote for a commit it does not hold", async () => {
+  const { home, checkout, first } = await repository();
+  const origin = join(home, "origin");
+  git(home, "clone", "-q", "--bare", checkout, origin);
+  const elsewhere = join(home, "elsewhere");
+  git(home, "clone", "-q", origin, elsewhere);
+  const missing = commit(elsewhere, "only on the remote");
+  git(elsewhere, "push", "-q", "origin", "HEAD:refs/heads/other");
+  git(checkout, "remote", "add", "origin", origin);
+  git(checkout, "config", "remote.origin.promisor", "true");
+  git(checkout, "config", "remote.origin.partialclonefilter", "blob:none");
+  // The precondition: without the guard, Git would fetch this commit on demand.
+  expect(git(checkout, "cat-file", "-t", "HEAD")).toBe("commit");
+  expect(await writerBaseFreshness(input(home, checkout, missing), { git: plainGit })).toBe("unknown");
+  expect(() => execFileSync("git", ["--no-lazy-fetch", "-C", checkout, "cat-file", "-e", missing], { stdio: "pipe" })).toThrow();
+  expect(await writerBaseFreshness(input(home, checkout, first), { git: plainGit })).toBe("unknown");
+});
+it("compares the recorded branch when the bundle names another one", async () => {
+  const { home, checkout, first } = await repository();
+  git(checkout, "update-ref", "refs/heads/other", first);
+  git(checkout, "bundle", "create", "-q", join(writerPaths(home, "repo-w1").bundles, "base.bundle"), "refs/heads/other");
+  const moved = commit(checkout);
+  expect(await writerBaseFreshness(input(home, checkout, moved), { git: plainGit })).toBe("current");
+  expect(await writerBaseFreshness(input(home, checkout, first), { git: plainGit })).toBe("behind");
+});
 it("refuses an unsafe recorded ref without running it", async () => {
   const { home, checkout, first } = await repository();
   const seen: string[][] = [];

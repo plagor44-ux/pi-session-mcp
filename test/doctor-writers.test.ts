@@ -153,6 +153,19 @@ it("warns about a ready writer behind its default base, with exit 1 and no path"
   expect(result.checks.filter((check) => check.severity === "error" && check.id.startsWith("writer_"))).toEqual([]);
   expect([renderDoctorJson(result), renderDoctorHuman(result)].join("\n")).not.toContain(home);
 });
+it("exits 1 when a writer behind its base is the only finding", async () => {
+  const { home, run, ready } = await fixture({ base: "main" }); await ready();
+  const result = await run({
+    writerBaseFreshness: async () => "behind",
+    packageRoot: home, nodeVersion: "22.19.0", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }),
+    fileSystem: { readFile: async () => "", stat: async (path) => ({ isDirectory: () => path === home, isFile: () => path !== home }), access: async () => undefined },
+    loadRawConfig: async () => ({ executionProfiles: { coding: { default: false, permissionProfile: "coding", provider: "fake", model: "fake", thinkingLevel: "off" } } }),
+    writerLeaseRoot: async () => undefined,
+  });
+  expect(result.checks.filter((check) => check.severity !== "ok").map((check) => check.id)).toEqual(["writer_base_behind"]);
+  expect(result.exitCode).toBe(1);
+  expect(result.ok).toBe(true);
+});
 it.each(["current", "unknown"] as const)("does not warn about a writer that is %s", async (freshness) => {
   const { run, ready } = await fixture({ base: "main" }); await ready();
   expect((await run({ writerBaseFreshness: async () => freshness })).checks.filter((check) => check.id === "writer_base_behind")).toEqual([

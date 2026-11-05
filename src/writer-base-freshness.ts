@@ -23,6 +23,9 @@ const COMMIT = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 async function compare({ home, name, checkout, base }: BaseFreshnessRequest, git: SnapshotGit, signal: AbortSignal): Promise<BaseFreshness> {
   if (!COMMIT.test(base.commit)) return "unknown";
+  // Git fetches a missing object on demand through a promisor remote. Not asking is the only way to stay offline on every Git version.
+  const promisor = await git.run(checkout, ["config", "--get-regexp", "^(extensions\\.partialclone|remote\\..*\\.promisor)$"], { signal });
+  if (promisor.code !== 1) return "unknown";
   const heads = await git.run(checkout, ["bundle", "list-heads", join(writerPaths(home, name).bundles, "base.bundle")], { signal });
   const source = writerBaseSource(heads.code === 0 ? heads.stdout : undefined, base.ref);
   if (!isSafeRefName(source)) return "unknown";
@@ -35,8 +38,8 @@ async function compare({ home, name, checkout, base }: BaseFreshnessRequest, git
 
 /**
  * Compares a writer's recorded base commit with the commit a reset would move it to, using only
- * local, read-only Git in the operator's checkout. Every failure, and a commit that is not an
- * ancestor of the branch, is `unknown`: the answer is advice and never fails its caller.
+ * local, read-only Git in the operator's checkout. Every failure, a partial clone, and a commit
+ * that is not an ancestor of the branch, is `unknown`: the answer is advice and never fails its caller.
  */
 export async function writerBaseFreshness(request: BaseFreshnessRequest, options: BaseFreshnessOptions = {}): Promise<BaseFreshness> {
   const git = "git" in options ? options.git : trustedGit({ timeoutMs: options.deadlineMs ?? BASE_FRESHNESS_DEADLINE_MS });
