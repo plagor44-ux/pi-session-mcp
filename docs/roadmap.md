@@ -200,6 +200,12 @@ mean they are implemented or that their gates passed.
   [Acceptance](acceptance.md#v0170-post-release-evidence). No profile sets
   `goModuleCache` yet. Not yet established: a live review turn with
   `goModuleCache` against a real provider. Open: #144, #215, #221.
+- 2026-11-04: [#250](https://github.com/plagor44-ux/pi-session-mcp/pull/250)
+  merges the opt-in session history (#215) under
+  [ADR 0019](adr/0019-opt-in-session-history.md), which the maintainer
+  accepted on 2026-11-04 after the merge (unreleased). Not yet established: a
+  run against a real provider, a real client or a container writer. Open:
+  #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
@@ -611,7 +617,8 @@ flowchart TD
 
 Follow [ADR 0003](adr/0003-post-mvp-maintenance.md), together with the approved
 macOS, extension and skill decisions in ADRs 0005–0007. Maintain local stdio,
-in-memory state and one trusted local peer.
+in-memory state, the opt-in session history (ADR 0019) and one trusted local
+peer.
 
 | Topic | Entry condition |
 | --- | --- |
@@ -621,7 +628,7 @@ in-memory state and one trusted local peer.
 | Worker result channel or report extension (K11) | Deferred in Sprint 17 ([#210](https://github.com/plagor44-ux/pi-session-mcp/issues/210)): in a small live comparison, the text contract and the receipt each had one kind of format failure, each fixed by one follow-up. Revisit with a text-contract failure that one follow-up does not resolve; the validator and fixtures in `eval/reports/` are the basis |
 | `Stop` gate on open sessions, MCP elicitation for worker questions, pi-goal-x, pi-subagents, the `subagent`, `structured-output.ts` and `git-checkpoint.ts` examples | Not planned: each collides with the wake, reaches the human instead of the model, continues outside the turn or loses its result (operator concept of 2026-10-25, consistent with #91 and ADR 0011) |
 | pi-lens on coding profiles | Not planned: no benefit in two ablation waves, 1.47 times the cost |
-| Persistence/resume | Actual loss of useful work on restart |
+| Resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |
 | Multi-user/UI/credentials | Separate justified product scope and ADR |
