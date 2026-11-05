@@ -87,6 +87,7 @@ export async function removeSnapshotState(paths: SnapshotPaths): Promise<void> {
 export interface GitResult { readonly code: number; readonly stdout: string; }
 export interface SnapshotGit { run(cwd: string, args: readonly string[], options?: { readonly signal?: AbortSignal; readonly inheritFds?: readonly number[] }): Promise<GitResult>; }
 export interface TrustedGitOptions { readonly candidates?: readonly string[]; readonly isTrustedBinary?: (path: string) => boolean; readonly env?: Readonly<Record<string, string>>; readonly timeoutMs?: number; readonly maxOutputBytes?: number; readonly mutationTimeoutMs?: number; }
+const GIT_STOP_GRACE_MS = 1_000;
 export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undefined {
   const binary = (options.candidates ?? ["/usr/bin/git", "/bin/git"]).find((path) => (options.isTrustedBinary ?? ((candidate: string) => isTrustedSystemBinary(candidate)))(path));
   if (!binary) return undefined;
@@ -97,12 +98,19 @@ export function trustedGit(options: TrustedGitOptions = {}): SnapshotGit | undef
       try { child = spawn(binary, ["--no-optional-locks", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "core.useReplaceRefs=false", "-c", "core.fileMode=true", "-c", "worktree.useRelativePaths=false", "-C", cwd, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore", ...(runOptions.inheritFds ?? [])], env: { PATH: "/usr/bin:/bin", HOME: options.env?.HOME ?? homedir(), LANG: "C", LC_ALL: "C", GIT_OPTIONAL_LOCKS: "0", GIT_TERMINAL_PROMPT: "0", ...options.env } }); }
       catch { reject(new SnapshotError("snapshot_unavailable")); return; }
       let failed = false; let settled = false; let size = 0; const chunks: Buffer[] = [];
-      const stop = (): void => { failed = true; if (child.pid) try { process.kill(-child.pid, "SIGKILL"); } catch { /* exited */ } };
+      let grace: NodeJS.Timeout | undefined;
+      // `close` waits for the output pipe, which a process outside the killed group can hold open: release it, and settle within a bound even if `close` never comes.
+      const stop = (): void => {
+        failed = true;
+        if (child.pid) try { process.kill(-child.pid, "SIGKILL"); } catch { /* exited */ }
+        child.stdout?.destroy();
+        grace ??= setTimeout(() => finish(undefined), GIT_STOP_GRACE_MS);
+      };
       const timer = setTimeout(stop, options.timeoutMs ?? 10_000);
       runOptions.signal?.addEventListener("abort", stop, { once: true });
       const finish = (outcome: GitResult | undefined): void => {
         if (settled) return;
-        settled = true; clearTimeout(timer); runOptions.signal?.removeEventListener("abort", stop);
+        settled = true; clearTimeout(timer); clearTimeout(grace); runOptions.signal?.removeEventListener("abort", stop);
         if (outcome === undefined) reject(new SnapshotError("snapshot_unavailable")); else resolve(outcome);
       };
       child.stdout!.on("data", (data: Buffer) => { size += data.length; if (size > (options.maxOutputBytes ?? 4 * 1024 * 1024)) stop(); else chunks.push(data); });

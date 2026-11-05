@@ -892,6 +892,7 @@ describe("writer setup reconciliation", () => {
     const output = await runWriterOperation("x-w1", "verify", { apply: true, discard: false }, { ...f.deps, adapter, launch, verify });
     expect(output.exitCode).toBe(0);
     expect(verify).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledWith(expect.objectContaining({ server: "inner" }));
     expect(adapter.inspect).not.toHaveBeenCalled();
   });
   it.each([undefined, "/runtime"])("passes only the minimal wrapper environment (runtime=%s)", async (runtime) => {

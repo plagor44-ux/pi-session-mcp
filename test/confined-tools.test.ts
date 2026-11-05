@@ -40,7 +40,10 @@ beforeAll(async () => {
   const skill = { name: "review", description: "d", filePath: join(skillDir, "SKILL.md"), baseDir: skillDir } as unknown as Skill;
   roots = await allowedReadRoots(workspace, [skill]);
   tools = Object.fromEntries(createConfinedReadOnlyTools(workspace, roots).map((tool) => [tool.name, tool]));
-});
+  // Where rg and fd are not installed, as on the macOS runners, the SDK downloads them on first use. Do that here, so a slow download cannot use up a test's time limit.
+  await run("grep", { pattern: "needle", path: "src" });
+  await run("find", { pattern: "*.txt", path: "src" });
+}, 300_000);
 
 describe("allowedReadRoots", () => {
   it("returns real, deduplicated roots", async () => {

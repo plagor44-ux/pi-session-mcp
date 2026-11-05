@@ -105,7 +105,7 @@ export async function runWriterOperation(name: string, operation: WriterOperatio
       if (operation === "verify") {
         const doctor = await (deps.doctor ?? runDoctor)({ home: ctx.home, packageRoot: deps.releaseRoot, configPath: deps.configPath, loadConfig: () => loadConfig(deps.configPath) });
         if (doctor.checks.some((check) => check.severity === "error" && (check.subject === name || GLOBAL_ERRORS.has(check.id)))) return done({ status: "failed", code: "doctor_failed" });
-        const checked = await (deps.verify ?? verifyMcpCapabilities)({ launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }, { inheritFds: [ctx.leaseFd!] }) });
+        const checked = await (deps.verify ?? verifyMcpCapabilities)({ server: "inner", launch: (deps.launch ?? createCommandMcpStdioLauncher)([writerPaths(ctx.home, name).wrapper], { HOME: ctx.home, PATH: process.env.PATH ?? "", PI_WRITER_NO_CREDENTIAL_REFRESH: "1", PI_WRITER_LEASE_FD: "3", ...(process.env.XDG_RUNTIME_DIR === undefined ? {} : { XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR }) }, { inheritFds: [ctx.leaseFd!] }) });
         if (checked.status !== "verified") return done({ status: "failed", code: `mcp_${checked.status}` });
         return done({ status: "ok", code: "mcp_verified" });
       }

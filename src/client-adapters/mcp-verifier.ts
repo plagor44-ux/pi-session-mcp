@@ -23,6 +23,8 @@ export interface McpStdioProcess {
 export interface McpVerifierOptions {
   readonly launch: (signal: AbortSignal) => Promise<McpStdioProcess>;
   readonly timeoutMs?: number;
+  /** The kind of server launched: `inner` is one behind a writer wrapper, which also lists its writer-internal tool. Default `host`. */
+  readonly server?: "host" | "inner";
 }
 
 export interface McpVerifierResult {
@@ -35,6 +37,7 @@ export interface McpVerifierResult {
 
 type JsonRpc = { readonly id?: number; readonly result?: unknown; readonly error?: unknown };
 const EXPECTED_TOOLS = ["pi_capabilities_get", "pi_session_start", "pi_session_list", "pi_session_get", "pi_session_prompt", "pi_session_abort", "pi_session_close", "pi_turn_get"] as const;
+const EXPECTED_INNER_TOOLS = [...EXPECTED_TOOLS, "pi_history_read"] as const;
 const EXPECTED_PROTOCOL = "2025-03-26";
 const ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 const FINGERPRINT_PATTERN = /^sha256:[0-9a-f]{64}$/;
@@ -148,7 +151,7 @@ function exactKeys(value: Record<string, unknown>, expected: readonly string[]):
   return keys.length === expected.length && [...expected].sort().every((key, index) => keys[index] === key);
 }
 
-async function performVerification(process: McpStdioProcess, deadline: number): Promise<McpVerifierResult> {
+async function performVerification(process: McpStdioProcess, deadline: number, expectedTools: readonly string[]): Promise<McpVerifierResult> {
   const result: { status: McpVerifierResult["status"]; initialize: boolean; toolsList: boolean; capabilitiesGet: boolean; tools: string[] } = { status: "failed", initialize: false, toolsList: false, capabilitiesGet: false, tools: [] };
   await beforeDeadline(Promise.resolve(process.write(frame({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: EXPECTED_PROTOCOL, capabilities: {}, clientInfo: { name: "pi-session-mcp-verifier", version: PACKAGE_VERSION } } }))), deadline);
   const initialized = await readResponse(process, 1, deadline);
@@ -165,8 +168,8 @@ async function performVerification(process: McpStdioProcess, deadline: number): 
   if (!listed?.result || typeof listed.result !== "object") return { ...result, status: "unsupported" };
   const tools = parseToolNames((listed.result as { tools?: unknown }).tools);
   result.toolsList = true;
-  if (!tools || tools.length !== EXPECTED_TOOLS.length || EXPECTED_TOOLS.some((name) => !tools.includes(name))) return { ...result, status: "unsupported" };
-  result.tools = [...EXPECTED_TOOLS];
+  if (!tools || tools.length !== expectedTools.length || expectedTools.some((name) => !tools.includes(name))) return { ...result, status: "unsupported" };
+  result.tools = [...expectedTools];
   await beforeDeadline(Promise.resolve(process.write(frame({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "pi_capabilities_get", arguments: {} } }))), deadline);
   const called = await readResponse(process, 4, deadline);
   const structured = called?.result && typeof called.result === "object" ? (called.result as { structuredContent?: unknown }).structuredContent : undefined;
@@ -185,7 +188,7 @@ export async function verifyMcpCapabilities(options: McpVerifierOptions): Promis
   let outcome = empty;
   try {
     process = await beforeDeadline(options.launch(controller.signal), deadline);
-    outcome = await performVerification(process, deadline);
+    outcome = await performVerification(process, deadline, options.server === "inner" ? EXPECTED_INNER_TOOLS : EXPECTED_TOOLS);
   } catch (error) {
     outcome = { ...empty, status: error instanceof VerificationTimeoutError ? "timeout" : "failed" };
   }
