@@ -6,7 +6,7 @@
 - `pi_session_start` accepts an optional `task` label for the history. `pi_capabilities_get` reports `history.enabled`. The configuration accepts an optional `history` block; an invalid one fails startup with `invalid_history`.
 - New `pi-session-mcp-history` CLI: `list`, `show`, `export` (Pi JSONL v3), `verdict`, `prune`, `reconcile` and a read-only `query`.
 - Doctor checks the history file when history is enabled: `history_storage`, `history_schema`, `history_integrity`, `history_gaps`.
-- Inner writer servers gain the writer-internal `pi_history_read`. **Upgrade note:** repeat each container repository's provisioning command with `--apply` for this release, as for every release; the host admits only an inner server of its own version, so writer sessions start, and are recorded, only after that step.
+- Inner writer servers gain the writer-internal `pi_history_read`, and `--writer <name> --verify` expects it there. **Upgrade note:** repeat each container repository's provisioning command with `--apply` for this release, as for every release; the host admits only an inner server of its own version, so writer sessions start, and are recorded, only after that step.
 
 ## 0.17.0 — 2026-11-02
 

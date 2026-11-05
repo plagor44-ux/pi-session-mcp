@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../package.json" with { type: "json" };
 import { MCP_MAX_FRAME_BYTES, verifyMcpCapabilities } from "../src/client-adapters/mcp-verifier.js";
-import { createMcpStdioLauncher } from "../src/setup-process.js";
+import { createCommandMcpStdioLauncher, createMcpStdioLauncher } from "../src/setup-process.js";
 import { compileServerEntry } from "./compiled-entry.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -123,6 +123,21 @@ describe("setup verification against the real server", () => {
     const result = await verifyMcpCapabilities({ launch, timeoutMs: 20_000 });
     expect(result).toMatchObject({ status: "verified", initialize: true, toolsList: true, capabilitiesGet: true });
   }, 60_000);
+
+  it("verifies an inner writer server and tells it apart from a host server (ADR 0019)", async () => {
+    const root = await temporaryRoot("pi-session-mcp-setup-verify-inner-");
+    const config = join(root, "config.json");
+    await writeFile(config, JSON.stringify({
+      workspaces: { project: root },
+      executionProfiles: { safe: { default: true, permissionProfile: "read-only", provider: "inert-provider", model: "inert-model", thinkingLevel: "off" } },
+    }), { mode: 0o600 });
+    const inner = createCommandMcpStdioLauncher([process.execPath, entry], { PI_SESSION_MCP_CONFIG: config, PI_SESSION_MCP_WRITER_GUARD: join(root, "writer-guard.json") });
+    expect(await verifyMcpCapabilities({ launch: inner, server: "inner", timeoutMs: 20_000 })).toMatchObject({ status: "verified", capabilitiesGet: true });
+    // A server of the other kind stays unsupported, in both directions.
+    expect(await verifyMcpCapabilities({ launch: inner, timeoutMs: 20_000 })).toMatchObject({ status: "unsupported", capabilitiesGet: false });
+    const host = createMcpStdioLauncher({ nodePath: process.execPath, entryPath: entry, configPath: config, timeoutMs: 20_000 });
+    expect(await verifyMcpCapabilities({ launch: host, server: "inner", timeoutMs: 20_000 })).toMatchObject({ status: "unsupported", capabilitiesGet: false });
+  }, 90_000);
 
   it("verifies a server whose configuration has container workspaces (#160)", async () => {
     const root = await temporaryRoot("pi-session-mcp-setup-verify-container-");
