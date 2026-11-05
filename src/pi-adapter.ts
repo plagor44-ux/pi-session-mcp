@@ -1,4 +1,5 @@
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
+import type { BaseFreshness } from "./writer-base-freshness.js";
 
 export type { PermissionProfile };
 
@@ -79,7 +80,7 @@ export class WriterUnavailableError extends Error {
 }
 
 export interface PiSessionHandle {
-  readonly placement?: { writer: string; base: { ref: string; commit: string } } | undefined;
+  readonly placement?: { writer: string; base: { ref: string; commit: string; freshness?: BaseFreshness } } | undefined;
   readonly deadlines?: { preflightMs?: number; abortMs?: number; cleanupMs?: number } | undefined;
   isLost?(): boolean;
   /** Sticky inner-registry refusal: preserve deadline uncertainty across relay preflight. */

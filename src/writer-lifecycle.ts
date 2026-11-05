@@ -378,15 +378,20 @@ async function requiredState(ctx: WriterContext, name: string): Promise<WriterSt
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   return state;
 }
-async function writerBase(ctx: WriterContext, name: string, state: WriterState, requested?: string) {
-  if (requested !== undefined) return resolveBase(ctx, requested);
-  // State normalizes remote branches to local heads. The original source ref remains
-  // in the single-ref base bundle, including when no corresponding host head exists.
-  const heads = await git(ctx, ["bundle", "list-heads", join(writerPaths(ctx.home, name).bundles, "base.bundle")], true);
+/**
+ * The ref a reset resolves for a writer on its recorded base. State normalizes remote branches to
+ * local heads. The original source ref remains in the single-ref base bundle, including when no
+ * corresponding host head exists.
+ */
+export function writerBaseSource(heads: string | undefined, recorded: string): string {
   const match = /^(?:[0-9a-f]{40}|[0-9a-f]{64}) (refs\/(?:heads\/.+|remotes\/[^/]+\/.+))$/m.exec(heads ?? "");
   const source = match?.[1];
-  if (source && isSafeRefName(source) && shortBranch(source) === shortBranch(state.base.ref)) return resolveBase(ctx, source);
-  return resolveBase(ctx, state.base.ref);
+  return source && isSafeRefName(source) && shortBranch(source) === shortBranch(recorded) ? source : recorded;
+}
+async function writerBase(ctx: WriterContext, name: string, state: WriterState, requested?: string) {
+  if (requested !== undefined) return resolveBase(ctx, requested);
+  const heads = await git(ctx, ["bundle", "list-heads", join(writerPaths(ctx.home, name).bundles, "base.bundle")], true);
+  return resolveBase(ctx, writerBaseSource(heads, state.base.ref));
 }
 async function requireCollected(ctx: WriterContext, name: string, state: WriterState, discard: boolean): Promise<void> {
   if (discard) return;

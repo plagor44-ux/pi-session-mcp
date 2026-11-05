@@ -44,6 +44,11 @@ npm run --silent doctor -- --json
 Exit codes are `0` (healthy), `1` (warning), `2` (failed check), and `64`
 (invalid usage). Output is sanitized.
 
+`writer_base_behind` warns about a ready writer whose recorded commit is behind
+the workspace default base in the operator's checkout. It fails nothing and
+changes nothing; run `pi-session-mcp-setup --writer <name> --finish --apply` once
+the writer is free, or accept the older base knowingly.
+
 Setup defaults to dry-run and requires an explicit target:
 
 ```bash

@@ -6,6 +6,7 @@ import { createProcessRunner } from "./setup-process.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
+import { writerBaseFreshness, type BaseFreshness, type BaseFreshnessRequest } from "./writer-base-freshness.js";
 import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
 import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError, SNAPSHOT_DIRECTORY } from "./review-snapshot.js";
@@ -29,7 +30,7 @@ export type DoctorCheckId =
   | "workspace_missing" | "workspace_not_directory" | "workspace_unreadable"
   | "workspace_not_writable" | "workspace_gitfile"
   | "workspace_mode_unset" | "workspace_base_unset" | "workspace_host_writes_accepted" | "container_runtime_unavailable"
-  | "container_profile_refused" | "writer_lease_directory" | "writer_not_ready" | "writer_not_migrated" | "writer_off_default_base"
+  | "container_profile_refused" | "writer_lease_directory" | "writer_not_ready" | "writer_not_migrated" | "writer_off_default_base" | "writer_base_behind"
   | "writer_dirty" | "writer_git_identity_missing" | "writer_uncollected_bundle"
   | "extension_missing" | "extension_version_mismatch" | "extension_unpinned"
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
@@ -79,6 +80,8 @@ export interface DoctorDependencies {
   /** Original configuration, before skill resolution; read only for selected container profiles. */
   readonly loadRawConfig?: () => Promise<unknown>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
+  /** Compares a ready writer on the workspace default base with that branch in the operator's checkout, offline and read-only. */
+  readonly writerBaseFreshness?: (request: BaseFreshnessRequest) => Promise<BaseFreshness>;
   /** Offline rootless Podman probe; called only when a workspace uses container mode. */
   readonly containerRuntime?: () => Promise<boolean>;
   /** Reads the installed manifest of a pinned extension; never imports extension code. */
@@ -116,7 +119,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -526,6 +529,14 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           : warning("writer_not_migrated", name, `run pi-session-mcp-setup --repo ${alias} --apply to migrate the writer to the relay`));
         if (entry.container.base !== undefined && ready && state.base.ref !== `refs/heads/${entry.container.base}`) {
           offDefaultBase.set(alias, (offDefaultBase.get(alias) ?? 0) + 1);
+        } else if (entry.container.base !== undefined && ready) {
+          const checkout = config.workspaces.get(alias);
+          let freshness: BaseFreshness = "unknown";
+          // Advice only: a comparison that cannot be made is no finding (#254).
+          if (checkout !== undefined) try { freshness = await (dependencies.writerBaseFreshness ?? writerBaseFreshness)({ home, name, checkout, base: state.base }); } catch { /* unknown */ }
+          checks.push(freshness === "behind"
+            ? warning("writer_base_behind", name, `finish the writer with pi-session-mcp-setup --writer ${name} --finish --apply once it is free, or accept the older base knowingly`)
+            : ok("writer_base_behind", name));
         }
         checks.push(await writerDirty(paths.clone, state)
           ? warning("writer_dirty", name, "collect writer work before resetting or recreating the writer") : ok("writer_dirty", name));

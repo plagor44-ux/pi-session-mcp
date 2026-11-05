@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- A coding start without `base` on a container workspace reports `base.freshness` in the start and get results (#254): `current`, `behind`, or `unknown` when the writer's recorded commit could not be compared with the workspace default base in the operator's checkout within two seconds. It uses only local, read-only Git, fetches nothing, moves no writer and never fails a start. A start with an explicit `base` is not compared.
+- Doctor warns with `writer_base_behind` about a ready writer behind its workspace default base (#254). The orchestration skill says what a controller does with each value.
+
 ## 0.18.0 — 2026-11-05
 
 Minor release by maintainer decision. It adds the opt-in session history (#215,

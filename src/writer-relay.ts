@@ -11,6 +11,7 @@ import { RegistryError } from "./session-registry.js";
 import { capabilitiesSchema, errorSchema, historyPageSuccessSchema, promptSuccessSchema, successSchema, turnSuccessSchema, type turnSchema } from "./tool-schemas.js";
 import { HistoryStoreError } from "./history/store.js";
 import type { HistoryPage } from "./pi-adapter.js";
+import { writerBaseFreshness, type BaseFreshness, type BaseFreshnessRequest } from "./writer-base-freshness.js";
 import { writerPaths } from "./writer-state.js";
 
 export const RELAY_START_BUDGET_MS = 60_000;
@@ -260,7 +261,7 @@ class RelayHandle implements PiSessionHandle {
 }
 
 export class WriterRelayAdapter implements PiSessionAdapter {
-  constructor(private readonly options: { home: string; workspaceModes: ReadonlyMap<string, WorkspaceModeEntry>; executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>; spawn?: WriterProcessFactory; now?: () => number; pollIntervalMs?: number }) {}
+  constructor(private readonly options: { home: string; workspaceModes: ReadonlyMap<string, WorkspaceModeEntry>; executionProfiles: ReadonlyMap<string, ConfiguredExecutionProfile>; spawn?: WriterProcessFactory; now?: () => number; pollIntervalMs?: number; baseFreshness?: (request: BaseFreshnessRequest, signal?: AbortSignal) => Promise<BaseFreshness> }) {}
   async create(input: Parameters<PiSessionAdapter["create"]>[0]): Promise<PiSessionHandle> {
     if (process.platform !== "linux") throw new WriterUnavailableError("none_ready");
     const now = this.options.now ?? Date.now, end = now() + RELAY_START_BUDGET_MS;
@@ -298,9 +299,11 @@ export class WriterRelayAdapter implements PiSessionAdapter {
         if (remaining() <= 0 || connection.lost) continue;
         const state = await readState(this.options.home, candidate.name);
         if (!state || state.base.ref !== candidate.state.base.ref || state.base.commit !== candidate.state.base.commit) continue;
+        // Only a default start is compared: an explicit base names a fix round, not the workspace default (#254).
+        const freshness = input.base === undefined ? await this.freshness(candidate.name, input.cwd, state.base, input.signal) : undefined;
         input.signal?.throwIfAborted();
         admitted = true;
-        return new RelayHandle(connection, result.session, { writer: candidate.name, base: state.base }, this.options.pollIntervalMs ?? RELAY_POLL_INTERVAL_MS);
+        return new RelayHandle(connection, result.session, { writer: candidate.name, base: { ...state.base, ...(freshness === undefined ? {} : { freshness }) } }, this.options.pollIntervalMs ?? RELAY_POLL_INTERVAL_MS);
       } catch (error) {
         if (input.signal?.aborted) throw input.signal.reason;
         if (error instanceof InnerError) {
@@ -317,6 +320,11 @@ export class WriterRelayAdapter implements PiSessionAdapter {
       }
     }
     throw new WriterUnavailableError("none_admitted", counts);
+  }
+  private async freshness(name: string, checkout: string, base: BaseFreshnessRequest["base"], signal?: AbortSignal): Promise<BaseFreshness> {
+    const request = { home: this.options.home, name, checkout, base };
+    try { return await (this.options.baseFreshness ? this.options.baseFreshness(request, signal) : writerBaseFreshness(request, signal ? { signal } : {})); }
+    catch { return "unknown"; }
   }
 }
 

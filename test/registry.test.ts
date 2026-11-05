@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SessionRegistry, type SessionRegistryOptions } from "../src/session-registry.js";
+import { viewSchema } from "../src/tool-schemas.js";
 import { FakeAdapter } from "./fake-adapter.js";
 import type { PiSessionHandle } from "../src/pi-adapter.js";
 
@@ -520,6 +521,19 @@ describe("relay session contract", () => {
     expect(adapter.createInputs[1]).not.toHaveProperty("base");
   });
 
+  it("base freshness stays in the session view and its published schema", async () => {
+    const { registry, adapter } = setup();
+    const create = adapter.create.bind(adapter);
+    vi.spyOn(adapter, "create").mockImplementation(async (input) => Object.assign(await create(input), {
+      placement: { writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40), freshness: "behind" as const } },
+    }));
+    const view = await registry.start("repo", codingProfile);
+    expect(view.base).toEqual({ ref: "refs/heads/main", commit: "a".repeat(40), freshness: "behind" });
+    expect(registry.get(view.id).base?.freshness).toBe("behind");
+    expect(viewSchema.parse(view).base?.freshness).toBe("behind");
+    expect(viewSchema.safeParse({ ...view, base: { ...view.base, freshness: "stale" } }).success).toBe(false);
+    expect(viewSchema.parse({ ...view, base: { ref: "refs/heads/dev", commit: "b".repeat(40) } }).base?.freshness).toBeUndefined();
+  });
   it("placement appears in the session view; lost handles still support get and close", async () => {
     const { registry, adapter } = setup();
     const create = adapter.create.bind(adapter);

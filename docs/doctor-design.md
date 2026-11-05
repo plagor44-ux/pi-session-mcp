@@ -43,6 +43,7 @@ and owners are:
 | `writer_not_ready` | State is missing or invalid, phase is not ready, acceptance fingerprint is stale, or the local image is absent (error) | validated writer name |
 | `writer_not_migrated` | Warning. The writer state still records the legacy launch, so the writer is not in the relay pool | validated writer name |
 | `writer_off_default_base` | Warning. One or more ready writers of a container workspace have a base other than the workspace default base; the remediation states only their count | validated workspace alias |
+| `writer_base_behind` | Warning. A ready writer on the workspace default base records a commit that is an ancestor of that branch in the operator's checkout, so a default start would use older code; the remediation names `--writer <name> --finish --apply`. An `ok` result also covers a comparison that was not possible | validated writer name |
 | `writer_git_identity_missing` | Clone Git config lacks a readable user name and email (warning); set both in the operator checkout, then reset the writer | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning). It reads only `HEAD` and refs, never the index or worktree, so an `ok` result is no proof of a clean clone and never authorizes cleanup; the boundary inspection does (#200) | validated writer name |
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
@@ -76,6 +77,10 @@ pulls an image. Dirty checks run no Git: they inspect HEAD, recursive local bran
 refs and packed-refs with 64 KiB per-file limits, rejecting symbolic links and
 unsafe directory entries. These checks do not inspect uncommitted worktree edits.
 Bundle warnings detect outstanding entries without reading their contents.
+`writer_base_behind` is the one writer check that runs Git, read-only and with no
+network, from a trusted system path and never in a writer's clone: at most two
+seconds per writer, in the operator's checkout, listing the writer's base bundle
+and resolving the branch as a reset does. It changes nothing.
 Each successful check emits an `ok` entry; remediation text contains no paths.
 Acceptance and the disposable-clone control run are explicit setup operations,
 never Doctor actions. Under Plan B, `--isolation-control --repo <alias> --apply`
