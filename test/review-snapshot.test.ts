@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmod, mkdir, readFile, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 import { assertNoConversionDrivers, guardedGit, ensureSnapshotRoot, lockSnapshotExclusive, lockSnapshotShared, readSnapshotState, removeSnapshotState, snapshotPaths, trustedGit, verifyClean, verifySnapshot, writeSnapshotState } from "../src/review-snapshot.js";
 import { isTrustedSystemBinary } from "../src/setup-platform.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -120,6 +120,59 @@ it("refuses untrusted binaries and bounds runtime and output", async () => {
   await writeFile(script, "#!/bin/sh\nprintf 'too much output'\n");
   await expect(trustedGit({ ...options, maxOutputBytes: 2 })!.run(home, [])).rejects.toMatchObject({ code: "snapshot_unavailable" });
 });
+// Stopping only after this handshake keeps a slow start on a loaded runner from deciding the two tests below.
+async function waitForPid(file: string): Promise<number> {
+  for (const deadline = Date.now() + 20_000; Date.now() < deadline; await new Promise((done) => setTimeout(done, 20))) {
+    const pid = Number(await readFile(file, "utf8").catch(() => "0"));
+    if (pid > 0) return pid;
+  }
+  return 0;
+}
+it("settles a stopped run although a surviving process still holds its output", async () => {
+  const home = await temporaryRoot("snapshot-survivor-"); const script = join(home, "git"); const pidFile = join(home, "survivor.pid");
+  // The survivor leaves the process group, so the group kill misses it, and keeps the output pipe open for 20 s.
+  const launcher = `const c=require("node:child_process").spawn("sleep",["20"],{detached:true,stdio:["ignore",1,"ignore"]});require("node:fs").writeFileSync(${JSON.stringify(pidFile)},String(c.pid));c.unref();`;
+  await writeFile(script, `#!/bin/sh\n'${process.execPath}' -e '${launcher}'\nsleep 20\n`, { mode: 0o700 });
+  const git = trustedGit({ candidates: [script], isTrustedBinary: () => true, timeoutMs: 60_000, env: { HOME: home, GIT_CONFIG_GLOBAL: join(home, "global"), GIT_CONFIG_NOSYSTEM: "1" } })!;
+  const abort = new AbortController();
+  const rejected = expect(git.run(home, [], { signal: abort.signal })).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  let survivor = 0;
+  try {
+    survivor = await waitForPid(pidFile);
+    // The survivor really runs, so the bound below is not vacuous.
+    expect(survivor).toBeGreaterThan(0);
+    const stopped = Date.now();
+    abort.abort();
+    await rejected;
+    expect(Date.now() - stopped).toBeLessThan(10_000);
+  } finally {
+    abort.abort();
+    if (survivor > 0) try { process.kill(survivor, "SIGKILL"); } catch { /* already gone */ }
+  }
+}, 40_000);
+it("settles a stopped run although the group kill fails", async () => {
+  const home = await temporaryRoot("snapshot-kill-fails-"); const script = join(home, "git"); const pidFile = join(home, "group.pid");
+  await writeFile(script, `#!/bin/sh\necho $$ > '${pidFile}'\nexec sleep 20\n`, { mode: 0o700 });
+  const git = trustedGit({ candidates: [script], isTrustedBinary: () => true, timeoutMs: 60_000, env: { HOME: home, GIT_CONFIG_GLOBAL: join(home, "global"), GIT_CONFIG_NOSYSTEM: "1" } })!;
+  const abort = new AbortController();
+  const rejected = expect(git.run(home, [], { signal: abort.signal })).rejects.toMatchObject({ code: "snapshot_unavailable" });
+  let pid = 0;
+  try {
+    pid = await waitForPid(pidFile);
+    expect(pid).toBeGreaterThan(0);
+    const kill = vi.spyOn(process, "kill").mockImplementation(() => { throw Object.assign(new Error("kill failed"), { code: "EPERM" }); });
+    try {
+      const stopped = Date.now();
+      abort.abort();
+      await rejected;
+      expect(Date.now() - stopped).toBeLessThan(10_000);
+      expect(kill).toHaveBeenCalled();
+    } finally { kill.mockRestore(); }
+  } finally {
+    abort.abort();
+    if (pid > 0) try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ }
+  }
+}, 40_000);
 it.skipIf(process.platform !== "linux")("shares locks, excludes other holders and requires the root", async () => {
   const home = await temporaryRoot("snapshot-lock-"); const paths = snapshotPaths(home, "review");
   await expect(lockSnapshotShared(paths)).rejects.toMatchObject({ code: "snapshot_unavailable" });
