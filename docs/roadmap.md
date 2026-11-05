@@ -206,6 +206,12 @@ mean they are implemented or that their gates passed.
   accepted on 2026-11-04 after the merge (unreleased). Not yet established: a
   run against a real provider, a real client or a container writer. Open:
   #144, #221.
+- 2026-11-05: minor release 0.18.0, by maintainer decision, ships #215 from
+  #250 with the fixes from #252 (pre-release record, including the live check
+  with real providers and a container writer, in
+  [Acceptance](acceptance.md#v0180-pre-release-acceptance)); publishing and the
+  upgrade of both installations follow. Not yet established: real Claude Code
+  or Codex controllers with the `task` label. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

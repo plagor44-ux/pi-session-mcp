@@ -2600,6 +2600,83 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.18.0 pre-release acceptance
+
+`v0.18.0` was accepted on 2026-11-05 from 08:31 to 08:38 UTC on its release
+candidate `f440b94`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.318`. Level 1 passed
+without restriction, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. Later commits change only
+this record and the roadmap.
+
+The minor release, decided by the maintainer, ships the opt-in session history
+(#215, ADR 0019) from PR #250 and the fixes from PR #252. The candidate is
+`main` at `572f462` plus the version commit.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    167 files, 4656 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack` listed 1014 files (tarball shasum
+    `8b56865d83ea7c30678abc6d41e92be4a4319424`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none.
+  - Doctor reported `packageVersion` `0.18.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix with real `systemd-run` and bubblewrap: 48 of 48
+  passed, none skipped (`test/sandbox-shell.bwrap.test.ts` and
+  `test/sandbox-shell.go-cache.bwrap.test.ts`).
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The build digest was the same before and
+  after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.18.0`. The global install resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3`.
+- In every Level 2 run the leak check passed. The disposable prefix and the
+  tarball were removed.
+
+Live check of the session history on the workstation, on 2026-11-05, before the
+release candidate existed. Candidate: the packed tarball of `main` at `54c77cd`
+in a temporary prefix, with its own configuration, a fixture repository holding
+only fake values and a disposable writer. The live configuration and the
+running servers were not changed. Real providers: `openai` (`gpt-6-luna`) on
+the host and `deepseek` (`deepseek-flash`) in a Podman container writer.
+
+- A host session and a writer session were recorded as `complete` with no gaps,
+  with `capture_source` `host` and `writer-relay`, and read back with `list` and
+  `show`.
+- Three fake secrets (path rule on `.env` and `grep`, the `github_token`
+  pattern, a known environment value) had 0 hits in `history.sqlite`, `-wal`,
+  `-shm`, the JSONL export and the `pi --export` HTML; a plain control marker
+  was present. A `write` to `secrets/created.txt` was stored as
+  `content not stored (path rule)`.
+- `export --format jsonl` produced Pi JSONL v3 that `pi` renders. `verdict` was
+  recorded and `query` refused `DELETE`.
+- A two-turn writer session with 480146 bytes of redacted entries stayed
+  `complete` with no truncation and no gaps. The page count was not observed
+  directly.
+- `SIGKILL` during a turn left the session `incomplete` and the turn
+  `unrecorded`, without a manual `reconcile`. `SIGTERM` with an open session
+  ended the server at once, and the recorded turn stayed `complete`.
+- Doctor's four `history_*` checks passed; the directory mode was 0700 and the
+  file modes 0600.
+- `--writer <name> --verify` returned `mcp_unsupported` on `54c77cd`. PR #252
+  fixed that, and the repeated step returned `mcp_verified`. The rest of PR #252,
+  the snapshot time bound and a test setup, does not touch the history code, and
+  the live check was not repeated on the candidate.
+
+Not established for `0.18.0`: a Level 3 cycle on the release candidate; real
+Claude Code or Codex controllers with the controller skill and the `task` label
+(a small MCP client drove the server in the live check); client-target
+`--verify` with history enabled; compaction; a single entry above the page size;
+the server host; and the published-release Level 2 and upgrades, which follow
+after publishing. What leaves a process alive on the macOS runners in the
+snapshot test that PR #252 bounds was not reproduced.
+
 ### v0.17.0 post-release evidence
 
 Recorded on 2026-11-03 for the published release `0.17.0`.
