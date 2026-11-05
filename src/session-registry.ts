@@ -7,12 +7,13 @@ import { NOOP_HISTORY_RECORDER, type HistoryReader, type HistoryRecorder } from 
 import { capJson, type Json } from "./history/redact.js";
 import { PiSessionCreationError, type HistoryPage, type PiAppliedSelection, type PiSessionAdapter, type PiSessionHandle, type PiTurnOutcome, type TurnCompletion } from "./pi-adapter.js";
 import type { PermissionProfile, ResolvedExecutionProfile, ThinkingLevel } from "./execution-profile.js";
+import type { BaseFreshness } from "./writer-base-freshness.js";
 export type SessionState = "idle" | "running" | "failed" | "closing" | "closed";
 export type TurnState = "running" | "completed" | "failed" | "aborted";
 export interface SessionView {
   id: string; workspace: string; executionProfile: string; profile: PermissionProfile;
   provider: string; model: string; thinkingLevel: ThinkingLevel;
-  writer?: string; base?: { ref: string; commit: string }; snapshot?: { base: string; head: string; tree: string };
+  writer?: string; base?: { ref: string; commit: string; freshness?: BaseFreshness }; snapshot?: { base: string; head: string; tree: string };
   state: SessionState; createdAt: string; updatedAt: string; lastError?: string;
 }
 /**

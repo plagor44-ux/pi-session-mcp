@@ -128,9 +128,39 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
   });
   it("starts on the first ready relay writer at the default base and reports placement", async () => {
     const s = await setup(); const handle = await s.start();
-    expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40) } });
+    expect(handle.placement).toEqual({ writer: "repo-w1", base: { ref: "refs/heads/main", commit: "a".repeat(40), freshness: "unknown" } });
     expect(handle.appliedSelection).toEqual({ provider: "p", model: "m", thinkingLevel: "off" });
     expect(await handle.prompt("hello", () => undefined)).toEqual({ status: "completed", assistantText: "done", truncated: false, completion: "stop" });
+  });
+  it.each(["current", "behind"] as const)("a default start reports a writer that is %s", async (freshness) => {
+    const s = await setup(); const seen: unknown[] = [];
+    s.options.baseFreshness = async (request) => { seen.push(request); return freshness; };
+    const handle = await new WriterRelayAdapter(s.options).create(input); handles.push(handle);
+    expect(handle.placement?.base).toEqual({ ref: "refs/heads/main", commit: "a".repeat(40), freshness });
+    expect(seen).toEqual([{ home: s.home, name: "repo-w1", checkout: "/unused", base: { ref: "refs/heads/main", commit: "a".repeat(40) } }]);
+  });
+  it("an explicit base keeps its plain result and is never compared", async () => {
+    const s = await setup(); let compared = false;
+    s.options.baseFreshness = async () => { compared = true; return "behind"; };
+    const handle = await new WriterRelayAdapter(s.options).create({ ...input, base: "main" }); handles.push(handle);
+    expect(handle.placement?.base).toEqual({ ref: "refs/heads/main", commit: "a".repeat(40) });
+    expect(compared).toBe(false);
+  });
+  it("a writer lost during the comparison is not admitted; the next one is tried", async () => {
+    const s = await setup([{}, {}]); const spawn = s.options.spawn!; let first: { close(): Promise<void> } | undefined;
+    s.options.spawn = { spawn: (wrapper, env) => { const transport = spawn.spawn(wrapper, env); first ??= transport; return transport; } };
+    let compared = 0;
+    s.options.baseFreshness = async () => { if (compared++ === 0) await first!.close(); return "current"; };
+    const handle = await new WriterRelayAdapter(s.options).create(input); handles.push(handle);
+    expect(handle.placement?.writer).toBe("repo-w2");
+    expect(handle.isLost?.()).toBe(false);
+    expect(compared).toBe(2);
+  });
+  it("a failing comparison never fails the start", async () => {
+    const s = await setup();
+    s.options.baseFreshness = async () => { throw new Error("comparison failed"); };
+    const handle = await new WriterRelayAdapter(s.options).create(input); handles.push(handle);
+    expect(handle.placement?.base.freshness).toBe("unknown");
   });
   it.each(["output_limit", "tool_use"] as const)("preserves a %s completion", async (completion) => {
     const handle = await (await setup([{ completion }])).start();

@@ -142,6 +142,55 @@ it("warns with a count when ready writers are off the default base", async () =>
   expect(checks[0]?.remediation).not.toContain("release");
   expect(checks[0]?.remediation).not.toContain("refs/heads");
 });
+it("warns about a ready writer behind its default base, with exit 1 and no path", async () => {
+  const { home, state, run, ready } = await fixture({ base: "main" }); await ready();
+  const seen: unknown[] = [];
+  const result = await run({ writerBaseFreshness: async (request) => { seen.push(request); return "behind"; } });
+  expect(result.checks.filter((check) => check.id === "writer_base_behind")).toEqual([
+    { id: "writer_base_behind", severity: "warning", subject: "repo-w1", remediation: expect.stringContaining("--writer repo-w1 --finish --apply") },
+  ]);
+  expect(seen).toEqual([{ home, name: "repo-w1", checkout: home, base: state.base }]);
+  expect(result.checks.filter((check) => check.severity === "error" && check.id.startsWith("writer_"))).toEqual([]);
+  expect([renderDoctorJson(result), renderDoctorHuman(result)].join("\n")).not.toContain(home);
+});
+it("exits 1 when a writer behind its base is the only finding", async () => {
+  const { home, run, ready } = await fixture({ base: "main" }); await ready();
+  const result = await run({
+    writerBaseFreshness: async () => "behind",
+    packageRoot: home, nodeVersion: "22.19.0", packageMetadata: async () => ({ version: "1.0.0", engines: { node: ">=22.19.0" } }),
+    fileSystem: { readFile: async () => "", stat: async (path) => ({ isDirectory: () => path === home, isFile: () => path !== home }), access: async () => undefined },
+    loadRawConfig: async () => ({ executionProfiles: { coding: { default: false, permissionProfile: "coding", provider: "fake", model: "fake", thinkingLevel: "off" } } }),
+    writerLeaseRoot: async () => undefined,
+  });
+  expect(result.checks.filter((check) => check.severity !== "ok").map((check) => check.id)).toEqual(["writer_base_behind"]);
+  expect(result.exitCode).toBe(1);
+  expect(result.ok).toBe(true);
+});
+it.each(["current", "unknown"] as const)("does not warn about a writer that is %s", async (freshness) => {
+  const { run, ready } = await fixture({ base: "main" }); await ready();
+  expect((await run({ writerBaseFreshness: async () => freshness })).checks.filter((check) => check.id === "writer_base_behind")).toEqual([
+    { id: "writer_base_behind", severity: "ok", subject: "repo-w1" },
+  ]);
+});
+it("a failing comparison does not warn", async () => {
+  const { run, ready } = await fixture({ base: "main" }); await ready();
+  const checks = (await run({ writerBaseFreshness: async () => { throw new Error("comparison failed"); } })).checks;
+  expect(checks.filter((check) => check.id === "writer_base_behind")).toEqual([{ id: "writer_base_behind", severity: "ok", subject: "repo-w1" }]);
+});
+it.each([
+  ["off the default base", { base: "main" }, { ref: "refs/heads/fix", commit: "c".repeat(40) }, false],
+  ["without a default base", {}, undefined, false],
+  ["not ready", { base: "main" }, undefined, true],
+] as const)("does not compare a writer %s", async (_name, options, base, broken) => {
+  const { paths, state, run, ready } = await fixture(options);
+  if (base) state.base = { ...base };
+  await ready();
+  if (broken) await writeFile(paths.wrapper, "changed wrapper");
+  let compared = false;
+  const result = await run({ writerBaseFreshness: async () => { compared = true; return "behind"; } });
+  expect(compared).toBe(false);
+  expect(result.checks.filter((check) => check.id === "writer_base_behind")).toEqual([]);
+});
 it("reports no paths, branch names or the lease directory name", async () => {
   const { home, state, run, ready } = await fixture({ base: "base-branch" });
   state.launch = "legacy";

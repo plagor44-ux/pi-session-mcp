@@ -2600,6 +2600,68 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.18.0 post-release evidence
+
+Recorded on 2026-11-05 for the published release `0.18.0`. The counts below come
+from the logs of the runs named here; they were read back when this record was
+written and the runs were not repeated for it.
+
+Deviation in the release order: the package was published at 09:04 UTC from the
+branch state `8f53b84`, before #253 was merged and before a tag existed. By
+maintainer decision, #253 was then merged and the annotated tag `v0.18.0` (tag
+object `6c1cb443703171579b3c0c3de60824183c9828e2`) was set on the release commit
+`8f53b8442a669d9b3588edf119c83d13e8ed0051`, the package's `gitHead`, instead of
+the merge commit `08117190360a9c251e019b281052f879905b5b25`. The release commit
+is in `main`, the two commits have the same tree, and the release notes name the
+deviation. CI on the merge commit (run 42000860124) and on the tag (run
+42000866711) passed; the scheduled install smoke against `pi-session-mcp@latest`
+(run 42036307937) and the Pi SDK canary (run 42028022328) passed on 2026-11-05.
+The GitHub release `v0.18.0` is marked latest; npm `latest` is `0.18.0`.
+
+Runs on a fresh clone of the tag and from a fresh npm prefix, finished by 09:23
+UTC, on the host of the pre-release acceptance:
+
+- The test run on the tag clone: 167 files, 4656 passed and 15 skipped. These
+  counts equal the pre-release run. The native sandbox matrix passed 48 of 48,
+  and the Podman-gated writer tests passed 10 of 10.
+- `npm pack` of the tag clone gives the published shasum
+  `08adf2a1d7830adbfdf5b31c104fd2a2df47320d` with 1014 files.
+- The published package: the install smoke reported `smoke_passed` with version
+  `0.18.0`.
+- Level 2 from the tag clone and from the published package: 160 of 160 checks
+  with delivery off and 228 of 228 with `--events spool`, each.
+
+Installations: both run `0.18.0`. The upgrade on 2026-11-05 followed the steps
+used for `0.17.0`, with backups of the configuration and the execution modes
+named for `0.18.0`; all 18 workstation writers and all 16 server writers were
+accepted and verified, and both client targets verified on each machine. History
+was then turned on at the workstation only, by operator decision; the server
+keeps it off.
+
+Checked again on the workstation on 2026-11-05 at about 19:00 UTC, with history
+enabled:
+
+- Doctor with the real configuration reported `packageVersion` `0.18.0`, no error
+  and the four history checks as passed; its warnings were `snapshot_unavailable`
+  and the known `workspace_gitfile` and `workspace_mode_unset` of the worktree
+  aliases. A run minutes later also reported `writer_dirty` on two writers of
+  another repository, which were not examined here.
+- Client-target `--verify` passed for `claude-code:user:pi-session-mcp`
+  (`mcp_verified`, both `skill_verified`, `hook_verified`) and
+  `codex:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`). This closes
+  the pre-release gap for client-target `--verify` with history enabled, on this
+  machine.
+- `--writer <name> --verify` reported `mcp_verified` for both writers of this
+  repository; the other writers were not repeated.
+- The history file holds 14 sessions, 9 of them with a `task` label, and no gap
+  was reported. Two labelled sessions are the live check. The history does not
+  record the client, so this does not establish which client set the other labels.
+
+Not established for `0.18.0`: a Level 3 cycle; a named real Claude Code or Codex
+controller using the controller skill and the `task` label; history on the server
+host; compaction; a single entry above the page size; macOS. A stale writer base
+on default starts was found during this period and is tracked as #254.
+
 ### v0.18.0 pre-release acceptance
 
 `v0.18.0` was accepted on 2026-11-05 from 08:31 to 08:38 UTC on its release

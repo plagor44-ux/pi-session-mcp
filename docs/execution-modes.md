@@ -139,7 +139,16 @@ Capabilities report configured `writers` and `defaultBase`, not free capacity.
 Start with an explicit coding profile on `pi-session-mcp`. Optional `base` is
 only for container coding and selects a branch, not a writer; elsewhere it
 fails with `base_not_applicable`. Start and get report `writer` and
-`base: { ref, commit }`. Omit `base` for ordinary default-pool work.
+`base: { ref, commit }`. Omit `base` for ordinary default-pool work; such a
+start also reports `base.freshness` (`current`, `behind` or `unknown`).
+
+An idle persistent writer stays on the commit it recorded at its last
+provisioning, reset, finish or recreate, also when its default branch moves on,
+and parallel sessions can start from different commits of one branch.
+`base.freshness` and Doctor's `writer_base_behind` show this; neither moves a
+writer. Run `--writer <name> --finish --apply` once the writer is free, or
+accept the older base knowingly. A local branch that lags its remote stays the
+operator's concern: nothing fetches.
 
 The generated wrapper launches one disposable `podman run -i --rm` per coding
 session: keep-id user namespace, read-only root, dropped capabilities,
