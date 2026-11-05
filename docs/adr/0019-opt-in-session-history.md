@@ -3,8 +3,8 @@
 **Status:** Accepted (2026-11-04, maintainer decision, after the merge);
 implemented under issue
 [#215](https://github.com/plagor44-ux/pi-session-mcp/issues/215) in pull
-request [#250](https://github.com/plagor44-ux/pi-session-mcp/pull/250)
-(unreleased). The maintainer decides the release line.
+request [#250](https://github.com/plagor44-ux/pi-session-mcp/pull/250);
+released in 0.18.0, a minor release by maintainer decision.
 
 - Planning basis: main `ecdbadf` (published 0.17.0), Pi SDK
   `@earendil-works/pi-coding-agent` 1.5.0.
