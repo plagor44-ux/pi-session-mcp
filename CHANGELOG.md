@@ -2,11 +2,30 @@
 
 ## Unreleased
 
+## 0.18.0 — 2026-11-05
+
+Minor release by maintainer decision. It adds the opt-in session history (#215,
+[ADR 0019](docs/adr/0019-opt-in-session-history.md), accepted 2026-11-04). The
+tool contract changes additively: `pi_session_start` gains an optional `task`
+and `pi_capabilities_get` reports `history.enabled`. History stays off without
+a `history` block, and configurations without one need no migration.
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Set `history` in the configuration
+only after the upgrade, because older releases reject the key. **Rollback note:**
+remove the `history` block before reinstalling 0.17.0 or older; the history file
+stays in place.
+
+### Added
+
 - Opt-in session history (#215, [ADR 0019](docs/adr/0019-opt-in-session-history.md)). With `"history": { "enabled": true }`, the server stores the redacted metadata, turns and Pi session entries of every session, including container writer sessions, in `~/.local/state/pi-session-mcp/history/history.sqlite`. Redaction runs on the host before storage: known environment values, credential patterns and a path rule that keeps `read`, `grep`, `edit` and `write` content of protected paths out of the file. A history failure never changes a session; it becomes a gap.
 - `pi_session_start` accepts an optional `task` label for the history. `pi_capabilities_get` reports `history.enabled`. The configuration accepts an optional `history` block; an invalid one fails startup with `invalid_history`.
 - New `pi-session-mcp-history` CLI: `list`, `show`, `export` (Pi JSONL v3), `verdict`, `prune`, `reconcile` and a read-only `query`.
 - Doctor checks the history file when history is enabled: `history_storage`, `history_schema`, `history_integrity`, `history_gaps`.
 - Inner writer servers gain the writer-internal `pi_history_read`, and `--writer <name> --verify` expects it there. **Upgrade note:** repeat each container repository's provisioning command with `--apply` for this release, as for every release; the host admits only an inner server of its own version, so writer sessions start, and are recorded, only after that step.
+
+### Fixed
+
 - A stopped snapshot Git run now fails back to its caller within a second, even when another process keeps its output open or the kill fails; before, the caller waited for that process. A process the kill missed can keep running.
 
 ## 0.17.0 — 2026-11-02
