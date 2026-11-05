@@ -212,6 +212,13 @@ mean they are implemented or that their gates passed.
   [Acceptance](acceptance.md#v0180-pre-release-acceptance)); publishing and the
   upgrade of both installations follow. Not yet established: real Claude Code
   or Codex controllers with the `task` label. Open: #144, #221.
+- 2026-11-05: 0.18.0 is published and both installations are upgraded; its
+  post-release record, including the tag on the release commit instead of the
+  merge commit, is in
+  [Acceptance](acceptance.md#v0180-post-release-evidence). [#254](https://github.com/plagor44-ux/pi-session-mcp/issues/254)
+  reports a writer behind its default base on default starts and in Doctor, by
+  maintainer decision without a refresh at start, so `pi_session_start` gains
+  no mutation (unreleased). Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
