@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.19.0 — 2026-11-06
+
+Minor release by maintainer decision. It reports a stale writer base on default
+coding starts (#254). The tool contract changes additively: the session view
+gains an optional `base.freshness`. No input, state or error code changes, and
+no writer moves. **Upgrade note:** as for every release, repeat the provisioning
+command of each container repository with `--apply` before the client targets,
+as described in [Installation](docs/installation.md#upgrade). Doctor can now exit
+with `1` on a machine with idle writers, where it may have exited with `0`; the
+new warning fails nothing. An operator override of the orchestration skill
+reports `skill_override_outdated`, because the bundled skill changed. **Rollback
+note:** reinstall 0.18.0; nothing is stored, and no configuration or writer state
+changes.
+
 ### Added
 
 - A coding start without `base` on a container workspace reports `base.freshness` in the start and get results (#254): `current`, `behind`, or `unknown` when the writer's recorded commit could not be compared with the workspace default base in the operator's checkout within two seconds. It uses only local, read-only Git, fetches nothing, moves no writer and never fails a start. A start with an explicit `base` is not compared.
