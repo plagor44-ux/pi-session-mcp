@@ -219,6 +219,11 @@ mean they are implemented or that their gates passed.
   reports a writer behind its default base on default starts and in Doctor, by
   maintainer decision without a refresh at start, so `pi_session_start` gains
   no mutation (unreleased). Open: #144, #221.
+- 2026-11-06: minor release 0.19.0, by maintainer decision, ships #254 from
+  #255 (pre-release record in
+  [Acceptance](acceptance.md#v0190-pre-release-acceptance)); publishing and the
+  upgrade of both installations follow. Not yet established: a live coding start
+  on a writer that is behind. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
