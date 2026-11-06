@@ -2600,6 +2600,66 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.19.0 pre-release acceptance
+
+`v0.19.0` was accepted on 2026-11-06 from 13:20 to 13:26 UTC on its release
+candidate `eefa723`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.1`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.319`. Level 1 passed
+without restriction, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. The later commit changes
+only this record and the roadmap.
+
+The minor release, decided by the maintainer, ships the stale writer base report
+(#254) from PR #255. The candidate is `main` at `919406b` plus the version
+commit. CI on `919406b` (run 42108097838) passed.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`; `git status --short` printed nothing.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    168 files, 4685 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack` listed 1017 files (tarball shasum
+    `906548d7326ab78bd2bb688c7b5fa71cee9f53a7`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none, and the
+    package holds no `docs/superpowers/` file.
+  - Doctor reported `packageVersion` `0.19.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+- Native sandbox matrix with real `systemd-run` and bubblewrap: 48 of 48
+  passed, none skipped (`test/sandbox-shell.bwrap.test.ts` and
+  `test/sandbox-shell.go-cache.bwrap.test.ts`).
+- Podman-gated writer tests: 10 of 10 passed (lifecycle and boundary).
+- `test/writer-base-freshness.test.ts`: 15 of 15 passed.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The build digest was the same before and
+  after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.19.0`. The global install resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3`.
+- In every Level 2 run the leak check passed. The disposable prefix and the
+  tarball were removed.
+
+Review of the one #254 commit that had no cross-family review when PR #255
+merged, `cb13fcd` (the partial-clone filter in the guard and
+`GIT_NO_LAZY_FETCH`): `review-snapshot` (OpenAI family, `gpt-6.1-sol`) on a
+snapshot of that commit returned `NO_FINDINGS`. It was a static review. The
+guard's Git behaviour it left unverified was then checked by hand against Git
+`2.56.0`: `config --get-regexp` with the guard's pattern exits `0` for a mixed-case
+remote name and key, a subsection with dots, an included file and the global
+file, and `1` when only `remote.<name>.url` is set.
+No test exercises the production path of `GIT_NO_LAZY_FETCH`: every test injects
+its own Git. That setting is a second safeguard behind the guard.
+
+Not established for `0.19.0`: a live coding start on a writer that is behind,
+which needs the installed release and follows after publishing; a Level 3 cycle
+on the release candidate; `base.freshness` read by a real Claude Code or Codex
+controller; Doctor's `writer_base_behind` on the candidate against a real
+configuration (it ran on `0cbdea6` during PR #255, before the review fixes); the
+server host; macOS locally; and the published-release Level 2 and upgrades, which
+follow after publishing.
+
 ### v0.18.0 post-release evidence
 
 Recorded on 2026-11-05 for the published release `0.18.0`. The counts below come
