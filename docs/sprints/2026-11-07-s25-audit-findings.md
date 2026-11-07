@@ -66,3 +66,5 @@ pull request with one commit series per issue, no release.
   against real rootless Podman; the #257 test fails against the base
   `writer-lifecycle.ts`.
 - `test/writer-collect-real-git.test.ts`: 44 of 44 on the final head.
+- Final head `ee91ce6`: `npm run typecheck` and `npm run build` exit 0;
+  `npm test` exit 0, 168 of 168 files, 4,695 passed, 15 skipped, none failed.
