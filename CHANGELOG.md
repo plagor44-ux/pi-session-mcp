@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- `pi-session-mcp-history prune` now deletes sessions that reconciliation marked
+  `incomplete` after a server crash once the recorded end of their instance is
+  older than the cutoff; sessions of a running server are never pruned (#258).
+
 ## 0.19.0 — 2026-11-06
 
 Minor release by maintainer decision. It reports a stale writer base on default

@@ -147,7 +147,7 @@ pi-session-mcp-history export <session> --format jsonl --out session.jsonl
 pi --export session.jsonl session.html
 ```
 
-`export` writes Pi's session JSONL; `pi --export` renders it as HTML. `prune --older-than 90d --apply` deletes old sessions, and `reconcile` marks the sessions of crashed servers `incomplete`.
+`export` writes Pi's session JSONL; `pi --export` renders it as HTML. `prune --older-than 90d --apply` deletes old sessions, and `reconcile` marks the sessions of crashed servers `incomplete`. A session counts as old when its recorded close, or the recorded end of the crashed instance that left it open, is older than the cutoff, so reconciled sessions are pruned too. Sessions of a running server are never pruned.
 
 ## Run it by hand
 

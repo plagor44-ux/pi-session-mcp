@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { runHistoryCli } from "../src/history/cli.js";
 import { compilePathRule } from "../src/history/path-rule.js";
 import { createHistoryRecorder } from "../src/history/recorder.js";
+import { reconcileInstances } from "../src/history/reconcile.js";
 import { Redactor } from "../src/history/redact.js";
 import { historyLocation, openHistoryStore } from "../src/history/store.js";
 import type { SessionView, TurnView } from "../src/session-registry.js";
@@ -15,7 +16,7 @@ afterAll(removeTemporaryRoots);
 const SECRET = `ghp_${"Zq9".repeat(12)}`;
 const LONG = `${"long text ".repeat(40)}end-of-long-text`;
 const at = (second: number) => `2026-11-04T10:00:${String(second).padStart(2, "0")}.000Z`;
-const ids = { a: "aaaaaaaa-0000-4000-8000-000000000001", b: "bbbbbbbb-0000-4000-8000-000000000002", c: "cccccccc-0000-4000-8000-000000000003" };
+const ids = { a: "aaaaaaaa-0000-4000-8000-000000000001", b: "bbbbbbbb-0000-4000-8000-000000000002", c: "cccccccc-0000-4000-8000-000000000003", d: "dddddddd-0000-4000-8000-000000000004" };
 
 function view(id: string, overrides: Partial<SessionView> = {}): SessionView {
   return { id, workspace: "repo", executionProfile: "review", profile: "read-only", provider: "p", model: "m", thinkingLevel: "high", state: "idle", createdAt: "2026-11-04T10:00:00.000Z", updatedAt: "2026-11-04T10:00:00.000Z", ...overrides };
@@ -212,5 +213,91 @@ describe("pi-session-mcp-history", () => {
     const reconciled = await run(home, "reconcile");
     expect(reconciled.code).toBe(0);
     expect(reconciled.stdout).toMatch(/^\d+ sessions? marked incomplete\n$/);
+  });
+});
+
+const PRUNE_NOW = new Date("2030-01-01T00:00:00.000Z");
+const LIVE_PID = 4_000_000;
+
+async function runPrune(home: string, ...argv: string[]) {
+  let stdout = "", stderr = "";
+  const code = await runHistoryCli(argv, { stdout: (s) => { stdout += s; }, stderr: (s) => { stderr += s; }, home, now: () => PRUNE_NOW });
+  return { code, stdout, stderr };
+}
+
+/**
+ * Records one instance per session through the real recorder, optionally backdates its close or its
+ * instance end, then reconciles with an injected liveness check: only `live: true` stays alive.
+ */
+async function pruneFixture(specs: Array<{ id: string; createdAt: string; closedAt?: string; endedAt?: string; live?: boolean }>) {
+  const home = await temporaryRoot("history-prune-");
+  const store = await openHistoryStore({ home });
+  for (const [index, spec] of specs.entries()) {
+    const pid = spec.live === true ? LIVE_PID : LIVE_PID + index + 1;
+    const recorder = createHistoryRecorder({
+      store, redactorFor: () => new Redactor({ knownValues: [], pathRule: compilePathRule([]) }),
+      configurationFingerprint: `sha256:${"a".repeat(64)}`, packageVersion: "0.0.0-test",
+      instance: { pid, procStart: null }, diagnostic: () => undefined,
+    });
+    recorder.sessionStarted({ view: view(spec.id, { createdAt: spec.createdAt }), sdkSessionId: `sdk-${spec.id.slice(0, 1)}`, source: "host" });
+    recorder.turnEnded(spec.id, turn(spec.id, 1), async () => ({ entries: timeline.slice(0, 2), next: 2, more: false }));
+    await recorder.settle(spec.id, 5_000);
+    if (spec.closedAt !== undefined) recorder.sessionClosed(view(spec.id, { createdAt: spec.createdAt, state: "closed" }));
+    store.db.prepare("UPDATE sessions SET closed_at = ? WHERE public_session_id = ?").run(spec.closedAt ?? null, spec.id);
+    if (spec.endedAt !== undefined) store.db.prepare("UPDATE instances SET ended_at = ? WHERE pid = ?").run(spec.endedAt, pid);
+  }
+  reconcileInstances(store, (pid) => pid === LIVE_PID);
+  store.close();
+  return home;
+}
+
+describe("prune after crash reconciliation", () => {
+  it("deletes old closed and old reconciled sessions, keeps recent and running ones", async () => {
+    const home = await pruneFixture([
+      { id: ids.a, createdAt: "2020-01-01T00:00:00.000Z", closedAt: "2020-01-02T00:00:00.000Z" },
+      { id: ids.b, createdAt: "2020-01-01T00:00:00.000Z", endedAt: "2020-01-03T00:00:00.000Z" },
+      { id: ids.c, createdAt: "2020-01-01T00:00:00.000Z", endedAt: "2029-12-20T00:00:00.000Z" },
+      { id: ids.d, createdAt: "2020-01-01T00:00:00.000Z", live: true },
+    ]);
+    expect((await run(home, "verdict", ids.b, "accepted", "--reason", "Checked before the crash.")).code).toBe(0);
+    expect((await run(home, "query", "SELECT public_session_id, completeness FROM sessions ORDER BY public_session_id", "--json")).stdout.trim().split("\n").map((line) => JSON.parse(line))).toEqual([
+      { public_session_id: ids.a, completeness: "complete" },
+      { public_session_id: ids.b, completeness: "incomplete" },
+      { public_session_id: ids.c, completeness: "incomplete" },
+      { public_session_id: ids.d, completeness: "complete" },
+    ]);
+
+    const dry = await runPrune(home, "prune", "--older-than", "30d");
+    expect(dry).toMatchObject({ code: 0, stdout: "2 sessions ended before 2029-12-02 would be deleted; rerun with --apply\n" });
+    expect((await run(home, "query", "SELECT count(*) AS n FROM sessions")).stdout).toBe("n\n4\n");
+
+    const applied = await runPrune(home, "prune", "--older-than", "30d", "--apply");
+    expect(applied).toMatchObject({ code: 0, stdout: "2 sessions deleted\n" });
+    expect((await run(home, "query", "SELECT public_session_id FROM sessions ORDER BY public_session_id", "--json")).stdout.trim().split("\n").map((line) => JSON.parse(line))).toEqual([
+      { public_session_id: ids.c },
+      { public_session_id: ids.d },
+    ]);
+    // Dependent rows of the deleted sessions are gone; the surviving sessions keep theirs.
+    for (const table of ["turns", "entries", "verdicts", "gaps"]) {
+      expect((await run(home, "query", `SELECT count(*) AS n FROM ${table} WHERE session_id IS NOT NULL AND session_id NOT IN (SELECT id FROM sessions)`)).stdout).toBe("n\n0\n");
+    }
+    expect((await run(home, "query", "SELECT count(*) AS n FROM entries")).stdout).toBe("n\n4\n");
+    expect((await run(home, "query", "SELECT count(*) AS n FROM turns")).stdout).toBe("n\n2\n");
+    expect((await run(home, "query", "SELECT count(*) AS n FROM verdicts")).stdout).toBe("n\n0\n");
+  });
+
+  it("issue #258 repro: a session left open by a crashed server is pruned", async () => {
+    const home = await pruneFixture([
+      { id: ids.a, createdAt: "2020-01-01T00:00:00.000Z", closedAt: "2020-01-01T12:00:00.000Z" },
+      { id: ids.b, createdAt: "2020-01-01T00:00:00.000Z" },
+    ]);
+    expect((await run(home, "query", "SELECT public_session_id, completeness, closed_at FROM sessions ORDER BY public_session_id", "--json")).stdout.trim().split("\n").map((line) => JSON.parse(line))).toEqual([
+      { public_session_id: ids.a, completeness: "complete", closed_at: "2020-01-01T12:00:00.000Z" },
+      { public_session_id: ids.b, completeness: "incomplete", closed_at: null },
+    ]);
+    const applied = await runPrune(home, "prune", "--older-than", "30d", "--apply");
+    expect(applied).toMatchObject({ code: 0, stdout: "2 sessions deleted\n" });
+    expect((await run(home, "query", "SELECT count(*) AS n FROM sessions")).stdout).toBe("n\n0\n");
+    expect((await run(home, "query", "SELECT count(*) AS n FROM entries WHERE session_id NOT IN (SELECT id FROM sessions)")).stdout).toBe("n\n0\n");
   });
 });
