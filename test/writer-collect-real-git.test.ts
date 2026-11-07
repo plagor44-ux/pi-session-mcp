@@ -472,6 +472,11 @@ it("refuses every non-discard cleanup while a nested repository sits under an ig
   // Pristine apart from the ignored path: no collection needed, but deleting the clone would lose the repository.
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
   expect(await recreateWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  // Uncollected work takes precedence: the refusal names the step the operator must take first.
+  await writeFile(join(f.paths.clone, "pending.txt"), "pending\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  await rm(join(f.paths.clone, "pending.txt"));
   // Collection never exports ignored paths and still succeeds; reset can delete an ignored directory through its
   // forced checkout (a tracked file replacing it), so reset and finish refuse as well.
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok" });
