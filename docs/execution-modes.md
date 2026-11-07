@@ -339,14 +339,22 @@ inspection and collection fail closed (`writer_inspect_failed`,
 `writer_collect_failed`).
 
 Collection preserves only what Git in the clone sees as work. **Ignored paths
-are outside it:** files and nested repositories under a path that `.gitignore`,
-`.git/info/exclude` or the clone's configuration ignores are neither inspected
-nor exported, and non-discard remove and recreate delete them like any other
-ignored file (reset and a persistent writer's finish keep them unless
-`--clean all` is set). The same holds for state that exists only inside the
-clone's `.git` directory, such as reflogs, unreachable objects, or the
-`.git/modules` repository of a submodule that was deinitialized. Move such work
-out of ignored paths, or commit it, before cleanup.
+are outside it:** files under a path that `.gitignore`, `.git/info/exclude` or
+the clone's configuration ignores are neither inspected nor exported. Reset and
+a persistent writer's finish keep them unless `--clean all` is set; remove,
+recreate and an ephemeral writer's finish delete them. A nested repository is
+the exception (#257): when any `.git` entry exists below the clone's top level,
+ignored paths included, the operations that delete ignored files refuse without
+`--discard` with `writer_nested_repository`: remove (also during surplus
+removal and settings-drift replacement), recreate, an ephemeral writer's finish,
+reset with `--clean all`, and the recreation that a failed reset verification
+would otherwise fall back to. Collect, and reset or a persistent writer's finish
+with the default `--clean untracked`, still succeed and keep the repository in
+place. The check walks the clone with `find` inside the writer image; an image
+without a working `find` makes these deleting operations refuse as well. State
+that exists only inside the clone's own `.git` directory, such as reflogs,
+unreachable objects or the `.git/modules` repository of a submodule that was
+deinitialized, is not preserved.
 
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch

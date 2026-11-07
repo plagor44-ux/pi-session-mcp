@@ -456,6 +456,33 @@ it("refuses a linked worktree inside the clone, whose .git is a file (#257)", as
   expect(await readFile(join(f.paths.clone, "linked", "pending.txt"), "utf8")).toBe("pending\n");
 }, 60_000);
 
+it("keeps a nested repository under an ignored path: collect and reset proceed, deleting operations refuse (#257)", async () => {
+  const f = await fixture();
+  // A worker-writable exclude rule hides the directory from `git add -A`, so it never becomes a gitlink.
+  await writeFile(join(f.paths.clone, ".git", "info", "exclude"), "vendor/\n");
+  const nested = join(f.paths.clone, "vendor", "dep");
+  await mkdir(nested, { recursive: true });
+  await git(nested, "init");
+  await git(nested, "config", "user.name", "writer");
+  await git(nested, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(nested, "unique.txt"), "unique\n");
+  await git(nested, "add", "unique.txt");
+  await git(nested, "commit", "-m", "unique");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false, repositories: true });
+  // Pristine apart from the ignored path: no collection needed, but deleting the clone would lose the repository.
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  // Collection never exports ignored paths, and reset with the default `clean: "untracked"` keeps them.
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok" });
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_reset" });
+  expect(await readFile(join(nested, "unique.txt"), "utf8")).toBe("unique\n");
+  // `clean: "all"` makes reset delete ignored files, so it refuses too.
+  await writeWriterState(f.home, "repo-w1", { ...(await readWriterState(f.home, "repo-w1"))!, clean: "all" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await readFile(join(nested, "unique.txt"), "utf8")).toBe("unique\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
+}, 60_000);
+
 it("collects a plain untracked directory (#257)", async () => {
   const f = await fixture();
   await mkdir(join(f.paths.clone, "plain"));

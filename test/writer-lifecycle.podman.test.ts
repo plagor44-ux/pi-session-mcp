@@ -415,3 +415,39 @@ ${BOUNDARY_GIT} rev-parse HEAD`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS)
   expect(await removeWriter(ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed", status: "ok" });
   await expect(lstat(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 }, 180_000);
+
+it.skipIf(skipReason !== undefined)("keeps an ignored nested repository through finish and refuses to remove it (#257)", async () => {
+  const home = await temporaryRoot("pi-writer-ignored-nested-podman-");
+  const checkout = join(home, "source");
+  await mkdir(checkout);
+  const ok = async (...args: string[]) => {
+    const result = await runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", checkout, ...args]);
+    expect(result.exitCode, result.stderr).toBe(0);
+  };
+  await ok("init", "-b", "main");
+  await writeFile(join(checkout, ".gitignore"), "vendor/\n");
+  await ok("add", ".gitignore");
+  await ok("-c", "user.name=writer-test", "-c", "user.email=writer@example.invalid", "commit", "-m", "base");
+  await ok("update-ref", "refs/remotes/origin/main", "HEAD");
+  await ok("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
+  const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
+  const paths = writerPaths(home, "repo-w1");
+  const state = (await readWriterState(home, "repo-w1"))!;
+  const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
+export GIT_CONFIG_NOSYSTEM=1
+mkdir -p vendor/dep
+cd vendor/dep
+${BOUNDARY_GIT} init -q
+printf '%s\\n' unique > unique.txt
+${BOUNDARY_GIT} add unique.txt
+${BOUNDARY_GIT} -c user.name=writer-test -c user.email=writer@example.invalid commit -q -m unique`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  expect(work.exitCode, work.stderr).toBe(0);
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false, repositories: true });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_nested_repository", status: "failed" });
+  expect(await finishWriter(ctx, "repo-w1")).toMatchObject({ code: "writer_reset", status: "ok" });
+  expect(await readFile(join(paths.clone, "vendor", "dep", "unique.txt"), "utf8")).toBe("unique\n");
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_nested_repository", status: "failed" });
+  expect(await removeWriter(ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed", status: "ok" });
+}, 180_000);

@@ -146,6 +146,8 @@ export async function preflight(ctx: lifecycle.WriterContext, names: readonly st
     const state = await readWriterState(ctx.home, name);
     const work = await (deps.lifecycle ?? lifecycle).inspectWork(ctx, name);
     if (work.nested || (!work.baseline && state?.collected?.digest !== work.digest)) throw new Error("writer_uncollected");
+    // Every caller removes the writer, ignored files included (#257).
+    if (work.repositories) throw new Error("writer_nested_repository");
   }
 }
 export async function remove(ctx: lifecycle.WriterContext, name: string, discard: boolean, deps: WriterSetupDependencies, extras: WakeHookOutcome[] = []): Promise<lifecycle.WriterOutcome> {
