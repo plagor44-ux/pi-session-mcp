@@ -15,7 +15,9 @@
   with `writer_uncollected`. An uninitialized submodule that matches the base
   stays allowed, and `--discard` is unchanged. The inspection digest moves to a
   new version, so a digest recorded by an older release no longer authorizes
-  cleanup.
+  cleanup. Ignored paths stay outside collection as before, including nested
+  repositories under them; [Execution modes](docs/execution-modes.md) now says
+  so next to the collection contract.
 - `pi-session-mcp-history prune` now deletes sessions that reconciliation marked
   `incomplete` after a server crash once the recorded end of their instance is
   older than the cutoff. An open session whose instance has no recorded end,

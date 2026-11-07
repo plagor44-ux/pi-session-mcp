@@ -338,8 +338,10 @@ ${INDEX_GIT} add -A`;
  * nested repository as a gitlink that holds only its HEAD, so (1) a gitlink that the staged index or the
  * worktree adds or changes relative to the writer base, and (2) a worktree gitlink whose directory holds a
  * populated repository (its own commits or uncommitted changes are invisible to the outer Git) both set
- * `nested`. Removing a gitlink or replacing it by a file is ordinary exported work. A path that Git has to
- * quote is not tested on disk but counted as nested: fail closed rather than parse it.
+ * `nested`. Removing a gitlink or replacing it by a file is ordinary exported work. With `core.quotePath`
+ * off, Git quotes only a path with a control character, a double quote or a backslash; such a gitlink is
+ * not tested on disk but counted as nested: fail closed rather than parse it. Ignored paths never become
+ * gitlinks and stay outside this check, as they stay outside collection.
  */
 function nestedScript(base: string): string {
   return `nested=0
@@ -349,7 +351,7 @@ for candidate in "$staged" "$tree"; do
     case "$line" in :??????\\ 160000\\ *) nested=1;; esac
   done < /tmp/nested-diff
 done
-${BOUNDARY_GIT} -c core.quotePath=true ls-tree -r "$tree" > /tmp/nested-links
+${BOUNDARY_GIT} -c core.quotePath=false ls-tree -r "$tree" > /tmp/nested-links
 while IFS= read -r line; do
   case "$line" in '160000 '*) ;; *) continue;; esac
   path=\${line#*\t}

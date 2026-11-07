@@ -332,7 +332,21 @@ changes are never exported, so no digest is recorded, and non-discard remove,
 reset and recreate refuse with `writer_uncollected`. Commit the nested files
 into the outer repository or move the nested repository out of the writer
 before collecting, or delete it explicitly with `--discard`. An uninitialized
-submodule that matches the base, and removing a gitlink, remain allowed.
+submodule that matches the base, and removing a gitlink, remain allowed; a
+gitlink path with a control character, a double quote or a backslash is always
+refused. A nested repository without any commit makes `git add -A` fail, so
+inspection and collection fail closed (`writer_inspect_failed`,
+`writer_collect_failed`).
+
+Collection preserves only what Git in the clone sees as work. **Ignored paths
+are outside it:** files and nested repositories under a path that `.gitignore`,
+`.git/info/exclude` or the clone's configuration ignores are neither inspected
+nor exported, and non-discard remove and recreate delete them like any other
+ignored file (reset and a persistent writer's finish keep them unless
+`--clean all` is set). The same holds for state that exists only inside the
+clone's `.git` directory, such as reflogs, unreachable objects, or the
+`.git/modules` repository of a submodule that was deinitialized. Move such work
+out of ignored paths, or commit it, before cleanup.
 
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch
@@ -344,8 +358,9 @@ pristine writer, without refused names; fetch the base again or resolve with
 `--reset --discard --apply`. The digest also covers the index tree, and the
 index and worktree tree objects must exist in the operator checkout. New work,
 including a change to the index alone, invalidates that authorization. A digest
-recorded by 0.14.1 or earlier never matches the versioned digest, so collect
-such a writer again before a destructive operation.
+recorded by an earlier release never matches the versioned digest (the
+version changed in 0.14.2 and again for #257), so collect such a writer again
+before a destructive operation.
 
 Index flags the worker sets (`assume-unchanged`, `skip-worktree`) never hide
 edits from inspect and collect ([#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231),
