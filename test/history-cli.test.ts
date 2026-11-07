@@ -246,6 +246,8 @@ async function pruneFixture(specs: Array<{ id: string; createdAt: string; closed
     store.db.prepare("UPDATE sessions SET closed_at = ? WHERE public_session_id = ?").run(spec.closedAt ?? null, spec.id);
     if (spec.endedAt !== undefined) store.db.prepare("UPDATE instances SET ended_at = ? WHERE pid = ?").run(spec.endedAt, pid);
   }
+  // One session-linked gap each, so the cascade check below has rows to remove.
+  store.db.prepare("INSERT INTO gaps (session_id, code, recorded_at) SELECT id, 'history_locked', '2020-01-01T00:00:00.000Z' FROM sessions").run();
   reconcileInstances(store, (pid) => pid === LIVE_PID);
   store.close();
   return home;
@@ -270,6 +272,7 @@ describe("prune after crash reconciliation", () => {
     const dry = await runPrune(home, "prune", "--older-than", "30d");
     expect(dry).toMatchObject({ code: 0, stdout: "2 sessions ended before 2029-12-02 would be deleted; rerun with --apply\n" });
     expect((await run(home, "query", "SELECT count(*) AS n FROM sessions")).stdout).toBe("n\n4\n");
+    expect((await run(home, "query", "SELECT count(*) AS n FROM gaps")).stdout).toBe("n\n4\n");
 
     const applied = await runPrune(home, "prune", "--older-than", "30d", "--apply");
     expect(applied).toMatchObject({ code: 0, stdout: "2 sessions deleted\n" });
@@ -284,6 +287,7 @@ describe("prune after crash reconciliation", () => {
     expect((await run(home, "query", "SELECT count(*) AS n FROM entries")).stdout).toBe("n\n4\n");
     expect((await run(home, "query", "SELECT count(*) AS n FROM turns")).stdout).toBe("n\n2\n");
     expect((await run(home, "query", "SELECT count(*) AS n FROM verdicts")).stdout).toBe("n\n0\n");
+    expect((await run(home, "query", "SELECT count(*) AS n FROM gaps")).stdout).toBe("n\n2\n");
   });
 
   it("issue #258 repro: a session left open by a crashed server is pruned", async () => {
