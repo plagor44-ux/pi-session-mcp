@@ -367,3 +367,51 @@ it.skipIf(skipReason !== undefined)("host SIGKILL of the relay parent releases t
     await runner.run("podman", ["rm", "-f", "-t", "0", container]);
   }
 }, 120_000);
+
+it.skipIf(skipReason !== undefined)("refuses to certify a nested repository and keeps it through non-discard cleanup (#257)", async () => {
+  const home = await temporaryRoot("pi-writer-nested-podman-");
+  const checkout = join(home, "source");
+  await mkdir(checkout);
+  async function git(...args: string[]) {
+    const result = await runner.run("git", ["-c", "core.hooksPath=/dev/null", "-C", checkout, ...args]);
+    return { exitCode: result.exitCode, stdout: result.stdout.trim(), stderr: result.stderr };
+  }
+  const ok = async (...args: string[]) => { const r = await git(...args); expect(r.exitCode, r.stderr).toBe(0); return r.stdout; };
+  await ok("init", "-b", "main");
+  await writeFile(join(checkout, "base.txt"), "base\n");
+  await ok("add", "base.txt");
+  await ok("-c", "user.name=writer-test", "-c", "user.email=writer@example.invalid", "commit", "-m", "base");
+  await ok("update-ref", "refs/remotes/origin/main", "HEAD");
+  await ok("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
+  const ctx = { home, checkout, runner, alias: "repo", releaseRoot: home, nodePath: process.execPath };
+  const rawConfig = { executionProfiles: { code: { default: false, permissionProfile: "coding", provider: "example", model: "model", thinkingLevel: "off" } } };
+  expect(await provisionWriter(ctx, { index: 1, settings: { writers: 1, lifecycle: "persistent", profiles: ["code"], image: "node", network: "none", cache: "none", tags: "none", clean: "untracked" }, rawConfig })).toMatchObject({ status: "ok" });
+  const paths = writerPaths(home, "repo-w1");
+  const state = (await readWriterState(home, "repo-w1"))!;
+  // The audit's layout, created inside the real boundary: a separate repository with a unique commit
+  // and an uncommitted file, not a configured submodule.
+  const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
+export GIT_CONFIG_NOSYSTEM=1
+mkdir nested
+cd nested
+${BOUNDARY_GIT} init -q
+printf '%s\\n' unique > unique.txt
+${BOUNDARY_GIT} add unique.txt
+${BOUNDARY_GIT} -c user.name=writer-test -c user.email=writer@example.invalid commit -q -m unique
+printf '%s\\n' pending > pending.txt
+${BOUNDARY_GIT} rev-parse HEAD`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  expect(work.exitCode, work.stderr).toBe(0);
+  const nestedCommit = work.stdout.trim();
+  expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: false, nested: true });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_uncollected", status: "failed" });
+  expect(await collectWriter(ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository", refs: [] });
+  expect((await readWriterState(home, "repo-w1"))!.collected).toBeUndefined();
+  expect((await git("cat-file", "-e", nestedCommit)).exitCode).not.toBe(0);
+  expect(await finishWriter(ctx, "repo-w1")).toMatchObject({ code: "writer_nested_repository", status: "failed" });
+  expect(await resetWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_uncollected", status: "failed" });
+  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_uncollected", status: "failed" });
+  expect(await readFile(join(paths.clone, "nested", "unique.txt"), "utf8")).toBe("unique\n");
+  expect(await readFile(join(paths.clone, "nested", "pending.txt"), "utf8")).toBe("pending\n");
+  expect(await removeWriter(ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed", status: "ok" });
+  await expect(lstat(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+}, 180_000);
