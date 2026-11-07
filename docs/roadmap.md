@@ -232,8 +232,8 @@ mean they are implemented or that their gates passed.
   ([#258](https://github.com/plagor44-ux/pi-session-mcp/issues/258)), and the
   persistence, installation and ADR status documentation matches the release
   record ([#259](https://github.com/plagor44-ux/pi-session-mcp/issues/259)).
-  Open for a maintainer decision: protecting nested repositories under ignored
-  paths. Open: #144, #221.
+  A nested repository under an ignored path now blocks every non-discard
+  cleanup as well. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

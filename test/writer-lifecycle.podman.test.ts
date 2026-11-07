@@ -416,7 +416,7 @@ ${BOUNDARY_GIT} rev-parse HEAD`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS)
   await expect(lstat(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
 }, 180_000);
 
-it.skipIf(skipReason !== undefined)("keeps an ignored nested repository through finish and refuses to remove it (#257)", async () => {
+it.skipIf(skipReason !== undefined)("refuses finish and remove while an ignored nested repository exists (#257)", async () => {
   const home = await temporaryRoot("pi-writer-ignored-nested-podman-");
   const checkout = join(home, "source");
   await mkdir(checkout);
@@ -446,8 +446,7 @@ ${BOUNDARY_GIT} -c user.name=writer-test -c user.email=writer@example.invalid co
   expect(work.exitCode, work.stderr).toBe(0);
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false, repositories: true });
   expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_nested_repository", status: "failed" });
-  expect(await finishWriter(ctx, "repo-w1")).toMatchObject({ code: "writer_reset", status: "ok" });
+  expect(await finishWriter(ctx, "repo-w1")).toEqual({ code: "writer_nested_repository", status: "failed" });
   expect(await readFile(join(paths.clone, "vendor", "dep", "unique.txt"), "utf8")).toBe("unique\n");
-  expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_nested_repository", status: "failed" });
   expect(await removeWriter(ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed", status: "ok" });
 }, 180_000);

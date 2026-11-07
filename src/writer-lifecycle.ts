@@ -342,8 +342,9 @@ ${INDEX_GIT} add -A`;
  * off, Git quotes only a path with a control character, a double quote or a backslash; such a gitlink is
  * not tested on disk but counted as nested: fail closed rather than parse it. Ignored paths never become
  * gitlinks and stay outside `nested`, as they stay outside collection. `repositories` is set when any `.git`
- * entry exists below the top level, under ignored paths too: no export can preserve such a repository, so
- * every operation that deletes ignored files refuses while it exists (#257). A failing walk counts as found.
+ * entry exists below the top level, under ignored paths too: no export can preserve such a repository, and even
+ * reset's forced checkout deletes an ignored directory that a tracked file replaces, so every non-discard reset,
+ * recreate, finish and remove refuses while it exists (#257). A failing walk counts as found.
  */
 function nestedScript(base: string): string {
   return `nested=0
@@ -429,14 +430,14 @@ async function writerBase(ctx: WriterContext, name: string, state: WriterState, 
   return resolveBase(ctx, writerBaseSource(heads, state.base.ref));
 }
 /**
- * Non-discard cleanup needs collected work. An operation that also deletes ignored files (`deletesIgnored`) refuses
- * while a nested repository exists anywhere in the clone, ignored paths included, because collection cannot export it.
+ * Non-discard cleanup needs collected work, and no nested repository anywhere in the clone, ignored paths included:
+ * collection cannot export one, and reset, recreate and remove can each delete it.
  */
-async function requireCollected(ctx: WriterContext, name: string, state: WriterState, discard: boolean, deletesIgnored: boolean): Promise<void> {
+async function requireCollected(ctx: WriterContext, name: string, state: WriterState, discard: boolean): Promise<void> {
   if (discard) return;
   const work = await inspectWork(ctx, name);
   if (work.nested || (!work.baseline && state.collected?.digest !== work.digest)) throw new LifecycleError("writer_uncollected");
-  if (deletesIgnored && work.repositories) throw new LifecycleError("writer_nested_repository");
+  if (work.repositories) throw new LifecycleError("writer_nested_repository");
 }
 async function refreshPrivateFiles(ctx: WriterContext, name: string, state: WriterState): Promise<void> {
   const paths = writerPaths(ctx.home, name);
@@ -596,7 +597,7 @@ export async function recreateWriter(ctx: WriterContext, name: string, opts: { d
   ctx = leasedContext(ctx);
   try {
     const state = await requiredState(ctx, name);
-    await requireCollected(ctx, name, state, opts.discard, true);
+    await requireCollected(ctx, name, state, opts.discard);
     return await recreate(ctx, name, state, await writerBase(ctx, name, state, opts.baseRef));
   } catch (error) { return failure(error); }
 }
@@ -606,7 +607,7 @@ export async function resetWriter(ctx: WriterContext, name: string, opts: { disc
   try {
     const state = await requiredState(ctx, name);
     const base = await writerBase(ctx, name, state, opts.baseRef);
-    await requireCollected(ctx, name, state, opts.discard, state.clean === "all");
+    await requireCollected(ctx, name, state, opts.discard);
     const paths = writerPaths(ctx.home, name);
     await verifyCloneLayout(paths.clone);
     await baseBundle(ctx, paths, base.ref, base.commit, state.tags);
@@ -635,16 +636,11 @@ ${identityScript(4, 5)}`;
     const next = { ...state, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
     await refreshPrivateFiles(ctx, name, next);
     await writeWriterState(ctx.home, name, next);
-    let after: Awaited<ReturnType<typeof inspectWork>> | undefined;
+    // Without discard, requireCollected proved that no nested repository existed, so recreation loses none (#257).
     try {
       await verifyCloneLayout(paths.clone);
-      after = await inspectWork(ctx, name);
-      if (!after.baseline) throw new LifecycleError("writer_reset_failed");
-    } catch {
-      // Recreation deletes ignored files; a repository that reset kept there has no other copy (#257).
-      if (!opts.discard && after?.repositories) throw new LifecycleError("writer_reset_failed");
-      return await recreate(ctx, name, next, base);
-    }
+      if (!(await inspectWork(ctx, name)).baseline) throw new LifecycleError("writer_reset_failed");
+    } catch { return await recreate(ctx, name, next, base); }
     const { collected: _collected, ...cleared } = next;
     await writeWriterState(ctx.home, name, cleared);
     return { status: "ok", code: "writer_reset" };

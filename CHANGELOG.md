@@ -16,10 +16,11 @@
   stays allowed, and `--discard` is unchanged. The inspection digest moves to a
   new version, so a digest recorded by an older release no longer authorizes
   cleanup. Ignored paths stay outside collection, but a nested repository under
-  one (for example hidden through `.git/info/exclude`) now makes every operation
-  that deletes ignored files refuse with `writer_nested_repository` unless
-  `--discard` is given: remove, recreate, an ephemeral writer's finish and reset
-  with `--clean all`. Collect and the default reset and finish keep it in place.
+  one (for example hidden through `.git/info/exclude`) now makes every cleanup
+  without `--discard` refuse with `writer_nested_repository`: remove, recreate,
+  finish and reset, since even reset's forced checkout deletes an ignored
+  directory that a tracked file of the new base replaces. Collect still
+  succeeds and leaves the repository in place.
 - `pi-session-mcp-history prune` now deletes sessions that reconciliation marked
   `incomplete` after a server crash once the recorded end of their instance is
   older than the cutoff. An open session whose instance has no recorded end,

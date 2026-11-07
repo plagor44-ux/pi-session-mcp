@@ -344,15 +344,15 @@ the clone's configuration ignores are neither inspected nor exported. Reset and
 a persistent writer's finish keep them unless `--clean all` is set; remove,
 recreate and an ephemeral writer's finish delete them. A nested repository is
 the exception (#257): when any `.git` entry exists below the clone's top level,
-ignored paths included, the operations that delete ignored files refuse without
-`--discard` with `writer_nested_repository`: remove (also during surplus
-removal and settings-drift replacement), recreate, an ephemeral writer's finish,
-reset with `--clean all`, and the recreation that a failed reset verification
-would otherwise fall back to. Collect, and reset or a persistent writer's finish
-with the default `--clean untracked`, still succeed and keep the repository in
-place. The check walks the clone with `find` inside the writer image; an image
-without a working `find` makes these deleting operations refuse as well. State
-that exists only inside the clone's own `.git` directory, such as reflogs,
+ignored paths included, every cleanup without `--discard` refuses with
+`writer_nested_repository`: remove (also during surplus removal and
+settings-drift replacement), recreate, finish and reset, whatever `--clean`
+says. Reset is included because its forced checkout deletes an ignored
+directory when the new base has a tracked file at that path. Collect still
+succeeds and leaves the repository in place; move it out of the writer, or
+delete it with `--discard`, before cleanup. The check walks the clone with
+`find` inside the writer image; an image without a working `find` makes these
+cleanups refuse as well. State that exists only inside the clone's own `.git` directory, such as reflogs,
 unreachable objects or the `.git/modules` repository of a submodule that was
 deinitialized, is not preserved.
 
