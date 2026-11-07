@@ -323,6 +323,13 @@ path (such as a branch `main-detached/topic`), is refused and makes collection
 incomplete (`writer_collect_incomplete`); the other branches are still
 exported. Clone-side Git ignores replace refs. These refs are **untrusted until reviewed**;
 setup does not merge or cherry-pick them. Collection does not change the clone.
+Collection refuses with `writer_nested_repository` when a staged or worktree
+gitlink differs from the writer base, or when a worktree gitlink contains a
+populated nested repository, even if it matches the base. Nested objects and
+uncommitted nested changes are not exported. Commit the nested work in the
+outer repository or move it out of the writer before collecting, or explicitly
+use `--discard` to delete it. An uninitialized base gitlink remains allowed.
+
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch
 commit exist in the operator checkout; otherwise collection is incomplete
@@ -560,6 +567,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_state_unreadable` | Writer state cannot safely be read |
 | `writer_inspect_failed` | Contained work inspection failed, including an index that cannot be evaluated such as an unmerged conflict |
 | `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
+| `writer_nested_repository` | Nested repository or gitlink cannot be preserved by collection; no cleanup authorization |
 | `writer_collect_failed` | Bundle generation/verification/import failed, including an unmerged index |
 | `writer_collect_incomplete` | One or more branch names refused, a collected commit or tree is missing from the operator checkout, or a tag, note or other unexported ref names an object only the clone has; no cleanup authorization |
 | `ref_name_refused` | Unsafe export name, or a `-wip`, `-index`, `-detached` or `-stash-<n>` name collision |

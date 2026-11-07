@@ -4,6 +4,18 @@
 
 ### Fixed
 
+- Writer collection no longer certifies a nested Git repository as collected
+  (#257). A non-ignored directory with its own `.git` became a gitlink that
+  recorded only the nested HEAD; collection still wrote the cleanup digest, and
+  a later non-discard remove, reset, recreate or finish deleted the only copy of
+  the nested commits and uncommitted nested work. Collection and finish now
+  refuse with `writer_nested_repository` when the worktree or the staged index
+  adds or changes a gitlink relative to the writer base, or when a gitlink
+  directory holds a populated repository; the other non-discard cleanups refuse
+  with `writer_uncollected`. An uninitialized submodule that matches the base
+  stays allowed, and `--discard` is unchanged. The inspection digest moves to a
+  new version, so a digest recorded by an older release no longer authorizes
+  cleanup.
 - `pi-session-mcp-history prune` now deletes sessions that reconciliation marked
   `incomplete` after a server crash once the recorded end of their instance is
   older than the cutoff. An open session whose instance has no recorded end,
