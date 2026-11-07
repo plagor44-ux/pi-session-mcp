@@ -342,6 +342,17 @@ Rules:
   or states explicitly that it is off. Delivery is off by default and when the
   field is absent; any other shape fails startup with `invalid_event_delivery`. See
   [Wake the controller](#wake-the-controller-claude-code).
+- An optional top-level `history` block turns on the local session history
+  ([ADR 0019](adr/0019-opt-in-session-history.md)); it is off by default and
+  when the block is absent, and an invalid block fails startup with
+  `invalid_history`. The file is
+  `~/.local/state/pi-session-mcp/history/history.sqlite` under the account's
+  home directory from the password database: `HOME` and `XDG_STATE_HOME` do not
+  move it. Turning history off again stops recording but does not delete the
+  file; delete old sessions with `pi-session-mcp-history prune`. Configuration,
+  redaction and the CLI are described in
+  [Session history](../README.md#session-history), the stored data and its
+  limits in the [threat model](threat-model.md).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
 
@@ -979,6 +990,14 @@ a registration was owned, `--dry-run`, `--apply` and `--verify` report
 A registration that was added manually is not bound to the build. Point it at
 the new version with the client's own commands.
 
+### Downgrade
+
+Downgrade like an upgrade, with the older version as the new one, after
+reading the [changelog](../CHANGELOG.md) entries you go back across. 0.17.0 and
+older reject a `history` block: remove it from the configuration before you
+install such a release (see the rollback note of 0.18.0). The history file
+stays in place, and a later upgrade with the block restored continues to use it.
+
 ## Remove
 
 ```bash
@@ -991,7 +1010,7 @@ npm uninstall -g pi-session-mcp
 same owned removal and reports `rolled_back`; use it to undo an apply. After
 every target reports `removed`, uninstall the package or delete the release
 directory, and delete the configuration file and
-`~/.local/state/pi-session-mcp/`. The same call removes the controller skill
+`~/.local/state/pi-session-mcp/`, which also holds the session history file. The same call removes the controller skill
 that `setup` installed (`skill_removed`) and the wake hook entry it added
 (`hook_removed`). It keeps a copy that you modified
 (`skill_divergent`) and the shared Claude Code directory while the other

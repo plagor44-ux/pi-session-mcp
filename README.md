@@ -2,7 +2,7 @@
 
 A local, stdio-only [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that lets a coding agent such as Codex or Claude Code delegate work to a [Pi](https://github.com/earendil-works/pi) coding-agent session, under rules that the operator sets.
 
-The client never chooses a directory, a model or a permission level. It selects from workspace and execution-profile aliases that you define in a local configuration file, starts a session, sends prompts, polls the turn and closes the session. Pi Session MCP embeds the Pi SDK, keeps all state in memory and talks only over stdin and stdout.
+The client never chooses a directory, a model or a permission level. It selects from workspace and execution-profile aliases that you define in a local configuration file, starts a session, sends prompts, polls the turn and closes the session. Pi Session MCP embeds the Pi SDK, keeps session state in memory (apart from an opt-in local [session history](#session-history)) and talks only over stdin and stdout.
 
 > Pi Session MCP is an independent project. It is not affiliated with or endorsed by the makers of Pi, OpenAI or Anthropic. Product names are used only to describe compatibility.
 
@@ -39,7 +39,7 @@ Every read-only profile reads only inside its workspace and the directories of i
 - **Pre-1.0.** The public tool contract is stable within a minor line: a change to tools, fields, states or error codes needs a new minor release.
 - **Linux and macOS**, Node.js 22.19.0 or newer. macOS is tested in CI on macOS 15 and 26 on Apple silicon; Intel Macs run the same code but are untested. Setup acceptance on a real Mac is recorded for Claude Code only; Codex is still pending. See [Acceptance](docs/acceptance.md#status). On other platforms `setup` refuses with `platform_unsupported`.
 - **Clients:** Codex CLI and Claude Code. The `setup` command does not pin client versions: it accepts a client whose public `mcp` command output matches the expected contract and fails closed otherwise.
-- **Out of scope by design:** HTTP, a web UI, persistence, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process.
+- **Out of scope by design:** HTTP, a web UI, resume, remote access and multi-user behavior. Sessions live in memory; the only persistent store is the opt-in [session history](#session-history) ([ADR 0019](docs/adr/0019-opt-in-session-history.md)), which records sessions but cannot restore them. One trusted local MCP peer talks to one server process.
 - **Not a sandbox.** A `coding` profile restricts the Pi tools that a session may use. It does not isolate the process from the operating system.
 - **Acceptance.** Every release passes the provider-free checks. The last live two-client acceptance (Level 3) ran on Pi SDK `1.1.0` with one provider pair on Linux and has not been repeated on later SDK pins; see [Acceptance](docs/acceptance.md).
 
@@ -171,7 +171,7 @@ Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS key
 
 ## Security model
 
-- **Local and single-peer.** No network listener, no daemon between client sessions, no persisted session state.
+- **Local and single-peer.** No network listener and no daemon between client sessions. Runtime session state lives in memory and ends with the server process, so there is no resume. With the opt-in [session history](#session-history) on, redacted session content and metadata are also written to a local file; that record cannot restore a session.
 - **Aliases instead of paths.** No tool accepts a working directory, a model, a provider or a credential.
 - **Explicit policy file.** The configuration path comes only from `PI_SESSION_MCP_CONFIG`. A file in the working directory, which is the client's project, is never read as configuration.
 - **Sanitized results.** Public errors are stable codes. They contain no paths, prompts, provider errors, authentication data or credential locations. `assistantText` can repeat workspace content and must be treated as sensitive.
