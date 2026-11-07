@@ -333,30 +333,29 @@ ${INDEX_GIT} update-index -z --skip-worktree --stdin < /tmp/absent-paths
 ${INDEX_GIT} add -A`;
 }
 
-// Compare gitlink changes without parsing paths; walk directories with shell globs to preserve unusual names.
+/**
+ * Detects nested work that collection cannot preserve (#257). `git add -A` records every non-ignored
+ * nested repository as a gitlink that holds only its HEAD, so (1) a gitlink that the staged index or the
+ * worktree adds or changes relative to the writer base, and (2) a worktree gitlink whose directory holds a
+ * populated repository (its own commits or uncommitted changes are invisible to the outer Git) both set
+ * `nested`. Removing a gitlink or replacing it by a file is ordinary exported work. A path that Git has to
+ * quote is not tested on disk but counted as nested: fail closed rather than parse it.
+ */
 function nestedScript(base: string): string {
   return `nested=0
 for candidate in "$staged" "$tree"; do
   ${BOUNDARY_GIT} diff-tree -r --raw --no-renames "${base}" "$candidate" > /tmp/nested-diff
   while IFS= read -r line; do
-    case "$line" in :160000\\ *|:??????\\ 160000\\ *) nested=1;; esac
+    case "$line" in :??????\\ 160000\\ *) nested=1;; esac
   done < /tmp/nested-diff
 done
-check_dirs() (
-  cd "$1" || exit 1
-  for entry in * .[!.]* ..?*; do
-    [ -d "$entry" ] && [ ! -L "$entry" ] || continue
-    [ "$entry" = .git ] && continue
-    path="${"${2:+$2/}"}$entry"
-    if [ -e "$entry/.git" ] || [ -L "$entry/.git" ]; then
-      item=$(${BOUNDARY_GIT} -C "$3" ls-tree "$tree" -- ":(literal)$path") || exit 1
-      case "$item" in '160000 '*) exit 1;; esac
-    else
-      check_dirs "$entry" "$path" "$3" || exit 1
-    fi
-  done
-)
-check_dirs . '' "$PWD" || nested=1`;
+${BOUNDARY_GIT} -c core.quotePath=true ls-tree -r "$tree" > /tmp/nested-links
+while IFS= read -r line; do
+  case "$line" in '160000 '*) ;; *) continue;; esac
+  path=\${line#*\t}
+  case "$path" in '"'*) nested=1; continue;; esac
+  if [ -e "$path/.git" ] || [ -L "$path/.git" ]; then nested=1; fi
+done < /tmp/nested-links`;
 }
 
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{

@@ -392,6 +392,32 @@ it("refuses a populated base gitlink even when its outer tree is unchanged (#257
   await rm(nested, { recursive: true });
   await mkdir(nested);
   expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false });
+  // Removing the base gitlink loses nothing: it is ordinary work, exported and collected.
+  await f.work("rm", "--cached", "--quiet", "nested");
+  await rm(nested, { recursive: true });
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: false });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_collected" });
+}, 60_000);
+
+it("refuses a nested repository inside an untracked directory, and one only staged as a gitlink (#257)", async () => {
+  const f = await fixture();
+  const deep = join(f.paths.clone, "outer dir", "deep");
+  await mkdir(deep, { recursive: true });
+  await writeFile(join(f.paths.clone, "outer dir", "plain"), "plain\n");
+  await git(deep, "init");
+  await git(deep, "config", "user.name", "writer");
+  await git(deep, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(deep, "unique.txt"), "unique\n");
+  await git(deep, "add", "unique.txt");
+  await git(deep, "commit", "-m", "unique");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: true });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  // Staged gitlink, nested repository then moved out of the worktree: the index still names a commit
+  // that only the nested object database held, so collection refuses rather than certify it.
+  await f.work("add", "outer dir/deep");
+  await rm(deep, { recursive: true });
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ nested: true });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
 }, 60_000);
 
 it("collects a plain untracked directory (#257)", async () => {

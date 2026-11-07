@@ -323,12 +323,16 @@ path (such as a branch `main-detached/topic`), is refused and makes collection
 incomplete (`writer_collect_incomplete`); the other branches are still
 exported. Clone-side Git ignores replace refs. These refs are **untrusted until reviewed**;
 setup does not merge or cherry-pick them. Collection does not change the clone.
-Collection refuses with `writer_nested_repository` when a staged or worktree
-gitlink differs from the writer base, or when a worktree gitlink contains a
-populated nested repository, even if it matches the base. Nested objects and
-uncommitted nested changes are not exported. Commit the nested work in the
-outer repository or move it out of the writer before collecting, or explicitly
-use `--discard` to delete it. An uninitialized base gitlink remains allowed.
+Collection and finish refuse with `writer_nested_repository` (#257) when the
+staged index or the worktree adds or changes a gitlink relative to the writer
+base, which `git add -A` also records for every non-ignored directory with its
+own `.git`, or when a worktree gitlink directory holds a populated repository,
+even if the gitlink matches the base. Nested objects and uncommitted nested
+changes are never exported, so no digest is recorded, and non-discard remove,
+reset and recreate refuse with `writer_uncollected`. Commit the nested files
+into the outer repository or move the nested repository out of the writer
+before collecting, or delete it explicitly with `--discard`. An uninitialized
+submodule that matches the base, and removing a gitlink, remain allowed.
 
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch
