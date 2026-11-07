@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.19.1 — 2026-11-07
+
+Patch release for three audit findings on 0.19.0 (#257, #258, #259). The MCP
+tool contract is unchanged. Setup gains the outcome code
+`writer_nested_repository`, and the inspection digest changes version.
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). A writer collected by an earlier
+release must be collected again before a non-discard reset, recreate, remove or
+finish. A writer that holds a nested repository, also under an ignored path,
+now refuses every reset, recreate, remove and finish until the repository is
+moved out or `--discard` is given. **Rollback note:** reinstall 0.19.0; collect
+writers again afterwards, because 0.19.0 does not accept the new digest.
+
 ### Fixed
 
 - Writer collection no longer certifies a nested Git repository as collected
@@ -25,6 +39,13 @@
   `incomplete` after a server crash once the recorded end of their instance is
   older than the cutoff. An open session whose instance has no recorded end,
   such as one of a running server, is never pruned (#258).
+
+### Changed
+
+- The README, client setup and installation guide name the opt-in session
+  history as the only persistent store, document its fixed location, that
+  turning it off keeps the file, and the downgrade step; ADR 0015 and ADR 0018
+  record the releases that shipped them (#259).
 
 ## 0.19.0 — 2026-11-06
 

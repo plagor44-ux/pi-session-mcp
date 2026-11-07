@@ -17,13 +17,16 @@ issues. Three audit findings on 0.19.0 were open:
   session history and the release record.
 
 #144 and #221 need a Mac and stay open. Branch `fix/s25-audit-findings`: one
-pull request with one commit series per issue, no release.
+pull request with one commit series per issue. On the maintainer's follow-up
+order of 2026-11-07 ("continue with the fixes, then prepare the next release
+on a clean state"), the same pull request also closes the ignored-path gap of
+#257 and prepares patch release 0.19.1.
 
 ## Results
 
 | Item | Result |
 | --- | --- |
-| #257 | Collection and finish refuse with the new `writer_nested_repository`; inspection reports `nested`, `baseline` requires its absence, and the inspection digest version changed. Real-Git and native rootless Podman tests; the Podman test fails on unchanged main. |
+| #257 | Collection and finish refuse with the new `writer_nested_repository`; inspection reports `nested`, `baseline` requires its absence, and the inspection digest version changed. A nested repository anywhere below the clone's top level, ignored paths included, makes every non-discard reset, recreate, finish and remove refuse with `writer_nested_repository`. Real-Git and native rootless Podman tests; the first Podman test fails on unchanged main. |
 | #258 | One retention predicate for preview and delete: the session's close, else the recorded end of its instance; an open session of an instance without a recorded end is never eligible. |
 | #259 | README, client setup and installation name the opt-in history as the only persistent store, document its location, that turning it off keeps the file, and the downgrade step; ADR 0015 and 0018 record their releases. |
 
@@ -48,12 +51,27 @@ pull request with one commit series per issue, no release.
    seen. The controller kept that out of #257: ignored paths are outside
    collection by contract for every kind of file, a worker can already hide
    any work through `.git/info/exclude`, and the issue excludes ignored files.
-   The limit is now documented next to the collection contract; changing it is
-   a maintainer decision. GLM's other findings were fixed: a quoted
+   The limit was first documented next to the collection contract. GLM's other findings were fixed: a quoted
    (non-ASCII) gitlink path made an uninitialized base submodule count as
    nested and blocked reset and finish (now listed with `core.quotePath` off),
    a stale digest-version sentence, and missing tests for a repository without
    commits and a `.git` file.
+4. Ignored-path follow-up (maintainer order to continue with the fixes): the
+   controller added a walk for any `.git` entry below the top level, run with
+   `find` inside the writer image, as a separate inspection flag
+   (`repositories`) that does not affect `baseline`. The first version (885de18)
+   refused only the operations that delete ignored files (remove, recreate, an
+   ephemeral finish, reset with `--clean all`). An OpenAI review on a review
+   snapshot answered `BLOCKING_FINDINGS`: reset's forced checkout deletes an
+   ignored directory when the new base has a tracked file at that path, and a
+   failed post-reset inspection fell back to recreation. Commit 7b3c5d9 makes
+   every non-discard cleanup refuse while such a repository exists. The
+   re-review on 7b3c5d9 answered `NON_BLOCKING_ONLY`: both findings closed, and
+   the docs did not say that `writer_uncollected` takes precedence; 4994596
+   documents and tests that order.
+5. Release 0.19.1 prepared in the same pull request; acceptance in
+   [Acceptance](../acceptance.md#v0191-pre-release-acceptance). Merge, tag and
+   publishing stay with the maintainer.
 
 ## Checks
 
