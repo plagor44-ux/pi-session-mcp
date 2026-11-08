@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+## 0.19.1 — 2026-11-07
+
+Patch release for three audit findings on 0.19.0 (#257, #258, #259). The MCP
+tool contract is unchanged. Setup gains the outcome code
+`writer_nested_repository`, and the inspection digest changes version.
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). A writer collected by an earlier
+release must be collected again before a non-discard reset, recreate, remove or
+finish. A writer that holds a nested repository, also under an ignored path,
+now refuses every reset, recreate, remove and finish until the repository is
+moved out or `--discard` is given. **Rollback note:** reinstall 0.19.0; collect
+writers again afterwards, because 0.19.0 does not accept the new digest.
+
+### Fixed
+
+- Writer collection no longer certifies a nested Git repository as collected
+  (#257). A non-ignored directory with its own `.git` became a gitlink that
+  recorded only the nested HEAD; collection still wrote the cleanup digest, and
+  a later non-discard remove, reset, recreate or finish deleted the only copy of
+  the nested commits and uncommitted nested work. Collection and finish now
+  refuse with `writer_nested_repository` when the worktree or the staged index
+  adds or changes a gitlink relative to the writer base, or when a gitlink
+  directory holds a populated repository; the other non-discard cleanups refuse
+  with `writer_uncollected`. An uninitialized submodule that matches the base
+  stays allowed, and `--discard` is unchanged. The inspection digest moves to a
+  new version, so a digest recorded by an older release no longer authorizes
+  cleanup. Ignored paths stay outside collection, but a nested repository under
+  one (for example hidden through `.git/info/exclude`) now makes every cleanup
+  without `--discard` refuse with `writer_nested_repository`: remove, recreate,
+  finish and reset, since even reset's forced checkout deletes an ignored
+  directory that a tracked file of the new base replaces. Collect still
+  succeeds and leaves the repository in place.
+- `pi-session-mcp-history prune` now deletes sessions that reconciliation marked
+  `incomplete` after a server crash once the recorded end of their instance is
+  older than the cutoff. An open session whose instance has no recorded end,
+  such as one of a running server, is never pruned (#258).
+
+### Changed
+
+- The README, client setup and installation guide name the opt-in session
+  history as the only persistent store, document its fixed location, that
+  turning it off keeps the file, and the downgrade step; ADR 0015 and ADR 0018
+  record the releases that shipped them (#259).
+
 ## 0.19.0 — 2026-11-06
 
 Minor release by maintainer decision. It reports a stale writer base on default

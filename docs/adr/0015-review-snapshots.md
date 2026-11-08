@@ -2,7 +2,9 @@
 
 **Status:** Accepted (2026-10-31, maintainer decision): option C with the
 detect-not-prevent contract of section 3. Implemented in
-[#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217) (unreleased);
+[#217](https://github.com/plagor44-ux/pi-session-mcp/issues/217), shipped in
+0.15.0 (Linux only; macOS support is open in
+[#221](https://github.com/plagor44-ux/pi-session-mcp/issues/221));
 see "Implementation notes" at the end for the decisions this ADR left open
 and two deviations. Issue
 #209. Planning basis: main `2a483c7d19cda65c32de5df781819eb5333b9694`,

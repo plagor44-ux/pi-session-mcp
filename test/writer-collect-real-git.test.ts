@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import type { CommandRunner } from "../src/client-adapters/types.js";
 import { collectWriter, finishWriter, inspectWork, recreateWriter, removeWriter, resetWriter } from "../src/writer-lifecycle.js";
-import { readWriterState } from "../src/writer-state.js";
+import { readWriterState, writeWriterState } from "../src/writer-state.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { fixture, git, gitPresent, spawn } from "./real-git-writer-fixture.js";
 
@@ -345,6 +345,154 @@ it("still collects nothing and removes a pristine writer without discard (#200 r
   expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "nothing_to_collect", refs: [], refused: 0, findings: [] });
   expect(await git(f.checkout, "for-each-ref", "--format=%(refname)", "refs/remotes/writer-repo-w1/")).toBe("");
   expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "ok", code: "writer_removed" });
+}, 60_000);
+
+it("refuses unpreserved nested repositories and permits explicit discard (#257)", async () => {
+  const f = await fixture();
+  const nested = join(f.paths.clone, "nested");
+  await mkdir(nested);
+  await git(nested, "init");
+  await git(nested, "config", "user.name", "writer");
+  await git(nested, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(nested, "unique.txt"), "unique\n");
+  await git(nested, "add", "unique.txt");
+  await git(nested, "commit", "-m", "unique");
+  const commit = await git(nested, "rev-parse", "HEAD");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository", refs: [], findings: [{ code: "writer_nested_repository" }] });
+  expect((await readWriterState(f.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await gitPresent(f.checkout, "cat-file", "-e", commit)).toBe(false);
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ code: "writer_nested_repository" });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await readFile(join(nested, "unique.txt"), "utf8")).toBe("unique\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
+}, 60_000);
+
+it("refuses a populated base gitlink even when its outer tree is unchanged (#257)", async () => {
+  const f = await fixture();
+  const nested = join(f.paths.clone, "nested");
+  await mkdir(nested);
+  await git(nested, "init");
+  await git(nested, "config", "user.name", "writer");
+  await git(nested, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(nested, "tracked"), "base\n");
+  await git(nested, "add", "tracked");
+  await git(nested, "commit", "-m", "base");
+  await f.work("add", "nested");
+  await f.work("commit", "-m", "gitlink");
+  const base = await f.work("rev-parse", "HEAD");
+  await writeWriterState(f.home, "repo-w1", { ...(await readWriterState(f.home, "repo-w1"))!, base: { ref: "refs/heads/main", commit: base } });
+  await writeFile(join(nested, "uncommitted"), "keep\n");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: true });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await readFile(join(nested, "uncommitted"), "utf8")).toBe("keep\n");
+  await rm(nested, { recursive: true });
+  await mkdir(nested);
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false });
+  // Removing the base gitlink loses nothing: it is ordinary work, exported and collected.
+  await f.work("rm", "--cached", "--quiet", "nested");
+  await rm(nested, { recursive: true });
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: false });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_collected" });
+}, 60_000);
+
+it("refuses a nested repository inside an untracked directory, and one only staged as a gitlink (#257)", async () => {
+  const f = await fixture();
+  const deep = join(f.paths.clone, "outer dir", "deep");
+  await mkdir(deep, { recursive: true });
+  await writeFile(join(f.paths.clone, "outer dir", "plain"), "plain\n");
+  await git(deep, "init");
+  await git(deep, "config", "user.name", "writer");
+  await git(deep, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(deep, "unique.txt"), "unique\n");
+  await git(deep, "add", "unique.txt");
+  await git(deep, "commit", "-m", "unique");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: true });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  // Staged gitlink, nested repository then moved out of the worktree: the index still names a commit
+  // that only the nested object database held, so collection refuses rather than certify it.
+  await f.work("add", "outer dir/deep");
+  await rm(deep, { recursive: true });
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ nested: true });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+}, 60_000);
+
+it("allows an uninitialized base submodule at a non-ASCII path (#257)", async () => {
+  const f = await fixture();
+  const head = await f.work("rev-parse", "HEAD");
+  // A gitlink in the base whose directory is empty: what a fresh clone of a repository with an
+  // uninitialized submodule looks like. Git quotes the name unless core.quotePath is off.
+  await f.work("update-index", "--add", "--cacheinfo", `160000,${head},dépendance`);
+  await f.work("commit", "-q", "-m", "submodule");
+  const base = await f.work("rev-parse", "HEAD");
+  await mkdir(join(f.paths.clone, "dépendance"));
+  await writeWriterState(f.home, "repo-w1", { ...(await readWriterState(f.home, "repo-w1"))!, base: { ref: "refs/heads/main", commit: base } });
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false });
+}, 60_000);
+
+it("fails closed on a nested repository without commits (#257)", async () => {
+  const f = await fixture();
+  const nested = join(f.paths.clone, "empty-nested");
+  await mkdir(nested);
+  await git(nested, "init");
+  await writeFile(join(nested, "draft.txt"), "draft\n");
+  // `git add -A` cannot record a repository without HEAD, so inspection fails and nothing is deleted.
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_inspect_failed" });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed" });
+  expect((await readWriterState(f.home, "repo-w1"))!.collected).toBeUndefined();
+  expect(await readFile(join(nested, "draft.txt"), "utf8")).toBe("draft\n");
+}, 60_000);
+
+it("refuses a linked worktree inside the clone, whose .git is a file (#257)", async () => {
+  const f = await fixture();
+  await f.work("worktree", "add", "-q", "-b", "side", "linked");
+  await writeFile(join(f.paths.clone, "linked", "pending.txt"), "pending\n");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: false, nested: true });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await readFile(join(f.paths.clone, "linked", "pending.txt"), "utf8")).toBe("pending\n");
+}, 60_000);
+
+it("refuses every non-discard cleanup while a nested repository sits under an ignored path; collect proceeds (#257)", async () => {
+  const f = await fixture();
+  // A worker-writable exclude rule hides the directory from `git add -A`, so it never becomes a gitlink.
+  await writeFile(join(f.paths.clone, ".git", "info", "exclude"), "vendor/\n");
+  const nested = join(f.paths.clone, "vendor", "dep");
+  await mkdir(nested, { recursive: true });
+  await git(nested, "init");
+  await git(nested, "config", "user.name", "writer");
+  await git(nested, "config", "user.email", "writer@example.invalid");
+  await writeFile(join(nested, "unique.txt"), "unique\n");
+  await git(nested, "add", "unique.txt");
+  await git(nested, "commit", "-m", "unique");
+  expect(await inspectWork(f.ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false, repositories: true });
+  // Pristine apart from the ignored path: no collection needed, but deleting the clone would lose the repository.
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await recreateWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  // Uncollected work takes precedence: the refusal names the step the operator must take first.
+  await writeFile(join(f.paths.clone, "pending.txt"), "pending\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_uncollected" });
+  await rm(join(f.paths.clone, "pending.txt"));
+  // Collection never exports ignored paths and still succeeds; reset can delete an ignored directory through its
+  // forced checkout (a tracked file replacing it), so reset and finish refuse as well.
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok" });
+  expect(await resetWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await finishWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_nested_repository" });
+  expect(await readFile(join(nested, "unique.txt"), "utf8")).toBe("unique\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: true })).toMatchObject({ code: "writer_removed" });
+}, 60_000);
+
+it("collects a plain untracked directory (#257)", async () => {
+  const f = await fixture();
+  await mkdir(join(f.paths.clone, "plain"));
+  await writeFile(join(f.paths.clone, "plain/file"), "plain\n");
+  expect(await removeWriter(f.ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_uncollected" });
+  expect(await collectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "ok", code: "writer_collected" });
+  expect(await git(f.checkout, "show", `${WIP_REF}:plain/file`)).toBe("plain");
 }, 60_000);
 
 const STASH_REF = (n: number) => `refs/remotes/writer-repo-w1/main-stash-${n}`;

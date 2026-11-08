@@ -323,6 +323,40 @@ path (such as a branch `main-detached/topic`), is refused and makes collection
 incomplete (`writer_collect_incomplete`); the other branches are still
 exported. Clone-side Git ignores replace refs. These refs are **untrusted until reviewed**;
 setup does not merge or cherry-pick them. Collection does not change the clone.
+Collection and finish refuse with `writer_nested_repository` (#257) when the
+staged index or the worktree adds or changes a gitlink relative to the writer
+base, which `git add -A` also records for every non-ignored directory with its
+own `.git`, or when a worktree gitlink directory holds a populated repository,
+even if the gitlink matches the base. Nested objects and uncommitted nested
+changes are never exported, so no digest is recorded, and non-discard remove,
+reset and recreate refuse with `writer_uncollected`. Commit the nested files
+into the outer repository or move the nested repository out of the writer
+before collecting, or delete it explicitly with `--discard`. An uninitialized
+submodule that matches the base, and removing a gitlink, remain allowed; a
+gitlink path with a control character, a double quote or a backslash is always
+refused. A nested repository without any commit makes `git add -A` fail, so
+inspection and collection fail closed (`writer_inspect_failed`,
+`writer_collect_failed`).
+
+Collection preserves only what Git in the clone sees as work. **Ignored paths
+are outside it:** files under a path that `.gitignore`, `.git/info/exclude` or
+the clone's configuration ignores are neither inspected nor exported. Reset and
+a persistent writer's finish keep them unless `--clean all` is set; remove,
+recreate and an ephemeral writer's finish delete them. A nested repository is
+the exception (#257): when any `.git` entry exists below the clone's top level,
+ignored paths included, every cleanup without `--discard` refuses: with
+`writer_uncollected` while work is uncollected, otherwise with
+`writer_nested_repository`. This covers remove (also during surplus removal and
+settings-drift replacement), recreate, finish and reset, whatever `--clean`
+says. Reset is included because its forced checkout deletes an ignored
+directory when the new base has a tracked file at that path. Collect still
+succeeds and leaves the repository in place; move it out of the writer, or
+delete it with `--discard`, before cleanup. The check walks the clone with
+`find` inside the writer image; an image without a working `find` makes these
+cleanups refuse as well. State that exists only inside the clone's own `.git`
+directory, such as reflogs, unreachable objects or the `.git/modules`
+repository of a submodule that was deinitialized, is not preserved.
+
 Only a complete export records a digest authorizing later destructive cleanup,
 and the digest is recorded only when the clone's HEAD commit and every branch
 commit exist in the operator checkout; otherwise collection is incomplete
@@ -333,8 +367,9 @@ pristine writer, without refused names; fetch the base again or resolve with
 `--reset --discard --apply`. The digest also covers the index tree, and the
 index and worktree tree objects must exist in the operator checkout. New work,
 including a change to the index alone, invalidates that authorization. A digest
-recorded by 0.14.1 or earlier never matches the versioned digest, so collect
-such a writer again before a destructive operation.
+recorded by an earlier release never matches the versioned digest (the
+version changed in 0.14.2 and again for #257), so collect such a writer again
+before a destructive operation.
 
 Index flags the worker sets (`assume-unchanged`, `skip-worktree`) never hide
 edits from inspect and collect ([#231](https://github.com/plagor44-ux/pi-session-mcp/issues/231),
@@ -560,6 +595,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_state_unreadable` | Writer state cannot safely be read |
 | `writer_inspect_failed` | Contained work inspection failed, including an index that cannot be evaluated such as an unmerged conflict |
 | `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
+| `writer_nested_repository` | Nested repository or gitlink cannot be preserved by collection; no cleanup authorization |
 | `writer_collect_failed` | Bundle generation/verification/import failed, including an unmerged index |
 | `writer_collect_incomplete` | One or more branch names refused, a collected commit or tree is missing from the operator checkout, or a tag, note or other unexported ref names an object only the clone has; no cleanup authorization |
 | `ref_name_refused` | Unsafe export name, or a `-wip`, `-index`, `-detached` or `-stash-<n>` name collision |

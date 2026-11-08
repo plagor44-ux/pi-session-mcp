@@ -2600,6 +2600,95 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.19.1 pre-release acceptance
+
+`v0.19.1` was accepted on 2026-11-07 from 22:20 to 22:27 UTC on its release
+candidate `c484d92`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.2`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.319`. Level 1 passed
+without restriction, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. The later commit changes
+only this record.
+
+The patch release ships the fixes for #257, #258 and #259 from PR #260 (Sprint
+25). The candidate is the branch `fix/s25-audit-findings` on top of `main` at
+`a596540`, with the version commit last. CI ran on the earlier branch head
+`c061d04` and passed; the candidate's own CI run follows the push.
+
+- Level 1 in the checkout of the candidate after `npm ci`: every command exited
+  with `0`.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    168 files, 4697 passed and 15 skipped, and no unhandled error.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack` listed 1018 files (tarball shasum
+    `d999bf3377f3a9852103b2523e371ae9f0f4590d`). A scan of the unpacked files
+    for private names, hosts and the maintainer's home path found none, and the
+    package holds no `docs/superpowers/` file.
+  - Doctor reported `packageVersion` `0.19.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+  - `git status --short` listed only the tarball that `npm pack` had just
+    written.
+- Native sandbox matrix with real `systemd-run` and bubblewrap: 48 of 48
+  passed, none skipped.
+- Podman-gated writer tests: 12 of 12 passed (lifecycle and boundary), among
+  them the two #257 tests against real rootless Podman.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The build digest was the same before and
+  after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install smoke reported `smoke_passed`
+  with version `0.19.1`. The global install resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3`.
+- In every Level 2 run the leak check passed and no process was left over. The
+  disposable prefix, the clone and the tarball were removed.
+
+Reviews, all on review snapshots by profiles of other model families than the
+authors: #258 by OpenAI (`NON_BLOCKING_ONLY`, both findings fixed); #257 by
+Zhipu GLM and xAI (`BLOCKING_FINDINGS` on nested repositories under ignored
+paths, then fixed in this pull request) and twice by OpenAI on the follow-up
+(`BLOCKING_FINDINGS` on reset's forced checkout and the recreation fallback,
+fixed in `7b3c5d9`; the re-review answered `NON_BLOCKING_ONLY`, fixed in
+`4994596`). The reviews were static; the controller ran the tests.
+
+Not established for `0.19.1`: a Level 3 cycle on the release candidate; the
+new refusal against a real writer of an installed release; the server host;
+macOS locally; and the published-release Level 2 and upgrades, which follow
+after publishing.
+
+### v0.19.0 post-release evidence
+
+Recorded on 2026-11-07 for the published release `0.19.0`, from runs on that
+day on the host of the pre-release acceptance.
+
+The annotated tag `v0.19.0` (tag object
+`f3fe9b97529f9534beedb4a9c9ce2b17ceda79f1`) points to
+`8a9ad6d2cfe69c17ebf23373ad25572857c203fb`, the package's `gitHead`. That commit
+is in `main`; the merge commit of PR #256, `a596540`, has the same tree. npm
+`latest` is `0.19.0`, published at 14:14 UTC on 2026-11-06. The pre-release
+record names a different tarball shasum because its candidate `eefa723`
+predates the commit that added the record, which the package ships.
+
+- A depth-1 clone of the tag: `npm ci`, both builds and the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` exited with `0`; 168 files,
+  4685 passed and 15 skipped, the counts of the pre-release run.
+- `npm pack` of the tag clone gives the published shasum
+  `41682c6462b18ae0e21dfb1f5b48b095522b2afa` with 1017 files.
+- The published package, installed into a fresh prefix: the install smoke
+  reported `smoke_passed` with version `0.19.0`; it resolves
+  `@earendil-works/pi-coding-agent` `1.5.0`, `undici` `8.12.3` and `minimatch`
+  `11.0.3`.
+- Level 2 from the tag clone and from the published package: 160 of 160 checks
+  with delivery off and 228 of 228 with `--events spool`, each, with the leak
+  and leftover-process checks passed. The prefixes were removed.
+
+Installations: the workstation still runs `0.18.0`; the upgrade of both
+installations to a 0.19 release has not happened yet. The native sandbox matrix
+and the Podman-gated tests were not repeated on the tag.
+
+Not established for `0.19.0`: a live coding start on a writer that is behind,
+which needs the installed release; a Level 3 cycle; the server host; macOS.
+
 ### v0.19.0 pre-release acceptance
 
 `v0.19.0` was accepted on 2026-11-06 from 13:20 to 13:26 UTC on its release

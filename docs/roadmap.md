@@ -224,6 +224,16 @@ mean they are implemented or that their gates passed.
   [Acceptance](acceptance.md#v0190-pre-release-acceptance)); publishing and the
   upgrade of both installations follow. Not yet established: a live coding start
   on a writer that is behind. Open: #144, #221.
+- 2026-11-07: [Sprint 25](sprints/2026-11-07-s25-audit-findings.md) fixes
+  three audit findings on 0.19.0 in one pull request (unreleased): collection
+  refuses nested repositories it cannot preserve
+  ([#257](https://github.com/plagor44-ux/pi-session-mcp/issues/257)), history
+  prune removes sessions of crashed servers
+  ([#258](https://github.com/plagor44-ux/pi-session-mcp/issues/258)), and the
+  persistence, installation and ADR status documentation matches the release
+  record ([#259](https://github.com/plagor44-ux/pi-session-mcp/issues/259)).
+  A nested repository under an ignored path now blocks every non-discard
+  cleanup as well. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

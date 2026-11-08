@@ -195,6 +195,14 @@ async function verdict(argv: readonly string[], io: HistoryCliIo): Promise<void>
   });
 }
 
+/**
+ * The single retention predicate for `prune`, shared by the dry-run count and the delete. A session
+ * is eligible when its recorded close, or the recorded end of the instance that left it open after
+ * a crash, lies before the cutoff. A session without either (live or indeterminate) never is.
+ */
+const PRUNE_ELIGIBLE = `FROM sessions s JOIN instances i ON i.id = s.instance_id
+  WHERE (s.closed_at IS NOT NULL OR i.ended_at IS NOT NULL) AND COALESCE(s.closed_at, i.ended_at) < ?`;
+
 async function prune(argv: readonly string[], io: HistoryCliIo): Promise<void> {
   const args = parse(argv, ["older-than"], ["apply"], 0);
   const match = /^(\d{1,5})d$/.exec(args.values.get("older-than") ?? "");
@@ -202,10 +210,10 @@ async function prune(argv: readonly string[], io: HistoryCliIo): Promise<void> {
   const cutoff = new Date((io.now?.() ?? new Date()).getTime() - Number(match[1]) * 86_400_000).toISOString();
   const apply = args.switches.has("apply");
   await withStore(io, !apply, (store) => {
-    const count = Number((store.db.prepare("SELECT count(*) AS n FROM sessions WHERE closed_at IS NOT NULL AND closed_at < ?").get(cutoff) as { n: number }).n);
+    const count = Number((store.db.prepare(`SELECT count(*) AS n ${PRUNE_ELIGIBLE}`).get(cutoff) as { n: number }).n);
     const noun = `${count} session${count === 1 ? "" : "s"}`;
-    if (!apply) { io.stdout(`${noun} closed before ${cutoff.slice(0, 10)} would be deleted; rerun with --apply\n`); return; }
-    store.transaction(() => { store.db.prepare("DELETE FROM sessions WHERE closed_at IS NOT NULL AND closed_at < ?").run(cutoff); });
+    if (!apply) { io.stdout(`${noun} ended before ${cutoff.slice(0, 10)} would be deleted; rerun with --apply\n`); return; }
+    store.transaction(() => { store.db.prepare(`DELETE FROM sessions WHERE id IN (SELECT s.id ${PRUNE_ELIGIBLE})`).run(cutoff); });
     store.db.exec("VACUUM");
     io.stdout(`${noun} deleted\n`);
   });

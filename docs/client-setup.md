@@ -18,7 +18,7 @@ installation with upgrade and removal, start with [Installation](installation.md
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 
-Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, persistence, resume support, remote access, or multi-user behavior.
+Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory; the only persistent store is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](../README.md#session-history)), which is off by default.
 
 ## Build
 

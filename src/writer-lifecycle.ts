@@ -333,8 +333,41 @@ ${INDEX_GIT} update-index -z --skip-worktree --stdin < /tmp/absent-paths
 ${INDEX_GIT} add -A`;
 }
 
+/**
+ * Detects nested work that collection cannot preserve (#257). `git add -A` records every non-ignored
+ * nested repository as a gitlink that holds only its HEAD, so (1) a gitlink that the staged index or the
+ * worktree adds or changes relative to the writer base, and (2) a worktree gitlink whose directory holds a
+ * populated repository (its own commits or uncommitted changes are invisible to the outer Git) both set
+ * `nested`. Removing a gitlink or replacing it by a file is ordinary exported work. With `core.quotePath`
+ * off, Git quotes only a path with a control character, a double quote or a backslash; such a gitlink is
+ * not tested on disk but counted as nested: fail closed rather than parse it. Ignored paths never become
+ * gitlinks and stay outside `nested`, as they stay outside collection. `repositories` is set when any `.git`
+ * entry exists below the top level, under ignored paths too: no export can preserve such a repository, and even
+ * reset's forced checkout deletes an ignored directory that a tracked file replaces, so every non-discard reset,
+ * recreate, finish and remove refuses while it exists (#257). A failing walk counts as found.
+ */
+function nestedScript(base: string): string {
+  return `nested=0
+for candidate in "$staged" "$tree"; do
+  ${BOUNDARY_GIT} diff-tree -r --raw --no-renames "${base}" "$candidate" > /tmp/nested-diff
+  while IFS= read -r line; do
+    case "$line" in :??????\\ 160000\\ *) nested=1;; esac
+  done < /tmp/nested-diff
+done
+${BOUNDARY_GIT} -c core.quotePath=false ls-tree -r "$tree" > /tmp/nested-links
+while IFS= read -r line; do
+  case "$line" in '160000 '*) ;; *) continue;; esac
+  path=\${line#*\t}
+  case "$path" in '"'*) nested=1; continue;; esac
+  if [ -e "$path/.git" ] || [ -L "$path/.git" ]; then nested=1; fi
+done < /tmp/nested-links
+repositories=0
+find . -path ./.git -prune -o -name .git -print > /tmp/nested-gits 2>/dev/null || repositories=1
+if [ -s /tmp/nested-gits ]; then repositories=1; fi`;
+}
+
 export async function inspectWork(ctx: WriterContext, name: string): Promise<{
-  baseline: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
+  baseline: boolean; nested?: boolean; repositories?: boolean; digest: string; head?: string; branches: readonly { name: string; commit: string }[]; dirty: boolean;
   stashes: readonly string[]; unknownRefs: number; indexTree: string; tree: string; headTree: string;
 }> {
   ctx = leasedContext(ctx);
@@ -342,15 +375,18 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
   const paths = writerPaths(ctx.home, name);
   await verifyCloneLayout(paths.clone);
-  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${worktreeIndexScript()}\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)'\nif stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then\n  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)\n  printf 'stash %s\\n' "$stash" $log\nfi\n${BOUNDARY_GIT} write-tree\nprintf '%s\\n' "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
+  const script = `set -eu\nexport GIT_CONFIG_NOSYSTEM=1\ncp .git/index /tmp/index\ncp .git/index /tmp/staged-index\nmkdir /tmp/objects\nexport GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/objects GIT_ALTERNATE_OBJECT_DIRECTORIES="$1/.git/objects"\nstaged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)\n${worktreeIndexScript()}\n${BOUNDARY_GIT} rev-parse --verify HEAD\n${BOUNDARY_GIT} for-each-ref --format='%(refname) %(objectname)'\nif stash=$(${BOUNDARY_GIT} rev-parse -q --verify refs/stash); then\n  log=$(${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash)\n  printf 'stash %s\\n' "$stash" $log\nfi\ntree=$(${BOUNDARY_GIT} write-tree)\n${nestedScript('$2')}\nif [ "$nested" = 1 ]; then printf '%s\\n' 'nested 1'; fi\nif [ "$repositories" = 1 ]; then printf '%s\\n' 'repositories 1'; fi\nprintf '%s\\n' "$tree" "$staged"\n${BOUNDARY_GIT} rev-parse 'HEAD^{tree}'\n${BOUNDARY_GIT} rev-parse "$2^{tree}"`;
   const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, script, [paths.clone, state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
   const lines = result.stdout.trim().split("\n");
   const hash = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
   const head = lines.shift(), baseTree = lines.pop(), headTree = lines.pop(), indexTree = lines.pop(), tree = lines.pop();
+  let nested = false, repositories = false;
   if (![head, baseTree, headTree, indexTree, tree].every((value) => value !== undefined && hash.test(value))) throw new LifecycleError("writer_inspect_failed");
   const refs: { name: string; commit: string }[] = [], stashes: string[] = [];
   for (const line of lines) {
+    if (line === "nested 1") { nested = true; continue; }
+    if (line === "repositories 1") { repositories = true; continue; }
     const [name, commit, extra] = line.split(" ");
     if (!commit || !hash.test(commit) || extra !== undefined) throw new LifecycleError("writer_inspect_failed");
     if (name === "stash") stashes.push(commit);
@@ -366,10 +402,10 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   const unknownRefs = (await missingObjects(ctx, others.map(({ commit }) => commit))).length;
   return {
     baseline: head === state.base.commit && branches.length === 1 && branches[0]!.name === state.base.ref && branches[0]!.commit === state.base.commit
-      && !refs.some(({ name }) => name === "refs/stash") && stashes.length === 0 && unknownRefs === 0 && tree === baseTree && indexTree === baseTree,
-    dirty: tree !== headTree || indexTree !== headTree, head: head!, branches, stashes, unknownRefs,
+      && !nested && !refs.some(({ name }) => name === "refs/stash") && stashes.length === 0 && unknownRefs === 0 && tree === baseTree && indexTree === baseTree,
+    nested, repositories, dirty: tree !== headTree || indexTree !== headTree, head: head!, branches, stashes, unknownRefs,
     indexTree: indexTree!, tree: tree!, headTree: headTree!,
-    digest: `sha256:${createHash("sha256").update("inspect-v2\n").update(result.stdout).digest("hex")}`,
+    digest: `sha256:${createHash("sha256").update("inspect-v3\n").update(result.stdout).digest("hex")}`,
   };
 }
 
@@ -393,10 +429,15 @@ async function writerBase(ctx: WriterContext, name: string, state: WriterState, 
   const heads = await git(ctx, ["bundle", "list-heads", join(writerPaths(ctx.home, name).bundles, "base.bundle")], true);
   return resolveBase(ctx, writerBaseSource(heads, state.base.ref));
 }
+/**
+ * Non-discard cleanup needs collected work, and no nested repository anywhere in the clone, ignored paths included:
+ * collection cannot export one, and reset, recreate and remove can each delete it.
+ */
 async function requireCollected(ctx: WriterContext, name: string, state: WriterState, discard: boolean): Promise<void> {
   if (discard) return;
   const work = await inspectWork(ctx, name);
-  if (!work.baseline && state.collected?.digest !== work.digest) throw new LifecycleError("writer_uncollected");
+  if (work.nested || (!work.baseline && state.collected?.digest !== work.digest)) throw new LifecycleError("writer_uncollected");
+  if (work.repositories) throw new LifecycleError("writer_nested_repository");
 }
 async function refreshPrivateFiles(ctx: WriterContext, name: string, state: WriterState): Promise<void> {
   const paths = writerPaths(ctx.home, name);
@@ -409,11 +450,11 @@ async function refreshPrivateFiles(ctx: WriterContext, name: string, state: Writ
 export type CollectOutcome = WriterOutcome & {
   refs: readonly string[];
   refused: number;
-  findings: readonly { code: "ref_name_refused" }[];
+  findings: readonly { code: "ref_name_refused" | "writer_nested_repository" }[];
 };
 export async function collectWriter(ctx: WriterContext, name: string): Promise<CollectOutcome> {
   ctx = leasedContext(ctx);
-  const refs: string[] = [], findings: { code: "ref_name_refused" }[] = [];
+  const refs: string[] = [], findings: { code: "ref_name_refused" | "writer_nested_repository" }[] = [];
   try {
     const paths = writerPaths(ctx.home, name);
     // Check redirects before inspecting or running any Git command on the clone.
@@ -453,6 +494,8 @@ export GIT_INDEX_FILE=/tmp/index GIT_OBJECT_DIRECTORY=/tmp/scratch/objects
 staged=$(GIT_INDEX_FILE=/tmp/staged-index ${BOUNDARY_GIT} write-tree)
 ${worktreeIndexScript()}
 tree=$(${BOUNDARY_GIT} write-tree)
+${nestedScript('$3')}
+if [ "$nested" = 1 ]; then printf '%s\\n' writer_nested_repository; exit 0; fi
 export GIT_AUTHOR_NAME=pi-writer GIT_AUTHOR_EMAIL=pi-writer@example.invalid
 export GIT_COMMITTER_NAME=pi-writer GIT_COMMITTER_EMAIL=pi-writer@example.invalid
 if [ "$staged" != "$(${BOUNDARY_GIT} rev-parse 'HEAD^{tree}')" ] && [ "$staged" != "$tree" ]; then
@@ -486,6 +529,10 @@ fi`;
       const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: true }, script, [paths.clone, state.base.ref, state.base.commit, shortBranch(state.base.ref)]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
       if (result.exitCode !== 0) throw new LifecycleError("writer_collect_failed");
       const messages = result.stdout.split("\n");
+      if (messages.includes("writer_nested_repository")) {
+        findings.push({ code: "writer_nested_repository" });
+        return { status: "failed", code: "writer_nested_repository", refs, refused: 1, findings };
+      }
       for (const message of messages) if (message === "ref_name_refused") findings.push({ code: "ref_name_refused" });
       if (!messages.includes("nothing_to_collect")) {
         await collectGit(ctx, ["bundle", "verify", bundle]);
@@ -506,6 +553,7 @@ fi`;
         return { status: "failed", code: "writer_collect_incomplete", refs, refused: findings.length, findings };
       }
       const work = await inspectWork(ctx, name);
+      if (work.nested) return { status: "failed", code: "writer_nested_repository", refs, refused: 1, findings: [{ code: "writer_nested_repository" }] };
       // Defence in depth (#193): whatever the boundary script exported or reported as nothing to collect,
       // every commit the clone's work refers to must exist as a commit object in the operator checkout
       // before a digest is recorded.
@@ -588,6 +636,7 @@ ${identityScript(4, 5)}`;
     const next = { ...state, base: { ref: `refs/heads/${base.short}`, commit: base.commit } };
     await refreshPrivateFiles(ctx, name, next);
     await writeWriterState(ctx.home, name, next);
+    // Without discard, requireCollected proved that no nested repository existed, so recreation loses none (#257).
     try {
       await verifyCloneLayout(paths.clone);
       if (!(await inspectWork(ctx, name)).baseline) throw new LifecycleError("writer_reset_failed");
@@ -614,7 +663,8 @@ export async function removeWriter(ctx: WriterContext, name: string, opts: { dis
     if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
     if (!opts.discard) {
       const work = await inspectWork(ctx, name);
-      if (!work.baseline && state.collected?.digest !== work.digest) throw new LifecycleError("writer_uncollected");
+      if (work.nested || (!work.baseline && state.collected?.digest !== work.digest)) throw new LifecycleError("writer_uncollected");
+      if (work.repositories) throw new LifecycleError("writer_nested_repository");
     }
     await removeWriterTree(paths.root);
     return { code: "writer_removed", status: "ok" };
