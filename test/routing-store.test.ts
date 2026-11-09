@@ -69,6 +69,14 @@ describe("routing store", () => {
     expect(store.db.prepare("SELECT count(*) AS n, min(id) AS first FROM routing_decisions").get()).toMatchObject({ n: 200, first: 6 });
   });
 
+  it("keeps assigned decisions out of the unassigned pool", async () => {
+    const store = await fresh(); const routing = createRoutingStore(store);
+    for (let i = 0; i < 5; i++) routing.recordDecision(decision(`a${i}`));
+    for (let i = 0; i < 205; i++) routing.recordDecision(decision(`n${i}`, { role: null }));
+    expect(store.db.prepare("SELECT count(*) AS n FROM routing_decisions WHERE tier IS NOT NULL AND role IS NOT NULL").get()).toMatchObject({ n: 5 });
+    expect(store.db.prepare("SELECT count(*) AS n FROM routing_decisions WHERE role IS NULL").get()).toMatchObject({ n: 200 });
+  });
+
   it("stores no workspace or task column", async () => {
     const store = await fresh();
     const names = store.db.prepare("PRAGMA table_info(routing_decisions)").all().map((row) => row.name);

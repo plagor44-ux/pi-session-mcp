@@ -11,7 +11,7 @@ const input = { defaultProfile: "z", profiles, workspaceMode: { mode: "host" as 
 it("uses the routing.json order when the store throws", async () => {
   const store = await openHistoryStore({ home: await temporaryRoot("routing-runtime-") });
   const diagnostic = vi.fn(); const runtime = createRoutingRuntime({ config, store, diagnostic, random: () => 0 }); store.close();
-  expect(runtime.route({ workspace: "repo", role: "code" }, input).alias).toBe("z"); expect(diagnostic).toHaveBeenCalledWith(expect.any(String));
+  expect(runtime.route({ workspace: "repo", role: "code" }, input).alias).toBe("z"); expect(diagnostic).toHaveBeenCalledWith("routing_store_unavailable");
 });
 it("does not explore without a store", () => {
   const runtime = createRoutingRuntime({ config, random: () => 0 });

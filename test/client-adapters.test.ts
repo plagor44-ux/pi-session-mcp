@@ -204,6 +204,7 @@ describe("client adapters", () => {
     ["missing routing", (({ routing: _routing, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
     ["invalid routing mode", { ...VERIFIED_CAPABILITIES, routing: { mode: "invalid" } }],
     ["unknown routing key", { ...VERIFIED_CAPABILITIES, routing: { mode: "off", path: "/x" } }],
+    ["manual routing without its tiers", { ...VERIFIED_CAPABILITIES, routing: { mode: "manual" } }],
     ["missing history", (({ history: _history, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
     ["non-boolean history", { ...VERIFIED_CAPABILITIES, history: { enabled: "yes" } }],
     ["unknown history key", { ...VERIFIED_CAPABILITIES, history: { enabled: true, path: "/x" } }],
