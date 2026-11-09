@@ -438,7 +438,7 @@ Rules:
   move it. Turning history off again stops recording but does not delete the
   file; delete old sessions with `pi-session-mcp-history prune`. Configuration,
   redaction and the CLI are described in
-  [Session history](../README.md#session-history), the stored data and its
+  [Session history](session-history.md), the stored data and its
   limits in the [threat model](threat-model.md).
 - Never put keys, tokens, credential objects, headers, base URLs or
   authentication paths into this file.
@@ -597,7 +597,7 @@ directory, where the client discovers it without further steps:
   profiles; additional controller skills of your own belong in the clients'
   native skill directories.
 
-The codes and the rules are in [Pi skills](skills.md#install-the-orchestration-skill-into-codex-and-claude-code)
+The codes and the rules are in [Pi skills](skills.md#install-the-controller-skills-into-codex-and-claude-code)
 and the [setup lifecycle design](client-setup-design.md#skill-installation).
 
 ### Wake the controller (Claude Code)

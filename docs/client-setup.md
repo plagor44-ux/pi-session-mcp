@@ -18,7 +18,7 @@ installation with upgrade and removal, start with [Installation](installation.md
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 
-Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory; the only persistent store is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](../README.md#session-history)), which is off by default.
+Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory; the only persistent store is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](session-history.md)), which is off by default.
 
 ## Build
 
@@ -381,6 +381,26 @@ claude mcp get pi-session-mcp
 Removal: `claude mcp remove pi-session-mcp` (add `-s <scope>` matching how it was added if it is not in the default scope).
 
 Claude Code enforces each tool's declared JSON Schema (`additionalProperties: false`) client-side. A legacy `profile` field, raw `provider`/`model`/`thinkingLevel`, or any other unlisted field cannot be constructed through Claude Code's normal tool-calling interface — those inputs never reach the server from this client, so the server-side rejection of unknown fields exists as defense in depth rather than as the sole line of defense for a Claude Code peer.
+
+## Run the server by hand
+
+```bash
+pi-session-mcp          # npm installation
+npm start               # release checkout
+```
+
+This starts the server on stdin and stdout. `PI_SESSION_MCP_CONFIG` must name the configuration file; the server never looks for one in its working directory. Do not type ordinary text into the process and do not redirect diagnostics to stdout: stdout carries MCP frames only.
+
+To explore the tools without a coding agent, use the pinned MCP Inspector:
+
+```bash
+npm run build
+npm run inspect
+```
+
+Listing tools and testing input validation needs no provider credentials. An accepted prompt needs existing local Pi authentication and an available provider and model.
+
+Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS keychain it also stores secrets there unencrypted; `MCP_INSPECTOR_SECRET_STORE=memory` keeps them in memory only.
 
 ## Expected flow and lifecycle deadlines
 
