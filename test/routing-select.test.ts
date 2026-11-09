@@ -135,6 +135,19 @@ describe("routing profile selection", () => {
     rejects(request({ role: "review", tier: "ultra", authorFamily: "openai" }), ctx, "routing_no_candidate");
     expect(routeStart(request({ role: "review", authorFamily: "openai" }), ctx).alias).toBe("other");
   });
+  it("explores only among candidates left after the family filter", () => {
+    const ctx = context();
+    ctx.profiles = new Map(ctx.profiles).set("third", profile("third", "read-only"));
+    ctx.config = { ...ctx.config, tiers: { ...ctx.config.tiers, medium: { ...ctx.config.tiers.medium, review: ["reader", "other", "third"] } }, families: new Map(ctx.config.families).set("third", "glm") };
+    ctx.exploration = { allowed: true, rate: 0.1, random: vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(0) };
+    expect(routeStart(request({ role: "review", authorFamily: "openai" }), ctx)).toMatchObject({ alias: "third", result: { exploration: true }, decision: { family: "glm", sameFamilyOverride: false } });
+  });
+  it("counts a duplicated alias once when exploring", () => {
+    const ctx = context();
+    ctx.config = { ...ctx.config, tiers: { ...ctx.config.tiers, medium: { ...ctx.config.tiers.medium, code: ["writer", "writer", "writer2"] } } };
+    ctx.exploration = { allowed: true, rate: 0.1, random: vi.fn().mockReturnValueOnce(0).mockReturnValueOnce(0) };
+    expect(routeStart(request({ role: "code" }), ctx)).toMatchObject({ alias: "writer2", result: { exploration: true } });
+  });
   it("keeps all resolved floors at or above every applicable floor", () => {
     const ctx = context();
     for (const roleFloor of TIERS) for (const riskFloor of TIERS) for (const workspaceFloor of TIERS) {
