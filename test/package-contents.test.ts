@@ -40,6 +40,7 @@ describe("package contents", () => {
   it("declares the history CLI and ships its ADR", async () => {
     const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { bin: Record<string, string> };
     expect(manifest.bin["pi-session-mcp-history"]).toBe("dist/history-main.js");
+    expect(manifest.bin["pi-session-mcp-routing"]).toBe("dist/routing-main.js");
     expect(await packedPaths()).toEqual(expect.arrayContaining(["docs/adr/0019-opt-in-session-history.md"]));
   }, 90_000);
 });
