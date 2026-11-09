@@ -1,5 +1,7 @@
 import { constants } from "node:fs";
-import { chmod, copyFile, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { chmod, copyFile, link, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { PricedModelCatalog } from "../model-catalog.js";
 import { routingConfigPath, writeRoutingDocument } from "../routing/config.js";
@@ -31,26 +33,35 @@ const documentBytes = (value: unknown): string => JSON.stringify(value, null, 2)
  * Keep the claim until all work finishes, even after the candidate is renamed live.
  */
 async function claimCandidate(path: string): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    let file;
-    try { file = await open(path, "wx", 0o600); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  const temporary = `${path}.tmp-${randomUUID()}`;
+  try {
+    const file = await open(temporary, "wx", 0o600);
+    try { await file.writeFile(JSON.stringify({ pid: process.pid })); }
+    finally { await file.close(); }
+    for (;;) {
+      try { await link(temporary, path); return true; }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
       let pid: unknown;
       try { pid = (JSON.parse(await readFile(path, "utf8")) as { pid?: unknown }).pid; }
       catch { return false; } // An incomplete or unreadable claim is not ours to remove.
       if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) return false;
       try { process.kill(pid, 0); return false; }
       catch (cause) { if ((cause as NodeJS.ErrnoException).code !== "ESRCH") return false; }
-      await rm(path);
-      continue;
+      const reclaimed = `${path}.reclaimed-${randomUUID()}`;
+      try { await rename(path, reclaimed); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+      try {
+        let movedPid: unknown;
+        try { movedPid = (JSON.parse(await readFile(reclaimed, "utf8")) as { pid?: unknown }).pid; }
+        catch { /* Restore unreadable content as well as a different owner. */ }
+        if (movedPid !== pid) {
+          try { await link(reclaimed, path); }
+          catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+          return false;
+        }
+      } finally { await rm(reclaimed, { force: true }); }
     }
-    try { await file.writeFile(JSON.stringify({ pid: process.pid })); }
-    catch (error) { await rm(path, { force: true }); throw error; }
-    finally { await file.close(); }
-    return true;
-  }
-  return false;
+  } finally { await rm(temporary, { force: true }); }
 }
 
 export async function runGuided(request: { apply: boolean; answers: GuidedAnswers }, deps: GuidedDependencies): Promise<SetupResult> {
@@ -73,9 +84,14 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
   let claimed = false;
   try {
     check();
+    for (const [alias, path] of [["config", deps.configPath], ["routing", routingConfigPath(deps.configPath)]] as const) {
+      try { if (!(await lstat(path)).isFile()) return stop("config_not_regular", "config", alias); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
     const existingConfig = await readOptional(deps.configPath);
     const existingRouting = await readOptional(routingConfigPath(deps.configPath));
     const plan = buildGuidedPlan(request.answers, { ...(existingConfig === undefined ? {} : { config: existingConfig }), ...(existingRouting === undefined ? {} : { routing: existingRouting }) });
+    plan.routingDocument = structuredClone(plan.routingDocument);
     const optional = await deps.optionalFeatures(); check();
     if (!optional.podman) add("prerequisites", "podman", "podman_unavailable");
     if (!optional.bubblewrap) add("prerequisites", "bubblewrap", "bubblewrap_unavailable");
@@ -87,11 +103,12 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
     }
     const catalog = await deps.catalog(); check();
     for (const profile of request.answers.profiles) {
-      if (!catalog.providers().some((provider) => provider.id === profile.provider && provider.authConfigured)) {
-        // No credential or arbitrary input is included in guidance or reports.
-        const providerId = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(profile.provider) ? profile.provider : "provider";
-        return stop("provider_login_required", "providers", providerId);
+      const provider = catalog.providers().find((entry) => entry.id === profile.provider);
+      if (!provider?.authConfigured) {
+        // Only catalog ids, never arbitrary answer values, may enter reports.
+        return stop("provider_login_required", "providers", provider?.id ?? "provider");
       }
+      if (plan.newProfiles.includes(profile.alias) && !provider.models.includes(profile.model)) return stop("model_unknown", "profiles", profile.alias);
     }
     if (!request.apply) {
       add("config", "installation", plan.configChanged || plan.routingChanged ? "configuration_planned" : "configuration_unchanged", plan.configChanged || plan.routingChanged ? "planned" : "unchanged");
@@ -125,13 +142,15 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
           for (const tier of Object.values(routing?.tiers ?? {})) for (const [role, aliases] of Object.entries(tier)) tier[role] = aliases.filter((value) => value !== alias);
           add("profiles", alias, "profile_dropped", "ok");
         }
+        plan.routingChanged = !isDeepStrictEqual(existingRouting, plan.routingDocument);
         plan.modeRequests = plan.modeRequests.map((mode) => mode.container?.profiles
           ? { ...mode, container: { ...mode.container, profiles: mode.container.profiles.filter((alias) => !failed.includes(alias)) } }
           : mode);
         const emptyContainer = plan.modeRequests.find((mode) => mode.mode === "container" && mode.container?.profiles?.length === 0);
         if (emptyContainer) return stop("container_profiles_empty", "modes", emptyContainer.alias);
         // Mutate only the owned candidate, never the live configuration during probes.
-        const updated = await open(candidate, "w", 0o600);
+        await rm(candidate, { force: true });
+        const updated = await open(candidate, "wx", 0o600);
         try { await updated.writeFile(documentBytes(plan.nextConfig)); } finally { await updated.close(); }
         check();
         if (!(await deps.doctor(candidate)).ok) { check(); return stop("doctor_failed", "candidate"); }
@@ -139,6 +158,10 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       }
     }
     // This is the first point at which the live files may change.
+    check();
+    const currentConfig = await readOptional(deps.configPath);
+    const currentRouting = await readOptional(routingConfigPath(deps.configPath));
+    if (!isDeepStrictEqual(existingConfig, currentConfig) || !isDeepStrictEqual(existingRouting, currentRouting)) return stop("config_changed_during_run", "config");
     check();
     if (plan.configChanged) {
       if (existingConfig !== undefined) {

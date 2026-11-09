@@ -20,9 +20,18 @@ import { collectGuidedAnswers, type Prompter } from "./guided/prompts.js";
 import { runGuided, type GuidedDependencies } from "./guided/run.js";
 
 /** Terminal interaction is stderr-only; never show a resolved path or credential. */
-function terminalPrompter(signal: AbortSignal): { prompter: Prompter; close(): void } {
-  const terminal = createInterface({ input: process.stdin, output: process.stderr });
-  const text = async (question: string, fallback = ""): Promise<string> => (await terminal.question(`${question}: `, { signal })).trim() || fallback;
+export function terminalPrompter(signal: AbortSignal, input: NodeJS.ReadableStream = process.stdin): { prompter: Prompter; close(): void } {
+  const terminal = createInterface({ input, output: process.stderr });
+  let closed = false;
+  terminal.once("close", () => { closed = true; });
+  const inputClosed = (): Error => Object.assign(new Error("input_closed"), { code: "input_closed" });
+  const text = async (question: string, fallback = ""): Promise<string> => {
+    if (closed) throw inputClosed();
+    let onClose: () => void = () => {};
+    const closing = new Promise<never>((_resolve, reject) => { onClose = () => reject(inputClosed()); terminal.once("close", onClose); });
+    try { return (await Promise.race([terminal.question(`${question}: `, { signal }), closing])).trim() || fallback; }
+    finally { terminal.off("close", onClose); }
+  };
   const prompter: Prompter = {
     text,
     confirm: async (question, fallback) => {
@@ -122,6 +131,8 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
     if (request.apply && report.exitCode === 0 && !json) process.stderr.write("Running Claude Code and Codex clients must reconnect (for example /mcp) to see the change.\n");
     return write(report);
   } catch (error) {
-    return fail(signal.aborted ? "operation_interrupted" : (error as { code?: unknown }).code === "answers_invalid" ? "answers_invalid" : "operation_failed", signal.aborted ? signal.reason === 143 ? 143 : 130 : 1);
+    const code = (error as { code?: unknown }).code;
+    const allowed = ["interview_declined", "provider_login_required", "no_read_only_profile", "answers_invalid", "input_closed"];
+    return fail(signal.aborted ? "operation_interrupted" : typeof code === "string" && allowed.includes(code) ? code : "operation_failed", signal.aborted ? signal.reason === 143 ? 143 : 130 : 1);
   } finally { terminal?.close(); }
 }

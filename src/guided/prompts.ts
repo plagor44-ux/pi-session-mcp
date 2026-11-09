@@ -38,10 +38,13 @@ export async function collectGuidedAnswers(prompter: Prompter, catalog: PricedMo
   for (const tier of TIERS) {
     const reviews = profiles.filter((p) => p.tier === tier && p.role === "review");
     const families = new Set(reviews.map((p) => p.family));
-    if (reviews.length && families.size < 2) await prompter.confirm(`${tier} has fewer than two families; review may need the same-family override. Continue?`, true).then((ok) => { if (!ok) throw new Error("operation_interrupted"); });
+    if (reviews.length && families.size < 2) await prompter.confirm(`${tier} has fewer than two families; review may need the same-family override. Continue?`, true).then((ok) => { if (!ok) throw Object.assign(new Error("interview_declined"), { code: "interview_declined" }); });
   }
   const defaults = [...new Set([...Object.entries(oldProfiles).filter(([, p]) => record(p).permissionProfile === "read-only").map(([alias]) => alias), ...profiles.filter((p) => p.role !== "code").map((p) => p.alias)])];
-  if (!defaults.length) throw Object.assign(new Error("answers_invalid"), { code: "answers_invalid" });
+  if (!defaults.length) {
+    const code = catalog.providers().some((provider) => provider.authConfigured) ? "no_read_only_profile" : "provider_login_required";
+    throw Object.assign(new Error(code), { code });
+  }
   const oldDefault = Object.entries(oldProfiles).find(([, p]) => record(p).default === true)?.[0];
   const defaultProfile = await prompter.choose("Default read-only profile", defaults, oldDefault ?? defaults[0]!);
   const workspaces: GuidedAnswers["workspaces"] = [];

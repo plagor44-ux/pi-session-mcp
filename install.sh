@@ -34,12 +34,12 @@ fi
 if [ -z "$INSTALLED" ]; then
   npm install -g "pi-session-mcp@$VERSION"
 fi
-if command -v pi-session-mcp-setup >/dev/null 2>&1; then
-  exec pi-session-mcp-setup --guided --apply "$@"
-fi
 PREFIX=$(npm prefix -g) || PREFIX=""
 if [ -n "$PREFIX" ] && [ -x "$PREFIX/bin/pi-session-mcp-setup" ]; then
   exec "$PREFIX/bin/pi-session-mcp-setup" --guided --apply "$@"
+fi
+if command -v pi-session-mcp-setup >/dev/null 2>&1; then
+  exec pi-session-mcp-setup --guided --apply "$@"
 fi
 echo "setup_not_found: add the npm global bin directory to PATH and run this script again" >&2
 exit 1

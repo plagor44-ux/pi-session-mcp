@@ -1,13 +1,17 @@
-import { chmod, mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile, rm, stat, symlink, readdir, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runGuided, type GuidedDependencies } from "../src/guided/run.js";
 import { parseGuidedAnswers } from "../src/guided/answers.js";
 import { result } from "../src/setup-result.js";
-import { runGuidedMain } from "../src/setup-guided-main.js";
+import { PassThrough } from "node:stream";
+import { buildGuidedPlan } from "../src/guided/plan.js";
+import { runGuidedMain, terminalPrompter } from "../src/setup-guided-main.js";
 import type { Prompter } from "../src/guided/prompts.js";
 
+vi.mock("node:fs/promises", { spy: true });
 const directories: string[] = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
 const answers = () => parseGuidedAnswers({ schemaVersion: 1, approveProbes: true, allowConfigChange: true,
@@ -33,6 +37,77 @@ async function fixture(live = false) {
 }
 const codes = (r: Awaited<ReturnType<typeof runGuided>>) => r.findings.map((f) => f.code);
 describe("guided run", () => {
+  it("rejects a pending terminal question when input ends", async () => {
+    const input = new PassThrough(); const terminal = terminalPrompter(new AbortController().signal, input);
+    try {
+      const pending = expect(terminal.prompter.text("Question")).rejects.toMatchObject({ code: "input_closed" });
+      input.end(); await pending;
+      await expect(terminal.prompter.text("Again")).rejects.toMatchObject({ code: "input_closed" });
+    } finally { terminal.close(); }
+  });
+  it.each(["input_closed", "interview_declined", "no_read_only_profile", "provider_login_required", "answers_invalid", "untrusted"]) ("reports only allowed interview codes: %s", async (code) => {
+    const f = await fixture();
+    const prompter: Prompter = { text: async () => "", confirm: async () => false, choose: async () => { throw Object.assign(new Error("private"), { code }); } };
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await runGuidedMain({ apply: true, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true })).toBe(1);
+      expect(JSON.parse(String(stdout.mock.calls[0]![0])).findings[0].code).toBe(code === "untrusted" ? "operation_failed" : code);
+    } finally { stdout.mockRestore(); stderr.mockRestore(); }
+  });
+  it.each([false, true])("rejects unknown models before writes (apply %s)", async (apply) => {
+    const f = await fixture(); const a = answers(); a.profiles[0]!.model = "unknown";
+    const r = await runGuided({ apply, answers: a }, f.deps);
+    expect(r.findings).toContainEqual({ target: { client: "guided", scope: "profiles", alias: "review" }, status: "failed", code: "model_unknown" });
+    expect(await readdir(f.directory)).toEqual([]); expect(f.deps.probe).not.toHaveBeenCalled();
+  });
+  it("does not report arbitrary provider-shaped input", async () => {
+    const f = await fixture(); const a = answers(); a.profiles[0]!.provider = "sk-live-secret";
+    const path = join(f.directory, "answers.json"); await writeFile(path, JSON.stringify(a));
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const r = await runGuided({ apply: false, answers: a }, f.deps);
+      expect(r.findings[0]!.target.alias).toBe("provider"); expect(JSON.stringify(r)).not.toContain("sk-live-secret");
+      expect(await runGuidedMain({ apply: false, answersPath: path }, true, new AbortController().signal, { dependencies: f.deps })).toBe(1);
+      expect(stdout.mock.calls.map((c) => String(c[0])).join("")).not.toContain("sk-live-secret");
+    } finally { stdout.mockRestore(); }
+  });
+  it.each(["config", "routing"]) ("refuses non-regular %s in dry run and apply", async (alias) => {
+    const f = await fixture(); const target = join(f.directory, "target"); await writeFile(target, "{}");
+    const path = alias === "config" ? f.configPath : join(f.directory, "routing.json");
+    await symlink(target, path);
+    for (const apply of [false, true]) {
+      const r = await runGuided({ apply, answers: answers() }, f.deps);
+      expect(r.findings).toContainEqual({ target: { client: "guided", scope: "config", alias }, status: "failed", code: "config_not_regular" });
+    }
+    expect(await readFile(target, "utf8")).toBe("{}");
+    await rm(path); await mkdir(path);
+    expect(codes(await runGuided({ apply: false, answers: answers() }, f.deps))).toContain("config_not_regular");
+  });
+  it.each(["config", "routing"]) ("detects concurrent %s changes before replacing live files", async (alias) => {
+    const f = await fixture(true); const before = await readFile(f.configPath, "utf8");
+    const path = alias === "config" ? f.configPath : join(f.directory, "routing.json");
+    const probe = f.deps.probe; f.deps.probe = async (profiles, candidate) => { await writeFile(path, '{"changed":true}'); return probe(profiles, candidate); };
+    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("config_changed_during_run");
+    expect(await readFile(f.configPath, "utf8")).toBe(alias === "config" ? '{"changed":true}' : before);
+    expect(await readdir(f.directory)).not.toContain("config.json.bak-guided-2026-11-09T12-00-00-000Z");
+  });
+  it("unlinks a probe-created candidate symlink before rewriting", async () => {
+    const f = await fixture(); const target = join(f.directory, "target"); await writeFile(target, "unchanged");
+    const probe = f.deps.probe;
+    f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); await rm(candidate); await symlink(target, candidate); return { ...r, findings: r.findings.filter((p) => p.profile === "review") }; };
+    expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+    expect(await readFile(target, "utf8")).toBe("unchanged");
+  });
+  it("removes a dropped alias from previously unchanged routing and backs it up", async () => {
+    const f = await fixture(); const a = answers(); a.profiles[1]!.alias = "x"; a.profiles[1]!.tier = null; a.profiles[1]!.family = null;
+    const routing = { mode: "manual", tiers: { medium: { review: ["review"], code: ["x"] } }, families: { review: "openai", x: "openai" } };
+    expect(buildGuidedPlan(a, { routing }).routingChanged).toBe(false);
+    const path = join(f.directory, "routing.json"); await writeFile(path, JSON.stringify(routing));
+    const probe = f.deps.probe; f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); return { ...r, findings: r.findings.filter((p) => p.profile !== "x") }; };
+    expect((await runGuided({ apply: true, answers: a }, f.deps)).exitCode).toBe(0);
+    const live = JSON.parse(await readFile(path, "utf8")); expect(live.tiers.medium.code).toEqual([]); expect(live.families).not.toHaveProperty("x");
+    expect(JSON.parse(await readFile(`${path}.bak-guided-2026-11-09T12-00-00-000Z`, "utf8"))).toEqual(routing);
+  });
   it("installs from answers and verifies", async () => {
     const f = await fixture(); const report = await runGuided({ apply: true, answers: answers() }, f.deps);
     expect(report.status).toBe("ok"); expect(f.calls).toEqual(["doctor", "probe", "changeMode", "apply", "doctor", "verify"]);
@@ -64,12 +139,13 @@ describe("guided run", () => {
   });
   it("removes a dropped profile from container modes", async () => {
     const f = await fixture(); const input = answers();
-    input.workspaces[0]!.mode = "container"; input.workspaces[0]!.container = { profiles: ["review", "code"] };
+    input.workspaces[0]!.mode = "container"; input.profiles.push({ ...input.profiles[1]!, alias: "writer" });
+    input.workspaces[0]!.container = { profiles: ["writer", "code"] };
     const probe = f.deps.probe;
     f.deps.probe = async (profiles, path) => { const report = await probe(profiles, path); return { ...report, findings: report.findings.filter((p) => p.profile !== "code") }; };
     const changeMode = vi.fn(f.deps.changeMode); f.deps.changeMode = changeMode;
     expect((await runGuided({ apply: true, answers: input }, f.deps)).exitCode).toBe(0);
-    expect(changeMode.mock.calls[0]![0].container!.profiles).toEqual(["review"]);
+    expect(changeMode.mock.calls[0]![0].container!.profiles).toEqual(["writer"]);
   });
   it("stops when a container workspace loses every profile", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath); const input = answers();
@@ -95,7 +171,7 @@ describe("guided run", () => {
   });
   it("stops with provider_login_required", async () => {
     const f = await fixture(true); f.deps.catalog = async () => ({ providers: () => [], outputPrice: () => undefined });
-    const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("provider_login_required"); expect(JSON.stringify(r)).toContain("openai"); expect(JSON.stringify(r)).not.toContain(f.directory);
+    const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider"); expect(JSON.stringify(r)).not.toContain(f.directory);
   });
   it("leaves no candidate after an abort", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath); const controller = new AbortController(); f.deps.signal = controller.signal;
@@ -107,6 +183,50 @@ describe("guided run", () => {
     const f = await fixture(); await writeFile(`${f.configPath}.guided-candidate`, JSON.stringify({ pid: 2147483647 }));
     await writeFile(`${f.configPath}.guided-candidate.json`, "incomplete stale config");
     expect((await runGuided({ apply: true, answers: answers() }, f.deps)).status).toBe("ok");
+    expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
+  });
+  it("publishes a complete private claim with a hard link", async () => {
+    const f = await fixture(); const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const link = vi.spyOn(fs, "link").mockImplementation(async (source, destination) => {
+      expect(JSON.parse(await readFile(source, "utf8"))).toEqual({ pid: process.pid });
+      expect((await stat(source)).mode & 0o777).toBe(0o600);
+      await actual.link(source, destination);
+    });
+    try {
+      expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+      expect(link).toHaveBeenCalledWith(expect.any(String), `${f.configPath}.guided-candidate`);
+      expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
+    } finally { link.mockRestore(); }
+  });
+  it("restores a live claim swapped in during dead-owner reclamation", async () => {
+    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`;
+    await writeFile(claim, JSON.stringify({ pid: 2147483647 }));
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async (source, destination) => {
+      await writeFile(claim, JSON.stringify({ pid: process.pid }));
+      await actual.rename(source, destination);
+    });
+    try {
+      expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
+      expect(JSON.parse(await readFile(claim, "utf8"))).toEqual({ pid: process.pid });
+      expect(await readdir(f.directory)).toEqual(["config.json.guided-candidate"]);
+    } finally { rename.mockRestore(); }
+  });
+  it("retries when another run takes the dead claim before rename", async () => {
+    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`;
+    await writeFile(claim, JSON.stringify({ pid: 2147483647 }));
+    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async () => {
+      await rm(claim); throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+    try {
+      expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+      expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
+    } finally { rename.mockRestore(); }
+  });
+  it("leaves unreadable claim contents alone and cleans temporary siblings", async () => {
+    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`; await writeFile(claim, "");
+    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
+    expect(await readFile(claim, "utf8")).toBe(""); expect(await readdir(f.directory)).toEqual(["config.json.guided-candidate"]);
   });
   it("refuses a live candidate", async () => {
     const f = await fixture(); await writeFile(`${f.configPath}.guided-candidate`, JSON.stringify({ pid: process.pid }));

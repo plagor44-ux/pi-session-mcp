@@ -26,6 +26,13 @@ function workspace(text: Prompter["text"], container = false): Partial<Prompter>
   };
 }
 describe("guided prompts", () => {
+  it("reports a declined family warning", async () => {
+    await expect(collect({ confirm: async () => false })).rejects.toMatchObject({ code: "interview_declined" });
+  });
+  it.each([false, true])("reports why no read-only candidates exist (authenticated %s)", async (authConfigured) => {
+    const prompter: Prompter = { text: async () => "", confirm: async () => true, choose: async (_q, options, fallback) => options.includes("skip" as never) ? "skip" as typeof fallback : fallback };
+    await expect(collectGuidedAnswers(prompter, { providers: () => [{ id: "openai", authConfigured, models: ["gpt-test"] }], outputPrice: () => 2 }, {})).rejects.toMatchObject({ code: authConfigured ? "no_read_only_profile" : "provider_login_required" });
+  });
   it("turns confirmed proposals into valid answers", async () => { const { answers } = await collect(); expect(parseGuidedAnswers(answers)).toEqual(answers); expect(answers.profiles.length).toBe(2); });
   it("accepts a proposal with one question", async () => {
     const { questions, answers } = await collect();

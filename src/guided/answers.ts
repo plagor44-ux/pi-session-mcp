@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isAbsolute } from "node:path";
 import { ALIAS_PATTERN } from "../execution-profile.js";
 import { FAMILY_PATTERN, ROLES, TIERS } from "../routing/config.js";
 
@@ -14,7 +15,7 @@ const schema = z.object({
   schemaVersion: z.literal(1), approveProbes: z.boolean(), allowConfigChange: z.boolean(),
   profiles: z.array(z.object({ alias, provider: z.string().trim().min(1).max(256), model: z.string().trim().min(1).max(256), role: z.enum(ROLES), thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]), tier: z.enum(TIERS).nullable(), family: z.string().regex(FAMILY_PATTERN).nullable() }).strict().refine((profile) => profile.tier === null || profile.family !== null)),
   defaultProfile: alias,
-  workspaces: z.array(z.object({ alias, path: z.string().min(1), mode: z.enum(["host", "container", "read-only"]), acceptHostWrites: z.boolean().optional(), container: container.optional() }).strict()),
+  workspaces: z.array(z.object({ alias, path: z.string().min(1).refine(isAbsolute), mode: z.enum(["host", "container", "read-only"]), acceptHostWrites: z.boolean().optional(), container: container.optional() }).strict()),
   history: z.object({ enabled: z.boolean() }).strict(), routing: z.object({ mode: z.enum(["off", "manual", "auto"]) }).strict(),
   clients: z.object({ claudeCode: z.boolean(), codex: z.boolean() }).strict(),
 }).strict().refine((answers) => {

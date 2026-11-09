@@ -20,9 +20,9 @@ the release, verify its published SHA-256, then run:
 sh install.sh
 ```
 
-Put the npm global bin directory on `PATH`. If setup is not on `PATH`, the
-script tries `$(npm prefix -g)/bin/pi-session-mcp-setup`; if it is not executable,
-the script reports `setup_not_found` after installation.
+The script prefers the executable `$(npm prefix -g)/bin/pi-session-mcp-setup`
+from the installed npm prefix, then falls back to `pi-session-mcp-setup` on
+`PATH`; if neither is executable, it reports `setup_not_found` after installation.
 
 The script installs its exact pinned npm version and runs guided setup with
 `--apply`. It supports a fresh install or a rerun at the same version, not an

@@ -7,6 +7,19 @@ const answers = () => parseGuidedAnswers({ schemaVersion: 1, approveProbes: true
 const code = (fn: () => unknown, expected: string) => { try { fn(); expect.fail("expected error"); } catch (e) { expect(e).toMatchObject({ code: expected }); } };
 
 describe("guided plan", () => {
+  it("rejects relative workspace paths in answers", () => {
+    const a = answers(); a.workspaces[0]!.path = "relative/repo";
+    code(() => parseGuidedAnswers(a), "answers_invalid");
+  });
+  it.each([{ profiles: undefined }, { profiles: [] }, { profiles: ["safe"] }, { profiles: ["missing"] }])("rejects invalid container profiles $profiles", ({ profiles }) => {
+    const a = answers(); a.workspaces[0]!.mode = "container";
+    if (profiles !== undefined) a.workspaces[0]!.container = { profiles };
+    code(() => buildGuidedPlan(a, {}), "container_profiles_invalid");
+  });
+  it("accepts existing coding container profiles", () => {
+    const a = answers(); a.workspaces[0]!.mode = "container"; a.workspaces[0]!.container = { profiles: ["writer"] };
+    expect(buildGuidedPlan(a, { config: { executionProfiles: { writer: { permissionProfile: "coding" } } } }).modeRequests[0]!.container!.profiles).toEqual(["writer"]);
+  });
   it("refuses unknown keys and does not echo their values", () => { try { parseGuidedAnswers({ apiKey: "SECRET" }); expect.fail(); } catch (e) { expect(e).toMatchObject({ code: "answers_invalid" }); expect(String(e)).not.toContain("SECRET"); } });
   it("builds a fresh configuration", () => { const plan = buildGuidedPlan(answers(), {}); expect(configSchema.safeParse(plan.nextConfig).success).toBe(true); expect(plan.newProfiles).toEqual(["safe"]); expect(plan.targets).toEqual([{ client: "codex", scope: "user", alias: "pi-session-mcp" }]); });
   it("preserves fields it does not know", () => { const first = buildGuidedPlan(answers(), {}); const config = { ...first.nextConfig, skillCatalog: { worker: "builtin:pi-session-review" }, history: { enabled: true, redactPaths: ["private/**"] }, executionProfiles: { safe: { ...(first.nextConfig.executionProfiles as Record<string, object>).safe, extensions: ["npm:example@1.0.0"], mcpServers: { sample: {} } } } }; const plan = buildGuidedPlan(answers(), { config, routing: first.routingDocument }); expect(plan.nextConfig).toEqual(config); });

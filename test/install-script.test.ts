@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const version = (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string }).version;
 const script = join(root, "install.sh");
 
-function run(installed = "", nodeVersion = "v22.19.0", args: string[] = [], setupLocation: "path" | "prefix" | "missing" = "path") {
+function run(installed = "", nodeVersion = "v22.19.0", args: string[] = [], setupLocation: "path" | "prefix" | "missing" | "both" = "path") {
   const dir = mkdtempSync(join(tmpdir(), "install-test-"));
   const log = join(dir, "log");
   const fake = (name: string, content: string) => {
@@ -19,6 +19,7 @@ function run(installed = "", nodeVersion = "v22.19.0", args: string[] = [], setu
   fake("npm", `printf 'npm' >> "$LOG"; printf ' <%s>' "$@" >> "$LOG"; printf '\\n' >> "$LOG"\nif [ "$1" = ls ]; then printf '%s' "$NPM_JSON"; [ -n "$INSTALLED" ]; elif [ "$1" = prefix ] && [ "$2" = -g ]; then printf '%s\\n' "$PREFIX"; fi`);
   mkdirSync(join(dir, "prefix", "bin"), { recursive: true });
   if (setupLocation !== "missing") fake(setupLocation === "path" ? "pi-session-mcp-setup" : "prefix/bin/pi-session-mcp-setup", `printf 'setup' >> "$LOG"; printf ' <%s>' "$@" >> "$LOG"; printf '\\n' >> "$LOG"`);
+  if (setupLocation === "both") fake("pi-session-mcp-setup", `printf 'wrong-setup' >> "$LOG"`);
   try {
     const result = spawnSync("sh", [script, ...args], { encoding: "utf8", env: { ...process.env, PATH: `${dir}:/usr/bin:/bin`, PREFIX: join(dir, "prefix"), LOG: log, INSTALLED: installed, NODE_VERSION: nodeVersion, NPM_JSON: JSON.stringify({ dependencies: installed ? { "pi-session-mcp": { version: installed } } : {} }) } });
     let calls = ""; try { calls = readFileSync(log, "utf8"); } catch { /* no calls */ }
@@ -26,6 +27,7 @@ function run(installed = "", nodeVersion = "v22.19.0", args: string[] = [], setu
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
+it("prefers the installed prefix binary over PATH", () => { const r = run(version, "v22.19.0", [], "both"); expect(r.status).toBe(0); expect(r.calls).toContain("setup <--guided> <--apply>"); expect(r.calls).not.toContain("wrong-setup"); });
 it("pins the package version", () => { expect(readFileSync(script, "utf8")).toContain(`VERSION="${version}"`); });
 it("installs that exact version, then runs setup", () => { const r = run(); expect(r.status).toBe(0); expect(r.calls).toContain(`npm <install> <-g> <pi-session-mcp@${version}>`); expect(r.calls).toContain("setup <--guided> <--apply>"); });
 it("skips npm install at the same version", () => { const r = run(version); expect(r.status).toBe(0); expect(r.calls).not.toContain("<install>"); expect(r.calls).toContain("setup"); });

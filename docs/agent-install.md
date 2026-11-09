@@ -11,6 +11,14 @@ login themselves, using the package's Pi executable:
 
 ## Stop and ask the owner
 
+- `config_not_regular`: no live file changed; ask the owner to supply regular configuration files.
+- `config_changed_during_run`: setup changed no live file; ask the owner to review the concurrent changes.
+- `model_unknown`: no live file changed; ask the owner to choose a model from the provider's catalog.
+- `container_profiles_invalid`: no live file changed; ask the owner to select non-empty coding profiles.
+- `input_closed`: no live file changed; ask the owner to restart the interview with input available.
+- `interview_declined`: no live file changed; ask the owner to review the family warning before retrying.
+- `no_read_only_profile`: no live file changed; ask the owner to select a read-only profile.
+
 - **Missing provider login:** stop on `provider_login_required`; ask the owner
   to log in using the command above, then re-check. Do not handle credentials.
 - **Existing configuration:** show the intended merge and ask before approving
