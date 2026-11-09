@@ -52,6 +52,24 @@ describe("model catalog report", () => {
 });
 
 describe("createModelCatalog", () => {
+  it("reads output prices and leaves providers() unchanged", async () => {
+    const catalog = await createModelCatalog(async () => ({
+      getProviders: () => [{ id: "p" }],
+      getModels: () => [{ id: "m", cost: { output: 2.1 } }],
+      checkAuth: async () => true,
+    }));
+    expect(catalog.outputPrice("p", "m")).toBe(2.1);
+    expect(catalog.outputPrice("p", "missing")).toBeUndefined();
+    expect(Object.keys(catalog.providers()[0]!)).toEqual(["id", "authConfigured", "models"]);
+  });
+
+  it("treats a non-numeric price as unknown", async () => {
+    const catalog = await createModelCatalog(async () => ({
+      getProviders: () => [{ id: "p" }], getModels: () => [{ id: "m", cost: { output: "2.1" } }],
+      checkAuth: async () => true,
+    }));
+    expect(catalog.outputPrice("p", "m")).toBeUndefined();
+  });
   const fakeRuntime = (checkAuth: CatalogRuntime["checkAuth"]): CatalogRuntime => ({
     getProviders: () => [{ id: "provider-c" }, { id: "provider-a" }, { id: "provider-b" }, { id: "provider-d" }],
     getModels: (providerId) => (providerId === "provider-a" ? [{ id: "m-2" }, { id: "m-1" }] : []),
