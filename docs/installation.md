@@ -20,6 +20,10 @@ the release, verify its published SHA-256, then run:
 sh install.sh
 ```
 
+Put the npm global bin directory on `PATH`. If setup is not on `PATH`, the
+script tries `$(npm prefix -g)/bin/pi-session-mcp-setup`; if it is not executable,
+the script reports `setup_not_found` after installation.
+
 The script installs its exact pinned npm version and runs guided setup with
 `--apply`. It supports a fresh install or a rerun at the same version, not an
 upgrade: a different installed version reports `upgrade_required`; follow
@@ -36,12 +40,63 @@ to setup or an agent:
 "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"
 ```
 
+The interactive interview proceeds in this order:
+
+1. Show authenticated and optional providers and the separate login command.
+   When none is authenticated, offer to re-check login.
+2. For each proposed profile, accept, change or skip it. Warn when a tier with
+   review profiles has fewer than two families.
+3. Choose the default read-only profile and repository workspaces and modes.
+4. Choose history, routing mode and client registrations.
+5. Approve probes for new profiles, then approve changes to an existing
+   configuration when applicable.
+
+When apply replaces existing files, it leaves `<config>.bak-guided-<timestamp>`
+and `routing.json.bak-guided-<timestamp>` beside their live files, mode `0600`.
+The owner may delete these backups after a successful run.
+
 Guided setup merges existing configuration only with approval, checks a
 candidate, probes new profiles only with approval (one provider turn each),
 then provisions and verifies selected clients. It does not replace divergent
 registrations. History is optional and stores redacted session content locally;
 `auto` routing requires it. Reconnect running clients after changes. The manual
 path below remains available.
+
+### Operate routing
+
+`routing.json` sits beside the configuration. Its fields are:
+
+- `mode`: `off`, `manual` or `auto`; without the file routing is `off`.
+- `tiers`: profile lists by tier and role, default empty.
+- `families`: profile-to-family mapping, default empty.
+- `floors`: defaults `code: medium`, `review: medium`, `explore: low`,
+  `riskHigh: hightech`, and an empty `workspaces` map.
+- `learning`: defaults `minSamples: 8`, `margin: 0.1`,
+  `explorationRate: 0.1` and `explorationBudgetUsd: 5`.
+
+Use `pi-session-mcp-routing` with `status [--json]`, `mode <off|manual|auto>`,
+`proposals`, `apply <id>`, `rollback <tier> <role>`,
+`unfreeze <tier> <role>` or `refresh`. Reconnect clients after a mode change.
+Rollback restores the earlier order and freezes the cell; apply refuses a
+reorder with `routing_cell_frozen` until unfreeze.
+
+Learning compares Wilson lower bounds, with the default minimum of 8 samples
+and margin 0.1, and makes at most one swap per cell per refresh. In auto mode,
+exploration defaults to 10%, with a 5 USD budget over 7 days, fewer than 3
+pending decisions, known costs and no high-risk exploration. Three failed
+sessions among the last 10 can suspend a profile for 24 hours, never leaving a
+cell without a candidate; manual mode proposes the suspension instead.
+
+Routing command failures:
+
+- `routing_not_configured`: mode change needs a routing file.
+- `routing_history_required`: auto mode needs enabled history.
+- `history_unavailable`: the operation needs available history.
+- `routing_proposal_unavailable`: the proposal is missing or invalid.
+- `routing_version_unavailable`: no usable earlier order exists.
+- `routing_cell_frozen`: unfreeze the cell before applying a reorder.
+- `routing_config_invalid`: the routing file is invalid.
+- `routing_unavailable`: another routing operation failed.
 
 ## What gets installed
 

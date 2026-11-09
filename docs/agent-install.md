@@ -20,6 +20,10 @@ login themselves, using the package's Pi executable:
   [upgrade procedure](installation.md#upgrade), not the installer.
 - **Probe spending:** ask before approving provider turns. Apply probes each new
   profile once with a fixed prompt; a dry run does not spend.
+- **Empty container profiles:** on `container_profiles_empty`, no live file
+  changed; ask the owner which profiles the container workspace should use.
+- **Setup not found:** on `setup_not_found`, ask the owner to add the npm global
+  bin directory to `PATH` and rerun the script.
 - **Host writes:** explain that host mode permits writes outside an OS sandbox;
   only the owner may explicitly approve `acceptHostWrites`.
 
