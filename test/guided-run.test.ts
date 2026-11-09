@@ -71,6 +71,15 @@ describe("guided run", () => {
       expect(stdout.mock.calls.map((c) => String(c[0])).join("")).not.toContain("sk-live-secret");
     } finally { stdout.mockRestore(); }
   });
+  it("does not report an unsafe catalog provider id", async () => {
+    const f = await fixture(); const a = answers(); const id = "unsafe\nprovider";
+    a.profiles[0]!.provider = id;
+    f.deps.catalog = async () => ({ providers: () => [{ id, authConfigured: false, models: [] }], outputPrice: () => undefined });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider");
+    expect(JSON.stringify(r)).not.toContain(JSON.stringify(id).slice(1, -1));
+    expect(await readdir(f.directory)).toEqual([]);
+  });
   it.each(["config", "routing"]) ("refuses non-regular %s in dry run and apply", async (alias) => {
     const f = await fixture(); const target = join(f.directory, "target"); await writeFile(target, "{}");
     const path = alias === "config" ? f.configPath : join(f.directory, "routing.json");
@@ -137,6 +146,22 @@ describe("guided run", () => {
     expect(JSON.parse(await readFile(f.configPath, "utf8")).executionProfiles).not.toHaveProperty("code");
     expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual([]);
   });
+  it("leaves live bytes untouched with no backup when every new profile is dropped", async () => {
+    const f = await fixture(); const a = answers();
+    a.routing.mode = "off";
+    for (const profile of a.profiles) { profile.tier = null; profile.family = null; }
+    const baseline = { ...a, profiles: [a.profiles[0]!] };
+    const config = buildGuidedPlan(baseline, {}).nextConfig;
+    const before = JSON.stringify(config, null, 4) + "\n\n";
+    await writeFile(f.configPath, before);
+    expect(buildGuidedPlan(a, { config }).newProfiles).toEqual(["code"]);
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "code", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r.exitCode).toBe(0); expect(codes(r)).toContain("profile_dropped");
+    expect(codes(r)).toContain("configuration_unchanged"); expect(codes(r)).not.toContain("configuration_installed");
+    expect(await readFile(f.configPath, "utf8")).toBe(before);
+    expect(await readdir(f.directory)).toEqual(["config.json"]);
+  });
   it("removes a dropped profile from container modes", async () => {
     const f = await fixture(); const input = answers();
     input.workspaces[0]!.mode = "container"; input.profiles.push({ ...input.profiles[1]!, alias: "writer" });
@@ -177,61 +202,89 @@ describe("guided run", () => {
     const f = await fixture(true); const before = await readFile(f.configPath); const controller = new AbortController(); f.deps.signal = controller.signal;
     f.deps.probe = async () => { controller.abort(130); throw new Error("secret"); };
     const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(r.exitCode).toBe(130); expect(await readFile(f.configPath)).toEqual(before);
-    await expect(stat(`${f.configPath}.guided-candidate`)).rejects.toMatchObject({ code: "ENOENT" }); await expect(stat(`${f.configPath}.guided-candidate.json`)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readdir(f.directory)).toEqual(["config.json"]);
   });
-  it("replaces a stale candidate", async () => {
-    const f = await fixture(); await writeFile(`${f.configPath}.guided-candidate`, JSON.stringify({ pid: 2147483647 }));
+  it("removes a dead owner's claim and replaces a stale candidate", async () => {
+    const f = await fixture(); await writeFile(`${f.configPath}.guided-claim-dead`, JSON.stringify({ pid: 2147483647 }));
     await writeFile(`${f.configPath}.guided-candidate.json`, "incomplete stale config");
     expect((await runGuided({ apply: true, answers: answers() }, f.deps)).status).toBe("ok");
-    expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
+    expect(JSON.parse(await readFile(f.configPath, "utf8")).executionProfiles).toHaveProperty("review");
+    expect(await readdir(f.directory)).toEqual(["config.json", "routing.json"]);
   });
-  it("publishes a complete private claim with a hard link", async () => {
+  it("publishes a complete private immutable claim by rename", async () => {
     const f = await fixture(); const actual = await vi.importActual<typeof fs>("node:fs/promises");
-    const link = vi.spyOn(fs, "link").mockImplementation(async (source, destination) => {
+    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async (source, destination) => {
+      expect(String(source)).toMatch(/config\.json\.guided-tmp-/);
+      expect(String(destination)).toMatch(/config\.json\.guided-claim-/);
       expect(JSON.parse(await readFile(source, "utf8"))).toEqual({ pid: process.pid });
       expect((await stat(source)).mode & 0o777).toBe(0o600);
-      await actual.link(source, destination);
-    });
-    try {
-      expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
-      expect(link).toHaveBeenCalledWith(expect.any(String), `${f.configPath}.guided-candidate`);
-      expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
-    } finally { link.mockRestore(); }
-  });
-  it("restores a live claim swapped in during dead-owner reclamation", async () => {
-    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`;
-    await writeFile(claim, JSON.stringify({ pid: 2147483647 }));
-    const actual = await vi.importActual<typeof fs>("node:fs/promises");
-    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async (source, destination) => {
-      await writeFile(claim, JSON.stringify({ pid: process.pid }));
       await actual.rename(source, destination);
     });
     try {
-      expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
-      expect(JSON.parse(await readFile(claim, "utf8"))).toEqual({ pid: process.pid });
-      expect(await readdir(f.directory)).toEqual(["config.json.guided-candidate"]);
+      expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+      expect(rename).toHaveBeenCalled();
+      expect(await readdir(f.directory)).toEqual(["config.json", "routing.json"]);
     } finally { rename.mockRestore(); }
   });
-  it("retries when another run takes the dead claim before rename", async () => {
-    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`;
-    await writeFile(claim, JSON.stringify({ pid: 2147483647 }));
-    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async () => {
-      await rm(claim); throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  it("backs off when another live claim appears after publishing, removing only its own claim", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath);
+    const claim = `${f.configPath}.guided-claim-other`; const bytes = `{ "pid": ${process.pid} }\n`;
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const rename = vi.spyOn(fs, "rename").mockImplementationOnce(async (source, destination) => {
+      await actual.rename(source, destination);
+      await writeFile(claim, bytes);
+    });
+    try {
+      expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
+      expect(await readFile(claim, "utf8")).toBe(bytes);
+      expect(await readFile(f.configPath)).toEqual(before);
+      expect(f.deps.doctor).not.toHaveBeenCalled();
+      expect(await readdir(f.directory)).toEqual(["config.json", "config.json.guided-claim-other"]);
+    } finally { rename.mockRestore(); }
+  });
+  it("does not block on a claim that disappears between listing and reading", async () => {
+    const f = await fixture(); const claim = `${f.configPath}.guided-claim-gone`;
+    await writeFile(claim, JSON.stringify({ pid: process.pid }));
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    const list = vi.spyOn(fs, "readdir").mockImplementationOnce(async (...args: Parameters<typeof fs.readdir>) => {
+      const entries = await actual.readdir(...args);
+      await rm(claim);
+      return entries;
     });
     try {
       expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
-      expect((await readdir(f.directory)).filter((name) => name.includes("guided-candidate"))).toEqual([]);
+      expect(await readdir(f.directory)).toEqual(["config.json", "routing.json"]);
+    } finally { list.mockRestore(); }
+  });
+  it.each(["", "invalid", "null", '{"pid":0}', '{"pid":1.5}', '{"pid":9007199254740992}'])("leaves invalid foreign claim contents alone: %s", async (bytes) => {
+    const f = await fixture(); const claim = `${f.configPath}.guided-claim-invalid`; await writeFile(claim, bytes);
+    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
+    expect(await readFile(claim, "utf8")).toBe(bytes);
+    expect(await readdir(f.directory)).toEqual(["config.json.guided-claim-invalid"]);
+  });
+  it("refuses a foreign live claim without changing live files or the claim", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath);
+    const claim = `${f.configPath}.guided-claim-live`; const bytes = `{ "pid": ${process.pid} }\n`;
+    await writeFile(claim, bytes);
+    const candidate = `${f.configPath}.guided-candidate.json`; await writeFile(candidate, "stale candidate");
+    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
+    expect(await readFile(claim, "utf8")).toBe(bytes); expect(await readFile(f.configPath)).toEqual(before);
+    expect(await readFile(candidate, "utf8")).toBe("stale candidate");
+    expect(await readdir(f.directory)).toEqual(["config.json", "config.json.guided-candidate.json", "config.json.guided-claim-live"]);
+  });
+  it("cleans the temporary file when claim publication fails", async () => {
+    const f = await fixture();
+    const rename = vi.spyOn(fs, "rename").mockRejectedValueOnce(Object.assign(new Error("denied"), { code: "EACCES" }));
+    try {
+      expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("operation_failed");
+      expect(await readdir(f.directory)).toEqual([]);
     } finally { rename.mockRestore(); }
   });
-  it("leaves unreadable claim contents alone and cleans temporary siblings", async () => {
-    const f = await fixture(); const claim = `${f.configPath}.guided-candidate`; await writeFile(claim, "");
-    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
-    expect(await readFile(claim, "utf8")).toBe(""); expect(await readdir(f.directory)).toEqual(["config.json.guided-candidate"]);
-  });
-  it("refuses a live candidate", async () => {
-    const f = await fixture(); await writeFile(`${f.configPath}.guided-candidate`, JSON.stringify({ pid: process.pid }));
-    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("guided_in_progress");
-    expect(JSON.parse(await readFile(`${f.configPath}.guided-candidate`, "utf8")).pid).toBe(process.pid);
+  it("ignores claim prefixes for different configuration file names", async () => {
+    const f = await fixture(); const siblings = ["config.json-other.guided-claim-x", "other.json.guided-claim-x"];
+    for (const name of siblings) await writeFile(join(f.directory, name), JSON.stringify({ pid: process.pid }));
+    expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+    expect(await readdir(f.directory)).toEqual(["config.json", ...siblings, "routing.json"].sort());
   });
   it("keeps live bytes when candidate Doctor refuses", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath); f.deps.doctor = async () => ({ ok: false });

@@ -1,9 +1,9 @@
 import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { chmod, copyFile, link, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname } from "node:path";
-import type { PricedModelCatalog } from "../model-catalog.js";
+import { chmod, copyFile, lstat, mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
+import { CATALOG_ID_PATTERN, type PricedModelCatalog } from "../model-catalog.js";
 import { routingConfigPath, writeRoutingDocument } from "../routing/config.js";
 import type { ModeRequest } from "../setup-modes.js";
 import type { ProbeReport } from "../setup-probe-result.js";
@@ -29,39 +29,44 @@ async function readOptional(path: string): Promise<unknown | undefined> {
 }
 const documentBytes = (value: unknown): string => JSON.stringify(value, null, 2) + "\n";
 
-/** The exclusive claim records the owner; its sibling is a plain, Doctor-readable config.
- * Keep the claim until all work finishes, even after the candidate is renamed live.
- */
-async function claimCandidate(path: string): Promise<boolean> {
-  const temporary = `${path}.tmp-${randomUUID()}`;
+/** Keep our immutable claim until all work finishes, even after the candidate is renamed live. */
+async function claimCandidate(configPath: string): Promise<string | undefined> {
+  const claim = `${configPath}.guided-claim-${randomUUID()}`;
+  const temporary = `${configPath}.guided-tmp-${randomUUID()}`;
+  let acquired = false;
   try {
     const file = await open(temporary, "wx", 0o600);
     try { await file.writeFile(JSON.stringify({ pid: process.pid })); }
     finally { await file.close(); }
-    for (;;) {
-      try { await link(temporary, path); return true; }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
+    await rename(temporary, claim);
+    // Publish before listing: if one run lists before another publishes, the later
+    // run sees the earlier claim. Both cannot succeed (both may safely back off).
+    let held = false;
+    const directory = dirname(configPath);
+    const prefix = `${basename(configPath)}.guided-claim-`;
+    for (const entry of await readdir(directory)) {
+      const other = join(directory, entry);
+      if (!entry.startsWith(prefix) || entry === basename(claim)) continue;
       let pid: unknown;
-      try { pid = (JSON.parse(await readFile(path, "utf8")) as { pid?: unknown }).pid; }
-      catch { return false; } // An incomplete or unreadable claim is not ours to remove.
-      if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) return false;
-      try { process.kill(pid, 0); return false; }
-      catch (cause) { if ((cause as NodeJS.ErrnoException).code !== "ESRCH") return false; }
-      const reclaimed = `${path}.reclaimed-${randomUUID()}`;
-      try { await rename(path, reclaimed); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
-      try {
-        let movedPid: unknown;
-        try { movedPid = (JSON.parse(await readFile(reclaimed, "utf8")) as { pid?: unknown }).pid; }
-        catch { /* Restore unreadable content as well as a different owner. */ }
-        if (movedPid !== pid) {
-          try { await link(reclaimed, path); }
-          catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-          return false;
-        }
-      } finally { await rm(reclaimed, { force: true }); }
+      try { pid = (JSON.parse(await readFile(other, "utf8")) as { pid?: unknown }).pid; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") held = true;
+        continue;
+      }
+      if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 0) { held = true; continue; }
+      try { process.kill(pid, 0); held = true; }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ESRCH") await rm(other, { force: true });
+        else held = true;
+      }
     }
-  } finally { await rm(temporary, { force: true }); }
+    if (held) return undefined;
+    acquired = true;
+    return claim;
+  } finally {
+    try { await rm(temporary, { force: true }); }
+    finally { if (!acquired) await rm(claim, { force: true }); }
+  }
 }
 
 export async function runGuided(request: { apply: boolean; answers: GuidedAnswers }, deps: GuidedDependencies): Promise<SetupResult> {
@@ -79,9 +84,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
     for (const finding of report.findings) add(scope, alias, finding.code, scope === "verification" && finding.status === "ok" ? "unchanged" : finding.status);
     return report.exitCode === 0 && report.status !== "failed";
   };
-  const claim = `${deps.configPath}.guided-candidate`;
-  const candidate = `${claim}.json`;
-  let claimed = false;
+  const candidate = `${deps.configPath}.guided-candidate.json`;
+  let claim: string | undefined;
   try {
     check();
     for (const [alias, path] of [["config", deps.configPath], ["routing", routingConfigPath(deps.configPath)]] as const) {
@@ -106,7 +110,7 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       const provider = catalog.providers().find((entry) => entry.id === profile.provider);
       if (!provider?.authConfigured) {
         // Only catalog ids, never arbitrary answer values, may enter reports.
-        return stop("provider_login_required", "providers", provider?.id ?? "provider");
+        return stop("provider_login_required", "providers", provider && CATALOG_ID_PATTERN.test(provider.id) ? provider.id : "provider");
       }
       if (plan.newProfiles.includes(profile.alias) && !provider.models.includes(profile.model)) return stop("model_unknown", "profiles", profile.alias);
     }
@@ -118,8 +122,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       return result(operation, findings, "planned");
     }
     await mkdir(dirname(deps.configPath), { recursive: true, mode: 0o700 }); check();
-    claimed = await claimCandidate(claim);
-    if (!claimed) return stop("guided_in_progress");
+    claim = await claimCandidate(deps.configPath);
+    if (!claim) return stop("guided_in_progress");
     check();
     // A stale owner's config is removed only after the exclusive claim is ours.
     await rm(candidate, { force: true });
@@ -142,6 +146,7 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
           for (const tier of Object.values(routing?.tiers ?? {})) for (const [role, aliases] of Object.entries(tier)) tier[role] = aliases.filter((value) => value !== alias);
           add("profiles", alias, "profile_dropped", "ok");
         }
+        plan.configChanged = !isDeepStrictEqual(existingConfig, plan.nextConfig);
         plan.routingChanged = !isDeepStrictEqual(existingRouting, plan.routingDocument);
         plan.modeRequests = plan.modeRequests.map((mode) => mode.container?.profiles
           ? { ...mode, container: { ...mode.container, profiles: mode.container.profiles.filter((alias) => !failed.includes(alias)) } }
@@ -205,7 +210,7 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
   } catch (error) {
     return stop(deps.signal?.aborted ? "operation_interrupted" : error instanceof GuidedPlanError ? error.code : "operation_failed");
   } finally {
-    if (claimed) {
+    if (claim) {
       try { await rm(candidate, { force: true }); }
       finally { await rm(claim, { force: true }); }
     }
