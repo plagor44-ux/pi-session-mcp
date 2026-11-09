@@ -28,6 +28,7 @@
     "pi-session-mcp-doctor": "scripts/doctor.mjs"
   },
   "files": [
+    "install.sh",
     "dist/",
     ".pi-session-mcp-cli/",
     "scripts/doctor.mjs",

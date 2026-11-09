@@ -48,6 +48,12 @@ otherwise decide and state the decision in the report. Select only worker
 skills for a profile; the controller skills are never catalog entries, and
 Doctor refuses them with `skill_controller_selected`.
 
+Inspect adjacent `routing.json` as well: tier cells reference profile aliases
+and families. Preserve unrelated assignments; update affected routing entries
+when renaming or retiring a profile, and reconnect clients after changes. An
+unknown alias makes routing inactive. Use `pi-session-mcp-routing status` to
+inspect routing and see [ADR 0020](../../docs/adr/0020-tier-routing.md).
+
 Before deleting a profile, check every container repository's selection. If any
 still selects it, stop and ask. Deleting an unselected profile needs no stop.
 

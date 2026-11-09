@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Guided installation with a pinned install script, non-interactive answers and
+  explicit approval for probes and configuration changes. Optional tier routing
+  selects profiles server-side and can learn within a tier from opt-in history.
+  See [Installation](docs/installation.md) and [ADR 0020](docs/adr/0020-tier-routing.md).
+  The installer does not upgrade existing versions; history migrated by this
+  release is unavailable to older releases until this release returns.
+
 ## 0.19.1 — 2026-11-07
 
 Patch release for three audit findings on 0.19.0 (#257, #258, #259). The MCP

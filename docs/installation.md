@@ -11,6 +11,38 @@ Code, and covers configuration changes, upgrades and removal. Related documents:
 - [Isolation setup](isolation-setup.md): rootless Podman prerequisites, what setup
   automates and migration from hand-made writers.
 
+## Guided installation
+
+On Linux or macOS with Node.js 22.19.0 or newer, download `install.sh` from
+the release, verify its published SHA-256, then run:
+
+```sh
+sh install.sh
+```
+
+The script installs its exact pinned npm version and runs guided setup with
+`--apply`. It supports a fresh install or a rerun at the same version, not an
+upgrade: a different installed version reports `upgrade_required`; follow
+[Upgrade](#upgrade) instead. To plan without writes or provider spending after
+installing the package, run `pi-session-mcp-setup --guided`; add `--apply` to
+apply. For non-interactive use, provide `--answers /path/to/answers.json`;
+`--config /path/to/config.json` optionally selects the guided configuration.
+See the [agent guide](agent-install.md) for the format and approval boundaries.
+
+The owner logs in through the package's Pi binary, never by giving credentials
+to setup or an agent:
+
+```sh
+"$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"
+```
+
+Guided setup merges existing configuration only with approval, checks a
+candidate, probes new profiles only with approval (one provider turn each),
+then provisions and verifies selected clients. It does not replace divergent
+registrations. History is optional and stores redacted session content locally;
+`auto` routing requires it. Reconnect running clients after changes. The manual
+path below remains available.
+
 ## What gets installed
 
 Pi Session MCP is a local, stdio-only MCP server. An MCP client starts
@@ -861,6 +893,10 @@ choose skills.
 The complete rules, errors, Doctor checks and limits are in [Pi skills](skills.md).
 
 ## Upgrade
+
+Neither `install.sh` nor guided setup performs upgrades. A history file migrated
+by tier routing is unavailable to releases older than this one until this release
+returns; see [ADR 0020](adr/0020-tier-routing.md).
 
 `setup` binds each owned registration to the package manifests and to every
 built runtime file, so the old version must remove its registration before the
