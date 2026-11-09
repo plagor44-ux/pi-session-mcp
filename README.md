@@ -37,11 +37,12 @@ It is not the right tool when you want to work with Pi yourself (run Pi directly
 On Linux or macOS with Node.js 22.19.0 or newer:
 
 ```sh
-curl -fsSLO https://github.com/plagor44-ux/pi-session-mcp/releases/latest/download/install.sh
-curl -fsSLO https://github.com/plagor44-ux/pi-session-mcp/releases/latest/download/install.sh.sha256
-sha256sum -c install.sh.sha256      # macOS: shasum -a 256 -c install.sh.sha256
-sh install.sh
+base=https://github.com/plagor44-ux/pi-session-mcp/releases/latest/download
+curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
+  sha256sum -c install.sh.sha256 && sh install.sh
 ```
+
+On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. The `&&` chain runs the installer only after both downloads and the checksum succeeded.
 
 The script installs its exact pinned version and runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary; setup never asks for a credential.
 
@@ -69,7 +70,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 
 | Feature | What it does | Docs |
 | --- | --- | --- |
-| Execution modes | Each repository is `read-only`, `host` or `container`. Host writes need explicit acceptance. | [Execution modes](docs/execution-modes.md) |
+| Execution modes | Each repository is `read-only`, `host`, `container` or a `snapshot` review slot. `host` coding needs an explicit host-write acceptance; an alias without a mode keeps legacy host coding and Doctor warns about it. | [Execution modes](docs/execution-modes.md) |
 | Leased writer pool | On Linux, each coding session on a container workspace leases a rootless-Podman full-clone writer through the one host registration. Setup collects and resets writers; no reconnect is needed after reset, finish or recreate. | [ADR 0012](docs/adr/0012-leased-writer-pool.md) |
 | Hardened read-only profiles | Read-only sessions read only inside their workspace and selected skills. On Linux they can opt into a bubblewrap shell without network, home or host writes. | [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md) |
 | Pi skills | Profiles select role skills (implementation, review, your own) from a catalog in your configuration. | [Pi skills](docs/skills.md) |
