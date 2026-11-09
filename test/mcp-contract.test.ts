@@ -151,7 +151,7 @@ describe("MCP contracts", () => {
     expect(inputSchemaOf("pi_turn_get")).toMatchObject({ type: "object", required: ["sessionId", "turnId"], additionalProperties: false, properties: { sessionId: { type: "string" }, turnId: { type: "string" } } });
     expect(discovery?.outputSchema).toMatchObject({
       type: "object",
-      required: ["ok", "server", "configuration", "events", "history", "workspaces", "executionProfiles"],
+      required: ["ok", "server", "configuration", "events", "history", "routing", "workspaces", "executionProfiles"],
       additionalProperties: false,
       properties: {
         server: { additionalProperties: false },
@@ -260,6 +260,7 @@ describe("MCP contracts", () => {
       configuration: { fingerprint: TEST_CONFIGURATION.fingerprint, reloadPolicy: "restart-required" },
       events: { delivery: "off" },
       history: { enabled: false },
+      routing: { mode: "off" },
       workspaces: [{ alias: "alpha-workspace", mode: "container", writers: 2, defaultBase: null }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {

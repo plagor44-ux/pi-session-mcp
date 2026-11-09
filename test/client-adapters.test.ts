@@ -21,6 +21,7 @@ const VERIFIED_CAPABILITIES: Record<string, unknown> = {
   configuration: VERIFIED_CONFIGURATION,
   events: { delivery: "off" },
   history: { enabled: false },
+  routing: { mode: "off" },
   workspaces: [],
   executionProfiles: [VERIFIED_PROFILE],
 };
@@ -200,6 +201,9 @@ describe("client adapters", () => {
     ["missing events", (({ events: _events, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
     ["unknown events delivery", { ...VERIFIED_CAPABILITIES, events: { delivery: "socket" } }],
     ["unknown events key", { ...VERIFIED_CAPABILITIES, events: { delivery: "off", path: "/run/x" } }],
+    ["missing routing", (({ routing: _routing, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
+    ["invalid routing mode", { ...VERIFIED_CAPABILITIES, routing: { mode: "invalid" } }],
+    ["unknown routing key", { ...VERIFIED_CAPABILITIES, routing: { mode: "off", path: "/x" } }],
     ["missing history", (({ history: _history, ...rest }) => rest)(VERIFIED_CAPABILITIES)],
     ["non-boolean history", { ...VERIFIED_CAPABILITIES, history: { enabled: "yes" } }],
     ["unknown history key", { ...VERIFIED_CAPABILITIES, history: { enabled: true, path: "/x" } }],

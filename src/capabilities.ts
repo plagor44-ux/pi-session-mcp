@@ -1,3 +1,4 @@
+import type { RoutingRuntime } from "./routing/runtime.js";
 import packageMetadata from "../package.json" with { type: "json" };
 import type { ConfigurationMetadata } from "./config.js";
 import type { WorkspaceModeEntry } from "./execution-modes.js";
@@ -33,6 +34,7 @@ export function projectCapabilities(
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
   history: { enabled: boolean } = { enabled: false },
+  routing: ReturnType<RoutingRuntime["capabilities"]> = { mode: "off" },
 ) {
   return {
     ok: true as const,
@@ -43,6 +45,7 @@ export function projectCapabilities(
     },
     events: { delivery: eventDelivery },
     history: { enabled: history.enabled },
+    routing,
     workspaces: [...workspaces.keys()]
       .sort(compareAliases)
       .map((alias) => {

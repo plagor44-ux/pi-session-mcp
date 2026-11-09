@@ -27,6 +27,7 @@ function capabilities(profiles = 1) {
     configuration: { fingerprint: `sha256:${"a".repeat(64)}`, reloadPolicy: "restart-required" },
     events: { delivery: "off" },
     history: { enabled: false },
+    routing: { mode: "off" },
     workspaces: [{ alias: "repo", mode: "unset" }],
     executionProfiles: Array.from({ length: profiles }, (_, index) => ({
       alias: `p${index}`.padEnd(64, "a"), default: index === 0, permissionProfile: "read-only",

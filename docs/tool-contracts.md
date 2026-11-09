@@ -49,6 +49,7 @@ records name the package version and the build they ran on, see
   },
   "events": { "delivery": "off" },
   "history": { "enabled": false },
+  "routing": { "mode": "off" },
   "workspaces": [{ "alias": "my-project", "mode": "unset" }],
   "executionProfiles": [{
     "alias": "safe-readonly",
@@ -87,6 +88,14 @@ Annotations are `readOnlyHint: true`, `destructiveHint: false`, `idempotentHint:
 ## Session start
 
 `pi_session_start` accepts a strict object containing a configured `workspace` alias and optional configured `executionProfile` alias. If omitted, the sole configured default profile is used. Unknown aliases fail before registry admission or SDK session creation.
+
+Routing arguments are optional: `tier` (`low`, `medium`, `hightech`, `ultra`), `role` (`code`, `review`, `explore`), `risk` (`normal`, `high`), `shell` (boolean, requires a sandboxed profile), `authorFamily` (lowercase family label matching `^[a-z][a-z0-9-]{0,31}$`), and `allowSameFamily` (boolean). `tier` and `executionProfile` conflict. With neither tier nor role, the default path is unchanged in every mode; an explicit profile is also unchanged except for that conflict. Routing runs only on the host relay.
+
+With routing on, pass `role` and optionally `tier`; omission uses the highest role, risk and workspace floor. Defaults are medium for code/review, low for explore, hightech for high risk. A higher tier is allowed; a lower one is refused. Review requires the author's configured family or the explicit same-family override. Only review may fall back one tier for a different family, never below its floor. Workspace, shell and suspension constraints filter candidates. Start failures do not retry another profile.
+
+Only a routed start adds `routing: { tier, role, profile, reason, exploration }` to the success result. `reason` is `floor`, `raised`, or `lower_tier_review`. Other tools and explicit/default starts do not add this key. Routing errors are `routing_off`, `routing_profile_conflict`, `routing_role_required`, `routing_tier_below_floor`, `routing_no_candidate`, `routing_same_family`, and `routing_author_required`.
+
+Capabilities always include a strict `routing` block: `{ mode: "off" }` when inactive, otherwise `{ mode: "manual" | "auto", tiers, families }`. `tiers` maps all four tiers to all three roles' alphabetically sorted alias lists; `families` maps profile aliases to family labels. This is the startup configuration, not the learned order. Manual never explores; auto explores only with an open history and within budget. Store failures fall back to configured order without suspensions or exploration and emit a content-free diagnostic. Invalid routing configuration disables routing with a diagnostic; explicit starts remain available.
 
 Optional `task` is a short label for the session history, such as an issue or plan id: 1–64 characters from `A–Z a–z 0–9 # . _ : / -`, starting with a letter, digit or `#`, without `..` or `//`. Anything else fails MCP schema validation. The label is stored only in the session history when it is enabled. It never reaches Pi, the session view, or any other tool result.
 

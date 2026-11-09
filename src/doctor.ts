@@ -1,3 +1,4 @@
+import { loadRoutingConfig, TIERS } from "./routing/config.js";
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, sep } from "node:path";
@@ -36,6 +37,7 @@ export type DoctorCheckId =
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "sandbox_unavailable" | "sandbox_go_cache_unavailable" | "workspace_git_unavailable"
   | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
+  | "routing_config_invalid" | "routing_history_required" | "routing_single_family"
   | "event_spool_root"
   | "history_storage" | "history_schema" | "history_integrity" | "history_gaps";
 
@@ -661,6 +663,16 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           : ok("workspace_git_unavailable", alias));
       }
     }
+  }
+  if (config && configPath) {
+    try {
+      const routing = await loadRoutingConfig(configPath, config.executionProfiles, config.workspaces);
+      if (routing.mode === "auto" && config.history?.enabled !== true) checks.push(failure("routing_history_required", "routing", "enable session history before using auto routing"));
+      if (routing.mode !== "off") for (const tier of TIERS) {
+        const review = routing.tiers[tier].review;
+        if (new Set(review.map(alias => routing.families.get(alias))).size < 2) checks.push(warning("routing_single_family", tier, "configure two review families or explicitly allow same-family review"));
+      }
+    } catch { checks.push(failure("routing_config_invalid", "routing", "correct routing.json to reference configured profiles and valid routing settings")); }
   }
   if (config) checks.push(...await snapshotChecks(config, home));
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
