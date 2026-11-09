@@ -17,10 +17,13 @@ async function fixture() {
   const turn = store.db.prepare("INSERT INTO turns (session_id,turn_id,state) VALUES (?,?,?)");
   const verdict = store.db.prepare("INSERT INTO verdicts (session_id,verdict,reason,recorded_at,source) VALUES (?,?,'','now','test')");
   const decision = store.db.prepare("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override) VALUES (?,?,'medium','code','normal',?,'floor',0,0)");
-  function add(id: string, profile: string, state = "completed", outcome = "accepted") {
-    session.run(id, id, profile, now.toISOString(), now.toISOString()); turn.run(id, "t", state); verdict.run(id, outcome); decision.run(id, now.toISOString(), profile);
+  const entry = store.db.prepare("INSERT INTO entries (session_id,position,pi_entry_id,entry_type,timestamp,role,redacted_json,redactions) VALUES (?,?,?,'message','now','assistant',?,'[]')");
+  function add(id: string, profile: string, state: string | null = "completed", outcome = "accepted") {
+    session.run(id, id, profile, now.toISOString(), now.toISOString()); if (state !== null) turn.run(id, "t", state); verdict.run(id, outcome); decision.run(id, now.toISOString(), profile);
   }
-  return { store, home, add, turn, verdict };
+  let position = 0;
+  const cost = (id: string, usage: unknown) => { position++; entry.run(id, position, `e${position}`, JSON.stringify({ message: { usage } })); };
+  return { store, home, add, turn, verdict, cost };
 }
 
 const stat = (profile: string, samples: number, meanScore: number, medianCostUsd: number | null = null) => ({ profile, samples, meanScore, medianCostUsd });
@@ -93,10 +96,59 @@ describe("routing learning", () => {
       expect(refreshRouting({ store, config: config(), now }).changes).toBe(0);
     } finally { store.close(); }
   });
-  it("is stable after a swap", async () => {
+  it("applies a verdict recorded after the decision settled", async () => {
+    const { store, add, verdict } = await fixture();
+    try { add("one", "a"); refreshRouting({ store, config: config(), now }); verdict.run("one", "rejected");
+      expect(refreshRouting({ store, config: config(), now }).outcomes).toBe(1);
+      expect(store.db.prepare("SELECT verdict FROM routing_decisions").get()).toMatchObject({ verdict: "rejected" });
+      expect(refreshRouting({ store, config: config(), now }).outcomes).toBe(0);
+    } finally { store.close(); }
+  });
+  it("keeps a suspend proposal when a reorder is proposed in the same cell", async () => {
+    const { store, add } = await fixture();
+    try { for (let i = 0; i < 3; i++) add(`f${i}`, "a", "failed", "rejected");
+      for (let i = 0; i < 8; i++) { add(`a${i}`, "a", "completed", "rejected"); add(`b${i}`, "b"); }
+      expect(refreshRouting({ store, config: config("manual"), now }).proposals).toBe(2);
+      expect(store.db.prepare("SELECT kind, state FROM routing_versions ORDER BY id").all()).toEqual([{ kind: "suspend", state: "proposed" }, { kind: "reorder", state: "proposed" }]);
+    } finally { store.close(); }
+  });
+  it("proposes one suspension per profile until it is decided", async () => {
+    const { store, add } = await fixture();
+    try { for (let i = 0; i < 3; i++) add(`f${i}`, "a", "failed");
+      expect(refreshRouting({ store, config: config("manual"), now }).proposals).toBe(1);
+      expect(refreshRouting({ store, config: config("manual"), now }).proposals).toBe(0);
+      expect(store.db.prepare("SELECT count(*) AS n FROM routing_versions WHERE kind = 'suspend' AND state = 'proposed'").get()).toMatchObject({ n: 1 });
+      store.db.exec("UPDATE routing_versions SET state = 'superseded'");
+      expect(refreshRouting({ store, config: config("manual"), now }).proposals).toBe(1);
+    } finally { store.close(); }
+  });
+  it("settles a session without turns but does not score it", async () => {
+    const { store, add } = await fixture();
+    try { for (let i = 0; i < 8; i++) { add(`a${i}`, "a", null, "rejected"); add(`b${i}`, "b"); }
+      expect(refreshRouting({ store, config: config(), now }).changes).toBe(0);
+      expect(store.db.prepare("SELECT turns, settled FROM routing_decisions WHERE session_ref = 'a0'").get()).toMatchObject({ turns: 0, settled: 1 });
+    } finally { store.close(); }
+  });
+  it("leaves sessions without turns out of the suspension window", async () => {
+    const { store, add } = await fixture();
+    try { for (let i = 0; i < 3; i++) add(`f${i}`, "a", "failed"); for (let i = 0; i < 10; i++) add(`z${i}`, "a", null);
+      refreshRouting({ store, config: config(), now }); expect(store.db.prepare("SELECT profile FROM routing_suspensions").all()).toEqual([{ profile: "a" }]);
+    } finally { store.close(); }
+  });
+  it("stores the summed cost and NULL for a zero or missing cost", async () => {
+    const { store, add, cost } = await fixture();
+    try { add("paid", "a"); cost("paid", { cost: { total: 0.1 } }); cost("paid", { cost: { total: 0.2 } }); add("zero", "a"); cost("zero", { cost: { total: 0 } }); add("none", "a"); cost("none", {});
+      refreshRouting({ store, config: config(), now });
+      const rows = new Map(store.db.prepare("SELECT session_ref, cost_usd FROM routing_decisions").all().map(row => [row.session_ref, row.cost_usd]));
+      expect(rows.get("paid")).toBeCloseTo(0.3, 6); expect(rows.get("zero")).toBeNull(); expect(rows.get("none")).toBeNull();
+    } finally { store.close(); }
+  });
+  it("stops at the deadline and finishes on the next refresh", async () => {
     const { store, add } = await fixture();
     try { for (let i = 0; i < 8; i++) { add(`a${i}`, "a", "completed", "rejected"); add(`b${i}`, "b"); }
-      refreshRouting({ store, config: config(), now }); expect(refreshRouting({ store, config: config(), now }).changes).toBe(0);
+      expect(refreshRouting({ store, config: config(), now, deadlineMs: 0 })).toEqual({ outcomes: 0, changes: 0, proposals: 0 });
+      expect(store.db.prepare("SELECT count(*) AS n FROM routing_decisions WHERE settled = 1").get()).toMatchObject({ n: 0 });
+      expect(refreshRouting({ store, config: config(), now })).toEqual({ outcomes: 16, changes: 1, proposals: 0 });
     } finally { store.close(); }
   });
   it("refreshes again after 24 hours only", async () => {

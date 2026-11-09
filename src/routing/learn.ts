@@ -29,7 +29,8 @@ export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input)
   const start = Date.now(); const expired = () => Date.now() - start >= deadlineMs;
   const db = store.db; const timestamp = now.toISOString();
   const decisions = db.prepare(`SELECT d.id, s.id AS session_id FROM routing_decisions d JOIN sessions s ON s.public_session_id = d.session_ref
-    WHERE d.settled = 0 AND d.decided_at >= ? AND s.closed_at IS NOT NULL AND EXISTS (SELECT 1 FROM verdicts v WHERE v.session_id = s.id) ORDER BY d.id LIMIT 500`).all(new Date(now.getTime() - 30 * 86400000).toISOString());
+    WHERE d.decided_at >= ? AND s.closed_at IS NOT NULL AND EXISTS (SELECT 1 FROM verdicts v WHERE v.session_id = s.id)
+      AND (d.settled = 0 OR d.verdict IS NOT (SELECT v.verdict FROM verdicts v WHERE v.session_id = s.id ORDER BY v.id DESC LIMIT 1)) ORDER BY d.id LIMIT 500`).all(new Date(now.getTime() - 30 * 86400000).toISOString());
   const update = db.prepare(`UPDATE routing_decisions SET turns = (SELECT COUNT(*) FROM turns WHERE session_id = ?),
     failed_turns = (SELECT COUNT(*) FROM turns WHERE session_id = ? AND state = 'failed'),
     cost_usd = (SELECT NULLIF(SUM(json_extract(redacted_json, '$.message.usage.cost.total')), 0) FROM entries WHERE session_id = ? AND role = 'assistant'),
@@ -39,11 +40,13 @@ export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input)
   const profiles = new Set(TIERS.flatMap(t => ROLES.flatMap(r => [...config.tiers[t][r]])));
   const failures = db.prepare(`SELECT COUNT(*) AS n FROM (SELECT s.id, EXISTS(SELECT 1 FROM turns t WHERE t.session_id = s.id AND t.state = 'failed') AS failed FROM sessions s WHERE s.execution_profile = ? AND EXISTS(SELECT 1 FROM turns t WHERE t.session_id = s.id) ORDER BY s.created_at DESC, s.id DESC LIMIT 10) WHERE failed = 1`);
   const version = db.prepare(`INSERT INTO routing_versions (tier, role, kind, profile, before_json, after_json, reason, state, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const openSuspend = db.prepare("SELECT 1 AS found FROM routing_versions WHERE kind = 'suspend' AND profile = ? AND state = 'proposed' LIMIT 1");
   for (const profile of profiles) {
     if (expired()) break;
     if (suspended.has(profile) || Number(failures.get(profile)!.n) < 3) continue;
     const cells = TIERS.flatMap(tier => ROLES.filter(role => config.tiers[tier][role].includes(profile)).map(role => ({ tier, role })));
     if (cells.some(({ tier, role }) => !config.tiers[tier][role].some(p => p !== profile && !suspended.has(p)))) continue;
+    if (config.mode !== "auto" && openSuspend.get(profile)) continue;
     const cell = cells[0]!;
     store.transaction(() => {
       if (config.mode === "auto") db.prepare(`INSERT INTO routing_suspensions (profile, until, reason) VALUES (?, ?, 'failed_sessions') ON CONFLICT(profile) DO UPDATE SET until=excluded.until, reason=excluded.reason`).run(profile, new Date(now.getTime() + 86400000).toISOString());
@@ -67,7 +70,7 @@ export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input)
     const next = nextSwap(stats, config.learning); if (!next) continue;
     store.transaction(() => {
       if (config.mode === "auto") db.prepare(`INSERT INTO routing_cells (tier, role, order_json, frozen) VALUES (?, ?, ?, 0) ON CONFLICT(tier, role) DO UPDATE SET order_json=excluded.order_json`).run(tier, role, JSON.stringify(next));
-      else db.prepare("UPDATE routing_versions SET state = 'superseded' WHERE tier = ? AND role = ? AND state = 'proposed'").run(tier, role);
+      else db.prepare("UPDATE routing_versions SET state = 'superseded' WHERE tier = ? AND role = ? AND kind = 'reorder' AND state = 'proposed'").run(tier, role);
       version.run(tier, role, "reorder", null, JSON.stringify(order), JSON.stringify(next), "quality_or_cost", config.mode === "auto" ? "applied" : "proposed", timestamp);
     });
     if (config.mode === "auto") result.changes++; else result.proposals++;
