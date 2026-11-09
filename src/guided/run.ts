@@ -121,6 +121,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       for (const target of plan.targets) add("registrations", target.client, "registration_planned", "planned");
       return result(operation, findings, "planned");
     }
+    // A dry run reports planned probes; only an apply needs the owner's approval to spend.
+    if (plan.newProfiles.length && !request.answers.approveProbes) return stop("probes_not_approved", "profiles");
     await mkdir(dirname(deps.configPath), { recursive: true, mode: 0o700 }); check();
     claim = await claimCandidate(deps.configPath);
     if (!claim) return stop("guided_in_progress");

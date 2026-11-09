@@ -135,6 +135,15 @@ describe("guided run", () => {
     const f = await fixture(true); const before = await readFile(f.configPath); const r = await runGuided({ apply: false, answers: answers() }, f.deps);
     expect(r.status).toBe("planned"); expect(f.deps.probe).not.toHaveBeenCalled(); expect(await readFile(f.configPath)).toEqual(before);
   });
+  it("plans probes in a dry run without approval and refuses the apply", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath); const unapproved = { ...answers(), approveProbes: false };
+    const planned = await runGuided({ apply: false, answers: unapproved }, f.deps);
+    expect(planned).toMatchObject({ status: "planned", exitCode: 0 }); expect(codes(planned)).toEqual(expect.arrayContaining(["probe_planned"])); expect(codes(planned)).not.toContain("probes_not_approved");
+    const applied = await runGuided({ apply: true, answers: unapproved }, f.deps);
+    expect(applied.exitCode).toBe(1); expect(codes(applied)).toContain("probes_not_approved");
+    expect(f.deps.probe).not.toHaveBeenCalled(); expect(f.deps.doctor).not.toHaveBeenCalled(); expect(await readFile(f.configPath)).toEqual(before);
+    expect((await readdir(f.directory)).sort()).toEqual(["config.json"]);
+  });
   it("keeps the live config when a probe fails", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath);
     vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });

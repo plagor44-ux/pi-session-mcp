@@ -951,7 +951,10 @@ The complete rules, errors, Doctor checks and limits are in [Pi skills](skills.m
 
 Neither `install.sh` nor guided setup performs upgrades. A history file migrated
 by tier routing is unavailable to releases older than this one until this release
-returns; see [ADR 0020](adr/0020-tier-routing.md).
+returns; see [ADR 0020](adr/0020-tier-routing.md). An existing history file is
+migrated by the first writable open, such as the first server start with history
+enabled or `pi-session-mcp-history verdict`. Until then the read-only commands
+`list`, `show`, `export` and `query` report `history_unavailable`.
 
 `setup` binds each owned registration to the package manifests and to every
 built runtime file, so the old version must remove its registration before the

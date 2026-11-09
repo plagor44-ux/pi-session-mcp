@@ -5,7 +5,7 @@ import type { SetupTarget } from "../setup-result.js";
 import { ROLES, TIERS } from "../routing/config.js";
 import type { GuidedAnswers } from "./answers.js";
 
-export type GuidedPlanErrorCode = "container_profiles_invalid" | "config_change_not_allowed" | "profile_alias_conflict" | "workspace_alias_conflict" | "host_writes_not_accepted" | "routing_requires_history" | "probes_not_approved" | "default_profile_unknown" | "default_profile_conflict" | "routing_profile_conflict";
+export type GuidedPlanErrorCode = "container_profiles_invalid" | "config_change_not_allowed" | "profile_alias_conflict" | "workspace_alias_conflict" | "host_writes_not_accepted" | "routing_requires_history" | "default_profile_unknown" | "default_profile_conflict" | "routing_profile_conflict";
 export class GuidedPlanError extends Error {
   constructor(readonly code: GuidedPlanErrorCode) { super(code); this.name = "GuidedPlanError"; }
 }
@@ -38,7 +38,6 @@ export function buildGuidedPlan(answers: GuidedAnswers, existing: { config?: unk
       if (!Object.entries(proposed).every(([key, value]) => key === "default" ? current[key] === (p.alias === answers.defaultProfile) : current[key] === value)) throw new GuidedPlanError("profile_alias_conflict");
     } else { profiles[p.alias] = proposed; newProfiles.push(p.alias); }
   }
-  if (newProfiles.length && !answers.approveProbes) throw new GuidedPlanError("probes_not_approved");
   const modeRequests: ModeRequest[] = [];
   for (const workspace of answers.workspaces) {
     if (workspace.mode === "container" && (!workspace.container?.profiles?.length || workspace.container.profiles.some((alias) => record(profiles[alias]).permissionProfile !== "coding"))) throw new GuidedPlanError("container_profiles_invalid");
