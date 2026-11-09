@@ -98,4 +98,54 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX gaps_session ON gaps(session_id);
   CREATE INDEX gaps_recorded_at ON gaps(recorded_at);
   `,
+  `
+  CREATE TABLE routing_decisions (
+    id INTEGER PRIMARY KEY,
+    session_ref TEXT NOT NULL,
+    decided_at TEXT NOT NULL,
+    tier TEXT,
+    role TEXT,
+    risk TEXT NOT NULL,
+    profile TEXT NOT NULL,
+    family TEXT,
+    origin TEXT NOT NULL,
+    exploration INTEGER NOT NULL,
+    same_family_override INTEGER NOT NULL,
+    turns INTEGER NOT NULL DEFAULT 0,
+    failed_turns INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL,
+    verdict TEXT,
+    settled INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX routing_decisions_cell ON routing_decisions(tier, role, id);
+  CREATE INDEX routing_decisions_exploration ON routing_decisions(exploration, decided_at);
+  CREATE TABLE routing_cells (
+    tier TEXT NOT NULL,
+    role TEXT NOT NULL,
+    order_json TEXT NOT NULL,
+    frozen INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (tier, role)
+  );
+  CREATE TABLE routing_versions (
+    id INTEGER PRIMARY KEY,
+    tier TEXT NOT NULL,
+    role TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('reorder', 'suspend')),
+    profile TEXT,
+    before_json TEXT NOT NULL,
+    after_json TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('proposed', 'applied', 'rolled_back', 'superseded')),
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE routing_suspensions (
+    profile TEXT PRIMARY KEY,
+    until TEXT NOT NULL,
+    reason TEXT NOT NULL
+  );
+  CREATE TABLE routing_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+  `,
 ];

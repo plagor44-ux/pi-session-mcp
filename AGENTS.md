@@ -26,7 +26,9 @@
   `allowModelNetwork: false`: an offline restore of the catalog Pi persisted
   earlier (`models-store.json`). It reads stored credential records and
   resolves API-key values in-process, as `checkAuth` does, but makes no
-  network request, no credential refresh and no `getAuth`. The session
+  network request, no credential refresh and no `getAuth`. The catalog may also
+  read each model's output price offline for the guided setup's tier proposal only
+  (maintainer-approved 2026-11-09). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
   (maintainer-approved 2026-10-30, #199). Do not widen these exceptions.

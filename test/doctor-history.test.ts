@@ -48,7 +48,7 @@ describe("doctor history checks", () => {
     expect(await historyChecks(home, { enabled: false })).toEqual([]);
   });
 
-  it("ok on a fresh v1 file with correct modes, and on a missing file", async () => {
+  it("ok on a fresh v2 file with correct modes, and on a missing file", async () => {
     expect(await historyChecks(await freshHome(), enabled)).toEqual([
       { id: "history_storage", severity: "ok", subject: "session history" },
       { id: "history_schema", severity: "ok", subject: "session history" },
@@ -80,11 +80,11 @@ describe("doctor history checks", () => {
     expect((await historyChecks(parent, enabled, { workspaces: new Map([["home", parent]]) })).find((check) => check.id === "history_storage")).toMatchObject({ severity: "error" });
   });
 
-  it("history_schema on user_version 2", async () => {
+  it("history_schema on user_version 3", async () => {
     const home = await freshHome();
     const { DatabaseSync } = await loadSqlite();
     const db = new DatabaseSync(historyLocation(home).file);
-    db.exec("PRAGMA user_version = 2");
+    db.exec("PRAGMA user_version = 3");
     db.close();
     const checks = await historyChecks(home, enabled);
     expect(checks.find((check) => check.id === "history_schema")).toMatchObject({ severity: "error" });
@@ -117,7 +117,7 @@ describe("doctor history checks", () => {
 
   it("uses the inspection seam instead of the file when injected", async () => {
     const seen: string[] = [];
-    const checks = await historyChecks("/nonexistent-home", enabled, { history: { inspect: async (home) => { seen.push(home); return { storage: "ok", schemaVersion: 1, integrity: "ok", recentGaps: 0 }; } } });
+    const checks = await historyChecks("/nonexistent-home", enabled, { history: { inspect: async (home) => { seen.push(home); return { storage: "ok", schemaVersion: 2, integrity: "ok", recentGaps: 0 }; } } });
     expect(seen).toEqual(["/nonexistent-home"]);
     expect(checks.map((check) => check.severity)).toEqual(["ok", "ok", "ok", "ok"]);
   });

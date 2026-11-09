@@ -3,6 +3,7 @@ import packageMetadata from "../package.json" with { type: "json" };
 import { CONFIGURATION_FINGERPRINT_PATTERN, RELOAD_POLICY } from "./config.js";
 import { ALIAS_PATTERN } from "./execution-profile.js";
 import { WORKSPACE_MODES } from "./execution-modes.js";
+import { FAMILY_PATTERN, TIERS, ROLES } from "./routing/config.js";
 import { TASK_LABEL_MAX } from "./history/constants.js";
 
 export const thinkingLevelSchema = z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
@@ -22,6 +23,10 @@ export const taskLabelSchema = z.string().max(TASK_LABEL_MAX).regex(TASK_LABEL_P
 // server still validates with the unchanged `z.string().uuid()`, so accepted values and issues are identical.
 export const idInputSchema = z.string().meta({ format: "uuid" }).pipe(z.string().uuid());
 export const successSchema = z.object({ ok: z.literal(true), session: viewSchema });
+export const routingResultSchema = z.object({ tier: z.enum(TIERS), role: z.enum(ROLES), profile: aliasSchema, reason: z.enum(["floor", "raised", "lower_tier_review"]), exploration: z.boolean() }).strict();
+export const startSuccessSchema = successSchema.extend({ routing: routingResultSchema.optional() });
+export const routingInputShape = { tier: z.enum(TIERS).optional(), role: z.enum(ROLES).optional(), risk: z.enum(["normal", "high"]).optional(), shell: z.boolean().optional(), authorFamily: z.string().regex(FAMILY_PATTERN).optional(), allowSameFamily: z.boolean().optional() };
+export const routingCapabilitiesSchema = z.object({ mode: z.enum(["off", "manual", "auto"]), tiers: z.object(Object.fromEntries(TIERS.map(tier => [tier, z.object(Object.fromEntries(ROLES.map(role => [role, z.array(aliasSchema)]))).strict()]))).strict().optional(), families: z.record(aliasSchema, z.string().regex(FAMILY_PATTERN)).optional() }).strict().refine(routing => routing.mode === "off" || (routing.tiers !== undefined && routing.families !== undefined));
 export const turnBase = { turnId: z.string().uuid(), sessionId: z.string().uuid(), startedAt: z.string(), updatedAt: z.string() };
 export const turnSchema = z.discriminatedUnion("state", [
   z.object({ ...turnBase, state: z.literal("running") }),
@@ -44,6 +49,7 @@ export const capabilitiesSchema = z.object({
   }).strict(),
   events: z.object({ delivery: z.enum(["spool", "off"]) }).strict(),
   history: z.object({ enabled: z.boolean() }).strict(),
+  routing: routingCapabilitiesSchema,
   workspaces: z.array(z.object({ alias: aliasSchema, mode: z.enum(WORKSPACE_MODES), writers: z.number().int().nonnegative().optional(), defaultBase: z.string().nullable().optional() }).strict()),
   executionProfiles: z.array(z.object({
     alias: aliasSchema,

@@ -38,6 +38,7 @@ describe("configuration capability projection", () => {
       configuration: { fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" },
       events: { delivery: "off" },
       history: { enabled: false },
+      routing: { mode: "off" },
       workspaces: [{ alias: "alpha-workspace", mode: "unset" }, { alias: "zeta-workspace", mode: "unset" }],
       executionProfiles: [
         {
@@ -101,7 +102,7 @@ describe("configuration capability projection", () => {
     const second = projectCapabilities(workspaces, executionProfiles, configuration);
 
     expect(second).toEqual(first);
-    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "history", "workspaces", "executionProfiles"]);
+    expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "history", "routing", "workspaces", "executionProfiles"]);
     expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds"]);
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");

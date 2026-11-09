@@ -20,7 +20,7 @@ Reasons to do that:
 - **Exactly the extra tools a task needs.** A profile can grant individual tools of local stdio MCP servers to its sessions, and nothing else from those servers.
 - **Role instructions you control.** A profile can select Pi skills from a catalog in your configuration, such as the implementation and review skills this package ships, or your own versions of them. The client cannot choose skills. The package also ships an orchestration skill for the controlling agent, which `setup` installs into Claude Code and Codex.
 - **Predictable to automate.** Sessions and turns have a small set of states and stable error codes. Results contain no paths, credentials, prompts or raw provider errors.
-- **Small footprint.** No daemon, no network listener and no stored state. An offline `doctor` checks an installation, and `setup` registers, verifies and removes the server reproducibly.
+- **Small footprint.** No daemon or network listener; history is optional. An offline `doctor` checks an installation, and `setup` registers, verifies and removes the server reproducibly.
 
 It is not the right tool when:
 
@@ -66,6 +66,21 @@ The client starts `node dist/main.js` as a child process. Pi Session MCP reads i
 The [tool contracts](docs/tool-contracts.md) define every field, state and error code.
 
 ## Quick start
+
+Download `install.sh` from the release, verify its published SHA-256, and run
+`sh install.sh` for guided installation. It installs the exact pinned version
+and applies setup; it does not upgrade an existing different version. The owner
+logs in through the packaged Pi binary, and approves provider probes and host
+writes. For a dry run use `pi-session-mcp-setup --guided`; for non-interactive
+setup see the [agent guide](docs/agent-install.md). See
+[installation](docs/installation.md#guided-installation) and the
+[upgrade procedure](docs/installation.md#upgrade).
+
+Optional tier routing selects profiles in the server; `manual` proposes learning
+changes and `auto` applies them with opt-in history. Inspect it with
+`pi-session-mcp-routing status`. See [ADR 0020](docs/adr/0020-tier-routing.md).
+
+### Manual installation
 
 ```bash
 npm install -g pi-session-mcp@<version>

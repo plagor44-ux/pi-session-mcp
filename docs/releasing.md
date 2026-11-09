@@ -217,8 +217,8 @@ Steps:
    ```
 
    This changes `package.json` and both version fields of `package-lock.json`.
-   Then change the version by hand in the package version line of `README.md`
-   and in the capability example of `docs/tool-contracts.md`.
+   Then change the version by hand in `install.sh` (`VERSION`), the package
+   version line of `README.md` and the capability example of `docs/tool-contracts.md`.
 3. In `CHANGELOG.md`, insert the heading `## <x.y.z> — <date>` directly below
    `## Unreleased`, so that the unreleased entries become the release entries.
 4. Run the Level 1 checks. `npm run --silent doctor -- --json` must report the
@@ -296,7 +296,9 @@ The shasum must equal the one that `npm stage publish` printed. Finally create
 the GitHub release:
 
 ```bash
-gh release create v<x.y.z> --title "pi-session-mcp v<x.y.z>" --notes-file <notes-file>
+sha256sum install.sh > install.sh.sha256
+   # On macOS use: shasum -a 256 install.sh > install.sh.sha256
+gh release create v<x.y.z> install.sh install.sh.sha256 --title "pi-session-mcp v<x.y.z>" --notes-file <notes-file>
 ```
 
 The release notes have three sections:

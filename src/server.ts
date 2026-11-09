@@ -7,7 +7,10 @@ import { codingAllowed, isShortBranchName, type WorkspaceModeEntry } from "./exe
 import { PiSessionCreationError, WriterUnavailableError } from "./pi-adapter.js";
 import { toResolvedExecutionProfile, type ConfiguredExecutionProfile } from "./execution-profile.js";
 import { RegistryError, type SessionRegistry } from "./session-registry.js";
-import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema, taskLabelSchema, historyPageSuccessSchema } from "./tool-schemas.js";
+import { aliasSchema, idInputSchema, successSchema, promptSuccessSchema, turnSuccessSchema, listSchema, errorSchema, capabilitiesSchema, taskLabelSchema, historyPageSuccessSchema, startSuccessSchema, routingInputShape } from "./tool-schemas.js";
+import { createRoutingRuntime, type RoutingRuntime } from "./routing/runtime.js";
+import { ROUTING_OFF } from "./routing/config.js";
+import { RoutingError, type RoutingRequest } from "./routing/select.js";
 import { HISTORY_RELAY_PAGE_BYTES } from "./history/constants.js";
 
 function result<T extends Record<string, unknown>>(value: T, isError = false) {
@@ -19,7 +22,7 @@ async function safe(action: () => Promise<Record<string, unknown>> | Record<stri
     if (error instanceof WriterUnavailableError) {
       return result({ ok: false, error: { code: error.code, message: error.message, reason: error.reason, ...(error.counts === undefined ? {} : { counts: error.counts }) } }, true);
     }
-    const known = error instanceof RegistryError || error instanceof PiSessionCreationError;
+    const known = error instanceof RegistryError || error instanceof PiSessionCreationError || error instanceof RoutingError;
     return result({ ok: false, error: { code: known ? error.code : "internal_error", message: known ? error.message : "Operation failed" } }, true);
   }
 }
@@ -33,21 +36,34 @@ export function createServer(
   workspaceModes: ReadonlyMap<string, WorkspaceModeEntry> = new Map(),
   eventDelivery: "spool" | "off" = "off",
   relay = false,
-  options: { history?: { enabled: boolean }; innerHistory?: boolean } = {},
+  options: { history?: { enabled: boolean }; innerHistory?: boolean; routing?: RoutingRuntime } = {},
 ): McpServer {
+  const routing = options.routing ?? createRoutingRuntime({ config: ROUTING_OFF });
   const server = new McpServer({ name: packageMetadata.name, version: packageMetadata.version }, { capabilities: { tools: {} } });
   server.registerTool("pi_capabilities_get", {
     description: "List configured workspace and execution-profile aliases. This reports configured intent, not provider or runtime availability. Call once at the start of a run.",
     inputSchema: z.object({}).strict(),
     outputSchema: capabilitiesSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery, options.history ?? { enabled: false })));
+  }, () => result(projectCapabilities(workspaces, executionProfiles, configuration, workspaceModes, eventDelivery, options.history ?? { enabled: false }, routing.capabilities())));
   server.registerTool("pi_session_start", {
     description: "Start a managed embedded Pi session for a configured workspace alias.",
-    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional(), task: taskLabelSchema.optional() }).strict(), outputSchema: z.union([successSchema, errorSchema]),
+    inputSchema: z.object({ workspace: aliasSchema, executionProfile: aliasSchema.optional(), base: z.string().refine(isShortBranchName).optional(), task: taskLabelSchema.optional(), ...routingInputShape }).strict(), outputSchema: z.union([startSuccessSchema, errorSchema]),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, ({ workspace, executionProfile, base, task }) => safe(async () => {
-    const alias = executionProfile ?? defaultExecutionProfile;
+  }, ({ base, task, ...request }) => safe(async () => {
+    const { workspace } = request;
+    const routingRequest: RoutingRequest = {
+      workspace,
+      ...(request.executionProfile === undefined ? {} : { executionProfile: request.executionProfile }),
+      ...(request.tier === undefined ? {} : { tier: request.tier }),
+      ...(request.role === undefined ? {} : { role: request.role }),
+      ...(request.risk === undefined ? {} : { risk: request.risk }),
+      ...(request.shell === undefined ? {} : { shell: request.shell }),
+      ...(request.authorFamily === undefined ? {} : { authorFamily: request.authorFamily }),
+      ...(request.allowSameFamily === undefined ? {} : { allowSameFamily: request.allowSameFamily }),
+    };
+    const routed = routing.route(routingRequest, { defaultProfile: defaultExecutionProfile, profiles: executionProfiles, workspaceMode: workspaceModes.get(workspace) ?? { mode: "unset" }, relay });
+    const alias = routed.alias;
     const configured = executionProfiles.get(alias);
     if (!configured) throw new RegistryError("unknown_execution_profile");
     if (!workspaces.has(workspace)) throw new RegistryError("unknown_workspace");
@@ -61,7 +77,9 @@ export function createServer(
     if (mode.mode === "snapshot" && ((configured.extensions?.length ?? 0) > 0 || (configured.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(configured.mcpServers ?? {}).length > 0)) {
       throw new RegistryError("snapshot_profile_unsupported");
     }
-    return { ok: true, session: await registry.start(workspace, toResolvedExecutionProfile(configured), { ...(base === undefined ? {} : { base }), ...(task === undefined ? {} : { task }) }) };
+    const session = await registry.start(workspace, toResolvedExecutionProfile(configured), { ...(base === undefined ? {} : { base }), ...(task === undefined ? {} : { task }) });
+    routing.afterStart(session.id, routed);
+    return { ok: true, session, ...(routed.result === undefined ? {} : { routing: routed.result }) };
   }));
   server.registerTool("pi_session_list", {
     description: "List local Pi sessions and their state.", inputSchema: z.object({}).strict(), outputSchema: z.union([listSchema, errorSchema]),

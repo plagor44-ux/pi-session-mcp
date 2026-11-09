@@ -73,7 +73,7 @@ describe("session history sentinel end to end", () => {
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
     try {
       const call = async (name: string, args: Record<string, unknown>) => (await client.callTool({ name, arguments: args })).structuredContent as Record<string, any>;
-      expect(await call("pi_capabilities_get", {})).toMatchObject({ history: { enabled: true } });
+      expect(await call("pi_capabilities_get", {})).toMatchObject({ history: { enabled: true }, routing: { mode: "off" } });
       const started = await call("pi_session_start", { workspace: "repo", task: "#215" });
       expect(started).toMatchObject({ ok: true });
       const sessionId = started.session.id as string;

@@ -1,3 +1,4 @@
+import { loadRoutingConfig, TIERS } from "./routing/config.js";
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, sep } from "node:path";
@@ -36,6 +37,7 @@ export type DoctorCheckId =
   | "skill_missing" | "skill_unreadable" | "skill_duplicate" | "skill_override_outdated"
   | "sandbox_unavailable" | "sandbox_go_cache_unavailable" | "workspace_git_unavailable"
   | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
+  | "routing_config_invalid" | "routing_history_required" | "routing_single_family"
   | "event_spool_root"
   | "history_storage" | "history_schema" | "history_integrity" | "history_gaps";
 
@@ -119,7 +121,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps", "routing_config_invalid", "routing_history_required", "routing_single_family"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -661,6 +663,16 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
           : ok("workspace_git_unavailable", alias));
       }
     }
+  }
+  if (config && configPath) {
+    try {
+      const routing = await loadRoutingConfig(configPath, config.executionProfiles, config.workspaces);
+      if (routing.mode === "auto" && config.history?.enabled !== true) checks.push(failure("routing_history_required", "routing", "enable session history before using auto routing"));
+      if (routing.mode !== "off") for (const tier of TIERS) {
+        const review = routing.tiers[tier].review;
+        if (review.length > 0 && new Set(review.map(alias => routing.families.get(alias))).size < 2) checks.push(warning("routing_single_family", tier, "configure two review families or explicitly allow same-family review"));
+      }
+    } catch { checks.push(failure("routing_config_invalid", "routing", "correct routing.json to reference configured profiles and valid routing settings")); }
   }
   if (config) checks.push(...await snapshotChecks(config, home));
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));

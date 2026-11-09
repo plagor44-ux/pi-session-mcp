@@ -1,3 +1,4 @@
+import { routingCapabilitiesSchema } from "../tool-schemas.js";
 import { isShortBranchName, MAX_WRITERS, WORKSPACE_MODES } from "../execution-modes.js";
 import { MAX_PROFILE_EXTENSIONS, parseExtensionSpec } from "../extension-spec.js";
 import { isAcceptableExtensionToolName, MAX_GRANTED_EXTENSION_TOOLS } from "../session-tools.js";
@@ -97,10 +98,10 @@ function validConfiguration(value: unknown): boolean {
 function validCapabilities(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const x = value as Record<string, unknown>;
-  if (x.ok !== true || !exactKeys(x, ["ok", "server", "configuration", "events", "history", "workspaces", "executionProfiles"]) || !x.server || typeof x.server !== "object") return false;
+  if (x.ok !== true || !exactKeys(x, ["ok", "server", "configuration", "events", "history", "routing", "workspaces", "executionProfiles"]) || !x.server || typeof x.server !== "object") return false;
   const info = x.server as Record<string, unknown>;
   if (!exactKeys(info, ["name", "version"]) || info.name !== PACKAGE_NAME || info.version !== PACKAGE_VERSION || !Array.isArray(x.workspaces) || !Array.isArray(x.executionProfiles)) return false;
-  if (!validConfiguration(x.configuration)) return false;
+  if (!validConfiguration(x.configuration) || !routingCapabilitiesSchema.safeParse(x.routing).success) return false;
   if (!x.events || typeof x.events !== "object") return false;
   const events = x.events as Record<string, unknown>;
   if (!exactKeys(events, ["delivery"]) || (events.delivery !== "spool" && events.delivery !== "off")) return false;

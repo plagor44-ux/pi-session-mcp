@@ -28,7 +28,7 @@ describe("package contents", () => {
   it("ships the operator documentation and the worker skills without implementation plans, sources or tests", async () => {
     const paths = await packedPaths();
     expect(paths).toEqual(expect.arrayContaining([
-      "README.md", "CHANGELOG.md", "docs/installation.md", "docs/tool-contracts.md", "docs/adr/0006-pi-extension-allowlist.md",
+      "README.md", "CHANGELOG.md", "install.sh", "docs/agent-install.md", "docs/adr/0020-tier-routing.md", "docs/installation.md", "docs/tool-contracts.md", "docs/adr/0006-pi-extension-allowlist.md",
     ]));
     expect(paths).toEqual(expect.arrayContaining([
       "skills/pi-session-profiles/SKILL.md", "skills/pi-session-orchestration/SKILL.md", "skills/pi-session-orchestration/references/start-errors.md", "skills/pi-session-implementation/SKILL.md", "skills/pi-session-review/SKILL.md",
@@ -40,6 +40,7 @@ describe("package contents", () => {
   it("declares the history CLI and ships its ADR", async () => {
     const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { bin: Record<string, string> };
     expect(manifest.bin["pi-session-mcp-history"]).toBe("dist/history-main.js");
+    expect(manifest.bin["pi-session-mcp-routing"]).toBe("dist/routing-main.js");
     expect(await packedPaths()).toEqual(expect.arrayContaining(["docs/adr/0019-opt-in-session-history.md"]));
   }, 90_000);
 });

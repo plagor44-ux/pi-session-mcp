@@ -12,6 +12,10 @@ export interface ModelCatalog {
   providers(): readonly CatalogProvider[];
 }
 
+export interface PricedModelCatalog extends ModelCatalog {
+  outputPrice(providerId: string, modelId: string): number | undefined;
+}
+
 /**
  * A provider or model id that is safe to print: no whitespace and no leading `/`, so it never starts a path.
  * A leading `@` is allowed for scoped model ids; ids may contain `/` after the first character.
@@ -31,7 +35,7 @@ export const AUTH_CHECK_TIMEOUT_MS = 5_000;
  */
 export interface CatalogRuntime {
   getProviders(): readonly { readonly id: string }[];
-  getModels(providerId: string): readonly { readonly id: string }[];
+  getModels(providerId: string): readonly { readonly id: string; readonly cost?: { readonly output?: unknown } }[];
   /** Resolves the configured authentication's kind, or `undefined` when none is configured. */
   checkAuth(providerId: string, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
@@ -62,16 +66,24 @@ const authConfigured = (runtime: CatalogRuntime, providerId: string): Promise<bo
  * provider is contacted; the only refresh is the offline restore at creation. Providers registered only
  * by Pi extensions are not part of the registry.
  */
-export async function createModelCatalog(createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime): Promise<ModelCatalog> {
+export async function createModelCatalog(createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime): Promise<PricedModelCatalog> {
   const runtime = await createRuntime();
+  const prices = new Map<string, Map<string, number>>();
   const providers = await Promise.all(runtime.getProviders().map(async (provider) => {
     const configured = await authConfigured(runtime, provider.id);
+    const models = runtime.getModels(provider.id);
+    const modelPrices = new Map<string, number>();
+    for (const model of models) {
+      const price = model.cost?.output;
+      if (typeof price === "number" && Number.isFinite(price)) modelPrices.set(model.id, price);
+    }
+    prices.set(provider.id, modelPrices);
     return Object.freeze({
       id: provider.id,
       authConfigured: configured,
-      models: Object.freeze(runtime.getModels(provider.id).map((model) => model.id).sort(compareIds)),
+      models: Object.freeze(models.map((model) => model.id).sort(compareIds)),
     });
   }));
   providers.sort((left, right) => compareIds(left.id, right.id));
-  return Object.freeze({ providers: () => Object.freeze(providers) });
+  return Object.freeze({ providers: () => Object.freeze(providers), outputPrice: (providerId: string, modelId: string) => prices.get(providerId)?.get(modelId) });
 }

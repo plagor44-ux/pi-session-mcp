@@ -24,9 +24,11 @@
     "pi-session-mcp-setup": "dist/setup-main.js",
     "pi-session-mcp-wake": "dist/wake-main.js",
     "pi-session-mcp-history": "dist/history-main.js",
+    "pi-session-mcp-routing": "dist/routing-main.js",
     "pi-session-mcp-doctor": "scripts/doctor.mjs"
   },
   "files": [
+    "install.sh",
     "dist/",
     ".pi-session-mcp-cli/",
     "scripts/doctor.mjs",

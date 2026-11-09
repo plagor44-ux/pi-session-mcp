@@ -23,9 +23,11 @@ import { knownValuesFromEnv, Redactor } from "./history/redact.js";
 import { compilePathRule } from "./history/path-rule.js";
 import type { GapCode } from "./history/constants.js";
 import type { AppConfig } from "./config.js";
+import { loadRoutingConfig, RoutingConfigError, ROUTING_OFF } from "./routing/config.js";
+import { createRoutingRuntime } from "./routing/runtime.js";
 import { PACKAGE_VERSION } from "./package-metadata.js";
 
-type ProcessDiagnostic = SdkPiAdapterDiagnostic | StartupDiagnostic | EventSpoolDiagnostic | {
+type ProcessDiagnostic = { level: "warn"; event: "routing_inactive" | "routing_degraded"; stage: "startup" | "routing"; code: string } | SdkPiAdapterDiagnostic | StartupDiagnostic | EventSpoolDiagnostic | {
   readonly level: "warn";
   readonly event: "event_delivery_inactive";
   readonly stage: "startup";
@@ -127,6 +129,15 @@ async function main(): Promise<void> {
       protectedReadPaths: [dirname(configFile), dirname(await realpath(configFile))],
     });
     const relay = guardPath === undefined;
+    let routingConfig = ROUTING_OFF;
+    if (relay) {
+      try { routingConfig = await loadRoutingConfig(configFile, config.executionProfiles, config.workspaces); }
+      catch (error) {
+        if (!(error instanceof RoutingConfigError)) throw error;
+        writeDiagnostic({ level: "warn", event: "routing_inactive", stage: "startup", code: "routing_config_invalid" });
+      }
+    }
+    const routing = createRoutingRuntime({ config: routingConfig, ...(historyStore === undefined ? {} : { store: historyStore }), diagnostic: (code) => writeDiagnostic({ level: "warn", event: "routing_degraded", stage: "routing", code }) });
     const adapter = relay ? new RoutingPiSessionAdapter(hostAdapter, new WriterRelayAdapter({
       home: homedir(), workspaceModes: config.workspaceModes, executionProfiles: config.executionProfiles,
     }), config.workspaceModes) : hostAdapter;
@@ -139,7 +150,7 @@ async function main(): Promise<void> {
       }),
     });
     handle = serveStdio(
-      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay, { history: { enabled: history !== undefined }, innerHistory: guardPath !== undefined }),
+      () => createServer(registry!, config.workspaces, config.executionProfiles, config.defaultExecutionProfile, config.configuration, config.workspaceModes, delivery, relay, { history: { enabled: history !== undefined }, innerHistory: guardPath !== undefined, routing }),
       {
         transport: new StdioServerTransport(process.stdin, stdoutGuard.transportStdout),
         onerror: () => writeDiagnostic({ level: "error", event: "mcp_transport_error", stage: "transport", code: "mcp_transport_error" }),
