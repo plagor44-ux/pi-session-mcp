@@ -73,23 +73,23 @@ describe("history store", () => {
     expect(await rejectionCode(openHistoryStore({ home, uid: own + 1 }))).toBe("history_unavailable");
   });
 
-  it("migrates an empty file to user_version 1", async () => {
+  it("migrates an empty file to user_version 2", async () => {
     const home = await temporaryRoot("history-migrate-");
     const store = await openStore(home);
-    expect(HISTORY_SCHEMA_VERSION).toBe(1);
-    expect(store.db.prepare("PRAGMA user_version").get()).toEqual(expect.objectContaining({ user_version: 1 }));
+    expect(HISTORY_SCHEMA_VERSION).toBe(2);
+    expect(store.db.prepare("PRAGMA user_version").get()).toEqual(expect.objectContaining({ user_version: 2 }));
     const tables = store.db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((row) => row.name);
     expect(tables).toEqual(expect.arrayContaining(["entries", "gaps", "instances", "sessions", "turns", "verdicts"]));
     store.close();
     // A second open of a current file is a no-op migration.
     const again = await openStore(home);
-    expect(again.db.prepare("PRAGMA user_version").get()).toEqual(expect.objectContaining({ user_version: 1 }));
+    expect(again.db.prepare("PRAGMA user_version").get()).toEqual(expect.objectContaining({ user_version: 2 }));
   });
 
   it("refuses a newer schema without writing", async () => {
     const home = await temporaryRoot("history-newer-");
     const store = await openStore(home);
-    store.db.exec("PRAGMA user_version = 2");
+    store.db.exec("PRAGMA user_version = 3");
     store.close();
     const { file } = historyLocation(home);
     const before = readFileSync(file);

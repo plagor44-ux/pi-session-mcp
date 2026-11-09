@@ -1,5 +1,5 @@
 /** Fixed values of the opt-in session history (ADR 0019). */
-export const HISTORY_SCHEMA_VERSION = 1;
+export const HISTORY_SCHEMA_VERSION = 2;
 /** Bounded wait for a locked database, "low seconds" (design call 2). */
 export const HISTORY_BUSY_TIMEOUT_MS = 2_000;
 /** Redacted bytes of a turn held in memory; a longer turn is written in several transactions. */
