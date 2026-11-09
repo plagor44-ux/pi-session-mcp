@@ -670,7 +670,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       if (routing.mode === "auto" && config.history?.enabled !== true) checks.push(failure("routing_history_required", "routing", "enable session history before using auto routing"));
       if (routing.mode !== "off") for (const tier of TIERS) {
         const review = routing.tiers[tier].review;
-        if (new Set(review.map(alias => routing.families.get(alias))).size < 2) checks.push(warning("routing_single_family", tier, "configure two review families or explicitly allow same-family review"));
+        if (review.length > 0 && new Set(review.map(alias => routing.families.get(alias))).size < 2) checks.push(warning("routing_single_family", tier, "configure two review families or explicitly allow same-family review"));
       }
     } catch { checks.push(failure("routing_config_invalid", "routing", "correct routing.json to reference configured profiles and valid routing settings")); }
   }
