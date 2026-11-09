@@ -125,6 +125,11 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
           for (const tier of Object.values(routing?.tiers ?? {})) for (const [role, aliases] of Object.entries(tier)) tier[role] = aliases.filter((value) => value !== alias);
           add("profiles", alias, "profile_dropped", "ok");
         }
+        plan.modeRequests = plan.modeRequests.map((mode) => mode.container?.profiles
+          ? { ...mode, container: { ...mode.container, profiles: mode.container.profiles.filter((alias) => !failed.includes(alias)) } }
+          : mode);
+        const emptyContainer = plan.modeRequests.find((mode) => mode.mode === "container" && mode.container?.profiles?.length === 0);
+        if (emptyContainer) return stop("container_profiles_empty", "modes", emptyContainer.alias);
         // Mutate only the owned candidate, never the live configuration during probes.
         const updated = await open(candidate, "w", 0o600);
         try { await updated.writeFile(documentBytes(plan.nextConfig)); } finally { await updated.close(); }
@@ -145,7 +150,18 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       check();
       await rename(candidate, deps.configPath);
     }
-    if (plan.routingChanged && plan.routingDocument !== undefined) { check(); await writeRoutingDocument(deps.configPath, plan.routingDocument); }
+    if (plan.routingChanged && plan.routingDocument !== undefined) {
+      check();
+      if (existingRouting !== undefined) {
+        const timestamp = (deps.now ?? (() => new Date()))().toISOString().replace(/[:.]/g, "-");
+        const path = routingConfigPath(deps.configPath);
+        const backup = `${path}.bak-guided-${timestamp}`;
+        await copyFile(path, backup, constants.COPYFILE_EXCL);
+        await chmod(backup, 0o600);
+      }
+      check();
+      await writeRoutingDocument(deps.configPath, plan.routingDocument);
+    }
     add("config", "installation", plan.configChanged || plan.routingChanged ? "configuration_installed" : "configuration_unchanged", plan.configChanged || plan.routingChanged ? "ok" : "unchanged");
     for (const mode of plan.modeRequests) {
       check(); const report = await deps.changeMode(mode, deps.configPath); check();

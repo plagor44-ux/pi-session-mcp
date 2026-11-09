@@ -1,6 +1,7 @@
-import { chmod, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, chmod, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
@@ -39,6 +40,14 @@ function terminalPrompter(signal: AbortSignal): { prompter: Prompter; close(): v
     },
   };
   return { prompter, close: () => terminal.close() };
+}
+
+async function installedClient(command: string): Promise<boolean> {
+  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+    try { await access(join(directory || ".", command), constants.X_OK); return true; }
+    catch { /* Keep checking PATH without running the client. */ }
+  }
+  return false;
 }
 
 function productionDependencies(configPath: string, signal: AbortSignal, catalog: () => Promise<PricedModelCatalog>): GuidedDependencies {
@@ -96,17 +105,21 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
       if (!injected.dependencies) output = (await import("./stdout-guard-install.js")).stdoutGuard.transportStdout as NodeJS.WriteStream;
       const prompter = injected.prompter ?? (terminal = terminalPrompter(signal)).prompter;
       let catalog = await (injected.dependencies?.catalog ?? createModelCatalog)();
-      while (catalog.providers().some((p) => !p.authConfigured)) {
-        const missing = catalog.providers().filter((p) => !p.authConfigured && /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(p.id));
-        process.stderr.write(`Provider login required: ${missing.map((p) => p.id).join(", ")}. Log in separately with "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi". Never enter credentials here.\n`);
-        if (!await prompter.confirm("Re-check provider login?", false)) break;
+      for (;;) {
+        const providers = catalog.providers().filter((p) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(p.id));
+        process.stderr.write(`Authenticated providers: ${providers.filter((p) => p.authConfigured).map((p) => p.id).join(", ") || "none"}\n`);
+        process.stderr.write(`Optional providers (not authenticated): ${providers.filter((p) => !p.authConfigured).map((p) => p.id).join(", ") || "none"}\n`);
+        process.stderr.write('Log in separately with "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi". Never enter credentials here.\n');
+        if (catalog.providers().some((p) => p.authConfigured) || !await prompter.confirm("Re-check provider login?", false)) break;
         catalog = await (injected.dependencies?.catalog ?? createModelCatalog)();
       }
-      answers = await collectGuidedAnswers(prompter, catalog, existing === undefined ? {} : { config: existing });
+      const clients = { claudeCode: await installedClient("claude"), codex: await installedClient("codex") };
+      answers = await collectGuidedAnswers(prompter, catalog, { ...(existing === undefined ? {} : { config: existing }), clients });
     }
     if (!injected.dependencies) output = (await import("./stdout-guard-install.js")).stdoutGuard.transportStdout as NodeJS.WriteStream;
     const deps = injected.dependencies ?? productionDependencies(configPath, signal, createModelCatalog);
     const report = await runGuided({ apply: request.apply, answers }, { ...deps, signal });
+    if (request.apply && report.exitCode === 0 && !json) process.stderr.write("Running Claude Code and Codex clients must reconnect (for example /mcp) to see the change.\n");
     return write(report);
   } catch (error) {
     return fail(signal.aborted ? "operation_interrupted" : (error as { code?: unknown }).code === "answers_invalid" ? "answers_invalid" : "operation_failed", signal.aborted ? signal.reason === 143 ? 143 : 130 : 1);

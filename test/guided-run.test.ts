@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -62,6 +62,32 @@ describe("guided run", () => {
     expect(JSON.parse(await readFile(f.configPath, "utf8")).executionProfiles).not.toHaveProperty("code");
     expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual([]);
   });
+  it("removes a dropped profile from container modes", async () => {
+    const f = await fixture(); const input = answers();
+    input.workspaces[0]!.mode = "container"; input.workspaces[0]!.container = { profiles: ["review", "code"] };
+    const probe = f.deps.probe;
+    f.deps.probe = async (profiles, path) => { const report = await probe(profiles, path); return { ...report, findings: report.findings.filter((p) => p.profile !== "code") }; };
+    const changeMode = vi.fn(f.deps.changeMode); f.deps.changeMode = changeMode;
+    expect((await runGuided({ apply: true, answers: input }, f.deps)).exitCode).toBe(0);
+    expect(changeMode.mock.calls[0]![0].container!.profiles).toEqual(["review"]);
+  });
+  it("stops when a container workspace loses every profile", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath); const input = answers();
+    input.workspaces[0]!.mode = "container"; input.workspaces[0]!.container = { profiles: ["code"] };
+    const probe = f.deps.probe;
+    f.deps.probe = async (profiles, path) => { const report = await probe(profiles, path); return { ...report, findings: report.findings.filter((p) => p.profile !== "code") }; };
+    expect(codes(await runGuided({ apply: true, answers: input }, f.deps))).toContain("container_profiles_empty");
+    expect(await readFile(f.configPath)).toEqual(before); expect(f.calls).not.toContain("changeMode"); expect(f.calls).not.toContain("apply");
+    await expect(stat(join(f.directory, "routing.json"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("backs up routing.json before changing it", async () => {
+    const f = await fixture(true); const path = join(f.directory, "routing.json"); const before = '{ "mode": "off", "custom": true }\n';
+    await writeFile(path, before, { mode: 0o644 });
+    expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+    const backup = `${path}.bak-guided-2026-11-09T12-00-00-000Z`;
+    expect(await readFile(backup, "utf8")).toBe(before); expect((await stat(backup)).mode & 0o777).toBe(0o600);
+    expect(await readFile(path, "utf8")).not.toBe(before);
+  });
   it.each([["stops on a foreign registration", "divergent", "registration_divergent"], ["stops with upgrade_required on a release mismatch", "release_binding_mismatch", "upgrade_required"]])("%s", async (_name, code, expected) => {
     const f = await fixture(true); const before = await readFile(f.configPath);
     f.deps.registrations = async () => result("dry-run", [{ target: { client: "codex", scope: "user", alias: "pi-session-mcp" }, status: "divergent", code: code! }]);
@@ -105,6 +131,35 @@ describe("guided run", () => {
     else input.profiles[0]!.family = "other";
     expect(codes(await runGuided({ apply: true, answers: input }, f.deps))).toContain(code); expect(await readFile(f.configPath)).toEqual(before);
   });
+  it("detects installed clients with executable access checks on PATH", async () => {
+    const f = await fixture(); await writeFile(join(f.directory, "claude"), "not a runnable program"); await chmod(join(f.directory, "claude"), 0o700);
+    await writeFile(join(f.directory, "codex"), "not executable", { mode: 0o600 });
+    const previous = process.env.PATH; process.env.PATH = f.directory;
+    const defaults: Record<string, boolean> = {};
+    const prompter: Prompter = {
+      text: async (_q, fallback) => fallback ?? "",
+      choose: async (_q, _options, fallback) => fallback,
+      confirm: async (q, fallback) => { defaults[q] = fallback; return q.includes("Approve") || fallback; },
+    };
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await runGuidedMain({ apply: false, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true })).toBe(0);
+      expect(defaults["Register Claude Code (if installed), including the wake hook?"]).toBe(true);
+      expect(defaults["Register Codex (if installed)?"]).toBe(false);
+      expect(stderr.mock.calls.map((c) => String(c[0])).join("")).not.toContain(f.directory);
+    } finally { if (previous === undefined) delete process.env.PATH; else process.env.PATH = previous; stdout.mockRestore(); stderr.mockRestore(); }
+  });
+  it.each([[true, false, true], [true, true, false], [false, false, false]])("prints reconnect guidance only for successful human apply (%s, %s)", async (apply, json, expected) => {
+    const f = await fixture(); const path = join(f.directory, "answers.json"); await writeFile(path, JSON.stringify(answers()));
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await runGuidedMain({ apply, answersPath: path }, json, new AbortController().signal, { dependencies: f.deps })).toBe(0);
+      const message = stderr.mock.calls.map((c) => String(c[0])).join("");
+      expect(message.includes("must reconnect")).toBe(expected);
+      if (expected) { expect(message).toContain("Claude Code and Codex"); expect(message).toContain("/mcp"); }
+      expect(message).not.toContain(f.directory);
+    } finally { stdout.mockRestore(); stderr.mockRestore(); }
+  });
   it("rejects invalid or unreadable answers with one path-free JSON report", async () => {
     const f = await fixture(); const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
@@ -113,7 +168,7 @@ describe("guided run", () => {
       expect(String(output.mock.calls[0]![0])).not.toContain(f.directory);
     } finally { output.mockRestore(); }
   });
-  it("keeps JSON stdout clean and prints only literal login guidance on stderr", async () => {
+  it("does not re-check an unauthenticated provider next to an authenticated one", async () => {
     const f = await fixture(); f.deps.catalog = async () => ({ providers: () => [{ id: "openai", authConfigured: false, models: [] }, { id: "anthropic", authConfigured: true, models: ["claude-test"] }], outputPrice: () => 2 });
     const questions: string[] = [];
     const prompter: Prompter = { text: async (q, fallback) => { questions.push(q); return fallback ?? ""; }, confirm: async (q, fallback) => { questions.push(q); return q.includes("Approve") ? true : fallback; }, choose: async (q, _options, fallback) => { questions.push(q); return fallback; } };
@@ -122,6 +177,8 @@ describe("guided run", () => {
       expect(await runGuidedMain({ apply: false, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true })).toBe(0);
       expect(stdout).toHaveBeenCalledTimes(1); expect(JSON.parse(String(stdout.mock.calls[0]![0])).status).toBe("planned");
       const guidance = stderr.mock.calls.map((c) => String(c[0])).join(""); expect(guidance).toContain('"$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"'); expect(guidance).not.toContain(f.directory);
+      expect(questions).not.toContain("Re-check provider login?");
+      expect(guidance).toContain("Authenticated providers: anthropic"); expect(guidance).toContain("Optional providers (not authenticated): openai");
       expect(questions.join(" ")).not.toMatch(/(?:enter|provide) (?:a )?(?:credential|api key|token)/i);
     } finally { stdout.mockRestore(); stderr.mockRestore(); }
   });
