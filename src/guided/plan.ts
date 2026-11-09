@@ -32,7 +32,7 @@ export function buildGuidedPlan(answers: GuidedAnswers, existing: { config?: unk
   const workspaces = { ...oldWorkspaces };
   const newProfiles: string[] = [];
   for (const p of answers.profiles) {
-    const proposed = { default: existing.config === undefined && p.alias === answers.defaultProfile, permissionProfile: p.role === "code" ? "coding" : "read-only", provider: p.provider, model: p.model, thinkingLevel: p.thinkingLevel };
+    const proposed = { default: oldDefault === undefined && p.alias === answers.defaultProfile, permissionProfile: p.role === "code" ? "coding" : "read-only", provider: p.provider, model: p.model, thinkingLevel: p.thinkingLevel };
     if (Object.hasOwn(profiles, p.alias)) {
       const current = record(profiles[p.alias]);
       if (!Object.entries(proposed).every(([key, value]) => key === "default" ? current[key] === (p.alias === answers.defaultProfile) : current[key] === value)) throw new GuidedPlanError("profile_alias_conflict");
@@ -53,11 +53,11 @@ export function buildGuidedPlan(answers: GuidedAnswers, existing: { config?: unk
   const tiers = { ...oldTiers };
   const families = { ...record(oldRouting.families) };
   for (const p of answers.profiles) {
-    if (Object.hasOwn(families, p.alias) && families[p.alias] !== p.family) throw new GuidedPlanError("routing_profile_conflict");
     if (p.tier === null) continue;
+    if (Object.hasOwn(families, p.alias) && families[p.alias] !== p.family) throw new GuidedPlanError("routing_profile_conflict");
     for (const tier of TIERS) for (const role of ROLES) {
       const list = record(oldTiers[tier])[role];
-      if (tier !== p.tier && Array.isArray(list) && list.includes(p.alias)) throw new GuidedPlanError("routing_profile_conflict");
+      if ((tier !== p.tier || (role === "code") !== (p.role === "code")) && Array.isArray(list) && list.includes(p.alias)) throw new GuidedPlanError("routing_profile_conflict");
     }
     const cells = { ...record(tiers[p.tier]) };
     const list = Array.isArray(cells[p.role]) ? cells[p.role] as unknown[] : [];
