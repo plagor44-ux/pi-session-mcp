@@ -6,6 +6,15 @@ import type { SetupResult } from "../src/setup-result.js";
 const sample: SetupResult = { schemaVersion: 1, operation: "dry-run", status: "planned", exitCode: 0, findings: [{ target: { client: "codex", scope: "user", alias: "pi-session-mcp" }, status: "absent", code: "absent" }] };
 
 describe("setup CLI", () => {
+  it("parses --guided with --answers and --config", () => {
+    expect(parseSetupArgs(["--guided", "--answers", "a.json", "--config", "c.json", "--apply", "--json"]).guided).toEqual({ apply: true, answersPath: "a.json", configPath: "c.json" });
+  });
+  it("fails with usage_invalid without a terminal or answers", async () => {
+    const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try { expect(await main(["--guided", "--json"])).toBe(64); expect(String(output.mock.calls[0]?.[0])).toContain("usage_invalid"); }
+    finally { output.mockRestore(); }
+  });
+  it.each([["--answers", "a.json"], ["--config", "c.json"], ["--guided", "--verify"], ["--guided", "--repo", "a"]])("refuses %s", (...args) => { expect(() => parseSetupArgs(args)).toThrow("usage_invalid"); });
   it("parses writer resets, explicit removal, repository base and Codex", () => {
     expect(parseSetupArgs(["--writer", "a-w1", "--reset", "--base", "main", "--discard", "--apply"]).writer).toEqual({ name: "a-w1", operation: "reset", baseRef: "main", discard: true, apply: true });
     expect(parseSetupArgs(["--writer", "a-w1", "--remove"]).writer).toMatchObject({ operation: "remove", apply: true });

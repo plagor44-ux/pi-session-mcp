@@ -12,6 +12,7 @@ import type { SnapshotRequest } from "./setup-snapshots.js";
 /** Small argv adapter; command execution remains injected in SetupClientAdapter. */
 export interface SetupCliRequest extends SetupRequest {
   readonly json: boolean;
+  readonly guided?: { apply: boolean; answersPath?: string; configPath?: string };
   /** `--customize-skill <name>`: copies a shipped skill into the override directory instead of touching clients. */
   readonly customizeSkill?: string;
   readonly repo?: ModeRequest;
@@ -24,6 +25,24 @@ export interface SetupCliRequest extends SetupRequest {
   readonly probe?: { readonly profiles: readonly string[]; readonly apply: boolean };
 }
 export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
+  if (argv.some((arg) => ["--guided", "--answers", "--config"].includes(arg))) {
+    let guided = false, json = false;
+    let operation: "apply" | "dry-run" | undefined;
+    let answersPath: string | undefined, configPath: string | undefined;
+    for (let index = 0; index < argv.length; index++) {
+      const arg = argv[index];
+      if (arg === "--guided" && !guided) guided = true;
+      else if (arg === "--json" && !json) json = true;
+      else if ((arg === "--apply" || arg === "--dry-run") && operation === undefined) operation = arg === "--apply" ? "apply" : "dry-run";
+      else if (arg === "--answers" || arg === "--config") {
+        const value = argv[++index];
+        if (!value || value.startsWith("-") || (arg === "--answers" ? answersPath !== undefined : configPath !== undefined)) throw new Error("usage_invalid");
+        if (arg === "--answers") answersPath = value; else configPath = value;
+      } else throw new Error("usage_invalid");
+    }
+    if (!guided) throw new Error("usage_invalid");
+    return { targets: [], json, ...(operation ? { operation } : {}), guided: { apply: operation === "apply", ...(answersPath === undefined ? {} : { answersPath }), ...(configPath === undefined ? {} : { configPath }) } };
+  }
   let operation: SetupOperation | undefined;
   let json = false;
   const targets: SetupTarget[] = [];

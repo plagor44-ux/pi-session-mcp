@@ -1,0 +1,53 @@
+import { CATALOG_ID_PATTERN, type PricedModelCatalog } from "../model-catalog.js";
+import { ROLES, TIERS } from "../routing/config.js";
+import { parseGuidedAnswers, type GuidedAnswers } from "./answers.js";
+import { proposeProfiles } from "./propose.js";
+
+export interface Prompter {
+  text(question: string, fallback?: string): Promise<string>;
+  confirm(question: string, fallback: boolean): Promise<boolean>;
+  choose<T extends string>(question: string, options: readonly T[], fallback: T): Promise<T>;
+}
+const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+
+export async function collectGuidedAnswers(prompter: Prompter, catalog: PricedModelCatalog, existing: { config?: unknown }): Promise<GuidedAnswers> {
+  const profiles: GuidedAnswers["profiles"] = [];
+  const config = record(existing.config);
+  const oldProfiles = record(config.executionProfiles);
+  for (const proposal of proposeProfiles(catalog)) {
+    if (!CATALOG_ID_PATTERN.test(proposal.provider) || !CATALOG_ID_PATTERN.test(proposal.model)) continue;
+    if (!await prompter.confirm(`Use ${proposal.alias}: ${proposal.provider} / ${proposal.model}?`, true)) continue;
+    const tier = await prompter.choose(`Tier for ${proposal.alias}`, TIERS, proposal.tier);
+    const role = await prompter.choose(`Role for ${proposal.alias}`, ROLES, proposal.role);
+    profiles.push({ ...proposal, tier, role,
+      model: await prompter.text(`Model for ${proposal.alias}`, proposal.model),
+      family: await prompter.text(`Family for ${proposal.alias}`, proposal.family),
+      thinkingLevel: await prompter.choose(`Thinking level for ${proposal.alias}`, ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const, proposal.thinkingLevel),
+    });
+  }
+  for (const tier of TIERS) {
+    const families = new Set(profiles.filter((p) => p.tier === tier).map((p) => p.family));
+    if (families.size < 2) await prompter.confirm(`${tier} has fewer than two families; review may need the same-family override. Continue?`, true).then((ok) => { if (!ok) throw new Error("operation_interrupted"); });
+  }
+  const defaults = [...new Set([...Object.entries(oldProfiles).filter(([, p]) => record(p).permissionProfile === "read-only").map(([alias]) => alias), ...profiles.filter((p) => p.role !== "code").map((p) => p.alias)])];
+  if (!defaults.length) throw Object.assign(new Error("answers_invalid"), { code: "answers_invalid" });
+  const oldDefault = Object.entries(oldProfiles).find(([, p]) => record(p).default === true)?.[0];
+  const defaultProfile = await prompter.choose("Default read-only profile", defaults, oldDefault ?? defaults[0]!);
+  const workspaces: GuidedAnswers["workspaces"] = [];
+  while (await prompter.confirm("Add a repository workspace?", false)) {
+    const alias = await prompter.text("Workspace alias");
+    const path = await prompter.text("Repository path (kept in configuration only)");
+    const mode = await prompter.choose("Workspace mode", ["read-only", "host", "container"] as const, "read-only");
+    const acceptHostWrites = mode === "host" ? await prompter.confirm("Do you, the owner, accept host writes?", false) : false;
+    const container = mode === "container" ? { profiles: (await prompter.text("Container profile aliases, comma-separated", profiles.filter((p) => p.role === "code").map((p) => p.alias).join(","))).split(",") } : undefined;
+    workspaces.push({ alias, path, mode, ...(mode === "host" ? { acceptHostWrites } : {}), ...(container ? { container } : {}) });
+  }
+  const enabled = await prompter.confirm("Enable history? It stores redacted session content locally.", record(config.history).enabled === true);
+  const mode = await prompter.choose("Routing mode (auto requires history)", enabled ? ["off", "manual", "auto"] as const : ["off", "manual"] as const, "off");
+  const claudeCode = await prompter.confirm("Register Claude Code (if installed), including the wake hook?", false);
+  const codex = await prompter.confirm("Register Codex (if installed)?", false);
+  const newProfiles = profiles.filter((p) => !Object.hasOwn(oldProfiles, p.alias));
+  const approveProbes = await prompter.confirm(`Approve ${newProfiles.length} provider turns: one fixed PONG probe per new profile on apply?`, false);
+  const allowConfigChange = existing.config === undefined ? false : await prompter.confirm("Allow adding the confirmed profiles and blocks to the existing configuration? Existing profiles are never replaced.", false);
+  return parseGuidedAnswers({ schemaVersion: 1, approveProbes, allowConfigChange, profiles, defaultProfile, workspaces, history: { enabled }, routing: { mode }, clients: { claudeCode, codex } });
+}

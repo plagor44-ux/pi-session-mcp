@@ -27,6 +27,15 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
   const failureTargets = request.snapshot ? [{ client: "snapshot", scope: "workspace", alias: request.snapshot.alias }] : request.writer ? [{ client: "writer", scope: request.writer.name.slice(0, request.writer.name.lastIndexOf("-w")), alias: request.writer.name }] : request.isolationControl ? [{ client: "writer", scope: "host", alias: "control" }] : request.repo !== undefined ? [{ client: "modes", scope: "workspace", alias: request.repo.alias }] : request.customizeSkill === undefined ? request.targets : [skillTarget(request.customizeSkill)];
   if (!currentSetupPlatform() && !request.snapshot) return write(cliFailure(operation, failureTargets, "platform_unsupported", 1), request.json);
   if (request.listModels) return (await import("./setup-probe-main.js")).runListModels(request.json);
+  if (request.guided) {
+    const controller = new AbortController();
+    const interrupt = (): void => controller.abort(130);
+    const terminate = (): void => controller.abort(143);
+    process.on("SIGINT", interrupt);
+    process.on("SIGTERM", terminate);
+    try { return await (await import("./setup-guided-main.js")).runGuidedMain(request.guided, request.json, controller.signal); }
+    finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+  }
   const config = process.env.PI_SESSION_MCP_CONFIG;
   if (!config) {
     if (request.probe) return (await import("./setup-probe-main.js")).runProbe(request.probe, request.json, "", new AbortController().signal);
