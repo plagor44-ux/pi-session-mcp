@@ -13,6 +13,7 @@ login themselves, using the package's Pi executable:
 
 - `config_not_regular`: no live file changed; ask the owner to supply regular configuration files.
 - `config_changed_during_run`: setup changed no live file; ask the owner to review the concurrent changes.
+- `guided_in_progress`: no live file changed; another guided run holds the configuration, or two runs started together and both backed off. Ask the owner whether another run is active before retrying once.
 - `model_unknown`: no live file changed; ask the owner to choose a model from the provider's catalog.
 - `container_profiles_invalid`: no live file changed; ask the owner to select non-empty coding profiles.
 - `input_closed`: no live file changed; ask the owner to restart the interview with input available.
