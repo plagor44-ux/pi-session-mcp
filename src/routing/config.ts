@@ -51,12 +51,14 @@ export function parseRoutingConfig(input: unknown, profiles: ReadonlyMap<string,
   if (!result.success) throw new RoutingConfigError();
   const data = result.data;
   const families = new ImmutableMap(Object.entries(data.families ?? {}));
+  if ([...families.keys()].some((name) => !profiles.has(name))) throw new RoutingConfigError();
   const assigned = new Map<string, Tier>();
   const tiers = {} as Record<Tier, Record<Role, readonly string[]>>;
   for (const name of TIERS) {
     const roles = {} as Record<Role, readonly string[]>;
     for (const role of ROLES) {
       const aliases = data.tiers?.[name]?.[role] ?? [];
+      if (new Set(aliases).size !== aliases.length) throw new RoutingConfigError();
       for (const profileAlias of aliases) {
         const profile = profiles.get(profileAlias);
         if (!profile || profile.permissionProfile !== (role === "code" ? "coding" : "read-only") || !families.has(profileAlias) || (assigned.has(profileAlias) && assigned.get(profileAlias) !== name)) throw new RoutingConfigError();

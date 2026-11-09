@@ -33,6 +33,8 @@ describe("routing configuration", () => {
     ["a family that fails FAMILY_PATTERN", { ...valid, families: { writer: "BAD", reader: "two" } }],
     ["an unknown top-level key", { ...valid, secret: "/private/path" }],
     ["a workspace floor for an unknown workspace", { ...valid, floors: { workspaces: { missing: "hightech" } } }],
+    ["one alias twice in a cell", { ...valid, tiers: { medium: { code: ["writer", "writer"] } } }],
+    ["a family for an unknown profile", { ...valid, families: { writer: "one", reader: "two", gone: "three" } }],
   ])("refuses %s", (_name, input) => {
     try { parseRoutingConfig(input, profiles, workspaces); expect.fail("expected rejection"); }
     catch (error) { expect(error).toMatchObject({ code: "routing_config_invalid" }); expect((error as Error).message).not.toContain("/private/path"); }
