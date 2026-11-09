@@ -68,6 +68,7 @@ export async function runRoutingCli(argv: readonly string[], io: RoutingCliIo): 
         if (!row || !isTier(String(row.tier)) || !isRole(String(row.role))) return fail("routing_proposal_unavailable");
         const tier = row.tier as Tier, role = row.role as Role;
         if (row.kind === "reorder") {
+          if (database.prepare("SELECT frozen FROM routing_cells WHERE tier = ? AND role = ?").get(tier, role)?.frozen === 1) return fail("routing_cell_frozen");
           const order: unknown = JSON.parse(String(row.after_json));
           if (!Array.isArray(order) || order.some(p => typeof p !== "string" || !routing.tiers[tier][role].includes(p)) || new Set(order).size !== order.length || order.length !== routing.tiers[tier][role].length) return fail("routing_proposal_unavailable");
           database.prepare("INSERT INTO routing_cells (tier,role,order_json,frozen) VALUES (?,?,?,0) ON CONFLICT(tier,role) DO UPDATE SET order_json=excluded.order_json").run(tier, role, JSON.stringify(order));
