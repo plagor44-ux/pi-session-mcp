@@ -4,6 +4,7 @@ import type { HistoryStore } from "../history/store.js";
 import { ROLES, TIERS, type Role, type RoutingConfig, type RoutingMode, type Tier } from "./config.js";
 import { routeStart, type RoutedStart, type RoutingRequest } from "./select.js";
 import { createRoutingStore } from "./store.js";
+import { explorationAllowed, maybeRefreshRouting } from "./learn.js";
 
 export interface RoutingRuntime {
   readonly config: RoutingConfig;
@@ -31,7 +32,7 @@ export function createRoutingRuntime(options: { config: RoutingConfig; store?: H
           suspended = store.suspendedProfiles(now());
           if (config.mode === "auto") {
             const spend = store.explorationSpend(new Date(now().getTime() - 7 * 24 * 60 * 60 * 1000));
-            allowed = !spend.costUnknown && spend.pending < 3 && spend.knownUsd < config.learning.explorationBudgetUsd;
+            allowed = explorationAllowed(spend, config.learning.explorationBudgetUsd);
           }
         } catch {
           orders.clear(); suspended = new Set(); allowed = false;
@@ -44,7 +45,8 @@ export function createRoutingRuntime(options: { config: RoutingConfig; store?: H
       if (config.mode === "off" || !options.store) return;
       try {
         if (routed.decision) createRoutingStore(options.store).recordDecision({ ...routed.decision, sessionRef: sessionId, decidedAt: now().toISOString() });
-        if (options.refresh) setImmediate(() => { try { options.refresh?.(); } catch { diagnostic("routing_refresh_failed"); } });
+        const store = options.store;
+        setImmediate(() => { try { if (options.refresh) options.refresh(); else maybeRefreshRouting({ store, config, now: now() }); } catch { diagnostic("routing_refresh_failed"); } });
       } catch { diagnostic("routing_store_unavailable"); }
     },
     capabilities() {
