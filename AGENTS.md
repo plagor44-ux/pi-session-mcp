@@ -4,14 +4,19 @@
 
 - Install: `npm ci`. Type check: `npm run typecheck`. Build: `npm run build`.
 - Tests: `npm test` (Vitest); one file with `npx vitest run test/<name>.test.ts`.
+  Vitest collects only `test/**/*.test.{ts,mjs}` (`vitest.config.ts`); a test
+  file in another directory or with another suffix does not run.
 - Issues and pull requests follow the templates in `.github/`. In a pull
   request, report only checks you actually ran, with their results.
-- Run the targeted tests for the files you change, then `npm test`. Inside a
-  container writer a few lock and hook tests can time out; report them by
-  file and test name instead of changing them.
+- Run the targeted tests for the files you change. A worker that was given one
+  bounded task stops there and reports each command with its exit code.
+  Whoever integrates the change, the controlling agent or you when you work
+  alone, runs the full sequence below on the integrated candidate; CI repeats
+  it on the pull request. Inside a container writer a few lock and hook tests
+  can time out; report them by file and test name instead of changing them.
 - CI runs `npm ci`, `npm run typecheck`, `npm run build:cli`,
   `NODE_OPTIONS=--unhandled-rejections=strict npm test` and `npm run build`;
-  run the same before a pull request.
+  run the same on the integrated candidate before a pull request.
 
 ## Rules
 

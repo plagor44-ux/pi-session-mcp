@@ -64,6 +64,17 @@
   `claude-code`, `ai-agents` and `agent-orchestration`.
   `test/readme-onboarding.test.ts` checks the README's relative links and
   anchors and its version line and release link against `package.json`.
+- `npm test` and every other Vitest call collect only
+  `test/**/*.test.{ts,mjs}`, set in the new `vitest.config.ts`. Vitest's
+  default pattern matches a test file anywhere below the root, so a checkout
+  with untracked evaluation artifacts below the ignored `eval/results/` also
+  ran the test files in them. `test/vitest-discovery.test.ts` fails when a
+  tracked file that the default pattern would have run lies outside the
+  configured one, so the narrower pattern cannot hide a test. `AGENTS.md`
+  separates the targeted tests of a worker with one bounded task from the full
+  sequence that whoever integrates the change runs on the integrated
+  candidate. Test configuration and project rules only; no runtime or contract
+  change.
 
 ### Fixed
 
