@@ -103,8 +103,11 @@
   for a Claude Code controller; `eval/controller-skill/README.md` holds the
   results and their limits. A Codex controller has not been measured. The
   reference lists `Branch:` as a field of the implementation report, which
-  the controller skill already asked for, and the suite's shared worker
-  report and the one of `verify-worker-claim` use the documented fields. A
+  the controller skill already asked for. The implementation skill asked for
+  "the hash and branch" in one part; it now asks for a `Commit:` line with
+  the bare full hash and a `Branch:` line, as the controller skill does. The
+  suite's shared worker report and the one of `verify-worker-claim` use the
+  documented fields. A
   run of the whole suite passed 8 of 10 cases; `terminal-read-once` and
   `verify-worker-claim` fail or vary on the current model with the skill
   before this change as well, and the README records what was measured.
