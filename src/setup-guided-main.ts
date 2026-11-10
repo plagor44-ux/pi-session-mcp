@@ -97,12 +97,13 @@ export interface GuidedMainDependencies {
   setProviderKey?: (provider: string) => Promise<number>;
 }
 
+/** The child's stdout goes to stderr: guided setup's stdout carries only its final report. */
+export const PROVIDER_KEY_CHILD_STDIO = Object.freeze(["inherit", 2, "inherit"] as const);
+
 /** Child inherits the owner's terminal; only its exit status returns to guided setup. */
-export function setProviderKeyInTerminal(provider: string): Promise<number> {
-  const entry = resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js");
+export function setProviderKeyInTerminal(provider: string, entry = resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js")): Promise<number> {
   return new Promise((resolveStatus) => {
-    // The child's stdout goes to stderr: guided setup's stdout carries only its final report.
-    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: ["inherit", 2, "inherit"] });
+    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: [...PROVIDER_KEY_CHILD_STDIO] });
     child.once("error", () => resolveStatus(1));
     child.once("exit", code => resolveStatus(code ?? 1));
   });

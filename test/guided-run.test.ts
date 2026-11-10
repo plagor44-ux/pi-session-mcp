@@ -8,7 +8,7 @@ import { parseGuidedAnswers } from "../src/guided/answers.js";
 import { result } from "../src/setup-result.js";
 import { PassThrough } from "node:stream";
 import { buildGuidedPlan } from "../src/guided/plan.js";
-import { runGuidedMain, terminalPrompter } from "../src/setup-guided-main.js";
+import { PROVIDER_KEY_CHILD_STDIO, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
 import type { Prompter } from "../src/guided/prompts.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -70,6 +70,41 @@ describe("guided run", () => {
       }
       expect(f.deps.probe).not.toHaveBeenCalled();
     } finally { out.mockRestore(); err.mockRestore(); }
+  });
+  it("reports a stored key only after the child succeeds and the reloaded catalog shows it", async () => {
+    const f = await fixture();
+    let stored = false, reads = 0;
+    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    const child = vi.fn(async () => { stored = true; return 0; });
+    const ids = ["openai", ""];
+    const prompter: Prompter = {
+      text: async (q, fallback) => q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? "",
+      confirm: async (q, fallback) => q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false,
+      choose: async (_q, _opts, fallback) => fallback,
+    };
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await runGuidedMain({ apply: true, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child });
+      expect(child).toHaveBeenCalledWith("openai");
+      expect(reads).toBeGreaterThanOrEqual(2);
+      const stderr = err.mock.calls.map(c => String(c[0])).join("");
+      expect(stderr).toContain("openai: key stored");
+      expect(stderr).toContain("Authenticated providers: openai");
+      expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("key stored");
+    } finally { out.mockRestore(); err.mockRestore(); }
+  });
+  it("runs the key child with stdout on stderr and returns only its exit status", async () => {
+    expect(PROVIDER_KEY_CHILD_STDIO).toEqual(["inherit", 2, "inherit"]);
+    const script = join(await mkdtemp(join(tmpdir(), "guided-child-")), "child.mjs"); directories.push(join(script, ".."));
+    await writeFile(script, 'const [, , a, b, id] = process.argv; if (a !== "auth" || b !== "set") process.exit(9); if (id === "signal") process.kill(process.pid, "SIGKILL"); process.exit(id === "openai" ? 0 : 3);\n');
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await setProviderKeyInTerminal("openai", script)).toBe(0);
+      expect(await setProviderKeyInTerminal("other", script)).toBe(3);
+      expect(await setProviderKeyInTerminal("signal", script)).toBe(1);
+      expect(await setProviderKeyInTerminal("openai", join(script, "..", "missing.mjs"))).not.toBe(0);
+    } finally { err.mockRestore(); }
   });
   it("never offers credential handoff with answers", async () => {
     const f = await fixture(); const path = join(f.directory, "answers.json"); await writeFile(path, "{}");
