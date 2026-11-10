@@ -1,3 +1,5 @@
+import { loadRuntimeProviderPolicy, type ProviderPolicy } from "./provider-store.js";
+import { ProviderStoreError } from "./provider-store-contract.js";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -91,6 +93,7 @@ const DEFAULT_EXTENSION_SDK: ExtensionSdk = {
 
 export interface SdkPiSessionAdapterOptions {
   readonly modelRuntimeFactory?: () => Promise<ModelRuntime>;
+  readonly providerPolicyFactory?: () => Promise<ProviderPolicy>;
   readonly createSession?: CreateSession;
   readonly diagnosticSink?: (diagnostic: SdkPiAdapterDiagnostic) => void;
   readonly mcpConnectionFactory?: McpConnectionFactory;
@@ -442,8 +445,9 @@ export async function createPhase0ResourceLoader(cwd: string, skills: readonly S
 export const defaultModelRuntimeFactory = (): Promise<ModelRuntime> => ModelRuntime.create({ refreshOnCreate: false });
 
 export class SdkPiSessionAdapter implements PiSessionAdapter {
-  private runtimePromise: Promise<ModelRuntime> | undefined;
+  private readonly policies = new WeakMap<ModelRuntime, ProviderPolicy>();
   private readonly modelRuntimeFactory: () => Promise<ModelRuntime>;
+  private readonly providerPolicyFactory: () => Promise<ProviderPolicy>;
   private readonly createSession: CreateSession;
   private readonly diagnosticSink: (diagnostic: SdkPiAdapterDiagnostic) => void;
   private readonly mcpConnectionFactory: McpConnectionFactory;
@@ -455,6 +459,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
 
   constructor(options: SdkPiSessionAdapterOptions = {}) {
     this.modelRuntimeFactory = options.modelRuntimeFactory ?? defaultModelRuntimeFactory;
+    this.providerPolicyFactory = options.providerPolicyFactory ?? loadRuntimeProviderPolicy;
     this.createSession = options.createSession ?? createAgentSession;
     this.diagnosticSink = options.diagnosticSink ?? (() => undefined);
     this.mcpConnectionFactory = options.mcpConnectionFactory ?? createStdioMcpConnection;
@@ -475,8 +480,8 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     let runtime: ModelRuntime;
     try {
       runtime = await this.getRuntime();
-    } catch {
-      throw this.failure(executionProfile, "runtime", "pi_session_creation_failed");
+    } catch (error) {
+      throw this.failure(executionProfile, "runtime", error instanceof ProviderStoreError ? "local_authentication_unavailable" : "pi_session_creation_failed");
     }
     const model = await this.resolveVerifiedModel(runtime, executionProfile);
 
@@ -537,9 +542,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     // registration wins, so every extension session gets a runtime of its own.
     let runtime: ModelRuntime;
     try {
-      runtime = await this.modelRuntimeFactory();
-    } catch {
-      throw this.failure(executionProfile, "runtime", "pi_session_creation_failed");
+      runtime = await this.getRuntime();
+    } catch (error) {
+      throw this.failure(executionProfile, "runtime", error instanceof ProviderStoreError ? "local_authentication_unavailable" : "pi_session_creation_failed");
     }
     let services: AgentSessionServices;
     let extensionTools: string[][];
@@ -690,6 +695,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
 
   /** Provider, model, authentication and availability, exactly as configured. */
   private async resolveVerifiedModel(runtime: ModelRuntime, executionProfile: ResolvedExecutionProfile): Promise<SdkModel> {
+    if (this.policies.get(runtime)?.blocked(executionProfile.provider)) {
+      throw this.failure(executionProfile, "check_auth", "local_authentication_missing");
+    }
     let provider: ReturnType<ModelRuntime["getProvider"]>;
     try {
       provider = runtime.getProvider(executionProfile.provider);
@@ -804,15 +812,14 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     }
   }
 
-  private getRuntime(): Promise<ModelRuntime> {
-    if (!this.runtimePromise) {
-      const pending = this.modelRuntimeFactory();
-      this.runtimePromise = pending;
-      void pending.catch(() => {
-        if (this.runtimePromise === pending) this.runtimePromise = undefined;
-      });
-    }
-    return this.runtimePromise;
+  private async getRuntime(): Promise<ModelRuntime> {
+    // New sessions observe rotations without changing the credentials of running sessions.
+    const policy = await this.providerPolicyFactory();
+    const runtime = await this.modelRuntimeFactory();
+    try { await policy.apply(runtime); }
+    catch { throw new ProviderStoreError("provider_store_unavailable"); }
+    this.policies.set(runtime, policy);
+    return runtime;
   }
 
   private failure(

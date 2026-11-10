@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import { serveArgs } from "../src/writer-boundary.js";
 import { serveRefusal } from "../src/refusal-server.js";
 import * as credentials from "../src/writer-credentials.js";
 import { WriterLeaseError } from "../src/writer-lease.js";
+import { openProviderStore } from "../src/provider-store.js";
 vi.mock("../src/refusal-server.js", () => ({ serveRefusal: vi.fn() }));
 vi.mock("../src/writer-credentials.js", async (original) => ({ ...await original<typeof credentials>(), refreshHostCredential: vi.fn(), writeBoundaryCredentials: vi.fn() }));
 let home: string, child: ChildProcess, deps: LaunchDependencies, tick: () => void;
@@ -19,7 +20,7 @@ const state: WriterState = { schemaVersion: 1, alias: "x", index: 1, phase: "not
 beforeEach(async () => {
   vi.clearAllMocks(); home = await mkdtemp(join(tmpdir(), "launch-"));
   child = new EventEmitter() as ChildProcess; child.kill = vi.fn(() => true);
-  deps = { home, releaseRoot: "/release", env: { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }, now: () => 1_800_000_000_000,
+  deps = { providerCatalogRuntime: async () => ({ getProviders: () => [{ id: "openai" }, { id: "anthropic" }], getModels: () => [], checkAuth: async () => undefined, registerProvider: () => {}, setRuntimeApiKey: async () => {} }), home, releaseRoot: "/release", env: { PI_WRITER_NO_CREDENTIAL_REFRESH: "1" }, now: () => 1_800_000_000_000,
     runner: { run: vi.fn(async (_cmd, args) => ({ exitCode: 0, stdout: args[0] === "info" ? "true" : "5.0.0", stderr: "" })) },
     lease: { acquire: vi.fn(async () => ({ fd: 42, release: vi.fn(async () => {}) })), adopt: vi.fn(async () => ({ fd: 3, release: vi.fn(async () => {}) })) },
     ensureAbsent: vi.fn(async () => {}),
@@ -32,6 +33,31 @@ async function save(ready = false, version = "5.0.0") {
   await writeFile(writerPaths(home, "x-w1").wrapper, "wrapper");
   if (ready) await writeWriterState(home, "x-w1", { ...state, phase: "ready", acceptance: { verdict: "pass", at: "now", network: "limited", fingerprint: acceptanceFingerprint({ wrapperDigest: wrapperDigest("wrapper"), packageVersion: PACKAGE_VERSION, imageId: state.imageId, podmanVersion: version, network: state.network, cache: state.cache, ...(await writerEventDeliveryEnabled(writerPaths(home, "x-w1").config) ? { eventDelivery: true } : {}) }) } });
 }
+it("hands off selected product keys without warming up overridden OAuth", async () => {
+  await save(); deps.env = {};
+  const store = openProviderStore({ home });
+  await store.setKey("openai", "sk-test-writer-selected", { builtInProviderIds: ["openai"] });
+  await store.setKey("anthropic", "sk-test-writer-unrelated", { builtInProviderIds: ["anthropic"] });
+  const host = join(home, ".pi", "agent"); await mkdir(host, { recursive: true });
+  await writeFile(join(host, "auth.json"), JSON.stringify({ openai: { type: "oauth", expires: 1, access: "sk-test-host", refresh: "sk-test-refresh" } }));
+  await launch(["x-w1", "node", "probe"], deps);
+  expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
+  expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, { openai: { type: "api_key", key: "sk-test-writer-selected" } });
+  const manifest = await readFile(join(writerPaths(home, "x-w1").agent, "provider-definitions.json"), "utf8");
+  expect(manifest).not.toContain("sk-test");
+  await store.removeKey("openai", { builtInProviderIds: ["openai"] });
+  await launch(["x-w1", "node", "probe"], deps);
+  expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, {});
+  expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
+});
+it("refuses selected loopback providers before spawning a container", async () => {
+  await save();
+  await writeWriterState(home, "x-w1", { ...state, providers: [{ provider: "local", model: "model" }] });
+  await openProviderStore({ home }).addProvider({ id: "local", api: "openai-completions", baseUrl: "http://127.0.0.1:8080", models: [{ id: "model", contextWindow: 4096, maxTokens: 512, reasoning: false, input: ["text"] }] }, { builtInProviderIds: [] });
+  await launch(["x-w1", "node", "probe"], deps);
+  expect(serveRefusal).toHaveBeenCalledWith("provider_unsupported_in_writer");
+  expect(deps.spawnPodman).not.toHaveBeenCalled();
+});
 it.each(["throw", "error"])("reports a Podman spawn %s once without leaking error details", async (kind) => {
   await save(); const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   vi.mocked(deps.spawnPodman).mockImplementation(() => {

@@ -2,7 +2,7 @@ import { loadRoutingConfig, TIERS } from "./routing/config.js";
 import { access, lstat, open, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
@@ -23,6 +23,9 @@ import { inspectHistory, type HistoryInspection } from "./history/inspect.js";
 import { historyLocation } from "./history/store.js";
 import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFingerprint, shippedSkillsDirectory, type ReleasedSkillTree } from "./skill-library.js";
 
+import { openProviderStore } from "./provider-store.js";
+import { ProviderStoreError } from "./provider-store-contract.js";
+
 export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
 export type DoctorCheckId =
@@ -38,6 +41,7 @@ export type DoctorCheckId =
   | "sandbox_unavailable" | "sandbox_go_cache_unavailable" | "workspace_git_unavailable"
   | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
   | "routing_config_invalid" | "routing_history_required" | "routing_single_family"
+  | "provider_store"
   | "event_spool_root"
   | "history_storage" | "history_schema" | "history_integrity" | "history_gaps";
 
@@ -121,7 +125,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps", "routing_config_invalid", "routing_history_required", "routing_single_family"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "provider_store", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps", "routing_config_invalid", "routing_history_required", "routing_single_family"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -674,6 +678,7 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
     } catch { checks.push(failure("routing_config_invalid", "routing", "correct routing.json to reference configured profiles and valid routing settings")); }
   }
+  checks.push(await providerStoreCheck(dependencies.home ?? userInfo().homedir));
   if (config) checks.push(...await snapshotChecks(config, home));
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
   const lease = await writerLeaseCheck(home, dependencies.writerLeaseRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.());
@@ -737,6 +742,17 @@ async function historyChecks(config: AppConfig, home: string, inspect: (home: st
 }
 
 export function renderDoctorJson(result: DoctorResult): string { return JSON.stringify(result) + "\n"; }
+export async function providerStoreCheck(home: string): Promise<DoctorCheck> {
+  try {
+    const state = await openProviderStore({ home }).read();
+    return state.sources.some(source => !source.bindingValid)
+      ? failure("provider_store", "providers", "credential_binding_mismatch")
+      : ok("provider_store", "providers");
+  } catch (error) {
+    return failure("provider_store", "providers", error instanceof ProviderStoreError ? error.code : "provider_store_unavailable");
+  }
+}
+
 export function renderDoctorHuman(result: DoctorResult): string { return result.checks.map((check) => `${check.severity.toUpperCase()} ${check.id} [${check.subject}]${check.remediation ? `: ${check.remediation}` : ""}`).join("\n") + "\n"; }
 
 export function parseDoctorArgs(args: readonly string[]): { json: boolean } | undefined { return args.length === 0 ? { json: false } : args.length === 1 && args[0] === "--json" ? { json: true } : undefined; }

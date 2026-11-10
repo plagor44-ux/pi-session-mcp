@@ -345,6 +345,10 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
     const adapter = new WriterRelayAdapter({ ...s.options, workspaceModes: new Map([["repo", { ...entry, container }]]) });
     await expect(adapter.create(input)).rejects.toMatchObject({ reason: "none_at_base" });
   });
+  it("preserves a loopback provider refusal as an operator-action start error", async () => {
+    const s = await setup([{ refuse: "provider_unsupported_in_writer" }]);
+    await expect(s.start()).rejects.toMatchObject({ code: "provider_unsupported_in_writer" });
+  });
   it("fenced and not-ready refusals are skipped without incrementing busy", async () => {
     const s = await setup([{ refuse: "writer_fenced" }, { refuse: "writer_not_ready" }]);
     await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { busy: 0, notAtBaseline: 0, settingsChanged: 0 } });

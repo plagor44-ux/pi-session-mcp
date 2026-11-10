@@ -80,7 +80,7 @@ describe("Doctor execution modes", () => {
   it("orders the new ids after workspace_gitfile and sorts aliases", async () => {
     const result = await runDoctor(dependencies({ zeta: "unset", alpha: "unset", host: "host", contained: "container" }));
     const ids = result.checks.map((check) => check.id);
-    expect(ids.slice(ids.lastIndexOf("workspace_gitfile") + 1)).toEqual(["workspace_mode_unset", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable"]);
+    expect(ids.slice(ids.lastIndexOf("workspace_gitfile") + 1)).toEqual(["workspace_mode_unset", "workspace_mode_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "provider_store"]);
     expect(modeChecks(result).map((check) => check.subject)).toEqual(["alpha", "zeta", "host", "contained"]);
     expect(result.exitCode).toBe(2);
     for (const output of [renderDoctorJson(result), renderDoctorHuman(result)]) {

@@ -18,6 +18,7 @@ export interface PiAppliedSelection {
 
 export type PiSessionCreationErrorCode =
   | "unknown_provider"
+  | "provider_unsupported_in_writer"
   | "unknown_model"
   | "local_authentication_missing"
   | "local_authentication_unavailable"
@@ -39,6 +40,7 @@ export type PiSessionCreationErrorCode =
 
 const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> = {
   unknown_provider: "Execution profile provider is not in the local Pi catalog",
+  provider_unsupported_in_writer: "Execution profile provider uses a loopback endpoint unavailable in a writer",
   unknown_model: "Execution profile model is not in the local Pi catalog",
   local_authentication_missing: "Local authentication for the execution profile is missing",
   local_authentication_unavailable: "Local authentication for the execution profile is unavailable",

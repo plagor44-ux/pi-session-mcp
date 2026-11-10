@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { AUTH_CHECK_TIMEOUT_MS, createModelCatalog, type CatalogProvider, type CatalogRuntime, type ModelCatalog } from "../src/model-catalog.js";
 import { catalogReport, formatCatalogHuman } from "../src/setup-probe-result.js";
 
+vi.mock("../src/provider-store.js", () => ({
+  loadRuntimeProviderPolicy: async () => ({ apply: async () => {}, source: () => "inherit", blocked: () => false }),
+}));
+
 const fakeCatalog = (providers: readonly CatalogProvider[]): ModelCatalog => ({ providers: () => providers });
 
 describe("model catalog report", () => {

@@ -231,7 +231,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `unknown_execution_profile` | The requested alias is not configured. |
 | `workspace_mode_forbids_coding` | The workspace's execution mode does not allow coding sessions on this server. Operator needed: do not retry or switch profiles on this server. |
 | `unknown_provider` / `unknown_model` | The exact configured item is absent from the local Pi catalog. |
-| `local_authentication_missing` / `local_authentication_unavailable` | Existing local Pi authentication is absent or cannot be resolved within its deadline. |
+| `local_authentication_missing` / `local_authentication_unavailable` | Effective local authentication is absent or cannot be resolved within its deadline. Under ADR 0021, `none`, a keyless custom provider or a mismatched credential binding is missing; an unreadable/invalid provider store is unavailable. Neither falls back to Pi authentication. |
 | `model_unavailable` | The exact model is not locally available for the configured provider. |
 | `thinking_level_unavailable` | The configured level is not effective for the resolved model. |
 | `execution_selection_mismatch` | The created session does not match the requested verified selection. |
@@ -253,6 +253,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `writer_session_lost` | Controller action: the child or transport was lost, or inner state cannot be determined. A running turn fails; further prompts refuse, including after idle loss. Get and close still work. Close and inspect/collect the work before starting a fresh session; do not blindly repeat a prompt. |
 | `base_not_applicable` | Controller action: remove `base` unless starting a coding profile on a container workspace. No session was created; do not switch profiles to bypass policy. |
 | `writer_not_ready` | The writer launcher cannot establish current readiness; operator must run repository setup/acceptance. All refusal-server tools return this error. |
+| `provider_unsupported_in_writer` | A selected custom provider uses a loopback endpoint that the container cannot reach. The launcher refuses work; the operator must configure a suitable endpoint. |
 | `container_runtime_unavailable` | The writer launcher found no usable rootless Podman; all refusal-server tools refuse work, with no host fallback. |
 | `writer_fenced` | The writer launcher could not confirm that no container of the writer is still running; all refusal-server tools refuse work. Through the host relay a start reports this as `writer_unavailable` with reason `none_admitted`. |
 | `server_stopping` | Shutdown has begun, so a new session cannot be admitted. |

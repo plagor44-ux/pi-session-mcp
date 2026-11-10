@@ -75,7 +75,7 @@ async function bounded<T>(operation: (signal: AbortSignal) => Promise<T>, ms: nu
 }
 
 const creationCodes = new Set<PiSessionCreationErrorCode>([
-  "unknown_provider", "unknown_model", "local_authentication_missing", "local_authentication_unavailable",
+  "unknown_provider", "unknown_model", "local_authentication_missing", "local_authentication_unavailable", "provider_unsupported_in_writer",
   "model_unavailable", "thinking_level_unavailable", "execution_selection_mismatch", "external_mcp_unavailable",
   "external_mcp_no_tools", "external_mcp_grant_tool_missing", "external_mcp_activation_mismatch",
   "extension_not_installed", "extension_version_mismatch", "extension_load_failed", "extension_tool_conflict",

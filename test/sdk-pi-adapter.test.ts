@@ -15,6 +15,14 @@ import { startupFailureDiagnostic } from "../src/process-diagnostics.js";
 import type { PiTurnOutcome } from "../src/pi-adapter.js";
 import { AUTH_OPERATION_TIMEOUT_MS, SESSION_CREATION_TIMEOUT_MS, createPhase0ResourceLoader, normalizeAssistantOutcome, PROFILE_TOOLS, SdkPiSessionAdapter, type SdkPiAdapterDiagnostic, type SdkStopReason } from "../src/sdk-pi-adapter.js";
 import type { ExtensionSdk } from "../src/sdk-pi-adapter.js";
+import { loadProviderPolicy, openProviderStore } from "../src/provider-store.js";
+import { createModelCatalog } from "../src/model-catalog.js";
+import { ProviderStoreError } from "../src/provider-store-contract.js";
+
+vi.mock("../src/provider-store.js", async original => ({
+  ...await original<typeof import("../src/provider-store.js")>(),
+  loadRuntimeProviderPolicy: async () => ({ apply: async () => {}, source: () => "inherit", blocked: () => false, boundaryCredentials: () => ({}), definitions: () => [], secretValues: () => [] }),
+}));
 
 // The Go module cache resolution reads /proc/self/fd, so it runs on Linux only, like the sandbox.
 const onLinux = it.skipIf(process.platform !== "linux");
@@ -48,6 +56,10 @@ function runtimeFixture() {
   const getAvailable = vi.fn<(...args: unknown[]) => Promise<readonly SdkModel[]>>(async () => [resolvedModel]);
   const refresh = vi.fn<(...args: unknown[]) => Promise<unknown>>(async () => ({ aborted: false, errors: new Map() }));
   const runtime = {
+    getProviders: () => [{ id: profile.provider }],
+    getModels: () => [resolvedModel],
+    registerProvider: vi.fn(),
+    setRuntimeApiKey: vi.fn(async (_provider: string, _key: string) => {}),
     getProvider,
     getModel,
     checkAuth,
@@ -104,6 +116,65 @@ async function create(adapter: SdkPiSessionAdapter) {
   return adapter.create({ cwd: process.cwd(), executionProfile: profile });
 }
 
+describe("SdkPiSessionAdapter provider policy", () => {
+  it("agrees with the catalog, applies runtime keys, and fails closed before Pi authentication", async () => {
+    const home = await temporaryRoot("adapter-provider-policy-");
+    const store = openProviderStore({ home });
+    const builtins = { builtInProviderIds: [profile.provider] };
+    const providerPolicyFactory = () => loadProviderPolicy({ home });
+    await store.setKey(profile.provider, "sk-test-adapter-key", builtins);
+    const fixture = runtimeFixture();
+    let effectiveKey = "inherited";
+    fixture.setRuntimeApiKey.mockImplementation(async (_id, key) => { effectiveKey = key; });
+    fixture.getAuth.mockImplementation(async () => ({ key: effectiveKey }));
+    const diagnostics: SdkPiAdapterDiagnostic[] = [];
+    const createSession = createSessionFixture(sessionFixture().session);
+    const adapter = new SdkPiSessionAdapter({ providerPolicyFactory, modelRuntimeFactory: async () => fixture.runtime, createSession, diagnosticSink: d => diagnostics.push(d) });
+    await create(adapter);
+    expect(fixture.setRuntimeApiKey).toHaveBeenCalledWith(profile.provider, "sk-test-adapter-key");
+    expect(await fixture.getAuth()).toEqual({ key: "sk-test-adapter-key" });
+    expect((await createModelCatalog(async () => fixture, providerPolicyFactory)).providers()[0]?.authConfigured).toBe(true);
+    await store.removeKey(profile.provider, builtins);
+    fixture.checkAuth.mockClear(); fixture.getAuth.mockClear();
+    await expect(create(adapter)).rejects.toMatchObject({ code: "local_authentication_missing" });
+    expect((await createModelCatalog(async () => fixture, providerPolicyFactory)).providers()[0]?.authConfigured).toBe(false);
+    expect(fixture.checkAuth).not.toHaveBeenCalled(); expect(fixture.getAuth).not.toHaveBeenCalled();
+    expect(diagnostics).toContainEqual(expect.objectContaining({ stage: "check_auth" }));
+    expect(JSON.stringify(diagnostics)).not.toContain("sk-test-adapter-key");
+  });
+
+  it("keeps a running session's key when a later session sees a rotation", async () => {
+    const home = await temporaryRoot("adapter-provider-rotation-");
+    const store = openProviderStore({ home });
+    const builtins = { builtInProviderIds: [profile.provider] };
+    await store.setKey(profile.provider, "sk-test-first-session", builtins);
+    const runtimes: ReturnType<typeof runtimeFixture>[] = [];
+    const adapter = new SdkPiSessionAdapter({
+      providerPolicyFactory: () => loadProviderPolicy({ home }),
+      modelRuntimeFactory: async () => {
+        const fixture = runtimeFixture(); let key = "inherited";
+        fixture.setRuntimeApiKey.mockImplementation(async (_id, value) => { key = value; });
+        fixture.getAuth.mockImplementation(async () => ({ key }));
+        runtimes.push(fixture); return fixture.runtime;
+      },
+      createSession: async options => createSessionFixture(sessionFixture().session)(options),
+    });
+    await create(adapter);
+    await store.setKey(profile.provider, "sk-test-second-session", builtins);
+    await create(adapter);
+    expect(runtimes).toHaveLength(2);
+    expect(await runtimes[0]!.getAuth()).toEqual({ key: "sk-test-first-session" });
+    expect(await runtimes[1]!.getAuth()).toEqual({ key: "sk-test-second-session" });
+  });
+
+  it("classifies an unreadable provider store without leaking diagnostics", async () => {
+    const diagnostics: SdkPiAdapterDiagnostic[] = [];
+    const adapter = new SdkPiSessionAdapter({ providerPolicyFactory: async () => { throw new ProviderStoreError("provider_store_unavailable"); }, diagnosticSink: d => diagnostics.push(d) });
+    await expect(create(adapter)).rejects.toMatchObject({ code: "local_authentication_unavailable" });
+    expect(diagnostics).toContainEqual(expect.objectContaining({ stage: "runtime", code: "local_authentication_unavailable" }));
+  });
+});
+
 describe("SdkPiSessionAdapter history reads", () => {
   it("readHistory returns entries after the cursor", async () => {
     const { session } = sessionFixture();
@@ -135,7 +206,7 @@ describe("SdkPiSessionAdapter history reads", () => {
 describe("SdkPiSessionAdapter deterministic selection", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("uses one lazy runtime for exact resolution and passes the same runtime with explicit options", async () => {
+  it("creates a runtime per session for exact resolution and passes it with explicit options", async () => {
     const fixture = runtimeFixture();
     const runtimeFactory = vi.fn(async () => fixture.runtime);
     const { session } = sessionFixture();
@@ -145,7 +216,7 @@ describe("SdkPiSessionAdapter deterministic selection", () => {
     const first = await create(adapter);
     const second = await create(adapter);
 
-    expect(runtimeFactory).toHaveBeenCalledTimes(1);
+    expect(runtimeFactory).toHaveBeenCalledTimes(2);
     expect(fixture.getProvider).toHaveBeenCalledWith(profile.provider);
     expect(fixture.getModel).toHaveBeenCalledWith(profile.provider, profile.model);
     expect(fixture.checkAuth).toHaveBeenCalledWith(profile.provider, expect.objectContaining({ signal: expect.any(AbortSignal) }));
@@ -1125,7 +1196,7 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
     await h.create({ ...profile, extensions: [] });
     expect(h.createServices).not.toHaveBeenCalled();
     expect(h.createSession).toHaveBeenCalledTimes(2);
-    expect(h.runtimeFactory).toHaveBeenCalledTimes(1);
+    expect(h.runtimeFactory).toHaveBeenCalledTimes(2);
   });
 
   it("activates extension tools in coding profiles", async () => {

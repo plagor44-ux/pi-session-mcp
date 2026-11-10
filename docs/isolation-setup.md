@@ -204,7 +204,26 @@ does not exist.
 
 ## Credentials and residual risks
 
-The launcher checks on launch and every **60 seconds**. Only when a selected
+[ADR 0021](adr/0021-provider-credentials.md) adds an opt-in source per provider.
+For selected providers, the launcher copies inherited Pi credentials as before,
+projects a product-store `key` as an `api_key` entry, and omits `none` or an
+invalid binding. Removing a product key does not re-enable Pi authentication;
+restoring inheritance is explicit and only supported for built-in providers.
+Only inherited providers receive host OAuth warm-up. Unselected keys, the
+product store and OAuth refresh tokens never enter the writer.
+
+Selected custom definitions and a non-secret source manifest are copied into
+`provider-definitions.json` in the writer's private agent area. The guarded
+inner server registers those definitions and reads selected keys only from
+boundary `auth.json`, without opening a host provider store. Loopback endpoints
+are refused with `provider_unsupported_in_writer`: a container cannot reach the
+host's loopback network. Use a reviewed non-loopback HTTPS endpoint instead.
+
+The product policy is captured at launch: key rotation and source changes apply
+to the next writer launch, not a running writer. Host sessions, catalog reads and
+profile probes observe changes on new runtimes; running sessions keep their key.
+
+The launcher checks on launch and every **60 seconds**. Only when a selected, inherited
 OAuth token expires within **10 minutes** or is expired does it refresh the host
 credential (invalid/missing expiry also triggers it). The refresh asks the Pi
 SDK for that much remaining validity through Pi's own locked host store,

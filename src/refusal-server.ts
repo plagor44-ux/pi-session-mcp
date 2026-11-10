@@ -4,8 +4,9 @@ import type { Readable, Writable } from "node:stream";
 import { z } from "zod";
 import { PACKAGE_VERSION } from "./package-metadata.js";
 
-export type RefusalCode = "container_runtime_unavailable" | "writer_not_ready" | "writer_busy" | "writer_fenced";
+export type RefusalCode = "container_runtime_unavailable" | "writer_not_ready" | "writer_busy" | "writer_fenced" | "provider_unsupported_in_writer";
 const messages: Record<RefusalCode, string> = {
+  provider_unsupported_in_writer: "A selected provider uses a loopback endpoint unavailable inside the writer.",
   container_runtime_unavailable: "Rootless Podman is not usable on this machine; this writer refuses all work.",
   writer_not_ready: "This writer is not ready; run pi-session-mcp-setup for its repository.",
   writer_busy: "This writer is already leased; try another writer.",
