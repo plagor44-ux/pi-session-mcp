@@ -42,8 +42,10 @@ to setup or an agent:
 
 The interactive interview proceeds in this order:
 
-1. On an interactive terminal with `--apply`, offer a separate owner-operated
-   key prompt for each unauthenticated provider. Then show authenticated and
+1. On an interactive terminal with `--apply`, ask whether the owner wants to
+   store a Pi Session MCP key. If so, the owner names provider IDs one by one;
+   each runs `pi-session-mcp-provider auth set <provider>` on the same
+   terminal, and setup sees only whether it succeeded. Then show authenticated and
    optional providers and the separate Pi login command. When none is
    authenticated, offer to re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
