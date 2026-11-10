@@ -31,7 +31,7 @@ Skip style nitpicks unless they hide a defect.
 Report each finding with:
 
 - Severity: critical, high, medium or low.
-- Location: repository-relative `path:line`. Give concrete lines, not only a file. If the path contains a space, write the location in backticks.
+- Location: repository-relative `path:line`. Give concrete lines, not only a file. If the path contains a space, write the location in backticks. A path that begins or ends with a space cannot be written as a location: name that file in the text of the finding.
 - Cause: what is wrong and why.
 - Impact: what can break and for whom.
 - Fix: a concrete, verifiable change, and how to check it.

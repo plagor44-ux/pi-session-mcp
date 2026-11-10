@@ -173,6 +173,18 @@ describe("review report contract", () => {
     expect(problems(review(text))).toEqual(["scope_conflict"]);
   });
 
+  // `none` beside an item says both that nothing and that something was left out.
+  it("rejects none beside an item in the scope section", async () => {
+    const partial = await fixture("review-done-with-concerns.txt");
+    for (const text of [partial.replace("Not reviewed:\n", "Not reviewed:\n- none\n"), partial.replace("Risks:", "- none\nRisks:")]) {
+      const result = review(text);
+      expect(problems(result)).toEqual(["scope_conflict"]);
+      expect(reviewDisposition(result)).toBe("request_report");
+    }
+    const complete = insertAfter(await fixture("review-no-findings.txt"), "Verdict", "Not reviewed:\n- none\n- token.ts — too long for one turn.");
+    expect(problems(review(complete))).toEqual(["scope_conflict"]);
+  });
+
   it("rejects a second scope section, in either order and also when both say the same", async () => {
     const text = await fixture("review-no-findings.txt");
     const none = "Not reviewed:\n- none";
@@ -184,7 +196,8 @@ describe("review report contract", () => {
     }
     expect(problems(review(`${insertAfter(text, "Verdict", none).trimEnd()}\n${none}\n`))).toEqual(["field_repeated"]);
     const partial = await fixture("review-done-with-concerns.txt");
-    expect(problems(review(`${partial.trimEnd()}\n${none}\n`))).toEqual(["field_repeated"]);
+    // The second section says none, the first names a part: the two contradict each other as well.
+    expect(problems(review(`${partial.trimEnd()}\n${none}\n`))).toEqual(["field_repeated", "scope_conflict"]);
   });
 
   it("rejects every label that occurs twice", async () => {
@@ -477,7 +490,8 @@ describe("review report verdict and findings", () => {
     const quoted = parsed(review(text.replace("- high handler.ts:2 —", "- high `src/my helper.ts:2-4` —")));
     expect(quoted.findings[0]).toMatchObject({ severity: "high", path: "src/my helper.ts", line: 2 });
     expect(quoted.findings).toHaveLength(2);
-    for (const location of ["src/my helper.ts:2", "` handler.ts:2`", "`handler.ts:2", "handler.ts:2`", "`/srv/my app/handler.ts:2`", "`../my app/handler.ts:2`"]) {
+    // A path that begins or ends with a space has no location in this form.
+    for (const location of ["src/my helper.ts:2", "` handler.ts:2`", "`handler.ts :2`", "`handler.ts:2", "handler.ts:2`", "`/srv/my app/handler.ts:2`", "`../my app/handler.ts:2`"]) {
       const candidate = text.replace("- high handler.ts:2 —", `- high ${location} —`);
       expect(problems(review(candidate)), location).toEqual(["finding_invalid"]);
     }

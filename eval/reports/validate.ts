@@ -392,6 +392,11 @@ function values(field: ReviewField): string[] {
   return field.body.map((line) => line.trim().replace(/^[-*]\s+/, "").trim()).filter((line) => line !== "");
 }
 
+/** Whether a list holds the `none` item that `items` leaves out. */
+function saysNone(body: readonly string[]): boolean {
+  return body.some((raw) => /^none\.?$/i.test(raw.replace(/^[-*]\s+/, "").trim()));
+}
+
 /**
  * Every line of the findings section is `none`, the head of a finding or an indented line that
  * continues the finding above it. Anything else is invalid, so a finding written as prose, as an
@@ -481,9 +486,12 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
     problems.push("findings_missing");
   }
 
-  const notReviewed = items(field("Not reviewed").body);
+  const scope = field("Not reviewed").body;
+  const notReviewed = items(scope);
+  // `none` beside an item says both that nothing and that something was left out, as under `Findings`.
+  const scopeContradicts = notReviewed.length > 0 && saysNone(scope);
   if (status.status === "DONE_WITH_CONCERNS" && notReviewed.length === 0) problems.push("scope_missing");
-  if (status.status === "DONE" && notReviewed.length > 0) problems.push("scope_conflict");
+  if ((status.status === "DONE" && notReviewed.length > 0) || scopeContradicts) problems.push("scope_conflict");
   // One status, one outcome: a question, a blocker or a finding under a status that does not act
   // on it would be lost, because the controller acts on the status.
   const question = items(field("Question").body).join(" ") || undefined;

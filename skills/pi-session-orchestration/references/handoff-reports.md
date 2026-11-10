@@ -57,8 +57,8 @@ files reviewed, and name the base or the files in the task.
 | `STATUS:` | `DONE`: the whole target was reviewed. `DONE_WITH_CONCERNS`: only a part was reviewed. `NEEDS_CONTEXT`: the reviewer needs an answer before it can review. `BLOCKED`: the reviewer could not review. | Always, as the first line. |
 | `Target:` | The bare full hash of the commit under review and nothing else. | Always. |
 | `Verdict:` | Exactly one of `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`. | With `DONE` and `DONE_WITH_CONCERNS`. Absent otherwise. |
-| `Findings:` | One item per verified finding: `- <severity> <path>:<line> — <cause and evidence>`, with severity `critical`, `high`, `medium` or `low` and a repository-relative path. A location whose path contains a space stands in backticks: `` `docs/release notes.md:3` ``. Indented lines below an item continue it; a finding itself is never indented. `- none` when there is none. | With `DONE` and `DONE_WITH_CONCERNS`. No finding otherwise. |
-| `Not reviewed:` | What the review left out and why. | With `DONE_WITH_CONCERNS`, with at least one item. With `DONE` absent or `- none`. |
+| `Findings:` | One item per verified finding: `- <severity> <path>:<line> — <cause and evidence>`, with severity `critical`, `high`, `medium` or `low` and a repository-relative path. A location whose path contains a space stands in backticks: `` `docs/release notes.md:3` ``. A path that begins or ends with a space has no location in this form; the finding names such a file in its text. Indented lines below an item continue it; a finding itself is never indented. `- none` when there is none. | With `DONE` and `DONE_WITH_CONCERNS`. No finding otherwise. |
+| `Not reviewed:` | What the review left out and why. `- none` stands alone, never beside an item. | With `DONE_WITH_CONCERNS`, with at least one item. With `DONE` absent or `- none`. |
 | `Question:` | The one question. | With `NEEDS_CONTEXT`. Absent otherwise. |
 | `Blocker:` | What prevented the review. | With `BLOCKED`. Absent otherwise. |
 | `Risks:` | Risks and hypotheses, with what would confirm each. | No. |
@@ -182,8 +182,9 @@ in this form. All of these steps share that one request.
    `path:line`, none of them indented below another. Without a review it
    lists no finding.
 7. `Not reviewed` is absent or `- none` with `DONE` and names something with
-   `DONE_WITH_CONCERNS`. `NEEDS_CONTEXT` has its `Question`, `BLOCKED` its
-   `Blocker`, and no other status has either.
+   `DONE_WITH_CONCERNS`, without `- none` beside an item. `NEEDS_CONTEXT`
+   has its `Question`, `BLOCKED` its `Blocker`, and no other status has
+   either.
 
 `Target` is a claim like the rest of the report. It catches a reviewer that
 read the wrong commit and says so, such as a snapshot slot that still held an
