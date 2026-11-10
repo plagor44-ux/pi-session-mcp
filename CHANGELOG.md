@@ -11,6 +11,15 @@
   The installer does not upgrade existing versions; history migrated by this
   release is unavailable to older releases until this release returns.
 
+### Fixed
+
+- Cleanup no longer treats an empty regular file named `.git`, such as uv leaves
+  in its cache, as a nested repository (#261). Directories, non-empty files and
+  symlinks named `.git` still refuse non-discard cleanup with
+  `writer_nested_repository`. The inspection digest moves to a new version, so a
+  writer collected under an earlier release must be collected again before a
+  non-discard reset, recreate, remove or finish.
+
 ## 0.19.1 — 2026-11-07
 
 Patch release for three audit findings on 0.19.0 (#257, #258, #259). The MCP

@@ -344,7 +344,9 @@ ${INDEX_GIT} add -A`;
  * gitlinks and stay outside `nested`, as they stay outside collection. `repositories` is set when any `.git`
  * entry exists below the top level, under ignored paths too: no export can preserve such a repository, and even
  * reset's forced checkout deletes an ignored directory that a tracked file replaces, so every non-discard reset,
- * recreate, finish and remove refuses while it exists (#257). A failing walk counts as found.
+ * recreate, finish and remove refuses while it exists (#257). An empty regular file named `.git`, which uv leaves
+ * in its cache, is not a repository and is not counted; directories, non-empty files and symlinks are (#261). A
+ * failing walk counts as found.
  */
 function nestedScript(base: string): string {
   return `nested=0
@@ -362,7 +364,7 @@ while IFS= read -r line; do
   if [ -e "$path/.git" ] || [ -L "$path/.git" ]; then nested=1; fi
 done < /tmp/nested-links
 repositories=0
-find . -path ./.git -prune -o -name .git -print > /tmp/nested-gits 2>/dev/null || repositories=1
+find . -path ./.git -prune -o -name .git ! \\( -type f -size 0c \\) -print > /tmp/nested-gits 2>/dev/null || repositories=1
 if [ -s /tmp/nested-gits ]; then repositories=1; fi`;
 }
 
@@ -405,7 +407,7 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
       && !nested && !refs.some(({ name }) => name === "refs/stash") && stashes.length === 0 && unknownRefs === 0 && tree === baseTree && indexTree === baseTree,
     nested, repositories, dirty: tree !== headTree || indexTree !== headTree, head: head!, branches, stashes, unknownRefs,
     indexTree: indexTree!, tree: tree!, headTree: headTree!,
-    digest: `sha256:${createHash("sha256").update("inspect-v3\n").update(result.stdout).digest("hex")}`,
+    digest: `sha256:${createHash("sha256").update("inspect-v4\n").update(result.stdout).digest("hex")}`,
   };
 }
 

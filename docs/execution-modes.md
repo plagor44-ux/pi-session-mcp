@@ -346,7 +346,9 @@ recreate and an ephemeral writer's finish delete them. A nested repository is
 the exception (#257): when any `.git` entry exists below the clone's top level,
 ignored paths included, every cleanup without `--discard` refuses: with
 `writer_uncollected` while work is uncollected, otherwise with
-`writer_nested_repository`. This covers remove (also during surplus removal and
+`writer_nested_repository`. An empty regular file named `.git`, as uv leaves in
+its cache, is not counted; directories, non-empty files and symlinks still are
+(#261). This covers remove (also during surplus removal and
 settings-drift replacement), recreate, finish and reset, whatever `--clean`
 says. Reset is included because its forced checkout deletes an ignored
 directory when the new base has a tracked file at that path. Collect still
