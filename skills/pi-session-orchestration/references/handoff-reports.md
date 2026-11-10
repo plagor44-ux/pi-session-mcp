@@ -57,7 +57,7 @@ files reviewed, and name the base or the files in the task.
 | `STATUS:` | `DONE`: the whole target was reviewed. `DONE_WITH_CONCERNS`: only a part was reviewed. `NEEDS_CONTEXT`: the reviewer needs an answer before it can review. `BLOCKED`: the reviewer could not review. | Always, as the first line. |
 | `Target:` | The bare full hash of the commit under review and nothing else. | Always. |
 | `Verdict:` | Exactly one of `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or `NO_FINDINGS`. | With `DONE` and `DONE_WITH_CONCERNS`. Absent otherwise. |
-| `Findings:` | One item per verified finding: `- <severity> <path>:<line> — <cause and evidence>`, with severity `critical`, `high`, `medium` or `low` and a repository-relative path. Indented lines below an item continue it; a finding itself is never indented. `- none` when there is none. | With `DONE` and `DONE_WITH_CONCERNS`. |
+| `Findings:` | One item per verified finding: `- <severity> <path>:<line> — <cause and evidence>`, with severity `critical`, `high`, `medium` or `low` and a repository-relative path. A location whose path contains a space stands in backticks: `` `docs/release notes.md:3` ``. Indented lines below an item continue it; a finding itself is never indented. `- none` when there is none. | With `DONE` and `DONE_WITH_CONCERNS`. No finding otherwise. |
 | `Not reviewed:` | What the review left out and why. | With `DONE_WITH_CONCERNS`, with at least one item. With `DONE` absent or `- none`. |
 | `Question:` | The one question. | With `NEEDS_CONTEXT`. Absent otherwise. |
 | `Blocker:` | What prevented the review. | With `BLOCKED`. Absent otherwise. |
@@ -71,10 +71,13 @@ files reviewed, and name the base or the files in the task.
 - `Risks`, `Checks run` and `Checks not run` do not decide what you do with
   the report. They tell you what to verify yourself, and the review skill asks
   the reviewer for them with every review.
-- Each label appears once. Everything below a label belongs to that field up
-  to the next label, so a review report has no text between its fields: a
-  second line below `Target` or `Verdict` is a second value, and a report with
-  two values is not read.
+- Each label appears once, `STATUS` included. Everything below a label
+  belongs to that field up to the next label, so a review report has no text
+  between its fields: a second line below `STATUS`, `Target` or `Verdict` is a
+  second value, and a report with two values is not read.
+- An indented line in the shape of a finding, with a severity, a location
+  and the separator, is a finding below another one. It fails the form
+  instead of being read as text of the finding above it.
 - A reviewer that was given no commit writes `Target: not given` with
   `NEEDS_CONTEXT` and asks for one. Nothing binds that report, so it is a
   format failure, and the gap is in your prompt: send the full hash with your
@@ -168,14 +171,16 @@ here is a format failure: ask once, in the same session, for a complete report
 in this form. All of these steps share that one request.
 
 2. The turn is complete: `truncated` is false and `completion` is `stop`.
-3. The first line is a valid `STATUS:` line, and no label appears twice.
+3. The first line is a valid `STATUS:` line with nothing below it, and no
+   label appears twice, `STATUS` included.
 4. `Target` holds the full hash of your commit and nothing else. A missing,
    abbreviated or decorated `Target` fails here.
 5. `Verdict` holds one of its three values and fits the status: none with
    `NEEDS_CONTEXT` or `BLOCKED`, one with a review.
 6. With a review, `Findings` is present and fits the verdict: `- none` with
    `NO_FINDINGS`, at least one finding otherwise, each with severity and
-   `path:line`, none of them indented below another.
+   `path:line`, none of them indented below another. Without a review it
+   lists no finding.
 7. `Not reviewed` is absent or `- none` with `DONE` and names something with
    `DONE_WITH_CONCERNS`. `NEEDS_CONTEXT` has its `Question`, `BLOCKED` its
    `Blocker`, and no other status has either.

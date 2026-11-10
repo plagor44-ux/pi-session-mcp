@@ -376,6 +376,22 @@ describe("review report verdict and findings", () => {
     }
   });
 
+  // The status decides what the controller does, so two statuses or text below the status are never read.
+  it("rejects a second status line and text below the status", async () => {
+    const text = await fixture("review-no-findings.txt");
+    for (const second of ["STATUS: DONE", "STATUS: DONE_WITH_CONCERNS", "Status: BLOCKED", "The review went well."]) {
+      const candidates = [insertAfter(text, "STATUS", second), ...(second.includes(":") ? [insertAfter(text, "Risks", second), `${text.trimEnd()}\n${second}\n`] : [])];
+      for (const candidate of candidates) {
+        const result = review(candidate);
+        expect(problems(result), candidate).toEqual(["status_invalid"]);
+        expect(reviewDisposition(result), candidate).toBe("request_report");
+      }
+    }
+    const wrong = review(insertAfter(withField(text, "Target", OTHER), "STATUS", "STATUS: BLOCKED"));
+    expect(problems(wrong)).toEqual(["status_invalid", "target_mismatch"]);
+    expect(reviewDisposition(wrong)).toBe("reject");
+  });
+
   it("rejects a report that starts with a verdict line instead of the status", async () => {
     const text = (await fixture("review-no-findings.txt")).replace(/^STATUS: DONE\n/, "VERDICT: NO_FINDINGS\n");
     const result = review(text);
@@ -440,12 +456,41 @@ describe("review report verdict and findings", () => {
   // An indented finding would otherwise be read as text of the finding above it and vanish.
   it("rejects a finding indented below another finding", async () => {
     const text = await fixture("review-done-with-concerns.txt");
-    for (const nested of ["  - high token.ts:2 — A wildcard claim authorizes every permission.", "  high `token.ts:2`: no list marker.", "\t* critical token.ts:2-4 — a tab."]) {
+    for (const nested of [
+      "  - high token.ts:2 — A wildcard claim authorizes every permission.",
+      "  high `token.ts:2`: no list marker.",
+      "\t* critical token.ts:2-4 — a tab.",
+      "  - high `src/my helper.ts:2` — a path with a space, in backticks.",
+      "  - high src/my helper.ts:2 — a path with a space, bare.",
+    ]) {
       const candidate = text.replace("Not reviewed:", `${nested}\nNot reviewed:`);
       expect(problems(review(candidate)), nested).toEqual(["finding_invalid"]);
     }
-    const prose = text.replace("Not reviewed:", "  - low risk: 3 callers pass a typed client.\n  The severity is high-level only.\nNot reviewed:");
-    expect(parsed(review(prose)).findings[0]?.details).toEqual(["- low risk: 3 callers pass a typed client.", "The severity is high-level only."]);
+    // Text that only starts like a finding stays text, with or without a space after the colon.
+    const continuation = ["- low risk: 3 callers pass a typed client.", "- low risk:3 callers", "The severity is high-level only.", "Fix: type the parameter in clean.ts:1 and its callers."];
+    const prose = text.replace("Not reviewed:", `${continuation.map((line) => `  ${line}`).join("\n")}\nNot reviewed:`);
+    expect(parsed(review(prose)).findings[0]?.details).toEqual(continuation);
+  });
+
+  it("reads a path with a space only in backticks", async () => {
+    const text = await fixture("review-blocking-findings.txt");
+    const quoted = parsed(review(text.replace("- high handler.ts:2 —", "- high `src/my helper.ts:2-4` —")));
+    expect(quoted.findings[0]).toMatchObject({ severity: "high", path: "src/my helper.ts", line: 2 });
+    expect(quoted.findings).toHaveLength(2);
+    for (const location of ["src/my helper.ts:2", "` handler.ts:2`", "`handler.ts:2", "handler.ts:2`", "`/srv/my app/handler.ts:2`", "`../my app/handler.ts:2`"]) {
+      const candidate = text.replace("- high handler.ts:2 —", `- high ${location} —`);
+      expect(problems(review(candidate)), location).toEqual(["finding_invalid"]);
+    }
+  });
+
+  it("rejects a finding in a report without a review", async () => {
+    for (const name of ["review-blocked.txt", "review-needs-context.txt"]) {
+      const text = (await fixture(name)).trimEnd();
+      const result = review(`${text}\nFindings:\n- high handler.ts:2 — The lookup ignores the tenant.\n`);
+      expect(problems(result), name).toEqual(["field_unexpected"]);
+      expect(reviewDisposition(result), name).toBe("request_report");
+      expect(review(`${text}\nFindings:\n- none\n`), name).toMatchObject({ ok: true });
+    }
   });
 
   it("accepts a location in backticks and a line range", async () => {
@@ -502,7 +547,8 @@ describe("review report completeness", () => {
 describe("report role", () => {
   it("rejects an implementation report offered as a review", async () => {
     const result = review(await fixture("text-valid-done.txt"));
-    expect(problems(result)).toEqual(["target_missing", "verdict_missing", "findings_missing"]);
+    // Its fields are no review labels, so they read as text below the status.
+    expect(problems(result)).toEqual(["status_invalid", "target_missing"]);
     expect(reviewDisposition(result)).toBe("request_report");
   });
 

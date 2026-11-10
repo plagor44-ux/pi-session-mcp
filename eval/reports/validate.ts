@@ -329,24 +329,35 @@ export type ReviewValidation = { ok: true; report: ParsedReview } | { ok: false;
 export type ReviewDisposition = "complete_review" | "incomplete_review" | "needs_context" | "blocked" | "request_report" | "reject";
 
 const VERDICTS: readonly ReviewVerdict[] = ["BLOCKING_FINDINGS", "NON_BLOCKING_ONLY", "NO_FINDINGS"];
-const REVIEW_LABELS = ["Target", "Verdict", "Findings", "Not reviewed", "Risks", "Checks run", "Checks not run", "Question", "Blocker"] as const;
+const REVIEW_LABELS = ["STATUS", "Target", "Verdict", "Findings", "Not reviewed", "Risks", "Checks run", "Checks not run", "Question", "Blocker"] as const;
 type ReviewLabel = (typeof REVIEW_LABELS)[number];
 const REVIEW_LABEL = new RegExp(`^(?:${REVIEW_LABELS.join("|")}):`, "i");
 /** A bare full commit hash: SHA-1 or SHA-256, lowercase as Git prints it. */
 const FULL_HASH = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 /** A full commit hash anywhere in a line, in either case and next to any other text. */
 const FULL_HASH_TOKEN = /(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])/gi;
-const FINDING =
-  /^[-*]\s+(?<severity>critical|high|medium|low)\s+`?(?<path>[^\s:`]+):(?<line>[1-9]\d*)(?:-[1-9]\d*)?`?\s*(?:—|–|-|:)\s*(?<text>\S.*)$/i;
-/** An indented line that gives a severity and a location: a finding below another finding. */
-const NESTED_FINDING = /^\s+(?:[-*]\s+)?(?:critical|high|medium|low)\s+`?[^\s:`]+:\d/i;
+const SEVERITY = "critical|high|medium|low";
+const LINE_REFERENCE = "[1-9]\\d*(?:-[1-9]\\d*)?";
+/**
+ * A location is `path:line`: bare when the path has no whitespace, in backticks otherwise. A bare
+ * path with a space could not be told from prose that ends in a location.
+ */
+const LOCATION = `(?:\`(?<quotedPath>[^\`:]+):(?<quotedLine>[1-9]\\d*)(?:-[1-9]\\d*)?\`|(?<path>[^\\s:\`]+):(?<line>[1-9]\\d*)(?:-[1-9]\\d*)?)`;
+const SEPARATOR = "\\s*(?:—|–|-|:)\\s*";
+const FINDING = new RegExp(`^[-*]\\s+(?<severity>${SEVERITY})\\s+${LOCATION}${SEPARATOR}(?<text>\\S.*)$`, "i");
+/**
+ * An indented line in the shape of a finding head, whatever its path looks like: a severity, text
+ * that ends in `:<line>`, and the separator. It is a finding below another finding.
+ */
+const NESTED_FINDING = new RegExp(`^\\s+(?:[-*]\\s+)?(?:${SEVERITY})\\s+\\S.*?:${LINE_REFERENCE}\`?${SEPARATOR}\\S`, "i");
 
 function isVerdict(value: string): value is ReviewVerdict {
   return (VERDICTS as readonly string[]).includes(value);
 }
 
 function isRepositoryRelative(path: string): boolean {
-  return !path.startsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+  if (path !== path.trim() || path.startsWith("/") || path.includes("\\")) return false;
+  return path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
 interface ReviewField {
@@ -404,7 +415,7 @@ function parseFindings(body: readonly string[]): { findings: ReviewFinding[]; no
       continue;
     }
     const groups = FINDING.exec(raw)?.groups;
-    const path = groups?.path;
+    const path = groups?.quotedPath ?? groups?.path;
     if (groups === undefined || path === undefined || !isRepositoryRelative(path)) {
       invalid = true;
       continue;
@@ -412,7 +423,7 @@ function parseFindings(body: readonly string[]): { findings: ReviewFinding[]; no
     open = {
       severity: (groups.severity ?? "").toLowerCase() as FindingSeverity,
       path,
-      line: Number(groups.line),
+      line: Number(groups.quotedLine ?? groups.line),
       text: (groups.text ?? "").trim(),
       details: [],
     };
@@ -437,7 +448,9 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
   const lines = turn.assistantText.split(/\r?\n/);
   const field = (label: ReviewLabel): ReviewField => reviewField(lines, label);
   const status = parseStatusLine(lines[0]);
-  if ("problem" in status) problems.push(status.problem);
+  // `STATUS` is a field like the others: a second status line or text below it is a second value.
+  const statusProblem = "problem" in status ? status.problem : values(field("STATUS")).length > 1 ? "status_invalid" : undefined;
+  if (statusProblem !== undefined) problems.push(statusProblem);
 
   // The binding is checked whatever else is wrong with the report, so a report that names another
   // commit, alone or beside the expected one, is rejected and never sent back for a correction.
@@ -446,7 +459,7 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
   if (hashes.some((hash) => hash.toLowerCase() !== expected.target)) problems.push("target_mismatch");
   else if (named.length === 0) problems.push("target_missing");
   else if (named.length > 1 || named[0] !== expected.target) problems.push("target_invalid");
-  if ("problem" in status) return { ok: false, problems };
+  if ("problem" in status || statusProblem !== undefined) return { ok: false, problems };
 
   if (REVIEW_LABELS.some((label) => field(label).count > 1)) problems.push("field_repeated");
 
@@ -459,8 +472,8 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
   else if (otherVerdicts.length > 0 || !isVerdict(claimed)) problems.push("verdict_invalid");
   else verdict = claimed;
 
-  // Without a review there is nothing to bind findings to; the section is not read then. A review
-  // says what it found: a missing or empty section is not read as "no findings".
+  // A review says what it found: a missing or empty section is not read as "no findings". Without
+  // a review there is nothing to bind findings to; listing one then is unexpected, see below.
   const parsed = reviewed ? parseFindings(field("Findings").body) : { findings: [], none: false, invalid: false };
   if (parsed.invalid) problems.push("finding_invalid");
   else if (verdict === "NO_FINDINGS" && parsed.findings.length > 0) problems.push("findings_unexpected");
@@ -471,11 +484,12 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
   const notReviewed = items(field("Not reviewed").body);
   if (status.status === "DONE_WITH_CONCERNS" && notReviewed.length === 0) problems.push("scope_missing");
   if (status.status === "DONE" && notReviewed.length > 0) problems.push("scope_conflict");
-  // One status, one outcome: a question or a blocker under another status would be lost, because
-  // the controller acts on the status.
+  // One status, one outcome: a question, a blocker or a finding under a status that does not act
+  // on it would be lost, because the controller acts on the status.
   const question = items(field("Question").body).join(" ") || undefined;
   const blocker = items(field("Blocker").body).join(" ") || undefined;
-  if ((status.status !== "NEEDS_CONTEXT" && question !== undefined) || (status.status !== "BLOCKED" && blocker !== undefined)) {
+  const strayFindings = !reviewed && items(field("Findings").body).length > 0;
+  if (strayFindings || (status.status !== "NEEDS_CONTEXT" && question !== undefined) || (status.status !== "BLOCKED" && blocker !== undefined)) {
     problems.push("field_unexpected");
   }
   if (status.status === "NEEDS_CONTEXT" && question === undefined) problems.push("question_missing");

@@ -171,7 +171,7 @@ fields follow. A review report names the commit under review as `Target:` with
 its bare full hash, then `Verdict:` with `BLOCKING_FINDINGS`,
 `NON_BLOCKING_ONLY` or `NO_FINDINGS`, and each finding with severity and
 `path:line` under `Findings:`, which says `- none` when there is none. Each
-label appears once, and `Target` and `Verdict` hold one value. Only `DONE` is
+label appears once, and `STATUS`, `Target` and `Verdict` hold one value. Only `DONE` is
 a review of the whole target. `DONE_WITH_CONCERNS` is an incomplete review
 whose verdict covers what was reviewed, and `NEEDS_CONTEXT` and `BLOCKED`
 carry no verdict. The controller compares `Target` with the commit it asked
