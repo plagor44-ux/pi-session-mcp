@@ -84,7 +84,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 
 ## Status
 
-The package version is **0.19.1**.
+The package version is **0.20.0**.
 
 | | |
 | --- | --- |

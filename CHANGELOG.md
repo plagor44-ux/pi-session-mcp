@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.20.0 — 2026-11-10
+
+Minor release: guided installation with optional tier routing (ADR 0020),
+opt-in provider credentials with a new command `pi-session-mcp-provider`
+(ADR 0021, #265, #266, #267) and the empty `.git` marker fix (#261). The tool
+set is unchanged; the start error code `provider_unsupported_in_writer` and
+the Doctor check `provider_store` are new.
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). A writer collected by an earlier
+release must be collected again before a non-discard reset, recreate, remove or
+finish. **Rollback note:** reinstall 0.19.1. It ignores the provider store, so
+every provider falls back to Pi's own login, including providers set to `none`;
+remove Pi's login for such a provider before rolling back. Collect writers
+again afterwards, because 0.19.1 does not accept the new digest.
+
 ### Added
 
 - Guided installation with a pinned install script, non-interactive answers and
