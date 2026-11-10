@@ -13,6 +13,7 @@
     "skipLibCheck": true
   },
   "include": [
+    "vitest.config.ts",
     "src/**/*.ts",
     "test/**/*.ts",
     "eval/profiles/**/*.ts",

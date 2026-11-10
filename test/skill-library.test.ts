@@ -162,9 +162,11 @@ describe("skill library", () => {
     for (const name of ["pi-session-implementation", "pi-session-review"]) {
       await expect(readSkillTree(join(shippedSkillsDirectory(), name))).resolves.toMatchObject({ files: [expect.objectContaining({ path: "SKILL.md" })] });
     }
-    // The controller skill is a tree: SKILL.md plus the start-error reference it links.
+    // The controller skill is a tree: SKILL.md plus the references it links.
     const orchestration = await readSkillTree(join(shippedSkillsDirectory(), "pi-session-orchestration"), { hidden: "reject" });
-    expect(orchestration.files.map((file) => file.path)).toEqual(["SKILL.md", "references/start-errors.md"]);
+    expect(orchestration.files.map((file) => file.path)).toEqual(["SKILL.md", "references/handoff-reports.md", "references/start-errors.md"]);
+    const entryText = orchestration.files.find((file) => file.path === "SKILL.md")?.bytes.toString("utf8") ?? "";
+    for (const file of orchestration.files.filter((entry) => entry.path !== "SKILL.md")) expect(entryText, file.path).toContain(`](${file.path})`);
   });
 
   it("keeps the worker final-report rules that never drop failures and define truncated", async () => {

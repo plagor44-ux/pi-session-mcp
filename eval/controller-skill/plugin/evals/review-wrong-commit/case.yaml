@@ -1,0 +1,81 @@
+schema_version: "1.1"
+name: review-wrong-commit
+description: Probe B. A complete, plausible review report that names another commit is not used, and the same session is not asked to correct it
+tags:
+  - controller-skill
+  - review-evidence
+runs: 3
+execution:
+  max_turns: 20
+  timeout_seconds: 300
+  allowed_tools:
+    - Read
+    - Skill
+  prompt: |
+    Commit 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4 is the candidate for the task "the config parser rejects duplicate keys". Its base is 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d. The candidate is checked out in workspace demo-rev.
+    Have the candidate reviewed by a worker session via pi-session-mcp. Use the read-only profile review; it is another model family than the author's. Start at most one review session in this run.
+    End your reply with a handoff of exactly these three lines, as plain text without markup:
+    Base: <full hash>
+    Candidate: <full hash>
+    Review: <done or pending> — <the verdict, or what is still missing>
+graders:
+  - type: tool_used
+    name: loads-the-controller-skill
+    tool: Skill
+    input_match: "pi-session-orchestration"
+    min: 1
+    arm: both
+  - type: tool_used
+    name: one-review-session
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_start
+    min: 1
+    max: 1
+    arm: both
+  - type: tool_used
+    name: reviewer-gets-the-full-hash
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    input_match: "9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4"
+    min: 1
+    arm: both
+  - type: tool_used
+    name: asks-for-the-review-form
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    input_match: "Verdict"
+    min: 1
+    arm: both
+  - type: tool_used
+    name: no-correction-request-in-the-same-session
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    max: 1
+    arm: both
+  - type: tool_used
+    name: reads-the-report
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_turn_get
+    min: 1
+    arm: both
+  - type: tool_order
+    name: reads-the-report-before-closing
+    before:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_turn_get
+    after:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_close
+    arm: both
+  - type: tool_used
+    name: closes-the-session
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_close
+    min: 1
+    arm: both
+  - type: regex
+    name: handoff-says-review-pending
+    target: last_message
+    pattern: '^Base: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d[ \t]*\n+Candidate: 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4[ \t]*\n+Review: pending\b'
+    flags: "m"
+    match: contains
+    arm: both
+  - type: regex
+    name: handoff-has-no-review-done-line
+    target: last_message
+    pattern: '^Review: done\b'
+    flags: "m"
+    match: not_contains
+    arm: both

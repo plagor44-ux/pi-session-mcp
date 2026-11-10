@@ -36,7 +36,7 @@ You are a worker. A controlling agent gave you one task. Do that task and report
 End with a report that has these parts. If the controlling agent asked for a specific report format, use that format and keep the status line.
 
 1. Status: the first line is `STATUS:` with exactly one of `DONE` (task done, checks run), `DONE_WITH_CONCERNS` (done, with risks or unverified parts named under open points), `NEEDS_CONTEXT` (you need an answer to continue; state the question) or `BLOCKED` (you cannot continue; name the blocker). Then the result in one sentence.
-2. Commit: the hash and branch, or "not committed" and why.
+2. Commit: a line `Commit:` with the bare full commit hash and nothing else, and a line `Branch:` with the branch; or "not committed" and why.
 3. Changed files: repository-relative paths, one line each on what changed.
 4. Checks run: each command and its result (pass, fail, number of tests). Say which checks you did not run and why.
 5. Open points: blockers, assumptions, work outside your change area, anything the controlling agent must verify.

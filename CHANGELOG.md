@@ -64,6 +64,81 @@
   `claude-code`, `ai-agents` and `agent-orchestration`.
   `test/readme-onboarding.test.ts` checks the README's relative links and
   anchors and its version line and release link against `package.json`.
+- `npm test` and every other Vitest call collect only
+  `test/**/*.test.{ts,mjs}`, set in the new `vitest.config.ts`. Vitest's
+  default pattern matches a test file anywhere below the root, so a checkout
+  with untracked evaluation artifacts below the ignored `eval/results/` also
+  ran the test files in them. `test/vitest-discovery.test.ts` fails when a
+  tracked file that the default pattern would have run lies outside the
+  configured one, so the narrower pattern cannot hide a test. `AGENTS.md`
+  separates the targeted tests of a worker with one bounded task from the full
+  sequence that whoever integrates the change runs on the integrated
+  candidate. Test configuration and project rules only; no runtime or contract
+  change.
+- The controller skill and the review skill ask for one report form. The
+  orchestration skill asked a reviewer for a first line `VERDICT:`, while the
+  review skill puts `STATUS:` first, so one report could not satisfy both. A
+  review report now starts with
+  `STATUS:`, names the commit under review as `Target:` with its bare full
+  hash, gives `Verdict:` with `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or
+  `NO_FINDINGS`, and lists each finding with severity and `path:line`. The new
+  reference `skills/pi-session-orchestration/references/handoff-reports.md`
+  holds the fields of the implementation report and the review report, tells a
+  complete review, an incomplete review, missing context and a blocked review
+  apart, and gives the order of the controller's checks: a report that names
+  another commit is rejected first, whatever its verdict and also when it is
+  cut off or not in the form, and a cut-off report (`truncated` or
+  `completion: "output_limit"`) of the right commit is asked for again and its
+  verdict not used. Each label appears once, `STATUS`, `Target` and `Verdict`
+  hold one value, and a review always has a `Findings` section, with `- none`
+  when it found nothing. `Target` is a claim; on a snapshot workspace
+  `session.snapshot.head` remains the evidence. `eval/reports/validate.ts`
+  gains the provider-free `validateReviewReport` and `reviewDisposition`, and
+  `test/review-report-validator.test.ts` covers them, including a report for
+  an existing but wrong commit. No tool enforces the form: the server returns
+  a report as the worker wrote it, the validator is not part of the package,
+  and the comparison happens only when the controlling agent follows the
+  skill. The cases `review-bound-report`, `review-wrong-commit` and
+  `review-wrong-role` of the controller skill evaluation suite measure that
+  for a Claude Code controller; `eval/controller-skill/README.md` holds the
+  results and their limits. A Codex controller has not been measured. The
+  reference lists `Branch:` as a field of the implementation report, which
+  the controller skill already asked for. The implementation skill asked for
+  "the hash and branch" in one part; it now asks for a `Commit:` line with
+  the bare full hash and a `Branch:` line, as the controller skill does. The
+  suite's shared worker report and the one of `verify-worker-claim` use the
+  documented fields. A
+  run of the whole suite passed 8 of 10 cases; `terminal-read-once` and
+  `verify-worker-claim` fail or vary on the current model with the skill
+  before this change as well, and the README records what was measured.
+  Skill text, evaluation helper, evaluation cases and tests only; no change
+  to the MCP tools, their schemas or the implementation receipt.
+- CI tests a branch once, through its pull request. A push starts the
+  workflow only on `main` and on a release tag `v*`; a push to another branch
+  no longer starts a second matrix run beside the one of its pull request. Of
+  the 60 CI runs before this change, 21 were such branch pushes, and 19 of 22
+  branch commits ran twice. Each pull request has its own concurrency group,
+  keyed by its number, and a new push to it cancels the run of the commit it
+  replaces. Runs on `main`, on a tag and on request stay independent: none
+  waits for or cancels another. The full platform matrix still runs for every
+  pull request, on `main`, on each release tag and through
+  `workflow_dispatch`, and the required check `verify` keeps its name and its
+  `if: always()`, so it is not skipped when the matrix fails or a started run
+  is cancelled, and passes only for a fully green matrix. A run cancelled
+  before any of its jobs started has not been observed with this workflow. A
+  branch without a pull request gets a run through a
+  draft pull request or a manual run. The
+  [acceptance guide](docs/acceptance.md#level-1-repository-checks)
+  lists what each event starts. Workflow and documentation only; the rulesets
+  are unchanged.
+- `AGENTS.md` has a section "Sensitive areas" that points from isolation,
+  credential routing, tool binding and the writer lifecycle to the decision
+  records, the code to start at and the tests to run.
+  `test/agents-sensitive-areas.test.ts` fails when one of the named files no
+  longer exists, when none of an area's tests imports its entry code at run
+  time, or when two areas name the same entry code. The pointers are in `AGENTS.md` and not
+  in a bundled skill, because the package ships neither `src/` nor `test/`.
+  Project rules and a test only.
 
 ### Fixed
 

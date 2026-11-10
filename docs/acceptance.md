@@ -50,7 +50,27 @@ Pass criteria:
 
 CI (`.github/workflows/ci.yml`) runs the steps from `npm ci` through
 `npm run build`, without `npm audit` and the two Git checks, on Node.js 22.19.0
-for every push and pull request. A result is valid for the commit it ran on.
+and on every platform of its matrix. A result is valid for the commit it ran
+on. It starts on these events:
+
+| Event | Run | Superseded run |
+| --- | --- | --- |
+| Pull request opened or reopened | Full matrix on the merge of the branch into its base | A run still in progress for the same pull request is cancelled |
+| New push to a branch with an open pull request | Full matrix, once, through the pull request | The run of the replaced commit is cancelled |
+| Push to a branch without a pull request | None | Not applicable |
+| Push to `main`, including a merge | Full matrix on the pushed commit | None: every run completes |
+| Push of a release tag `v*` | Full matrix on the tagged commit | None: every run completes |
+| Manual run (`workflow_dispatch`) on any branch or tag | Full matrix on that ref | None: every run completes |
+
+The required check `verify` has `if: always()`: it is not skipped when the
+matrix fails or a started run is cancelled, and it passes only when every
+platform passed. A skipped job would count as a passed required check. A
+cancelled run can therefore leave a failed `verify` on the commit that was
+replaced; the pull request is judged by the run of its newest commit. A run
+that is cancelled before any of its jobs started has not been observed with
+this workflow. It may report no `verify` for the replaced commit, which
+changes nothing for the newest one. To test a branch before it has a pull
+request, open a draft pull request or start a manual run on the branch.
 
 The nightly Pi SDK canary (`.github/workflows/pi-sdk-canary.yml`) checks the
 unchanged sources against the newest published Pi SDK. It is an early warning

@@ -7,7 +7,7 @@
     "startedAt": "2026-10-26T10:00:00Z",
     "updatedAt": "2026-10-26T10:00:25Z",
     "completedAt": "2026-10-26T10:00:25Z",
-    "assistantText": "STATUS: DONE\nResult: input validation added.\nBranch: fix/demo\nCommits: abc1234 fix: validate input\nChanged files: src/demo.ts (validation), test/demo.test.ts (cases)\nChecks: npm test exit 0 (12 passed)\nConcerns: none",
+    "assistantText": "STATUS: DONE\nResult: Input validation added.\nBranch: fix/demo\nCommit: 3e1f5a7c9b2d4f60718293a4b5c6d7e8f9012345\nChanged files:\n- src/demo.ts — validation\n- test/demo.test.ts — cases\nChecks run:\n- npm test — exit 0 (12 passed)\nOpen points:\n- none",
     "truncated": false,
     "completion": "stop"
   }

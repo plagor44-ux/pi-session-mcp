@@ -31,7 +31,7 @@ describe("package contents", () => {
       "README.md", "CHANGELOG.md", "install.sh", "docs/agent-install.md", "docs/adr/0020-tier-routing.md", "docs/installation.md", "docs/tool-contracts.md", "docs/adr/0006-pi-extension-allowlist.md",
     ]));
     expect(paths).toEqual(expect.arrayContaining([
-      "skills/pi-session-profiles/SKILL.md", "skills/pi-session-orchestration/SKILL.md", "skills/pi-session-orchestration/references/start-errors.md", "skills/pi-session-implementation/SKILL.md", "skills/pi-session-review/SKILL.md",
+      "skills/pi-session-profiles/SKILL.md", "skills/pi-session-orchestration/SKILL.md", "skills/pi-session-orchestration/references/start-errors.md", "skills/pi-session-orchestration/references/handoff-reports.md", "skills/pi-session-implementation/SKILL.md", "skills/pi-session-review/SKILL.md",
     ]));
     expect(paths.filter((path) => path.startsWith("docs/superpowers/"))).toEqual([]);
     expect(paths.filter((path) => path.startsWith("src/") || path.startsWith("test/") || path === "package-lock.json")).toEqual([]);

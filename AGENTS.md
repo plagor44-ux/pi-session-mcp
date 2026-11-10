@@ -4,14 +4,19 @@
 
 - Install: `npm ci`. Type check: `npm run typecheck`. Build: `npm run build`.
 - Tests: `npm test` (Vitest); one file with `npx vitest run test/<name>.test.ts`.
+  Vitest collects only `test/**/*.test.{ts,mjs}` (`vitest.config.ts`); a test
+  file in another directory or with another suffix does not run.
 - Issues and pull requests follow the templates in `.github/`. In a pull
   request, report only checks you actually ran, with their results.
-- Run the targeted tests for the files you change, then `npm test`. Inside a
-  container writer a few lock and hook tests can time out; report them by
-  file and test name instead of changing them.
+- Run the targeted tests for the files you change. A worker that was given one
+  bounded task stops there and reports each command with its exit code.
+  Whoever integrates the change, the controlling agent or you when you work
+  alone, runs the full sequence below on the integrated candidate; CI repeats
+  it on the pull request. Inside a container writer a few lock and hook tests
+  can time out; report them by file and test name instead of changing them.
 - CI runs `npm ci`, `npm run typecheck`, `npm run build:cli`,
   `NODE_OPTIONS=--unhandled-rejections=strict npm test` and `npm run build`;
-  run the same before a pull request.
+  run the same on the integrated candidate before a pull request.
 
 ## Rules
 
@@ -86,6 +91,33 @@
   installing. Client prompts never dispatch extension commands, and stdout stays
   reserved for MCP frames through the stdout guard. Extensions may persist their
   own state; Pi Session MCP itself keeps sessions in memory. Its only persistent session record is the opt-in session history (ADR 0019); the opt-in provider store (ADR 0021) persists credential sources, API keys and provider definitions, never session content.
+
+## Sensitive areas
+
+Before you change one of these areas, read its decision record, start at the
+named code and run the named tests. Each line names where to start, not every
+file of the area.
+
+- Isolation of read-only and coding profiles:
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md) and
+  [ADR 0008](docs/adr/0008-coding-profile-isolation.md); `src/confined-tools.ts`
+  and `src/sandbox-shell.ts`; `test/confined-tools.test.ts`,
+  `test/sandbox-shell.test.ts`, `test/sandbox-shell.bwrap.test.ts` and
+  `test/profile-boundaries.test.ts`.
+- Credential routing:
+  [ADR 0021](docs/adr/0021-provider-credentials.md); `src/provider-store.ts`
+  and `src/writer-credentials.ts`; `test/provider-store.test.ts` and
+  `test/writer-credentials.test.ts`.
+- Tool binding of a session:
+  [ADR 0010](docs/adr/0010-read-only-extension-tools.md) and
+  [ADR 0006](docs/adr/0006-pi-extension-allowlist.md); `src/session-tools.ts`
+  and `src/mcp-session-tools.ts`; `test/session-tools.test.ts`,
+  `test/mcp-session-tools.test.ts` and `test/profile-boundaries.test.ts`.
+- Writer lifecycle:
+  [ADR 0012](docs/adr/0012-leased-writer-pool.md) and
+  [ADR 0016](docs/adr/0016-writer-recovery-export.md); `src/writer-lifecycle.ts`
+  and `src/writer-lease.ts`; `test/writer-lifecycle.podman.test.ts`,
+  `test/writer-lease.test.ts` and `test/writer-collect-real-git.test.ts`.
 
 <!-- OPENWIKI:START -->
 
