@@ -19,15 +19,24 @@ function trackedFiles(): string[] | undefined {
 }
 
 const tracked = trackedFiles();
+// CI always has the checkout, so a missing inventory there is a failure, not a reason to skip.
+const inventoryRequired = Boolean(process.env.CI);
 
 describe("test discovery", () => {
   it("collects only the test files below test/", () => {
     expect(config.test?.include).toEqual(["test/**/*.test.{ts,mjs}"]);
   });
 
+  // An exclude or a second project list would remove files after the include matched them,
+  // and the inventory check below compares against the include alone.
+  it("removes nothing from what the include matches", () => {
+    expect(Object.keys(config.test ?? {})).toEqual(["include"]);
+  });
+
   // Narrowing the include must not hide a test: a tracked file that the default
   // pattern would have run, but the configured one does not, fails here.
-  it.skipIf(tracked === undefined)("leaves no tracked test file uncollected", () => {
+  it.skipIf(tracked === undefined && !inventoryRequired)("leaves no tracked test file uncollected", () => {
+    expect(tracked, "the tracked files could not be listed").toBeDefined();
     const uncollected = (tracked ?? []).filter((file) => DEFAULT_TEST_NAME.test(file) && !COLLECTED.test(file));
     expect(uncollected).toEqual([]);
   });
