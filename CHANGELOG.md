@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Prompt cache warming stays inside a running turn. SDK 1.5.1 changed its
+  default from `streaming` to `idle`, which re-sends a session's last request
+  for up to 30 minutes after a turn has ended, to keep the provider's prompt
+  cache entry alive. Sessions now set `streaming` explicitly, the SDK default
+  up to 1.5.0, so this update does not change it: a session that waits for its
+  next prompt sends no provider request.
+
 ## 0.20.0 — 2026-11-10
 
 Minor release: guided installation with optional tier routing (ADR 0020),

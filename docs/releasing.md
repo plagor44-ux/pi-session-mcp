@@ -77,6 +77,10 @@ update is possible. It is not an update and not an acceptance.
    `isMcpToolName` (`dist/core/mcp-servers.js`) with the reserved names in
    `src/session-tools.ts`. That function is not a root export, so no test
    notices when the SDK reserves another name.
+   Compare the SDK's settings defaults (`dist/core/settings-defaults.js`) as
+   well. Sessions run on in-memory settings, so a changed default changes what
+   a worker does unless `sessionSettings` in `src/sdk-pi-adapter.ts` sets the
+   value, as it does for `cacheWarming`.
 
 3. Move the pins, the SDK and its seven family packages in one command:
 
