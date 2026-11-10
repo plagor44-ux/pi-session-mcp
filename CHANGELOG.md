@@ -10,6 +10,25 @@
   See [Installation](docs/installation.md) and [ADR 0020](docs/adr/0020-tier-routing.md).
   The installer does not upgrade existing versions; history migrated by this
   release is unavailable to older releases until this release returns.
+- Opt-in provider credentials (#265, [ADR 0021](docs/adr/0021-provider-credentials.md)).
+  Each provider has one source: `inherit` (Pi's own login, the default), `key`
+  (a key stored by Pi Session MCP, which takes precedence) or `none`. The store
+  lives in a private directory under the account home and is checked for
+  owner, mode and links; an unreadable store never falls back to Pi's login.
+  Operator-defined providers (HTTPS, or HTTP on loopback) never inherit and
+  bind their key to the endpoint origin. Catalog, probe and sessions use the
+  same policy. Writers receive only the keys and definitions of their selected
+  providers; loopback custom providers are refused for container workspaces
+  with the new start code `provider_unsupported_in_writer`. Stored keys are
+  redacted from history. Doctor gains the check `provider_store`.
+- New command `pi-session-mcp-provider` (#266) to list providers and sources,
+  store a key from a hidden terminal prompt or from piped standard input, set
+  `none`, restore inheritance, and add or remove operator-defined providers.
+  It works offline and never prints a key. Exit codes are 0, 1, 3 (unknown
+  provider), 4 (invalid definition or key) and 64 (usage).
+- Guided setup can hand the key step to that command on an interactive
+  terminal with `--apply` (#267); it never does so with `--answers`, a
+  non-terminal or a dry run, and receives only the command's exit status.
 
 ### Fixed
 
