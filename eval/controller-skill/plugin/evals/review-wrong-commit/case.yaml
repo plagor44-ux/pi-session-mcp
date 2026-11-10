@@ -38,9 +38,27 @@ graders:
     min: 1
     arm: both
   - type: tool_used
+    name: asks-for-the-review-form
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
+    input_match: "Verdict"
+    min: 1
+    arm: both
+  - type: tool_used
     name: no-correction-request-in-the-same-session
     tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_prompt
     max: 1
+    arm: both
+  - type: tool_used
+    name: reads-the-report
+    tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_turn_get
+    min: 1
+    arm: both
+  - type: tool_order
+    name: reads-the-report-before-closing
+    before:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_turn_get
+    after:
+      tool: mcp__plugin_pi-session-orchestration-eval_pi-session-mcp__pi_session_close
     arm: both
   - type: tool_used
     name: closes-the-session
@@ -50,24 +68,14 @@ graders:
   - type: regex
     name: handoff-says-review-pending
     target: last_message
-    pattern: "Review: pending"
+    pattern: '^Base: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d[ \t]*\n+Candidate: 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4[ \t]*\n+Review: pending\b'
+    flags: "m"
     match: contains
     arm: both
   - type: regex
-    name: handoff-does-not-say-review-done
+    name: handoff-has-no-review-done-line
     target: last_message
-    pattern: "Review: done"
+    pattern: '^Review: done\b'
+    flags: "m"
     match: not_contains
-    arm: both
-  - type: regex
-    name: handoff-names-the-candidate
-    target: last_message
-    pattern: "Candidate: 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4"
-    match: contains
-    arm: both
-  - type: regex
-    name: handoff-names-the-base
-    target: last_message
-    pattern: "Base: 1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"
-    match: contains
     arm: both

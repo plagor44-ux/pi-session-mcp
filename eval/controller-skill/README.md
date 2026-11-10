@@ -43,9 +43,9 @@ Shared mocks are fixed responses. `mocks/pi-session-mcp/_tools.json` holds the r
 | `verify-worker-claim` | The controller checks the worker's claim itself (any Bash command; the eval cwd has no repository, so the check itself cannot succeed) | `Bash` min 1 |
 | `early-stop` | A 25 s turn that only announces work gets exactly one follow-up in the same session | `T:pi_session_prompt` 2..2; `T:pi_session_start` max 1 |
 | `unstructured-report` | A report without status, commit, files or checks is sent back for the agreed report, which must carry a `STATUS` line | `T:pi_session_prompt` 2..2; `T:pi_session_start` max 1; `T:pi_session_prompt` with `STATUS` in its input min 1 |
-| `review-bound-report` | Probe A: a complete review report that names the candidate is used as the review of that commit | `Skill` with `pi-session-orchestration` min 1; `T:pi_session_start` 1..1; `T:pi_session_prompt` max 1, with the candidate's full hash in its input min 1; `T:pi_session_close` min 1; last message contains `Review: done`, not `Review: pending`, and the `Candidate:` and `Base:` lines with the full hashes |
-| `review-wrong-commit` | Probe B: the same report with another commit as `Target` is not used, and the session is not asked to correct it | As `review-bound-report`, but the last message contains `Review: pending` and not `Review: done` |
-| `review-wrong-role` | Probe B: an implementation report in place of the review is not used as a review, and the review form is asked for once | As `review-wrong-commit`, but `T:pi_session_prompt` 2..2 |
+| `review-bound-report` | Probe A: a complete review report that names the candidate is used as the review of that commit | `Skill` with `pi-session-orchestration` min 1; `T:pi_session_start` 1..1; `T:pi_session_prompt` max 1, with the candidate's full hash in its input min 1 and with `Verdict` in its input min 1; `T:pi_turn_get` min 1 and before `T:pi_session_close`; `T:pi_session_close` min 1; the last message holds the lines `Base:`, `Candidate:` and `Review: done` with the full hashes one after the other, and no line that starts with `Review: pending` |
+| `review-wrong-commit` | Probe B: the same report with another commit as `Target` is not used, and the session is not asked to correct it | As `review-bound-report`, but the third line is `Review: pending` and no line starts with `Review: done` |
+| `review-wrong-role` | Probe B: an implementation report in place of the review is not used as a review, and the review form is asked for once | As `review-wrong-commit`, but `T:pi_session_prompt` 2..2, both with `Verdict` in their input, and `T:pi_turn_get` min 2 |
 
 ## Baseline (skill at `e6fc87c`, 2026-10-26)
 
@@ -103,12 +103,15 @@ In none of the 13 runs that served a report of another commit or an implementati
 
 Cost: USD 4.41 for the 20 runs (one smoke run, nine with the first wording, one traced run, nine with the final wording), Claude tokens only.
 
+An independent review of the cases found that these graders did not require `pi_turn_get`, so a case could pass for a controller that never read the report, that `review-wrong-role` counted two prompts without looking at the second one, and that the handoff markers were searched in the whole last message. The cases now also require the read, and the read before the close, a request for a `Verdict` (in `review-wrong-role` in both prompts), and the three handoff lines one after the other at line starts. The runs above used the first graders. With the final graders each case was run once and passed (four runs with one repetition of `review-wrong-role`, USD 0.94): the report was read once, in `review-wrong-role` twice, before the session was closed.
+
 What this does not show:
 
-- Three runs per case, one model and one client. `claude plugin eval` runs Claude Code only; a Codex controller needs a live run of its own.
+- Three runs per case with the first graders and one with the final ones, one model and one client. `claude plugin eval` runs Claude Code only; a Codex controller needs a live run of its own.
 - The wrong commit is a clearly different full hash. A hash that differs in a few characters, an abbreviated hash and a report that names both commits are covered by the validator tests, not by a case.
 - The reviewer is a mock on a host workspace. The check of `session.snapshot.head` before the first prompt is not exercised, and `Target` stays a claim: the cases show what the controller does with a report, not what a reviewer read.
 - Each run is a fresh controller session that ends with the handoff. A restart in the middle of a task cannot be expressed in this runner.
+- The follow-up of `review-wrong-role` gets the turn ID of the first prompt, because a fixed mock cannot count calls. A real server gives every prompt a turn of its own.
 - A task that names what to do with an unusable report changes the result, as the first wording shows. The cases measure a controller that is not told so.
 - The runs used the skill as of `ff4a41d`. The `Branch:` row of the reference was added afterwards (see the next section), and the review cases were not run again with it.
 
@@ -126,13 +129,13 @@ One run per case with the three review cases added, same client and model: 8 of 
 | `verify-worker-claim` | this branch | documented form without `Branch:` | 0/3 |
 | `verify-worker-claim` | base | documented form without `Branch:` | 0/3 |
 
-- The shared worker report and the one of `verify-worker-claim` used older field names (`Commits:` with an abbreviated hash, `Checks:`, `Concerns:`), which `validateTextReport` reads as `commit_missing` and `checks_missing`. They now use the documented form, and `test/controller-skill-report-mocks.test.ts` keeps them there. This did not make either case pass.
+- The shared worker report and the one of `verify-worker-claim` used older field names (`Commits:` with an abbreviated hash, `Checks:`, `Concerns:`), which `validateTextReport` reads as `commit_missing` and `checks_missing`. They now use the documented form, and `test/controller-skill-report-mocks.test.ts` keeps them there. Without a `Branch:` line this made neither case pass.
 - `terminal-read-once`: every failing run made seven tool calls instead of five and called `pi_turn_get` twice. One run was traced: the two extra calls were a follow-up prompt and the read of its turn. The mock answers every prompt with the same turn ID, so the grader counts that read as a second read of the first turn. The controller had asked the worker for a `Branch:` line, as section 5 of the skill says, and sent the report back because it had none. The reference did not list that field; it does now, and the served reports carry it. The two failing runs after that were not traced.
 - `verify-worker-claim`: the controller ran no command in any of the seven runs, with the base skill as well, so this branch is not the cause. No run of this case was traced. In the traced run of `terminal-read-once` the controller reported that the server gives it no path to the workspace and that it could therefore check nothing itself.
 - Three runs per arm cannot separate 2/3 from 1/3. Whether this branch changes how often a controller sends a report back is not resolved.
 - Both cases need rework that is not part of this change: `terminal-read-once` a mock that answers a follow-up with a turn of its own, as the agent mocks of `parallel-starts` do for sessions, and `verify-worker-claim` a workspace that the controller can reach.
 
-Cost: USD 7.13 for these 26 runs. All runs of this day together: 46 runs, USD 11.54, Claude tokens only.
+Cost: USD 7.13 for these 26 runs. All runs of this day together: 50 runs, USD 12.48, Claude tokens only.
 
 ## How to Run
 

@@ -24,8 +24,13 @@ describe("implementation reports served by the controller skill eval suite", () 
   it.each(["mocks", "verify-worker-claim/mocks"])("%s serves a report in the documented form, with its branch", (dir) => {
     const turn = servedTurn(dir);
     expect(validateTextReport(turn)).toMatchObject({ ok: true, report: { status: "DONE" } });
+    // The validator reads the status, the commit and the checks. The other fields are checked here.
+    expect(turn.assistantText).toMatch(/^Result: \S.*$/m);
     expect(turn.assistantText).toMatch(/^Branch: \S+$/m);
     expect(turn.assistantText).toMatch(/^Commit: [0-9a-f]{40}$/m);
+    expect(turn.assistantText).toMatch(/^Changed files:\n- \S+ — \S/m);
+    expect(turn.assistantText).toMatch(/^Checks run:\n- \S.* — exit 0\b/m);
+    expect(turn.assistantText).toMatch(/^Open points:\n- \S/m);
   });
 
   // These two cases are about a report the controller has to send back.
