@@ -60,6 +60,19 @@ function insertAfter(text: string, label: string, line: string): string {
   return lines.join("\n");
 }
 
+/** Removes a field with the lines below it, up to the next line that starts another field. */
+function withoutSection(text: string, label: string): string {
+  const lines = text.split("\n");
+  const index = lines.findIndex((line) => line.startsWith(`${label}:`));
+  if (index === -1) throw new Error(`the fixture has no ${label} line`);
+  let end = index + 1;
+  while (end < lines.length && !/^[A-Z][A-Za-z ]*:/.test(lines[end] ?? "")) end += 1;
+  lines.splice(index, end - index);
+  return lines.join("\n");
+}
+
+const crlf = (text: string): string => text.replace(/\n/g, "\r\n");
+
 // Independent of the validator: asks the review subject whether the cited line exists.
 async function locationExists(finding: ReviewFinding): Promise<boolean> {
   try {
@@ -101,6 +114,30 @@ describe("review report contract", () => {
     expect(reviewDisposition(result)).toBe("complete_review");
   });
 
+  it("keeps the lines that continue a finding", async () => {
+    const report = parsed(review(await fixture("review-blocking-findings.txt")));
+    expect(report.findings.map((finding) => finding.details)).toEqual([
+      [
+        "Impact: cross-tenant invoice disclosure.",
+        "Fix: add tenantId to the where clause, as getTenantInvoice in clean.ts does; check with an invoice of a second tenant.",
+      ],
+      [
+        "Impact: a token with a wildcard claim bypasses the exact permission check.",
+        "Fix: drop the wildcard branch; check that a wildcard claim does not authorize another permission.",
+      ],
+    ]);
+    expect(parsed(review(await fixture("review-false-location.txt"))).findings[0]?.details).toEqual([]);
+  });
+
+  it("reads a report with CRLF line ends and with its fields in another order alike", async () => {
+    const text = await fixture("review-blocking-findings.txt");
+    const expected = parsed(review(text));
+    expect(parsed(review(crlf(text)))).toEqual(expected);
+    const [status, target, verdict, ...rest] = text.trimEnd().split("\n");
+    const reordered = [status, ...rest, verdict, target].join("\n");
+    expect(parsed(review(reordered))).toEqual(expected);
+  });
+
   it("names the seeded defects of the review subject and no clean path", async () => {
     const seed = JSON.parse(await readFile(new URL("seed.json", subjectRoot), "utf8")) as { defects: Array<{ path: string }>; clean_paths: string[] };
     const report = parsed(review(await fixture("review-blocking-findings.txt")));
@@ -136,6 +173,31 @@ describe("review report contract", () => {
     expect(problems(review(text))).toEqual(["scope_conflict"]);
   });
 
+  it("rejects a second scope section, in either order and also when both say the same", async () => {
+    const text = await fixture("review-no-findings.txt");
+    const none = "Not reviewed:\n- none";
+    const part = "Not reviewed:\n- token.ts — too long for one turn.";
+    for (const [first, second] of [[none, part], [part, none]]) {
+      const result = review(`${insertAfter(text, "Verdict", first!).trimEnd()}\n${second}\n`);
+      expect(problems(result)).toEqual(["field_repeated", "scope_conflict"]);
+      expect(reviewDisposition(result)).toBe("request_report");
+    }
+    expect(problems(review(`${insertAfter(text, "Verdict", none).trimEnd()}\n${none}\n`))).toEqual(["field_repeated"]);
+    const partial = await fixture("review-done-with-concerns.txt");
+    expect(problems(review(`${partial.trimEnd()}\n${none}\n`))).toEqual(["field_repeated"]);
+  });
+
+  it("rejects every label that occurs twice", async () => {
+    const complete = await fixture("review-no-findings.txt");
+    for (const label of ["Risks", "Checks run", "Checks not run"]) {
+      expect(problems(review(`${complete.trimEnd()}\n${label}:\n- none\n`)), label).toEqual(["field_repeated"]);
+    }
+    const question = await fixture("review-needs-context.txt");
+    expect(problems(review(`${question.trimEnd()}\nQuestion: And which files?\n`))).toEqual(["field_repeated"]);
+    const blocked = await fixture("review-blocked.txt");
+    expect(problems(review(`${blocked.trimEnd()}\nBlocker: The profile has no shell.\n`))).toEqual(["field_repeated"]);
+  });
+
   it("reads missing context as a question, not as a review", async () => {
     const result = review(await fixture("review-needs-context.txt"));
     const report = parsed(result);
@@ -162,6 +224,33 @@ describe("review report contract", () => {
     expect(problems(review(withField(await fixture("review-blocked.txt"), "Blocker", undefined)))).toEqual(["blocker_missing"]);
   });
 
+  it("rejects a question or a blocker under a status that does not act on it", async () => {
+    const question = "Question: Is the wildcard claim intended?";
+    const blocker = "Blocker: token.ts could not be read.";
+    const cases: Array<[string, string]> = [
+      ["review-no-findings.txt", question],
+      ["review-no-findings.txt", blocker],
+      ["review-done-with-concerns.txt", question],
+      ["review-done-with-concerns.txt", blocker],
+      ["review-needs-context.txt", blocker],
+      ["review-blocked.txt", question],
+    ];
+    for (const [name, line] of cases) {
+      const result = review(`${(await fixture(name)).trimEnd()}\n${line}\n`);
+      expect(problems(result), `${name} ${line}`).toEqual(["field_unexpected"]);
+      expect(reviewDisposition(result), `${name} ${line}`).toBe("request_report");
+    }
+    const none = `${(await fixture("review-no-findings.txt")).trimEnd()}\nQuestion:\n- none\nBlocker: none\n`;
+    expect(reviewDisposition(review(none))).toBe("complete_review");
+  });
+
+  it("keeps a question that runs over several lines", async () => {
+    const text = `${(await fixture("review-needs-context.txt")).trimEnd()}\n  The task also names two files outside that range.\n`;
+    expect(parsed(review(text)).question).toBe(
+      "The task names a commit range but no base. Which commit does the range start from? The task also names two files outside that range.",
+    );
+  });
+
   it("rejects a verdict on a review that did not take place", async () => {
     for (const name of ["review-blocked.txt", "review-needs-context.txt"]) {
       const text = insertAfter(await fixture(name), "Target", "Verdict: NO_FINDINGS");
@@ -185,7 +274,7 @@ describe("review report binding to the target commit", () => {
 
   it("rejects an abbreviated, decorated or uppercase target", async () => {
     const text = await fixture("review-no-findings.txt");
-    for (const value of [TARGET.slice(0, 12), `\`${TARGET}\``, `${TARGET} (main)`, TARGET.toUpperCase(), `${OTHER}..${TARGET}`]) {
+    for (const value of [TARGET.slice(0, 12), `\`${TARGET}\``, `${TARGET} (main)`, TARGET.toUpperCase(), "main", "not given"]) {
       const result = review(withField(text, "Target", value));
       expect(problems(result), value).toEqual(["target_invalid"]);
       expect(reviewDisposition(result), value).toBe("request_report");
@@ -198,10 +287,58 @@ describe("review report binding to the target commit", () => {
     }
   });
 
+  it("rejects a target that names another commit beside the expected one", async () => {
+    const text = await fixture("review-no-findings.txt");
+    for (const value of [`${OTHER}..${TARGET}`, `${TARGET} (base ${OTHER})`, `\`${OTHER}\``, `commit ${OTHER}`, OTHER.toUpperCase()]) {
+      const result = review(withField(text, "Target", value));
+      expect(problems(result), value).toEqual(["target_mismatch"]);
+      expect(reviewDisposition(result), value).toBe("reject");
+    }
+  });
+
   it("rejects a report that names two targets, in either order", async () => {
     const text = await fixture("review-no-findings.txt");
-    expect(problems(review(insertAfter(text, "Target", `Target: ${OTHER}`)))).toEqual(["target_invalid"]);
-    expect(problems(review(insertAfter(withField(text, "Target", OTHER), "Target", `Target: ${TARGET}`)))).toEqual(["target_invalid"]);
+    for (const candidate of [insertAfter(text, "Target", `Target: ${OTHER}`), insertAfter(withField(text, "Target", OTHER), "Target", `Target: ${TARGET}`)]) {
+      const result = review(candidate);
+      expect(problems(result)).toEqual(["target_mismatch", "field_repeated"]);
+      expect(reviewDisposition(result)).toBe("reject");
+    }
+    const twice = review(insertAfter(text, "Target", `Target: ${TARGET}`));
+    expect(problems(twice)).toEqual(["target_invalid", "field_repeated"]);
+    expect(reviewDisposition(twice)).toBe("request_report");
+  });
+
+  // Everything below the label belongs to the field: a second line is a second value, not a comment.
+  it("reads a line below the target as part of the target", async () => {
+    const text = await fixture("review-no-findings.txt");
+    for (const convert of [(value: string) => value, crlf]) {
+      const other = review(convert(insertAfter(text, "Target", OTHER)));
+      expect(problems(other)).toEqual(["target_mismatch"]);
+      expect(reviewDisposition(other)).toBe("reject");
+      for (const line of [TARGET, "- the head of the branch", "  reviewed in full"]) {
+        const result = review(convert(insertAfter(text, "Target", line)));
+        expect(problems(result), line).toEqual(["target_invalid"]);
+        expect(reviewDisposition(result), line).toBe("request_report");
+      }
+    }
+  });
+
+  it("rejects a report of another commit also when its status line is missing or invalid", async () => {
+    const text = withField(await fixture("review-no-findings.txt"), "Target", OTHER);
+    const missing = review(text.replace(/^STATUS: DONE\n/, ""));
+    expect(problems(missing)).toEqual(["status_missing", "target_mismatch"]);
+    expect(reviewDisposition(missing)).toBe("reject");
+    const invalid = review(text.replace(/^STATUS: DONE\n/, "STATUS: APPROVED\n"));
+    expect(problems(invalid)).toEqual(["status_invalid", "target_mismatch"]);
+    expect(reviewDisposition(invalid)).toBe("reject");
+  });
+
+  // A reviewer that was given no commit can say so, but such a report is never bound to one.
+  it("does not bind a report whose reviewer was given no commit", async () => {
+    const text = withField(await fixture("review-needs-context.txt"), "Target", "not given");
+    const result = review(text);
+    expect(problems(result)).toEqual(["target_invalid"]);
+    expect(reviewDisposition(result)).toBe("request_report");
   });
 
   it("accepts nothing when the controller has no full hash to compare with", async () => {
@@ -225,7 +362,18 @@ describe("review report verdict and findings", () => {
 
   it("rejects a report that names two verdicts", async () => {
     const text = insertAfter(await fixture("review-no-findings.txt"), "Verdict", "Verdict: BLOCKING_FINDINGS");
-    expect(problems(review(text))).toEqual(["verdict_invalid"]);
+    expect(problems(review(text))).toEqual(["field_repeated", "verdict_invalid"]);
+  });
+
+  it("reads a line below the verdict as part of the verdict", async () => {
+    const text = await fixture("review-no-findings.txt");
+    for (const convert of [(value: string) => value, crlf]) {
+      for (const line of ["BLOCKING_FINDINGS", "- NON_BLOCKING_ONLY", "NO_FINDINGS", "Nothing stood out."]) {
+        const result = review(convert(insertAfter(text, "Verdict", line)));
+        expect(problems(result), line).toEqual(["verdict_invalid"]);
+        expect(reviewDisposition(result), line).toBe("request_report");
+      }
+    }
   });
 
   it("rejects a report that starts with a verdict line instead of the status", async () => {
@@ -273,7 +421,31 @@ describe("review report verdict and findings", () => {
 
   it("rejects a second findings section instead of dropping it", async () => {
     const text = `${(await fixture("review-no-findings.txt")).trimEnd()}\nFindings:\n- high handler.ts:2 — hidden below the checks.\n`;
+    expect(problems(review(text))).toEqual(["field_repeated", "finding_invalid"]);
+  });
+
+  it("rejects a review without a findings section or with an empty one", async () => {
+    const text = await fixture("review-no-findings.txt");
+    expect(problems(review(withoutSection(text, "Findings")))).toEqual(["findings_missing"]);
+    expect(problems(review(text.replace("Findings:\n- none\n", "Findings:\n")))).toEqual(["findings_missing"]);
+    const bare = `STATUS: DONE\nTarget: ${TARGET}\nVerdict: NO_FINDINGS\n`;
+    expect(problems(review(bare))).toEqual(["findings_missing"]);
+  });
+
+  it("rejects none beside a finding", async () => {
+    const text = (await fixture("review-blocking-findings.txt")).replace("Findings:\n", "Findings:\n- none\n");
     expect(problems(review(text))).toEqual(["finding_invalid"]);
+  });
+
+  // An indented finding would otherwise be read as text of the finding above it and vanish.
+  it("rejects a finding indented below another finding", async () => {
+    const text = await fixture("review-done-with-concerns.txt");
+    for (const nested of ["  - high token.ts:2 — A wildcard claim authorizes every permission.", "  high `token.ts:2`: no list marker.", "\t* critical token.ts:2-4 — a tab."]) {
+      const candidate = text.replace("Not reviewed:", `${nested}\nNot reviewed:`);
+      expect(problems(review(candidate)), nested).toEqual(["finding_invalid"]);
+    }
+    const prose = text.replace("Not reviewed:", "  - low risk: 3 callers pass a typed client.\n  The severity is high-level only.\nNot reviewed:");
+    expect(parsed(review(prose)).findings[0]?.details).toEqual(["- low risk: 3 callers pass a typed client.", "The severity is high-level only."]);
   });
 
   it("accepts a location in backticks and a line range", async () => {
@@ -300,12 +472,37 @@ describe("review report completeness", () => {
     expect(problems(result)).toEqual(["incomplete_turn", "target_mismatch"]);
     expect(reviewDisposition(result)).toBe("reject");
   });
+
+  // The order of "Accepting a review report" in the handoff reference: another commit first, then form.
+  it("decides in the documented order", async () => {
+    const good = await fixture("review-no-findings.txt");
+    const wrong = withField(good, "Target", OTHER);
+    const cut = { truncated: true };
+    const table: Array<[string, Validation, string]> = [
+      ["another commit", review(wrong), "reject"],
+      ["another commit, cut off", review(wrong, cut), "reject"],
+      ["another commit, no status", review(wrong.replace(/^STATUS: DONE\n/, "")), "reject"],
+      ["another commit, no verdict", review(withField(wrong, "Verdict", undefined)), "reject"],
+      ["cut off", review(good, cut), "request_report"],
+      ["no status", review(good.replace(/^STATUS: DONE\n/, "")), "request_report"],
+      ["no target", review(withField(good, "Target", undefined)), "request_report"],
+      ["no target, cut off", review(withField(good, "Target", undefined), cut), "request_report"],
+      ["abbreviated target", review(withField(good, "Target", TARGET.slice(0, 12))), "request_report"],
+      ["no verdict", review(withField(good, "Verdict", undefined)), "request_report"],
+      ["no findings section", review(withoutSection(good, "Findings")), "request_report"],
+      ["complete", review(good), "complete_review"],
+      ["partial", review(await fixture("review-done-with-concerns.txt")), "incomplete_review"],
+      ["question", review(await fixture("review-needs-context.txt")), "needs_context"],
+      ["blocked", review(await fixture("review-blocked.txt")), "blocked"],
+    ];
+    for (const [name, result, expected] of table) expect(reviewDisposition(result), name).toBe(expected);
+  });
 });
 
 describe("report role", () => {
   it("rejects an implementation report offered as a review", async () => {
     const result = review(await fixture("text-valid-done.txt"));
-    expect(problems(result)).toEqual(["target_missing", "verdict_missing"]);
+    expect(problems(result)).toEqual(["target_missing", "verdict_missing", "findings_missing"]);
     expect(reviewDisposition(result)).toBe("request_report");
   });
 

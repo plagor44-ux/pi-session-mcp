@@ -65,7 +65,7 @@ function parseStatusLine(line: string | undefined): { status: ReportStatus } | {
   return isStatus(value) ? { status: value } : { problem: "status_invalid" };
 }
 
-function section(lines: readonly string[], label: string, boundary: RegExp = TOP_LEVEL_LABEL): string[] | undefined {
+function section(lines: readonly string[], label: string): string[] | undefined {
   const pattern = new RegExp(`^${label}:\\s*(.*)$`, "i");
   const index = lines.findIndex((line, position) => position > 0 && pattern.test(line));
   if (index === -1) return undefined;
@@ -73,7 +73,7 @@ function section(lines: readonly string[], label: string, boundary: RegExp = TOP
   const body = inline ? [inline] : [];
   for (let position = index + 1; position < lines.length; position += 1) {
     const line = lines[position] ?? "";
-    if (boundary.test(line)) break;
+    if (TOP_LEVEL_LABEL.test(line)) break;
     body.push(line);
   }
   return body;
@@ -275,6 +275,8 @@ export type ReviewProblem =
   | "target_missing"
   | "target_invalid"
   | "target_mismatch"
+  | "field_repeated"
+  | "field_unexpected"
   | "verdict_missing"
   | "verdict_invalid"
   | "verdict_unexpected"
@@ -292,6 +294,8 @@ export interface ReviewFinding {
   path: string;
   line: number;
   text: string;
+  /** The indented lines below the finding, such as its impact and fix, without their indentation. */
+  details: string[];
 }
 
 export interface ParsedReview {
@@ -318,17 +322,24 @@ export type ReviewValidation = { ok: true; report: ParsedReview } | { ok: false;
  * - `needs_context`: the reviewer asks a question; no review took place yet.
  * - `blocked`: the reviewer could not review; no review took place.
  * - `request_report`: the report is cut off or not in the agreed format; ask once for a complete one.
- * - `reject`: the report is bound to another commit, or no binding can be checked; discard it and
- *   review again. Asking the same session to correct the line would only produce the expected text.
+ * - `reject`: the report names another commit, or no binding can be checked; discard it and review
+ *   again. Asking the same session to correct the line would only produce the expected text. This
+ *   comes before every other problem: a cut-off or malformed report of another commit is rejected too.
  */
 export type ReviewDisposition = "complete_review" | "incomplete_review" | "needs_context" | "blocked" | "request_report" | "reject";
 
 const VERDICTS: readonly ReviewVerdict[] = ["BLOCKING_FINDINGS", "NON_BLOCKING_ONLY", "NO_FINDINGS"];
-const REVIEW_LABEL = /^(?:Target|Verdict|Findings|Not reviewed|Risks|Checks run|Checks not run|Question|Blocker):/i;
+const REVIEW_LABELS = ["Target", "Verdict", "Findings", "Not reviewed", "Risks", "Checks run", "Checks not run", "Question", "Blocker"] as const;
+type ReviewLabel = (typeof REVIEW_LABELS)[number];
+const REVIEW_LABEL = new RegExp(`^(?:${REVIEW_LABELS.join("|")}):`, "i");
 /** A bare full commit hash: SHA-1 or SHA-256, lowercase as Git prints it. */
 const FULL_HASH = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+/** A full commit hash anywhere in a line, in either case and next to any other text. */
+const FULL_HASH_TOKEN = /(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])/gi;
 const FINDING =
   /^[-*]\s+(?<severity>critical|high|medium|low)\s+`?(?<path>[^\s:`]+):(?<line>[1-9]\d*)(?:-[1-9]\d*)?`?\s*(?:—|–|-|:)\s*(?<text>\S.*)$/i;
+/** An indented line that gives a severity and a location: a finding below another finding. */
+const NESTED_FINDING = /^\s+(?:[-*]\s+)?(?:critical|high|medium|low)\s+`?[^\s:`]+:\d/i;
 
 function isVerdict(value: string): value is ReviewVerdict {
   return (VERDICTS as readonly string[]).includes(value);
@@ -338,97 +349,136 @@ function isRepositoryRelative(path: string): boolean {
   return !path.startsWith("/") && !path.includes("\\") && path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
-function labelCount(lines: readonly string[], label: string): number {
-  const pattern = new RegExp(`^${label}:`, "i");
-  return lines.filter((line, position) => position > 0 && pattern.test(line)).length;
+interface ReviewField {
+  /** How often the label occurs. */
+  count: number;
+  /** The text after the label and every line below it up to the next label, for each occurrence. */
+  body: string[];
 }
 
-type SingleValue = { kind: "missing" } | { kind: "ambiguous" } | { kind: "value"; value: string };
+/**
+ * Reads a field wherever its label occurs, so that nothing a report says under a label is dropped:
+ * a second section is counted and read, and a line below a one-line field belongs to that field.
+ */
+function reviewField(lines: readonly string[], label: ReviewLabel): ReviewField {
+  const pattern = new RegExp(`^${label}:(.*)$`, "i");
+  const field: ReviewField = { count: 0, body: [] };
+  let inside = false;
+  for (const line of lines) {
+    const inline = pattern.exec(line)?.[1];
+    if (inline !== undefined) {
+      field.count += 1;
+      inside = true;
+      if (inline.trim() !== "") field.body.push(inline.trim());
+    } else if (REVIEW_LABEL.test(line)) inside = false;
+    else if (inside) field.body.push(line);
+  }
+  return field;
+}
 
-/** A field that binds the report must appear once: two different values would let either be read. */
-function singleValue(lines: readonly string[], label: string): SingleValue {
-  const count = labelCount(lines, label);
-  if (count > 1) return { kind: "ambiguous" };
-  const value = firstText(section(lines, label, REVIEW_LABEL));
-  return value === undefined ? { kind: "missing" } : { kind: "value", value };
+/** What a one-value field holds: every non-blank line of it, without a list marker. */
+function values(field: ReviewField): string[] {
+  return field.body.map((line) => line.trim().replace(/^[-*]\s+/, "").trim()).filter((line) => line !== "");
 }
 
 /**
  * Every line of the findings section is `none`, the head of a finding or an indented line that
- * continues the finding above it. Anything else is invalid, so a finding written as prose or as an
- * indented list is never read as "no findings".
+ * continues the finding above it. Anything else is invalid, so a finding written as prose, as an
+ * indented list or below another finding is never read as "no findings" or as text of its neighbor.
  */
-function parseFindings(body: string[] | undefined): { findings: ReviewFinding[]; invalid: boolean } {
+function parseFindings(body: readonly string[]): { findings: ReviewFinding[]; none: boolean; invalid: boolean } {
   const findings: ReviewFinding[] = [];
+  let none = false;
   let invalid = false;
-  let open = false;
-  for (const raw of body ?? []) {
+  let open: ReviewFinding | undefined;
+  for (const raw of body) {
     if (raw.trim() === "") continue;
     if (/^\s/.test(raw)) {
-      if (!open) invalid = true;
+      if (open === undefined || NESTED_FINDING.test(raw)) invalid = true;
+      else open.details.push(raw.trim());
       continue;
     }
-    open = false;
-    if (/^(?:[-*]\s+)?none\.?\s*$/i.test(raw)) continue;
+    open = undefined;
+    if (/^(?:[-*]\s+)?none\.?\s*$/i.test(raw)) {
+      none = true;
+      continue;
+    }
     const groups = FINDING.exec(raw)?.groups;
     const path = groups?.path;
     if (groups === undefined || path === undefined || !isRepositoryRelative(path)) {
       invalid = true;
       continue;
     }
-    open = true;
-    findings.push({
+    open = {
       severity: (groups.severity ?? "").toLowerCase() as FindingSeverity,
       path,
       line: Number(groups.line),
       text: (groups.text ?? "").trim(),
-    });
+      details: [],
+    };
+    findings.push(open);
   }
-  return { findings, invalid };
+  // `none` beside a finding contradicts itself.
+  return { findings, none, invalid: invalid || (none && findings.length > 0) };
 }
 
 /**
  * Checks the shape of a review report and its binding to one commit. `expected.target` is the full
  * hash of the commit the controller asked to have reviewed. A report that names another commit, an
- * abbreviated hash or none does not validate, whatever its verdict. A valid report is still a claim:
- * that the reviewer read this commit is evidence only where the controller fixed it, for example with
- * a review snapshot.
+ * abbreviated hash or none does not validate, whatever its verdict. Each label may occur once, and
+ * `Target` and `Verdict` hold one value: a second section or a second line is never dropped in favor
+ * of the first. A valid report is still a claim: that the reviewer read this commit is evidence only
+ * where the controller fixed it, for example with a review snapshot.
  */
 export function validateReviewReport(turn: Turn, expected: { target: string }): ReviewValidation {
   if (!FULL_HASH.test(expected.target)) return { ok: false, problems: ["expected_target_invalid"] };
   const problems: ReviewProblem[] = [];
   if (incomplete(turn)) problems.push("incomplete_turn");
   const lines = turn.assistantText.split(/\r?\n/);
+  const field = (label: ReviewLabel): ReviewField => reviewField(lines, label);
   const status = parseStatusLine(lines[0]);
-  if ("problem" in status) return { ok: false, problems: [...problems, status.problem] };
+  if ("problem" in status) problems.push(status.problem);
 
-  const target = singleValue(lines, "Target");
-  if (target.kind === "missing") problems.push("target_missing");
-  else if (target.kind === "ambiguous" || !FULL_HASH.test(target.value)) problems.push("target_invalid");
-  else if (target.value !== expected.target) problems.push("target_mismatch");
+  // The binding is checked whatever else is wrong with the report, so a report that names another
+  // commit, alone or beside the expected one, is rejected and never sent back for a correction.
+  const named = values(field("Target"));
+  const hashes = named.flatMap((value) => value.match(FULL_HASH_TOKEN) ?? []);
+  if (hashes.some((hash) => hash.toLowerCase() !== expected.target)) problems.push("target_mismatch");
+  else if (named.length === 0) problems.push("target_missing");
+  else if (named.length > 1 || named[0] !== expected.target) problems.push("target_invalid");
+  if ("problem" in status) return { ok: false, problems };
+
+  if (REVIEW_LABELS.some((label) => field(label).count > 1)) problems.push("field_repeated");
 
   const reviewed = status.status === "DONE" || status.status === "DONE_WITH_CONCERNS";
-  const claimed = singleValue(lines, "Verdict");
+  const [claimed, ...otherVerdicts] = values(field("Verdict"));
   let verdict: ReviewVerdict | undefined;
   if (!reviewed) {
-    if (claimed.kind !== "missing") problems.push("verdict_unexpected");
-  } else if (claimed.kind === "missing") problems.push("verdict_missing");
-  else if (claimed.kind === "ambiguous" || !isVerdict(claimed.value)) problems.push("verdict_invalid");
-  else verdict = claimed.value;
+    if (field("Verdict").count > 0) problems.push("verdict_unexpected");
+  } else if (claimed === undefined) problems.push("verdict_missing");
+  else if (otherVerdicts.length > 0 || !isVerdict(claimed)) problems.push("verdict_invalid");
+  else verdict = claimed;
 
-  // Without a review there is nothing to bind findings to; the section is not read then.
-  const parsed = reviewed ? parseFindings(section(lines, "Findings", REVIEW_LABEL)) : { findings: [], invalid: false };
-  const findingsInvalid = parsed.invalid || (reviewed && labelCount(lines, "Findings") > 1);
-  if (findingsInvalid) problems.push("finding_invalid");
+  // Without a review there is nothing to bind findings to; the section is not read then. A review
+  // says what it found: a missing or empty section is not read as "no findings".
+  const parsed = reviewed ? parseFindings(field("Findings").body) : { findings: [], none: false, invalid: false };
+  if (parsed.invalid) problems.push("finding_invalid");
   else if (verdict === "NO_FINDINGS" && parsed.findings.length > 0) problems.push("findings_unexpected");
-  else if (verdict !== undefined && verdict !== "NO_FINDINGS" && parsed.findings.length === 0) problems.push("findings_missing");
+  else if (reviewed && parsed.findings.length === 0 && !(parsed.none && (verdict === undefined || verdict === "NO_FINDINGS"))) {
+    problems.push("findings_missing");
+  }
 
-  const notReviewed = items(section(lines, "Not reviewed", REVIEW_LABEL));
+  const notReviewed = items(field("Not reviewed").body);
   if (status.status === "DONE_WITH_CONCERNS" && notReviewed.length === 0) problems.push("scope_missing");
   if (status.status === "DONE" && notReviewed.length > 0) problems.push("scope_conflict");
-  const question = items(section(lines, "Question", REVIEW_LABEL))[0];
+  // One status, one outcome: a question or a blocker under another status would be lost, because
+  // the controller acts on the status.
+  const question = items(field("Question").body).join(" ") || undefined;
+  const blocker = items(field("Blocker").body).join(" ") || undefined;
+  if ((status.status !== "NEEDS_CONTEXT" && question !== undefined) || (status.status !== "BLOCKED" && blocker !== undefined)) {
+    problems.push("field_unexpected");
+  }
   if (status.status === "NEEDS_CONTEXT" && question === undefined) problems.push("question_missing");
-  const blocker = items(section(lines, "Blocker", REVIEW_LABEL))[0];
   if (status.status === "BLOCKED" && blocker === undefined) problems.push("blocker_missing");
   if (problems.length > 0) return { ok: false, problems };
 
@@ -439,11 +489,11 @@ export function validateReviewReport(turn: Turn, expected: { target: string }): 
       target: expected.target,
       findings: parsed.findings,
       notReviewed,
-      checks: parseChecks(section(lines, "Checks run", REVIEW_LABEL)),
+      checks: parseChecks(field("Checks run").body),
       claimsOnly: true,
       ...(verdict === undefined ? {} : { verdict }),
-      ...(status.status === "NEEDS_CONTEXT" && question !== undefined ? { question } : {}),
-      ...(status.status === "BLOCKED" && blocker !== undefined ? { blocker } : {}),
+      ...(question === undefined ? {} : { question }),
+      ...(blocker === undefined ? {} : { blocker }),
     },
   };
 }

@@ -170,12 +170,16 @@ with `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`, and labeled
 fields follow. A review report names the commit under review as `Target:` with
 its bare full hash, then `Verdict:` with `BLOCKING_FINDINGS`,
 `NON_BLOCKING_ONLY` or `NO_FINDINGS`, and each finding with severity and
-`path:line`. Only `DONE` is a review of the whole target. `DONE_WITH_CONCERNS`
-is an incomplete review whose verdict covers what was reviewed, and
-`NEEDS_CONTEXT` and `BLOCKED` carry no verdict. The controller compares
-`Target` with the commit it asked about and does not use a report that names
-another one. `Target` is a claim; what a reviewer could read is fixed by its
-workspace, for example a review snapshot. In this repository
+`path:line` under `Findings:`, which says `- none` when there is none. Each
+label appears once, and `Target` and `Verdict` hold one value. Only `DONE` is
+a review of the whole target. `DONE_WITH_CONCERNS` is an incomplete review
+whose verdict covers what was reviewed, and `NEEDS_CONTEXT` and `BLOCKED`
+carry no verdict. The controller compares `Target` with the commit it asked
+about before anything else and rejects a report that names another one, also
+when that report is cut off or not in the form. `Target` is a claim; what a
+reviewer could read is fixed by its workspace, for example a review snapshot.
+The form is for the review of one commit: the controller gives the reviewer
+the full hash also for a branch, a range or a set of files. In this repository
 `eval/reports/validate.ts` checks both forms without a provider
 (`validateTextReport`, `validateReviewReport`).
 

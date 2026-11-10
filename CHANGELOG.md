@@ -86,9 +86,12 @@
   holds the fields of the implementation report and the review report, tells a
   complete review, an incomplete review, missing context and a blocked review
   apart, and gives the order of the controller's checks: a report that names
-  another commit is rejected whatever its verdict, and a cut-off report
-  (`truncated` or `completion: "output_limit"`) is asked for again and its
-  verdict not used. `Target` is a claim; on a snapshot workspace
+  another commit is rejected first, whatever its verdict and also when it is
+  cut off or not in the form, and a cut-off report (`truncated` or
+  `completion: "output_limit"`) of the right commit is asked for again and its
+  verdict not used. Each label appears once, `Target` and `Verdict` hold one
+  value, and a review always has a `Findings` section, with `- none` when it
+  found nothing. `Target` is a claim; on a snapshot workspace
   `session.snapshot.head` remains the evidence. `eval/reports/validate.ts`
   gains the provider-free `validateReviewReport` and `reviewDisposition`, and
   `test/review-report-validator.test.ts` covers them, including a report for
