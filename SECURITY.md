@@ -20,8 +20,11 @@ Pi Session MCP promises a narrow boundary, described in the
 [threat model](docs/threat-model.md). Reports about a broken promise are in
 scope, for example:
 
-- a path, credential, prompt, provider error or authentication location in a
-  public tool result, a `doctor` report or a `setup` report;
+- a path, credential, prompt, provider error or authentication location in an
+  error or in the metadata of a public tool result, or in a `doctor` or `setup`
+  report. `assistantText` is the worker model's output and is returned
+  unsanitized: content that it repeats is in scope only when the worker should
+  not have been able to read it;
 - a client reaching a directory, model, provider or permission level that the
   configuration does not offer through an alias;
 - a session receiving a tool that its execution profile does not grant;

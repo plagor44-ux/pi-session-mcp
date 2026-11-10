@@ -1,6 +1,6 @@
 # Tool contracts
 
-Every response includes text JSON for broad client compatibility and the same object as `structuredContent`. Success is `{ok:true,...}`. Domain failures are `{ok:false,error:{code,message}}` with `isError: true`; `writer_unavailable` also carries `reason` and, for `none_admitted`, `counts`. Complete prompts, credentials, and raw provider errors are never returned.
+Every response includes text JSON for broad client compatibility and the same object as `structuredContent`. Success is `{ok:true,...}`. Domain failures are `{ok:false,error:{code,message}}` with `isError: true`; `writer_unavailable` also carries `reason` and, for `none_admitted`, `counts`. Errors and metadata never carry complete prompts, credentials or raw provider errors. A completed turn's `assistantText` is model output and is not sanitized; see [Deterministic MCP errors](#deterministic-mcp-errors).
 
 | Tool | Input | Effect | readOnlyHint |
 | --- | --- | --- | --- |

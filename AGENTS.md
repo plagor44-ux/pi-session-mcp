@@ -80,12 +80,12 @@
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
 - Tracked files contain no operator-specific hosts, paths, or internal service names; use placeholders.
-- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), an opt-in local provider store for credential sources, API keys and operator-defined provider definitions (ADR 0021), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
 - Pi extensions load only from an execution profile's exact
   `npm:<name>@<version>` allowlist, resolved from Pi's install without
   installing. Client prompts never dispatch extension commands, and stdout stays
   reserved for MCP frames through the stdout guard. Extensions may persist their
-  own state; Pi Session MCP itself keeps sessions in memory; its only persistent store is the opt-in session history (ADR 0019).
+  own state; Pi Session MCP itself keeps sessions in memory. Its only persistent session record is the opt-in session history (ADR 0019); the opt-in provider store (ADR 0021) persists credential sources, API keys and provider definitions, never session content.
 
 <!-- OPENWIKI:START -->
 

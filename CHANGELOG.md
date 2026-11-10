@@ -35,6 +35,35 @@
   cache entry alive. Sessions now set `streaming` explicitly, the SDK default
   up to 1.5.0, so this update does not change it: a session that waits for its
   next prompt sends no provider request.
+- The README, the project rules, the security policy, client setup, the
+  installation guide, the tool contracts and the architecture document match
+  the opt-in provider credentials of 0.20.0
+  ([#275](https://github.com/plagor44-ux/pi-session-mcp/issues/275)). They no
+  longer say that setup never asks for a credential, that Pi authentication is
+  never stored, that the session history is the only persistent store, or that
+  one `ModelRuntime` lives as long as the server process: since 0.20.0 each
+  session gets its own, so a session started after a credential change observes
+  it. They name the three credential sources, the unencrypted local provider
+  store, the guided handoff to `pi-session-mcp-provider auth set` and the
+  credentials a container writer receives. Guarantees about omitted data are
+  scoped to errors and metadata; `assistantText` is described as unsanitized
+  model output that can repeat secrets, and the security policy counts repeated
+  content as a defect only when the worker should not have been able to read
+  it. Documentation only; no runtime or contract change.
+- The README opens with a pre-1.0 status note that links the acceptance record
+  of the current version and the threat model, and with a copyable prompt for
+  a second opinion from a read-only worker, its prerequisites and what the
+  server does not guarantee
+  ([#276](https://github.com/plagor44-ux/pi-session-mcp/issues/276)). The
+  Quick start separates the download and checksum from running the installer,
+  says that a checksum from the same release is an integrity check and no
+  proof of origin, describes what `install.sh` does, links the release of the
+  described version and the manual paths, and states that npm still resolves
+  transitive dependencies at install time. The package description names
+  Codex and Claude Code, and the keywords add `mcp-server`, `codex`,
+  `claude-code`, `ai-agents` and `agent-orchestration`.
+  `test/readme-onboarding.test.ts` checks the README's relative links and
+  anchors and its version line and release link against `package.json`.
 
 ### Fixed
 

@@ -18,7 +18,7 @@ installation with upgrade and removal, start with [Installation](installation.md
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 
-Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory; the only persistent store is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](session-history.md)), which is off by default.
+Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory. The only persistent session record is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](session-history.md)), which is off by default. The opt-in provider store ([ADR 0021](adr/0021-provider-credentials.md), see [provider credentials](installation.md#provider-credentials-and-custom-providers)) persists credential sources, API keys and custom provider definitions, and no session content.
 
 ## Build
 
@@ -398,14 +398,14 @@ npm run build
 npm run inspect
 ```
 
-Listing tools and testing input validation needs no provider credentials. An accepted prompt needs existing local Pi authentication and an available provider and model.
+Listing tools and testing input validation needs no provider credentials. An accepted prompt needs local authentication for the profile's provider (Pi's own login by default, or a key stored with `pi-session-mcp-provider auth set`) and an available provider and model.
 
 Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS keychain it also stores secrets there unencrypted; `MCP_INSPECTOR_SECRET_STORE=memory` keeps them in memory only.
 
 ## Expected flow and lifecycle deadlines
 
 1. Call `pi_capabilities_get` with `{}` and select a workspace alias and an execution-profile alias from the returned config-derived lists.
-2. Call `pi_session_start` with those aliases (without `executionProfile` the default profile is used; `base` applies only to a coding profile on a container workspace). The server resolves the configured provider/model through its shared `ModelRuntime` (a profile with extensions gets a fresh runtime for each session), loads and validates the profile's selected skills, checks existing local Pi authentication and availability, creates with explicit model/thinking/tools, and verifies the effective SDK result.
+2. Call `pi_session_start` with those aliases (without `executionProfile` the default profile is used; `base` applies only to a coding profile on a container workspace). The server resolves the configured provider/model through a `ModelRuntime` that it creates for this session, loads and validates the profile's selected skills, checks local authentication for the provider (Pi's login by default, or the source set with `pi-session-mcp-provider`) and availability, creates with explicit model/thinking/tools, and verifies the effective SDK result.
 3. Call `pi_session_prompt` with the returned `sessionId` and a read-only prompt. It returns after accepted preflight with a `turnId` in `running` state.
 4. Poll `pi_turn_get` with that `sessionId` and `turnId` until `completed`, `failed`, or `aborted`, with a deadline no longer than three minutes. There is no `pi_turn_wait` tool. With event delivery active (`events.delivery` is `spool` in `pi_capabilities_get`) and the wake hook installed, a Claude Code controller waits for the wake instead and reads the turn once.
 5. Call `pi_session_close` when the session is no longer needed.
@@ -441,7 +441,7 @@ provider/engine observations, not as evidence of such a mismatch. A generic
 
 ## Pi authentication and data boundary
 
-Pi's existing local authentication mechanism belongs to Pi. Do not copy credential values into the repository configuration, MCP registration command, MCP tool input, logs, or documentation. The server only checks whether authentication can be resolved; it never emits the auth object, source, path, headers, base URL, or raw refresh/provider failure.
+Pi's existing local authentication mechanism belongs to Pi and is the default source for every built-in provider. Do not copy credential values into the repository configuration, MCP registration command, MCP tool input, logs, or documentation. The server only checks whether authentication can be resolved; it never emits the auth object, source, path, headers, base URL, or raw refresh/provider failure. A key that the operator stores with `pi-session-mcp-provider auth set` lives in the opt-in provider store, which only the `pi-session-mcp-provider` command changes; no MCP tool accepts a key, and no error or metadata field returns one. See [provider credentials](installation.md#provider-credentials-and-custom-providers). For a container workspace, the launcher copies the selected providers' credentials into that writer's private directory; see [credentials and residual risks](isolation-setup.md#credentials-and-residual-risks).
 
 Prompts, provider errors, complete model objects, SDK identifiers, credential fields, tool arguments/results, thinking blocks, and transcripts are not public metadata. `assistantText` can repeat sensitive workspace or tool content and must be treated as sensitive.
 
@@ -465,7 +465,7 @@ Verify that `PI_SESSION_MCP_CONFIG` names the intended absolute JSON file, it co
 
 ### Pi selection or authentication fails
 
-Use a locally configured exact provider/model pair and existing Pi authentication. Do not try to repair an error by adding credentials to the config or MCP request. Safe errors distinguish unknown provider/model, unavailable model, missing/unavailable local authentication, unavailable thinking level, and verified-selection mismatch.
+Use a locally configured exact provider/model pair and working authentication for that provider: Pi's login, or the source that `pi-session-mcp-provider list` shows for it. Do not try to repair an error by adding credentials to the config or MCP request. Safe errors distinguish unknown provider/model, unavailable model, missing/unavailable local authentication, unavailable thinking level, and verified-selection mismatch.
 
 ### A turn remains `running`
 
@@ -473,7 +473,7 @@ Poll `pi_turn_get` for at most three minutes. If it does not become terminal, re
 
 ### A prompt fails immediately after a provider config or credential change
 
-For profiles without extensions, `pi_session_prompt` reads the configured provider/model through one `ModelRuntime` that is created once and cached for the lifetime of the Pi Session MCP server process (a profile with extensions creates a fresh runtime when each session starts); the underlying SDK reads `~/.pi/agent/models.json` only at that creation. Editing that file (for example adding or fixing a provider API key) does not take effect in an already-running server process, and a resulting turn typically fails (`turn_failed`) within milliseconds rather than after a real provider round trip. Restart or reconnect the MCP server (which restarts the process) after any provider config or credential change, then retry.
+`pi_session_prompt` reads the configured provider/model through the `ModelRuntime` of its session. Since 0.20.0 the server creates that runtime when the session starts, for every profile, and applies the provider policy to it; the underlying SDK reads `~/.pi/agent/models.json` only at that creation. A later change, for example an edit of that file or a key set, rotated or removed with `pi-session-mcp-provider`, does not reach a session that is already open: it keeps the runtime it started with, and a turn in it can fail (`turn_failed`) within milliseconds rather than after a real provider round trip. Close the session and start a new one. If a new session fails in the same way, restart or reconnect the MCP server (which restarts the process), then retry.
 
 ### Session cleanup
 

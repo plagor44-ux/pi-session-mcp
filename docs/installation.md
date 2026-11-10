@@ -189,8 +189,10 @@ the same arguments.
   start writer containers. Direct writer verify
   disables credential refresh and uses no session or provider request.
 
-Pi Session MCP embeds the Pi SDK version pinned in `package.json`. It reuses the
-local user's existing Pi authentication and never prints it. Automated writers
+Pi Session MCP embeds the Pi SDK version pinned in `package.json`. By default it
+reuses the local user's existing Pi authentication and never prints it; a key
+stored with `pi-session-mcp-provider` takes precedence for its provider (see
+[Provider credentials](#provider-credentials-and-custom-providers)). Automated writers
 keep selected provider credentials in their private boundary agent copy; see
 [Execution modes](execution-modes.md#writer-storage-launch-and-readiness).
 

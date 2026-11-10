@@ -11,6 +11,10 @@ Pi Session MCP is a local, stdio-only [Model Context Protocol](https://modelcont
 
 > Pi Session MCP is an independent project. It is not affiliated with or endorsed by the makers of Pi, OpenAI or Anthropic. Product names are used only to describe compatibility.
 
+> **Status: pre-1.0.** Version 0.20.0 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients ran on 0.16.1; none has run on 0.20.0, and the [0.20.0 acceptance record](docs/acceptance.md#v0200-post-release-evidence) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
+
+[Example](#example-a-second-opinion) · [Quick start](#quick-start) · [Status](#status) · [Security model](#security-model)
+
 ```mermaid
 flowchart LR
   C["Codex or Claude Code<br/>(controller)"] -- "MCP over stdio" --> S["pi-session-mcp"]
@@ -18,8 +22,31 @@ flowchart LR
   P --> M[("Model provider")]
   S -. "container workspaces" .-> W["Leased writer pool<br/>(rootless Podman)"]
   S -. "opt-in" .-> H[("Session history")]
+  S -. "opt-in" .-> K[("Provider store")]
   S -. "opt-in" .-> R{{"Tier routing"}}
 ```
+
+## Example: a second opinion
+
+With the server registered, ask Codex or Claude Code in plain language:
+
+```text
+Get a second opinion from a Pi worker through the pi-session-mcp tools.
+List the configured aliases with pi_capabilities_get. Start a session on the
+workspace alias for this repository with the default read-only execution
+profile. Ask the worker to review src/parser.ts and its tests for correctness
+bugs and unhandled edge cases. Poll the turn until it is finished, close the
+session, and report the findings with file and line. Check each finding
+against the code before you act on it.
+```
+
+Replace `src/parser.ts` with a file of yours. The prompt needs:
+
+- the package installed and registered with your client ([Quick start](#quick-start));
+- a configuration that names the repository as a workspace alias and has a read-only execution profile. One read-only profile is the default, so the prompt names none;
+- authentication for that profile's provider: Pi's login, or a key in the [provider store](docs/installation.md#provider-credentials-and-custom-providers).
+
+The prompt is a request to your client, and the client's configuration decides what happens: the model it runs, whether it loaded the orchestration skill, and which tool calls it makes without asking you. The server enforces the configured aliases, the profile's tool allowlist and the limits of a turn. It cannot make either model follow the prompt, and the worker's answer can be wrong. The built-in tools of a read-only profile read files inside the workspace and run no commands unless the profile opts into the sandboxed shell, so name files instead of asking for a `git diff`. Tools that you grant to a profile from extensions or external MCP servers are outside that limit and may write or run commands; for this example, use a profile without them or with grants you have vetted.
 
 ## Why use it
 
@@ -28,28 +55,37 @@ flowchart LR
 - **Work goes to a model you choose.** An execution profile binds a provider, a model and a thinking level, so routine work can run on a local or cheaper model.
 - **Follow-ups keep their context.** A session stays open across prompts.
 - **You set the limits.** The client selects aliases only. The default profile is read-only, and profiles grant exactly the skills and external MCP tools you list.
-- **Predictable to automate.** Sessions and turns have few states and stable error codes. Results contain no paths, credentials, prompts or raw provider errors.
+- **Predictable to automate.** Sessions and turns have few states and stable error codes. Errors and the session, turn and capability metadata carry no paths, credentials, prompts or raw provider errors. The worker's answer, `assistantText`, is model output and comes back unsanitized.
 
 It is not the right tool when you want to work with Pi yourself (run Pi directly), when you need remote access, several users or sessions that survive a restart, or when you need to contain untrusted code: a `coding` profile limits Pi's tools, but it is not an operating-system sandbox.
 
 ## Quick start
 
-On Linux or macOS with Node.js 22.19.0 or newer:
+On Linux or macOS with Node.js 22.19.0 or newer, download the installer of the latest release and check it:
 
 ```sh
 base=https://github.com/plagor44-ux/pi-session-mcp/releases/latest/download
 curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
-  sha256sum -c install.sh.sha256 && sh install.sh
+  sha256sum -c install.sh.sha256
 ```
 
-On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. The `&&` chain runs the installer only after both downloads and the checksum succeeded.
+On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.20.0](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.20.0).
 
-The script installs its exact pinned version and runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary; setup never asks for a credential.
+The checksum comes from the same release as the script. A match shows that the two files belong together, which catches a damaged or incomplete download. It does not prove who published the script, because whoever can replace one file can replace both. Read `install.sh` before you run it. It is short: it checks the platform and the Node.js version, runs `npm install -g pi-session-mcp@<version>` with the version written in the script unless that version is installed already, and starts `pi-session-mcp-setup --guided --apply`. It refuses to upgrade a different installed version.
 
-- Plan without writes: `pi-session-mcp-setup --guided`.
+```sh
+sh install.sh
+```
+
+The script pins the package version, and the package pins its direct dependencies. npm resolves the transitive dependencies at install time within the ranges those dependencies declare. For the dependency tree the maintainers tested, [install from a release tag](docs/installation.md#from-a-release-tag) with `npm ci`.
+
+The script then runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary. Setup does not read, print or store a credential. When you apply on an interactive terminal, the interview first offers to run `pi-session-mcp-provider auth set <provider>` for providers you name. That command prompts for an API key with echo off and stores it in Pi Session MCP's own [provider store](docs/installation.md#provider-credentials-and-custom-providers); setup receives only its exit status. Answer no, the default, and setup leaves every credential source as it is.
+
+- Plan without writes, with the package installed: `pi-session-mcp-setup --guided`.
+- Without the script: install [from npm](docs/installation.md#from-npm) or [from a release tag](docs/installation.md#from-a-release-tag), then [configure](docs/installation.md#2-configure) and [register a client](docs/installation.md#4-register-a-client) by hand.
 - Non-interactive or agent-driven installs: [agent guide](docs/agent-install.md).
 - Configuration format: [Configure](docs/installation.md#2-configure).
-- Manual installation, upgrades and removal: [installation guide](docs/installation.md).
+- Upgrades and removal: [Upgrade](docs/installation.md#upgrade) and [Remove](docs/installation.md#remove).
 
 ## Tools
 
@@ -80,7 +116,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 | Session history | Opt-in, redacted local SQLite record of sessions, with a CLI for listing, verdicts, queries and export. | [Session history](docs/session-history.md) |
 | Tier routing | Opt-in server-side choice of a profile within a tier (`ultra`, `hightech`, `medium`, `low`), manual or learning from history. | [Operate routing](docs/installation.md#operate-routing) |
 | Doctor and setup | An offline health check, and reproducible registration, verification and removal for each client. | [Client setup](docs/client-setup.md) |
-| Provider CLI | `pi-session-mcp-provider` manages local provider definitions and credential sources offline. | [Provider credentials](docs/installation.md#provider-credentials-and-custom-providers) |
+| Provider CLI | `pi-session-mcp-provider` manages local provider definitions and each provider's credential source (Pi's login, a stored API key or none) offline. | [Provider credentials](docs/installation.md#provider-credentials-and-custom-providers) |
 
 ## Status
 
@@ -91,19 +127,21 @@ The package version is **0.20.0**.
 | Stability | Pre-1.0. Tools, fields, states and error codes change only in a new minor release. |
 | Platforms | Linux and macOS with Node.js 22.19.0 or newer. CI covers macOS 15 and 26 on Apple silicon; Intel Macs are untested. Setup refuses other platforms with `platform_unsupported`. |
 | Clients | Codex CLI and Claude Code. Setup accepts a client whose public `mcp` command output matches the expected contract, without pinning versions. |
-| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle ran on 0.16.1 with Pi SDK 1.5.0; see [Acceptance](docs/acceptance.md). |
+| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). For 0.20.0 the [acceptance record](docs/acceptance.md#v0200-post-release-evidence) names what is not established: a turn against a real provider with a stored key, an interactive `install.sh` run with the key step, a writer turn against an operator-defined provider, a full live cycle, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
 | Out of scope | HTTP, a web UI, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process. |
 
 ## Security model
 
-- **Local and single-peer.** No network listener and no daemon. Sessions live in memory and end with the server process. The opt-in session history records redacted sessions but cannot restore them.
-- **Aliases instead of paths.** No tool accepts a working directory, a model, a provider or a credential. Pi's existing local authentication is reused and never stored, printed or returned.
+- **Local and single-peer.** No network listener and no daemon. Sessions live in memory and end with the server process; nothing restores them. The opt-in [session history](docs/session-history.md) keeps a record of sessions for reading, redacted on a best-effort basis. The opt-in provider store keeps credential sources, API keys and custom provider definitions, and no session content.
+- **Aliases instead of paths.** No tool accepts a working directory, a model, a provider or a credential.
+- **No credential input over MCP.** By default each built-in provider uses Pi's own login (`inherit`); a provider you define yourself has no credential until you store a key. Pi Session MCP resolves Pi's login through the Pi SDK and does not print it or put it into errors or metadata. `pi-session-mcp-provider auth set` can store an API key for one provider in a local store, protected by file permissions (`0700` directory, `0600` files) and not encrypted; that key then replaces Pi's login for that provider. A container writer receives the credentials of its selected providers and no others, an OAuth entry without its refresh token, and code that runs in that writer can read them. See [provider credentials](docs/installation.md#provider-credentials-and-custom-providers) and [ADR 0021](docs/adr/0021-provider-credentials.md).
 - **Explicit policy file.** The configuration comes only from `PI_SESSION_MCP_CONFIG`, never from the client's working directory.
-- **Sanitized results.** Errors are stable codes without paths, prompts, provider errors or credential locations. `assistantText` can repeat workspace content and is sensitive.
+- **Sanitized errors and metadata.** Errors are stable codes, and session, turn and capability metadata are whitelists. They carry no paths, prompts, raw provider errors, credentials or credential locations.
+- **Unsanitized answers.** `assistantText` is the worker model's output, returned as written and capped at 64 KiB. It can repeat workspace content, absolute paths and any secret the worker read. Treat it as sensitive.
 - **Fail closed.** Unknown fields, unknown aliases, unexpected client output and divergent registrations are rejected, not repaired.
 - **Bounded waiting.** Session creation, prompt acceptance, abort, close and shutdown have fixed deadlines.
 
-The [threat model](docs/threat-model.md) states the assumptions and limits, including what a `coding` profile does not protect against.
+The [threat model](docs/threat-model.md) states the assumptions and limits, including what a `coding` profile does not protect against and what code in a container writer can do with the credentials it receives.
 
 ## Documentation
 
