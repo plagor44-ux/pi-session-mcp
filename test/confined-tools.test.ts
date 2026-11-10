@@ -223,6 +223,16 @@ describe("allowedReadRoots protected paths", () => {
     await expect(confineToolPath(join(linked, "SKILL.md"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
   });
 
+  it("refuses a workspace that is, contains or lies inside the provider store, also before it exists", async () => {
+    const providers = join(config, "providers");
+    await mkdir(join(providers, "inner"), { recursive: true });
+    for (const candidate of [home, config, providers, join(providers, "inner")]) {
+      await expect(allowedReadRoots(candidate, [], [], [providers])).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    }
+    await expect(allowedReadRoots(home, [], [], [join(home, "absent", "providers")])).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    expect(await allowedReadRoots(workspace, [], [], [providers])).toEqual([workspace]);
+  });
+
   it("keeps a skill directory below a protected path, and an unrelated one, as a root", async () => {
     for (const directory of [join(home, "skills", "review"), join(home, ".pi", "agent"), join(area, "elsewhere", "cfg")]) {
       expect(await allowedReadRoots(workspace, [skillAt(directory)], protectedPaths())).toEqual([workspace, directory]);

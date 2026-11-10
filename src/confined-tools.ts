@@ -48,11 +48,14 @@ function isWithin(path: string, root: string): boolean {
  * A symlinked skill file resolves outside its directory, so its real file is a root as well.
  */
 export async function allowedReadRoots(workspace: string, skills: readonly Skill[], protectedPaths: readonly string[] = [], deniedPaths: readonly string[] = []): Promise<string[]> {
-  const roots = new Set<string>([await realpath(workspace)]);
+  const workspaceReal = await realpath(workspace);
+  const roots = new Set<string>([workspaceReal]);
   const protectedReal = await Promise.all(protectedPaths.map((path) => canonical(path)));
   // A denied path (the provider store) is never a root or below one, wherever a skill points.
   const deniedReal = await Promise.all(deniedPaths.map((path) => canonical(path)));
   const allowed = (root: string): boolean => !deniedReal.some((denied) => isWithin(root, denied) || isWithin(denied, root));
+  // The workspace root cannot be dropped, so a workspace that overlaps a denied path refuses the session.
+  if (!allowed(workspaceReal)) throw new Error(OUTSIDE_ROOTS_MESSAGE);
   for (const skill of skills) {
     const directory = await realpath(dirname(skill.filePath)), file = await canonical(skill.filePath);
     const root = protectedReal.some((path) => isWithin(path, directory)) ? file : directory;

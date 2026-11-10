@@ -1,5 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, type Stats } from "node:fs";
-import { chmod, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
@@ -83,7 +83,13 @@ async function checkDirectory(directory: string, create: boolean): Promise<Stats
     await mkdir(directory, { recursive: true, mode: 0o700 });
     // The umask narrows the creation mode; verify() requires it exactly.
     const created = await lstat(directory);
-    if (created.isDirectory() && created.uid === process.getuid?.()) await chmod(directory, 0o700);
+    if (!created.isDirectory() || created.uid !== process.getuid?.()) fail("provider_store_unavailable");
+    // Repair through a descriptor of the checked directory, never through a path that could become a link.
+    const handle = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try {
+      if (!same(created, await handle.stat())) fail("provider_store_unavailable");
+      await handle.chmod(0o700);
+    } finally { await handle.close(); }
     s = await lstat(directory);
   }
   if (s) {

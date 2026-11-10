@@ -25,7 +25,8 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   host store and OAuth refresh tokens do not cross the boundary. Host coding
   runs as the operator and can access the store. Confined read-only tools and
   sandboxed shells cannot access the home store: the store directory is never
-  a read root, also not through a skill placed in it or linked to it. History redaction includes
+  a read root, also not through a skill placed in it or linked to it, and a
+  read-only session whose workspace overlaps it does not start. History redaction includes
   stored keys, including rotated values still used by running sessions; SDKs,
   extensions and writer code that handle keys remain outside this guarantee.
 

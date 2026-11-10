@@ -140,6 +140,24 @@ describe("provider store", () => {
     for (const name of ["credentials.json", ".lock"]) expect((await fs.lstat(join(directory, name))).mode & 0o777).toBe(0o600);
     expect((await policy()).source("openai")).toBe("key");
   });
+  it("never changes the mode of a link that replaces the new store directory", async () => {
+    await fs.mkdir(join(home, ".config", "pi-session-mcp"), { recursive: true, mode: 0o700 });
+    const target = join(home, "unrelated"); await fs.mkdir(target, { mode: 0o755 }); await fs.chmod(target, 0o755);
+    const actual = await vi.importActual<typeof fs>("node:fs/promises");
+    let calls = 0;
+    vi.mocked(fs.lstat).mockImplementation((async (path: Parameters<typeof actual.lstat>[0], ...rest: unknown[]) => {
+      if (String(path) === directory && ++calls === 2) {
+        const checked = await actual.lstat(path);
+        await actual.rm(directory, { recursive: true }); await actual.symlink(target, directory);
+        return checked;
+      }
+      return (actual.lstat as (...args: unknown[]) => unknown)(path, ...rest);
+    }) as typeof fs.lstat);
+    await expect(store().setKey("openai", key, builtin)).rejects.toMatchObject({ code: "provider_store_unavailable" });
+    vi.mocked(fs.lstat).mockImplementation(actual.lstat);
+    expect((await actual.stat(target)).mode & 0o777).toBe(0o755);
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
   it("reads only the writer boundary when the writer guard is set", async () => {
     await store().setKey("openai", key, builtin);
     const agent = join(home, "boundary");

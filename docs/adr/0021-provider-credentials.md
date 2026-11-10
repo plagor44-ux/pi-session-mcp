@@ -60,7 +60,9 @@ revocation survives a crash, serialized by an exclusive lock file in the same
 directory. The directory lies outside every workspace, writer and snapshot
 tree. Read-only tools only read inside the workspace and the selected skills;
 the store directory is never a read root, nor is a skill directory that
-contains it, and a skill file that resolves into it is refused. The sandboxed
+contains it, and a skill file that resolves into it is refused. A read-only
+session whose workspace is, contains or lies inside the store directory fails
+to start (`pi_session_creation_failed`). The sandboxed
 shell has no home, so confined read-only workers cannot reach the store.
 
 ### Runtime integration
