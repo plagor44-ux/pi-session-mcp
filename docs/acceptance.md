@@ -2607,8 +2607,10 @@ Linux 7.3 (`x64`) with Node.js `26.13.0`, npm `12.2.2`, Git `2.56.0`, systemd
 `262`, bubblewrap `0.13.1`, Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code
 `2.1.322`. Level 1 passed in a fresh clone on the second full test run (see
 below), and Level 2 passed in the working tree and for the packed tarball,
-each with delivery off and with delivery on. The later commit changes only
-this record.
+each with delivery off and with delivery on. The later commits change only
+this record and `test/package-contents.test.ts`, whose check for the new
+executable depended on a built `dist/`, which CI only builds after the tests
+(it failed on macOS); the test now checks the manifest and the source instead.
 
 The minor release ships guided installation with optional tier routing
 (ADR 0020), opt-in provider credentials with the command
