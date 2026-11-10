@@ -27,8 +27,10 @@
   provider stream that a gateway reports as "cut short after the reply had
   begun" is retried like other dropped streams, so such a turn can recover
   instead of failing; the SDK's default models change, which does not affect
-  profiles because each names its model. Live acceptance on 1.5.2 (Level 3) is
-  not done yet.
+  profiles because each names its model. One live two-client cycle (Level 3)
+  on 1.5.2 passed its gate on the `main` commit `93980d9`; see the
+  [record](docs/evaluation/level3-2026-11-10/README.md). It is evidence for
+  that commit only, not for a release.
 - Prompt cache warming stays inside a running turn. SDK 1.5.1 changed its
   default from `streaming` to `idle`, which re-sends a session's last request
   for up to 30 minutes after a turn has ended, to keep the provider's prompt

@@ -782,6 +782,11 @@ cycle has not been repeated on Pi SDK `1.x`. This note adds no result and
 changes none.
 On 2026-11-02 one full ten-task cycle passed on the published `0.16.1`
 with Pi SDK `1.5.0`; see [its record](evaluation/level3-2026-11-02/README.md).
+On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
+`93980d9` with Pi SDK `1.5.2`; see
+[its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
+commit only: the published `0.20.0` has no cycle, and a later release needs
+its own.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The
