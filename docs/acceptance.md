@@ -2660,11 +2660,76 @@ store, a path `chmod` that could follow a link, then a umask that removes
 owner read) were fixed, and the last round answered `NON_BLOCKING_ONLY`, also
 fixed. The reviews were static; the controller ran the tests.
 
+#### Credential routing evidence (#265, #266, #267)
+
+Recorded on 2026-11-10 on `main` at `15c6b72` (the merged pull request), with
+synthetic keys, a local fake endpoint and a controlled writer fixture; no
+provider was contacted and no operator credential was used. This is separate
+from live-provider acceptance. The harness reported only codes, counts,
+booleans and truncated SHA-256 hashes, never a key.
+
+- Host path, from the packed tarball installed with npm into a throwaway
+  `node:22-bookworm` container (Node.js `22.23.3`) as an unprivileged user
+  with its own home, so the store started empty. A loopback fake
+  OpenAI-compatible endpoint recorded per request whether the
+  `Authorization` header equalled `Bearer <expected key>` and whether the key
+  appeared in the body.
+  - `pi-session-mcp-provider add psm-fake --api openai-completions` with a
+    loopback base URL; a key given as an argument exited `64`.
+  - The first key was entered through a real PTY (`script`) at the hidden
+    prompt: exit `0`, the terminal transcript held only the prompt and `ok`,
+    not the key. `auth set --stdin` on a terminal was refused with
+    `usage_invalid`.
+  - The store directory was `0700`, `credentials.json` and `providers.json`
+    `0600`. `--list-models` listed the provider.
+  - `--probe-profile` without `--apply` made no request. With `--apply` it
+    reported `probe_passed`, and a real MCP session (`pi_session_start`,
+    `pi_session_prompt`, `pi_turn_get`) completed with the expected reply.
+    After `auth set --stdin` rotated the key and the endpoint expected the new
+    one, probe and session passed again. All 4 requests to that endpoint
+    carried exactly the currently stored key, none had it in the body.
+  - A provider whose endpoint answered with a `307` redirect to another port:
+    the probe ended `probe_turn_failed`; the redirect was not followed, and
+    the other origin received no request.
+  - After `auth remove` the probe reported `probe_auth_missing` and the session
+    start `local_authentication_missing`, with no request.
+    `auth inherit` on the operator-defined provider returned
+    `provider_inherit_unsupported`; `remove` while the configuration selected
+    it returned `provider_in_use`.
+  - With history on, a search of the home and `/tmp` for both keys found them
+    only in `credentials.json`.
+- Writer path, on this Linux host with rootless Podman `6.1.4` and the pinned
+  Node image: two writers provisioned with `provisionWriter` in a temporary
+  home (network `none`), launched through the real `launch` with that home.
+  The store held keys for the selected `openai` and an operator-defined HTTPS
+  provider, and for the unselected `anthropic` and a second operator-defined
+  provider; Pi's own login held an `openai` API key and OAuth entries with
+  refresh tokens for the selected `openai-codex` and the unselected
+  `google-gemini-cli`.
+  - Inside the writer, `/pi/agent` held only `auth.json` and
+    `provider-definitions.json`. `auth.json` named only the three selected
+    providers: `openai` with the stored key (not Pi's key), the HTTPS provider
+    with its key, and `openai-codex` with its access token and an empty
+    refresh token. The definitions named only the selected operator-defined
+    provider. The host store was not visible and no environment variable held
+    a key.
+  - The writer's runtime policy (`PI_SESSION_MCP_WRITER_GUARD`) applied to a
+    `ModelRuntime` on that `auth.json` resolved exactly those three
+    credentials and none for the unselected providers.
+  - A host-side search of both writers' state trees found the selected
+    credentials only in the agent `auth.json`, and no unselected key or
+    refresh token. No OAuth warm-up ran (expiry far in the future).
+  - The writer whose profile selected a loopback operator-defined provider
+    refused `pi_session_start` with `provider_unsupported_in_writer`, and its
+    container did not start.
+  - Both writers were removed and no container was left.
+
 Not established for `0.20.0`: a Level 3 cycle on the release candidate; a
-live provider turn with a stored key or an operator-defined provider; a
-container writer launched with a stored key; the server host; macOS locally;
-and the published-release Level 2 and upgrades, which follow after
-publishing.
+turn against a real provider with a stored key; a full interactive
+`sh install.sh` run with the key step on a PTY; a writer turn against an
+operator-defined provider (network `none` and loopback refusal leave no local
+endpoint for it); the server host; macOS locally; and the published-release
+Level 2 and upgrades, which follow after publishing.
 
 ### v0.19.1 pre-release acceptance
 
