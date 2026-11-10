@@ -106,9 +106,11 @@
   replaces. Runs on `main`, on a tag and on request stay independent: none
   waits for or cancels another. The full platform matrix still runs for every
   pull request, on `main`, on each release tag and through
-  `workflow_dispatch`, and the required check `verify` keeps its name, is
-  evaluated when the matrix failed or was cancelled, and passes only for a
-  fully green matrix. A branch without a pull request gets a run through a
+  `workflow_dispatch`, and the required check `verify` keeps its name and its
+  `if: always()`, so it is not skipped when the matrix fails or a started run
+  is cancelled, and passes only for a fully green matrix. A run cancelled
+  before any of its jobs started has not been observed with this workflow. A
+  branch without a pull request gets a run through a
   draft pull request or a manual run. The
   [acceptance guide](docs/acceptance.md#level-1-repository-checks)
   lists what each event starts. Workflow and documentation only; the rulesets
