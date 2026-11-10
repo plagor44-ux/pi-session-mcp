@@ -11,7 +11,8 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   `~/.config/pi-session-mcp/providers/`; `HOME` and `XDG_CONFIG_HOME` cannot
   relocate it. The directory is 0700 and its regular files are 0600,
   user-owned and opened without following links, with inode checks. Mutations
-  use a bounded exclusive kernel lock and temporary-file fsync plus rename.
+  use a bounded exclusive kernel lock, temporary-file fsync, rename and a
+  directory fsync, so a revocation is durable.
   Removing a custom provider revokes its credential first; an interruption
   leaves a keyless custom definition, which never inherits Pi authentication.
   Retrying removal completes it. An invalid store or binding never falls back
@@ -23,7 +24,8 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   selected keys; this is not a credential sandbox. Unselected credentials, the
   host store and OAuth refresh tokens do not cross the boundary. Host coding
   runs as the operator and can access the store. Confined read-only tools and
-  sandboxed shells cannot access the home store. History redaction includes
+  sandboxed shells cannot access the home store: the store directory is never
+  a read root, also not through a skill placed in it or linked to it. History redaction includes
   stored keys, including rotated values still used by running sessions; SDKs,
   extensions and writer code that handle keys remain outside this guarantee.
 

@@ -35,7 +35,7 @@ function reader(all: unknown[], calls: number[] = []) {
   };
 }
 
-async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore; turnBufferBytes?: number } = {}) {
+async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore; turnBufferBytes?: number; redactorFor?: () => Redactor } = {}) {
   const home = await temporaryRoot("history-recorder-");
   const store = await openHistoryStore({ home });
   stores.push(store);
@@ -43,7 +43,7 @@ async function setup(options: { wrap?: (store: HistoryStore) => HistoryStore; tu
   const used = options.wrap ? options.wrap(store) : store;
   const recorder = createHistoryRecorder({
     store: used,
-    redactorFor: () => new Redactor({ knownValues: [], pathRule: compilePathRule([]) }),
+    redactorFor: options.redactorFor ?? (() => new Redactor({ knownValues: [], pathRule: compilePathRule([]) })),
     configurationFingerprint: `sha256:${"a".repeat(64)}`,
     packageVersion: "0.0.0-test",
     instance: { pid: process.pid, procStart: null },
@@ -135,6 +135,34 @@ describe("history recorder", () => {
     expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
     expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries")).toEqual([{ pi_entry_id: "b", turn_id: turn(2).turnId }]);
     expect(rows(store, "SELECT turn_id, recorded FROM turns WHERE recorded = 1")).toEqual([{ turn_id: turn(2).turnId, recorded: 1 }]);
+  });
+
+  it("records a gap when the redactor fails mid-run and repairs it on the next read", async () => {
+    let failRedactor = false;
+    const { store, recorder } = await setup({
+      redactorFor: () => {
+        if (failRedactor) throw Object.assign(new Error("store"), { code: "provider_store_unavailable" });
+        return new Redactor({ knownValues: [], pathRule: compilePathRule([]) });
+      },
+    });
+    start(recorder);
+    await recorder.settle(SESSION_ID, 5_000);
+    failRedactor = true;
+    const all = [entry("a")];
+    recorder.turnEnded(SESSION_ID, turn(1), reader(all));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT code, first_turn_id FROM gaps")).toEqual([{ code: "history_unavailable", first_turn_id: turn(1).turnId }]);
+    expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "has_gaps" }]);
+    expect(rows(store, "SELECT turn_id, recorded FROM turns")).toEqual([{ turn_id: turn(1).turnId, recorded: 0 }]);
+    failRedactor = false;
+    all.push({ ...entry("b"), timestamp: "2026-11-04T10:00:03.000Z" });
+    recorder.turnEnded(SESSION_ID, { ...turn(2), completedAt: "2026-11-04T10:00:04.000Z" }, reader(all));
+    await recorder.settle(SESSION_ID, 5_000);
+    expect(rows(store, "SELECT code FROM gaps")).toEqual([]);
+    expect(rows(store, "SELECT completeness FROM sessions")).toEqual([{ completeness: "complete" }]);
+    expect(rows(store, "SELECT pi_entry_id, turn_id FROM entries ORDER BY position")).toEqual([
+      { pi_entry_id: "a", turn_id: turn(1).turnId }, { pi_entry_id: "b", turn_id: turn(2).turnId },
+    ]);
   });
 
   it("emits one diagnostic when no gap can be written", async () => {

@@ -55,11 +55,13 @@ same store.
 
 The directory must be `0700` and each file `0600`, plain, owned by the user and
 never a link. Reads use `O_NOFOLLOW` and an inode check. Writes go through a
-temporary file, `fsync` and rename, serialized by an exclusive lock file in the
-same directory. The directory lies outside every workspace, writer and snapshot
-tree. The home directory is already a protected read path for skills, read-only
-tools only read inside the workspace, and the sandboxed shell has no home, so
-confined read-only workers cannot reach the store.
+temporary file, `fsync`, rename and an `fsync` of the directory, so a
+revocation survives a crash, serialized by an exclusive lock file in the same
+directory. The directory lies outside every workspace, writer and snapshot
+tree. Read-only tools only read inside the workspace and the selected skills;
+the store directory is never a read root, nor is a skill directory that
+contains it, and a skill file that resolves into it is refused. The sandboxed
+shell has no home, so confined read-only workers cannot reach the store.
 
 ### Runtime integration
 

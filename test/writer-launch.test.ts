@@ -50,6 +50,13 @@ it("hands off selected product keys without warming up overridden OAuth", async 
   expect(credentials.writeBoundaryCredentials).toHaveBeenLastCalledWith(writerPaths(home, "x-w1").agent, {});
   expect(credentials.refreshHostCredential).not.toHaveBeenCalled();
 });
+it("refuses before spawning when the provider store or catalog cannot be read", async () => {
+  await save();
+  await launch(["x-w1", "node", "probe"], { ...deps, providerPolicyFactory: async () => { throw new Error("store"); } });
+  expect(serveRefusal).toHaveBeenLastCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+  await launch(["x-w1", "node", "probe"], { ...deps, providerCatalogRuntime: async () => { throw new Error("catalog"); } });
+  expect(serveRefusal).toHaveBeenLastCalledWith("writer_not_ready"); expect(deps.spawnPodman).not.toHaveBeenCalled();
+});
 it("refuses selected loopback providers before spawning a container", async () => {
   await save();
   await writeWriterState(home, "x-w1", { ...state, providers: [{ provider: "local", model: "model" }] });

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { loadProviderPolicy, openProviderStore, providerSecretValues, refreshProviderRedactionValues, type ProviderPolicyRuntime, type ProviderPolicy } from "../src/provider-store.js";
+import { loadProviderPolicy, loadRuntimeProviderPolicy, openProviderStore, providerSecretValues, refreshProviderRedactionValues, type ProviderPolicyRuntime, type ProviderPolicy } from "../src/provider-store.js";
 import { type ProviderDefinition, ProviderStoreError } from "../src/provider-store-contract.js";
 import { createModelCatalog } from "../src/model-catalog.js";
 import { providerStoreCheck } from "../src/doctor.js";
@@ -122,6 +122,34 @@ describe("provider store", () => {
     expect(r.setRuntimeApiKey).not.toHaveBeenCalled();
     expect(p.boundaryCredentials(["ghost"])).toEqual({});
     expect(p.blocked("ghost")).toBe(true);
+  });
+  it("lets auth inherit delete an orphaned entry and nothing else", async () => {
+    await store().setKey("openai", key, builtin);
+    await fs.writeFile(join(directory, "credentials.json"), JSON.stringify({ v: 1, providers: { openai: { source: "key", key, binding: "builtin:openai" }, ghost: { source: "key", key: "sk-test-ghost", binding: "builtin:ghost" } } }));
+    await store().inherit("ghost", builtin);
+    expect((await store().read()).sources).toEqual([{ providerId: "openai", source: "key", bindingValid: true }]);
+    await expect(store().inherit("never-stored", builtin)).rejects.toMatchObject({ code: "provider_unknown" });
+    expect(await providerStoreCheck(home)).toMatchObject({ severity: "ok" });
+  });
+  it("creates exact modes under a restrictive umask", async () => {
+    // Existing parents, as on a used machine; the umask then narrows only what the store creates.
+    await fs.mkdir(join(home, ".config", "pi-session-mcp"), { recursive: true, mode: 0o700 });
+    const previous = process.umask(0o277);
+    try { await store().setKey("openai", key, builtin); } finally { process.umask(previous); }
+    expect((await fs.lstat(directory)).mode & 0o777).toBe(0o700);
+    for (const name of ["credentials.json", ".lock"]) expect((await fs.lstat(join(directory, name))).mode & 0o777).toBe(0o600);
+    expect((await policy()).source("openai")).toBe("key");
+  });
+  it("reads only the writer boundary when the writer guard is set", async () => {
+    await store().setKey("openai", key, builtin);
+    const agent = join(home, "boundary");
+    await writeBoundaryCredentials(agent, {});
+    await writeBoundaryProviders(agent, { v: 1, providers: [], sources: { openai: "none" } });
+    vi.stubEnv("PI_SESSION_MCP_WRITER_GUARD", "1"); vi.stubEnv("PI_CODING_AGENT_DIR", agent);
+    vi.mocked(userInfo).mockReturnValue({ ...userInfo(), homedir: home });
+    expect((await loadRuntimeProviderPolicy()).blocked("openai")).toBe(true);
+    vi.unstubAllEnvs();
+    expect((await loadRuntimeProviderPolicy()).source("openai")).toBe("key");
   });
   it("ignores orphaned custom keys", async () => {
     await store().addProvider(definition, builtin); await store().setKey("custom", key, builtin);

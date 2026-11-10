@@ -1,5 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, type Stats } from "node:fs";
-import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, rename, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { dirname, join } from "node:path";
@@ -79,7 +79,13 @@ async function checkDirectory(directory: string, create: boolean): Promise<Stats
   // A linked .config or product directory must not relocate secrets into a workspace.
   await checkParents(directory);
   let s = await stat(directory);
-  if (!s && create) { await mkdir(directory, { recursive: true, mode: 0o700 }); s = await lstat(directory); }
+  if (!s && create) {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    // The umask narrows the creation mode; verify() requires it exactly.
+    const created = await lstat(directory);
+    if (created.isDirectory() && created.uid === process.getuid?.()) await chmod(directory, 0o700);
+    s = await lstat(directory);
+  }
   if (s) {
     await checkParents(directory);
     verify(s, true);
@@ -152,6 +158,7 @@ async function atomic(directory: string, name: string, value: unknown): Promise<
   const temporary = join(directory, `.${name}-${randomUUID()}.tmp`);
   const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
   try {
+    await handle.chmod(0o600);
     const created = await handle.stat(); verify(created);
     await handle.writeFile(JSON.stringify(value) + "\n"); await handle.sync();
     if (!same(created, await lstat(temporary))) fail("provider_store_unavailable");
@@ -161,6 +168,9 @@ async function atomic(directory: string, name: string, value: unknown): Promise<
     else if (existing) fail("provider_store_unavailable");
     await handle.close();
     await rename(temporary, destination);
+    // A revocation that a crash could undo would fail open; make the rename itself durable.
+    const parent = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try { await parent.sync(); } finally { await parent.close(); }
   } finally { await handle.close(); await unlink(temporary).catch(() => undefined); }
 }
 async function locked<T>(directory: string, fn: () => Promise<T>): Promise<T> {
@@ -175,6 +185,7 @@ async function locked<T>(directory: string, fn: () => Promise<T>): Promise<T> {
     handle = platform === "darwin"
       ? await openLockedDarwin(path, { timeoutMs: 2000 })
       : await open(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
+    if (!before) await handle.chmod(0o600); // A new lock file; an existing one was verified above.
     const opened = await handle.stat(); verify(opened);
     if (before && !same(before, opened)) fail("provider_store_unavailable");
     if (platform === "linux") {
@@ -191,6 +202,8 @@ async function locked<T>(directory: string, fn: () => Promise<T>): Promise<T> {
   } finally { await handle?.close(); }
 }
 const location = (home?: string): string => join(home ?? userInfo().homedir, ".config", "pi-session-mcp", "providers");
+/** The store directory, which confined read-only tools must never expose. */
+export const providerStoreDirectory = (home?: string): string => location(home);
 
 export function openProviderStore(options: { home?: string } = {}): ProviderStore {
   const directory = location(options.home);
@@ -205,7 +218,10 @@ export function openProviderStore(options: { home?: string } = {}): ProviderStor
     }),
     setKey: (id, key, o) => { if (!keyValid(key)) return Promise.reject(new ProviderStoreError("credential_invalid")); return mutate(async s => { known(s, id, o); s.credentials[id] = { source: "key", key, binding: identity(id, s.definitions) }; await saveCredentials(s); }); },
     removeKey: (id, o) => mutate(async s => { known(s, id, o); s.credentials[id] = { source: "none" }; await saveCredentials(s); }),
-    inherit: (id, o) => mutate(async s => { known(s, id, o); if (s.definitions.some(d => d.id === id)) fail("provider_inherit_unsupported"); delete s.credentials[id]; await saveCredentials(s); }),
+    inherit: (id, o) => mutate(async s => {
+      // An entry for a provider that no longer exists can only be deleted; deleting grants nothing.
+      if (ID.test(id) && id in s.credentials && !o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id)) { delete s.credentials[id]; await saveCredentials(s); return; }
+      known(s, id, o); if (s.definitions.some(d => d.id === id)) fail("provider_inherit_unsupported"); delete s.credentials[id]; await saveCredentials(s); }),
     addProvider: (definition, o) => {
       if (!definitionValid(definition)) return Promise.reject(new ProviderStoreError("provider_definition_invalid"));
       return mutate(async s => { if (o.builtInProviderIds.includes(definition.id) || s.definitions.some(d => d.id === definition.id)) fail("provider_id_conflict"); await atomic(directory, "providers.json", { v: 1, providers: [...s.definitions, definition] }); });

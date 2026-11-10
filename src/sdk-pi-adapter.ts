@@ -1,4 +1,4 @@
-import { loadRuntimeProviderPolicy, type ProviderPolicy } from "./provider-store.js";
+import { loadRuntimeProviderPolicy, providerStoreDirectory, type ProviderPolicy } from "./provider-store.js";
 import { ProviderStoreError } from "./provider-store-contract.js";
 import {
   type AgentSession,
@@ -646,7 +646,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     if (executionProfile.permissionProfile !== "read-only") return [];
     let roots: string[];
     try {
-      roots = await allowedReadRoots(input.cwd, skills, this.protectedReadPaths);
+      roots = await allowedReadRoots(input.cwd, skills, this.protectedReadPaths, [providerStoreDirectory(accountHome())]);
     } catch {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }

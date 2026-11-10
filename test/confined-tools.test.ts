@@ -204,6 +204,25 @@ describe("allowedReadRoots protected paths", () => {
     await expect(confineToolPath(join(skillDirectory, "other.txt"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
   });
 
+  it("never makes the provider store or anything containing it a root", async () => {
+    const providers = join(config, "providers");
+    await mkdir(join(providers, "nested"), { recursive: true });
+    await writeFile(join(providers, "credentials.json"), "{}");
+    await writeFile(join(providers, "SKILL.md"), "skill");
+    await writeFile(join(providers, "nested", "SKILL.md"), "skill");
+    const linked = join(area, "linked-skill"); await mkdir(linked, { recursive: true });
+    await symlink(join(providers, "credentials.json"), join(linked, "SKILL.md"));
+    for (const directory of [providers, join(providers, "nested"), config]) {
+      // Without protected paths, as when the configuration lives elsewhere.
+      const result = await allowedReadRoots(workspace, [skillAt(directory)], [], [providers]);
+      expect(result).toEqual([workspace]);
+      await expect(confineToolPath(join(providers, "credentials.json"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    }
+    const result = await allowedReadRoots(workspace, [skillAt(linked)], protectedPaths(), [providers]);
+    expect(result).toEqual([workspace, linked]);
+    await expect(confineToolPath(join(linked, "SKILL.md"), workspace, result)).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+  });
+
   it("keeps a skill directory below a protected path, and an unrelated one, as a root", async () => {
     for (const directory of [join(home, "skills", "review"), join(home, ".pi", "agent"), join(area, "elsewhere", "cfg")]) {
       expect(await allowedReadRoots(workspace, [skillAt(directory)], protectedPaths())).toEqual([workspace, directory]);
