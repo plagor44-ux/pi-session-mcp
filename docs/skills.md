@@ -165,11 +165,27 @@ blocker or risk is never dropped to save space. `truncated: true` means the
 report the controller receives is incomplete; `truncated: false` does not prove
 that it is complete or correct. Completed turns also carry `completion`: `stop`, `output_limit`, or `tool_use`, from the final SDK stop reason. Other states omit it. `output_limit` indicates a cutoff independently of `truncated`; both can apply, and neither field proves task success.
 
-The orchestration skill is a small skill tree: `SKILL.md` plus
-`references/start-errors.md`, the classification of `pi_session_start` error
-codes, which the controller reads only after a start failure. Setup copies the
-whole tree and the tree fingerprint covers both files; a copy of only
-`SKILL.md` lacks the referenced file.
+Implementation and review reports share one form: the first line is `STATUS:`
+with `DONE`, `DONE_WITH_CONCERNS`, `NEEDS_CONTEXT` or `BLOCKED`, and labeled
+fields follow. A review report names the commit under review as `Target:` with
+its bare full hash, then `Verdict:` with `BLOCKING_FINDINGS`,
+`NON_BLOCKING_ONLY` or `NO_FINDINGS`, and each finding with severity and
+`path:line`. Only `DONE` is a review of the whole target. `DONE_WITH_CONCERNS`
+is an incomplete review whose verdict covers what was reviewed, and
+`NEEDS_CONTEXT` and `BLOCKED` carry no verdict. The controller compares
+`Target` with the commit it asked about and does not use a report that names
+another one. `Target` is a claim; what a reviewer could read is fixed by its
+workspace, for example a review snapshot. In this repository
+`eval/reports/validate.ts` checks both forms without a provider
+(`validateTextReport`, `validateReviewReport`).
+
+The orchestration skill is a small skill tree: `SKILL.md` plus two references
+the controller reads on demand. `references/start-errors.md` classifies the
+`pi_session_start` error codes and is read only after a start failure.
+`references/handoff-reports.md` holds the fields of both report forms and the
+order in which a review report is checked. Setup copies the whole tree and the
+tree fingerprint covers all of its files; a copy of only `SKILL.md` lacks the
+referenced files.
 
 A package update can change the shipped skills. Close affected sessions before
 you update, as for any skill change.

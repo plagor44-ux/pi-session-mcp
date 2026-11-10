@@ -75,6 +75,25 @@
   sequence that whoever integrates the change runs on the integrated
   candidate. Test configuration and project rules only; no runtime or contract
   change.
+- The controller skill and the review skill ask for one report form. The
+  orchestration skill asked a reviewer for a first line `VERDICT:`, while the
+  review skill puts `STATUS:` first; a reviewer that followed its own skill
+  failed the controller's format check. A review report now starts with
+  `STATUS:`, names the commit under review as `Target:` with its bare full
+  hash, gives `Verdict:` with `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or
+  `NO_FINDINGS`, and lists each finding with severity and `path:line`. The new
+  reference `skills/pi-session-orchestration/references/handoff-reports.md`
+  holds the fields of the implementation report and the review report, tells a
+  complete review, an incomplete review, missing context and a blocked review
+  apart, and gives the order of the controller's checks: a report that names
+  another commit is rejected whatever its verdict, and a cut-off report
+  (`truncated` or `completion: "output_limit"`) is asked for again and its
+  verdict not used. `Target` is a claim; on a snapshot workspace
+  `session.snapshot.head` remains the evidence. `eval/reports/validate.ts`
+  gains the provider-free `validateReviewReport` and `reviewDisposition`, and
+  `test/review-report-validator.test.ts` covers them, including a report for
+  an existing but wrong commit. Skill text, evaluation helper and tests only;
+  no change to the MCP tools, their schemas or the implementation receipt.
 
 ### Fixed
 

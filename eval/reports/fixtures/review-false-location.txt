@@ -1,0 +1,9 @@
+STATUS: DONE
+Target: 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4
+Verdict: BLOCKING_FINDINGS
+Findings:
+- high handler.ts:40 — The lookup filters by invoice ID only, so an invoice ID of another tenant returns that tenant's invoice.
+Risks:
+- none
+Checks run:
+- none

@@ -1,0 +1,16 @@
+STATUS: DONE
+Target: 9f2c4e1a7b3d5f60819a2b3c4d5e6f708192a3b4
+Verdict: BLOCKING_FINDINGS
+Findings:
+- high handler.ts:2 — The lookup filters by invoice ID only, so an invoice ID of another tenant returns that tenant's invoice.
+  Impact: cross-tenant invoice disclosure.
+  Fix: add tenantId to the where clause, as getTenantInvoice in clean.ts does; check with an invoice of a second tenant.
+- high token.ts:2 — A wildcard entry in the claims authorizes every required permission, although permissions are exact literals.
+  Impact: a token with a wildcard claim bypasses the exact permission check.
+  Fix: drop the wildcard branch; check that a wildcard claim does not authorize another permission.
+Risks:
+- none
+Checks run:
+- none
+Checks not run:
+- node --test — the target has no test command; the behavior was read from the source.
