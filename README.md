@@ -80,6 +80,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 | Session history | Opt-in, redacted local SQLite record of sessions, with a CLI for listing, verdicts, queries and export. | [Session history](docs/session-history.md) |
 | Tier routing | Opt-in server-side choice of a profile within a tier (`ultra`, `hightech`, `medium`, `low`), manual or learning from history. | [Operate routing](docs/installation.md#operate-routing) |
 | Doctor and setup | An offline health check, and reproducible registration, verification and removal for each client. | [Client setup](docs/client-setup.md) |
+| Provider CLI | `pi-session-mcp-provider` manages local provider definitions and credential sources offline. | [Provider credentials](docs/installation.md#provider-credentials-and-custom-providers) |
 
 ## Status
 

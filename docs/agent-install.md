@@ -9,6 +9,10 @@ login themselves, using the package's Pi executable:
 "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"
 ```
 
+Alternatively, the owner may run `pi-session-mcp-provider auth set <provider>`
+on their terminal. Agents must never enter or handle keys, including through
+standard input. See [provider credentials](installation.md#provider-credentials-and-custom-providers).
+
 ## Stop and ask the owner
 
 - `config_not_regular`: no live file changed; ask the owner to supply regular configuration files.

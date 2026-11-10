@@ -18,6 +18,9 @@ export async function readProviderKey(input: Readable & Partial<Pick<ReadStream,
       input.off("close", onClose);
       input.off("error", onClose);
       if (raw) {
+        process.off("SIGINT", onSignal);
+        process.off("SIGTERM", onSignal);
+        process.off("exit", onExit);
         try { input.setRawMode!(wasRaw); } catch { result = undefined; }
       }
       input.pause();
@@ -40,6 +43,13 @@ export async function readProviderKey(input: Readable & Partial<Pick<ReadStream,
       else finish(value.replace(/\r?\n$/, "") || undefined);
     };
     const onClose = (): void => finish(undefined);
+    const onSignal = (): void => finish(undefined);
+    const onExit = (): void => { try { input.setRawMode!(wasRaw); } catch { /* Terminal may already be gone. */ } };
+    if (raw) {
+      process.once("SIGINT", onSignal);
+      process.once("SIGTERM", onSignal);
+      process.once("exit", onExit);
+    }
     input.on("data", onData);
     input.once("end", onEnd);
     input.once("close", onClose);
