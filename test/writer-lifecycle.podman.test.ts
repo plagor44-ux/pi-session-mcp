@@ -479,8 +479,13 @@ mkdir -p var/uv-cache/sdists-v10
   expect(await removeWriter(ctx, "repo-w1", { discard: false })).toMatchObject({ code: "writer_removed", status: "ok" });
 }, 180_000);
 
-it.skipIf(skipReason !== undefined)("still refuses non-discard cleanup for .git directories, non-empty files and symlinks under an ignored path (#261)", async () => {
-  const home = await temporaryRoot("pi-writer-git-markers-podman-");
+// One marker per case, so that a regression for one kind is not masked by another.
+it.skipIf(skipReason !== undefined).each([
+  ["an empty .git directory", "mkdir -p var/marker/.git"],
+  ["a non-empty .git file", "mkdir -p var/marker\nprintf '%s\\n' 'gitdir: /elsewhere' > var/marker/.git"],
+  ["a .git symlink to an empty file", "mkdir -p var/marker\n: > var/marker/target\nln -s target var/marker/.git"],
+])("still refuses non-discard cleanup for %s under an ignored path (#261)", async (_kind, marker) => {
+  const home = await temporaryRoot("pi-writer-git-marker-podman-");
   const checkout = join(home, "source");
   await mkdir(checkout);
   const ok = async (...args: string[]) => {
@@ -499,10 +504,7 @@ it.skipIf(skipReason !== undefined)("still refuses non-discard cleanup for .git 
   const paths = writerPaths(home, "repo-w1");
   const state = (await readWriterState(home, "repo-w1"))!;
   const work = await runner.run("podman", throwawayArgs("repo-w1", paths, state.imageId, { clone: "rw", bundles: false }, `set -eu
-mkdir -p var/empty-dir/.git var/non-empty-file var/symlink
-printf '%s\\n' 'gitdir: /elsewhere' > var/non-empty-file/.git
-: > var/symlink/target
-ln -s target var/symlink/.git`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+${marker}`, []), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
   expect(work.exitCode, work.stderr).toBe(0);
   expect(await inspectWork(ctx, "repo-w1")).toMatchObject({ baseline: true, nested: false, repositories: true });
   expect(await removeWriter(ctx, "repo-w1", { discard: false })).toEqual({ code: "writer_nested_repository", status: "failed" });
