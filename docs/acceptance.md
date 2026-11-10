@@ -2600,6 +2600,81 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.20.0 post-release evidence
+
+Recorded on 2026-11-10 for the published release `0.20.0`. The counts below
+come from the logs of the runs named here; they were read back when this
+record was written and the runs were not repeated for it. The server results
+come from the operator's notes on that upgrade, because its logs were not at
+hand for this record.
+
+The annotated tag `v0.20.0` (tag object
+`4884c13b6092732301b39e82907d217cf5718f68`) points to
+`727d8ac8df5a7bbbf20c0744c74458ca97877b56`, the merge commit of PR #269 on
+`main` and the package's `gitHead`. npm `latest` is `0.20.0`, published at
+11:34 UTC on 2026-11-10 with shasum
+`e08a0b300afc9b658bf05afccc3b5ea9c1f5fedb` and 1065 files; the publish dry run
+before it had reported the same shasum and file count. The GitHub release
+`v0.20.0`, published at 11:42 UTC, is marked latest and carries `install.sh`
+and `install.sh.sha256`. The pre-release record names a different tarball
+shasum because its candidate `1c2b7c9` predates later changes to that record,
+which the package ships.
+
+Runs from 11:42 to 11:46 UTC on the host of the pre-release acceptance, with
+Node.js `26.13.0`, Codex CLI `0.166.0` and Claude Code `2.1.322`:
+
+- A fresh clone of the tag: `npm ci`, typecheck, both builds and the test run
+  with `NODE_OPTIONS=--unhandled-rejections=strict` exited with `0`; 184 files,
+  5043 passed and 15 skipped, the counts of the second pre-release run. Doctor
+  reported `packageVersion` `0.20.0`, and `git status --porcelain` printed
+  nothing afterwards.
+- The published package: `npm install -g --prefix <fresh prefix>
+  pi-session-mcp@0.20.0` exited with `0`, and the installed manifest names
+  version `0.20.0`.
+- Level 2: four runs of `scripts/setup-acceptance.mjs`, each exiting with `0`.
+  Two used the tag clone (`--setup` with its built `dist/setup-main.js`,
+  `--build-dir` the clone) and two the published package (`--setup` the
+  installed `pi-session-mcp-setup`, `--build-dir` the installed package), each
+  once without and once with `--events spool`. The harness script was the copy
+  in the maintainer's checkout, last modified before the release and identical
+  to the tag's. Both sources reported 160 of 160 checks with delivery off and
+  228 of 228 with `--events spool`. Every run covered the four targets (Codex
+  `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps, and
+  reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. Removing the prefix exited with `0`.
+
+Installations: both run `0.20.0`, upgraded from `0.19.1` on 2026-11-10 with
+the steps used for `0.19.1`: backups of the configuration and the execution
+modes named for `0.20.0`, the client targets removed, the npm install, each
+container repository's provisioning command with `--apply`, Doctor, the client
+targets applied and verified, and `--writer <name> --verify` for every writer.
+
+- Workstation, from its logs, which hold each command's report but not its
+  exit status; all 7 apply reports and all 20 verify reports are `ok`. All
+  five container repositories reported `mode_unchanged`, and all 18 writers
+  were `writer_accepted` and then `mcp_verified`, each on the first attempt.
+  Both client targets verified
+  (`mcp_verified`, both `skill_verified`, and `hook_verified` for Claude Code).
+  Doctor reported `packageVersion` `0.20.0` and no error, with the new check
+  `provider_store` passed; its warnings were `snapshot_unavailable`,
+  `writer_base_behind` on 10 writers, and the known `workspace_gitfile` and
+  `workspace_mode_unset` of the worktree aliases.
+- Server, from the operator's notes: all 16 writers were `writer_accepted` and
+  `mcp_verified`. Two of them first returned `mcp_timeout` while the load
+  average was about 15 on 8 cores, and passed when repeated. Doctor reported no
+  error; its warnings were `workspace_mode_unset` and `writer_base_behind` on
+  two writers.
+- Neither machine has a provider store, so every provider's source is
+  `inherit` and sessions authenticate as before the upgrade.
+
+The bubblewrap and Podman-gated test files were not run on their own on the
+tag; the log of the tag clone's test run holds only the totals.
+
+Not established for `0.20.0`: a turn against a real provider with a stored
+key; a full interactive `sh install.sh` run with the key step on a PTY; a
+writer turn against an operator-defined provider; a Level 3 cycle; macOS
+outside CI.
+
 ### v0.20.0 pre-release acceptance
 
 `v0.20.0` was accepted on 2026-11-10 on its release candidate `1c2b7c9`, on
