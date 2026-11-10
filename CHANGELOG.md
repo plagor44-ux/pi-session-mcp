@@ -95,8 +95,21 @@
   `session.snapshot.head` remains the evidence. `eval/reports/validate.ts`
   gains the provider-free `validateReviewReport` and `reviewDisposition`, and
   `test/review-report-validator.test.ts` covers them, including a report for
-  an existing but wrong commit. Skill text, evaluation helper and tests only;
-  no change to the MCP tools, their schemas or the implementation receipt.
+  an existing but wrong commit. No tool enforces the form: the server returns
+  a report as the worker wrote it, the validator is not part of the package,
+  and the comparison happens only when the controlling agent follows the
+  skill. The cases `review-bound-report`, `review-wrong-commit` and
+  `review-wrong-role` of the controller skill evaluation suite measure that
+  for a Claude Code controller; `eval/controller-skill/README.md` holds the
+  results and their limits. A Codex controller has not been measured. The
+  reference lists `Branch:` as a field of the implementation report, which
+  the controller skill already asked for, and the suite's shared worker
+  report and the one of `verify-worker-claim` use the documented fields. A
+  run of the whole suite passed 8 of 10 cases; `terminal-read-once` and
+  `verify-worker-claim` fail or vary on the current model with the skill
+  before this change as well, and the README records what was measured.
+  Skill text, evaluation helper, evaluation cases and tests only; no change
+  to the MCP tools, their schemas or the implementation receipt.
 - CI tests a branch once, through its pull request. A push starts the
   workflow only on `main` and on a release tag `v*`; a push to another branch
   no longer starts a second matrix run beside the one of its pull request. Of

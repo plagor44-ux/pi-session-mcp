@@ -27,6 +27,7 @@ for a shorter, complete report in the same form. Never accept the cut-off one.
 | --- | --- |
 | `STATUS:` | `DONE`: task done, checks run. `DONE_WITH_CONCERNS`: done, with risks or unverified parts under `Open points`. `NEEDS_CONTEXT`: an answer is needed. `BLOCKED`: the worker cannot continue. |
 | `Result:` | One sentence. |
+| `Branch:` | The branch that holds the commit. It has its own line, because the `Commit` line holds the hash alone. |
 | `Commit:` | The bare full hash, or `not committed` and the reason. Required with `DONE` and `DONE_WITH_CONCERNS`. |
 | `Changed files:` | Repository-relative paths, one item each. |
 | `Checks run:` | Each command with its exit code. Required with `DONE` and `DONE_WITH_CONCERNS`. |
@@ -36,6 +37,7 @@ for a shorter, complete report in the same form. Never accept the cut-off one.
 ```text
 STATUS: DONE
 Result: The slug helper keeps digits and its tests pass.
+Branch: fix/slug-digits
 Commit: 4f3c2a17b9e05d6c8a1f2b3c4d5e6f7a8b9c0d1e
 Changed files:
 - src/slug.js — digits are kept
