@@ -13,7 +13,9 @@ delivery off.
 - Server: the clone and build of the cycle of the same day, commit
   `93980d93c4b748ada38b8137fedca547aa293150` with Pi SDK `1.5.2`, SHA-256 of
   `dist/main.js`
-  `362286248e2b59c3b90058533427f89d3168983584c4e9fdeecd2c5f9a5ab336`. Linux
+  `362286248e2b59c3b90058533427f89d3168983584c4e9fdeecd2c5f9a5ab336`. Whether
+  the clone was clean was not recorded at the start of this check;
+  `git status --short` printed nothing when it was run after the check. Linux
   (`x64`), Node.js `22.23.3`.
 - Configuration: temporary and credential-free, event delivery `spool`, a
   private runtime directory for the spool and the claims, two synthetic

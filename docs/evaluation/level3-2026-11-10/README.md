@@ -123,6 +123,12 @@ All 10 tasks reached their intended outcome. Every completed turn reported
 - Pre-registration: the digest file verified again after the cycle, and the
   prompts, the proxy, the driver, the evaluator, the hidden tests and both
   configuration files still had their pre-registered digests.
+- Exit statuses beyond the results table and Level 1: the profile probes
+  exited with 0 in both attempts, offline Doctor exited with 0, and the
+  capability-only checks of attempt 2 exited with 0, after 7 seconds with
+  Claude Code and 8 seconds with Codex. For `git diff --check`,
+  `git status --short`, the provider listing and the digest checks only the
+  output was kept, not the exit status.
 
 ## Deviation from the pre-registration
 

@@ -66,8 +66,9 @@ Claude Code ran on both targets.
   MCP configuration with `--strict-mcp-config`, Codex through `-c` options
   with `--ignore-user-config`.
 - Controller skill: for Claude Code installed by the target's own setup in the
-  controller's directory (`applied`, `skill_installed`, a regular copy equal to
-  the shipped skill); for Codex a run-scoped link. Tree digest
+  controller's directory (exit 0 in all five prepared runs, `applied`,
+  `skill_installed`, a regular copy equal to the shipped skill); for Codex a
+  run-scoped link. Tree digest
   `a465e06afd649737addafad3e12f30a6dbeb9ba5088fca56d586b5e04df88194` for
   target B and
   `c58d34b04a53be54dacb34da6330e7e25a77b50d012d26f5a50cd1947a44b6bf` for
