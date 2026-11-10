@@ -429,10 +429,20 @@ function phase0ResourceLoaderOptions(skills: readonly Skill[], confinedCwd?: str
   };
 }
 
+/**
+ * The in-memory settings of every SDK session. Prompt cache warming stays inside a running turn: the SDK
+ * may re-send a request to keep its cache entry alive while the agent works, but a session that waits for
+ * its next prompt sends nothing. That was the SDK default up to 1.5.0; since 1.5.1 the default is `"idle"`,
+ * which keeps refreshing for up to 30 minutes after a turn has ended.
+ */
+function sessionSettings(): SettingsManager {
+  return SettingsManager.inMemory({ cacheWarming: "streaming" }, { projectTrusted: false });
+}
+
 export async function createPhase0ResourceLoader(cwd: string, skills: readonly Skill[] = [], permissionProfile?: ResolvedExecutionProfile["permissionProfile"]): Promise<{
   resourceLoader: DefaultResourceLoader; settingsManager: SettingsManager;
 }> {
-  const settingsManager = SettingsManager.inMemory(undefined, { projectTrusted: false });
+  const settingsManager = sessionSettings();
   const resourceLoader = new DefaultResourceLoader({ cwd, agentDir: cwd, settingsManager, ...phase0ResourceLoaderOptions(skills, permissionProfile === "read-only" ? cwd : undefined) });
   await resourceLoader.reload();
   return { resourceLoader, settingsManager };
@@ -553,7 +563,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         cwd,
         agentDir: cwd,
         modelRuntime: runtime,
-        settingsManager: SettingsManager.inMemory(undefined, { projectTrusted: false }),
+        settingsManager: sessionSettings(),
         resourceLoaderOptions: { ...phase0ResourceLoaderOptions(skills, executionProfile.permissionProfile === "read-only" ? cwd : undefined), additionalExtensionPaths: directories },
       }));
       this.checkResources(services.resourceLoader, skills, executionProfile, "extension_load");

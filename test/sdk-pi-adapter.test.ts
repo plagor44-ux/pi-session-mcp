@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ModelRuntime, SessionManager, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager, type AgentSession, type CreateAgentSessionOptions, type CreateAgentSessionResult, type SettingsManager } from "@earendil-works/pi-coding-agent";
 import type { AgentSessionRuntime, AgentSessionServices, CreateAgentSessionRuntimeFactory } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -229,6 +229,8 @@ describe("SdkPiSessionAdapter deterministic selection", () => {
       thinkingLevel: profile.thinkingLevel,
       tools: PROFILE_TOOLS["read-only"],
     }));
+    // The session is created with the adapter's settings, not with the SDK's defaults.
+    expect(createSession.mock.calls[0]![0].settingsManager?.getCacheWarmingMode()).toBe("streaming");
     expect(first.appliedSelection).toEqual({ provider: profile.provider, model: profile.model, thinkingLevel: profile.thinkingLevel });
     expect(second.appliedSelection).toEqual(first.appliedSelection);
   });
@@ -535,6 +537,12 @@ describe("Pi resource policy", () => {
     expect(resourceLoader.getExtensions().extensions).toEqual([]);
     await expect(readFile(marker, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
     expect(resourceLoader.getAgentsFiles().agentsFiles.some(({ path }) => path === join(cwd, "AGENTS.md"))).toBe(true);
+  });
+
+  it("keeps prompt cache warming inside a running turn", async () => {
+    const { settingsManager } = await createPhase0ResourceLoader(await temporaryRoot("pi-warming-"));
+    // The SDK default is "idle" since 1.5.1: a session waiting for its next prompt would send provider requests.
+    expect(settingsManager.getCacheWarmingMode()).toBe("streaming");
   });
 });
 
@@ -1174,6 +1182,8 @@ describe("SdkPiSessionAdapter allowlisted extensions", () => {
         additionalExtensionPaths: ["/hidden/extension/fixture-ext"],
       }),
     }));
+    const { settingsManager } = h.createServices.mock.calls[0]![0] as { settingsManager: SettingsManager };
+    expect(settingsManager.getCacheWarmingMode()).toBe("streaming");
     expect(h.createServices.mock.invocationCallOrder[0]!).toBeLessThan(h.fixture.getProvider.mock.invocationCallOrder[0]!);
     expect(h.createSession).not.toHaveBeenCalled();
     expect(h.createSessionFromServices).toHaveBeenCalledWith(expect.objectContaining({

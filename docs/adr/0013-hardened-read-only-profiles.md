@@ -282,6 +282,38 @@ closes fd 4 and the waiting command starts without a reader; it still runs in
 its limited scope, and `RuntimeMaxSec` ends it at the run's deadline plus 30
 seconds.
 
+### Amendment 2026-11-10: operations hooks under Pi SDK 1.5.2
+
+Pi SDK 1.5.1 changed two of the operations interfaces behind the second layer
+of section 1. The move of the pin from 1.5.0 to 1.5.2 (#270) brings both in:
+
+- `GrepOperations.readFile` is optional and no longer called. Up to 1.5.0
+  `grep` read every matched file through that hook when `context` was set.
+  Now `rg` emits the context lines itself, as it already did for the matched
+  lines of a search without `context`. The server no longer provides the hook,
+  so the only path `grep` hands a hook is the search path (`isDirectory`). A
+  search stays inside the read roots because both layers check the search path
+  and `rg` does not follow symlinks during traversal; the residual in
+  [Consequences](#consequences) about a directory swapped after the check is
+  unchanged.
+- `ReadOperations.createReadStream` is new and optional. The server does not
+  provide it, so `read` keeps reading through the guarded `readFile`. It
+  therefore still loads a whole file before it selects lines; the SDK's
+  streaming would need a guarded stream hook.
+
+The SDK takes a tool's operations as a whole and uses its own unconfined
+defaults only when a tool gets none, so a hook the server leaves out is absent
+and never replaced. `test/confined-tools.test.ts` checks this for `read`, and
+that the hooks alone refuse an outside path inside the SDK's `read`, `grep`
+and `ls`. The return type of `confinedOperations` requires a decision for every
+hook of `ReadOperations`, `GrepOperations` and `LsOperations`: guarded, or
+named as left out. A hook that a later SDK adds to one of them fails the
+typecheck and therefore the nightly Pi SDK canary, which did not notice
+`createReadStream`. The check goes by hook name: it does not notice an existing
+hook whose parameters change, which remains for the source comparison of an SDK
+update. `find` gets no operations, as before, and relies on the first layer
+alone.
+
 ## Contract change and versioning
 
 The capabilities field `shell`, the start error `sandbox_unavailable` and the

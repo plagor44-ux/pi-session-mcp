@@ -77,6 +77,10 @@ update is possible. It is not an update and not an acceptance.
    `isMcpToolName` (`dist/core/mcp-servers.js`) with the reserved names in
    `src/session-tools.ts`. That function is not a root export, so no test
    notices when the SDK reserves another name.
+   Compare the SDK's settings defaults (`dist/core/settings-defaults.js`) as
+   well. Sessions run on in-memory settings, so a changed default changes what
+   a worker does unless `sessionSettings` in `src/sdk-pi-adapter.ts` sets the
+   value, as it does for `cacheWarming`.
 
 3. Move the pins, the SDK and its seven family packages in one command:
 
@@ -105,10 +109,15 @@ update is possible. It is not an update and not an acceptance.
    [Prepare a release](#prepare-a-release) shows whether a consumer install of
    the new pins works.
 
-Three guards protect the SDK boundary. `test/sdk-contract.test.ts` pins the prompt
+Four guards protect the SDK boundary. `test/sdk-contract.test.ts` pins the prompt
 dispositions, the rejection path and the exact tools declared to the model for
 each permission profile. The stop-reason mapping is exhaustive, so a new stop
-reason fails the typecheck. `test/sdk-failure-recovery.test.ts` pins the retry
+reason fails the typecheck. The hooks of the confined read tools are
+exhaustive in the same way: `confinedOperations` in `src/confined-tools.ts`
+must guard or name every hook of the SDK's `ReadOperations`, `GrepOperations`
+and `LsOperations`, so a hook added by the SDK fails the typecheck
+([ADR 0013](adr/0013-hardened-read-only-profiles.md#amendment-2026-11-10-operations-hooks-under-pi-sdk-152)).
+`test/sdk-failure-recovery.test.ts` pins the retry
 and compaction signals. If one of them fails, the update needs source changes
 and its own review of the public contract, not only a new pin.
 
