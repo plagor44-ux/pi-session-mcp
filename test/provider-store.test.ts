@@ -133,11 +133,22 @@ describe("provider store", () => {
   });
   it.each([0o277, 0o477, 0o777])("creates exact modes under the restrictive umask %o", async (mask) => {
     const previous = process.umask(mask);
-    try { await store().setKey("openai", key, builtin); } finally { process.umask(previous); }
-    expect(process.umask()).toBe(previous);
+    try {
+      await store().setKey("openai", key, builtin);
+      expect(process.umask()).toBe(mask);
+    } finally { process.umask(previous); }
     expect((await fs.lstat(directory)).mode & 0o777).toBe(0o700);
     for (const name of ["credentials.json", ".lock"]) expect((await fs.lstat(join(directory, name))).mode & 0o777).toBe(0o600);
     expect((await policy()).source("openai")).toBe("key");
+  });
+  it.skipIf(process.getuid?.() === 0)("restores the umask when creating the store directory fails", async () => {
+    const product = join(home, ".config", "pi-session-mcp");
+    await fs.mkdir(product, { recursive: true, mode: 0o700 }); await fs.chmod(product, 0o500);
+    const previous = process.umask(0o022);
+    try {
+      await expect(store().setKey("openai", key, builtin)).rejects.toMatchObject({ code: "provider_store_unavailable" });
+      expect(process.umask()).toBe(0o022);
+    } finally { process.umask(previous); await fs.chmod(product, 0o700); }
   });
   it("never changes the mode of a link that replaces the new store directory", async () => {
     await fs.mkdir(join(home, ".config", "pi-session-mcp"), { recursive: true, mode: 0o700 });
