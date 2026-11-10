@@ -37,6 +37,36 @@ async function fixture(live = false) {
 }
 const codes = (r: Awaited<ReturnType<typeof runGuided>>) => r.findings.map((f) => f.code);
 describe("guided run", () => {
+  it.each([
+    { apply: true, terminal: true, stderrTerminal: true, offered: true },
+    { apply: false, terminal: true, stderrTerminal: true, offered: false },
+    { apply: true, terminal: true, stderrTerminal: false, offered: false },
+  ])("gates provider key handoff: $apply $terminal $stderrTerminal", async ({ apply, terminal, stderrTerminal, offered }) => {
+    const f = await fixture();
+    let reads = 0;
+    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    const child = vi.fn(async () => 1);
+    const prompts: string[] = [];
+    const prompter: Prompter = { text: async () => "", confirm: async () => false, choose: async (q, _opts, fallback) => { prompts.push(q); return q.startsWith("Authentication") ? "set-key" as typeof fallback : fallback; } };
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal, stderrTerminal, setProviderKey: child });
+      expect(child).toHaveBeenCalledTimes(offered ? 1 : 0);
+      expect(prompts.some(q => q.startsWith("Authentication"))).toBe(offered);
+      if (offered) { expect(child).toHaveBeenCalledWith("openai"); expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL"); expect(reads).toBeGreaterThanOrEqual(2); expect(err.mock.calls.map(c => String(c[0])).join("")).toContain("not configured"); }
+      expect(f.deps.probe).not.toHaveBeenCalled();
+    } finally { out.mockRestore(); err.mockRestore(); }
+  });
+  it("never offers credential handoff with answers", async () => {
+    const f = await fixture(); const path = join(f.directory, "answers.json"); await writeFile(path, "{}");
+    const child = vi.fn(async () => 0); const prompter: Prompter = { text: vi.fn(), confirm: vi.fn(), choose: vi.fn() };
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await runGuidedMain({ apply: true, answersPath: path }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child });
+      expect(child).not.toHaveBeenCalled(); expect(prompter.choose).not.toHaveBeenCalled();
+    } finally { out.mockRestore(); err.mockRestore(); }
+  });
   it("rejects a pending terminal question when input ends", async () => {
     const input = new PassThrough(); const terminal = terminalPrompter(new AbortController().signal, input);
     try {
