@@ -2600,6 +2600,70 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.20.0 pre-release acceptance
+
+`v0.20.0` was accepted on 2026-11-10 on its release candidate `1c2b7c9`, on
+Linux 7.3 (`x64`) with Node.js `26.13.0`, npm `12.2.2`, Git `2.56.0`, systemd
+`262`, bubblewrap `0.13.1`, Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code
+`2.1.322`. Level 1 passed in a fresh clone on the second full test run (see
+below), and Level 2 passed in the working tree and for the packed tarball,
+each with delivery off and with delivery on. The later commit changes only
+this record.
+
+The minor release ships guided installation with optional tier routing
+(ADR 0020), opt-in provider credentials with the command
+`pi-session-mcp-provider` and the guided key handoff (ADR 0021, #265, #266,
+#267), and the empty `.git` marker fix (#261), on the branch
+`feat/provider-credentials` on top of `main` at `7b3ce04`, with the version
+commit last.
+
+- Level 1 in a fresh clone of the candidate after `npm ci`: typecheck,
+  `build:cli` and `build` exited with `0`.
+  - The first test run, with `NODE_OPTIONS=--unhandled-rejections=strict`,
+    reported 1 failure of 5058 tests:
+    `test/sandbox-shell.bwrap.test.ts` "ends a running command on abort and
+    collects its scope" still saw the shell scope active when its wait ended.
+    No scope was left afterwards, the file passed three times on its own, and
+    the second full run reported 184 files, 5043 passed, 15 skipped and exit
+    `0`. Treated as a timing flake under full-suite load, not as fixed.
+  - The bubblewrap and Podman-gated files (`sandbox-shell.bwrap`,
+    `sandbox-shell.go-cache.bwrap`, `writer-lifecycle.podman`,
+    `writer-boundary.podman`) ran unskipped: 64 of 64 passed.
+  - `npm audit` and `npm audit --omit=dev` reported 0 vulnerabilities.
+  - `npm pack` listed 1065 files (tarball sha1
+    `0831ee61f30868c4980c89851b2f6ea9bd9c519b`), with the new executable
+    `pi-session-mcp-provider`. A scan of the unpacked files for private names,
+    hosts and the maintainer's home path found none, and the package holds no
+    `docs/superpowers/` file.
+  - Doctor reported `packageVersion` `0.20.0`.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The build digest was the same before and
+  after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`.
+- In every Level 2 run the leak check passed and no process was left over. The
+  disposable prefix and the tarball were removed.
+
+Reviews, by read-only profiles of other model families than the authors (the
+store, the CLI and the handoff were written by OpenAI workers): #265 by Zhipu
+GLM and, as a third family for the security boundary, DeepSeek; #266 and #267
+by Zhipu GLM. The #261 fix was reviewed earlier in the same pull request. All three answered
+`NON_BLOCKING_ONLY`; the findings were checked against the code and fixed with
+regression tests (a history gap when the store fails mid-run, the store
+directory as a read root through a skill, directory `fsync` after rename,
+umask-exact modes, orphaned entries, `--stdin` on a terminal, a config failure
+on `remove`, and missing tests). The controller's fixes were reviewed by
+OpenAI in three rounds: two `BLOCKING_FINDINGS` (a workspace overlapping the
+store, a path `chmod` that could follow a link, then a umask that removes
+owner read) were fixed, and the last round answered `NON_BLOCKING_ONLY`, also
+fixed. The reviews were static; the controller ran the tests.
+
+Not established for `0.20.0`: a Level 3 cycle on the release candidate; a
+live provider turn with a stored key or an operator-defined provider; a
+container writer launched with a stored key; the server host; macOS locally;
+and the published-release Level 2 and upgrades, which follow after
+publishing.
+
 ### v0.19.1 pre-release acceptance
 
 `v0.19.1` was accepted on 2026-11-07 from 22:20 to 22:27 UTC on its release
