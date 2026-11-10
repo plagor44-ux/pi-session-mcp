@@ -88,8 +88,25 @@ async function checkAbsolute(path: string, roots: readonly string[]): Promise<vo
   if (!roots.some((root) => isWithin(real, root))) throw new Error(OUTSIDE_ROOTS_MESSAGE);
 }
 
-/** The `*Operations` hooks that re-check every absolute path the SDK hands them; exported for tests. */
-export function confinedOperations(roots: readonly string[]): { read: ReadOperations; grep: GrepOperations; ls: LsOperations } {
+/**
+ * Every hook of an SDK operations interface, decided: guarded here, or named in `Omitted` and left out.
+ * A hook that a later SDK adds, optional or not, is missing from the object below and fails the typecheck
+ * (and therefore the Pi SDK canary) instead of going unnoticed. The check goes by hook name: an existing hook
+ * whose parameters change still compiles.
+ */
+type Decided<Operations, Omitted extends keyof Operations = never> = Required<Omit<Operations, Omitted>> & { [Hook in Omitted]?: never };
+
+/**
+ * The `*Operations` hooks that re-check every absolute path the SDK hands them; exported for tests.
+ * The SDK takes a tool's operations as a whole (`options.operations ?? defaults`), so a hook left out
+ * here is absent and never replaced by the SDK's unconfined default. Two are left out on purpose:
+ * - `read.createReadStream` (SDK 1.5.1): without it the SDK reads through `readFile`, guarded below.
+ * - `grep.readFile`: ignored since SDK 1.5.1. `rg` emits the context lines itself, so the only path
+ *   `grep` hands a hook is the search path; `rg` opens the files, as `fd` does for `find`.
+ */
+export function confinedOperations(roots: readonly string[]): {
+  read: Decided<ReadOperations, "createReadStream">; grep: Decided<GrepOperations, "readFile">; ls: Decided<LsOperations>;
+} {
   const guard = async <T>(path: string, run: () => Promise<T>): Promise<T> => { await checkAbsolute(path, roots); return run(); };
   return {
     read: {
@@ -99,7 +116,6 @@ export function confinedOperations(roots: readonly string[]): { read: ReadOperat
     },
     grep: {
       isDirectory: (path) => guard(path, async () => (await stat(path)).isDirectory()),
-      readFile: (path) => guard(path, () => readFile(path, "utf-8")),
     },
     ls: {
       exists: (path) => guard(path, async () => { try { await access(path, constants.F_OK); return true; } catch { return false; } }),

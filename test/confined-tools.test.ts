@@ -1,7 +1,7 @@
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Skill, ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createGrepToolDefinition, createLsToolDefinition, createReadToolDefinition, type Skill, type ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { allowedReadRoots, confinedOperations, confineToolPath, createConfinedReadOnlyTools, OUTSIDE_ROOTS_MESSAGE } from "../src/confined-tools.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -35,7 +35,7 @@ beforeAll(async () => {
   await symlink(join(outside, "secret.txt"), join(workspace, "link-file"));
   await symlink(outside, join(workspace, "link-dir"));
   await mkdir(join(workspace, "mixed"), { recursive: true });
-  await writeFile(join(workspace, "mixed", "own.txt"), "own needle\n");
+  await writeFile(join(workspace, "mixed", "own.txt"), "line before\nown needle\nline after\n");
   await symlink(join(outside, "secret.txt"), join(workspace, "mixed", "escape.txt"));
   const skill = { name: "review", description: "d", filePath: join(skillDir, "SKILL.md"), baseDir: skillDir } as unknown as Skill;
   roots = await allowedReadRoots(workspace, [skill]);
@@ -135,10 +135,17 @@ describe("confined tools", () => {
   it("grep over a directory with an outward symlink returns no outside content", async () => {
     const output = await run("grep", { pattern: "needle", path: "." });
     expect(output).toContain("own needle");
+    expect(output).not.toContain("line before");
     expect(output).not.toContain(SECRET);
     const listing = await run("grep", { pattern: "needle", path: "mixed" });
     expect(listing).toContain("own needle");
     expect(listing).not.toContain(SECRET);
+    // Since SDK 1.5.1 `rg` emits the context lines itself; no hook sees the matched files.
+    const context = await run("grep", { pattern: "needle", path: ".", context: 2 });
+    expect(context).toContain("own needle");
+    expect(context).toContain("line before");
+    expect(context).toContain("line after");
+    expect(context).not.toContain(SECRET);
   });
 
   it("find over the workspace does not descend into an outward symlink", async () => {
@@ -158,13 +165,38 @@ describe("confined tools", () => {
     for (const path of [join(workspace, "link-file"), join(workspace, "link-dir"), join(outside, "secret.txt"), "/etc/hostname"]) {
       await expect(ops.read.readFile(path)).rejects.toThrow(refused);
       await expect(ops.read.access(path)).rejects.toThrow(refused);
-      await expect(ops.read.detectImageMimeType!(path)).rejects.toThrow(refused);
+      await expect(ops.read.detectImageMimeType(path)).rejects.toThrow(refused);
       await expect(ops.grep.isDirectory(path)).rejects.toThrow(refused);
-      await expect(ops.grep.readFile(path)).rejects.toThrow(refused);
       await expect(ops.ls.exists(path)).rejects.toThrow(refused);
       await expect(ops.ls.stat(path)).rejects.toThrow(refused);
       await expect(ops.ls.readdir(path)).rejects.toThrow(refused);
     }
+  });
+
+  /** An SDK tool with the hooks but without the execute wrapper: what the hooks alone achieve inside the SDK. */
+  async function bare(name: "read" | "grep" | "ls", params: Record<string, unknown>, operations = confinedOperations(roots)): Promise<string> {
+    const definition = name === "read" ? createReadToolDefinition(workspace, { operations: operations.read })
+      : name === "grep" ? createGrepToolDefinition(workspace, { operations: operations.grep })
+        : createLsToolDefinition(workspace, { operations: operations.ls });
+    const result = await (definition as unknown as ToolDefinition).execute("call", params as never, undefined, undefined, undefined as never);
+    return JSON.stringify(result.content);
+  }
+
+  it("the SDK tools hand the hooks the path they open, so the hooks alone refuse an outside path", async () => {
+    await expect(bare("read", { path: "src/a.txt" })).resolves.toContain("inside needle");
+    await expect(bare("read", { path: "link-file" })).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    await expect(bare("ls", { path: "link-dir" })).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    // The SDK's grep reports a refused search path as not found; no content comes back either way.
+    await expect(bare("grep", { pattern: "needle", path: "link-dir" })).rejects.toThrow(/not found/i);
+    await expect(bare("grep", { pattern: "needle", path: "link-file" })).rejects.toThrow(/not found/i);
+  });
+
+  it("the SDK reads through the guarded readFile and adds no default for a hook left out", async () => {
+    const operations = confinedOperations(roots);
+    const readFile = vi.fn(operations.read.readFile);
+    const output = await bare("read", { path: "src/a.txt" }, { ...operations, read: { ...operations.read, readFile } });
+    expect(output).toContain("inside needle");
+    expect(readFile).toHaveBeenCalledExactlyOnceWith(join(workspace, "src", "a.txt"));
   });
 });
 

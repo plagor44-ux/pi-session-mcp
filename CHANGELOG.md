@@ -4,6 +4,31 @@
 
 ### Changed
 
+- Updated the Pi SDK family from 1.5.0 to 1.5.2
+  ([#270](https://github.com/plagor44-ux/pi-session-mcp/issues/270)):
+  `pi-coding-agent`, `pi-ai`, `pi-agent-core`, `pi-codemode`, `pi-mcp`,
+  `pi-schema`, `pi-telemetry` and `pi-tui`. The canary for 1.5.2 failed on one
+  test line: `GrepOperations.readFile` is optional since SDK 1.5.1 and no
+  longer called, because `grep` takes its context lines from `rg` instead of
+  reading the matched files. The read confinement of ADR 0013 drops that hook
+  and does not provide the new optional `ReadOperations.createReadStream`, so
+  `read` keeps going through the guarded `readFile`. The SDK uses a tool's
+  operations as a whole, so a hook left out never falls back to an unconfined
+  default, and a hook that a later SDK adds to the operations of `read`, `grep`
+  or `ls` now fails the typecheck; see the
+  [amendment to ADR 0013](docs/adr/0013-hardened-read-only-profiles.md#amendment-2026-11-10-operations-hooks-under-pi-sdk-152).
+  Checked against the upstream changelog and sources: no change to stop
+  reasons, prompt dispositions, the names of the tools declared to the model
+  or MCP naming (`isMcpToolName` still reserves `mcp__` and the three resource
+  tools). Upstream changes operators may notice: `grep` globs are relative to
+  `path` and the description of its `glob` parameter says so; a `limit` below
+  1 in `find` and `ls` means 1; Anthropic sessions on `api.anthropic.com` use
+  message threads, where a request sends only the new messages; a dropped
+  provider stream that a gateway reports as "cut short after the reply had
+  begun" is retried like other dropped streams, so such a turn can recover
+  instead of failing; the SDK's default models change, which does not affect
+  profiles because each names its model. Live acceptance on 1.5.2 (Level 3) is
+  not done yet.
 - Prompt cache warming stays inside a running turn. SDK 1.5.1 changed its
   default from `streaming` to `idle`, which re-sends a session's last request
   for up to 30 minutes after a turn has ended, to keep the provider's prompt
