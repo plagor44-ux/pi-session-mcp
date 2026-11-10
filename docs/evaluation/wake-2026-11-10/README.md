@@ -46,7 +46,14 @@ delivery off.
 - Pre-registration: the scenarios, their criteria, the prompts, the driver,
   the evaluator and the configuration were fixed and digested before the first
   session; the digest file verified before each scenario and afterwards. The
-  prompts are not published.
+  exit statuses of those checks were not recorded; a further check after the
+  record's review, `sha256sum -c` over its 15 entries, exited with 0. The
+  prompts are not published. The two workspaces were created by a script of
+  the kit that is among the digested files; a digest of their content was not
+  recorded. No digest of the execution plan was recorded for this check
+  either. The pre-registration of the cycle of the same day had recorded one,
+  SHA-256 `dff18f778acf51a47b5a9af6493de0cdd42746202eab18791737285a86d03600`,
+  which is the plan as tracked at the commit `93980d9`.
 
 A first setup attempt failed before any session: the kit's configuration had
 a `coding` profile as its only and default profile, which Doctor reports as

@@ -37,12 +37,19 @@ Claude Code ran on both targets.
 - Release binding of target A. It was taken after the runs, not before the
   first one as the plan asks; the clone was still clean then, and the
   harness's digest over `dist/`, computed again, was the one bound at
-  `prepare`. `npm pack --ignore-scripts` in the clone, with npm `10.9.9`, gave
-  a tarball with the shasum `9f9e8f7f99fc139bb022c8b73b6cc0ae2dc14cea`. The
-  registry serves `0.20.0` with the shasum
-  `e08a0b300afc9b658bf05afccc3b5ea9c1f5fedb`. The two archives differ, and
-  their 1065 entries have the same paths, modes and contents. The runs used
-  the clone's build, not an installed package.
+  `prepare`. `npm pack --ignore-scripts` in the clone, with npm `10.9.9`, ran
+  twice and gave a tarball with the shasum
+  `9f9e8f7f99fc139bb022c8b73b6cc0ae2dc14cea` both times; its exit status was
+  recorded for the second run only and was 0. The registry serves `0.20.0`
+  with the shasum `e08a0b300afc9b658bf05afccc3b5ea9c1f5fedb`. The two archives
+  differ, and their 1065 entries have the same paths, modes and contents. The
+  runs used the clone's build, not an installed package.
+- Plan, fixtures and oracles: no digest of the execution plan was recorded
+  for these runs. The pre-registration of the cycle of the same day had
+  recorded one, SHA-256
+  `dff18f778acf51a47b5a9af6493de0cdd42746202eab18791737285a86d03600`, which is
+  the plan as tracked at the commit `93980d9`. The fixtures and the oracles
+  are part of the harness script, so its digest binds them.
 - Host: Linux (`x64`), Node.js `22.23.3`.
 - Configuration: `prepare --from-profile` copied provider, model and thinking
   level of one operator `coding` profile, `deepseek` `deepseek-flash` with
@@ -76,8 +83,10 @@ scenario: a session in the prepared controller directory, started with the
 harness's `--setting-sources project,local`, loaded `pi-session-orchestration`
 from the project copy. The skill's base directory was the project's, and the
 loaded text held a reference that only the skill of target B has. The check
-used the differing installed pair, not a separate marker skill. In the three
-scenario runs on target B the skill was loaded from the project copy as well.
+used the differing installed pair, not a separate marker skill. The client's
+result event reported success and its standard error was empty; its exit
+status was not recorded. In the three scenario runs on target B the skill was
+loaded from the project copy as well.
 
 ## Results
 
