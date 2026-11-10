@@ -9,6 +9,9 @@
 - Run the targeted tests for the files you change, then `npm test`. Inside a
   container writer a few lock and hook tests can time out; report them by
   file and test name instead of changing them.
+- CI runs `npm ci`, `npm run typecheck`, `npm run build:cli`,
+  `NODE_OPTIONS=--unhandled-rejections=strict npm test` and `npm run build`;
+  run the same before a pull request.
 
 ## Rules
 
@@ -34,8 +37,8 @@
   (maintainer-approved 2026-10-30, #199). Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
-- Keep MCP-server stdout exclusively for MCP stdio frames; CLI reports must be
-  sanitized and must not contain secrets, paths, or complete prompts.
+- CLI reports must be sanitized and must not contain secrets, paths, or
+  complete prompts.
   Exception: `pi-session-mcp-history show --full`, `export` and `query` print
   redacted session content by purpose (ADR 0019); their other output follows
   this rule.
@@ -43,8 +46,12 @@
   `--rollback`, or `--remove`; default to dry-run, never pin client versions but
   reject a client whose public command output does not match the expected
   contract, and never auto-replace divergent registrations.
-- `--probe-profile … --apply` is the only setup operation that uses a provider;
-  it uses a fixed prompt, never outputs reply text, and uses fakes in tests.
+- Only two setup operations use a provider: `--probe-profile … --apply`, and
+  the probe step of `--guided --apply` for new profiles after explicit
+  `approveProbes`. Both use the fixed probe prompt, never output reply text,
+  and use fakes in tests.
+- Guided setup and `install.sh` never ask for, print or store a provider
+  credential; the owner logs in through Pi.
 - Setup accepts only configured client targets and derives absolute paths
   internally; durable ownership state must remain path-free and secret-free.
 - Mutating setup runs on Linux and macOS only. Linux requires a supported
@@ -60,7 +67,8 @@
   handshake/tools/list/capabilities check, without starting sessions or using a
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
-- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), and one trusted local MCP peer. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- Tracked files contain no operator-specific hosts, paths, or internal service names; use placeholders.
+- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
 - Pi extensions load only from an execution profile's exact
   `npm:<name>@<version>` allowlist, resolved from Pi's install without
   installing. Client prompts never dispatch extension commands, and stdout stays
@@ -71,7 +79,7 @@
 
 ## OpenWiki
 
-This repository has a generated `openwiki/` evidence index. It is optional just-in-time context, not required startup reading.
+A checkout may have a generated `openwiki/` evidence index. It is not tracked in Git and may be missing or stale. It is optional just-in-time context, not required startup reading.
 
 - Do not enumerate, preload, or search wikis at task start. Use retrieval when the user asks for it, when unfamiliar architecture or dependency behavior materially affects the task, or when source inspection leaves an important uncertainty. Stop once the question is grounded.
 - When those conditions apply and OpenWiki retrieval tools are available, use `openwiki_search` for just-in-time context and `openwiki_read` for the relevant complete sections. If search returns `workspace_required`, ask which listed workspace to use and retry with its ID.
@@ -80,6 +88,6 @@ This repository has a generated `openwiki/` evidence index. It is optional just-
 - Treat source code and tests as authoritative. A brief's unknowns and review items are verification gaps, not automatic requirements.
 - Prefer the narrowest quiet validation that proves the changed behavior. Preserve complete failure output.
 
-The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+No workflow refreshes the index; the maintainer regenerates it with the OpenWiki update lifecycle. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
 
 <!-- OPENWIKI:END -->
