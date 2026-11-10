@@ -220,7 +220,7 @@ export function openProviderStore(options: { home?: string } = {}): ProviderStor
     removeKey: (id, o) => mutate(async s => { known(s, id, o); s.credentials[id] = { source: "none" }; await saveCredentials(s); }),
     inherit: (id, o) => mutate(async s => {
       // An entry for a provider that no longer exists can only be deleted; deleting grants nothing.
-      if (ID.test(id) && id in s.credentials && !o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id)) { delete s.credentials[id]; await saveCredentials(s); return; }
+      if (ID.test(id) && Object.hasOwn(s.credentials, id) && !o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id)) { delete s.credentials[id]; await saveCredentials(s); return; }
       known(s, id, o); if (s.definitions.some(d => d.id === id)) fail("provider_inherit_unsupported"); delete s.credentials[id]; await saveCredentials(s); }),
     addProvider: (definition, o) => {
       if (!definitionValid(definition)) return Promise.reject(new ProviderStoreError("provider_definition_invalid"));
