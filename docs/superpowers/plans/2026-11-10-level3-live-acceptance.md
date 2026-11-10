@@ -152,14 +152,34 @@ Part 1.
 
 ## Part 3: multi-session skill acceptance (targeted)
 
+Two prepared runs, because the scenarios share fixtures. `parallel` uses the
+fixtures `slug` and `stats`, `abort` uses `wait` and `range`, and `trio` uses
+`slug`, `wait` and `review`. `run` refuses a scenario with `fixturesChanged`
+when one of its fixtures differs from the baseline that `prepare` stored, and
+a passed `parallel` has changed `slug`. So `parallel` and `abort` share one
+prepared run, and `trio` gets a second one with untouched fixtures. Each
+prepared run holds its own fixtures for both clients.
+
 ```bash
+# Run A: parallel and abort
 node scripts/multi-session-acceptance.mjs prepare --candidate <checkout> \
   --base-config <operator configuration> --from-profile <alias>
-node scripts/multi-session-acceptance.mjs run --run <run directory> \
-  --client claude --scenario parallel   # then abort, trio; then --client codex
-node scripts/multi-session-acceptance.mjs evidence --run <run directory> --out <file>
+node scripts/multi-session-acceptance.mjs run --run <run directory A> \
+  --client claude --scenario parallel   # then abort; then both with --client codex
+node scripts/multi-session-acceptance.mjs evidence --run <run directory A> --out <file A>
+
+# Run B: trio, on fixtures that no scenario has touched
+node scripts/multi-session-acceptance.mjs prepare --candidate <checkout> \
+  --base-config <operator configuration> --from-profile <alias>
+node scripts/multi-session-acceptance.mjs run --run <run directory B> \
+  --client claude --scenario trio       # then --client codex
+node scripts/multi-session-acceptance.mjs evidence --run <run directory B> --out <file B>
 ```
 
+- Both prepared runs use the same candidate checkout, client versions and
+  profile. Keep both evidence files and both results; neither replaces the
+  other. A scenario that `run` refuses is recorded as refused and is not
+  repaired by resetting a fixture by hand.
 - Linux only. The working directory must not lie in a temporary directory.
 - `prepare` binds the build, the controller skill, the worker skills, the
   fixtures, the harness and the controller skill copies in the operator's
