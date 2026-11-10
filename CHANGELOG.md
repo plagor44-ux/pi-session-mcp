@@ -36,6 +36,20 @@
   up to 1.5.0, so this update does not change it: a session that waits for its
   next prompt sends no provider request.
 
+### Fixed
+
+- The scope lifecycle tests of the sandbox shell
+  (`test/sandbox-shell.bwrap.test.ts`) look only at the scope of the command
+  they started. They listed every `pi-session-mcp-shell-*` scope of the user,
+  so a scope that another test file or a session on the same host had running
+  made "ends a running command on abort and collects its scope" fail after its
+  10 s wait. That happened in the first full run of the `v0.20.0` candidate
+  and of the SDK 1.5.2 update, while the file passed on its own
+  ([#272](https://github.com/plagor44-ux/pi-session-mcp/issues/272)). In the
+  second run the one scope still listed belonged to another command: the user
+  journal has it starting after the wait had begun. The aborted command's own
+  scope was no longer listed. Tests only; no runtime or contract change.
+
 ## 0.20.0 — 2026-11-10
 
 Minor release: guided installation with optional tier routing (ADR 0020),

@@ -4,7 +4,7 @@
  * through the sandbox succeeds (unprivileged user namespaces, overlay support), and the Git tests also need `git`.
  */
 import { execFile, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -120,13 +120,25 @@ async function linkedWorktree(prefix: string): Promise<{ main: string; linked: s
 const writeCommonDir = (bytes: number, name: string): string =>
   `target=$(git rev-parse --git-common-dir); case "$target" in /*) ;; *) target="$PWD/$target" ;; esac; echo "TARGET=$target"; head -c ${bytes} /dev/zero > "$target/${name}"`;
 
-const listShellUnits = async (): Promise<string> => {
-  const { stdout } = await run("/usr/bin/systemctl", ["--user", "list-units", "--all", "--no-legend", "pi-session-mcp-shell-*"], { timeout: 5_000 });
+/**
+ * A run whose scope name the test knows, of the form the server generates. Other test files and sessions on
+ * the same host run sandboxed commands at the same time, so a test may only look at the scope it started.
+ */
+function namedScope() {
+  const unit = `pi-session-mcp-shell-${randomUUID()}`;
+  return { unit, dependencies: { unitName: vi.fn(() => unit) } };
+}
+
+/** What systemd lists for the scope `unit`; empty once the scope is collected. */
+const listScope = async (unit: string): Promise<string> => {
+  const { stdout } = await run("/usr/bin/systemctl", ["--user", "list-units", "--all", "--no-legend", `${unit}.scope`], { timeout: 5_000 });
   return stdout.trim();
 };
 
-const expectNoShellUnits = async (): Promise<void> => {
-  await vi.waitFor(async () => { expect(await listShellUnits()).toBe(""); }, { timeout: 10_000, interval: 250 });
+const expectScopeCollected = async (scope: ReturnType<typeof namedScope>): Promise<void> => {
+  // The run asked for the name, so this is the scope it started.
+  expect(scope.dependencies.unitName).toHaveBeenCalledOnce();
+  await vi.waitFor(async () => { expect(await listScope(scope.unit)).toBe(""); }, { timeout: 10_000, interval: 250 });
 };
 
 /** How many processes have `marker` in their command line. */
@@ -522,36 +534,68 @@ describe.skipIf(!available)("real bubblewrap sandbox", () => {
     describe("scope lifecycle", () => {
       it.skipIf(!systemctlAvailable)("ends a running command on abort and collects its scope", async () => {
         const workspace = await temporaryRoot("sandbox-real-lifecycle-abort-");
+        const scope = namedScope();
         const controller = new AbortController();
         const abortTimer = setTimeout(() => controller.abort(), 700);
         const started = Date.now();
-        const result = await runSandbox(workspace, "sleep 30", { timeout: 30, signal: controller.signal });
+        const result = await runSandbox(workspace, "sleep 30", { dependencies: scope.dependencies, timeout: 30, signal: controller.signal });
         clearTimeout(abortTimer);
         expect(Date.now() - started).toBeLessThan(5_000);
         expect(failedRun(result).message).toBe("aborted");
-        await expectNoShellUnits();
+        await expectScopeCollected(scope);
       }, 60_000);
 
       it.skipIf(!systemctlAvailable)("ends a running command on timeout and collects its scope", async () => {
         const workspace = await temporaryRoot("sandbox-real-lifecycle-timeout-");
+        const scope = namedScope();
         const started = Date.now();
-        const result = await runSandbox(workspace, "sleep 30", { timeout: 1 });
+        const result = await runSandbox(workspace, "sleep 30", { dependencies: scope.dependencies, timeout: 1 });
         expect(Date.now() - started).toBeLessThan(10_000);
         expect(failedRun(result).message).toBe("timeout:1");
-        await expectNoShellUnits();
+        await expectScopeCollected(scope);
       }, 60_000);
 
       it.skipIf(!systemctlAvailable)("does not hang on a background child that holds stdout open", async () => {
         const workspace = await temporaryRoot("sandbox-real-lifecycle-stdout-");
+        const scope = namedScope();
         const started = Date.now();
-        const result = await runSandbox(workspace, "(sleep 30 &) ; echo started", { timeout: 2 });
+        const result = await runSandbox(workspace, "(sleep 30 &) ; echo started", { dependencies: scope.dependencies, timeout: 2 });
         expect(Date.now() - started).toBeLessThan(10_000);
         if (result.ok) {
           expect(okRun(result)).toEqual({ exitCode: 0, output: "started\n" });
         } else {
           expect(result.error.message).toBe("timeout:2");
         }
-        await expectNoShellUnits();
+        await expectScopeCollected(scope);
+      }, 60_000);
+
+      it.skipIf(!systemctlAvailable)("collects an aborted command's scope and leaves another command's scope running", async () => {
+        const workspace = await temporaryRoot("sandbox-real-lifecycle-other-");
+        const expectScopeRunning = async (unit: string): Promise<void> => {
+          await vi.waitFor(async () => { expect(await listScope(unit)).toContain("running"); }, { timeout: 10_000, interval: 100 });
+        };
+        const other = namedScope();
+        const otherController = new AbortController();
+        const otherRun = runSandbox(workspace, "sleep 60", { dependencies: other.dependencies, timeout: 60, signal: otherController.signal });
+        const scope = namedScope();
+        const controller = new AbortController();
+        const aborted = runSandbox(workspace, "sleep 30", { dependencies: scope.dependencies, timeout: 30, signal: controller.signal });
+        try {
+          // Both scopes are seen running first, so "collected" below cannot mean "never started".
+          await expectScopeRunning(other.unit);
+          await expectScopeRunning(scope.unit);
+          controller.abort();
+          expect(failedRun(await aborted).message).toBe("aborted");
+          await expectScopeCollected(scope);
+          expect(await listScope(other.unit)).toContain("running");
+        } finally {
+          // Also after a failed assertion above: neither run may outlive the test and its workspace.
+          controller.abort();
+          otherController.abort();
+          await Promise.all([aborted, otherRun]);
+        }
+        expect(failedRun(await otherRun).message).toBe("aborted");
+        await expectScopeCollected(other);
       }, 60_000);
     });
   });
