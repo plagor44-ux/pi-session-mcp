@@ -39,6 +39,18 @@ describe("provider CLI", () => {
     const closed = new PassThrough(); closed.destroy();
     expect(await f.run(["auth", "set", "openai", "--stdin"], { input: closed })).toBe(4);
   });
+  it("refuses --stdin on a terminal, where the key would echo", async () => {
+    const f = fixture();
+    const stream = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode: vi.fn() });
+    expect(await f.run(["auth", "set", "openai", "--stdin"], { input: stream })).toBe(64);
+    expect(f.output()).toContain("usage_invalid"); expect(stream.setRawMode).not.toHaveBeenCalled(); expect(f.store.setKey).not.toHaveBeenCalled();
+  });
+  it("reports an unloadable selected configuration as config_invalid and keeps the provider", async () => {
+    const f = fixture();
+    const loadConfig = vi.fn(async () => { throw new Error("/private/path is broken"); }) as unknown as typeof import("../src/config.js").loadConfig;
+    expect(await f.run(["remove", "openai"], { configPath: "/private/path", loadConfig })).toBe(1);
+    expect(f.output()).toContain("config_invalid"); expect(f.output()).not.toContain("/private/path"); expect(f.store.removeProvider).not.toHaveBeenCalled();
+  });
   it("accepts hidden terminal input and invokes auth operations", async () => {
     const f = fixture();
     const stream = Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode: vi.fn() });

@@ -54,6 +54,8 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
     else if (command === "auth") {
       if (!(["set", "remove", "inherit"].includes(args[0] ?? "")) || !safeId(args[1]) || (args[0] === "set" ? !(args.length === 2 || (args.length === 3 && args[2] === "--stdin")) : args.length !== 2)) return fail("usage_invalid", 64);
       if (args[0] === "set" && args.length === 2 && !(io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
+      // Typed into --stdin a key would echo; the hidden prompt is the terminal route.
+      if (args[0] === "set" && args.length === 3 && (io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
     } else if (command === "remove") { if (args.length !== 1 || !safeId(args[0])) return fail("usage_invalid", 64); }
     else return fail("usage_invalid", 64);
     const store = io.store ?? openProviderStore();
@@ -73,7 +75,12 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
     } else if (command === "add") await store.addProvider(def!, options);
     else if (command === "remove") {
       const path = io.configPath ?? process.env.PI_SESSION_MCP_CONFIG;
-      if (path && [...(await (io.loadConfig ?? loadConfig)(path)).executionProfiles.values()].some(p => p.provider === args[0])) return fail("provider_in_use", 1);
+      if (path) {
+        let profiles;
+        try { profiles = [...(await (io.loadConfig ?? loadConfig)(path)).executionProfiles.values()]; }
+        catch { return fail("config_invalid", 1); }
+        if (profiles.some(p => p.provider === args[0])) return fail("provider_in_use", 1);
+      }
       await store.removeProvider(args[0]!);
     } else if (command === "auth") {
       const [action, id] = args as [string, string];

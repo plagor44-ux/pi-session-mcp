@@ -209,7 +209,8 @@ pi-session-mcp-provider remove <id>
 
 The terminal key prompt disables echo. For unattended provisioning operated by the
 owner, pipe the key to `pi-session-mcp-provider auth set <id> --stdin`; do not
-put it in an argument. These commands never contact a provider or spend a turn.
+put it in an argument. `--stdin` on a terminal is refused (exit 64) because the
+typed key would echo. These commands never contact a provider or spend a turn.
 `inherit` uses Pi authentication (the default for built-ins), `key` takes
 precedence using the stored key, and `none` explicitly disables authentication.
 `auth remove` sets `none`; only `auth inherit` restores Pi authentication.
@@ -223,9 +224,13 @@ userinfo, query or fragment. Supported APIs are `openai-completions`,
 to 128000 and `--max-tokens` to 8192. Use `--reasoning` and `--image` to
 mark capabilities. Loopback custom providers are refused for container workspaces.
 Changing a custom provider's origin invalidates its bound key until set again.
+Doctor reports `credential_binding_mismatch` for such a key and for an entry whose
+provider no longer exists; `auth set` binds a key again, and `auth inherit <id>`
+deletes the entry of a provider that no longer exists.
 Removing a provider is refused when the configuration selected by
 `PI_SESSION_MCP_CONFIG` references it. If no configuration is selected,
 removal proceeds; other configurations report `unknown_provider` on next start.
+A selected configuration that cannot be loaded refuses removal with `config_invalid`.
 
 Changes take effect for new sessions and catalog reads; running sessions retain
 their original credentials, and writers receive changes on their next launch.
