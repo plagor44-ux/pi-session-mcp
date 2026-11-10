@@ -136,7 +136,10 @@ by setup, and an interactive or stream-json Claude Code session.
 - Install the hook only through the target's own
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp` in
   a disposable project directory, with a disposable home for the setup step.
-  Setup must report `hook_verified`. No global registration or hook changes.
+  A first `--apply` must report `hook_added`. Then run
+  `pi-session-mcp-setup --verify --target claude-code:project:pi-session-mcp`
+  with the same configuration and home; it must report `hook_verified`. No
+  global registration or hook changes.
 - Scenarios, as defined for the
   [Sprint 7 candidate](../../sprints/2026-10-24-s7-stabilization-live-acceptance.md):
   a turn ends while the controller waits and one result read follows, with no
