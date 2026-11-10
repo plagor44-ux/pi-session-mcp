@@ -18,7 +18,7 @@ installation with upgrade and removal, start with [Installation](installation.md
 - A local checkout of this repository
 - Existing local Pi authentication only when sending a real prompt
 
-Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory; the only persistent store is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](session-history.md)), which is off by default.
+Pi Session MCP is a local, stdio-only MCP server for one trusted local MCP peer. It has no HTTP endpoint, web UI, resume support, remote access, or multi-user behavior. Sessions live in memory. The only persistent session record is the opt-in session history ([ADR 0019](adr/0019-opt-in-session-history.md), see [Session history](session-history.md)), which is off by default. The opt-in provider store ([ADR 0021](adr/0021-provider-credentials.md), see [provider credentials](installation.md#provider-credentials-and-custom-providers)) persists credential sources, API keys and custom provider definitions, and no session content.
 
 ## Build
 
@@ -398,7 +398,7 @@ npm run build
 npm run inspect
 ```
 
-Listing tools and testing input validation needs no provider credentials. An accepted prompt needs existing local Pi authentication and an available provider and model.
+Listing tools and testing input validation needs no provider credentials. An accepted prompt needs local authentication for the profile's provider (Pi's own login by default, or a key stored with `pi-session-mcp-provider auth set`) and an available provider and model.
 
 Inspector 2.x keeps its server catalog in `~/.mcp-inspector/`. Without an OS keychain it also stores secrets there unencrypted; `MCP_INSPECTOR_SECRET_STORE=memory` keeps them in memory only.
 
@@ -441,7 +441,7 @@ provider/engine observations, not as evidence of such a mismatch. A generic
 
 ## Pi authentication and data boundary
 
-Pi's existing local authentication mechanism belongs to Pi. Do not copy credential values into the repository configuration, MCP registration command, MCP tool input, logs, or documentation. The server only checks whether authentication can be resolved; it never emits the auth object, source, path, headers, base URL, or raw refresh/provider failure.
+Pi's existing local authentication mechanism belongs to Pi and is the default source for every built-in provider. Do not copy credential values into the repository configuration, MCP registration command, MCP tool input, logs, or documentation. The server only checks whether authentication can be resolved; it never emits the auth object, source, path, headers, base URL, or raw refresh/provider failure. A key that the operator stores with `pi-session-mcp-provider auth set` lives in the opt-in provider store, which only that command writes; no MCP tool accepts or returns a key. See [provider credentials](installation.md#provider-credentials-and-custom-providers). For a container workspace, the launcher copies the selected providers' credentials into that writer's private directory; see [credentials and residual risks](isolation-setup.md#credentials-and-residual-risks).
 
 Prompts, provider errors, complete model objects, SDK identifiers, credential fields, tool arguments/results, thinking blocks, and transcripts are not public metadata. `assistantText` can repeat sensitive workspace or tool content and must be treated as sensitive.
 
@@ -465,7 +465,7 @@ Verify that `PI_SESSION_MCP_CONFIG` names the intended absolute JSON file, it co
 
 ### Pi selection or authentication fails
 
-Use a locally configured exact provider/model pair and existing Pi authentication. Do not try to repair an error by adding credentials to the config or MCP request. Safe errors distinguish unknown provider/model, unavailable model, missing/unavailable local authentication, unavailable thinking level, and verified-selection mismatch.
+Use a locally configured exact provider/model pair and working authentication for that provider: Pi's login, or the source that `pi-session-mcp-provider list` shows for it. Do not try to repair an error by adding credentials to the config or MCP request. Safe errors distinguish unknown provider/model, unavailable model, missing/unavailable local authentication, unavailable thinking level, and verified-selection mismatch.
 
 ### A turn remains `running`
 

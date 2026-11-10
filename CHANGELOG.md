@@ -35,6 +35,16 @@
   cache entry alive. Sessions now set `streaming` explicitly, the SDK default
   up to 1.5.0, so this update does not change it: a session that waits for its
   next prompt sends no provider request.
+- The README, the project rules, client setup and the architecture scope match
+  the opt-in provider credentials of 0.20.0
+  ([#275](https://github.com/plagor44-ux/pi-session-mcp/issues/275)). They no
+  longer say that setup never asks for a credential, that Pi authentication is
+  never stored, or that the session history is the only persistent store.
+  They name the three credential sources, the unencrypted local provider store,
+  the guided handoff to `pi-session-mcp-provider auth set` and the credentials a
+  container writer receives. Guarantees about omitted data are scoped to errors
+  and metadata; `assistantText` is described as unsanitized model output that
+  can repeat secrets. Documentation only; no runtime or contract change.
 
 ### Fixed
 

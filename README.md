@@ -18,6 +18,7 @@ flowchart LR
   P --> M[("Model provider")]
   S -. "container workspaces" .-> W["Leased writer pool<br/>(rootless Podman)"]
   S -. "opt-in" .-> H[("Session history")]
+  S -. "opt-in" .-> K[("Provider store")]
   S -. "opt-in" .-> R{{"Tier routing"}}
 ```
 
@@ -28,7 +29,7 @@ flowchart LR
 - **Work goes to a model you choose.** An execution profile binds a provider, a model and a thinking level, so routine work can run on a local or cheaper model.
 - **Follow-ups keep their context.** A session stays open across prompts.
 - **You set the limits.** The client selects aliases only. The default profile is read-only, and profiles grant exactly the skills and external MCP tools you list.
-- **Predictable to automate.** Sessions and turns have few states and stable error codes. Results contain no paths, credentials, prompts or raw provider errors.
+- **Predictable to automate.** Sessions and turns have few states and stable error codes. Errors and the session, turn and capability metadata carry no paths, credentials, prompts or raw provider errors. The worker's answer, `assistantText`, is model output and comes back unsanitized.
 
 It is not the right tool when you want to work with Pi yourself (run Pi directly), when you need remote access, several users or sessions that survive a restart, or when you need to contain untrusted code: a `coding` profile limits Pi's tools, but it is not an operating-system sandbox.
 
@@ -44,7 +45,7 @@ curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
 
 On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. The `&&` chain runs the installer only after both downloads and the checksum succeeded.
 
-The script installs its exact pinned version and runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary; setup never asks for a credential.
+The script installs its exact pinned version and runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary. Setup does not read, print or store a credential. When you apply on an interactive terminal, the interview first offers to run `pi-session-mcp-provider auth set <provider>` for providers you name. That command prompts for an API key with echo off and stores it in Pi Session MCP's own [provider store](docs/installation.md#provider-credentials-and-custom-providers); setup receives only its exit status. Answer no, the default, and Pi's login stays the only credential source.
 
 - Plan without writes: `pi-session-mcp-setup --guided`.
 - Non-interactive or agent-driven installs: [agent guide](docs/agent-install.md).
@@ -80,7 +81,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 | Session history | Opt-in, redacted local SQLite record of sessions, with a CLI for listing, verdicts, queries and export. | [Session history](docs/session-history.md) |
 | Tier routing | Opt-in server-side choice of a profile within a tier (`ultra`, `hightech`, `medium`, `low`), manual or learning from history. | [Operate routing](docs/installation.md#operate-routing) |
 | Doctor and setup | An offline health check, and reproducible registration, verification and removal for each client. | [Client setup](docs/client-setup.md) |
-| Provider CLI | `pi-session-mcp-provider` manages local provider definitions and credential sources offline. | [Provider credentials](docs/installation.md#provider-credentials-and-custom-providers) |
+| Provider CLI | `pi-session-mcp-provider` manages local provider definitions and each provider's credential source (Pi's login, a stored API key or none) offline. | [Provider credentials](docs/installation.md#provider-credentials-and-custom-providers) |
 
 ## Status
 
@@ -96,14 +97,16 @@ The package version is **0.20.0**.
 
 ## Security model
 
-- **Local and single-peer.** No network listener and no daemon. Sessions live in memory and end with the server process. The opt-in session history records redacted sessions but cannot restore them.
-- **Aliases instead of paths.** No tool accepts a working directory, a model, a provider or a credential. Pi's existing local authentication is reused and never stored, printed or returned.
+- **Local and single-peer.** No network listener and no daemon. Sessions live in memory and end with the server process; nothing restores them. The opt-in [session history](docs/session-history.md) keeps a record of sessions for reading, redacted on a best-effort basis. The opt-in provider store keeps credential sources, API keys and custom provider definitions, and no session content.
+- **Aliases instead of paths.** No tool accepts a working directory, a model, a provider or a credential, and no tool result carries a credential.
+- **Credentials stay outside MCP.** By default each provider uses Pi's own login (`inherit`). Pi Session MCP resolves it through the Pi SDK and does not print or return it. `pi-session-mcp-provider auth set` can store an API key for one provider in a local store, protected by file permissions (`0700` directory, `0600` files) and not encrypted; that key then replaces Pi's login for that provider. A container writer receives the credentials of its selected providers and no others, an OAuth entry without its refresh token, and code that runs in that writer can read them. See [provider credentials](docs/installation.md#provider-credentials-and-custom-providers) and [ADR 0021](docs/adr/0021-provider-credentials.md).
 - **Explicit policy file.** The configuration comes only from `PI_SESSION_MCP_CONFIG`, never from the client's working directory.
-- **Sanitized results.** Errors are stable codes without paths, prompts, provider errors or credential locations. `assistantText` can repeat workspace content and is sensitive.
+- **Sanitized errors and metadata.** Errors are stable codes, and session, turn and capability metadata are whitelists. They carry no paths, prompts, raw provider errors, credentials or credential locations.
+- **Unsanitized answers.** `assistantText` is the worker model's output, returned as written and capped at 64 KiB. It can repeat workspace content, absolute paths and any secret the worker read. Treat it as sensitive.
 - **Fail closed.** Unknown fields, unknown aliases, unexpected client output and divergent registrations are rejected, not repaired.
 - **Bounded waiting.** Session creation, prompt acceptance, abort, close and shutdown have fixed deadlines.
 
-The [threat model](docs/threat-model.md) states the assumptions and limits, including what a `coding` profile does not protect against.
+The [threat model](docs/threat-model.md) states the assumptions and limits, including what a `coding` profile does not protect against and what code in a container writer can do with the credentials it receives.
 
 ## Documentation
 
