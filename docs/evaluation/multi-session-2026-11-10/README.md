@@ -20,25 +20,44 @@ Claude Code ran on both targets.
   `bb1620ad94f97a68b73806bee846a9f65daae32b18f8ec8ecab7245b6c080c31` in both.
   Only the `acceptance` verdict that it computes counts.
 - Target B: the clone and build of the cycle of the same day, commit
-  `93980d93c4b748ada38b8137fedca547aa293150` with Pi SDK `1.5.2`, clean. The
+  `93980d93c4b748ada38b8137fedca547aa293150` with Pi SDK `1.5.2`, clean, no
+  tag. SHA-256 of `dist/main.js`:
+  `362286248e2b59c3b90058533427f89d3168983584c4e9fdeecd2c5f9a5ab336`. The
   harness's digest over `dist/` is
   `f200521c4ac8679c37f6e10acd4c44a3f5f603297fa4d2a24a9178969911d416`.
-- Target A: a fresh clone of the tag `v0.20.0`, commit
+- Target A: a fresh clone of the annotated tag `v0.20.0` (tag object
+  `4884c13b6092732301b39e82907d217cf5718f68`), commit
   `727d8ac8df5a7bbbf20c0744c74458ca97877b56` with Pi SDK `1.5.0`, clean, built
-  with `npm ci`, `npm run build` and `npm run build:cli`. The harness's digest
-  over `dist/` is
+  with `npm ci`, `npm run build` and `npm run build:cli`. Their logs show no
+  error; their exit statuses were not recorded. `dist/main.js` has the same
+  SHA-256 as for target B, because that file is byte-identical in both
+  builds. The harness's digest over `dist/` is
   `372826e51a12f0a707c18c1ae17fbda52a998a8027106f27ba050f25e6ba0c00`. Level 1
   was not run on this clone.
+- Release binding of target A. It was taken after the runs, not before the
+  first one as the plan asks; the clone was still clean then, and the
+  harness's digest over `dist/`, computed again, was the one bound at
+  `prepare`. `npm pack --ignore-scripts` in the clone, with npm `10.9.9`, gave
+  a tarball with the shasum `9f9e8f7f99fc139bb022c8b73b6cc0ae2dc14cea`. The
+  registry serves `0.20.0` with the shasum
+  `e08a0b300afc9b658bf05afccc3b5ea9c1f5fedb`. The two archives differ, and
+  their 1065 entries have the same paths, modes and contents. The runs used
+  the clone's build, not an installed package.
 - Host: Linux (`x64`), Node.js `22.23.3`.
 - Configuration: `prepare --from-profile` copied provider, model and thinking
   level of one operator `coding` profile, `deepseek` `deepseek-flash` with
-  thinking `high`, into the three run profiles. No extensions. Every prepared
-  run had the configuration fingerprint
+  thinking `high`, into the three run profiles, one `read-only` and two
+  `coding`. No extensions. The ten fixture workspaces had no execution mode
+  set, and event delivery was off. Every prepared run had the configuration
+  fingerprint
   `sha256:8b2372698a599f9a7226f836ba6f23f91090d7931f09c2b123ff31e4ffe2819e`.
 - Clients, started as the harness starts them: Claude Code `2.1.322`, with the
   model `claude-sonnet-5-5` selected through the client's model environment
   variable because the harness passes none; Codex CLI `0.166.0` with its
-  default model, which its JSON output does not report.
+  default model, which its JSON output does not report. Each client got the
+  server from the harness for that run only: Claude Code through a run-scoped
+  MCP configuration with `--strict-mcp-config`, Codex through `-c` options
+  with `--ignore-user-config`.
 - Controller skill: for Claude Code installed by the target's own setup in the
   controller's directory (`applied`, `skill_installed`, a regular copy equal to
   the shipped skill); for Codex a run-scoped link. Tree digest
@@ -48,8 +67,9 @@ Claude Code ran on both targets.
   target A. Both copies in the operator's home have the digest of target A.
 - Prepared runs: B-1 (`parallel`, `abort`) and B-2 (`trio`) on target B; A-1
   (`parallel`, `abort`), A-2 (`trio`) and A-3 (the two Codex scenarios that
-  got no clean run on A-1) on target A. Each client and scenario was launched
-  once per prepared run.
+  got no clean run on A-1) on target A. Each scheduled pair of client and
+  scenario was attempted once per prepared run. Four Codex attempts were
+  refused before launch: all three on target B and `abort` on A-1.
 
 Skill precedence with Claude Code `2.1.322`, checked on B-1 before its first
 scenario: a session in the prepared controller directory, started with the
@@ -115,6 +135,15 @@ Target A, `v0.20.0`:
 6 for Claude Code on target A; 3 and 7 for Codex on A-1 and A-2; 3 and 6 for
 Codex on A-3.
 
+Exit statuses: the harness's `run` command exited with 0 for all ten launched
+runs, the two with a failed verdict included. Its exit status says that the
+run finished; the verdict is in its result. In each of the ten the client
+process exited with 0 and was not ended by the harness's time limit. The
+refused Codex `abort` on A-1 exited with 2. For the three refused Codex
+attempts on target B only the refusal was recorded, not the exit status.
+`prepare` and `evidence` exited with 0 for A-1, A-2 and A-3; for B-1 and B-2
+their exit statuses were not recorded.
+
 ## Independent checks
 
 These are the harness's own checks, read from its results.
@@ -134,8 +163,8 @@ These are the harness's own checks, read from its results.
 ## What this shows and what it does not
 
 - The same build, fixtures and profiles for both clients exist only on
-  `v0.20.0`. There both clients passed `parallel` and `abort`, Codex on a
-  second prepared run, and `trio` passed with Claude Code and failed with
+  `v0.20.0`. There both clients passed `parallel` and `abort`, Codex on the
+  further prepared run A-3, and `trio` passed with Claude Code and failed with
   Codex on one timing criterion.
 - On the `main` commit only Claude Code ran. Codex stays untested there with
   this harness until the copies in the operator's home equal the candidate's

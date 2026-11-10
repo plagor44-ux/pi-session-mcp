@@ -19,17 +19,19 @@ delivery off.
   private runtime directory for the spool and the claims, two synthetic
   workspaces in execution mode `host` with accepted host writes, a `coding`
   profile on `deepseek` `deepseek-flash` (thinking `high`, `maxTurnSeconds`
-  600) that every session used, and an unused `read-only` default profile.
-  Offline Doctor passed with 23 checks in the setup environment.
+  600) that every session used, and an unused `read-only` default profile on
+  `openai` `gpt-6-luna` (thinking `low`). Offline Doctor exited with 0 and
+  passed with 23 checks in the setup environment.
 - Hook: installed only by the candidate's own
   `pi-session-mcp-setup --apply --target claude-code:project:pi-session-mcp`
   in a disposable project directory with a disposable home. The dry run
   reported `hook_add_planned`; `--apply` reported `applied`, `skill_installed`
   for both controller skills and `hook_added`; `--verify` reported
-  `mcp_verified`, `skill_verified` and `hook_verified`. The project settings
-  then held exactly one `PostToolUse` entry with `asyncRewake`, the
-  candidate's wake program, the default budget of 1,800,000 ms and a timeout
-  of 1860 seconds. No manual hook was used.
+  `mcp_verified`, `skill_verified` and `hook_verified`. Each of the three
+  commands exited with 0. The project settings then held exactly one
+  `PostToolUse` entry with `asyncRewake`, the candidate's wake program, the
+  default budget of 1,800,000 ms and a timeout of 1860 seconds. No manual hook
+  was used.
 - Client: Claude Code `2.1.322` as `claude -p` with stream-json input and
   output, held open by a driver, model `claude-sonnet-5-5`, project settings
   only (`--setting-sources project,local`, so no user-scope hook took part),
@@ -46,12 +48,14 @@ delivery off.
   session; the digest file verified before each scenario and afterwards. The
   prompts are not published.
 
-A first setup step failed with `doctor_failed` before any session: the kit's
-configuration had a `coding` profile as its only and default profile, which
-Doctor reports as `config_invalid`. Setup changed nothing. The configuration
-got the `read-only` default profile, and the pre-registration was digested
-again. A smoke session without a Pi tool call confirmed that the driver could
-hold and end a session; it is not a wake result.
+A first setup attempt failed before any session: the kit's configuration had
+a `coding` profile as its only and default profile, which Doctor reports as
+`config_invalid`. Offline Doctor exited with 2, and the setup dry run,
+`--apply` and `--verify` each exited with 1 and reported `doctor_failed`.
+Setup changed nothing. The configuration got the `read-only` default profile,
+and the pre-registration was digested again. A smoke session without a Pi tool
+call confirmed that the driver could hold and end a session; it is not a wake
+result.
 
 ## Results
 
@@ -63,15 +67,17 @@ Each scenario ran once.
 | W2: two turns, 15-second and 50-second commands | passed | Both prompts were accepted (8.1 s and 8.8 s) before any read, and the round ended at 10.7 s. The waiters ended at 25.1 s and 60.7 s; new rounds started at 26.9 s and 62.7 s. Each turn was read once and `completed` (27.6 s and 62.7 s; turn durations 17.1 s and 52.0 s). No read returned `running`, no `sleep`. Both sessions closed, final list empty |
 | W4: abort one turn, close the other session while its turn runs (90-second commands) | passed | Both prompts were accepted at 10.0 s and 10.1 s. The abort returned `ok`; the other session was closed at 12.3 s and its turn was never read. Both waiters and both worker commands had ended by 12.2 s. The aborted turn was read once, `aborted` with no `abortReason`, at 15.0 s inside the controller's first round; no further round started. Final list empty; neither workspace had a change in Git |
 
-In every scenario no server, waiter or worker process of the run remained 15
-seconds after the client had ended.
+The client process exited with 0, without a signal and before the driver's
+time limit, in the smoke session and in each of the three scenarios. In every
+scenario no server, waiter or worker process of the run remained 15 seconds
+after the client had ended.
 
 The client's stream-json output showed no reminder text in any session. The
 wake is therefore inferred from a controller round that starts without input
 shortly after the waiter ended, not from a visible reminder; the W4 criterion
 "no reminder names the closed session's turn" rests on the same observation
-(no round started, the turn was never read). The driver saw process lifetimes,
-not exit codes.
+(no round started, the turn was never read). Of the server, the waiters and
+the worker commands the driver saw process lifetimes, not exit codes.
 
 ## Independent checks
 
@@ -86,9 +92,9 @@ not exit codes.
 - Registrations: the digests of the real Claude Code MCP registrations, of the
   Codex configuration and of the real user settings were identical before and
   after. The server build was unchanged.
-- Removal: `pi-session-mcp-setup --remove` for the same target reported
-  `removed`, `skill_removed` for both skills and `hook_removed`, and left the
-  project settings without a hook.
+- Removal: `pi-session-mcp-setup --remove` for the same target exited with 0,
+  reported `removed`, `skill_removed` for both skills and `hook_removed`, and
+  left the project settings without a hook.
 - Reported client cost: USD 0.90 for the smoke session and the three
   scenarios.
 
