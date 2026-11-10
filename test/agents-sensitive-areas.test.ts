@@ -35,3 +35,23 @@ it("names an existing decision record, entry code and test for every sensitive a
     expect([...records, ...paths].filter((path) => !existsSync(join(root, path))), item).toEqual([]);
   }
 });
+
+/** The `src/` or `test/` paths an item names. */
+function named(item: string, prefix: "src" | "test"): string[] {
+  return [...item.matchAll(/`((?:src|test)\/[^`]+)`/g)].map((match) => match[1]!).filter((path) => path.startsWith(`${prefix}/`));
+}
+
+// Existing files could be any files. The named tests must exercise the named code, and no two
+// areas may start at the same code, so one unrelated pointer cannot stand in for all four.
+it("names tests that import the entry code of their area, and other entry code for each area", () => {
+  const owner = new Map<string, string>();
+  for (const item of areas()) {
+    const tests = named(item, "test").map((path) => readFileSync(join(root, path), "utf8"));
+    for (const source of named(item, "src")) {
+      const specifier = `"../${source.replace(/\.ts$/, ".js")}"`;
+      expect(tests.some((text) => text.includes(specifier)), `${source} is imported by no test of: ${item}`).toBe(true);
+      expect(owner.get(source), `${source} is named by two areas`).toBeUndefined();
+      owner.set(source, item);
+    }
+  }
+});

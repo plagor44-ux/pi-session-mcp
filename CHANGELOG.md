@@ -119,7 +119,10 @@
   credential routing, tool binding and the writer lifecycle to the decision
   records, the code to start at and the tests to run.
   `test/agents-sensitive-areas.test.ts` fails when one of the named files no
-  longer exists. Project rules and a test only.
+  longer exists, when none of an area's tests imports its entry code, or when
+  two areas name the same entry code. The pointers are in `AGENTS.md` and not
+  in a bundled skill, because the package ships neither `src/` nor `test/`.
+  Project rules and a test only.
 
 ### Fixed
 
