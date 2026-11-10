@@ -21,9 +21,12 @@ was blocked at the preflight and started no task; attempt 2 is the cycle.
   request #283), clean, built with `npm ci`, `npm run build:cli` and
   `npm run build`. SHA-256 of `dist/main.js`:
   `362286248e2b59c3b90058533427f89d3168983584c4e9fdeecd2c5f9a5ab336`, the same
-  before and after the cycle. SHA-256 over the sorted per-file SHA-256 list of
-  the 230 files in `dist/`:
-  `f316718abb64856b338e6d546b9ebe3ca4dfa6ab105d590724ccdbf22bab0115`.
+  before and after the cycle. That file is byte-identical to the one built
+  from the tag `v0.20.0`, so it does not tell the two builds apart. The
+  SHA-256 over the sorted per-file SHA-256 list of the 230 files in `dist/`
+  does: `f316718abb64856b338e6d546b9ebe3ca4dfa6ab105d590724ccdbf22bab0115`
+  here, `541b0000682a94b5b02c08e83aa42e124a1385c100d220d5be6e2fa9628ea19c` for
+  a build of `v0.20.0` on the same machine.
 - Level 1 on this clone, before the cycle: `npm ci`, `npm run typecheck`,
   `npm run build:cli`, `NODE_OPTIONS=--unhandled-rejections=strict npm test`
   (190 test files and 5126 tests passed, 15 skipped), `npm run build` and
@@ -168,6 +171,9 @@ package, the provider store with a stored key
 ([#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278)),
 interactive approval dialogs, external MCP grants, client restart or resume,
 container writers (no workspace of this cycle was a container workspace), the
-Claude Code wake (delivery was off), session history, tier routing, macOS, and
-model capability on larger work. The fixture tasks are deliberately small. One
+Claude Code wake (delivery was off; a
+[targeted check](../wake-2026-11-10/README.md) ran separately), several
+sessions at the same time (see the
+[multi-session record](../multi-session-2026-11-10/README.md)), session
+history, tier routing, macOS, and model capability on larger work. The fixture tasks are deliberately small. One
 cycle with one model per profile says nothing about other providers or models.

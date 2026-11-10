@@ -1,8 +1,14 @@
 # Level 3 live acceptance with Codex and Claude Code: execution plan
 
-**Status:** plan only. Nothing in this plan has been run. Every step that uses a
-real client, a provider, a budget or a persistent installation needs its own
-maintainer approval before it starts.
+**Status:** Parts 1, 2 and 3 ran on 2026-11-10 with target B, the `main`
+commit `93980d9`. Part 3 ran there with Claude Code only and, for both clients,
+on the published `v0.20.0`. The records are the
+[cycle](../../evaluation/level3-2026-11-10/README.md), the
+[wake check](../../evaluation/wake-2026-11-10/README.md) and the
+[multi-session skill acceptance](../../evaluation/multi-session-2026-11-10/README.md).
+#278 has not been run. The plan stays as the description of the method; every
+later run that uses a real client, a provider, a budget or a persistent
+installation needs its own maintainer approval before it starts.
 
 **Issues:** [#277](https://github.com/plagor44-ux/pi-session-mcp/issues/277)
 (Level 3 cycle) and, separately,
@@ -235,14 +241,22 @@ Independent of Parts 1 to 3 and never evidence for the gate.
 
 ## Approvals this plan needs
 
-- [ ] Target under test (A, B or both).
-- [ ] Worker provider, models and budget ceiling.
-- [ ] Real client runs for Part 1.
-- [ ] Part 2 and Part 3, each separately.
-- [ ] For Part 3 on target B: the change to the controller skill copies in the
-      operator's home.
-- [ ] #278: the disposable installation, the test key and its removal.
-- [ ] Publishing each record through a pull request.
+- Target under test (A, B or both).
+- Worker provider, models and budget ceiling.
+- Real client runs for Part 1.
+- Part 2 and Part 3, each separately.
+- For Part 3 on target B: the change to the controller skill copies in the
+  operator's home.
+- #278: the disposable installation, the test key and its removal.
+- Publishing each record through a pull request.
+
+State on 2026-11-10: the maintainer approved target B, the real client runs,
+the further tests and the publication in general terms and named neither
+models nor a budget ceiling. The runs therefore used the provider and model
+selection of the last cycle and the bounds stated in each record. The change
+to the controller skill copies in the operator's home was not approved and not
+made, so Part 3 with Codex ran on `v0.20.0`, whose skill equals those copies.
+#278 waits for a dedicated test key that only the maintainer can enter.
 
 ## Not covered by any part
 

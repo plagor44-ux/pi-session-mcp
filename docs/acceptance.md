@@ -513,7 +513,10 @@ Pi Session MCP tools; the script never does.
   skill of the same name. With `--setting-sources project,local`, as the
   harness starts it, Claude Code `2.1.296` listed only the project copy when a
   different personal copy existed (observed on 2026-10-12 with a marker skill);
-  without that flag the personal copy shadowed the project copy. Re-check this
+  without that flag the personal copy shadowed the project copy. On 2026-11-10
+  Claude Code `2.1.322`, started the same way, loaded the project copy while a
+  different personal copy existed
+  ([record](evaluation/multi-session-2026-11-10/README.md)). Re-check this
   when the client version changes. Codex's precedence between its home skills
   and the run's repository skill is not established, so a Codex run is refused
   while any bound Codex skill source (`$CODEX_HOME/skills`,
@@ -787,6 +790,13 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
 its own.
+Two targeted records of the same day are not Level 3 cycles and add nothing to
+that gate: the
+[Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
+setup installs, on the same commit, and the
+[multi-session skill acceptance](evaluation/multi-session-2026-11-10/README.md)
+with Claude Code on that commit and with both clients on the published
+`0.20.0`, where one Codex scenario failed a timing criterion.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. The
@@ -2694,6 +2704,14 @@ targets applied and verified, and `--writer <name> --verify` for every writer.
 
 The bubblewrap and Podman-gated test files were not run on their own on the
 tag; the log of the tag clone's test run holds only the totals.
+
+Added later on 2026-11-10: a targeted multi-session skill acceptance on a
+fresh clone of the tag, with both clients, real workers and Node.js `22.23.3`.
+Claude Code passed `parallel`, `abort` and `trio`. Codex passed `parallel` and
+`abort` on a second prepared run, after its first `parallel` run had failed on
+a changed bound resource, and failed `trio` on one timing criterion. See the
+[record](evaluation/multi-session-2026-11-10/README.md). It is not a Level 3
+cycle.
 
 Not established for `0.20.0`: a turn against a real provider with a stored
 key; a full interactive `sh install.sh` run with the key step on a PTY; a
