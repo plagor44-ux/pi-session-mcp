@@ -1,6 +1,6 @@
 {
   "name": "pi-session-mcp",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "description": "Local stdio MCP server for controlled Pi coding-agent sessions",
   "license": "MIT",
   "keywords": [
@@ -25,6 +25,7 @@
     "pi-session-mcp-wake": "dist/wake-main.js",
     "pi-session-mcp-history": "dist/history-main.js",
     "pi-session-mcp-routing": "dist/routing-main.js",
+    "pi-session-mcp-provider": "dist/provider-main.js",
     "pi-session-mcp-doctor": "scripts/doctor.mjs"
   },
   "files": [

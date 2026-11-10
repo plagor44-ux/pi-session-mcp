@@ -643,6 +643,11 @@ flowchart TD
 
 ## Product boundary and deferred work
 
+Opt-in per-provider credentials and operator-defined providers are now within
+scope under [ADR 0021](adr/0021-provider-credentials.md) (#265). Pi authentication
+remains the default for built-in providers; product keys, explicit no-credential
+sources and selected writer handoff do not introduce a shared credential service.
+
 Follow [ADR 0003](adr/0003-post-mvp-maintenance.md), together with the approved
 macOS, extension and skill decisions in ADRs 0005–0007. Maintain local stdio,
 in-memory state, the opt-in session history (ADR 0019) and one trusted local
@@ -659,7 +664,7 @@ peer.
 | Resume | Actual loss of useful work on restart |
 | HTTP/remote/mobile | Concrete need existing SSH/remote development cannot meet; separate ADR/security decision |
 | Finer turn_failed | Closed public final SDK cause discriminator after retry/compaction, not error-text guessing |
-| Multi-user/UI/credentials | Separate justified product scope and ADR |
+| Multi-user/UI/shared credential service | Separate justified product scope and ADR |
 | Explicit unverified code for an unreadable client start time (R15) | A run that passes while the start time was unreadable, or a demonstrated need; today the run fails with `noServerObserved`, so it cannot pass falsely |
 | Former pi-control #31/#32 | Closed as not_planned; no automatic migration/reopening |
 | Former release gates/#11–#14 | Historical; bind current acceptance to the current build |

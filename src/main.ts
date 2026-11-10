@@ -20,6 +20,7 @@ import { openHistoryStore, classifyStoreError, type HistoryStore } from "./histo
 import { createHistoryRecorder, type HistoryRecorder } from "./history/recorder.js";
 import { defaultIsAlive, procStartOf, reconcileInstances } from "./history/reconcile.js";
 import { knownValuesFromEnv, Redactor } from "./history/redact.js";
+import { loadRuntimeProviderPolicy, providerSecretValues, refreshProviderRedactionValues } from "./provider-store.js";
 import { compilePathRule } from "./history/path-rule.js";
 import type { GapCode } from "./history/constants.js";
 import type { AppConfig } from "./config.js";
@@ -81,14 +82,21 @@ async function openHistory(config: AppConfig): Promise<{ store: HistoryStore; re
     writeDiagnostic({ level: "warn", event: "history_inactive", stage: "startup", code: classifyStoreError(error) });
     return undefined;
   }
+  try { await loadRuntimeProviderPolicy(); }
+  catch {
+    store.close();
+    writeDiagnostic({ level: "warn", event: "history_inactive", stage: "startup", code: "history_unavailable" });
+    return undefined;
+  }
   const knownValues = knownValuesFromEnv(process.env);
   const redactors = new Map<string, Redactor>();
   const recorder = createHistoryRecorder({
     store,
     redactorFor: (workspace) => {
+      refreshProviderRedactionValues();
       let redactor = redactors.get(workspace);
       if (redactor === undefined) {
-        redactor = new Redactor({ knownValues, pathRule: compilePathRule([...history.redactPaths, ...(history.workspaces.get(workspace) ?? [])]) });
+        redactor = new Redactor({ knownValues, secretValues: providerSecretValues, pathRule: compilePathRule([...history.redactPaths, ...(history.workspaces.get(workspace) ?? [])]) });
         redactors.set(workspace, redactor);
       }
       return redactor;

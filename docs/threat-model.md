@@ -6,6 +6,30 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 
 ## Threats and mitigations
 
+- **Opt-in provider credentials ([ADR 0021](adr/0021-provider-credentials.md)):**
+  the account-database home fixes the store at
+  `~/.config/pi-session-mcp/providers/`; `HOME` and `XDG_CONFIG_HOME` cannot
+  relocate it. The directory is 0700 and its regular files are 0600,
+  user-owned and opened without following links, with inode checks. Mutations
+  use a bounded exclusive kernel lock, temporary-file fsync, rename and a
+  directory fsync, so a revocation is durable.
+  Removing a custom provider revokes its credential first; an interruption
+  leaves a keyless custom definition, which never inherits Pi authentication.
+  Retrying removal completes it. An invalid store or binding never falls back
+  to Pi credentials. `auth remove` means `none`; only explicit `auth inherit`
+  restores the built-in provider's Pi authentication.
+  New runtimes read the current policy; existing sessions retain their keys.
+  A writer receives only its selected keys and non-secret provider definitions
+  on its next launch. Code inside that writer can read, use or exfiltrate those
+  selected keys; this is not a credential sandbox. Unselected credentials, the
+  host store and OAuth refresh tokens do not cross the boundary. Host coding
+  runs as the operator and can access the store. Confined read-only tools and
+  sandboxed shells cannot access the home store: the store directory is never
+  a read root, also not through a skill placed in it or linked to it, and a
+  read-only session whose workspace overlaps it does not start. History redaction includes
+  stored keys, including rotated values still used by running sessions; SDKs,
+  extensions and writer code that handle keys remain outside this guarantee.
+
 - **Review of a moving tree ([ADR 0015](adr/0015-review-snapshots.md)):** a
   reviewer on a host alias reads whatever the operator's checkout holds at
   each tool call. A `snapshot` workspace binds a session to one commit in a
@@ -104,8 +128,10 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     request. A granted research
     tool with free-form input (search, documentation lookup) is a possible
     outbound channel for workspace content; prefer query-style tools.
-- **Unsafe diagnostics:** Doctor is a separate offline CLI with no MCP, Pi,
-  provider, credential, or network dependency. Its human/JSON output is
+- **Unsafe diagnostics:** Doctor is a separate offline CLI with no MCP or network dependency.
+  Its `provider_store` check validates local permissions, ownership, schemas
+  and credential bindings; built-in identity discovery uses the offline catalog
+  without `getAuth` or credential refresh. Its human/JSON output is
   sanitized and its stable exit statuses are 0 (healthy), 1 (warning), 2
   (failed check), and 64 (usage error).
 - **Untrusted working directory:** an MCP client starts the server in the
@@ -171,7 +197,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
 
 - **Workspace escape:** callers can request configured workspace aliases only; validated configuration maps aliases to resolved paths. There is no arbitrary `cwd` input.
 - **Execution-selection escalation:** callers cannot supply raw provider, model, thinking level, permission profile, or credentials. A configured execution-profile alias binds all of those values; exactly one configured default is `read-only`. The legacy `profile` input is rejected rather than silently reinterpreted.
-- **Resolver fallback:** fuzzy CLI resolution, settings, restore, and first-available fallback could run a different model. The adapter uses only exact `ModelRuntime.getProvider()` and `getModel()` on its durable runtime, then passes an explicit model to `createAgentSession`.
+- **Resolver fallback:** fuzzy CLI resolution, settings, restore, and first-available fallback could run a different model. The adapter uses only exact `ModelRuntime.getProvider()` and `getModel()` on the session's own runtime, then passes an explicit model to `createAgentSession`.
 - **Missing/auth-refresh failure:** a catalog entry alone does not prove authentication. `checkAuth()`, `getAuth(model)`, and local availability are checked with a deadline before creation. Auth values and raw refresh failures never leave the adapter.
 - **Thinking-level clamping:** SDK capability handling can alter a requested level. The adapter compares the effective `session.thinkingLevel` after creation and disposes on a mismatch.
 - **Orphaned SDK session:** a post-creation mismatch or later registry failure could otherwise leave a live Pi handle. The adapter holds it locally until all postconditions pass, best-effort disposes on each later failure, and the registry admits only verified handles.

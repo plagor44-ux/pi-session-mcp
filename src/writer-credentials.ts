@@ -54,6 +54,11 @@ export async function writeBoundaryCredentials(agentDir: string, value: Record<s
   await writeAtomic(agentDir, "auth.json", value);
 }
 
+export async function writeBoundaryProviders(agentDir: string, value: Record<string, unknown>): Promise<void> {
+  await mkdir(agentDir, { recursive: true, mode: 0o700 });
+  await writeAtomic(agentDir, "provider-definitions.json", value);
+}
+
 export function expiresWithin(host: unknown, providers: readonly string[], minutes: number, now: number): boolean {
   return selectedEntries(host, providers).some(([, entry]) => {
     if (entry.type !== "oauth") return false;

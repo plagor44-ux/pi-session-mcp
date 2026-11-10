@@ -205,7 +205,15 @@ export function createHistoryRecorder(options: HistoryRecorderOptions): HistoryR
       const at = Date.parse(timestamp);
       return earlier.find(({ turn: failed }) => failed.completedAt !== undefined && at <= Date.parse(failed.completedAt))?.turn ?? turn;
     };
-    const redactor = options.redactorFor(state.record.view.workspace);
+    let redactor: Redactor;
+    // The redactor reads the provider store; a store that fails mid-run is a gap the next read repairs, never a lost turn.
+    try { redactor = options.redactorFor(state.record.view.workspace); }
+    catch {
+      if (ensureStarted(state) === undefined) tryWriteTurn(state, turn);
+      gap(state, turn.turnId, "history_unavailable");
+      state.unread.push({ turn, code: "history_unavailable" });
+      return;
+    }
     let cursor = state.cursor;
     let position = cursor;
     let header: z.infer<typeof headerSchema> | undefined;

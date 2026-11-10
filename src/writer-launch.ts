@@ -1,6 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { userInfo } from "node:os";
+import { isLoopbackProvider, loadProviderPolicy, type ProviderPolicy } from "./provider-store.js";
+import { catalogBuiltInProviderIds, type CatalogRuntime } from "./model-catalog.js";
+import { writeBoundaryProviders } from "./writer-credentials.js";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CommandRunner } from "./client-adapters/types.js";
@@ -32,6 +35,8 @@ export interface LaunchDependencies {
   warmupHostCredential?: (input: HostCredentialRefresh) => Promise<void>;
   /** The host's persisted Pi model catalog copied into the writer's agent directory; defaults to the host agent directory below `home`. */
   modelsStorePath?: string;
+  providerPolicyFactory?: () => Promise<ProviderPolicy>;
+  providerCatalogRuntime?: () => Promise<CatalogRuntime>;
   setInterval(callback: () => void, ms: number): ReturnType<typeof setInterval>;
   clearInterval(timer: ReturnType<typeof setInterval>): void;
 }
@@ -91,21 +96,34 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
   }
   const providers = state.providers;
   const names = providers.map(({ provider }) => provider);
+  let policy: ProviderPolicy;
+  try { policy = await (deps.providerPolicyFactory ?? (() => loadProviderPolicy({ home: deps.home })))(); }
+  catch { return refuse("writer_not_ready"); }
+  const definitions = policy.definitions(names);
+  if (definitions.some(isLoopbackProvider)) return refuse("provider_unsupported_in_writer");
+  try {
+    const builtinIds = await catalogBuiltInProviderIds(deps.providerCatalogRuntime, async () => policy);
+    if (names.some(id => !builtinIds.includes(id) && !definitions.some(definition => definition.id === id))) return refuse("writer_not_ready");
+  } catch { return refuse("writer_not_ready"); }
+  const inheritedNames = names.filter(id => policy.source(id) === "inherit");
+  try {
+    await writeBoundaryProviders(paths.agent, { v: 1, providers: definitions, sources: Object.fromEntries(names.map(id => [id, policy.blocked(id) ? "none" : policy.source(id)])) });
+  } catch { return refuse("writer_not_ready"); }
   const readHost = async (): Promise<unknown> => {
     try { return JSON.parse(await readFile(join(deps.home, ".pi", "agent", "auth.json"), "utf8")) as unknown; }
     catch { return undefined; }
   };
   const refresh = async () => {
     const host = await readHost();
-    if (expiresWithin(host, names, REFRESH_THRESHOLD_MINUTES, deps.now())) {
+    if (expiresWithin(host, inheritedNames, REFRESH_THRESHOLD_MINUTES, deps.now())) {
       const warmup = deps.warmupHostCredential ?? refreshHostCredential;
       const authPath = join(deps.home, ".pi", "agent", "auth.json");
       // In parallel, so the whole warm-up stays bounded at 20 s; Pi's locked store writes the file, never this launcher.
       // A failed refresh is ignored: the copy below still runs.
-      await Promise.allSettled(selectedOAuthProviders(host, names).map((provider) =>
+      await Promise.allSettled(selectedOAuthProviders(host, inheritedNames).map((provider) =>
         warmup({ authPath, provider, minOAuthValidityMs: REFRESH_THRESHOLD_MINUTES * 60_000, timeoutMs: 20_000 })));
     }
-    await writeBoundaryCredentials(paths.agent, selectBoundaryCredentials(await readHost(), names));
+    await writeBoundaryCredentials(paths.agent, { ...selectBoundaryCredentials(await readHost(), inheritedNames), ...policy.boundaryCredentials(names) });
   };
   const enabled = deps.env.PI_WRITER_NO_CREDENTIAL_REFRESH !== "1";
   try { if (enabled) await refresh(); } catch { return refuse("writer_not_ready"); }
@@ -195,7 +213,7 @@ async function launchLeased(argv: readonly string[], deps: LaunchDependencies, n
 
 if (isEntryPoint(import.meta.url, process.argv[1])) {
   void launchEntry(process.argv.slice(2), {
-    home: homedir(), releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
+    home: userInfo().homedir, releaseRoot: resolve(dirname(fileURLToPath(import.meta.url)), ".."),
     runner: createProcessRunner(), spawnPodman: (args, inheritFds) => spawn("podman", args, { stdio: ["pipe", "inherit", "inherit", ...inheritFds] }),
     env: process.env, now: Date.now, setInterval, clearInterval,
   }).then((code) => { process.exitCode = code; });

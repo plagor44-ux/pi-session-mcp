@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, chmod, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -92,6 +93,34 @@ export interface GuidedMainDependencies {
   dependencies?: GuidedDependencies;
   prompter?: Prompter;
   terminal?: boolean;
+  stderrTerminal?: boolean;
+  setProviderKey?: (provider: string) => Promise<number>;
+}
+
+/** The child's stdout goes to stderr: guided setup's stdout carries only its final report. */
+export const PROVIDER_KEY_CHILD_STDIO = Object.freeze(["inherit", 2, "inherit"] as const);
+
+/** Child inherits the owner's terminal; only its exit status returns to guided setup. */
+export function setProviderKeyInTerminal(provider: string, entry = resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js")): Promise<number> {
+  return new Promise((resolveStatus) => {
+    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: [...PROVIDER_KEY_CHILD_STDIO] });
+    child.once("error", () => resolveStatus(1));
+    child.once("exit", code => resolveStatus(code ?? 1));
+  });
+}
+
+export async function offerProviderCredentials(prompter: Prompter, catalog: PricedModelCatalog, reload: () => Promise<PricedModelCatalog>, run: (provider: string) => Promise<number>, report: (text: string) => void): Promise<PricedModelCatalog> {
+  // Pi's catalog lists dozens of providers, so the owner names the ones to configure instead of being asked about each.
+  if (!(await prompter.confirm("Store a Pi Session MCP API key for a provider now? Pi's own login stays the default", false))) return catalog;
+  const safe = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/;
+  for (;;) {
+    const id = (await prompter.text("Provider ID for the key (empty to continue)", "")).trim();
+    if (id === "") return catalog;
+    if (!safe.test(id) || !catalog.providers().some(p => p.id === id)) { report("Unknown provider ID\n"); continue; }
+    const status = await run(id);
+    catalog = await reload();
+    report(status === 0 && catalog.providers().some(p => p.id === id && p.authConfigured) ? `${id}: key stored\n` : `${id}: not configured\n`);
+  }
 }
 
 export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided"]>, json: boolean, signal: AbortSignal, injected: GuidedMainDependencies = {}): Promise<number> {
@@ -112,8 +141,22 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") return fail("operation_failed"); }
       // Reserve stdout before loading the offline SDK catalog or running a provider probe.
       if (!injected.dependencies) output = (await import("./stdout-guard-install.js")).stdoutGuard.transportStdout as NodeJS.WriteStream;
-      const prompter = injected.prompter ?? (terminal = terminalPrompter(signal)).prompter;
-      let catalog = await (injected.dependencies?.catalog ?? createModelCatalog)();
+      let prompter = injected.prompter ?? (terminal = terminalPrompter(signal)).prompter;
+      const reload = injected.dependencies?.catalog ?? createModelCatalog;
+      let catalog = await reload();
+      if (request.apply && (injected.terminal ?? process.stdin.isTTY) && (injected.stderrTerminal ?? process.stderr.isTTY)) {
+        const currentPrompter: Prompter = {
+          text: (question, fallback) => prompter.text(question, fallback),
+          confirm: (question, fallback) => prompter.confirm(question, fallback),
+          choose: (question, options, fallback) => prompter.choose(question, options, fallback),
+        };
+        catalog = await offerProviderCredentials(currentPrompter, catalog, reload, async provider => {
+          terminal?.close(); terminal = undefined;
+          try { return await (injected.setProviderKey ?? setProviderKeyInTerminal)(provider); }
+          catch { return 1; }
+          finally { if (!injected.prompter) prompter = (terminal = terminalPrompter(signal)).prompter; }
+        }, text => { process.stderr.write(text); });
+      }
       for (;;) {
         const providers = catalog.providers().filter((p) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(p.id));
         process.stderr.write(`Authenticated providers: ${providers.filter((p) => p.authConfigured).map((p) => p.id).join(", ") || "none"}\n`);

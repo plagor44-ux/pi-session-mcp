@@ -5,7 +5,7 @@
  * writing a tarball, so this checks the real packing rules instead of the field's text.
  */
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
@@ -38,9 +38,13 @@ describe("package contents", () => {
   }, 90_000);
 
   it("declares the history CLI and ships its ADR", async () => {
-    const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { bin: Record<string, string> };
+    const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { bin: Record<string, string>; files: string[] };
     expect(manifest.bin["pi-session-mcp-history"]).toBe("dist/history-main.js");
     expect(manifest.bin["pi-session-mcp-routing"]).toBe("dist/routing-main.js");
+    expect(manifest.bin["pi-session-mcp-provider"]).toBe("dist/provider-main.js");
+    // CI runs the tests before the build, so check what the build turns into the bin: `dist/` from `src/`.
+    expect(manifest.files).toContain("dist/");
+    await expect(access(new URL("../src/provider-main.ts", import.meta.url))).resolves.toBeUndefined();
     expect(await packedPaths()).toEqual(expect.arrayContaining(["docs/adr/0019-opt-in-session-history.md"]));
   }, 90_000);
 });

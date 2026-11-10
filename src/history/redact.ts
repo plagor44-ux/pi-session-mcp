@@ -99,8 +99,10 @@ function grepLinePaths(line: string): string[] {
 export class Redactor {
   private readonly knownValues: readonly string[];
   private readonly pathRule: (path: string) => boolean;
+  private readonly secretValues: () => readonly string[];
 
-  constructor(options: { knownValues: readonly string[]; pathRule: (path: string) => boolean }) {
+  constructor(options: { knownValues: readonly string[]; pathRule: (path: string) => boolean; secretValues?: () => readonly string[] }) {
+    this.secretValues = options.secretValues ?? (() => []);
     this.knownValues = options.knownValues.filter((value) => value.length >= MIN_KNOWN_VALUE_LENGTH);
     this.pathRule = options.pathRule;
   }
@@ -198,7 +200,7 @@ export class Redactor {
 
   private text(input: string, counts: Partial<Record<RedactionKind, number>>): string {
     let text = input;
-    for (const known of this.knownValues) {
+    for (const known of [...new Set([...this.knownValues, ...this.secretValues().filter(value => value.length > 0)])].sort((a, b) => b.length - a.length)) {
       if (!text.includes(known)) continue;
       const parts = text.split(known);
       counts.known_value = (counts.known_value ?? 0) + parts.length - 1;

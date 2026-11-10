@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.20.0 — 2026-11-10
+
+Minor release: guided installation with optional tier routing (ADR 0020),
+opt-in provider credentials with a new command `pi-session-mcp-provider`
+(ADR 0021, #265, #266, #267) and the empty `.git` marker fix (#261). The tool
+set is unchanged; the start error code `provider_unsupported_in_writer` and
+the Doctor check `provider_store` are new.
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). A writer collected by an earlier
+release must be collected again before a non-discard reset, recreate, remove or
+finish. **Rollback note:** reinstall 0.19.1. It ignores the provider store, so
+every provider falls back to Pi's own login, including providers set to `none`;
+remove Pi's login for such a provider before rolling back. Collect writers
+again afterwards, because 0.19.1 does not accept the new digest.
+
 ### Added
 
 - Guided installation with a pinned install script, non-interactive answers and
@@ -10,6 +26,34 @@
   See [Installation](docs/installation.md) and [ADR 0020](docs/adr/0020-tier-routing.md).
   The installer does not upgrade existing versions; history migrated by this
   release is unavailable to older releases until this release returns.
+- Opt-in provider credentials (#265, [ADR 0021](docs/adr/0021-provider-credentials.md)).
+  Each provider has one source: `inherit` (Pi's own login, the default), `key`
+  (a key stored by Pi Session MCP, which takes precedence) or `none`. The store
+  lives in a private directory under the account home and is checked for
+  owner, mode and links; an unreadable store never falls back to Pi's login.
+  Operator-defined providers (HTTPS, or HTTP on loopback) never inherit and
+  bind their key to the endpoint origin. Catalog, probe and sessions use the
+  same policy. Writers receive only the keys and definitions of their selected
+  providers; loopback custom providers are refused for container workspaces
+  with the new start code `provider_unsupported_in_writer`. Stored keys are
+  redacted from history. Doctor gains the check `provider_store`.
+- New command `pi-session-mcp-provider` (#266) to list providers and sources,
+  store a key from a hidden terminal prompt or from piped standard input, set
+  `none`, restore inheritance, and add or remove operator-defined providers.
+  It works offline and never prints a key. Exit codes are 0, 1, 3 (unknown
+  provider), 4 (invalid definition or key) and 64 (usage).
+- Guided setup can hand the key step to that command on an interactive
+  terminal with `--apply` (#267); it never does so with `--answers`, a
+  non-terminal or a dry run, and receives only the command's exit status.
+
+### Fixed
+
+- Cleanup no longer treats an empty regular file named `.git`, such as uv leaves
+  in its cache, as a nested repository (#261). Directories, non-empty files and
+  symlinks named `.git` still refuse non-discard cleanup with
+  `writer_nested_repository`. The inspection digest moves to a new version, so a
+  writer collected under an earlier release must be collected again before a
+  non-discard reset, recreate, remove or finish.
 
 ## 0.19.1 — 2026-11-07
 

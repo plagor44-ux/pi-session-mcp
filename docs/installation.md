@@ -33,7 +33,7 @@ apply. For non-interactive use, provide `--answers /path/to/answers.json`;
 `--config /path/to/config.json` optionally selects the guided configuration.
 See the [agent guide](agent-install.md) for the format and approval boundaries.
 
-The owner logs in through the package's Pi binary, never by giving credentials
+The owner can log in through the package's Pi binary, never by giving credentials
 to setup or an agent:
 
 ```sh
@@ -42,8 +42,12 @@ to setup or an agent:
 
 The interactive interview proceeds in this order:
 
-1. Show authenticated and optional providers and the separate login command.
-   When none is authenticated, offer to re-check login.
+1. On an interactive terminal with `--apply`, ask whether the owner wants to
+   store a Pi Session MCP key. If so, the owner names provider IDs one by one;
+   each runs `pi-session-mcp-provider auth set <provider>` on the same
+   terminal, and setup sees only whether it succeeded. Then show authenticated and
+   optional providers and the separate Pi login command. When none is
+   authenticated, offer to re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
    review profiles has fewer than two families.
 3. Choose the default read-only profile and repository workspaces and modes.
@@ -189,6 +193,49 @@ Pi Session MCP embeds the Pi SDK version pinned in `package.json`. It reuses the
 local user's existing Pi authentication and never prints it. Automated writers
 keep selected provider credentials in their private boundary agent copy; see
 [Execution modes](execution-modes.md#writer-storage-launch-and-readiness).
+
+## Provider credentials and custom providers
+
+The owner can manage provider credentials offline without changing Pi's own login:
+
+```bash
+pi-session-mcp-provider list --json
+pi-session-mcp-provider auth set <provider>
+pi-session-mcp-provider auth remove <provider>
+pi-session-mcp-provider auth inherit <provider>
+pi-session-mcp-provider add <id> --api openai-completions --base-url https://example.com/v1 --model <model>
+pi-session-mcp-provider remove <id>
+```
+
+The terminal key prompt disables echo. For unattended provisioning operated by the
+owner, pipe the key to `pi-session-mcp-provider auth set <id> --stdin`; do not
+put it in an argument. `--stdin` on a terminal is refused (exit 64) because the
+typed key would echo. These commands never contact a provider or spend a turn.
+`inherit` uses Pi authentication (the default for built-ins), `key` takes
+precedence using the stored key, and `none` explicitly disables authentication.
+`auth remove` sets `none`; only `auth inherit` restores Pi authentication.
+Custom providers cannot inherit Pi credentials. The `list` command shows safe
+source and authentication metadata, never keys.
+
+Custom definitions require an HTTPS URL, or HTTP on loopback only, without
+userinfo, query or fragment. Supported APIs are `openai-completions`,
+`openai-responses`, `anthropic-messages`, `google-generative-ai` and
+`mistral-conversations`. Comma-separate model IDs; `--context-window` defaults
+to 128000 and `--max-tokens` to 8192. Use `--reasoning` and `--image` to
+mark capabilities. Loopback custom providers are refused for container workspaces.
+Changing a custom provider's origin invalidates its bound key until set again.
+Doctor reports `credential_binding_mismatch` for such a key and for an entry whose
+provider no longer exists; `auth set` binds a key again, and `auth inherit <id>`
+deletes the entry of a provider that no longer exists.
+Removing a provider is refused when the configuration selected by
+`PI_SESSION_MCP_CONFIG` references it. If no configuration is selected,
+removal proceeds; other configurations report `unknown_provider` on next start.
+A selected configuration that cannot be loaded refuses removal with `config_invalid`.
+
+Changes take effect for new sessions and catalog reads; running sessions retain
+their original credentials, and writers receive changes on their next launch.
+Exit codes are 0 (success), 1 (runtime or storage error, including provider in
+use), 3 (unknown provider), 4 (invalid definition or key), and 64 (usage).
 
 ## Check profiles: model catalog and probe
 

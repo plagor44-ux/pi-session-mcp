@@ -133,7 +133,8 @@ describe("Pi SDK selected skill contract", () => {
       expect(catalog(br)).toContain("fixture-alpha");
       expect(catalog(br)).not.toContain("fixture-beta");
       expect(catalog(er)).toBe("");
-      expect(h.runtimes).toHaveLength(1);
+      // Runtime-scoped credentials must not let a new session rotate an existing session's key.
+      expect(h.runtimes).toHaveLength(3);
     } finally { await Promise.all([a, b, empty].map((s) => h.registry.close(s.id))); }
   });
 
