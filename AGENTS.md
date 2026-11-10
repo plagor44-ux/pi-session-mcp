@@ -34,7 +34,13 @@
   (maintainer-approved 2026-11-09). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
-  (maintainer-approved 2026-10-30, #199). Do not widen these exceptions.
+  (maintainer-approved 2026-10-30, #199). A third narrow exception is the
+  provider store (ADR 0021, maintainer-approved 2026-11-10): right after a
+  `ModelRuntime` is created for the session adapter or the catalog, the
+  runtime may call `registerProvider` for operator-defined providers (without
+  a key in their configuration) and `setRuntimeApiKey` for providers whose
+  source is a stored key, both offline and without persistence; only
+  `src/provider-store.ts` reads key values. Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - CLI reports must be sanitized and must not contain secrets, paths, or
@@ -50,8 +56,14 @@
   the probe step of `--guided --apply` for new profiles after explicit
   `approveProbes`. Both use the fixed probe prompt, never output reply text,
   and use fakes in tests.
-- Guided setup and `install.sh` never ask for, print or store a provider
-  credential; the owner logs in through Pi.
+- Guided setup and `install.sh` never read, print or store a provider
+  credential themselves; the owner logs in through Pi or stores a key with
+  `pi-session-mcp-provider auth set`. Only on an interactive terminal, and
+  never with `--answers`, a non-terminal or a dry run, guided setup may run
+  that command as a child process on the same terminal and receives only its
+  exit status (ADR 0021). The provider CLI reads a key only from a terminal
+  prompt with echo off or from standard input with `--stdin`, rejects a key in
+  an argument and has no command that prints one.
 - Setup accepts only configured client targets and derives absolute paths
   internally; durable ownership state must remain path-free and secret-free.
 - Mutating setup runs on Linux and macOS only. Linux requires a supported
