@@ -77,8 +77,8 @@
   change.
 - The controller skill and the review skill ask for one report form. The
   orchestration skill asked a reviewer for a first line `VERDICT:`, while the
-  review skill puts `STATUS:` first; a reviewer that followed its own skill
-  failed the controller's format check. A review report now starts with
+  review skill puts `STATUS:` first, so one report could not satisfy both. A
+  review report now starts with
   `STATUS:`, names the commit under review as `Target:` with its bare full
   hash, gives `Verdict:` with `BLOCKING_FINDINGS`, `NON_BLOCKING_ONLY` or
   `NO_FINDINGS`, and lists each finding with severity and `path:line`. The new
@@ -94,6 +94,22 @@
   `test/review-report-validator.test.ts` covers them, including a report for
   an existing but wrong commit. Skill text, evaluation helper and tests only;
   no change to the MCP tools, their schemas or the implementation receipt.
+- CI tests a branch once, through its pull request. A push starts the
+  workflow only on `main` and on a release tag `v*`; a push to another branch
+  no longer starts a second matrix run beside the one of its pull request. Of
+  the 60 CI runs before this change, 21 were such branch pushes, and 19 of 22
+  branch commits ran twice. Each pull request has its own concurrency group,
+  keyed by its number, and a new push to it cancels the run of the commit it
+  replaces. Runs on `main`, on a tag and on request stay independent: none
+  waits for or cancels another. The full platform matrix still runs for every
+  pull request, on `main`, on each release tag and through
+  `workflow_dispatch`, and the required check `verify` keeps its name, is
+  evaluated when the matrix failed or was cancelled, and passes only for a
+  fully green matrix. A branch without a pull request gets a run through a
+  draft pull request or a manual run. The
+  [acceptance guide](docs/acceptance.md#level-1-repository-checks)
+  lists what each event starts. Workflow and documentation only; the rulesets
+  are unchanged.
 
 ### Fixed
 

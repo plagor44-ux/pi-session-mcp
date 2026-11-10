@@ -1,12 +1,24 @@
 name: CI
 
+# A branch under review is tested once, by its pull request. A push starts a
+# run only on main and on a release tag; a branch without a pull request gets a
+# run on request through workflow_dispatch.
 on:
   pull_request:
   push:
+    branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Each pull request has its own group: a new push to it cancels the run of the
+# commit it replaces. Every other run is alone in its group, so runs on main, on
+# a tag and on request never wait for or cancel one another.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -44,7 +56,9 @@ jobs:
         run: node scripts/install-smoke.mjs --package-root "$RUNNER_TEMP/smoke-prefix/lib/node_modules/pi-session-mcp"
 
   # The "Protect main" ruleset requires a check named "verify"; it passes only
-  # when every platform in the matrix passed.
+  # when every platform in the matrix passed. Keep `always()`: a skipped job
+  # counts as a passed required check, so this job must also run, and fail, when
+  # the matrix failed or the run was cancelled.
   verify:
     needs: test
     if: always()
