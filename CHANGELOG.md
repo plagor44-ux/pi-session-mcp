@@ -110,6 +110,11 @@
   [acceptance guide](docs/acceptance.md#level-1-repository-checks)
   lists what each event starts. Workflow and documentation only; the rulesets
   are unchanged.
+- `AGENTS.md` has a section "Sensitive areas" that points from isolation,
+  credential routing, tool binding and the writer lifecycle to the decision
+  records, the code to start at and the tests to run.
+  `test/agents-sensitive-areas.test.ts` fails when one of the named files no
+  longer exists. Project rules and a test only.
 
 ### Fixed
 
