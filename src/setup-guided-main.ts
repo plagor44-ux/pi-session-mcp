@@ -101,21 +101,25 @@ export interface GuidedMainDependencies {
 export function setProviderKeyInTerminal(provider: string): Promise<number> {
   const entry = resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js");
   return new Promise((resolveStatus) => {
-    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: "inherit" });
+    // The child's stdout goes to stderr: guided setup's stdout carries only its final report.
+    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: ["inherit", 2, "inherit"] });
     child.once("error", () => resolveStatus(1));
     child.once("exit", code => resolveStatus(code ?? 1));
   });
 }
 
 export async function offerProviderCredentials(prompter: Prompter, catalog: PricedModelCatalog, reload: () => Promise<PricedModelCatalog>, run: (provider: string) => Promise<number>, report: (text: string) => void): Promise<PricedModelCatalog> {
-  for (const provider of catalog.providers().filter(p => !p.authConfigured && /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(p.id))) {
-    const action = await prompter.choose(`Authentication for ${provider.id}`, ["keep-pi-auth", "set-key", "skip"] as const, "keep-pi-auth");
-    if (action !== "set-key") continue;
-    const status = await run(provider.id);
+  // Pi's catalog lists dozens of providers, so the owner names the ones to configure instead of being asked about each.
+  if (!(await prompter.confirm("Store a Pi Session MCP API key for a provider now? Pi's own login stays the default", false))) return catalog;
+  const safe = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/;
+  for (;;) {
+    const id = (await prompter.text("Provider ID for the key (empty to continue)", "")).trim();
+    if (id === "") return catalog;
+    if (!safe.test(id) || !catalog.providers().some(p => p.id === id)) { report("Unknown provider ID\n"); continue; }
+    const status = await run(id);
     catalog = await reload();
-    if (status !== 0 || !catalog.providers().some(p => p.id === provider.id && p.authConfigured)) report(`${provider.id}: not configured\n`);
+    report(status === 0 && catalog.providers().some(p => p.id === id && p.authConfigured) ? `${id}: key stored\n` : `${id}: not configured\n`);
   }
-  return catalog;
 }
 
 export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided"]>, json: boolean, signal: AbortSignal, injected: GuidedMainDependencies = {}): Promise<number> {

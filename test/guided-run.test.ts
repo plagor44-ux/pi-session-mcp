@@ -47,14 +47,27 @@ describe("guided run", () => {
     f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => 1);
     const prompts: string[] = [];
-    const prompter: Prompter = { text: async () => "", confirm: async () => false, choose: async (q, _opts, fallback) => { prompts.push(q); return q.startsWith("Authentication") ? "set-key" as typeof fallback : fallback; } };
+    // The owner opts in, names an unknown ID, then openai, then ends the list.
+    const ids = ["no-such-provider", "openai", ""];
+    const prompter: Prompter = {
+      text: async (q, fallback) => { prompts.push(q); return q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? ""; },
+      confirm: async (q, fallback) => { prompts.push(q); return q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false; },
+      choose: async (q, _opts, fallback) => { prompts.push(q); return fallback; },
+    };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
       await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal, stderrTerminal, setProviderKey: child });
       expect(child).toHaveBeenCalledTimes(offered ? 1 : 0);
-      expect(prompts.some(q => q.startsWith("Authentication"))).toBe(offered);
-      if (offered) { expect(child).toHaveBeenCalledWith("openai"); expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL"); expect(reads).toBeGreaterThanOrEqual(2); expect(err.mock.calls.map(c => String(c[0])).join("")).toContain("not configured"); }
+      expect(prompts.some(q => q.startsWith("Store a Pi Session MCP API key"))).toBe(offered);
+      if (offered) {
+        expect(child).toHaveBeenCalledWith("openai");
+        expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL");
+        expect(reads).toBeGreaterThanOrEqual(2);
+        const stderr = err.mock.calls.map(c => String(c[0])).join("");
+        expect(stderr).toContain("Unknown provider ID");
+        expect(stderr).toContain("openai: not configured");
+      }
       expect(f.deps.probe).not.toHaveBeenCalled();
     } finally { out.mockRestore(); err.mockRestore(); }
   });
