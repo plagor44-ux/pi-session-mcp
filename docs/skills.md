@@ -174,14 +174,25 @@ its bare full hash, then `Verdict:` with `BLOCKING_FINDINGS`,
 label appears once, and `STATUS`, `Target` and `Verdict` hold one value. Only `DONE` is
 a review of the whole target. `DONE_WITH_CONCERNS` is an incomplete review
 whose verdict covers what was reviewed, and `NEEDS_CONTEXT` and `BLOCKED`
-carry no verdict. The controller compares `Target` with the commit it asked
-about before anything else and rejects a report that names another one, also
-when that report is cut off or not in the form. `Target` is a claim; what a
-reviewer could read is fixed by its workspace, for example a review snapshot.
-The form is for the review of one commit: the controller gives the reviewer
-the full hash also for a branch, a range or a set of files. In this repository
-`eval/reports/validate.ts` checks both forms without a provider
-(`validateTextReport`, `validateReviewReport`).
+carry no verdict. The controller skill tells the controller to compare
+`Target` with the commit it asked about before anything else and to reject a
+report that names another one, also when that report is cut off or not in the
+form. No tool enforces this. The server returns `assistantText` as the worker
+wrote it and reads no report, so the comparison happens only when the
+controlling agent follows the skill. `Target` is also only a claim: a reviewer
+copies the hash from its task, so the line catches a report about another
+commit, not a reviewer that read another one. What a reviewer could read is
+fixed by its workspace, for example a review snapshot. The form is for the
+review of one commit: the controller gives the reviewer the full hash also for
+a branch, a range or a set of files.
+
+In this repository `eval/reports/validate.ts` checks both forms without a
+provider (`validateTextReport`, `validateReviewReport`). It serves the tests
+and the evaluation and is not part of the package. Whether a Claude Code
+controller that loads the skill applies the rule is measured by the cases
+`review-bound-report`, `review-wrong-commit` and `review-wrong-role` of the
+suite in `eval/controller-skill/`; its README holds the results. A Codex
+controller has not been measured.
 
 The orchestration skill is a small skill tree: `SKILL.md` plus two references
 the controller reads on demand. `references/start-errors.md` classifies the
