@@ -131,11 +131,10 @@ describe("provider store", () => {
     await expect(store().inherit("never-stored", builtin)).rejects.toMatchObject({ code: "provider_unknown" });
     expect(await providerStoreCheck(home)).toMatchObject({ severity: "ok" });
   });
-  it("creates exact modes under a restrictive umask", async () => {
-    // Existing parents, as on a used machine; the umask then narrows only what the store creates.
-    await fs.mkdir(join(home, ".config", "pi-session-mcp"), { recursive: true, mode: 0o700 });
-    const previous = process.umask(0o277);
+  it.each([0o277, 0o477, 0o777])("creates exact modes under the restrictive umask %o", async (mask) => {
+    const previous = process.umask(mask);
     try { await store().setKey("openai", key, builtin); } finally { process.umask(previous); }
+    expect(process.umask()).toBe(previous);
     expect((await fs.lstat(directory)).mode & 0o777).toBe(0o700);
     for (const name of ["credentials.json", ".lock"]) expect((await fs.lstat(join(directory, name))).mode & 0o777).toBe(0o600);
     expect((await policy()).source("openai")).toBe("key");
