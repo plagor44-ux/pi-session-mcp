@@ -1,14 +1,19 @@
 {
   "name": "pi-session-mcp",
   "version": "0.20.0",
-  "description": "Local stdio MCP server for controlled Pi coding-agent sessions",
+  "description": "Local stdio MCP server that lets Codex and Claude Code delegate work to configured Pi coding-agent sessions",
   "license": "MIT",
   "keywords": [
     "mcp",
     "model-context-protocol",
     "pi",
     "coding-agent",
-    "stdio"
+    "stdio",
+    "mcp-server",
+    "codex",
+    "claude-code",
+    "ai-agents",
+    "agent-orchestration"
   ],
   "repository": {
     "type": "git",

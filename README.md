@@ -11,6 +11,10 @@ Pi Session MCP is a local, stdio-only [Model Context Protocol](https://modelcont
 
 > Pi Session MCP is an independent project. It is not affiliated with or endorsed by the makers of Pi, OpenAI or Anthropic. Product names are used only to describe compatibility.
 
+> **Status: pre-1.0.** Version 0.20.0 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients ran on 0.16.1; none has run on 0.20.0, and the [0.20.0 acceptance record](docs/acceptance.md#v0200-post-release-evidence) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
+
+[Example](#example-a-second-opinion) · [Quick start](#quick-start) · [Status](#status) · [Security model](#security-model)
+
 ```mermaid
 flowchart LR
   C["Codex or Claude Code<br/>(controller)"] -- "MCP over stdio" --> S["pi-session-mcp"]
@@ -21,6 +25,28 @@ flowchart LR
   S -. "opt-in" .-> K[("Provider store")]
   S -. "opt-in" .-> R{{"Tier routing"}}
 ```
+
+## Example: a second opinion
+
+With the server registered, ask Codex or Claude Code in plain language:
+
+```text
+Get a second opinion from a Pi worker through the pi-session-mcp tools.
+List the configured aliases with pi_capabilities_get. Start a session on the
+workspace alias for this repository with the default read-only execution
+profile. Ask the worker to review src/parser.ts and its tests for correctness
+bugs and unhandled edge cases. Poll the turn until it is finished, close the
+session, and report the findings with file and line. Check each finding
+against the code before you act on it.
+```
+
+Replace `src/parser.ts` with a file of yours. The prompt needs:
+
+- the package installed and registered with your client ([Quick start](#quick-start));
+- a configuration that names the repository as a workspace alias and has a read-only execution profile. One read-only profile is the default, so the prompt names none;
+- authentication for that profile's provider: Pi's login, or a key in the [provider store](docs/installation.md#provider-credentials-and-custom-providers).
+
+The prompt is a request to your client, and the client's configuration decides what happens: the model it runs, whether it loaded the orchestration skill, and which tool calls it makes without asking you. The server enforces the configured aliases, the profile's tool allowlist and the limits of a turn. It cannot make either model follow the prompt, and the worker's answer can be wrong. A read-only worker reads files inside the workspace and runs no commands unless its profile opts into the sandboxed shell, so name files instead of asking for a `git diff`.
 
 ## Why use it
 
@@ -35,22 +61,31 @@ It is not the right tool when you want to work with Pi yourself (run Pi directly
 
 ## Quick start
 
-On Linux or macOS with Node.js 22.19.0 or newer:
+On Linux or macOS with Node.js 22.19.0 or newer, download the installer of the latest release and check it:
 
 ```sh
 base=https://github.com/plagor44-ux/pi-session-mcp/releases/latest/download
 curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
-  sha256sum -c install.sh.sha256 && sh install.sh
+  sha256sum -c install.sh.sha256
 ```
 
-On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. The `&&` chain runs the installer only after both downloads and the checksum succeeded.
+On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.20.0](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.20.0).
 
-The script installs its exact pinned version and runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary. Setup does not read, print or store a credential. When you apply on an interactive terminal, the interview first offers to run `pi-session-mcp-provider auth set <provider>` for providers you name. That command prompts for an API key with echo off and stores it in Pi Session MCP's own [provider store](docs/installation.md#provider-credentials-and-custom-providers); setup receives only its exit status. Answer no, the default, and Pi's login stays the only credential source.
+The checksum comes from the same release as the script. It shows that the download is complete and unchanged; it does not prove who published it, because whoever can replace one file can replace both. Read `install.sh` before you run it. It is short: it checks the platform and the Node.js version, runs `npm install -g pi-session-mcp@<version>` with the version written in the script unless that version is installed already, and starts `pi-session-mcp-setup --guided --apply`. It refuses to upgrade a different installed version.
 
-- Plan without writes: `pi-session-mcp-setup --guided`.
+```sh
+sh install.sh
+```
+
+The script pins the package version, and the package pins its direct dependencies. npm resolves the transitive dependencies at install time within the ranges those dependencies declare. For the dependency tree the maintainers tested, [install from a release tag](docs/installation.md#from-a-release-tag) with `npm ci`.
+
+The script then runs the guided setup. The interview proposes profiles from Pi's offline model catalog and asks before it probes a provider, changes an existing configuration or allows host writes. You log in to providers yourself through the package's Pi binary. Setup does not read, print or store a credential. When you apply on an interactive terminal, the interview first offers to run `pi-session-mcp-provider auth set <provider>` for providers you name. That command prompts for an API key with echo off and stores it in Pi Session MCP's own [provider store](docs/installation.md#provider-credentials-and-custom-providers); setup receives only its exit status. Answer no, the default, and Pi's login stays the only credential source.
+
+- Plan without writes, with the package installed: `pi-session-mcp-setup --guided`.
+- Without the script: install [from npm](docs/installation.md#from-npm) or [from a release tag](docs/installation.md#from-a-release-tag), then [configure](docs/installation.md#2-configure) and [register a client](docs/installation.md#4-register-a-client) by hand.
 - Non-interactive or agent-driven installs: [agent guide](docs/agent-install.md).
 - Configuration format: [Configure](docs/installation.md#2-configure).
-- Manual installation, upgrades and removal: [installation guide](docs/installation.md).
+- Upgrades and removal: [Upgrade](docs/installation.md#upgrade) and [Remove](docs/installation.md#remove).
 
 ## Tools
 
@@ -92,7 +127,7 @@ The package version is **0.20.0**.
 | Stability | Pre-1.0. Tools, fields, states and error codes change only in a new minor release. |
 | Platforms | Linux and macOS with Node.js 22.19.0 or newer. CI covers macOS 15 and 26 on Apple silicon; Intel Macs are untested. Setup refuses other platforms with `platform_unsupported`. |
 | Clients | Codex CLI and Claude Code. Setup accepts a client whose public `mcp` command output matches the expected contract, without pinning versions. |
-| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle ran on 0.16.1 with Pi SDK 1.5.0; see [Acceptance](docs/acceptance.md). |
+| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). For 0.20.0 the [acceptance record](docs/acceptance.md#v0200-post-release-evidence) names what is not established: a turn against a real provider with a stored key, an interactive `install.sh` run with the key step, a writer turn against an operator-defined provider, a full live cycle, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
 | Out of scope | HTTP, a web UI, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process. |
 
 ## Security model

@@ -227,7 +227,12 @@ Steps:
 
    This changes `package.json` and both version fields of `package-lock.json`.
    Then change the version by hand in `install.sh` (`VERSION`), the package
-   version line of `README.md` and the capability example of `docs/tool-contracts.md`.
+   version line and the release link in the Quick start of `README.md`, and
+   the capability example of `docs/tool-contracts.md`.
+   `test/readme-onboarding.test.ts` fails until both README places name the
+   new version. The status note at the top of the README and the acceptance
+   row of its status table name a version and link its acceptance record:
+   update them once that record exists, and state only what it establishes.
 3. In `CHANGELOG.md`, insert the heading `## <x.y.z> — <date>` directly below
    `## Unreleased`, so that the unreleased entries become the release entries.
 4. Run the Level 1 checks. `npm run --silent doctor -- --json` must report the

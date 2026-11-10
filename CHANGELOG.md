@@ -45,6 +45,20 @@
   container writer receives. Guarantees about omitted data are scoped to errors
   and metadata; `assistantText` is described as unsanitized model output that
   can repeat secrets. Documentation only; no runtime or contract change.
+- The README opens with a pre-1.0 status note that links the acceptance record
+  of the current version and the threat model, and with a copyable prompt for
+  a second opinion from a read-only worker, its prerequisites and what the
+  server does not guarantee
+  ([#276](https://github.com/plagor44-ux/pi-session-mcp/issues/276)). The
+  Quick start separates the download and checksum from running the installer,
+  says that a checksum from the same release is an integrity check and no
+  proof of origin, describes what `install.sh` does, links the release of the
+  described version and the manual paths, and states that npm still resolves
+  transitive dependencies at install time. The package description names
+  Codex and Claude Code, and the keywords add `mcp-server`, `codex`,
+  `claude-code`, `ai-agents` and `agent-orchestration`.
+  `test/readme-onboarding.test.ts` checks the README's relative links and
+  anchors and its version line and release link against `package.json`.
 
 ### Fixed
 
