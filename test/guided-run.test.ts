@@ -17,6 +17,8 @@ afterEach(async () => { await Promise.all(directories.splice(0).map((p) => rm(p,
 const answers = () => parseGuidedAnswers({ schemaVersion: 1, approveProbes: true, allowConfigChange: true,
   profiles: ["review", "code"].map((role) => ({ alias: role, provider: "openai", model: "gpt-test", role, thinkingLevel: "medium", tier: "medium", family: "openai" })),
   defaultProfile: "review", workspaces: [{ alias: "repo", path: "/fake/repo", mode: "read-only" }], history: { enabled: true }, routing: { mode: "manual" }, clients: { claudeCode: true, codex: false } });
+/** A catalog that cannot tell a model's thinking levels, so proposals keep the role's level. */
+const noLevels = { thinkingLevels: () => undefined, effectiveThinkingLevel: () => undefined };
 async function fixture(live = false) {
   const directory = await mkdtemp(join(tmpdir(), "guided-test-")); directories.push(directory);
   const configPath = join(directory, "config.json");
@@ -26,7 +28,7 @@ async function fixture(live = false) {
   const target = { client: "fake", scope: "user", alias: "pi-session-mcp" };
   const deps: GuidedDependencies = {
     configPath, optionalFeatures: async () => ({ podman: true, bubblewrap: true }),
-    catalog: async () => ({ providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2 }),
+    catalog: async () => ({ ...noLevels, providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2 }),
     doctor: vi.fn(async () => { calls.push("doctor"); return { ok: true }; }),
     probe: vi.fn<GuidedDependencies["probe"]>(async (profiles) => { calls.push("probe"); return { schemaVersion: 1, operation: "apply", status: "ok", doctor: { blocking: [], other: [] }, findings: profiles.map((profile) => ({ profile, status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 })), usage: "unknown", exitCode: 0 }; }),
     changeMode: async () => { calls.push("changeMode"); const status = modeApplied ? "unchanged" : "ok"; modeApplied = true; return result("apply", [{ target, status, code: "mode_ready" }]); },
@@ -44,7 +46,7 @@ describe("guided run", () => {
   ])("gates provider key handoff: $apply $terminal $stderrTerminal", async ({ apply, terminal, stderrTerminal, offered }) => {
     const f = await fixture();
     let reads = 0;
-    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    f.deps.catalog = async () => { reads++; return { ...noLevels, providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => 1);
     const prompts: string[] = [];
     // The owner opts in, names an unknown ID, then openai, then ends the list.
@@ -74,7 +76,7 @@ describe("guided run", () => {
   it("reports a stored key only after the child succeeds and the reloaded catalog shows it", async () => {
     const f = await fixture();
     let stored = false, reads = 0;
-    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    f.deps.catalog = async () => { reads++; return { ...noLevels, providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => { stored = true; return 0; });
     const ids = ["openai", ""];
     const prompter: Prompter = {
@@ -152,7 +154,7 @@ describe("guided run", () => {
   it("does not report an unsafe catalog provider id", async () => {
     const f = await fixture(); const a = answers(); const id = "unsafe\nprovider";
     a.profiles[0]!.provider = id;
-    f.deps.catalog = async () => ({ providers: () => [{ id, authConfigured: false, models: [] }], outputPrice: () => undefined });
+    f.deps.catalog = async () => ({ ...noLevels, providers: () => [{ id, authConfigured: false, models: [] }], outputPrice: () => undefined });
     const r = await runGuided({ apply: true, answers: a }, f.deps);
     expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider");
     expect(JSON.stringify(r)).not.toContain(JSON.stringify(id).slice(1, -1));
@@ -180,13 +182,17 @@ describe("guided run", () => {
   });
   it("unlinks a probe-created candidate symlink before rewriting", async () => {
     const f = await fixture(); const target = join(f.directory, "target"); await writeFile(target, "unchanged");
+    // code-two passes, so dropping code leads to the rewrite instead of the coding_profiles_dropped stop.
+    const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
     const probe = f.deps.probe;
-    f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); await rm(candidate); await symlink(target, candidate); return { ...r, findings: r.findings.filter((p) => p.profile === "review") }; };
-    expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+    f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); await rm(candidate); await symlink(target, candidate); return { ...r, findings: r.findings.filter((p) => p.profile !== "code") }; };
+    expect((await runGuided({ apply: true, answers: a }, f.deps)).exitCode).toBe(0);
     expect(await readFile(target, "utf8")).toBe("unchanged");
   });
   it("removes a dropped alias from previously unchanged routing and backs it up", async () => {
     const f = await fixture(); const a = answers(); a.profiles[1]!.alias = "x"; a.profiles[1]!.tier = null; a.profiles[1]!.family = null;
+    // A second coding profile passes, so dropping x does not leave the installation without one.
+    a.profiles.push({ ...a.profiles[1]!, alias: "y" });
     const routing = { mode: "manual", tiers: { medium: { review: ["review"], code: ["x"] } }, families: { review: "openai", x: "openai" } };
     expect(buildGuidedPlan(a, { routing }).routingChanged).toBe(false);
     const path = join(f.directory, "routing.json"); await writeFile(path, JSON.stringify(routing));
@@ -224,20 +230,67 @@ describe("guided run", () => {
   });
   it("keeps the live config when a probe fails", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath);
-    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
-    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("default_profile_failed"); expect(await readFile(f.configPath)).toEqual(before);
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }, { profile: "code", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: answers() }, f.deps);
+    expect(r.findings.filter((x) => x.target.scope === "profiles")).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "probe_passed" },
+      { target: { client: "guided", scope: "profiles", alias: "review" }, status: "failed", code: "default_profile_failed", cause: "probe_timeout" },
+    ]);
+    expect(await readFile(f.configPath)).toEqual(before);
   });
   it("drops a failing profile from config and routing", async () => {
-    const f = await fixture(); vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "code", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
-    const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("profile_dropped");
+    const f = await fixture(); const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "code", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }, { profile: "code-two", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r.findings).toContainEqual({ target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "probe_timeout" });
     expect(JSON.parse(await readFile(f.configPath, "utf8")).executionProfiles).not.toHaveProperty("code");
-    expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual([]);
+    expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual(["code-two"]);
+  });
+  it("names the session-start cause of a dropped profile and reports every passed probe", async () => {
+    const f = await fixture(); const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [
+      { profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+      { profile: "code", status: "failed", code: "probe_start_failed", startCode: "thinking_level_unavailable", providerTurn: false, durationMs: 1 },
+      { profile: "code-two", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+    ], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r).toMatchObject({ status: "ok", exitCode: 0 });
+    expect(r.findings.filter((x) => x.target.scope === "profiles")).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "review" }, status: "ok", code: "probe_passed" },
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "thinking_level_unavailable" },
+      { target: { client: "guided", scope: "profiles", alias: "code-two" }, status: "ok", code: "probe_passed" },
+    ]);
+  });
+  it("does not stop for a missing coding profile when the owner accepted none", async () => {
+    const f = await fixture(); const a = answers(); a.profiles[1]!.alias = "explore"; a.profiles[1]!.role = "explore";
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "explore", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r).toMatchObject({ status: "ok", exitCode: 0 });
+    expect(r.findings).toContainEqual({ target: { client: "guided", scope: "profiles", alias: "explore" }, status: "ok", code: "profile_dropped", cause: "probe_timeout" });
+    expect(codes(r)).not.toContain("coding_profiles_dropped");
+  });
+  it("stops before any live change when the probes drop every accepted coding profile", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath);
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [
+      { profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+      { profile: "code", status: "failed", code: "probe_start_failed", startCode: "thinking_level_unavailable", providerTurn: false, durationMs: 1 },
+    ], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: answers() }, f.deps);
+    expect(r).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(r.findings.slice(-2)).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "thinking_level_unavailable" },
+      { target: { client: "guided", scope: "profiles", alias: "installation" }, status: "failed", code: "coding_profiles_dropped" },
+    ]);
+    expect(await readFile(f.configPath)).toEqual(before);
+    for (const call of ["changeMode", "apply", "verify"]) expect(f.calls).not.toContain(call);
+    expect(await readdir(f.directory)).toEqual(["config.json"]);
   });
   it("leaves live bytes untouched with no backup when every new profile is dropped", async () => {
     const f = await fixture(); const a = answers();
     a.routing.mode = "off";
     for (const profile of a.profiles) { profile.tier = null; profile.family = null; }
-    const baseline = { ...a, profiles: [a.profiles[0]!] };
+    // The existing coding profile keeps the installation able to code, so dropping the new one does not stop the run.
+    const baseline = { ...a, profiles: [a.profiles[0]!, { ...a.profiles[1]!, alias: "coder" }] };
     const config = buildGuidedPlan(baseline, {}).nextConfig;
     const before = JSON.stringify(config, null, 4) + "\n\n";
     await writeFile(f.configPath, before);
@@ -282,7 +335,7 @@ describe("guided run", () => {
     expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain(expected); expect(await readFile(f.configPath)).toEqual(before);
   });
   it("stops with provider_login_required", async () => {
-    const f = await fixture(true); f.deps.catalog = async () => ({ providers: () => [], outputPrice: () => undefined });
+    const f = await fixture(true); f.deps.catalog = async () => ({ ...noLevels, providers: () => [], outputPrice: () => undefined });
     const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider"); expect(JSON.stringify(r)).not.toContain(f.directory);
   });
   it("leaves no candidate after an abort", async () => {
@@ -429,7 +482,7 @@ describe("guided run", () => {
     } finally { output.mockRestore(); }
   });
   it("does not re-check an unauthenticated provider next to an authenticated one", async () => {
-    const f = await fixture(); f.deps.catalog = async () => ({ providers: () => [{ id: "openai", authConfigured: false, models: [] }, { id: "anthropic", authConfigured: true, models: ["claude-test"] }], outputPrice: () => 2 });
+    const f = await fixture(); f.deps.catalog = async () => ({ ...noLevels, providers: () => [{ id: "openai", authConfigured: false, models: [] }, { id: "anthropic", authConfigured: true, models: ["claude-test"] }], outputPrice: () => 2 });
     const questions: string[] = [];
     const prompter: Prompter = { text: async (q, fallback) => { questions.push(q); return fallback ?? ""; }, confirm: async (q, fallback) => { questions.push(q); return q.includes("Approve") ? true : fallback; }, choose: async (q, _options, fallback) => { questions.push(q); return fallback; } };
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

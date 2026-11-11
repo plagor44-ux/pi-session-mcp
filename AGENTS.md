@@ -36,7 +36,10 @@
   resolves API-key values in-process, as `checkAuth` does, but makes no
   network request, no credential refresh and no `getAuth`. The catalog may also
   read each model's output price offline for the guided setup's tier proposal only
-  (maintainer-approved 2026-11-09). The session
+  (maintainer-approved 2026-11-09), and each model's thinking levels through the
+  pi-ai package-root exports `getSupportedThinkingLevels` and
+  `clampThinkingLevel`, offline and for the guided setup's profile proposals
+  only (maintainer-approved 2026-11-11, #288). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
   (maintainer-approved 2026-10-30, #199). A third narrow exception is the

@@ -67,6 +67,28 @@ describe("createModelCatalog", () => {
     expect(Object.keys(catalog.providers()[0]!)).toEqual(["id", "authConfigured", "models"]);
   });
 
+  it("reads the thinking levels a model offers and the level Pi applies to a request", async () => {
+    const catalog = await createModelCatalog(async () => ({
+      getProviders: () => [{ id: "p" }],
+      getModels: () => [
+        { id: "no-medium", reasoning: true, thinkingLevelMap: { medium: null } },
+        { id: "plain", reasoning: false },
+        { id: "extended", reasoning: true, thinkingLevelMap: { xhigh: "xhigh" } },
+      ],
+      checkAuth: async () => true,
+    }));
+    expect(catalog.thinkingLevels("p", "no-medium")).toEqual(["off", "minimal", "low", "high"]);
+    expect(catalog.effectiveThinkingLevel("p", "no-medium", "medium")).toBe("high");
+    expect(catalog.effectiveThinkingLevel("p", "no-medium", "low")).toBe("low");
+    expect(catalog.thinkingLevels("p", "plain")).toEqual(["off"]);
+    expect(catalog.effectiveThinkingLevel("p", "plain", "high")).toBe("off");
+    expect(catalog.thinkingLevels("p", "extended")).toEqual(["off", "minimal", "low", "medium", "high", "xhigh"]);
+    expect(catalog.effectiveThinkingLevel("p", "extended", "max")).toBe("xhigh");
+    expect(catalog.thinkingLevels("p", "missing")).toBeUndefined();
+    expect(catalog.effectiveThinkingLevel("p", "missing", "medium")).toBeUndefined();
+    expect(catalog.thinkingLevels("other", "no-medium")).toBeUndefined();
+  });
+
   it("treats a non-numeric price as unknown", async () => {
     const catalog = await createModelCatalog(async () => ({
       getProviders: () => [{ id: "p" }], getModels: () => [{ id: "m", cost: { output: "2.1" } }],

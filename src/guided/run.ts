@@ -72,11 +72,11 @@ async function claimCandidate(configPath: string): Promise<string | undefined> {
 export async function runGuided(request: { apply: boolean; answers: GuidedAnswers }, deps: GuidedDependencies): Promise<SetupResult> {
   const operation = request.apply ? "apply" : "dry-run";
   const findings: SetupFinding[] = [];
-  const add = (scope: string, alias: string, code: string, status: SetupStatus = "unchanged"): void => {
-    findings.push({ target: { client: "guided", scope, alias }, status, code });
+  const add = (scope: string, alias: string, code: string, status: SetupStatus = "unchanged", cause?: string): void => {
+    findings.push({ target: { client: "guided", scope, alias }, status, code, ...(cause === undefined ? {} : { cause }) });
   };
-  const stop = (code: string, scope = "plan", alias = "installation"): SetupResult => {
-    add(scope, alias, code, "failed");
+  const stop = (code: string, scope = "plan", alias = "installation", cause?: string): SetupResult => {
+    add(scope, alias, code, "failed", cause);
     return result(operation, findings, "failed", code === "operation_interrupted" ? deps.signal?.reason === 143 ? 143 : 130 : 1);
   };
   const check = (): void => { if (deps.signal?.aborted) throw new Error("operation_interrupted"); };
@@ -138,15 +138,25 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       const probe = await deps.probe(plan.newProfiles, candidate); check();
       if (probe.refusal) return stop("probe_failed", "profiles");
       const failed = plan.newProfiles.filter((alias) => !probe.findings.some((finding) => finding.profile === alias && finding.status === "ok"));
-      if (failed.includes(request.answers.defaultProfile)) return stop("default_profile_failed", "profiles", request.answers.defaultProfile);
+      // The adapter's code for a refused session start, otherwise the probe's own outcome code.
+      const causeOf = (alias: string): string | undefined => {
+        const finding = probe.findings.find((entry) => entry.profile === alias);
+        return finding?.startCode ?? finding?.code;
+      };
+      const defaultProfile = request.answers.defaultProfile;
+      for (const alias of plan.newProfiles) {
+        if (!failed.includes(alias)) add("profiles", alias, "probe_passed", "ok");
+        else if (alias !== defaultProfile) add("profiles", alias, "profile_dropped", "ok", causeOf(alias));
+      }
+      if (failed.includes(defaultProfile)) return stop("default_profile_failed", "profiles", defaultProfile, causeOf(defaultProfile));
       if (failed.length) {
-        const profiles = plan.nextConfig.executionProfiles as Record<string, unknown>;
+        const profiles = plan.nextConfig.executionProfiles as Record<string, { permissionProfile?: unknown }>;
         const routing = plan.routingDocument as { families?: Record<string, unknown>; tiers?: Record<string, Record<string, string[]>> } | undefined;
+        const droppedCoding = failed.some((alias) => profiles[alias]?.permissionProfile === "coding");
         for (const alias of failed) {
           delete profiles[alias];
           if (routing?.families) delete routing.families[alias];
           for (const tier of Object.values(routing?.tiers ?? {})) for (const [role, aliases] of Object.entries(tier)) tier[role] = aliases.filter((value) => value !== alias);
-          add("profiles", alias, "profile_dropped", "ok");
         }
         plan.configChanged = !isDeepStrictEqual(existingConfig, plan.nextConfig);
         plan.routingChanged = !isDeepStrictEqual(existingRouting, plan.routingDocument);
@@ -155,6 +165,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
           : mode);
         const emptyContainer = plan.modeRequests.find((mode) => mode.mode === "container" && mode.container?.profiles?.length === 0);
         if (emptyContainer) return stop("container_profiles_empty", "modes", emptyContainer.alias);
+        // The owner accepted a coding profile; an installation that cannot code is not what they chose.
+        if (droppedCoding && !Object.values(profiles).some((profile) => profile?.permissionProfile === "coding")) return stop("coding_profiles_dropped", "profiles");
         // Mutate only the owned candidate, never the live configuration during probes.
         await rm(candidate, { force: true });
         const updated = await open(candidate, "wx", 0o600);

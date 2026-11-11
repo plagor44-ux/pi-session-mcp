@@ -1,3 +1,4 @@
+import type { ThinkingLevel } from "../execution-profile.js";
 import type { PricedModelCatalog } from "../model-catalog.js";
 import { ROLES, TIERS, type Role, type Tier } from "../routing/config.js";
 
@@ -8,8 +9,11 @@ export interface ProfileProposal {
   role: Role;
   tier: Tier;
   family: string;
-  thinkingLevel: "low" | "medium" | "high";
+  thinkingLevel: ThinkingLevel;
 }
+
+/** The level each role asks for; a proposal takes the level Pi applies to that request for its model. */
+const ROLE_THINKING_LEVEL: Readonly<Record<Role, ThinkingLevel>> = { code: "medium", review: "high", explore: "low" };
 
 export function tierForOutputPrice(usd: number | undefined): Tier | undefined {
   if (usd === undefined || !Number.isFinite(usd) || usd <= 0) return undefined;
@@ -50,7 +54,9 @@ export function proposeProfiles(catalog: PricedModelCatalog): readonly ProfilePr
         if (!cell) { cell = new Map(); cells.set(key, cell); }
         const previous = cell.get(family);
         if (previous && (previous.price > price || (previous.price === price && compare(previous.proposal.model, model) >= 0))) continue;
-        cell.set(family, { price, proposal: { alias: `${role}-${tier}-${family}`, provider: provider.id, model, role, tier, family, thinkingLevel: role === "code" ? "medium" : role === "review" ? "high" : "low" } });
+        // A session refuses a level its model does not offer (thinking_level_unavailable), so propose the one Pi applies.
+        const thinkingLevel = catalog.effectiveThinkingLevel(provider.id, model, ROLE_THINKING_LEVEL[role]) ?? ROLE_THINKING_LEVEL[role];
+        cell.set(family, { price, proposal: { alias: `${role}-${tier}-${family}`, provider: provider.id, model, role, tier, family, thinkingLevel } });
       }
     }
   }

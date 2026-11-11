@@ -49,7 +49,13 @@ The interactive interview proceeds in this order:
    optional providers and the separate Pi login command. When none is
    authenticated, offer to re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
-   review profiles has fewer than two families.
+   review profiles has fewer than two families. A proposal's thinking level is
+   the one Pi applies for its model: the role asks for `medium` (code), `high`
+   (review) or `low` (explore); a model that does not offer that level gets the
+   nearest higher level it offers, otherwise the nearest lower one, and a model
+   without reasoning gets `off`. Changing a proposal offers only the levels of
+   the chosen model; a model the catalog does not list gets every level and
+   stops the run with `model_unknown`.
 3. Choose the default read-only profile and repository workspaces and modes.
 4. Choose history, routing mode and client registrations.
 5. Approve probes for new profiles, then approve changes to an existing
@@ -65,6 +71,18 @@ then provisions and verifies selected clients. It does not replace divergent
 registrations. History is optional and stores redacted session content locally;
 `auto` routing requires it. Reconnect running clients after changes. The manual
 path below remains available.
+
+The report has one finding for each probed profile. A profile that passed shows
+`probe_passed`. A profile that failed is removed from the candidate and shows
+`profile_dropped` with a `cause`: the adapter's code when Pi refused the
+session start, such as `thinking_level_unavailable`, otherwise the
+[probe code](#check-profiles-model-catalog-and-probe), such as `probe_timeout`.
+JSON reports carry it as the `cause` field, human reports as `, cause <code>`.
+Three outcomes stop the run before any live file changes: the default profile
+failed (`default_profile_failed`, with its `cause`), a container workspace lost
+every profile (`container_profiles_empty`), or the probes dropped every coding
+profile the owner accepted and the configuration would keep none
+(`coding_profiles_dropped`).
 
 ### Operate routing
 

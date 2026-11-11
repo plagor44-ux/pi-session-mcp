@@ -2,6 +2,7 @@
  * Offline view of Pi's model registry behind an injectable interface, so tests and callers need no
  * provider credentials. Only documented package-root exports of the SDK are used.
  */
+import { THINKING_LEVELS, type ThinkingLevel } from "./execution-profile.js";
 import { loadRuntimeProviderPolicy, type ProviderPolicy, type ProviderPolicyRuntime } from "./provider-store.js";
 
 export interface CatalogProvider {
@@ -14,9 +15,40 @@ export interface ModelCatalog {
   providers(): readonly CatalogProvider[];
 }
 
+/** The catalog guided setup proposes profiles from: prices and thinking levels, both read offline. */
 export interface PricedModelCatalog extends ModelCatalog {
   outputPrice(providerId: string, modelId: string): number | undefined;
+  /** The levels the model offers, in order from none to the most; undefined for a model the catalog does not list. */
+  thinkingLevels(providerId: string, modelId: string): readonly ThinkingLevel[] | undefined;
+  /** The level Pi applies when a session with this model requests `level`; undefined for a model the catalog does not list. */
+  effectiveThinkingLevel(providerId: string, modelId: string, level: ThinkingLevel): ThinkingLevel | undefined;
 }
+
+/** A model entry as the catalog reads it. The thinking fields are only handed to Pi's own rules below. */
+export interface CatalogModel {
+  readonly id: string;
+  readonly cost?: { readonly output?: unknown };
+  readonly reasoning?: unknown;
+  readonly thinkingLevelMap?: unknown;
+}
+
+/** Pi's rules for a model's thinking levels; a session start applies the same clamp to its configured level. */
+export interface ThinkingLevelRules {
+  supported(model: CatalogModel): readonly string[];
+  clamp(model: CatalogModel, level: ThinkingLevel): string;
+}
+
+const loadThinkingLevelRules = (): Promise<ThinkingLevelRules> =>
+  import("@earendil-works/pi-ai").then(({ getSupportedThinkingLevels, clampThinkingLevel }) => {
+    // `getModels` returns pi-ai `Model` objects; `CatalogModel` names only the fields this module itself reads.
+    type PiModel = Parameters<typeof getSupportedThinkingLevels>[0];
+    return {
+      supported: (model) => getSupportedThinkingLevels(model as unknown as PiModel),
+      clamp: (model, level) => clampThinkingLevel(model as unknown as PiModel, level),
+    };
+  });
+
+const isThinkingLevel = (value: string): value is ThinkingLevel => (THINKING_LEVELS as readonly string[]).includes(value);
 
 /**
  * A provider or model id that is safe to print: no whitespace and no leading `/`, so it never starts a path.
@@ -39,7 +71,7 @@ export interface CatalogRuntime {
   registerProvider?: ProviderPolicyRuntime["registerProvider"];
   setRuntimeApiKey?: ProviderPolicyRuntime["setRuntimeApiKey"];
   getProviders(): readonly { readonly id: string }[];
-  getModels(providerId: string): readonly { readonly id: string; readonly cost?: { readonly output?: unknown } }[];
+  getModels(providerId: string): readonly CatalogModel[];
   /** Resolves the configured authentication's kind, or `undefined` when none is configured. */
   checkAuth(providerId: string, options?: { signal?: AbortSignal }): Promise<unknown>;
 }
@@ -85,13 +117,16 @@ const authConfigured = (runtime: CatalogRuntime, providerId: string): Promise<bo
  * calls `getAuth`, `getAvailable` or `refresh` itself. Provider policy registers custom definitions
  * and applies in-memory keys offline; no credential value enters catalog output and no provider is
  * contacted. The only refresh is the offline restore at creation. Providers registered only
- * by Pi extensions are not part of the registry.
+ * by Pi extensions are not part of the registry. Output prices and thinking levels serve guided
+ * setup's proposals only.
  */
 export async function createModelCatalog(
   createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime,
   policyFactory: () => Promise<ProviderPolicy> = loadRuntimeProviderPolicy,
+  thinkingLevelRules: () => Promise<ThinkingLevelRules> = loadThinkingLevelRules,
 ): Promise<PricedModelCatalog> {
   const runtime = await createRuntime();
+  const rules = await thinkingLevelRules();
   let policy: ProviderPolicy | undefined;
   let policyUnavailable = false;
   try {
@@ -103,6 +138,7 @@ export async function createModelCatalog(
     });
   } catch { policyUnavailable = true; }
   const prices = new Map<string, Map<string, number>>();
+  const entries = new Map<string, Map<string, CatalogModel>>();
   const providers = await Promise.all(runtime.getProviders().map(async (provider) => {
     const configured = !policyUnavailable && !policy?.blocked(provider.id) && await authConfigured(runtime, provider.id);
     const models = runtime.getModels(provider.id);
@@ -112,6 +148,7 @@ export async function createModelCatalog(
       if (typeof price === "number" && Number.isFinite(price)) modelPrices.set(model.id, price);
     }
     prices.set(provider.id, modelPrices);
+    entries.set(provider.id, new Map(models.map((model) => [model.id, model])));
     return Object.freeze({
       id: provider.id,
       authConfigured: configured,
@@ -119,5 +156,19 @@ export async function createModelCatalog(
     });
   }));
   providers.sort((left, right) => compareIds(left.id, right.id));
-  return Object.freeze({ providers: () => Object.freeze(providers), outputPrice: (providerId: string, modelId: string) => prices.get(providerId)?.get(modelId) });
+  const entry = (providerId: string, modelId: string): CatalogModel | undefined => entries.get(providerId)?.get(modelId);
+  return Object.freeze({
+    providers: () => Object.freeze(providers),
+    outputPrice: (providerId: string, modelId: string) => prices.get(providerId)?.get(modelId),
+    thinkingLevels: (providerId: string, modelId: string) => {
+      const model = entry(providerId, modelId);
+      return model === undefined ? undefined : Object.freeze(rules.supported(model).filter(isThinkingLevel));
+    },
+    effectiveThinkingLevel: (providerId: string, modelId: string, level: ThinkingLevel) => {
+      const model = entry(providerId, modelId);
+      if (model === undefined) return undefined;
+      const effective = rules.clamp(model, level);
+      return isThinkingLevel(effective) ? effective : undefined;
+    },
+  });
 }

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { collectGuidedAnswers, type Prompter } from "../src/guided/prompts.js";
 import { parseGuidedAnswers } from "../src/guided/answers.js";
-const catalog = { providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2 };
-async function collect(overrides: Partial<Prompter> = {}, existing: Parameters<typeof collectGuidedAnswers>[2] = {}) {
+import type { PricedModelCatalog } from "../src/model-catalog.js";
+const catalog: PricedModelCatalog = { providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2, thinkingLevels: () => undefined, effectiveThinkingLevel: () => undefined };
+async function collect(overrides: Partial<Prompter> = {}, existing: Parameters<typeof collectGuidedAnswers>[2] = {}, source: PricedModelCatalog = catalog) {
   const questions: string[] = [];
   const base: Prompter = {
     text: async (_q, fallback) => fallback ?? "",
@@ -15,7 +16,19 @@ async function collect(overrides: Partial<Prompter> = {}, existing: Parameters<t
     confirm: async (q, fallback) => { questions.push(q); return base.confirm(q, fallback); },
     choose: async (q, options, fallback) => { questions.push(q); return base.choose(q, options, fallback); },
   };
-  return { answers: await collectGuidedAnswers(prompter, catalog, existing), questions: questions.join("\n") };
+  return { answers: await collectGuidedAnswers(prompter, source, existing), questions: questions.join("\n") };
+}
+/** Changes the code proposal, types `model` for it and records the thinking-level question. */
+async function changeCodeLevel(source: PricedModelCatalog, model: string) {
+  const asked: { options: readonly string[]; fallback: string }[] = [];
+  const { answers } = await collect({
+    choose: async (q, options, fallback) => {
+      if (q.startsWith("Thinking level for")) asked.push({ options, fallback });
+      return options.includes("change" as never) && q.includes("role code") ? "change" as typeof fallback : fallback;
+    },
+    text: async (q, fallback) => q.startsWith("Model for") ? model : fallback ?? "",
+  }, {}, source);
+  return { asked, profile: answers.profiles.find((p) => p.role === "code")! };
 }
 function workspace(text: Prompter["text"], container = false): Partial<Prompter> {
   let added = false;
@@ -31,7 +44,22 @@ describe("guided prompts", () => {
   });
   it.each([false, true])("reports why no read-only candidates exist (authenticated %s)", async (authConfigured) => {
     const prompter: Prompter = { text: async () => "", confirm: async () => true, choose: async (_q, options, fallback) => options.includes("skip" as never) ? "skip" as typeof fallback : fallback };
-    await expect(collectGuidedAnswers(prompter, { providers: () => [{ id: "openai", authConfigured, models: ["gpt-test"] }], outputPrice: () => 2 }, {})).rejects.toMatchObject({ code: authConfigured ? "no_read_only_profile" : "provider_login_required" });
+    await expect(collectGuidedAnswers(prompter, { ...catalog, providers: () => [{ id: "openai", authConfigured, models: ["gpt-test"] }] }, {})).rejects.toMatchObject({ code: authConfigured ? "no_read_only_profile" : "provider_login_required" });
+  });
+  it("offers only the levels of the model chosen on the change path, defaulting to the one Pi applies", async () => {
+    // The proposal is for gpt-test at medium; the owner switches to a model that lacks medium.
+    const source: PricedModelCatalog = {
+      ...catalog,
+      thinkingLevels: (_provider, model) => model === "no-medium" ? ["off", "low", "high"] : undefined,
+      effectiveThinkingLevel: (_provider, model, level) => model === "no-medium" && level === "medium" ? "high" : undefined,
+    };
+    const { asked, profile } = await changeCodeLevel(source, "no-medium");
+    expect(asked).toEqual([{ options: ["off", "low", "high"], fallback: "high" }]);
+    expect(profile).toMatchObject({ model: "no-medium", thinkingLevel: "high" });
+  });
+  it("offers every level on the change path when the catalog does not know the model", async () => {
+    const { asked } = await changeCodeLevel(catalog, "typed-model");
+    expect(asked).toEqual([{ options: ["off", "minimal", "low", "medium", "high", "xhigh", "max"], fallback: "medium" }]);
   });
   it("turns confirmed proposals into valid answers", async () => { const { answers } = await collect(); expect(parseGuidedAnswers(answers)).toEqual(answers); expect(answers.profiles.length).toBe(2); });
   it("accepts a proposal with one question", async () => {

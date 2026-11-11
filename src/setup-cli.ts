@@ -214,4 +214,4 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
 export function formatSetupResult(setupResult: SetupResult): string {
   return JSON.stringify(setupResult);
 }
-export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code}${x.slot === undefined ? "" : `, slot ${x.slot}`})`)].join("\n"); }
+export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code}${x.slot === undefined ? "" : `, slot ${x.slot}`}${x.cause === undefined ? "" : `, cause ${x.cause}`})`)].join("\n"); }

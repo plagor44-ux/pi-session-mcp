@@ -15,7 +15,11 @@ export interface SetupFinding {
   readonly code: string;
   /** Recovery slot, never a filesystem path. */
   readonly slot?: number;
+  /** Code of the reported cause, for example the probe outcome that made guided setup drop a profile. */
+  readonly cause?: string;
 }
+
+const CODE_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 export interface SetupResult {
   readonly schemaVersion: 1;
@@ -34,8 +38,10 @@ export function result(
   const normalized = findings.map((finding) => Object.freeze({
     target: Object.freeze({ ...finding.target }),
     status: finding.status,
-    code: /^[a-z][a-z0-9_]{0,63}$/.test(finding.code) ? finding.code : "operation_failed",
+    code: CODE_PATTERN.test(finding.code) ? finding.code : "operation_failed",
     ...(Number.isSafeInteger(finding.slot) && finding.slot! >= 0 ? { slot: finding.slot } : {}),
+    // A cause that is not a plain code is left out rather than replaced, so no value can pass through it.
+    ...(finding.cause !== undefined && CODE_PATTERN.test(finding.cause) ? { cause: finding.cause } : {}),
   }));
   return Object.freeze({ schemaVersion: 1, operation, status, findings: Object.freeze(normalized), exitCode });
 }

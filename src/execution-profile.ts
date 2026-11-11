@@ -7,6 +7,8 @@ export const ALIAS_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/;
 export type PermissionProfile = "read-only" | "coding";
 export type ShellMode = "sandboxed";
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+/** Every thinking level, from none to the most. */
+export const THINKING_LEVELS: readonly ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 /** A profile as it appears in the strictly validated application config. */
 export interface ConfiguredExecutionProfile {

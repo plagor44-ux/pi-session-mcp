@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ALIAS_PATTERN } from "../src/execution-profile.js";
+import { ALIAS_PATTERN, type ThinkingLevel } from "../src/execution-profile.js";
 import type { PricedModelCatalog } from "../src/model-catalog.js";
 import { familyOfModel, proposeProfiles, tierForOutputPrice } from "../src/guided/propose.js";
 
-const catalog = (entries: readonly { provider: string; model: string; price?: number; auth?: boolean }[]): PricedModelCatalog => ({
+const catalog = (entries: readonly { provider: string; model: string; price?: number; auth?: boolean }[], effective?: (model: string, level: ThinkingLevel) => ThinkingLevel): PricedModelCatalog => ({
   providers: () => entries.map((e) => ({ id: e.provider, authConfigured: e.auth !== false, models: [e.model] })),
   outputPrice: (provider, model) => entries.find((e) => e.provider === provider && e.model === model)?.price,
+  thinkingLevels: () => undefined,
+  effectiveThinkingLevel: (_provider, model, level) => effective?.(model, level),
 });
 
 describe("guided profile proposals", () => {
@@ -28,6 +30,15 @@ describe("guided profile proposals", () => {
     expect(result.every((p) => p.model === "gpt-c" && p.family === "openai" && p.tier === "medium")).toBe(true);
     expect(result.find((p) => p.role === "code")?.thinkingLevel).toBe("medium");
     expect(result.find((p) => p.role === "review")?.thinkingLevel).toBe("high");
+  });
+  it("proposes the level Pi applies when the model lacks the role's level", () => {
+    // Like the DeepSeek models of #288: medium is not offered and Pi moves it up to high.
+    const result = proposeProfiles(catalog([{ provider: "p", model: "no-medium", price: 1 }], (_model, level) => level === "medium" ? "high" : level));
+    expect(result.map((p) => [p.role, p.thinkingLevel])).toEqual([["code", "high"], ["review", "high"], ["explore", "low"]]);
+  });
+  it("proposes off for a model without reasoning", () => {
+    const result = proposeProfiles(catalog([{ provider: "p", model: "plain", price: 1 }], () => "off"));
+    expect(result.map((p) => p.thinkingLevel)).toEqual(["off", "off", "off"]);
   });
   it("proposes explore only for low", () => {
     const result = proposeProfiles(catalog([{ provider: "p", model: "a", price: 1 }, { provider: "p", model: "b", price: 2 }]));
