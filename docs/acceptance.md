@@ -790,7 +790,8 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own.
+its own. `0.20.1`, released from a later commit, has none; see
+[its record](#v0201-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2635,6 +2636,79 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.20.1 pre-release acceptance
+
+`v0.20.1` was accepted on 2026-11-11 from 06:38 to 06:43 UTC on its release
+candidate `a16650a`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.2`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.166.0` and Claude Code `2.1.322`. Level 1 passed,
+and Level 2 passed in the working tree and for the packed tarball, each with
+delivery off and with delivery on. Every command below ran once. The later
+commit changes only this record.
+
+The patch release `0.20.1` ships what `main` holds after `v0.20.0`: the Pi SDK
+update from `1.5.0` to `1.5.2` (PR #271), the isolation of the sandbox scope
+tests (PR #274), the documentation of the credential boundaries and the README
+onboarding (PR #279), one report form in the bundled skills with the CI and
+test maintenance (PR #283), and the acceptance records of 2026-11-10
+(PR #284). Its own pull request carries only the version, the changelog
+heading and this record, on the branch `chore/release-0.20.1` on top of `main`
+at `445db12`, with the version commit first. The public MCP contract is
+unchanged since `0.20.0`.
+
+- Level 1 in the clone of the candidate after `npm ci`: typecheck,
+  `build:cli`, the test run and `build` exited with `0`, in the order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    190 files, 5126 passed and 15 skipped. The load average was 1.7 when it
+    started.
+  - The bubblewrap and Podman-gated files (`sandbox-shell.bwrap`,
+    `sandbox-shell.go-cache.bwrap`, `writer-lifecycle.podman`,
+    `writer-boundary.podman`), run again on their own with the same setting:
+    65 of 65 passed, none skipped.
+  - `npm audit` and `npm audit --omit=dev` exited with `0` and reported 0
+    vulnerabilities.
+  - Doctor reported `packageVersion` `0.20.1`. It exited with `2` because no
+    configuration was set (`config_missing`).
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing before the pack.
+  - `npm pack` listed 1069 files (tarball shasum
+    `71e54bff6448803ef2c3a3a61e41db436ba7bceb`). A scan of the unpacked files
+    for private names, hosts and a home path found none, and the package holds
+    no `docs/superpowers/` file.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.20.1`.
+  The global install resolves `@earendil-works/pi-coding-agent` `1.5.2`,
+  `undici` `8.12.3` and `minimatch` `11.0.3`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps,
+  and reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. The disposable prefix, the tarball and
+  the clone were removed.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits from `93980d9` to the release
+candidate change only Markdown files and the version in `package.json`,
+`package-lock.json` and `install.sh`. The candidate's `dist/` has 230 files
+and the digest that the cycle's record names for its build
+(`f316718abb64856b338e6d546b9ebe3ca4dfa6ab105d590724ccdbf22bab0115`, SHA-256
+over the sorted per-file SHA-256 list); the candidate was built with Node.js
+`26.13.0`, the cycle's build with `22.23.3`.
+
+Not established for `0.20.1`: a Level 3 cycle on the release; a turn against a
+real provider with a stored key, a full interactive `sh install.sh` run with
+the key step on a PTY and a writer turn against an operator-defined provider
+([#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278)), as for
+`0.20.0`; a Codex controller with the changed controller skill, because the
+multi-session harness refused Codex on `93980d9`
+([record](evaluation/multi-session-2026-11-10/README.md)); the Claude Code
+wake on a commit other than `93980d9`; the server host; macOS outside CI; and
+the published-release Level 2 and the upgrades, which follow after publishing.
 
 ### v0.20.0 post-release evidence
 
