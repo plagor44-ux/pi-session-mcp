@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import type { Provider } from "@earendil-works/pi-ai";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AUTH_CHECK_TIMEOUT_MS, createModelCatalog, type CatalogProvider, type CatalogRuntime, type ModelCatalog } from "../src/model-catalog.js";
 import { catalogReport, formatCatalogHuman } from "../src/setup-probe-result.js";
 
@@ -140,5 +141,21 @@ describe("createModelCatalog", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("marks only providers that declare account sign-in", async () => {
+    const catalog = await createModelCatalog(async () => ({
+      getProviders: () => [{ id: "with-oauth", auth: { oauth: {} } }, { id: "key-only", auth: {} }, { id: "bare" }],
+      getModels: () => [], checkAuth: async () => undefined,
+    }));
+    expect(catalog.providers().map((p) => [p.id, p.signIn])).toEqual([["bare", undefined], ["key-only", undefined], ["with-oauth", true]]);
+    expect(catalog.providers()[0]).not.toHaveProperty("signIn");
+    // `--list-models` keeps its public fields.
+    expect(catalogReport(catalog).providers.some((p) => "signIn" in p)).toBe(false);
+  });
+
+  it("reads account sign-in from the field the SDK declares", () => {
+    // Compile-time guard: the typecheck fails here if the SDK drops `auth.oauth`.
+    expectTypeOf<Provider["auth"]>().toHaveProperty("oauth");
   });
 });
