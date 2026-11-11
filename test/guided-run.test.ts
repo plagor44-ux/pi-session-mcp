@@ -8,7 +8,7 @@ import { parseGuidedAnswers } from "../src/guided/answers.js";
 import { result } from "../src/setup-result.js";
 import { PassThrough } from "node:stream";
 import { buildGuidedPlan } from "../src/guided/plan.js";
-import { PROVIDER_KEY_CHILD_STDIO, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
+import { PROVIDER_KEY_CHILD_STDIO, offerProviderCredentials, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
 import type { Prompter } from "../src/guided/prompts.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -19,6 +19,10 @@ const answers = () => parseGuidedAnswers({ schemaVersion: 1, approveProbes: true
   defaultProfile: "review", workspaces: [{ alias: "repo", path: "/fake/repo", mode: "read-only" }], history: { enabled: true }, routing: { mode: "manual" }, clients: { claudeCode: true, codex: false } });
 /** A catalog that cannot tell a model's thinking levels, so proposals keep the role's level. */
 const noLevels = { thinkingLevels: () => undefined, effectiveThinkingLevel: () => undefined };
+const FIRST_PROVIDER_QUESTION = "Provider ID (? lists them, empty to continue)";
+const NEXT_PROVIDER_QUESTION = "Another provider ID (? lists them, empty to continue)";
+const providerQuestion = (q: string) => q === FIRST_PROVIDER_QUESTION || q === NEXT_PROVIDER_QUESTION;
+const KEY_OFFER = "Store a provider key now?";
 async function fixture(live = false) {
   const directory = await mkdtemp(join(tmpdir(), "guided-test-")); directories.push(directory);
   const configPath = join(directory, "config.json");
@@ -52,8 +56,8 @@ describe("guided run", () => {
     // The owner opts in, names an unknown ID, then openai, then ends the list.
     const ids = ["no-such-provider", "openai", ""];
     const prompter: Prompter = {
-      text: async (q, fallback) => { prompts.push(q); return q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? ""; },
-      confirm: async (q, fallback) => { prompts.push(q); return q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false; },
+      text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
+      confirm: async (q, fallback) => { prompts.push(q); return q === KEY_OFFER ? true : fallback ?? false; },
       choose: async (q, _opts, fallback) => { prompts.push(q); return fallback; },
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -61,27 +65,30 @@ describe("guided run", () => {
     try {
       await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal, stderrTerminal, setProviderKey: child });
       expect(child).toHaveBeenCalledTimes(offered ? 1 : 0);
-      expect(prompts.some(q => q.startsWith("Store a Pi Session MCP API key"))).toBe(offered);
+      expect(prompts.includes(KEY_OFFER)).toBe(offered);
       if (offered) {
         expect(child).toHaveBeenCalledWith("openai");
         expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL");
         expect(reads).toBeGreaterThanOrEqual(2);
         const stderr = err.mock.calls.map(c => String(c[0])).join("");
         expect(stderr).toContain("Unknown provider ID");
-        expect(stderr).toContain("openai: not configured");
+        expect(stderr).not.toContain("no-such-provider");
+        expect(stderr).toContain("openai: key command failed, not authenticated");
+        expect(stderr).not.toContain("not configured");
       }
       expect(f.deps.probe).not.toHaveBeenCalled();
     } finally { out.mockRestore(); err.mockRestore(); }
   });
-  it("reports a stored key only after the child succeeds and the reloaded catalog shows it", async () => {
+  it("leaves the outcome of a stored key to the key command and then asks for another provider", async () => {
     const f = await fixture();
     let stored = false, reads = 0;
     f.deps.catalog = async () => { reads++; return { ...noLevels, providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => { stored = true; return 0; });
     const ids = ["openai", ""];
+    const prompts: string[] = [];
     const prompter: Prompter = {
-      text: async (q, fallback) => q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? "",
-      confirm: async (q, fallback) => q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false,
+      text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
+      confirm: async (q, fallback) => q === KEY_OFFER ? true : fallback ?? false,
       choose: async (_q, _opts, fallback) => fallback,
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -90,10 +97,11 @@ describe("guided run", () => {
       await runGuidedMain({ apply: true, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child });
       expect(child).toHaveBeenCalledWith("openai");
       expect(reads).toBeGreaterThanOrEqual(2);
+      expect(prompts.filter(providerQuestion)).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
       const stderr = err.mock.calls.map(c => String(c[0])).join("");
-      expect(stderr).toContain("openai: key stored");
+      expect(stderr).not.toMatch(/openai: (?:nothing changed|key command)/);
       expect(stderr).toContain("Authenticated providers: openai");
-      expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("key stored");
+      expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("one at a time");
     } finally { out.mockRestore(); err.mockRestore(); }
   });
   it("runs the key child with stdout on stderr and returns only its exit status", async () => {
@@ -494,5 +502,64 @@ describe("guided run", () => {
       expect(guidance).toContain("Authenticated providers: anthropic"); expect(guidance).toContain("Optional providers (not authenticated): openai");
       expect(questions.join(" ")).not.toMatch(/(?:enter|provide) (?:a )?(?:credential|api key|token)/i);
     } finally { stdout.mockRestore(); stderr.mockRestore(); }
+  });
+});
+describe("provider key step", () => {
+  const catalogOf = (authenticated: Record<string, boolean>) => ({ ...noLevels, outputPrice: () => 2,
+    providers: () => Object.entries(authenticated).map(([id, authConfigured]) => ({ id, authConfigured, models: ["m"] })) });
+  const providers = { anthropic: true, deepseek: false, openai: false, "openai-codex": false };
+  async function step(answers: string[], options: { status?: number; before?: Record<string, boolean>; after?: Record<string, boolean> } = {}) {
+    const events: string[] = [];
+    const prompter: Prompter = {
+      text: async (q) => { events.push(`ask: ${q}`); return answers.shift() ?? ""; },
+      confirm: async (q) => { events.push(`confirm: ${q}`); return true; },
+      choose: async (_q, _options, fallback) => fallback,
+    };
+    const run = vi.fn(async (_id: string) => options.status ?? 0);
+    const before = options.before ?? providers;
+    await offerProviderCredentials(prompter, catalogOf(before), async () => catalogOf(options.after ?? before), run, (text) => { events.push(`say: ${text}`); });
+    const said = events.filter((e) => e.startsWith("say: ")).map((e) => e.slice(5));
+    return { events, run, said, asked: events.filter((e) => e.startsWith("ask: ")).map((e) => e.slice(5)) };
+  }
+  it("explains the step before its first question and words the question differently after a stored key", async () => {
+    const { events, said, asked } = await step(["openai", ""], { after: { ...providers, openai: true } });
+    expect(events[0]).toMatch(/^say: /); expect(events[1]).toBe(`confirm: ${KEY_OFFER}`);
+    expect(said[0]).toContain("each provider you name, one at a time"); expect(said[0]).toContain("an empty answer continues");
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
+    // The key command itself says whether it stored or replaced the key; the step adds no line.
+    expect(said).toHaveLength(1);
+  });
+  it("lists the provider IDs on ? without running the key command", async () => {
+    const { run, said, asked } = await step(["?", ""]);
+    expect(run).not.toHaveBeenCalled();
+    expect(said.slice(1)).toEqual(["Authenticated providers: anthropic\nOptional providers (not authenticated): deepseek, openai, openai-codex\n"]);
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, FIRST_PROVIDER_QUESTION]);
+  });
+  it("answers an unknown ID with close catalog IDs and never echoes it", async () => {
+    const { run, said } = await step(["OpenAI-Codx", "opena", "open ai", "zz-sk-test-SENTINEL", "bad id!", ""]);
+    expect(run).not.toHaveBeenCalled();
+    expect(said.slice(1)).toEqual([
+      "Unknown provider ID. Closest: openai-codex. Enter ? to list all.\n",
+      "Unknown provider ID. Closest: openai, openai-codex. Enter ? to list all.\n",
+      "Unknown provider ID. Closest: openai. Enter ? to list all.\n",
+      "Unknown provider ID. Enter ? to list all provider IDs.\n",
+      "Unknown provider ID. Enter ? to list all provider IDs.\n",
+    ]);
+    expect(said.join("")).not.toMatch(/Codx|open ai|SENTINEL|bad id/);
+  });
+  it.each([
+    { status: 4, authenticated: true, line: "openai: nothing changed, still authenticated\n" },
+    { status: 3, authenticated: false, line: "openai: nothing changed, not authenticated\n" },
+    { status: 64, authenticated: true, line: "openai: nothing changed, still authenticated\n" },
+    { status: 1, authenticated: true, line: "openai: key command failed, authenticated\n" },
+    { status: 1, authenticated: false, line: "openai: key command failed, not authenticated\n" },
+    { status: 0, authenticated: false, line: "openai: key command succeeded, but not authenticated\n" },
+  ])("reports exit $status with authentication $authenticated in one outcome line", async ({ status, authenticated, line }) => {
+    const catalog = { ...providers, openai: authenticated };
+    const { run, said, asked } = await step(["openai", ""], { status, before: catalog, after: catalog });
+    expect(run).toHaveBeenCalledWith("openai");
+    expect(said.slice(1)).toEqual([line]);
+    // Only a key that the reloaded catalog shows counts as stored.
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, FIRST_PROVIDER_QUESTION]);
   });
 });

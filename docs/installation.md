@@ -42,12 +42,19 @@ to setup or an agent:
 
 The interactive interview proceeds in this order:
 
-1. On an interactive terminal with `--apply`, ask whether the owner wants to
-   store a Pi Session MCP key. If so, the owner names provider IDs one by one;
-   each runs `pi-session-mcp-provider auth set <provider>` on the same
-   terminal, and setup sees only whether it succeeded. Then show authenticated and
-   optional providers and the separate Pi login command. When none is
-   authenticated, offer to re-check login.
+1. On an interactive terminal with `--apply`, explain the key step and ask
+   whether the owner wants to store a Pi Session MCP key. If so, the owner
+   names provider IDs one at a time: `?` lists them, an unknown ID is answered
+   with the closest catalog IDs or the way to list them (never with the typed
+   value), and an empty answer continues. Each ID runs
+   `pi-session-mcp-provider auth set <provider>` on the same terminal, which
+   reports `key stored` or `key replaced` itself; setup sees only its exit
+   status. After a stored key the question reads `Another provider ID`. After
+   a failed entry setup prints `nothing changed` when the command stopped
+   before writing (for example on an empty entry), otherwise
+   `key command failed`, each with whether the provider is authenticated.
+   Then show authenticated and optional providers and the separate Pi login
+   command. When none is authenticated, offer to re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
    review profiles has fewer than two families. A proposal's thinking level is
    the one Pi applies for its model: the role asks for `medium` (code), `high`
@@ -227,7 +234,12 @@ pi-session-mcp-provider add <id> --api openai-completions --base-url https://exa
 pi-session-mcp-provider remove <id>
 ```
 
-The terminal key prompt disables echo. For unattended provisioning operated by the
+The terminal key prompt disables echo and says that the input is hidden. When
+a key is already stored for the provider, `auth set` says so before the
+prompt; an empty entry keeps that key (exit 4, `credential_invalid`), and a
+new one is reported as `<provider>: key replaced` instead of
+`<provider>: key stored`. These lines go to stderr; stdout still carries only
+`ok`, and `--stdin` prints none of them. For unattended provisioning operated by the
 owner, pipe the key to `pi-session-mcp-provider auth set <id> --stdin`; do not
 put it in an argument. `--stdin` on a terminal is refused (exit 64) because the
 typed key would echo. These commands never contact a provider or spend a turn.
