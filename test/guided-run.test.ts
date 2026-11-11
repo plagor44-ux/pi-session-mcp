@@ -8,7 +8,7 @@ import { parseGuidedAnswers } from "../src/guided/answers.js";
 import { result } from "../src/setup-result.js";
 import { PassThrough } from "node:stream";
 import { buildGuidedPlan } from "../src/guided/plan.js";
-import { PROVIDER_KEY_CHILD_STDIO, offerProviderCredentials, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
+import { CREDENTIAL_CHILD_STDIO, offerProviderCredentials, opensBrowserByDefault, runGuidedMain, setProviderKeyInTerminal, signInInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
 import type { Prompter } from "../src/guided/prompts.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -22,7 +22,8 @@ const noLevels = { thinkingLevels: () => undefined, effectiveThinkingLevel: () =
 const FIRST_PROVIDER_QUESTION = "Provider ID (? lists them, empty to continue)";
 const NEXT_PROVIDER_QUESTION = "Another provider ID (? lists them, empty to continue)";
 const providerQuestion = (q: string) => q === FIRST_PROVIDER_QUESTION || q === NEXT_PROVIDER_QUESTION;
-const KEY_OFFER = "Store a provider key now?";
+const CREDENTIAL_OFFER = "Sign in to a provider or store a key now?";
+const BROWSER_QUESTION = "Open a browser on this machine to sign in?";
 async function fixture(live = false) {
   const directory = await mkdtemp(join(tmpdir(), "guided-test-")); directories.push(directory);
   const configPath = join(directory, "config.json");
@@ -57,7 +58,7 @@ describe("guided run", () => {
     const ids = ["no-such-provider", "openai", ""];
     const prompter: Prompter = {
       text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
-      confirm: async (q, fallback) => { prompts.push(q); return q === KEY_OFFER ? true : fallback ?? false; },
+      confirm: async (q, fallback) => { prompts.push(q); return q === CREDENTIAL_OFFER ? true : fallback ?? false; },
       choose: async (q, _opts, fallback) => { prompts.push(q); return fallback; },
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -65,7 +66,7 @@ describe("guided run", () => {
     try {
       await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal, stderrTerminal, setProviderKey: child });
       expect(child).toHaveBeenCalledTimes(offered ? 1 : 0);
-      expect(prompts.includes(KEY_OFFER)).toBe(offered);
+      expect(prompts.includes(CREDENTIAL_OFFER)).toBe(offered);
       if (offered) {
         expect(child).toHaveBeenCalledWith("openai");
         expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL");
@@ -88,7 +89,7 @@ describe("guided run", () => {
     const prompts: string[] = [];
     const prompter: Prompter = {
       text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
-      confirm: async (q, fallback) => q === KEY_OFFER ? true : fallback ?? false,
+      confirm: async (q, fallback) => q === CREDENTIAL_OFFER ? true : fallback ?? false,
       choose: async (_q, _opts, fallback) => fallback,
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -110,7 +111,7 @@ describe("guided run", () => {
     const ids = ["openai", ""];
     const prompter: Prompter = {
       text: async (q, fallback) => providerQuestion(q) ? ids.shift() ?? "" : fallback ?? "",
-      confirm: async (q, fallback) => q === KEY_OFFER ? true : fallback ?? false,
+      confirm: async (q, fallback) => q === CREDENTIAL_OFFER ? true : fallback ?? false,
       choose: async (_q, _opts, fallback) => fallback,
     };
     const deferInterrupts = async <T>(run: () => Promise<T>): Promise<T> => { events.push("defer"); try { return await run(); } finally { events.push("resume"); } };
@@ -123,7 +124,7 @@ describe("guided run", () => {
     } finally { out.mockRestore(); err.mockRestore(); }
   });
   it("runs the key child with stdout on stderr and returns only its exit status", async () => {
-    expect(PROVIDER_KEY_CHILD_STDIO).toEqual(["inherit", 2, "inherit"]);
+    expect(CREDENTIAL_CHILD_STDIO).toEqual(["inherit", 2, "inherit"]);
     const script = join(await mkdtemp(join(tmpdir(), "guided-child-")), "child.mjs"); directories.push(join(script, ".."));
     await writeFile(script, 'const [, , a, b, id] = process.argv; if (a !== "auth" || b !== "set") process.exit(9); if (id === "signal") process.kill(process.pid, "SIGKILL"); process.exit(id === "openai" ? 0 : 3);\n');
     const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -134,13 +135,49 @@ describe("guided run", () => {
       expect(await setProviderKeyInTerminal("openai", join(script, "..", "missing.mjs"))).not.toBe(0);
     } finally { err.mockRestore(); }
   });
+  it("runs the sign-in child with stdout on stderr and returns only its exit status", async () => {
+    const script = join(await mkdtemp(join(tmpdir(), "guided-child-")), "child.mjs"); directories.push(join(script, ".."));
+    await writeFile(script, 'const a = process.argv.slice(2).join(" "); process.exit(a === "auth login openai --no-browser" ? 0 : a === "auth login openai" ? 5 : 9);\n');
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await signInInTerminal("openai", true, script)).toBe(0);
+      expect(await signInInTerminal("openai", false, script)).toBe(5);
+      expect(await signInInTerminal("openai", true, join(script, "..", "missing.mjs"))).not.toBe(0);
+    } finally { err.mockRestore(); }
+  });
+  it.each([
+    { apply: true, stderrTerminal: true, offered: true },
+    { apply: false, stderrTerminal: true, offered: false },
+    { apply: true, stderrTerminal: false, offered: false },
+  ])("gates the sign-in like the key entry: apply $apply, stderr terminal $stderrTerminal", async ({ apply, stderrTerminal, offered }) => {
+    const f = await fixture();
+    f.deps.catalog = async () => ({ ...noLevels, providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"], signIn: true as const }], outputPrice: () => 2 });
+    const events: string[] = [];
+    const signIn = vi.fn(async (_provider: string, _noBrowser: boolean) => { events.push("child"); return 1; });
+    const setProviderKey = vi.fn(async () => 1);
+    const deferInterrupts = async <T>(run: () => Promise<T>): Promise<T> => { events.push("defer"); try { return await run(); } finally { events.push("resume"); } };
+    const ids = ["openai", ""];
+    const prompter: Prompter = {
+      text: async (q, fallback) => providerQuestion(q) ? ids.shift() ?? "" : fallback ?? "",
+      confirm: async (q, fallback) => q === CREDENTIAL_OFFER ? true : fallback ?? false,
+      choose: async (_q, _opts, fallback) => fallback,
+    };
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal, setProviderKey, signIn, browserDefault: false, deferInterrupts });
+      expect(signIn.mock.calls).toEqual(offered ? [["openai", true]] : []);
+      expect(events).toEqual(offered ? ["defer", "child", "resume"] : []);
+      expect(setProviderKey).not.toHaveBeenCalled();
+    } finally { out.mockRestore(); err.mockRestore(); }
+  });
   it("never offers credential handoff with answers", async () => {
     const f = await fixture(); const path = join(f.directory, "answers.json"); await writeFile(path, "{}");
-    const child = vi.fn(async () => 0); const prompter: Prompter = { text: vi.fn(), confirm: vi.fn(), choose: vi.fn() };
+    const child = vi.fn(async () => 0); const signIn = vi.fn(async () => 0); const prompter: Prompter = { text: vi.fn(), confirm: vi.fn(), choose: vi.fn() };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
     try {
-      await runGuidedMain({ apply: true, answersPath: path }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child });
-      expect(child).not.toHaveBeenCalled(); expect(prompter.choose).not.toHaveBeenCalled();
+      await runGuidedMain({ apply: true, answersPath: path }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child, signIn });
+      expect(child).not.toHaveBeenCalled(); expect(signIn).not.toHaveBeenCalled(); expect(prompter.choose).not.toHaveBeenCalled();
     } finally { out.mockRestore(); err.mockRestore(); }
   });
   it("rejects a pending terminal question when input ends", async () => {
@@ -515,7 +552,9 @@ describe("guided run", () => {
     try {
       expect(await runGuidedMain({ apply: false, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true })).toBe(0);
       expect(stdout).toHaveBeenCalledTimes(1); expect(JSON.parse(String(stdout.mock.calls[0]![0])).status).toBe("planned");
-      const guidance = stderr.mock.calls.map((c) => String(c[0])).join(""); expect(guidance).toContain('"$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"'); expect(guidance).not.toContain(f.directory);
+      const guidance = stderr.mock.calls.map((c) => String(c[0])).join(""); expect(guidance).not.toContain(f.directory);
+      expect(guidance).toContain('Sign in with "pi-session-mcp-provider auth login <provider>" or store a key with "pi-session-mcp-provider auth set <provider>". Never enter credentials here.\n');
+      expect(guidance).not.toContain(".bin/pi");
       expect(questions).not.toContain("Re-check provider login?");
       expect(guidance).toContain("Authenticated providers: anthropic"); expect(guidance).toContain("Optional providers (not authenticated): openai");
       expect(questions.join(" ")).not.toMatch(/(?:enter|provide) (?:a )?(?:credential|api key|token)/i);
@@ -523,25 +562,39 @@ describe("guided run", () => {
   });
 });
 describe("provider key step", () => {
-  const catalogOf = (authenticated: Record<string, boolean>) => ({ ...noLevels, outputPrice: () => 2,
-    providers: () => Object.entries(authenticated).map(([id, authConfigured]) => ({ id, authConfigured, models: ["m"] })) });
+  /** `signIn` names the providers that declare account sign-in. */
+  const catalogOf = (authenticated: Record<string, boolean>, signIn: readonly string[] = []) => ({ ...noLevels, outputPrice: () => 2,
+    providers: () => Object.entries(authenticated).map(([id, authConfigured]) => ({ id, authConfigured, models: ["m"], ...(signIn.includes(id) ? { signIn: true as const } : {}) })) });
   const providers = { anthropic: true, deepseek: false, openai: false, "openai-codex": false };
-  async function step(answers: string[], options: { status?: number | ((id: string) => number); before?: Record<string, boolean>; after?: Record<string, boolean> } = {}) {
+  async function step(answers: string[], options: { status?: number | ((id: string) => number); before?: Record<string, boolean>; after?: Record<string, boolean>; signIn?: readonly string[]; method?: "sign-in" | "key"; browser?: boolean; browserDefault?: boolean } = {}) {
     const events: string[] = [];
+    const choices: unknown[][] = [];
+    const browserFallbacks: boolean[] = [];
     const prompter: Prompter = {
       text: async (q) => { events.push(`ask: ${q}`); return answers.shift() ?? ""; },
-      confirm: async (q) => { events.push(`confirm: ${q}`); return true; },
-      choose: async (_q, _options, fallback) => fallback,
+      confirm: async (q, fallback) => {
+        events.push(`confirm: ${q}`);
+        if (q !== BROWSER_QUESTION) return true;
+        browserFallbacks.push(fallback);
+        return options.browser ?? fallback;
+      },
+      choose: async (q, offered, fallback) => { choices.push([q, offered, fallback]); return (options.method ?? fallback) as typeof fallback; },
     };
-    const run = vi.fn(async (id: string) => typeof options.status === "function" ? options.status(id) : options.status ?? 0);
+    const status = async (id: string): Promise<number> => typeof options.status === "function" ? options.status(id) : options.status ?? 0;
+    const setKey = vi.fn(status);
+    const signIn = vi.fn(async (id: string, _noBrowser: boolean) => status(id));
     const before = options.before ?? providers;
-    await offerProviderCredentials(prompter, catalogOf(before), async () => catalogOf(options.after ?? before), run, (text) => { events.push(`say: ${text}`); });
+    const signInIds = options.signIn ?? [];
+    await offerProviderCredentials(prompter, catalogOf(before, signInIds), {
+      reload: async () => catalogOf(options.after ?? before, signInIds),
+      setKey, signIn, report: (text) => { events.push(`say: ${text}`); }, browserDefault: options.browserDefault ?? false,
+    });
     const said = events.filter((e) => e.startsWith("say: ")).map((e) => e.slice(5));
-    return { events, run, said, asked: events.filter((e) => e.startsWith("ask: ")).map((e) => e.slice(5)) };
+    return { events, run: setKey, setKey, signIn, choices, browserFallbacks, said, asked: events.filter((e) => e.startsWith("ask: ")).map((e) => e.slice(5)) };
   }
   it("explains the step before its first question and words the question differently after a stored key", async () => {
     const { events, said, asked } = await step(["openai", ""], { after: { ...providers, openai: true } });
-    expect(events[0]).toMatch(/^say: /); expect(events[1]).toBe(`confirm: ${KEY_OFFER}`);
+    expect(events[0]).toMatch(/^say: /); expect(events[1]).toBe(`confirm: ${CREDENTIAL_OFFER}`);
     expect(said[0]).toContain("each provider you name, one at a time"); expect(said[0]).toContain("an empty answer continues");
     expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
     // The key command itself says whether it stored or replaced the key; the step adds no line.
@@ -555,8 +608,54 @@ describe("provider key step", () => {
   it("lists the provider IDs on ? without running the key command", async () => {
     const { run, said, asked } = await step(["?", ""]);
     expect(run).not.toHaveBeenCalled();
-    expect(said.slice(1)).toEqual(["Authenticated providers: anthropic\nOptional providers (not authenticated): deepseek, openai, openai-codex\n"]);
+    expect(said.slice(1)).toEqual(["Authenticated providers: anthropic\nOptional providers (not authenticated): deepseek, openai, openai-codex\nProviders with account sign-in: none\n"]);
     expect(asked).toEqual([FIRST_PROVIDER_QUESTION, FIRST_PROVIDER_QUESTION]);
+  });
+  it("lists the providers with account sign-in on ?", async () => {
+    const { said } = await step(["?", ""], { signIn: ["openai", "openai-codex"] });
+    expect(said.slice(1)).toEqual(["Authenticated providers: anthropic\nOptional providers (not authenticated): deepseek, openai, openai-codex\nProviders with account sign-in: openai, openai-codex\n"]);
+  });
+  it("asks sign-in or key only for providers that declare account sign-in", async () => {
+    const { choices, setKey, signIn } = await step(["openai", "deepseek", ""], { signIn: ["openai"] });
+    expect(choices).toEqual([["openai: sign in with an account or store an API key?", ["sign-in", "key"], "sign-in"]]);
+    expect(signIn.mock.calls.map(([id]) => id)).toEqual(["openai"]);
+    expect(setKey.mock.calls).toEqual([["deepseek"]]);
+  });
+  it('passes --no-browser when the owner declines the browser and stores a key on "key"', async () => {
+    expect((await step(["openai", ""], { signIn: ["openai"], browser: false })).signIn.mock.calls).toEqual([["openai", true]]);
+    expect((await step(["openai", ""], { signIn: ["openai"], browser: true })).signIn.mock.calls).toEqual([["openai", false]]);
+    const key = await step(["openai", ""], { signIn: ["openai"], method: "key" });
+    expect(key.setKey.mock.calls).toEqual([["openai"]]); expect(key.signIn).not.toHaveBeenCalled();
+    expect(key.events).not.toContain(`confirm: ${BROWSER_QUESTION}`);
+  });
+  it("offers the browser by default only where one is likely", async () => {
+    const cases: [NodeJS.ProcessEnv, NodeJS.Platform, boolean][] = [
+      [{}, "darwin", true], [{ DISPLAY: ":0" }, "linux", true], [{ WAYLAND_DISPLAY: "wayland-0" }, "linux", true], [{}, "linux", false],
+      [{ SSH_CONNECTION: "a b c d" }, "darwin", false], [{ SSH_TTY: "/dev/pts/1", DISPLAY: "localhost:10.0" }, "linux", false],
+      [{ SSH_CONNECTION: "", DISPLAY: ":0" }, "linux", true],
+    ];
+    for (const [env, platform, expected] of cases) expect(opensBrowserByDefault(env, platform), JSON.stringify([env, platform])).toBe(expected);
+    for (const browserDefault of [true, false]) {
+      const { browserFallbacks, signIn } = await step(["openai", ""], { signIn: ["openai"], browserDefault });
+      expect(browserFallbacks).toEqual([browserDefault]);
+      expect(signIn.mock.calls).toEqual([["openai", !browserDefault]]);
+    }
+  });
+  it.each([
+    { status: 1, authenticated: false, lines: ['openai: sign-in failed, not authenticated\nIf Pi stored the sign-in anyway, "pi-session-mcp-provider auth inherit openai" enables it.\n'] },
+    { status: 1, authenticated: true, lines: ["openai: sign-in failed, authenticated\n"] },
+    { status: 3, authenticated: false, lines: ["openai: nothing changed, not authenticated\n"] },
+    { status: 4, authenticated: false, lines: ["openai: nothing changed, not authenticated\n"] },
+    { status: 64, authenticated: true, lines: ["openai: nothing changed, still authenticated\n"] },
+    { status: 0, authenticated: false, lines: ["openai: sign-in succeeded, but not authenticated\n"] },
+    { status: 0, authenticated: true, lines: [] },
+  ])("reports each sign-in outcome with the authentication state: exit $status, authenticated $authenticated", async ({ status, authenticated, lines }) => {
+    const catalog = { ...providers, openai: authenticated };
+    const { signIn, said, asked } = await step(["openai", ""], { status, before: catalog, after: catalog, signIn: ["openai"] });
+    expect(signIn).toHaveBeenCalledOnce();
+    expect(said.slice(1)).toEqual(lines);
+    // Only a sign-in that the reloaded catalog shows counts as configured.
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, status === 0 && authenticated ? NEXT_PROVIDER_QUESTION : FIRST_PROVIDER_QUESTION]);
   });
   it("answers an unknown ID with close catalog IDs and never echoes it", async () => {
     const { run, said } = await step(["OpenAI-Codx", "opena", "open ai", "zz-sk-test-SENTINEL", "bad id!", ""]);

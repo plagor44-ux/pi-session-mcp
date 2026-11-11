@@ -78,11 +78,12 @@
   and refreshes that provider's catalog once from Pi's catalog service
   (ADR 0022); it sends no model request. All three use fakes in tests.
 - Guided setup and `install.sh` never read, print or store a provider
-  credential themselves; the owner logs in through Pi or stores a key with
+  credential themselves; the owner signs in with
+  `pi-session-mcp-provider auth login` or stores a key with
   `pi-session-mcp-provider auth set`. Only on an interactive terminal, and
   never with `--answers`, a non-terminal or a dry run, guided setup may run
-  that command as a child process on the same terminal and receives only its
-  exit status (ADR 0021). The provider CLI reads a key only from a terminal
+  either command as a child process on the same terminal and receives only its
+  exit status (ADR 0021, ADR 0022). The provider CLI reads a key only from a terminal
   prompt with echo off or from standard input with `--stdin`, rejects a key in
   an argument and has no command that prints one.
 - Setup accepts only configured client targets and derives absolute paths

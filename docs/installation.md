@@ -33,28 +33,43 @@ apply. For non-interactive use, provide `--answers /path/to/answers.json`;
 `--config /path/to/config.json` optionally selects the guided configuration.
 See the [agent guide](agent-install.md) for the format and approval boundaries.
 
-The owner can log in through the package's Pi binary, never by giving credentials
-to setup or an agent:
+The owner signs in to a provider account or stores a key on their own terminal,
+never by giving credentials to setup or an agent (add `--no-browser` to
+`auth login` when this machine has no browser; see
+[account sign-in](#account-sign-in)):
 
 ```sh
-"$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"
+pi-session-mcp-provider auth login <provider>
+pi-session-mcp-provider auth set <provider>
 ```
 
 The interactive interview proceeds in this order:
 
-1. On an interactive terminal with `--apply`, explain the key step and ask
-   whether the owner wants to store a Pi Session MCP key. If so, the owner
-   names provider IDs one at a time: `?` lists them, an unknown ID is answered
-   with the closest catalog IDs or the way to list them (never with the typed
-   value), and an empty answer continues. Each ID runs
-   `pi-session-mcp-provider auth set <provider>` on the same terminal, which
-   reports `key stored` or `key replaced` itself; setup sees only its exit
-   status. After a stored key the question reads `Another provider ID`. After
-   a failed entry setup prints `nothing changed` when the command stopped
-   before writing (for example on an empty entry), otherwise
-   `key command failed`, each with whether the provider is authenticated.
-   Then show authenticated and optional providers and the separate Pi login
-   command. When none is authenticated, offer to re-check login.
+1. On an interactive terminal with `--apply`, explain the credential step and
+   ask whether the owner wants to sign in to a provider or store a key (default
+   no). If so, the owner names provider IDs one at a time: `?` lists them and
+   the providers that offer account sign-in, an unknown ID is answered with the
+   closest catalog IDs or the way to list them (never with the typed value),
+   and an empty answer continues. For a provider that offers account sign-in,
+   setup asks whether to sign in or store an API key (default sign in), and
+   before a sign-in whether to open a browser on this machine (default yes,
+   except in an SSH session and on Linux without `DISPLAY` or
+   `WAYLAND_DISPLAY`; no adds `--no-browser`). A sign-in runs
+   `pi-session-mcp-provider auth login <provider>`, a key
+   `pi-session-mcp-provider auth set <provider>`, as a child process on the
+   same terminal; each reports its own outcome, and setup sees only the exit
+   status. Ctrl-C while the command runs ends only that command. After a
+   success that authenticates the provider the question reads
+   `Another provider ID`. A success that leaves the provider unauthenticated
+   prints `succeeded, but not authenticated`. After a failure setup prints
+   `nothing changed` when the command stopped before changing anything (for
+   example on an empty key or a provider with a stored key), otherwise
+   `key command failed` or `sign-in failed`, each with whether the provider is
+   authenticated; a failed sign-in that leaves the provider unauthenticated
+   adds that `pi-session-mcp-provider auth inherit <provider>` enables a
+   sign-in that Pi stored anyway. Then show authenticated and optional
+   providers and the two commands above. When none is authenticated, offer to
+   re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
    review profiles has fewer than two families. A proposal's thinking level is
    the one Pi applies for its model: the role asks for `medium` (code), `high`
