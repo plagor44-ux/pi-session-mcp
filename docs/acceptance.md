@@ -513,7 +513,10 @@ Pi Session MCP tools; the script never does.
   skill of the same name. With `--setting-sources project,local`, as the
   harness starts it, Claude Code `2.1.296` listed only the project copy when a
   different personal copy existed (observed on 2026-10-12 with a marker skill);
-  without that flag the personal copy shadowed the project copy. Re-check this
+  without that flag the personal copy shadowed the project copy. On 2026-11-10
+  Claude Code `2.1.322`, started the same way, loaded the project copy while a
+  different personal copy existed
+  ([record](evaluation/multi-session-2026-11-10/README.md)). Re-check this
   when the client version changes. Codex's precedence between its home skills
   and the run's repository skill is not established, so a Codex run is refused
   while any bound Codex skill source (`$CODEX_HOME/skills`,
@@ -777,16 +780,29 @@ as recorded; a new run gets a new record.
 Targeted records below, the Pi extension live check and the multi-session
 skill acceptance with one or two concurrent sessions, are not Level 3 cycles
 even where they used a real controller or a real model. The wording "passed all
-three levels" refers to earlier private cycles only; the full ten-task Level 3
-cycle has not been repeated on Pi SDK `1.x`. This note adds no result and
+three levels" refers to earlier private cycles only. When this note was written
+on 2026-10-13, the full ten-task Level 3 cycle had not been repeated on Pi SDK
+`1.x`; the two cycles named next came later. This note adds no result and
 changes none.
 On 2026-11-02 one full ten-task cycle passed on the published `0.16.1`
 with Pi SDK `1.5.0`; see [its record](evaluation/level3-2026-11-02/README.md).
+On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
+`93980d9` with Pi SDK `1.5.2`; see
+[its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
+commit only: the published `0.20.0` has no cycle, and a later release needs
+its own.
+Two targeted records of the same day are not Level 3 cycles and add nothing to
+that gate: the
+[Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
+setup installs, on the same commit, and the
+[multi-session skill acceptance](evaluation/multi-session-2026-11-10/README.md)
+with Claude Code on that commit and with both clients on a clone of the tag
+`v0.20.0`, where one Codex scenario failed a timing criterion.
 
 Release notes state which levels were run for a release and what was not
-covered. Pi Session MCP has passed all three levels in earlier private cycles. The
-live two-client acceptance has not yet been repeated on a build with Pi SDK
-`1.x`.
+covered. Pi Session MCP has passed all three levels in earlier private cycles. On
+builds with Pi SDK `1.x` the live two-client acceptance has been repeated in
+the two cycles named above and in no other.
 
 `v0.6.2` passed Level 1 on a fresh clone of its tag. It passed Level 2 in all
 three variants: working tree, published release, and published npm package.
@@ -2689,6 +2705,17 @@ targets applied and verified, and `--writer <name> --verify` for every writer.
 
 The bubblewrap and Podman-gated test files were not run on their own on the
 tag; the log of the tag clone's test run holds only the totals.
+
+Added later on 2026-11-10: a targeted multi-session skill acceptance on a
+fresh clone of the tag, with both clients, real workers and Node.js `22.23.3`.
+Claude Code passed `parallel`, `abort` and `trio`. Codex passed `parallel` and
+`abort` on a further prepared run, after its first `parallel` run had failed on
+a changed bound resource and its first `abort` attempt had been refused for
+the same reason, and failed `trio` on one timing criterion. The runs used the
+clone's build, not the installed package; the files of a pack from that clone
+equal those of the registry tarball. See the
+[record](evaluation/multi-session-2026-11-10/README.md). It is not a Level 3
+cycle.
 
 Not established for `0.20.0`: a turn against a real provider with a stored
 key; a full interactive `sh install.sh` run with the key step on a PTY; a

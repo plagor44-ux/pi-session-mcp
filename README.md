@@ -11,7 +11,7 @@ Pi Session MCP is a local, stdio-only [Model Context Protocol](https://modelcont
 
 > Pi Session MCP is an independent project. It is not affiliated with or endorsed by the makers of Pi, OpenAI or Anthropic. Product names are used only to describe compatibility.
 
-> **Status: pre-1.0.** Version 0.20.0 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients ran on 0.16.1; none has run on 0.20.0, and the [0.20.0 acceptance record](docs/acceptance.md#v0200-post-release-evidence) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
+> **Status: pre-1.0.** Version 0.20.0 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients on a release ran on 0.16.1; none has run on 0.20.0, and the [0.20.0 acceptance record](docs/acceptance.md#v0200-post-release-evidence) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
 
 [Example](#example-a-second-opinion) · [Quick start](#quick-start) · [Status](#status) · [Security model](#security-model)
 
@@ -127,7 +127,7 @@ The package version is **0.20.0**.
 | Stability | Pre-1.0. Tools, fields, states and error codes change only in a new minor release. |
 | Platforms | Linux and macOS with Node.js 22.19.0 or newer. CI covers macOS 15 and 26 on Apple silicon; Intel Macs are untested. Setup refuses other platforms with `platform_unsupported`. |
 | Clients | Codex CLI and Claude Code. Setup accepts a client whose public `mcp` command output matches the expected contract, without pinning versions. |
-| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). For 0.20.0 the [acceptance record](docs/acceptance.md#v0200-post-release-evidence) names what is not established: a turn against a real provider with a stored key, an interactive `install.sh` run with the key step, a writer turn against an operator-defined provider, a full live cycle, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
+| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle on a release ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). A later cycle ran on an unreleased commit of `main` with Pi SDK 1.5.2 ([record](docs/evaluation/level3-2026-11-10/README.md)) and is no evidence for 0.20.0. For 0.20.0 the [acceptance record](docs/acceptance.md#v0200-post-release-evidence) names what is not established: a turn against a real provider with a stored key, an interactive `install.sh` run with the key step, a writer turn against an operator-defined provider, a full live cycle, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
 | Out of scope | HTTP, a web UI, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process. |
 
 ## Security model
