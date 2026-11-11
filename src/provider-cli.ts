@@ -124,15 +124,17 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
           }
           io.stderr(`Signing in to ${id} through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".\n`);
           if (await status(["auth", "login", id, ...(args[2] === "--no-browser" ? ["--no-browser"] : [])], "terminal") !== 0) return fail("sign_in_failed", 1);
-          // A provider set to none uses the new sign-in only if nobody changed its source meanwhile.
-          // After Pi has run, every store error reads as one code, so 3, 4 and 64 never follow a sign-in.
+          // A provider set to none uses the new sign-in only if nobody changed its source meanwhile: the store
+          // checks it under its lock. After Pi has run, every store error reads as one code, so 3, 4 and 64
+          // never follow a sign-in.
           if (source === "none") {
-            try { if (sourceIn(await store.read(), id) === "none") await store.inherit(id, options); }
+            try { await store.inherit(id, options, "none"); }
             catch { return fail("provider_store_unavailable", 1); }
           }
         } else {
-          // none first: an interrupted sign-out leaves the provider disabled, never still signed in.
-          if (source === "inherit") await store.removeKey(id, options);
+          // none first: an interrupted sign-out leaves the provider disabled, never still signed in. Only from
+          // inherit, checked under the store's lock, so a key stored meanwhile stays.
+          if (source === "inherit") await store.removeKey(id, options, "inherit");
           if (await status(["auth", "logout", id], "silent") !== 0) return fail("sign_out_failed", 1);
         }
       }

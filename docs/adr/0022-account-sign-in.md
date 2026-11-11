@@ -148,21 +148,23 @@ credential a provider uses:
 | `key` | Refused with `provider_key_stored`; nothing runs. | Deletes Pi's entry; the source stays `key`. |
 
 - `auth login` changes the source only after Pi reported success, and only
-  when the source, read again at that point, is still `none`; a source that
-  changed during the sign-in stays as it is. If the product store cannot be
-  written then, the command fails with `provider_store_unavailable`.
+  when the source, checked under the product store's lock at that point, is
+  still `none`; a source that changed during the sign-in, such as a key stored
+  meanwhile, stays as it is. If the product store cannot be written then, the
+  command fails with `provider_store_unavailable`.
 - Every failure of `auth login` fails closed. When Pi stored the credential
   but did not exit with 0 (the synchronization case above), or when the store
   write failed, the sign-in is in Pi's store while a provider that was `none`
   stays `none`. `auth inherit <provider>` or another `auth login` enables it;
   the documentation and guided setup's failure line say so.
-- `auth logout` writes `none` before Pi deletes the entry, so a failed
-  deletion (`sign_out_failed`) still leaves the provider unauthenticated, and
-  running the command again deletes the entry or, when it is already gone,
-  succeeds. Under `none` no other Pi credential, such as a key in an
-  environment variable, can take over, so a sign-out never silently enables
-  another account. `auth login` or `auth inherit` enables Pi's authentication
-  again.
+- `auth logout` writes `none` before Pi deletes the entry, and only when the
+  source, checked under the product store's lock, is still `inherit`, so a key
+  stored meanwhile stays. A failed deletion (`sign_out_failed`) still leaves
+  the provider unauthenticated, and running the command again deletes the
+  entry or, when it is already gone, succeeds. Under `none` no other Pi
+  credential, such as a key in an environment variable, can take over, so a
+  sign-out never silently enables another account. `auth login` or
+  `auth inherit` enables Pi's authentication again.
 - A stored key keeps precedence (ADR 0021). A sign-in made while a key is
   stored would stay unused, so `auth login` refuses it and, on a terminal,
   says that `auth inherit <provider>` drops the key and
