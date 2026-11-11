@@ -104,6 +104,24 @@ describe("guided run", () => {
       expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("one at a time");
     } finally { out.mockRestore(); err.mockRestore(); }
   });
+  it("runs the key command with interrupts deferred", async () => {
+    const f = await fixture();
+    const events: string[] = [];
+    const ids = ["openai", ""];
+    const prompter: Prompter = {
+      text: async (q, fallback) => providerQuestion(q) ? ids.shift() ?? "" : fallback ?? "",
+      confirm: async (q, fallback) => q === KEY_OFFER ? true : fallback ?? false,
+      choose: async (_q, _opts, fallback) => fallback,
+    };
+    const deferInterrupts = async <T>(run: () => Promise<T>): Promise<T> => { events.push("defer"); try { return await run(); } finally { events.push("resume"); } };
+    const setProviderKey = async (): Promise<number> => { events.push("child"); return 0; };
+    const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const err = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await runGuidedMain({ apply: true, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey, deferInterrupts });
+      expect(events).toEqual(["defer", "child", "resume"]);
+    } finally { out.mockRestore(); err.mockRestore(); }
+  });
   it("runs the key child with stdout on stderr and returns only its exit status", async () => {
     expect(PROVIDER_KEY_CHILD_STDIO).toEqual(["inherit", 2, "inherit"]);
     const script = join(await mkdtemp(join(tmpdir(), "guided-child-")), "child.mjs"); directories.push(join(script, ".."));

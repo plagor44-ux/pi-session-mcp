@@ -95,7 +95,11 @@ export interface GuidedMainDependencies {
   terminal?: boolean;
   stderrTerminal?: boolean;
   setProviderKey?: (provider: string) => Promise<number>;
+  /** Runs a credential command with Ctrl-C left to that command; `setup-main` passes its SIGINT gate (ADR 0022). */
+  deferInterrupts?: <T>(run: () => Promise<T>) => Promise<T>;
 }
+
+const runDirectly = <T>(run: () => Promise<T>): Promise<T> => run();
 
 /** The child's stdout goes to stderr: guided setup's stdout carries only its final report. */
 export const PROVIDER_KEY_CHILD_STDIO = Object.freeze(["inherit", 2, "inherit"] as const);
@@ -208,7 +212,7 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
         };
         catalog = await offerProviderCredentials(currentPrompter, catalog, reload, async provider => {
           terminal?.close(); terminal = undefined;
-          try { return await (injected.setProviderKey ?? setProviderKeyInTerminal)(provider); }
+          try { return await (injected.deferInterrupts ?? runDirectly)(() => (injected.setProviderKey ?? setProviderKeyInTerminal)(provider)); }
           catch { return 1; }
           finally { if (!injected.prompter) prompter = (terminal = terminalPrompter(signal)).prompter; }
         }, text => { process.stderr.write(text); });
