@@ -1,6 +1,6 @@
 import { CATALOG_ID_PATTERN, type PricedModelCatalog } from "../model-catalog.js";
 import { isAbsolute } from "node:path";
-import { ALIAS_PATTERN } from "../execution-profile.js";
+import { ALIAS_PATTERN, THINKING_LEVELS } from "../execution-profile.js";
 import { FAMILY_PATTERN, ROLES, TIERS } from "../routing/config.js";
 import { parseGuidedAnswers, type GuidedAnswers } from "./answers.js";
 import { proposeProfiles } from "./propose.js";
@@ -29,11 +29,16 @@ export async function collectGuidedAnswers(prompter: Prompter, catalog: PricedMo
     if (action === "accept") { profiles.push(proposal); continue; }
     const tier = await prompter.choose(`Tier for ${proposal.alias}`, TIERS, proposal.tier);
     const role = await prompter.choose(`Role for ${proposal.alias}`, ROLES, proposal.role);
-    profiles.push({ ...proposal, tier, role,
-      model: await prompter.text(`Model for ${proposal.alias}`, proposal.model),
-      family: await validatedText(`Family for ${proposal.alias}`, (value) => FAMILY_PATTERN.test(value), proposal.family),
-      thinkingLevel: await prompter.choose(`Thinking level for ${proposal.alias}`, ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const, proposal.thinkingLevel),
-    });
+    const model = await prompter.text(`Model for ${proposal.alias}`, proposal.model);
+    const family = await validatedText(`Family for ${proposal.alias}`, (value) => FAMILY_PATTERN.test(value), proposal.family);
+    // Offer only the levels the chosen model accepts: its own, or the one Pi falls back to when it lists none.
+    // A model the catalog does not list gets every level; the run stops on it later with model_unknown.
+    const offered = catalog.thinkingLevels(proposal.provider, model);
+    const effective = catalog.effectiveThinkingLevel(proposal.provider, model, proposal.thinkingLevel);
+    const levels = offered === undefined ? THINKING_LEVELS : offered.length > 0 ? offered : [effective ?? "off"];
+    const preferred = effective ?? proposal.thinkingLevel;
+    const thinkingLevel = await prompter.choose(`Thinking level for ${proposal.alias}`, levels, levels.includes(preferred) ? preferred : levels[0]!);
+    profiles.push({ ...proposal, tier, role, model, family, thinkingLevel });
   }
   for (const tier of TIERS) {
     const reviews = profiles.filter((p) => p.tier === tier && p.role === "review");

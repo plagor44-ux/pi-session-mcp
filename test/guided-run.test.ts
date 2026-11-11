@@ -8,7 +8,7 @@ import { parseGuidedAnswers } from "../src/guided/answers.js";
 import { result } from "../src/setup-result.js";
 import { PassThrough } from "node:stream";
 import { buildGuidedPlan } from "../src/guided/plan.js";
-import { PROVIDER_KEY_CHILD_STDIO, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
+import { PROVIDER_KEY_CHILD_STDIO, offerProviderCredentials, runGuidedMain, setProviderKeyInTerminal, terminalPrompter } from "../src/setup-guided-main.js";
 import type { Prompter } from "../src/guided/prompts.js";
 
 vi.mock("node:fs/promises", { spy: true });
@@ -17,6 +17,12 @@ afterEach(async () => { await Promise.all(directories.splice(0).map((p) => rm(p,
 const answers = () => parseGuidedAnswers({ schemaVersion: 1, approveProbes: true, allowConfigChange: true,
   profiles: ["review", "code"].map((role) => ({ alias: role, provider: "openai", model: "gpt-test", role, thinkingLevel: "medium", tier: "medium", family: "openai" })),
   defaultProfile: "review", workspaces: [{ alias: "repo", path: "/fake/repo", mode: "read-only" }], history: { enabled: true }, routing: { mode: "manual" }, clients: { claudeCode: true, codex: false } });
+/** A catalog that cannot tell a model's thinking levels, so proposals keep the role's level. */
+const noLevels = { thinkingLevels: () => undefined, effectiveThinkingLevel: () => undefined };
+const FIRST_PROVIDER_QUESTION = "Provider ID (? lists them, empty to continue)";
+const NEXT_PROVIDER_QUESTION = "Another provider ID (? lists them, empty to continue)";
+const providerQuestion = (q: string) => q === FIRST_PROVIDER_QUESTION || q === NEXT_PROVIDER_QUESTION;
+const KEY_OFFER = "Store a provider key now?";
 async function fixture(live = false) {
   const directory = await mkdtemp(join(tmpdir(), "guided-test-")); directories.push(directory);
   const configPath = join(directory, "config.json");
@@ -26,7 +32,7 @@ async function fixture(live = false) {
   const target = { client: "fake", scope: "user", alias: "pi-session-mcp" };
   const deps: GuidedDependencies = {
     configPath, optionalFeatures: async () => ({ podman: true, bubblewrap: true }),
-    catalog: async () => ({ providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2 }),
+    catalog: async () => ({ ...noLevels, providers: () => [{ id: "openai", authConfigured: true, models: ["gpt-test"] }], outputPrice: () => 2 }),
     doctor: vi.fn(async () => { calls.push("doctor"); return { ok: true }; }),
     probe: vi.fn<GuidedDependencies["probe"]>(async (profiles) => { calls.push("probe"); return { schemaVersion: 1, operation: "apply", status: "ok", doctor: { blocking: [], other: [] }, findings: profiles.map((profile) => ({ profile, status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 })), usage: "unknown", exitCode: 0 }; }),
     changeMode: async () => { calls.push("changeMode"); const status = modeApplied ? "unchanged" : "ok"; modeApplied = true; return result("apply", [{ target, status, code: "mode_ready" }]); },
@@ -44,14 +50,14 @@ describe("guided run", () => {
   ])("gates provider key handoff: $apply $terminal $stderrTerminal", async ({ apply, terminal, stderrTerminal, offered }) => {
     const f = await fixture();
     let reads = 0;
-    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    f.deps.catalog = async () => { reads++; return { ...noLevels, providers: () => [{ id: "openai", authConfigured: false, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => 1);
     const prompts: string[] = [];
     // The owner opts in, names an unknown ID, then openai, then ends the list.
     const ids = ["no-such-provider", "openai", ""];
     const prompter: Prompter = {
-      text: async (q, fallback) => { prompts.push(q); return q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? ""; },
-      confirm: async (q, fallback) => { prompts.push(q); return q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false; },
+      text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
+      confirm: async (q, fallback) => { prompts.push(q); return q === KEY_OFFER ? true : fallback ?? false; },
       choose: async (q, _opts, fallback) => { prompts.push(q); return fallback; },
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -59,27 +65,30 @@ describe("guided run", () => {
     try {
       await runGuidedMain({ apply, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal, stderrTerminal, setProviderKey: child });
       expect(child).toHaveBeenCalledTimes(offered ? 1 : 0);
-      expect(prompts.some(q => q.startsWith("Store a Pi Session MCP API key"))).toBe(offered);
+      expect(prompts.includes(KEY_OFFER)).toBe(offered);
       if (offered) {
         expect(child).toHaveBeenCalledWith("openai");
         expect(JSON.stringify(child.mock.calls)).not.toContain("sk-test-SENTINEL");
         expect(reads).toBeGreaterThanOrEqual(2);
         const stderr = err.mock.calls.map(c => String(c[0])).join("");
         expect(stderr).toContain("Unknown provider ID");
-        expect(stderr).toContain("openai: not configured");
+        expect(stderr).not.toContain("no-such-provider");
+        expect(stderr).toContain("openai: key command failed, not authenticated");
+        expect(stderr).not.toContain("not configured");
       }
       expect(f.deps.probe).not.toHaveBeenCalled();
     } finally { out.mockRestore(); err.mockRestore(); }
   });
-  it("reports a stored key only after the child succeeds and the reloaded catalog shows it", async () => {
+  it("leaves the outcome of a stored key to the key command and then asks for another provider", async () => {
     const f = await fixture();
     let stored = false, reads = 0;
-    f.deps.catalog = async () => { reads++; return { providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
+    f.deps.catalog = async () => { reads++; return { ...noLevels, providers: () => [{ id: "openai", authConfigured: stored, models: ["gpt-test"] }], outputPrice: () => 2 }; };
     const child = vi.fn(async () => { stored = true; return 0; });
     const ids = ["openai", ""];
+    const prompts: string[] = [];
     const prompter: Prompter = {
-      text: async (q, fallback) => q.startsWith("Provider ID for the key") ? ids.shift() ?? "" : fallback ?? "",
-      confirm: async (q, fallback) => q.startsWith("Store a Pi Session MCP API key") ? true : fallback ?? false,
+      text: async (q, fallback) => { prompts.push(q); return providerQuestion(q) ? ids.shift() ?? "" : fallback ?? ""; },
+      confirm: async (q, fallback) => q === KEY_OFFER ? true : fallback ?? false,
       choose: async (_q, _opts, fallback) => fallback,
     };
     const out = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -88,10 +97,11 @@ describe("guided run", () => {
       await runGuidedMain({ apply: true, configPath: f.configPath }, true, new AbortController().signal, { dependencies: f.deps, prompter, terminal: true, stderrTerminal: true, setProviderKey: child });
       expect(child).toHaveBeenCalledWith("openai");
       expect(reads).toBeGreaterThanOrEqual(2);
+      expect(prompts.filter(providerQuestion)).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
       const stderr = err.mock.calls.map(c => String(c[0])).join("");
-      expect(stderr).toContain("openai: key stored");
+      expect(stderr).not.toMatch(/openai: (?:nothing changed|key command)/);
       expect(stderr).toContain("Authenticated providers: openai");
-      expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("key stored");
+      expect(out.mock.calls.map(c => String(c[0])).join("")).not.toContain("one at a time");
     } finally { out.mockRestore(); err.mockRestore(); }
   });
   it("runs the key child with stdout on stderr and returns only its exit status", async () => {
@@ -152,7 +162,7 @@ describe("guided run", () => {
   it("does not report an unsafe catalog provider id", async () => {
     const f = await fixture(); const a = answers(); const id = "unsafe\nprovider";
     a.profiles[0]!.provider = id;
-    f.deps.catalog = async () => ({ providers: () => [{ id, authConfigured: false, models: [] }], outputPrice: () => undefined });
+    f.deps.catalog = async () => ({ ...noLevels, providers: () => [{ id, authConfigured: false, models: [] }], outputPrice: () => undefined });
     const r = await runGuided({ apply: true, answers: a }, f.deps);
     expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider");
     expect(JSON.stringify(r)).not.toContain(JSON.stringify(id).slice(1, -1));
@@ -180,13 +190,17 @@ describe("guided run", () => {
   });
   it("unlinks a probe-created candidate symlink before rewriting", async () => {
     const f = await fixture(); const target = join(f.directory, "target"); await writeFile(target, "unchanged");
+    // code-two passes, so dropping code leads to the rewrite instead of the coding_profiles_dropped stop.
+    const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
     const probe = f.deps.probe;
-    f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); await rm(candidate); await symlink(target, candidate); return { ...r, findings: r.findings.filter((p) => p.profile === "review") }; };
-    expect((await runGuided({ apply: true, answers: answers() }, f.deps)).exitCode).toBe(0);
+    f.deps.probe = async (profiles, candidate) => { const r = await probe(profiles, candidate); await rm(candidate); await symlink(target, candidate); return { ...r, findings: r.findings.filter((p) => p.profile !== "code") }; };
+    expect((await runGuided({ apply: true, answers: a }, f.deps)).exitCode).toBe(0);
     expect(await readFile(target, "utf8")).toBe("unchanged");
   });
   it("removes a dropped alias from previously unchanged routing and backs it up", async () => {
     const f = await fixture(); const a = answers(); a.profiles[1]!.alias = "x"; a.profiles[1]!.tier = null; a.profiles[1]!.family = null;
+    // A second coding profile passes, so dropping x does not leave the installation without one.
+    a.profiles.push({ ...a.profiles[1]!, alias: "y" });
     const routing = { mode: "manual", tiers: { medium: { review: ["review"], code: ["x"] } }, families: { review: "openai", x: "openai" } };
     expect(buildGuidedPlan(a, { routing }).routingChanged).toBe(false);
     const path = join(f.directory, "routing.json"); await writeFile(path, JSON.stringify(routing));
@@ -224,20 +238,67 @@ describe("guided run", () => {
   });
   it("keeps the live config when a probe fails", async () => {
     const f = await fixture(true); const before = await readFile(f.configPath);
-    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
-    expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain("default_profile_failed"); expect(await readFile(f.configPath)).toEqual(before);
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }, { profile: "code", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: answers() }, f.deps);
+    expect(r.findings.filter((x) => x.target.scope === "profiles")).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "probe_passed" },
+      { target: { client: "guided", scope: "profiles", alias: "review" }, status: "failed", code: "default_profile_failed", cause: "probe_timeout" },
+    ]);
+    expect(await readFile(f.configPath)).toEqual(before);
   });
   it("drops a failing profile from config and routing", async () => {
-    const f = await fixture(); vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "code", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
-    const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("profile_dropped");
+    const f = await fixture(); const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "code", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }, { profile: "code-two", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r.findings).toContainEqual({ target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "probe_timeout" });
     expect(JSON.parse(await readFile(f.configPath, "utf8")).executionProfiles).not.toHaveProperty("code");
-    expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual([]);
+    expect(JSON.parse(await readFile(join(f.directory, "routing.json"), "utf8")).tiers.medium.code).toEqual(["code-two"]);
+  });
+  it("names the session-start cause of a dropped profile and reports every passed probe", async () => {
+    const f = await fixture(); const a = answers(); a.profiles.push({ ...a.profiles[1]!, alias: "code-two" });
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [
+      { profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+      { profile: "code", status: "failed", code: "probe_start_failed", startCode: "thinking_level_unavailable", providerTurn: false, durationMs: 1 },
+      { profile: "code-two", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+    ], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r).toMatchObject({ status: "ok", exitCode: 0 });
+    expect(r.findings.filter((x) => x.target.scope === "profiles")).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "review" }, status: "ok", code: "probe_passed" },
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "thinking_level_unavailable" },
+      { target: { client: "guided", scope: "profiles", alias: "code-two" }, status: "ok", code: "probe_passed" },
+    ]);
+  });
+  it("does not stop for a missing coding profile when the owner accepted none", async () => {
+    const f = await fixture(); const a = answers(); a.profiles[1]!.alias = "explore"; a.profiles[1]!.role = "explore";
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [{ profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 }, { profile: "explore", status: "failed", code: "probe_timeout", providerTurn: true, durationMs: 1 }], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: a }, f.deps);
+    expect(r).toMatchObject({ status: "ok", exitCode: 0 });
+    expect(r.findings).toContainEqual({ target: { client: "guided", scope: "profiles", alias: "explore" }, status: "ok", code: "profile_dropped", cause: "probe_timeout" });
+    expect(codes(r)).not.toContain("coding_profiles_dropped");
+  });
+  it("stops before any live change when the probes drop every accepted coding profile", async () => {
+    const f = await fixture(true); const before = await readFile(f.configPath);
+    vi.mocked(f.deps.probe).mockResolvedValue({ schemaVersion: 1, operation: "apply", status: "failed", doctor: { blocking: [], other: [] }, findings: [
+      { profile: "review", status: "ok", code: "probe_passed", providerTurn: true, durationMs: 1 },
+      { profile: "code", status: "failed", code: "probe_start_failed", startCode: "thinking_level_unavailable", providerTurn: false, durationMs: 1 },
+    ], usage: "unknown", exitCode: 1 });
+    const r = await runGuided({ apply: true, answers: answers() }, f.deps);
+    expect(r).toMatchObject({ status: "failed", exitCode: 1 });
+    expect(r.findings.slice(-2)).toEqual([
+      { target: { client: "guided", scope: "profiles", alias: "code" }, status: "ok", code: "profile_dropped", cause: "thinking_level_unavailable" },
+      { target: { client: "guided", scope: "profiles", alias: "installation" }, status: "failed", code: "coding_profiles_dropped" },
+    ]);
+    expect(await readFile(f.configPath)).toEqual(before);
+    for (const call of ["changeMode", "apply", "verify"]) expect(f.calls).not.toContain(call);
+    expect(await readdir(f.directory)).toEqual(["config.json"]);
   });
   it("leaves live bytes untouched with no backup when every new profile is dropped", async () => {
     const f = await fixture(); const a = answers();
     a.routing.mode = "off";
     for (const profile of a.profiles) { profile.tier = null; profile.family = null; }
-    const baseline = { ...a, profiles: [a.profiles[0]!] };
+    // The existing coding profile keeps the installation able to code, so dropping the new one does not stop the run.
+    const baseline = { ...a, profiles: [a.profiles[0]!, { ...a.profiles[1]!, alias: "coder" }] };
     const config = buildGuidedPlan(baseline, {}).nextConfig;
     const before = JSON.stringify(config, null, 4) + "\n\n";
     await writeFile(f.configPath, before);
@@ -282,7 +343,7 @@ describe("guided run", () => {
     expect(codes(await runGuided({ apply: true, answers: answers() }, f.deps))).toContain(expected); expect(await readFile(f.configPath)).toEqual(before);
   });
   it("stops with provider_login_required", async () => {
-    const f = await fixture(true); f.deps.catalog = async () => ({ providers: () => [], outputPrice: () => undefined });
+    const f = await fixture(true); f.deps.catalog = async () => ({ ...noLevels, providers: () => [], outputPrice: () => undefined });
     const r = await runGuided({ apply: true, answers: answers() }, f.deps); expect(codes(r)).toContain("provider_login_required"); expect(r.findings.at(-1)!.target.alias).toBe("provider"); expect(JSON.stringify(r)).not.toContain(f.directory);
   });
   it("leaves no candidate after an abort", async () => {
@@ -429,7 +490,7 @@ describe("guided run", () => {
     } finally { output.mockRestore(); }
   });
   it("does not re-check an unauthenticated provider next to an authenticated one", async () => {
-    const f = await fixture(); f.deps.catalog = async () => ({ providers: () => [{ id: "openai", authConfigured: false, models: [] }, { id: "anthropic", authConfigured: true, models: ["claude-test"] }], outputPrice: () => 2 });
+    const f = await fixture(); f.deps.catalog = async () => ({ ...noLevels, providers: () => [{ id: "openai", authConfigured: false, models: [] }, { id: "anthropic", authConfigured: true, models: ["claude-test"] }], outputPrice: () => 2 });
     const questions: string[] = [];
     const prompter: Prompter = { text: async (q, fallback) => { questions.push(q); return fallback ?? ""; }, confirm: async (q, fallback) => { questions.push(q); return q.includes("Approve") ? true : fallback; }, choose: async (q, _options, fallback) => { questions.push(q); return fallback; } };
     const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true); const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
@@ -441,5 +502,69 @@ describe("guided run", () => {
       expect(guidance).toContain("Authenticated providers: anthropic"); expect(guidance).toContain("Optional providers (not authenticated): openai");
       expect(questions.join(" ")).not.toMatch(/(?:enter|provide) (?:a )?(?:credential|api key|token)/i);
     } finally { stdout.mockRestore(); stderr.mockRestore(); }
+  });
+});
+describe("provider key step", () => {
+  const catalogOf = (authenticated: Record<string, boolean>) => ({ ...noLevels, outputPrice: () => 2,
+    providers: () => Object.entries(authenticated).map(([id, authConfigured]) => ({ id, authConfigured, models: ["m"] })) });
+  const providers = { anthropic: true, deepseek: false, openai: false, "openai-codex": false };
+  async function step(answers: string[], options: { status?: number | ((id: string) => number); before?: Record<string, boolean>; after?: Record<string, boolean> } = {}) {
+    const events: string[] = [];
+    const prompter: Prompter = {
+      text: async (q) => { events.push(`ask: ${q}`); return answers.shift() ?? ""; },
+      confirm: async (q) => { events.push(`confirm: ${q}`); return true; },
+      choose: async (_q, _options, fallback) => fallback,
+    };
+    const run = vi.fn(async (id: string) => typeof options.status === "function" ? options.status(id) : options.status ?? 0);
+    const before = options.before ?? providers;
+    await offerProviderCredentials(prompter, catalogOf(before), async () => catalogOf(options.after ?? before), run, (text) => { events.push(`say: ${text}`); });
+    const said = events.filter((e) => e.startsWith("say: ")).map((e) => e.slice(5));
+    return { events, run, said, asked: events.filter((e) => e.startsWith("ask: ")).map((e) => e.slice(5)) };
+  }
+  it("explains the step before its first question and words the question differently after a stored key", async () => {
+    const { events, said, asked } = await step(["openai", ""], { after: { ...providers, openai: true } });
+    expect(events[0]).toMatch(/^say: /); expect(events[1]).toBe(`confirm: ${KEY_OFFER}`);
+    expect(said[0]).toContain("each provider you name, one at a time"); expect(said[0]).toContain("an empty answer continues");
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
+    // The key command itself says whether it stored or replaced the key; the step adds no line.
+    expect(said).toHaveLength(1);
+  });
+  it("keeps the follow-up question after a later entry fails", async () => {
+    const { said, asked } = await step(["openai", "deepseek", ""], { status: (id) => id === "openai" ? 0 : 4, after: { ...providers, openai: true } });
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
+    expect(said.slice(1)).toEqual(["deepseek: nothing changed, not authenticated\n"]);
+  });
+  it("lists the provider IDs on ? without running the key command", async () => {
+    const { run, said, asked } = await step(["?", ""]);
+    expect(run).not.toHaveBeenCalled();
+    expect(said.slice(1)).toEqual(["Authenticated providers: anthropic\nOptional providers (not authenticated): deepseek, openai, openai-codex\n"]);
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, FIRST_PROVIDER_QUESTION]);
+  });
+  it("answers an unknown ID with close catalog IDs and never echoes it", async () => {
+    const { run, said } = await step(["OpenAI-Codx", "opena", "open ai", "zz-sk-test-SENTINEL", "bad id!", ""]);
+    expect(run).not.toHaveBeenCalled();
+    expect(said.slice(1)).toEqual([
+      "Unknown provider ID. Closest: openai-codex. Enter ? to list all.\n",
+      "Unknown provider ID. Closest: openai, openai-codex. Enter ? to list all.\n",
+      "Unknown provider ID. Closest: openai. Enter ? to list all.\n",
+      "Unknown provider ID. Enter ? to list all provider IDs.\n",
+      "Unknown provider ID. Enter ? to list all provider IDs.\n",
+    ]);
+    expect(said.join("")).not.toMatch(/Codx|open ai|SENTINEL|bad id/);
+  });
+  it.each([
+    { status: 4, authenticated: true, line: "openai: nothing changed, still authenticated\n" },
+    { status: 3, authenticated: false, line: "openai: nothing changed, not authenticated\n" },
+    { status: 64, authenticated: true, line: "openai: nothing changed, still authenticated\n" },
+    { status: 1, authenticated: true, line: "openai: key command failed, authenticated\n" },
+    { status: 1, authenticated: false, line: "openai: key command failed, not authenticated\n" },
+    { status: 0, authenticated: false, line: "openai: key command succeeded, but not authenticated\n" },
+  ])("reports exit $status with authentication $authenticated in one outcome line", async ({ status, authenticated, line }) => {
+    const catalog = { ...providers, openai: authenticated };
+    const { run, said, asked } = await step(["openai", ""], { status, before: catalog, after: catalog });
+    expect(run).toHaveBeenCalledWith("openai");
+    expect(said.slice(1)).toEqual([line]);
+    // Only a key that the reloaded catalog shows counts as stored.
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, FIRST_PROVIDER_QUESTION]);
   });
 });

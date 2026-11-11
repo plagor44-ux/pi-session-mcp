@@ -86,11 +86,16 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
       const [action, id] = args as [string, string];
       if (action === "set") {
         if (!builtInProviderIds.includes(id) && !custom.has(id)) return fail("provider_unknown", 3);
-        if (args.length === 2) io.stderr("Enter provider key: ");
-        const key = await readProviderKey(io.input ?? process.stdin, args.length === 3);
-        if (args.length === 2) io.stderr("\n");
+        // Guidance belongs to the hidden prompt only; --stdin keeps its plain output for scripts.
+        const terminal = args.length === 2;
+        const replacing = snapshot.sources.some(s => s.providerId === id && s.source === "key");
+        if (terminal && replacing) io.stderr(`A key is already stored for ${id}. A new key replaces it; an empty entry keeps it.\n`);
+        if (terminal) io.stderr(`Enter the key for ${id} (input is hidden): `);
+        const key = await readProviderKey(io.input ?? process.stdin, !terminal);
+        if (terminal) io.stderr("\n");
         if (!key) return fail("credential_invalid", 4);
         await store.setKey(id, key, options);
+        if (terminal) io.stderr(`${id}: ${replacing ? "key replaced" : "key stored"}\n`);
       } else if (action === "remove") await store.removeKey(id, options);
       else await store.inherit(id, options);
     }

@@ -12,8 +12,10 @@ function fixture() {
   };
   const catalog = async () => ({ providers: () => [{ id: "openai", authConfigured: true, models: [] }] });
   const run = (args: string[], extra: Partial<Parameters<typeof runProviderCli>[1]> = {}) => runProviderCli(args, { store, catalog, stdout: t => { out += t; }, stderr: t => { err += t; }, ...extra });
-  return { store, run, output: () => out + err };
+  return { store, run, output: () => out + err, stdout: () => out, stderr: () => err };
 }
+const terminal = () => Object.assign(new PassThrough(), { isTTY: true, isRaw: false, setRawMode: vi.fn() });
+const storedKey = { sources: [{ providerId: "openai", source: "key" as const, bindingValid: true }], definitions: [] };
 describe("provider CLI", () => {
   it("lists safe metadata only in human and JSON modes", async () => {
     const f = fixture();
@@ -61,6 +63,41 @@ describe("provider CLI", () => {
     expect(await f.run(["auth", "inherit", "openai"])).toBe(0);
     expect(f.store.removeKey).toHaveBeenCalledOnce(); expect(f.store.inherit).toHaveBeenCalledOnce();
     expect(f.output()).not.toContain("sk-test-SENTINEL");
+  });
+  it("says that terminal input is hidden and that a new key was stored", async () => {
+    const f = fixture();
+    const stream = terminal();
+    const result = f.run(["auth", "set", "openai"], { input: stream });
+    await new Promise(resolve => setImmediate(resolve)); stream.write("sk-test-SENTINEL\r");
+    expect(await result).toBe(0);
+    expect(f.stderr()).toBe("Enter the key for openai (input is hidden): \nopenai: key stored\n");
+    expect(f.stdout()).toBe("ok\n");
+  });
+  it("announces a stored key before the prompt and reports its replacement", async () => {
+    const f = fixture(); vi.mocked(f.store.read).mockResolvedValue(storedKey);
+    const stream = terminal();
+    const result = f.run(["auth", "set", "openai"], { input: stream });
+    await new Promise(resolve => setImmediate(resolve));
+    expect(f.stderr()).toBe("A key is already stored for openai. A new key replaces it; an empty entry keeps it.\nEnter the key for openai (input is hidden): ");
+    stream.write("sk-test-SENTINEL\r");
+    expect(await result).toBe(0);
+    expect(f.stderr()).toMatch(/\nopenai: key replaced\n$/); expect(f.stderr()).not.toContain("key stored");
+    expect(f.store.setKey).toHaveBeenCalledOnce(); expect(f.output()).not.toContain("sk-test-SENTINEL");
+  });
+  it("keeps a stored key on an empty entry", async () => {
+    const f = fixture(); vi.mocked(f.store.read).mockResolvedValue(storedKey);
+    const stream = terminal();
+    const result = f.run(["auth", "set", "openai"], { input: stream });
+    await new Promise(resolve => setImmediate(resolve)); stream.write("\r");
+    expect(await result).toBe(4);
+    expect(f.store.setKey).not.toHaveBeenCalled();
+    expect(f.stderr()).toContain("A key is already stored for openai."); expect(f.stderr()).toContain("credential_invalid");
+    expect(f.stderr()).not.toContain("key replaced"); expect(f.stdout()).toBe("");
+  });
+  it("adds no terminal text to the --stdin path, even over a stored key", async () => {
+    const f = fixture(); vi.mocked(f.store.read).mockResolvedValue(storedKey);
+    expect(await f.run(["auth", "set", "openai", "--stdin"], { input: Readable.from(["sk-test-SENTINEL\n"]) })).toBe(0);
+    expect(f.stderr()).toBe(""); expect(f.stdout()).toBe("ok\n");
   });
   it("lists custom providers and bound key status without their endpoint", async () => {
     const f = fixture();

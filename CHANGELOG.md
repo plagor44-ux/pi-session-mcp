@@ -23,6 +23,46 @@
   installer wrote after its key step. That guided installation dropped both
   proposed coding profiles, because the thinking level it proposes for them
   is not available for that provider's models. It is not a Level 3 cycle.
+- The key step of guided setup explains itself
+  ([#289](https://github.com/plagor44-ux/pi-session-mcp/issues/289)). Before
+  its first question it says that the owner names providers one at a time and
+  that an empty answer continues. `?` lists the provider IDs, an unknown ID is
+  answered with the closest catalog IDs or the way to list them and never with
+  the typed value, and after a stored key the question reads
+  `Another provider ID`. A failed entry no longer reads `not configured`:
+  setup prints `nothing changed` when `auth set` stopped before writing
+  (exit 3, 4 or 64), otherwise `key command failed`, each with whether the
+  provider is authenticated. Guided setup still receives only the exit status
+  of `auth set`.
+- `pi-session-mcp-provider auth set` on a terminal says that the input is
+  hidden, announces a key already stored for the provider before the prompt,
+  and reports `<provider>: key stored` or `<provider>: key replaced` on
+  stderr. Its stdout `ok`, its exit codes and the `--stdin` path are
+  unchanged.
+
+### Fixed
+
+- Guided setup proposes a thinking level that the model offers
+  ([#288](https://github.com/plagor44-ux/pi-session-mcp/issues/288)). It
+  proposed `medium` for every coding profile, which Pi refuses at session
+  start for a model that lacks it, so the probes dropped such profiles and the
+  report named no cause. A proposal now takes the level Pi applies to the
+  role's level for its model, through the pi-ai package-root export
+  `clampThinkingLevel`: the nearest higher level the model offers, otherwise
+  the nearest lower one, and `off` for a model without reasoning. The `change`
+  path offers only the levels the chosen model accepts (`off` alone for a model
+  that offers none). Reading a model's levels is
+  a maintainer-approved widening of the offline catalog exception in
+  `AGENTS.md`.
+- The guided report names what each probe found: `probe_passed`, or
+  `profile_dropped` with a new optional finding field `cause` (for example
+  `thinking_level_unavailable` or `probe_timeout`), which `default_profile_failed`
+  also carries. Human reports show it as `, cause <code>`.
+- A guided run stops with the new code `coding_profiles_dropped`, before any
+  live file changes, when the probes drop every coding profile the owner
+  accepted and the configuration would keep none. Before, it ended `ok` with
+  read-only profiles only. A container workspace that loses every profile
+  still stops the run first, with `container_profiles_empty`.
 
 ## 0.20.1 — 2026-11-11
 

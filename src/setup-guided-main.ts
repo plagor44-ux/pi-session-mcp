@@ -109,17 +109,73 @@ export function setProviderKeyInTerminal(provider: string, entry = resolve(dirna
   });
 }
 
+/** A provider ID that is safe to print on the owner's terminal. */
+const SAFE_PROVIDER_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/;
+
+/** The catalog's printable provider IDs, one line for the authenticated and one for the others. */
+function providerListing(catalog: PricedModelCatalog): string {
+  const providers = catalog.providers().filter((p) => SAFE_PROVIDER_ID.test(p.id));
+  const ids = (authenticated: boolean): string => providers.filter((p) => p.authConfigured === authenticated).map((p) => p.id).join(", ") || "none";
+  return `Authenticated providers: ${ids(true)}\nOptional providers (not authenticated): ${ids(false)}\n`;
+}
+
+/** Levenshtein distance between two strings. */
+function editDistance(left: string, right: string): number {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= right.length; j++) {
+      current[j] = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (left[i - 1] === right[j - 1] ? 0 : 1));
+    }
+    previous = current;
+  }
+  return previous[right.length]!;
+}
+
+/** Up to three catalog IDs near a typed value: a few edits away, ignoring case, or containing it. */
+function closestProviderIds(typed: string, ids: readonly string[]): string[] {
+  const value = typed.toLowerCase();
+  if (value.length > 256) return [];
+  const limit = Math.max(1, Math.floor(value.length / 3));
+  return ids
+    .map((id) => {
+      const candidate = id.toLowerCase();
+      return { id, contains: value.length >= 3 && candidate.includes(value), distance: editDistance(value, candidate) };
+    })
+    .filter(({ contains, distance }) => contains || distance <= limit)
+    .sort((left, right) => left.distance - right.distance || (left.id < right.id ? -1 : 1))
+    .slice(0, 3)
+    .map(({ id }) => id);
+}
+
+/** `auth set` exits with these before it writes: provider_unknown (3), credential_invalid (4) and usage_invalid (64). */
+const KEY_UNCHANGED_EXITS: ReadonlySet<number> = new Set([3, 4, 64]);
+
 export async function offerProviderCredentials(prompter: Prompter, catalog: PricedModelCatalog, reload: () => Promise<PricedModelCatalog>, run: (provider: string) => Promise<number>, report: (text: string) => void): Promise<PricedModelCatalog> {
   // Pi's catalog lists dozens of providers, so the owner names the ones to configure instead of being asked about each.
-  if (!(await prompter.confirm("Store a Pi Session MCP API key for a provider now? Pi's own login stays the default", false))) return catalog;
-  const safe = /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/;
+  report("Pi Session MCP can store an API key for each provider you name, one at a time; Pi's own login stays the default.\n"
+    + "At each provider question, ? lists the IDs and an empty answer continues.\n");
+  if (!(await prompter.confirm("Store a provider key now?", false))) return catalog;
+  let stored = false;
   for (;;) {
-    const id = (await prompter.text("Provider ID for the key (empty to continue)", "")).trim();
+    const id = (await prompter.text(`${stored ? "Another provider ID" : "Provider ID"} (? lists them, empty to continue)`, "")).trim();
     if (id === "") return catalog;
-    if (!safe.test(id) || !catalog.providers().some(p => p.id === id)) { report("Unknown provider ID\n"); continue; }
+    if (id === "?") { report(providerListing(catalog)); continue; }
+    const ids = catalog.providers().map((p) => p.id).filter((value) => SAFE_PROVIDER_ID.test(value));
+    if (!ids.includes(id)) {
+      // Name catalog IDs only: the typed value may be a key entered at the wrong question.
+      const near = closestProviderIds(id, ids);
+      report(near.length ? `Unknown provider ID. Closest: ${near.join(", ")}. Enter ? to list all.\n` : "Unknown provider ID. Enter ? to list all provider IDs.\n");
+      continue;
+    }
     const status = await run(id);
     catalog = await reload();
-    report(status === 0 && catalog.providers().some(p => p.id === id && p.authConfigured) ? `${id}: key stored\n` : `${id}: not configured\n`);
+    const authenticated = catalog.providers().some((p) => p.id === id && p.authConfigured);
+    // After a success the key command itself has said whether it stored or replaced the key.
+    if (status === 0 && authenticated) { stored = true; continue; }
+    report(status === 0 ? `${id}: key command succeeded, but not authenticated\n`
+      : KEY_UNCHANGED_EXITS.has(status) ? `${id}: nothing changed, ${authenticated ? "still authenticated" : "not authenticated"}\n`
+        : `${id}: key command failed, ${authenticated ? "authenticated" : "not authenticated"}\n`);
   }
 }
 
@@ -158,9 +214,7 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
         }, text => { process.stderr.write(text); });
       }
       for (;;) {
-        const providers = catalog.providers().filter((p) => /^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(p.id));
-        process.stderr.write(`Authenticated providers: ${providers.filter((p) => p.authConfigured).map((p) => p.id).join(", ") || "none"}\n`);
-        process.stderr.write(`Optional providers (not authenticated): ${providers.filter((p) => !p.authConfigured).map((p) => p.id).join(", ") || "none"}\n`);
+        process.stderr.write(providerListing(catalog));
         process.stderr.write('Log in separately with "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi". Never enter credentials here.\n');
         if (catalog.providers().some((p) => p.authConfigured) || !await prompter.confirm("Re-check provider login?", false)) break;
         catalog = await (injected.dependencies?.catalog ?? createModelCatalog)();

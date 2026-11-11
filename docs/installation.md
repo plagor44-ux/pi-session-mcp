@@ -42,14 +42,28 @@ to setup or an agent:
 
 The interactive interview proceeds in this order:
 
-1. On an interactive terminal with `--apply`, ask whether the owner wants to
-   store a Pi Session MCP key. If so, the owner names provider IDs one by one;
-   each runs `pi-session-mcp-provider auth set <provider>` on the same
-   terminal, and setup sees only whether it succeeded. Then show authenticated and
-   optional providers and the separate Pi login command. When none is
-   authenticated, offer to re-check login.
+1. On an interactive terminal with `--apply`, explain the key step and ask
+   whether the owner wants to store a Pi Session MCP key. If so, the owner
+   names provider IDs one at a time: `?` lists them, an unknown ID is answered
+   with the closest catalog IDs or the way to list them (never with the typed
+   value), and an empty answer continues. Each ID runs
+   `pi-session-mcp-provider auth set <provider>` on the same terminal, which
+   reports `key stored` or `key replaced` itself; setup sees only its exit
+   status. After a stored key the question reads `Another provider ID`. After
+   a failed entry setup prints `nothing changed` when the command stopped
+   before writing (for example on an empty entry), otherwise
+   `key command failed`, each with whether the provider is authenticated.
+   Then show authenticated and optional providers and the separate Pi login
+   command. When none is authenticated, offer to re-check login.
 2. For each proposed profile, accept, change or skip it. Warn when a tier with
-   review profiles has fewer than two families.
+   review profiles has fewer than two families. A proposal's thinking level is
+   the one Pi applies for its model: the role asks for `medium` (code), `high`
+   (review) or `low` (explore); a model that does not offer that level gets the
+   nearest higher level it offers, otherwise the nearest lower one, and a model
+   without reasoning gets `off`. Changing a proposal offers only the levels the
+   chosen model accepts, which is `off` alone, the level Pi falls back to, for
+   a model that offers none; a model the catalog does not list gets every level
+   and stops the run with `model_unknown`.
 3. Choose the default read-only profile and repository workspaces and modes.
 4. Choose history, routing mode and client registrations.
 5. Approve probes for new profiles, then approve changes to an existing
@@ -65,6 +79,21 @@ then provisions and verifies selected clients. It does not replace divergent
 registrations. History is optional and stores redacted session content locally;
 `auto` routing requires it. Reconnect running clients after changes. The manual
 path below remains available.
+
+The report has one finding for each probed profile. A profile that passed shows
+`probe_passed`. A failed profile other than the default is removed from the
+candidate and shows `profile_dropped` with a `cause`: the adapter's code when
+Pi refused the session start, such as `thinking_level_unavailable`, otherwise
+the [probe code](#check-profiles-model-catalog-and-probe), such as
+`probe_timeout`. A failed default profile is not dropped; it stops the run with
+`default_profile_failed`, which carries its `cause` the same way. JSON reports
+carry the cause as the `cause` field, human reports as `, cause <code>`. Three
+outcomes stop the run before any live file changes, checked in this order: the
+default profile failed (`default_profile_failed`), a container workspace lost
+every profile (`container_profiles_empty`), or the probes dropped every coding
+profile the owner accepted and the configuration would keep none
+(`coding_profiles_dropped`). A container workspace that loses its only coding
+profile therefore stops the run with `container_profiles_empty`.
 
 ### Operate routing
 
@@ -209,7 +238,12 @@ pi-session-mcp-provider add <id> --api openai-completions --base-url https://exa
 pi-session-mcp-provider remove <id>
 ```
 
-The terminal key prompt disables echo. For unattended provisioning operated by the
+The terminal key prompt disables echo and says that the input is hidden. When
+a key is already stored for the provider, `auth set` says so before the
+prompt; an empty entry keeps that key (exit 4, `credential_invalid`), and a
+new one is reported as `<provider>: key replaced` instead of
+`<provider>: key stored`. These lines go to stderr; stdout still carries only
+`ok`, and `--stdin` prints none of them. For unattended provisioning operated by the
 owner, pipe the key to `pi-session-mcp-provider auth set <id> --stdin`; do not
 put it in an argument. `--stdin` on a terminal is refused (exit 64) because the
 typed key would echo. These commands never contact a provider or spend a turn.
