@@ -508,14 +508,14 @@ describe("provider key step", () => {
   const catalogOf = (authenticated: Record<string, boolean>) => ({ ...noLevels, outputPrice: () => 2,
     providers: () => Object.entries(authenticated).map(([id, authConfigured]) => ({ id, authConfigured, models: ["m"] })) });
   const providers = { anthropic: true, deepseek: false, openai: false, "openai-codex": false };
-  async function step(answers: string[], options: { status?: number; before?: Record<string, boolean>; after?: Record<string, boolean> } = {}) {
+  async function step(answers: string[], options: { status?: number | ((id: string) => number); before?: Record<string, boolean>; after?: Record<string, boolean> } = {}) {
     const events: string[] = [];
     const prompter: Prompter = {
       text: async (q) => { events.push(`ask: ${q}`); return answers.shift() ?? ""; },
       confirm: async (q) => { events.push(`confirm: ${q}`); return true; },
       choose: async (_q, _options, fallback) => fallback,
     };
-    const run = vi.fn(async (_id: string) => options.status ?? 0);
+    const run = vi.fn(async (id: string) => typeof options.status === "function" ? options.status(id) : options.status ?? 0);
     const before = options.before ?? providers;
     await offerProviderCredentials(prompter, catalogOf(before), async () => catalogOf(options.after ?? before), run, (text) => { events.push(`say: ${text}`); });
     const said = events.filter((e) => e.startsWith("say: ")).map((e) => e.slice(5));
@@ -528,6 +528,11 @@ describe("provider key step", () => {
     expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
     // The key command itself says whether it stored or replaced the key; the step adds no line.
     expect(said).toHaveLength(1);
+  });
+  it("keeps the follow-up question after a later entry fails", async () => {
+    const { said, asked } = await step(["openai", "deepseek", ""], { status: (id) => id === "openai" ? 0 : 4, after: { ...providers, openai: true } });
+    expect(asked).toEqual([FIRST_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION, NEXT_PROVIDER_QUESTION]);
+    expect(said.slice(1)).toEqual(["deepseek: nothing changed, not authenticated\n"]);
   });
   it("lists the provider IDs on ? without running the key command", async () => {
     const { run, said, asked } = await step(["?", ""]);
