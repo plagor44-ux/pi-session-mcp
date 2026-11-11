@@ -805,6 +805,15 @@ ran with Codex on a clone of the tag `v0.20.1`, after the release and the
 upgrade: Codex passed all three scenarios, two of them on a further prepared
 run. It is not a Level 3 cycle either; see the
 [post-release evidence](#v0201-post-release-evidence).
+On the same day the targeted check of
+[#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278) ran on the
+published `0.20.1` with one provider and a dedicated test key: real turns
+with a stored key passed on a built-in and on an operator-defined provider,
+in a container writer and on a configuration that the guided installer wrote
+after its key step, while that installer dropped both proposed coding
+profiles; see
+[its record](#provider-credentials-against-a-real-provider-278). It is not a
+Level 3 cycle either.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2761,11 +2770,165 @@ that the pre-release record names for a Codex controller with the changed
 controller skill. It is not a Level 3 cycle, and Claude Code did not run on
 the release.
 
-Still not established for `0.20.1`: a Level 3 cycle on the release; the three
-checks of [#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278);
-the Claude Code wake on a commit other than `93980d9`; macOS outside CI; and
-any session on the server host, where only the upgrade and its provider-free
-checks ran.
+Still not established for `0.20.1`: a Level 3 cycle on the release; a stored
+key with any provider other than the one of the
+[targeted check](#provider-credentials-against-a-real-provider-278) below,
+with a client or on macOS; a coding profile from a guided installation with
+that provider; the Claude Code wake on a commit other than `93980d9`; macOS
+outside CI; and any session on the server host, where only the upgrade and
+its provider-free checks ran.
+
+#### Provider credentials against a real provider (#278)
+
+Recorded on 2026-11-11 between 12:10 and 13:59 UTC for the published package
+`0.20.1` (npm `dist.shasum` `d1a88207486beeb5085daad58f5838292ac6562d`,
+`gitHead` `a8c1d5dc6c6db602d3a631e79eeb58271675fd94`, Pi SDK `1.5.2`) and the
+release's `install.sh`, whose SHA-256 matched the published
+`install.sh.sha256`. This is the targeted check of
+[#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278) with one
+provider and one dedicated test key. It is not a Level 3 cycle, involves no
+client and says nothing about other providers.
+
+A local pre-registration (SHA-256
+`f3e5023d1cd1b5a26dcc72f9c61e962485ae5e9c416ccb4674877de637be0a61`), written
+before a key was entered and before the first request that carried one,
+fixed the checks, their pass criteria, the removal, and one attempt per check
+with one repetition only for a cause in the harness or the environment. Only
+the unauthenticated reachability requests named below preceded it. One
+amendment (SHA-256
+`171f6cd9a14714e4d05984fc774da5c6d20923a50fb019af126c5a8ef2d6e5d8`) records
+the harness defect named below. Both notes and the harness stay with the
+operator. The harness printed only codes, states, booleans and counts, never
+reply text, a prompt, a session or turn identifier, or a key.
+
+- Environment: two throwaway containers from one locally built image (Fedora
+  45 with rootless Podman `6.1.3`, Node.js `22.23.1`, npm `10.9.8`) on a Linux
+  host with rootless Podman `6.1.4`, not privileged, each with an
+  unprivileged user that has its own home, so each provider store started
+  empty. Neither held a client, and both ran without an init process. The
+  operator's own configuration, Pi login and registrations were outside both
+  containers; after the check the operator's installation still had no
+  provider store and every provider on `inherit`.
+- Provider: DeepSeek with the model `deepseek-flash`, as the built-in
+  provider `deepseek` and as one operator-defined provider on the same public
+  HTTPS endpoint (`pi-session-mcp-provider add` with the API
+  `openai-completions` and `--reasoning`). The owner entered the test key at
+  the hidden terminal prompt of `pi-session-mcp-provider auth set` and of the
+  guided installer. The agent that ran the checks never saw it: a scan
+  program read the store inside the container and printed counts and file
+  names only, after it had reported a planted synthetic value in a self-test.
+- First container: the package installed with npm, a hand-written
+  configuration with a default read-only profile on `deepseek` and a
+  read-only and a coding profile on the operator-defined provider, and two
+  synthetic Git workspaces, one in mode `read-only` and one in mode
+  `container` with one writer (image `node`, network `pasta`, persistent)
+  that setup provisioned and accepted inside the container's own rootless
+  Podman after `isolation_control_passed`.
+  - Without a key: Doctor exited with `0`; `--probe-profile` without
+    `--apply` reported `probe_auth_missing` and no provider turn for each of
+    the three profiles; the writer verified with `mcp_verified`; and
+    `pi_session_start` through the installed server over stdio was refused
+    with `local_authentication_missing` for each profile. An unauthenticated
+    request to the endpoint was answered from the container and from a
+    container nested in it.
+  - After the owner had stored the key for both providers, `list --json`
+    showed the source `key`, a valid binding and `authConfigured: true` for
+    both.
+  - Built-in provider, read-only profile, host adapter. In the first attempt
+    the start succeeded and the prompt returned a running turn; then the
+    harness failed at its first poll, because it read the turn identifier
+    from a field that the turn view does not have, and closed the session. No
+    result was observed. That is a defect of the harness, not of the product.
+    The one repetition with the corrected field passed: the turn ended
+    `completed` with `completion: "stop"` and `truncated: false`, the reply
+    equalled the random token that the prompt asked for, the close succeeded
+    and no session was left.
+  - Operator-defined provider, read-only profile, host adapter: passed in its
+    one attempt with the same outcome.
+  - Operator-defined provider, coding profile, container workspace: passed in
+    its one attempt. The start leased the writer on its default base with
+    the freshness `current`; the turn ended `completed` with
+    `completion: "stop"` and `truncated: false`, and the reply equalled the
+    token. `--collect --apply` reported `writer_collected`: the collected ref
+    was one commit ahead of the base, changed only the one requested file,
+    and that file held the token. `--finish --apply` reported `writer_reset`,
+    the writer verified with `mcp_verified`, and Doctor exited with `0`.
+  - The server wrote nothing to stderr during these four sessions.
+  - Leak scans covered the configuration, the writer state, the nested
+    container storage, the workspaces, the harness output with the captured
+    server stderr, the npm logs, Pi's agent directory and `/tmp`; no shell
+    history file existed. Before the turns the key was only in
+    `credentials.json`. After
+    them it was in exactly one more file, the leased writer's own
+    `agent/auth.json`. After `--finish` it was only in `credentials.json`
+    again. Environment and command line of the three processes that the user
+    could read held no key. The other process entries could not be read; the
+    process table showed mostly zombies, which the missing init process had
+    left. In the nested container storage 3 files could not be read and 1
+    file above the scan's size limit was skipped.
+- Key step of guided setup, observed in the first container with an empty
+  input in place of a key: while the hidden prompt waited,
+  `pi-session-mcp-provider auth set` ran as a separate child process of guided
+  setup on the same terminal. Its standard input, output and error were that
+  terminal, echo was off, its environment had no variable with a key-like
+  name, and it shared no pipe or socket with its parent. The child then
+  printed `credential_invalid`, and the parent printed
+  `<provider>: not configured`, although the key that the owner had stored
+  before was still in place and valid.
+- Second container, with nothing installed: the owner ran `sh install.sh` on
+  a terminal under `script`, a fresh install followed by
+  `pi-session-mcp-setup --guided --apply`.
+  - Key step: one unknown provider ID was answered with `Unknown provider ID`.
+    The owner then entered the key for `deepseek` twice at the hidden prompt.
+    Each entry was answered with `ok` and `deepseek: key stored`, and the
+    second replaced the first without notice. An empty ID ended the step. The
+    terminal transcript did not contain the key.
+  - Interview: the owner accepted all five proposed profiles, where the
+    pre-registration had planned one, added one workspace in mode
+    `read-only`, left history, routing and both client registrations off, and
+    approved five probe turns.
+  - Result: `apply: ok` with `configuration_installed` and `mode_applied`.
+    Both proposed coding profiles, one on `deepseek-flash` and one on
+    `deepseek-v4-pro`, were refused at session creation with
+    `thinking_level_unavailable` and reported as `profile_dropped`: guided
+    setup proposes the thinking level `medium` for every coding profile, and
+    the SDK's catalog has no `medium` for these two models. No coding profile
+    remained. The installed configuration held the three read-only profiles.
+    Guided setup keeps a new profile only after its probe passed, so three
+    probes passed, one of them on `deepseek-v4-pro`, a model that the
+    pre-registration did not name. The report lists the dropped profiles but
+    no passed probe. Doctor exited with `0`, and `list --json` showed the
+    source `key` for `deepseek`.
+  - A leak scan after the guided run, of the transcript, the configuration,
+    the workspace, the npm logs, Pi's agent directory and `/tmp`, found the
+    key only in `credentials.json`; no shell history file existed.
+  - One real turn through the installed server on that configuration, with
+    its default profile on the read-only workspace, then passed in its one
+    attempt: `completed`, `completion: "stop"`, `truncated: false`, the reply
+    equal to the token, and no session left. After it, a scan of the
+    transcript, the harness output and the installed configuration files
+    found no key; the other locations were not scanned again.
+- Removal: `auth remove` for both providers in the first container and for
+  `deepseek` in the second set each source to `none`. `credentials.json` then
+  held no key, and every start was refused with
+  `local_authentication_missing` again. Both containers and the two images
+  built or pulled for the check were removed. Revoking the test key at the
+  provider is the owner's step and is not confirmed in this record.
+
+The owner read the question for a provider ID, which returns after
+`<provider>: key stored`, as a loop, and called the step neither ergonomic
+nor easy to understand. Also observed in that run: the list of providers
+appears only after the step; the hidden prompt does not say that the input
+stays invisible; and a second entry replaces a stored key without saying so.
+
+Limits: one provider, one key and single short turns, one of them a coding
+turn of one file and one commit; a second model only through one guided
+probe. The operator-defined provider pointed at the endpoint of the built-in
+one, which exercises the operator-defined path but no other vendor's service.
+No client, no history, no routing and no OAuth login took part. The first
+attempt on the built-in provider produced no observed result. The scans cover
+files and the readable process environments, not process memory. Linux only,
+in nested containers.
 
 ### v0.20.1 pre-release acceptance
 

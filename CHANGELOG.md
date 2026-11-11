@@ -13,6 +13,16 @@
   and `parallel` and `abort` on one further prepared run, after its first
   `parallel` run had failed on a bound resource that Codex itself changed.
   Neither is a Level 3 cycle.
+- Acceptance record only, no runtime change: the
+  [targeted provider-credential check](docs/acceptance.md#provider-credentials-against-a-real-provider-278)
+  on the published `0.20.1` in a disposable environment with one provider and
+  a dedicated test key
+  ([#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278)). Real
+  turns with a stored key passed on a built-in and on an operator-defined
+  provider, in a container writer and on a configuration that the guided
+  installer wrote after its key step. That guided installation dropped both
+  proposed coding profiles, because the thinking level it proposes for them
+  is not available for that provider's models. It is not a Level 3 cycle.
 
 ## 0.20.1 — 2026-11-11
 
