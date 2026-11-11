@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.20.1](docs/acceptance.md#v0201-post-release-evidence)
+  (registry and release assets, Level 2 on a clone of the tag and on the
+  published npm package, the upgrade of both installations) and a
+  [multi-session skill acceptance with a Codex controller](docs/evaluation/multi-session-2026-11-11/README.md)
+  on a clone of the tag `v0.20.1`. Codex passed `trio` in its first attempt
+  and `parallel` and `abort` on one further prepared run, after its first
+  `parallel` run had failed on a bound resource that Codex itself changed.
+  Neither is a Level 3 cycle.
+
 ## 0.20.1 — 2026-11-11
 
 Patch release: the Pi SDK update from 1.5.0 to 1.5.2

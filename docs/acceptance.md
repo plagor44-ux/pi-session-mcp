@@ -799,6 +799,12 @@ setup installs, on the same commit, and the
 [multi-session skill acceptance](evaluation/multi-session-2026-11-10/README.md)
 with Claude Code on that commit and with both clients on a clone of the tag
 `v0.20.0`, where one Codex scenario failed a timing criterion.
+On 2026-11-11 a further targeted
+[multi-session skill acceptance](evaluation/multi-session-2026-11-11/README.md)
+ran with Codex on a clone of the tag `v0.20.1`, after the release and the
+upgrade: Codex passed all three scenarios, two of them on a further prepared
+run. It is not a Level 3 cycle either; see the
+[post-release evidence](#v0201-post-release-evidence).
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2636,6 +2642,130 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.20.1 post-release evidence
+
+Recorded on 2026-11-11 for the published release `0.20.1`. The counts below
+come from the logs of the runs named here. Unlike the `0.20.0` record, the
+exit status of every setup, install and verify command of both upgrades was
+recorded.
+
+The annotated tag `v0.20.1` (tag object
+`962d98af0d86249e4d1a0a67010c724e19d6469e`) points to
+`a8c1d5dc6c6db602d3a631e79eeb58271675fd94`, the merge commit of PR #285 on
+`main` and the package's `gitHead`. CI passed on that commit and on the tag,
+each in its first attempt.
+
+- npm: `npm publish --dry-run` and `npm stage publish` in a fresh clone of
+  the tag, with npm `12.2.2`, exited with `0` and reported 1069 files with
+  the shasum `d1a88207486beeb5085daad58f5838292ac6562d`. The tarball
+  downloaded from the staging area had that shasum and 1069 entries. A first
+  `npm stage approve` from a shell without a terminal ended with `EOTP` and
+  changed nothing. The maintainer then approved the version; how was not
+  observed for this record. The registry has served `0.20.1` as `latest`
+  since 08:53 UTC, with the same shasum and file count, and the tarball it
+  serves is byte-identical to the one downloaded from staging.
+- GitHub release `v0.20.1`, published at 08:54 UTC and marked latest, with
+  `install.sh` and `install.sh.sha256`. Both were downloaded through
+  `releases/latest/download/`: the checksum matched, and `install.sh` is
+  byte-identical to the tag's file.
+- The pre-release record names a different tarball shasum because its
+  candidate `a16650a` predates the commit that added that record, which the
+  package ships.
+
+Runs on the host of the pre-release acceptance, with Node.js `26.13.0`, npm
+`12.2.2`, Codex CLI `0.166.0` and Claude Code `2.1.322`:
+
+- A fresh clone of the tag, from 07:03 to 07:06 UTC, before the package was
+  published: `git describe --tags --exact-match` printed `v0.20.1`. `npm ci`,
+  typecheck, `build:cli`, the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` and `build` exited with `0`;
+  190 files, 5126 passed and 15 skipped. Doctor reported `packageVersion`
+  `0.20.1` and exited with `2` because no configuration was set
+  (`config_missing`). `git status --porcelain` printed nothing afterwards.
+  `dist/` had 230 files and the digest of the pre-release candidate
+  (`f316718abb64856b338e6d546b9ebe3ca4dfa6ab105d590724ccdbf22bab0115`).
+- The published package, from 08:55 to 08:57 UTC: `npm install -g --prefix
+  <fresh prefix> pi-session-mcp@0.20.1` exited with `0`. The installed
+  manifest names version `0.20.1`, and the install resolves
+  `@earendil-works/pi-coding-agent` `1.5.2`. The installed Doctor reported
+  `packageVersion` `0.20.1` and exited with `2` for the same reason.
+- Level 2: four runs of `scripts/setup-acceptance.mjs`, each exiting with
+  `0`. Two used the tag clone (`--setup` with its built `dist/setup-main.js`,
+  `--build-dir` the clone) and two the published package (`--setup` the
+  installed `pi-session-mcp-setup`, `--build-dir` the installed package), each
+  once without and once with `--events spool`. The harness script was the tag
+  clone's own in the first pair and that of a second clean clone of the tag in
+  the second. Both sources reported 160 of 160 checks with delivery off and
+  228 of 228 with `--events spool`. Every run covered the four targets (Codex
+  `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps, and
+  reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. For the tag clone the manifests and
+  the built runtime files had the same digests before and after the two
+  runs. The prefix was removed.
+
+The bubblewrap and Podman-gated test files were not run on their own on the
+tag; the log of the tag clone's test run holds only the totals. `npm audit`
+and `git diff --check` were not run on the tag clone either, so its run covers
+the commands that CI runs, not the complete Level 1, which ran on the release
+candidate ([pre-release acceptance](#v0201-pre-release-acceptance)).
+
+Installations: both run `0.20.1`, upgraded from `0.20.0` on 2026-11-11 from
+08:57 to 09:09 UTC with the steps used for `0.20.0`: backups of the
+configuration and the execution modes named for `0.20.1`, the client targets
+removed, the npm install, each container repository's provisioning command
+first as a dry run and then with `--apply`, Doctor, the client targets applied
+and verified, and `--writer <name> --verify` for every writer. Every one of
+these commands exited with `0`, except Doctor, which exited with `1` for
+warnings only. Before the upgrade neither machine had a server process with a
+child process, a running writer container or a held writer lease.
+
+- Workstation, with Node.js `26.13.0` and npm `12.2.2`: all five container
+  repositories reported `mode_unchanged`, and all 18 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. Both
+  client targets verified (`mcp_verified`, both `skill_verified`, and
+  `hook_verified` for Claude Code). Doctor reported `packageVersion` `0.20.1`
+  and no error. Its 30 warnings were those it had reported on `0.20.0` right
+  before the upgrade: `snapshot_unavailable`, `writer_base_behind` on 7
+  writers, and the known `workspace_gitfile` and `workspace_mode_unset` of the
+  worktree aliases. After Codex had updated itself to `0.167.1` at 09:09 UTC,
+  the Codex client target verified again at 09:22 UTC and exited with `0`.
+  The 18 open controller sessions were not closed first, as
+  [Installation](installation.md#npm-installation) asks; the check at the
+  start, which found their server processes without a child process, stood in
+  for that step. Each of these processes holds the `0.20.0` modules it had
+  loaded and would load any further module from the replaced package, so it
+  is on no defined release until its controller reconnects.
+- Server, with Node.js `24.22.2` and npm `11.19.1`, driven over SSH: all five
+  container repositories reported `mode_unchanged`, and all 16 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt, at a
+  load average of about 5. Both client targets verified (`mcp_verified`, both
+  `skill_verified`; that host has no wake hook). Doctor reported
+  `packageVersion` `0.20.1` and no error; its 3 warnings were those from
+  before the upgrade, `workspace_mode_unset` and `writer_base_behind` on two
+  writers. No server process of a client session ran there at the start.
+
+Multi-session skill acceptance with Codex, from 09:03 to 09:11 UTC on a fresh
+clone of the tag with real workers and Node.js `22.23.3`, after the
+workstation upgrade had replaced the controller skill copies in the
+operator's home with the shipped skill: Codex passed `trio` in its first
+attempt, and `parallel` and `abort` on one further prepared run. Its first
+`parallel` run had failed only on a bound resource that Codex itself changed
+at its start, and the harness had then refused its first `abort` attempt. A
+pre-registration written before the first run allowed one further prepared
+run for this cause. During the last
+run Codex updated its own installation from `0.166.0` to `0.167.1`; all four
+client launches preceded the switch, and no scenario ran with `0.167.1`. See
+the [record](evaluation/multi-session-2026-11-11/README.md). It closes the gap
+that the pre-release record names for a Codex controller with the changed
+controller skill. It is not a Level 3 cycle, and Claude Code did not run on
+the release.
+
+Still not established for `0.20.1`: a Level 3 cycle on the release; the three
+checks of [#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278);
+the Claude Code wake on a commit other than `93980d9`; macOS outside CI; and
+any session on the server host, where only the upgrade and its provider-free
+checks ran.
 
 ### v0.20.1 pre-release acceptance
 
