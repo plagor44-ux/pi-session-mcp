@@ -71,7 +71,8 @@ values and an existing repository):
 The format is strict: no extra keys. Roles are `code`, `review`, `explore`;
 levels are `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Not every
 model offers every level; a profile with a level its model lacks fails its probe
-with the cause `thinking_level_unavailable` and is dropped. Tier is
+with the cause `thinking_level_unavailable` and is dropped, or, as the default
+profile, stops the run with `default_profile_failed`. Tier is
 `low`, `medium`, `hightech`, `ultra` or null; a tiered profile needs a
 lowercase family label. The default must be read-only, not `code`. Workspace
 modes are `read-only`, `container`, `host`; optional `container` settings are

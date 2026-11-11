@@ -31,11 +31,13 @@ export async function collectGuidedAnswers(prompter: Prompter, catalog: PricedMo
     const role = await prompter.choose(`Role for ${proposal.alias}`, ROLES, proposal.role);
     const model = await prompter.text(`Model for ${proposal.alias}`, proposal.model);
     const family = await validatedText(`Family for ${proposal.alias}`, (value) => FAMILY_PATTERN.test(value), proposal.family);
-    // Offer only what the chosen model offers. A model the catalog does not list gets every level; the run stops on it later.
+    // Offer only the levels the chosen model accepts: its own, or the one Pi falls back to when it lists none.
+    // A model the catalog does not list gets every level; the run stops on it later with model_unknown.
     const offered = catalog.thinkingLevels(proposal.provider, model);
-    const levels = offered?.length ? offered : THINKING_LEVELS;
     const effective = catalog.effectiveThinkingLevel(proposal.provider, model, proposal.thinkingLevel);
-    const thinkingLevel = await prompter.choose(`Thinking level for ${proposal.alias}`, levels, effective !== undefined && levels.includes(effective) ? effective : proposal.thinkingLevel);
+    const levels = offered === undefined ? THINKING_LEVELS : offered.length > 0 ? offered : [effective ?? "off"];
+    const preferred = effective ?? proposal.thinkingLevel;
+    const thinkingLevel = await prompter.choose(`Thinking level for ${proposal.alias}`, levels, levels.includes(preferred) ? preferred : levels[0]!);
     profiles.push({ ...proposal, tier, role, model, family, thinkingLevel });
   }
   for (const tier of TIERS) {

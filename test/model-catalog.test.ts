@@ -74,6 +74,7 @@ describe("createModelCatalog", () => {
         { id: "no-medium", reasoning: true, thinkingLevelMap: { medium: null } },
         { id: "plain", reasoning: false },
         { id: "extended", reasoning: true, thinkingLevelMap: { xhigh: "xhigh" } },
+        { id: "none", reasoning: true, thinkingLevelMap: { off: null, minimal: null, low: null, medium: null, high: null } },
       ],
       checkAuth: async () => true,
     }));
@@ -84,6 +85,9 @@ describe("createModelCatalog", () => {
     expect(catalog.effectiveThinkingLevel("p", "plain", "high")).toBe("off");
     expect(catalog.thinkingLevels("p", "extended")).toEqual(["off", "minimal", "low", "medium", "high", "xhigh"]);
     expect(catalog.effectiveThinkingLevel("p", "extended", "max")).toBe("xhigh");
+    // A model that disables every level lists none, and Pi falls back to off; the change path offers only that.
+    expect(catalog.thinkingLevels("p", "none")).toEqual([]);
+    expect(catalog.effectiveThinkingLevel("p", "none", "medium")).toBe("off");
     expect(catalog.thinkingLevels("p", "missing")).toBeUndefined();
     expect(catalog.effectiveThinkingLevel("p", "missing", "medium")).toBeUndefined();
     expect(catalog.thinkingLevels("other", "no-medium")).toBeUndefined();

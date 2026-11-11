@@ -60,9 +60,10 @@ The interactive interview proceeds in this order:
    the one Pi applies for its model: the role asks for `medium` (code), `high`
    (review) or `low` (explore); a model that does not offer that level gets the
    nearest higher level it offers, otherwise the nearest lower one, and a model
-   without reasoning gets `off`. Changing a proposal offers only the levels of
-   the chosen model; a model the catalog does not list gets every level and
-   stops the run with `model_unknown`.
+   without reasoning gets `off`. Changing a proposal offers only the levels the
+   chosen model accepts, which is `off` alone, the level Pi falls back to, for
+   a model that offers none; a model the catalog does not list gets every level
+   and stops the run with `model_unknown`.
 3. Choose the default read-only profile and repository workspaces and modes.
 4. Choose history, routing mode and client registrations.
 5. Approve probes for new profiles, then approve changes to an existing
@@ -80,16 +81,19 @@ registrations. History is optional and stores redacted session content locally;
 path below remains available.
 
 The report has one finding for each probed profile. A profile that passed shows
-`probe_passed`. A profile that failed is removed from the candidate and shows
-`profile_dropped` with a `cause`: the adapter's code when Pi refused the
-session start, such as `thinking_level_unavailable`, otherwise the
-[probe code](#check-profiles-model-catalog-and-probe), such as `probe_timeout`.
-JSON reports carry it as the `cause` field, human reports as `, cause <code>`.
-Three outcomes stop the run before any live file changes: the default profile
-failed (`default_profile_failed`, with its `cause`), a container workspace lost
+`probe_passed`. A failed profile other than the default is removed from the
+candidate and shows `profile_dropped` with a `cause`: the adapter's code when
+Pi refused the session start, such as `thinking_level_unavailable`, otherwise
+the [probe code](#check-profiles-model-catalog-and-probe), such as
+`probe_timeout`. A failed default profile is not dropped; it stops the run with
+`default_profile_failed`, which carries its `cause` the same way. JSON reports
+carry the cause as the `cause` field, human reports as `, cause <code>`. Three
+outcomes stop the run before any live file changes, checked in this order: the
+default profile failed (`default_profile_failed`), a container workspace lost
 every profile (`container_profiles_empty`), or the probes dropped every coding
 profile the owner accepted and the configuration would keep none
-(`coding_profiles_dropped`).
+(`coding_profiles_dropped`). A container workspace that loses its only coding
+profile therefore stops the run with `container_profiles_empty`.
 
 ### Operate routing
 

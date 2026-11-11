@@ -50,7 +50,8 @@
   role's level for its model, through the pi-ai package-root export
   `clampThinkingLevel`: the nearest higher level the model offers, otherwise
   the nearest lower one, and `off` for a model without reasoning. The `change`
-  path offers only the levels of the chosen model. Reading a model's levels is
+  path offers only the levels the chosen model accepts (`off` alone for a model
+  that offers none). Reading a model's levels is
   a maintainer-approved widening of the offline catalog exception in
   `AGENTS.md`.
 - The guided report names what each probe found: `probe_passed`, or
@@ -60,7 +61,8 @@
 - A guided run stops with the new code `coding_profiles_dropped`, before any
   live file changes, when the probes drop every coding profile the owner
   accepted and the configuration would keep none. Before, it ended `ok` with
-  read-only profiles only.
+  read-only profiles only. A container workspace that loses every profile
+  still stops the run first, with `container_profiles_empty`.
 
 ## 0.20.1 — 2026-11-11
 

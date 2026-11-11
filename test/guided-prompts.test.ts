@@ -57,6 +57,17 @@ describe("guided prompts", () => {
     expect(asked).toEqual([{ options: ["off", "low", "high"], fallback: "high" }]);
     expect(profile).toMatchObject({ model: "no-medium", thinkingLevel: "high" });
   });
+  it("offers only the level Pi falls back to when the chosen model offers none", async () => {
+    // Pi lists no level for a reasoning model whose map disables every level, and clamps any request to off.
+    const source: PricedModelCatalog = {
+      ...catalog,
+      thinkingLevels: (_provider, model) => model === "no-levels" ? [] : undefined,
+      effectiveThinkingLevel: (_provider, model) => model === "no-levels" ? "off" : undefined,
+    };
+    const { asked, profile } = await changeCodeLevel(source, "no-levels");
+    expect(asked).toEqual([{ options: ["off"], fallback: "off" }]);
+    expect(profile).toMatchObject({ model: "no-levels", thinkingLevel: "off" });
+  });
   it("offers every level on the change path when the catalog does not know the model", async () => {
     const { asked } = await changeCodeLevel(catalog, "typed-model");
     expect(asked).toEqual([{ options: ["off", "minimal", "low", "medium", "high", "xhigh", "max"], fallback: "medium" }]);
