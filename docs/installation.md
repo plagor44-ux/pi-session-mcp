@@ -306,8 +306,9 @@ from the Pi CLI that ships with the package, so no Pi installation of your own
 is needed:
 
 - It needs a terminal on standard input and standard error; otherwise it
-  stops with `usage_invalid` (exit 64) before anything else, so an agent, a
-  pipe or a script cannot run it.
+  stops with `usage_invalid` (exit 64) before anything else. That keeps pipes
+  and non-interactive scripts out, but a program that runs it on a
+  pseudo-terminal passes the check: run it yourself, never through an agent.
 - It prints one line,
   `Signing in to <provider> through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".`,
   and hands the terminal to Pi's dialogue. The sign-in address, codes,

@@ -14,7 +14,7 @@ It runs Pi's own sign-in dialogue; `--no-browser` suits a machine without a
 browser. Alternatively, the owner may run
 `pi-session-mcp-provider auth set <provider>` on their terminal. Agents must
 never enter or handle keys, including through standard input, and never take
-part in a sign-in. See [provider credentials](installation.md#provider-credentials-and-custom-providers).
+part in a sign-in, also not by running the command on a pseudo-terminal. See [provider credentials](installation.md#provider-credentials-and-custom-providers).
 
 ## Stop and ask the owner
 

@@ -87,8 +87,11 @@ refused with `sign_in_unsupported` before anything runs.
 `auth set` (ADR 0021):
 
 - The command requires standard input and standard error to be terminals and
-  otherwise stops with `usage_invalid` before anything else. An agent, a pipe
-  or a script therefore cannot run it.
+  otherwise stops with `usage_invalid` before anything else, so a pipe or a
+  non-interactive script cannot run it. The check is a guard, not a boundary:
+  a program that allocates a pseudo-terminal passes it, so keeping agents out
+  of a sign-in stays a rule for agents ([agent guide](../agent-install.md)),
+  not something the command enforces.
 - The child is the `pi` executable that the pinned
   `@earendil-works/pi-coding-agent` package declares, started with the
   current Node.js and never looked up on `PATH`.
@@ -102,7 +105,7 @@ refused with `sign_in_unsupported` before anything runs.
   for Pi itself.
 - Pi Session MCP never reads, records or reformats the child's output. The
   sign-in address, codes, instructions and Pi's confirmation, which names its
-  credential file, reach only the owner's terminal.
+  credential file, reach only the terminal that the command runs on.
 - Before the child starts, the command prints one line on standard error:
   `Signing in to <provider> through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".`
   Pi's own hints name its own executable, which is not on the owner's `PATH`.
@@ -250,8 +253,8 @@ non-terminal or in a dry run.
 No token, authorization code, device code or sign-in address enters Pi
 Session MCP's process, and none appears in its reports, logs, diagnostics, MCP
 results, configuration, guided answers, backups, history or event spool. Pi
-writes them only to the owner's terminal and keeps the credential in its own
-store, as for every `inherit` credential.
+writes them only to the terminal that the command runs on and keeps the
+credential in its own store, as for every `inherit` credential.
 
 ### Rule changes
 

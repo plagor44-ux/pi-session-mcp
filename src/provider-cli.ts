@@ -66,7 +66,7 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
       if (args[0] === "set" && args.length === 2 && !(io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
       // Typed into --stdin a key would echo; the hidden prompt is the terminal route.
       if (args[0] === "set" && args.length === 3 && (io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
-      // Pi's sign-in talks to the owner on the terminal; an agent or a script has none to offer.
+      // Pi's sign-in talks to the owner on the terminal. This keeps pipes out; a pseudo-terminal passes, so agents stay out by rule (ADR 0022).
       if (args[0] === "login" && !((io.input ?? process.stdin).isTTY === true && (io.stderrTerminal ?? process.stderr.isTTY === true))) return fail("usage_invalid", 64);
     } else if (command === "remove") { if (args.length !== 1 || !safeId(args[0])) return fail("usage_invalid", 64); }
     else return fail("usage_invalid", 64);

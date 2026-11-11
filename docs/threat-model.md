@@ -37,8 +37,12 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   the sign-in address, codes and tokens stay between Pi, the terminal and Pi's
   own store, and none reaches a report, log, MCP result, configuration or
   history. The command requires a terminal on standard input and standard
-  error, so an agent, a pipe or a script cannot start a sign-in, and no MCP
-  tool starts, completes or observes one. The sign-in contacts the provider's
+  error, so a pipe or a non-interactive script cannot start a sign-in. The
+  check is a guard, not a boundary: a program that allocates a pseudo-terminal,
+  such as an agent tool that runs commands on one, passes it, so keeping
+  agents out of a sign-in rests on the rule in the
+  [agent guide](agent-install.md). No MCP tool starts, completes or observes a
+  sign-in. The sign-in contacts the provider's
   sign-in endpoints and refreshes that provider's catalog once from Pi's
   catalog service; it sends no model request. A sign-out writes `none` before
   Pi deletes its entry, so a failed deletion never leaves the provider usable,
