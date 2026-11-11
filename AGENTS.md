@@ -51,7 +51,12 @@
   runtime may call `registerProvider` for operator-defined providers (without
   a key in their configuration) and `setRuntimeApiKey` for providers whose
   source is a stored key, both offline and without persistence; only
-  `src/provider-store.ts` reads key values. Do not widen these exceptions.
+  `src/provider-store.ts` reads key values. A fourth narrow exception is
+  account sign-in (ADR 0022, maintainer-approved 2026-11-11): the provider
+  CLI's `auth login` and `auth logout` run the bundled Pi CLI's commands of the
+  same names as child processes, from the `pi` executable the pinned SDK
+  package declares, and use only their exit status; only
+  `src/provider-sign-in.ts` starts them. Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - CLI reports must be sanitized and must not contain secrets, paths, or
@@ -111,9 +116,11 @@ file of the area.
   `test/sandbox-shell.test.ts`, `test/sandbox-shell.bwrap.test.ts` and
   `test/profile-boundaries.test.ts`.
 - Credential routing:
-  [ADR 0021](docs/adr/0021-provider-credentials.md); `src/provider-store.ts`
-  and `src/writer-credentials.ts`; `test/provider-store.test.ts` and
-  `test/writer-credentials.test.ts`.
+  [ADR 0021](docs/adr/0021-provider-credentials.md) and
+  [ADR 0022](docs/adr/0022-account-sign-in.md); `src/provider-store.ts`,
+  `src/writer-credentials.ts` and `src/provider-sign-in.ts`;
+  `test/provider-store.test.ts`, `test/writer-credentials.test.ts` and
+  `test/provider-sign-in.test.ts`.
 - Tool binding of a session:
   [ADR 0010](docs/adr/0010-read-only-extension-tools.md) and
   [ADR 0006](docs/adr/0006-pi-extension-allowlist.md); `src/session-tools.ts`
