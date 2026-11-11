@@ -790,7 +790,8 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own.
+its own. `0.20.1`, released from a later commit, has none; see
+[its record](#v0201-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2635,6 +2636,33 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.20.1 pre-release acceptance
+
+The patch release `0.20.1` ships what `main` holds after `v0.20.0`: the Pi SDK
+update from `1.5.0` to `1.5.2` (PR #271), the isolation of the sandbox scope
+tests (PR #274), the documentation of the credential boundaries and the README
+onboarding (PR #279), one report form in the bundled skills with the CI and
+test maintenance (PR #283), and the acceptance records of 2026-11-10
+(PR #284). Its own pull request carries only the version, the changelog
+heading and this record, on the branch `chore/release-0.20.1` on top of `main`
+at `445db12`. The public MCP contract is unchanged since `0.20.0`.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits from `93980d9` to the release
+candidate change only Markdown files and the version in `package.json`,
+`package-lock.json` and `install.sh`.
+
+Not established for `0.20.1`: a Level 3 cycle on the release; a turn against a
+real provider with a stored key, a full interactive `sh install.sh` run with
+the key step on a PTY and a writer turn against an operator-defined provider
+([#278](https://github.com/plagor44-ux/pi-session-mcp/issues/278)), as for
+`0.20.0`; a Codex controller with the changed controller skill, because the
+multi-session harness refused Codex on `93980d9`
+([record](evaluation/multi-session-2026-11-10/README.md)); the Claude Code
+wake on a commit other than `93980d9`; the server host; macOS outside CI; and
+the published-release Level 2 and the upgrades, which follow after publishing.
 
 ### v0.20.0 post-release evidence
 

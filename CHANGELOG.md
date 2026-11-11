@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.20.1 — 2026-11-11
+
+Patch release: the Pi SDK update from 1.5.0 to 1.5.2
+([#270](https://github.com/plagor44-ux/pi-session-mcp/issues/270)), the
+documentation of the credential boundaries and the README onboarding (#275,
+#276), one report form in the bundled controller, implementation and review
+skills, and test and CI maintenance (#272). The MCP tool contract is
+unchanged: no tool, field, state or error code is new, and neither is a setup
+outcome or a Doctor check. No full live two-client cycle ran on this release;
+the one on the `main` commit `93980d9` predates the release commit, see the
+[acceptance record](docs/acceptance.md#v0201-pre-release-acceptance).
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Applying the client targets
+installs the changed controller skill; an override of yours stays untouched,
+and Doctor warns with `skill_override_outdated`. **Rollback note:** reinstall
+0.20.0. This release changes no stored format of Pi Session MCP.
+
 ### Changed
 
 - Updated the Pi SDK family from 1.5.0 to 1.5.2
