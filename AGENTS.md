@@ -63,15 +63,20 @@
   complete prompts.
   Exception: `pi-session-mcp-history show --full`, `export` and `query` print
   redacted session content by purpose (ADR 0019); their other output follows
-  this rule.
+  this rule. During `pi-session-mcp-provider auth login` the Pi child's own
+  output reaches the owner's terminal unread (ADR 0022); the provider CLI's own
+  lines stay free of secrets and paths.
 - Doctor is offline-only. Setup mutations require explicit `--apply`,
   `--rollback`, or `--remove`; default to dry-run, never pin client versions but
   reject a client whose public command output does not match the expected
   contract, and never auto-replace divergent registrations.
-- Only two setup operations use a provider: `--probe-profile … --apply`, and
-  the probe step of `--guided --apply` for new profiles after explicit
-  `approveProbes`. Both use the fixed probe prompt, never output reply text,
-  and use fakes in tests.
+- Three setup operations use a provider: `--probe-profile … --apply`, the
+  probe step of `--guided --apply` for new profiles after explicit
+  `approveProbes`, and `pi-session-mcp-provider auth login`. The probes use the
+  fixed probe prompt and never output reply text. `auth login` runs Pi's own
+  sign-in on the owner's terminal, contacts the provider's sign-in endpoints
+  and refreshes that provider's catalog once from Pi's catalog service
+  (ADR 0022); it sends no model request. All three use fakes in tests.
 - Guided setup and `install.sh` never read, print or store a provider
   credential themselves; the owner logs in through Pi or stores a key with
   `pi-session-mcp-provider auth set`. Only on an interactive terminal, and
@@ -96,7 +101,7 @@
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
 - Tracked files contain no operator-specific hosts, paths, or internal service names; use placeholders.
-- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), an opt-in local provider store for credential sources, API keys and operator-defined provider definitions (ADR 0021), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), an opt-in local provider store for credential sources, API keys and operator-defined provider definitions (ADR 0021), owner-operated account sign-in through Pi's own credential store (ADR 0022), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
 - Pi extensions load only from an execution profile's exact
   `npm:<name>@<version>` allowlist, resolved from Pi's install without
   installing. Client prompts never dispatch extension commands, and stdout stays

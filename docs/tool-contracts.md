@@ -231,7 +231,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `unknown_execution_profile` | The requested alias is not configured. |
 | `workspace_mode_forbids_coding` | The workspace's execution mode does not allow coding sessions on this server. Operator needed: do not retry or switch profiles on this server. |
 | `unknown_provider` / `unknown_model` | The exact configured item is absent from the local Pi catalog. |
-| `local_authentication_missing` / `local_authentication_unavailable` | Effective local authentication is absent or cannot be resolved within its deadline. Under ADR 0021, `none`, a keyless custom provider or a mismatched credential binding is missing; an unreadable/invalid provider store is unavailable. Neither falls back to Pi authentication. |
+| `local_authentication_missing` / `local_authentication_unavailable` | Effective local authentication is absent or cannot be resolved within its deadline. Under ADR 0021, `none`, a keyless custom provider or a mismatched credential binding is missing; an unreadable/invalid provider store is unavailable. Neither falls back to Pi authentication. `pi-session-mcp-provider auth logout` (ADR 0022) leaves a provider that used Pi authentication at `none`, so it is missing until `auth login` or `auth inherit`. |
 | `model_unavailable` | The exact model is not locally available for the configured provider. |
 | `thinking_level_unavailable` | The configured level is not effective for the resolved model. |
 | `execution_selection_mismatch` | The created session does not match the requested verified selection. |

@@ -227,13 +227,16 @@ keep selected provider credentials in their private boundary agent copy; see
 
 ## Provider credentials and custom providers
 
-The owner can manage provider credentials offline without changing Pi's own login:
+The owner can manage provider credentials, and sign in to provider accounts,
+without operating Pi:
 
 ```bash
 pi-session-mcp-provider list --json
 pi-session-mcp-provider auth set <provider>
 pi-session-mcp-provider auth remove <provider>
 pi-session-mcp-provider auth inherit <provider>
+pi-session-mcp-provider auth login <provider> [--no-browser]
+pi-session-mcp-provider auth logout <provider>
 pi-session-mcp-provider add <id> --api openai-completions --base-url https://example.com/v1 --model <model>
 pi-session-mcp-provider remove <id>
 ```
@@ -246,7 +249,11 @@ new one is reported as `<provider>: key replaced` instead of
 `ok`, and `--stdin` prints none of them. For unattended provisioning operated by the
 owner, pipe the key to `pi-session-mcp-provider auth set <id> --stdin`; do not
 put it in an argument. `--stdin` on a terminal is refused (exit 64) because the
-typed key would echo. These commands never contact a provider or spend a turn.
+typed key would echo. Apart from `auth login`, these commands never contact a
+provider; `auth login` contacts the provider's sign-in endpoints and refreshes
+that provider's model catalog once from Pi's catalog service, bounded to 15
+seconds (`PI_OFFLINE` in the environment turns the refresh off). None of them
+spends a turn.
 `inherit` uses Pi authentication (the default for built-ins), `key` takes
 precedence using the stored key, and `none` explicitly disables authentication.
 `auth remove` sets `none`; only `auth inherit` restores Pi authentication.
@@ -271,7 +278,67 @@ A selected configuration that cannot be loaded refuses removal with `config_inva
 Changes take effect for new sessions and catalog reads; running sessions retain
 their original credentials, and writers receive changes on their next launch.
 Exit codes are 0 (success), 1 (runtime or storage error, including provider in
-use), 3 (unknown provider), 4 (invalid definition or key), and 64 (usage).
+use and a failed sign-in or sign-out), 3 (unknown provider), 4 (invalid
+definition or key, or a sign-in that cannot apply), and 64 (usage).
+
+### Account sign-in
+
+A built-in provider that declares account sign-in, for example for a
+subscription instead of an API key, is signed in with
+`pi-session-mcp-provider auth login <provider>`
+([ADR 0022](adr/0022-account-sign-in.md)). The command runs Pi's own sign-in
+from the Pi CLI that ships with the package, so no Pi installation of your own
+is needed:
+
+- It needs a terminal on standard input and standard error; otherwise it
+  stops with `usage_invalid` (exit 64) before anything else, so an agent, a
+  pipe or a script cannot run it.
+- It prints one line,
+  `Signing in to <provider> through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".`,
+  and hands the terminal to Pi's dialogue. The sign-in address, codes,
+  instructions and Pi's confirmation are Pi's own text and appear only on
+  your terminal; Pi Session MCP does not read them.
+- Without `--no-browser`, Pi tries to open a browser on this machine and
+  prints the address to open. On a machine without a browser, for example
+  over SSH, add `--no-browser`: Pi then uses the provider's other method, such
+  as a device code, or prints the address without opening a browser.
+- Only Pi's exit status counts. 0 prints `ok`; any other status, a cancelled
+  sign-in included, is `sign_in_failed` (exit 1). An operator-defined
+  provider, or a built-in provider without account sign-in, is refused with
+  `sign_in_unsupported` (exit 4) before Pi runs.
+
+The provider's credential source decides what the commands do:
+
+| Source before | `auth login` | `auth logout` |
+| --- | --- | --- |
+| `inherit` | Signs in; the source stays `inherit`. | Sets `none`, then deletes Pi's entry. |
+| `none` | Signs in, then sets `inherit`. | Deletes Pi's entry; the source stays `none`. |
+| `key` | Refused with `provider_key_stored` (exit 4); nothing runs. | Deletes Pi's entry; the source stays `key`. |
+
+A stored key takes precedence over a sign-in, so `auth login` refuses to run
+while one is stored and says that `auth inherit <provider>` drops the key and
+`auth remove <provider>` disables the provider. A provider that was `none`
+becomes `inherit` after a successful sign-in only if its source is still
+`none` at that point; if the store cannot be written then, the command fails
+with `provider_store_unavailable` (exit 1). Every failure fails closed: when
+Pi stored the sign-in but the command did not succeed, a provider that was
+`none` stays `none`, and `auth inherit <provider>` or another `auth login`
+enables the stored sign-in.
+
+`auth logout <provider>` needs no terminal and prints only `ok` or an error
+code. It sets `none` first and then deletes the provider's entry from Pi's
+store, so a failed deletion (`sign_out_failed`, exit 1) still leaves the
+provider unauthenticated; run the command again. Under `none` no other Pi
+credential, such as a key in an environment variable, can take over. The
+sign-out is local: Pi Session MCP revokes nothing at the provider, so end the
+session in the provider's account settings as well. `auth login` or
+`auth inherit` enables Pi authentication again.
+
+The sign-in lives in Pi's own store, `auth.json` in Pi's agent directory
+(`~/.pi/agent` unless `PI_CODING_AGENT_DIR` moves it), and a Pi that the same
+user runs shares it: a sign-in or a sign-out there has the same effect. If you
+move Pi's agent directory with `PI_CODING_AGENT_DIR` or a different `HOME`, run
+the provider CLI and the server with the same environment.
 
 ## Check profiles: model catalog and probe
 

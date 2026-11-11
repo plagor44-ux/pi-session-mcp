@@ -30,6 +30,23 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   stored keys, including rotated values still used by running sessions; SDKs,
   extensions and writer code that handle keys remain outside this guarantee.
 
+- **Account sign-in ([ADR 0022](adr/0022-account-sign-in.md)):**
+  `pi-session-mcp-provider auth login` runs the Pi CLI that the pinned SDK
+  package declares, never one found on `PATH`, as a child process on the
+  owner's terminal. Only the child's exit status crosses into Pi Session MCP:
+  the sign-in address, codes and tokens stay between Pi, the terminal and Pi's
+  own store, and none reaches a report, log, MCP result, configuration or
+  history. The command requires a terminal on standard input and standard
+  error, so an agent, a pipe or a script cannot start a sign-in, and no MCP
+  tool starts, completes or observes one. The sign-in contacts the provider's
+  sign-in endpoints and refreshes that provider's catalog once from Pi's
+  catalog service; it sends no model request. A sign-out writes `none` before
+  Pi deletes its entry, so a failed deletion never leaves the provider usable,
+  but it revokes nothing at the provider: the refresh token stays valid until
+  it expires or the owner ends the session in the account settings. Pi's
+  store is shared with any Pi that the same user runs, so either side's
+  sign-in or sign-out applies to both.
+
 - **Review of a moving tree ([ADR 0015](adr/0015-review-snapshots.md)):** a
   reviewer on a host alias reads whatever the operator's checkout holds at
   each tool call. A `snapshot` workspace binds a session to one commit in a

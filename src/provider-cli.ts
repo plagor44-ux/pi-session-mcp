@@ -2,14 +2,19 @@ import type { Readable } from "node:stream";
 import type { ReadStream } from "node:tty";
 import { loadConfig } from "./config.js";
 import { CATALOG_ID_PATTERN, createModelCatalog, type ModelCatalog } from "./model-catalog.js";
-import { ProviderStoreError, SUPPORTED_PROVIDER_APIS, type ProviderDefinition, type ProviderStore, type SupportedProviderApi } from "./provider-store-contract.js";
+import { ProviderStoreError, SUPPORTED_PROVIDER_APIS, type CredentialSource, type ProviderDefinition, type ProviderStore, type ProviderStoreSnapshot, type SupportedProviderApi } from "./provider-store-contract.js";
 import { openProviderStore } from "./provider-store.js";
 import { readProviderKey } from "./provider-key-input.js";
+import { runBundledPi, type PiAuthMode } from "./provider-sign-in.js";
 
 export interface ProviderCliDependencies {
   store?: ProviderStore;
   catalog?: () => Promise<ModelCatalog>;
   input?: Readable & Partial<Pick<ReadStream, "isTTY" | "isRaw" | "setRawMode">>;
+  /** Whether stderr is a terminal; defaults to `process.stderr.isTTY === true`. */
+  stderrTerminal?: boolean;
+  /** Runs the bundled Pi CLI and resolves its exit status; defaults to `runBundledPi` (ADR 0022). */
+  runPi?: (args: readonly string[], mode: PiAuthMode) => Promise<number>;
   stdout(text: string): void;
   stderr(text: string): void;
   configPath?: string;
@@ -18,6 +23,8 @@ export interface ProviderCliDependencies {
 class Failure extends Error { constructor(readonly code: string, readonly exit: 1 | 3 | 4 | 64) { super(code); } }
 const fail = (code: string, exit: 1 | 3 | 4 | 64): never => { throw new Failure(code, exit); };
 const safeId = (id: string | undefined): id is string => id !== undefined && CATALOG_ID_PATTERN.test(id);
+/** A provider's stored source; a provider without an entry is `inherit`. */
+const sourceIn = (snapshot: ProviderStoreSnapshot, id: string): CredentialSource => snapshot.sources.find(s => s.providerId === id)?.source ?? "inherit";
 
 function definition(args: readonly string[]): ProviderDefinition {
   const id = args[0];
@@ -52,10 +59,15 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
     if (command === "add") def = definition(args);
     else if (command === "list") { if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) return fail("usage_invalid", 64); }
     else if (command === "auth") {
-      if (!(["set", "remove", "inherit"].includes(args[0] ?? "")) || !safeId(args[1]) || (args[0] === "set" ? !(args.length === 2 || (args.length === 3 && args[2] === "--stdin")) : args.length !== 2)) return fail("usage_invalid", 64);
+      if (!(["set", "remove", "inherit", "login", "logout"].includes(args[0] ?? "")) || !safeId(args[1])
+        || (args[0] === "set" ? !(args.length === 2 || (args.length === 3 && args[2] === "--stdin"))
+          : args[0] === "login" ? !(args.length === 2 || (args.length === 3 && args[2] === "--no-browser"))
+          : args.length !== 2)) return fail("usage_invalid", 64);
       if (args[0] === "set" && args.length === 2 && !(io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
       // Typed into --stdin a key would echo; the hidden prompt is the terminal route.
       if (args[0] === "set" && args.length === 3 && (io.input ?? process.stdin).isTTY) return fail("usage_invalid", 64);
+      // Pi's sign-in talks to the owner on the terminal; an agent or a script has none to offer.
+      if (args[0] === "login" && !((io.input ?? process.stdin).isTTY === true && (io.stderrTerminal ?? process.stderr.isTTY === true))) return fail("usage_invalid", 64);
     } else if (command === "remove") { if (args.length !== 1 || !safeId(args[0])) return fail("usage_invalid", 64); }
     else return fail("usage_invalid", 64);
     const store = io.store ?? openProviderStore();
@@ -97,7 +109,33 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
         await store.setKey(id, key, options);
         if (terminal) io.stderr(`${id}: ${replacing ? "key replaced" : "key stored"}\n`);
       } else if (action === "remove") await store.removeKey(id, options);
-      else await store.inherit(id, options);
+      else if (action === "inherit") await store.inherit(id, options);
+      else {
+        // Account sign-in (ADR 0022): Pi's own command runs as a child; only its exit status returns.
+        if (!builtInProviderIds.includes(id) && !custom.has(id)) return fail("provider_unknown", 3);
+        if (custom.has(id) || providers.find(p => p.id === id)?.signIn !== true) return fail("sign_in_unsupported", 4);
+        const runPi = io.runPi ?? runBundledPi;
+        const status = async (piArgs: readonly string[], mode: PiAuthMode): Promise<number> => { try { return await runPi(piArgs, mode); } catch { return 1; } };
+        const source = sourceIn(snapshot, id);
+        if (action === "login") {
+          if (source === "key") {
+            io.stderr(`A key is stored for ${id} and takes precedence over a sign-in. "pi-session-mcp-provider auth inherit ${id}" drops the key; "pi-session-mcp-provider auth remove ${id}" disables the provider.\n`);
+            return fail("provider_key_stored", 4);
+          }
+          io.stderr(`Signing in to ${id} through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".\n`);
+          if (await status(["auth", "login", id, ...(args[2] === "--no-browser" ? ["--no-browser"] : [])], "terminal") !== 0) return fail("sign_in_failed", 1);
+          // A provider set to none uses the new sign-in only if nobody changed its source meanwhile.
+          // After Pi has run, every store error reads as one code, so 3, 4 and 64 never follow a sign-in.
+          if (source === "none") {
+            try { if (sourceIn(await store.read(), id) === "none") await store.inherit(id, options); }
+            catch { return fail("provider_store_unavailable", 1); }
+          }
+        } else {
+          // none first: an interrupted sign-out leaves the provider disabled, never still signed in.
+          if (source === "inherit") await store.removeKey(id, options);
+          if (await status(["auth", "logout", id], "silent") !== 0) return fail("sign_out_failed", 1);
+        }
+      }
     }
     if (command !== "list") io.stdout("ok\n");
     return 0;

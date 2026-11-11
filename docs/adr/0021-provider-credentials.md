@@ -1,6 +1,9 @@
 # ADR 0021: Opt-in provider credentials and operator-defined providers
 
-**Status:** Accepted (2026-11-10, owner decision).
+**Status:** Accepted (2026-11-10, owner decision); amended by
+[ADR 0022](0022-account-sign-in.md), which brings owner-operated account
+sign-in through Pi's own store into scope and replaces this ADR's statement
+under Consequences that OAuth enrollment is out of scope.
 
 - Amends the SDK exceptions in `AGENTS.md` (#142, #199) with one more narrow
   `ModelRuntime` use, and the install rule for an owner-operated key prompt.
