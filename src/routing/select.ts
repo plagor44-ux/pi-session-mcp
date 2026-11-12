@@ -54,8 +54,12 @@ function candidatesFor(tier: Tier, role: Role, request: RoutingRequest, context:
     if (!profile || context.suspended.has(alias)) return false;
     if (profile.permissionProfile !== (role === "code" ? "coding" : "read-only")) return false;
     const mode = context.workspaceMode;
-    if (role === "code" && !codingAllowed(mode, context.relay)) return false;
-    if (mode.mode === "container" && !mode.container?.profiles.includes(alias)) return false;
+    // A container workspace's selected profiles provision its writers; read-only sessions run on
+    // the host checkout and admit any read-only profile, as an explicit start does.
+    if (role === "code") {
+      if (!codingAllowed(mode, context.relay)) return false;
+      if (mode.mode === "container" && !mode.container?.profiles.includes(alias)) return false;
+    }
     if (mode.mode === "snapshot" && ((profile.extensions?.length ?? 0) > 0 || (profile.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(profile.mcpServers ?? {}).length > 0)) return false;
     return !request.shell || profile.shell === "sandboxed";
   });

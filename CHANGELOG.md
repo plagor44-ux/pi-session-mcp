@@ -89,6 +89,15 @@
   accepted and the configuration would keep none. Before, it ended `ok` with
   read-only profiles only. A container workspace that loses every profile
   still stops the run first, with `container_profiles_empty`.
+- Routed `review` and `explore` starts on a container workspace choose among
+  the tier's read-only profiles
+  ([#293](https://github.com/plagor44-ux/pi-session-mcp/issues/293)). The
+  selection applied the workspace's selected profiles, which provision its
+  writers and can only be coding profiles, to every role, so these starts
+  always ended with `routing_no_candidate`, while an explicit read-only start
+  on the same workspace worked. Routed `code` still uses only the selected
+  profiles and still needs the host relay; the family, `shell`, snapshot and
+  suspension rules are unchanged.
 
 ## 0.20.1 — 2026-11-11
 

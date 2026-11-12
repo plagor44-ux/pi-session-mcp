@@ -86,6 +86,18 @@ describe("routing profile selection", () => {
     expect(routeStart(request({ role: "code" }), ctx).alias).toBe("writer2");
     ctx.relay = false; rejects(request({ role: "code" }), ctx, "routing_no_candidate");
   });
+  it("offers read-only profiles for review and explore on a container workspace", () => {
+    const ctx = context({ tiers: { medium: { code: ["writer", "writer2"], review: ["reader", "other"], explore: ["other"] }, hightech: { code: ["highwriter"], review: ["upper"] } } });
+    ctx.workspaceMode = { mode: "container", container: { profiles: ["writer2"], writers: 1, lifecycle: "persistent", image: "node", network: "none", cache: "none", tags: "none", clean: "all" } };
+    expect(routeStart(request({ role: "review", authorFamily: "openai" }), ctx).alias).toBe("other");
+    expect(routeStart(request({ role: "review", authorFamily: "glm" }), ctx).alias).toBe("reader");
+    expect(routeStart(request({ role: "explore", tier: "medium" }), ctx).alias).toBe("other");
+    expect(routeStart(request({ role: "code" }), ctx).alias).toBe("writer2");
+    // Read-only sessions run on the host checkout, so the writer relay only gates code.
+    ctx.relay = false;
+    expect(routeStart(request({ role: "review", authorFamily: "openai" }), ctx).alias).toBe("other");
+    rejects(request({ role: "code" }), ctx, "routing_no_candidate");
+  });
   it("explores only when allowed and random is below rate", () => {
     const ctx = context(); const random = vi.fn().mockReturnValueOnce(0.05).mockReturnValueOnce(0.9); ctx.exploration = { allowed: true, rate: 0.1, random };
     expect(routeStart(request({ role: "code" }), ctx)).toMatchObject({ alias: "writer2", result: { exploration: true }, decision: { exploration: true } });
