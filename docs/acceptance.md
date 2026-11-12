@@ -2663,6 +2663,14 @@ workspace without a mode.
 
 ### v0.21.0 pre-release acceptance
 
+`v0.21.0` was accepted on 2026-11-12 from 09:18 to 09:23 UTC on its release
+candidate `8de79c5`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.0`, npm `12.2.2`, Git `2.56.0`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.1.4`, Codex CLI `0.167.1` and Claude Code `2.1.322`. Level 1 passed,
+and Level 2 passed in the working tree and for the packed tarball, each with
+delivery off and with delivery on. Every command below ran once. The later
+commit changes only this record.
+
 The minor release `0.21.0` ships what `main` holds after `v0.20.1`: the
 post-release evidence of `0.20.1` (PR #286), the targeted provider-credential
 check (PR #287), the guided-setup fixes for thinking levels and the key step
@@ -2670,8 +2678,42 @@ check (PR #287), the guided-setup fixes for thinking levels and the key step
 (PR #292) and the routing fixes for container workspaces and the routing start
 errors (PR #295). Its own pull request carries only the version, the changelog
 heading and this record, on the branch `chore/release-0.21.0` on top of `main`
-at `5b002ed`. The public MCP contract is unchanged since `0.20.1`; the minor
-release is a maintainer decision for the account sign-in.
+at `5b002ed`, with the version commit first. The public MCP contract is
+unchanged since `0.20.1`; the minor release is a maintainer decision for the
+account sign-in.
+
+- Level 1 in the clone of the candidate after `npm ci`: typecheck,
+  `build:cli`, the test run and `build` exited with `0`, in the order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    193 files, 5202 passed and 15 skipped. The load average was 3.9 when it
+    started.
+  - The bubblewrap and Podman-gated files (`sandbox-shell.bwrap`,
+    `sandbox-shell.go-cache.bwrap`, `writer-lifecycle.podman`,
+    `writer-boundary.podman`), run again on their own with the same setting:
+    65 of 65 passed, none skipped.
+  - `npm audit` and `npm audit --omit=dev` exited with `0` and reported 0
+    vulnerabilities.
+  - Doctor reported `packageVersion` `0.21.0`. It exited with `2` because no
+    configuration was set (`config_missing`).
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing before the pack.
+  - `npm pack` listed 1075 files (tarball shasum
+    `ea9b725a0edcde7a19eb15e652444d1f67d1453e`). A scan of the unpacked files
+    for private names, hosts and a home path found none, and the package holds
+    no `docs/superpowers/` file.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.21.0`.
+  The global install resolves `@earendil-works/pi-coding-agent` `1.5.2`,
+  `undici` `8.12.3` and `minimatch` `11.0.3`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps,
+  and reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. The disposable prefix, the tarball and
+  the clone were removed.
 
 No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
 `main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
