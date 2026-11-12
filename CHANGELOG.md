@@ -23,7 +23,10 @@
   a browser on this machine, and leaves a Ctrl-C during either command to that
   command. A sign-in contacts the provider's sign-in endpoints and refreshes
   that provider's catalog once from Pi's catalog service; the other provider
-  commands and Doctor stay offline.
+  commands and Doctor stay offline. One live sign-in and sign-out with
+  `openai-codex` passed on the branch in a disposable container
+  ([record](docs/acceptance.md#issue-290-candidate-acceptance-2026-11-12)); it
+  is not a Level 3 cycle.
 
 ### Changed
 
