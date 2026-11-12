@@ -823,6 +823,10 @@ separate Pi, the owner signed in to `openai-codex` through
 sign-out the provider stood at `none` and a session start was refused; see
 [its record](#issue-290-candidate-acceptance-2026-11-12). It is not a Level 3
 cycle either.
+After the release of `0.21.0` on the same day, a routed review session ran
+three turns against a real provider on the published release; see the
+[post-release evidence](#v0210-post-release-evidence). It is not a Level 3
+cycle either.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2660,6 +2664,146 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.21.0 post-release evidence
+
+Recorded on 2026-11-12 for the published release `0.21.0`. The counts below
+come from the logs of the runs named here, which also hold the exit status of
+every setup, install and verify command of both upgrades.
+
+The annotated tag `v0.21.0` (tag object
+`f2db8147157a62f972fc13007011e14e3a2c52e3`) points to
+`f22ce9454af49f5f8f9e5c8368ab7f5004b5305d`, the merge commit of PR #296 on
+`main` and the package's `gitHead`. CI passed on that commit and on the tag,
+each in its first attempt.
+
+- npm: `npm publish --dry-run` in a fresh clone of the tag, with npm
+  `12.2.2`, exited with `0` and reported 1075 files with the shasum
+  `343b1111d6e1984813c0bb1f85041878b7b2505d`. The maintainer staged the
+  package from that clone with `npm stage publish` and approved it; neither
+  step was observed for this record. The registry has served `0.21.0` as
+  `latest` since 10:17 UTC, with the same shasum and file count. The tarball
+  downloaded from the registry has that shasum and 1075 entries, it holds no
+  `docs/superpowers/` file, and a scan of its unpacked files for private
+  names, hosts and a home path found none.
+- GitHub release `v0.21.0`, published at 11:11 UTC and marked latest, with
+  `install.sh` and `install.sh.sha256`. Both were downloaded through
+  `releases/latest/download/`: the checksum matched, and `install.sh` is
+  byte-identical to the tag's file.
+- The pre-release record names a different tarball shasum because its
+  candidate `8de79c5` predates the commit that added that record, which the
+  package ships.
+
+Runs on the host of the pre-release acceptance, with Node.js `26.13.0`, npm
+`12.2.2`, Codex CLI `0.167.1` and Claude Code `2.1.322`:
+
+- A fresh clone of the tag, from 09:46 to 09:49 UTC, before the package was
+  published: `git describe --tags --exact-match` printed `v0.21.0`. `npm ci`,
+  typecheck, `build:cli`, the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` and `build` exited with `0`;
+  193 files, 5202 passed and 15 skipped, at a load average of 3.6 when the
+  test run started. Doctor reported `packageVersion` `0.21.0` and exited with
+  `2` because no configuration was set (`config_missing`). After the Level 2
+  runs below, `git status --short` printed nothing.
+- The published package, from 11:10 to 11:12 UTC: `npm install -g --prefix
+  <fresh prefix> pi-session-mcp@0.21.0` exited with `0`. The installed
+  manifest names version `0.21.0`, `scripts/install-smoke.mjs` reported
+  `smoke_passed` with that version, and the install resolves
+  `@earendil-works/pi-coding-agent` `1.5.2`, `undici` `8.12.3` and
+  `minimatch` `11.0.3`.
+- Level 2: four runs of `scripts/setup-acceptance.mjs`, each exiting with
+  `0`. Two used the tag clone (`--setup` with its built `dist/setup-main.js`,
+  `--build-dir` the clone) and two the published package (`--setup` the
+  installed `pi-session-mcp-setup`, `--build-dir` the installed package), each
+  once without and once with `--events spool`. The harness script was the tag
+  clone's own in the first pair and that of a second clean clone of the tag in
+  the second. Both sources reported 160 of 160 checks with delivery off and
+  228 of 228 with `--events spool`. Every run covered the four targets (Codex
+  `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps, and
+  reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. For the tag clone the manifests and
+  the built runtime files had the same digest before and after its two runs.
+  The prefix and both clones were removed.
+
+The bubblewrap and Podman-gated test files were not run on their own on the
+tag; the log of the tag clone's test run holds only the totals. `npm audit`
+and `git diff --check` were not run on the tag clone either, so its run covers
+the commands that CI runs, not the complete Level 1, which ran on the release
+candidate ([pre-release acceptance](#v0210-pre-release-acceptance)).
+
+Installations: both run `0.21.0`, upgraded from `0.20.1` on 2026-11-12 from
+11:13 to 11:23 UTC with the steps used for `0.20.1`: backups of the
+configuration and the execution modes named for `0.21.0`, the client targets
+removed, the npm install, each container repository's provisioning command
+first as a dry run and then with `--apply`, Doctor, the client targets applied
+and verified, and `--writer <name> --verify` for every writer. Every one of
+these commands exited with `0`, except Doctor, which exited with `1` for
+warnings only. Neither machine had a running writer container or a held
+writer lease at the start.
+
+- Workstation, with Node.js `26.13.0` and npm `12.2.2`: all five container
+  repositories reported `mode_unchanged`, and all 18 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. Both
+  client targets verified (`mcp_verified`, both `skill_verified`, and
+  `hook_verified` for Claude Code). Doctor reported `packageVersion` `0.21.0`
+  and no error. Its 34 warnings were those it had reported on `0.20.1` right
+  before the upgrade: `snapshot_unavailable`, `writer_base_behind` on 11
+  writers, and the known `workspace_gitfile` and `workspace_mode_unset` of the
+  worktree aliases, 11 each. The open controller sessions were not closed
+  first, as [Installation](installation.md#npm-installation) asks. The check
+  at the start found a child process only under the server of one other
+  controller session, which had an open read-only session, and the owner
+  chose to upgrade without closing it. Each server process that was running
+  holds the `0.20.1` modules it had loaded and would load any further module
+  from the replaced package, so it is on no defined release until its
+  controller reconnects.
+- Server, with Node.js `24.22.2` and npm `11.19.1`, driven over SSH: all five
+  container repositories reported `mode_unchanged`, and all 16 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt; the
+  load average was 2.8 after the writer checks. Both client targets verified
+  (`mcp_verified`, both `skill_verified`; that host has no wake hook). Doctor
+  reported `packageVersion` `0.21.0` and no error; its 3 warnings were those
+  from before the upgrade, `workspace_mode_unset` and `writer_base_behind` on
+  two writers. The one server process of a client session there had no child
+  process at the start.
+
+After the upgrades, tier routing ([ADR 0020](adr/0020-tier-routing.md)) was
+switched on in the mode `manual` on both machines, with a `routing.json`
+beside each configuration. Doctor then reported no error and the same warnings
+as before, and both client targets of each machine verified again.
+
+Use of the published release on the workstation, after its Claude Code
+controller (`2.1.322`) had reconnected and the server reported version
+`0.21.0` with routing on:
+
+- Routed starts on a container workspace, the case that #293 fixed:
+  `role: explore` got a read-only profile of the tier `low`; `role: review`
+  with `risk: high` and the author family `openai` was raised to the tier
+  `ultra` and got a read-only profile of the family `xai`; and `role: review`
+  with the author family `anthropic`, which no profile carries, got a
+  read-only profile of the tier `medium` with the model `gpt-6.1-sol`. Each
+  start reported the reason `floor`. The first two sessions were closed
+  without a prompt.
+- The last session ran three turns against the provider `openai` between
+  21:19 and 21:35 UTC. Each completed with the completion `stop` and without
+  truncation, and for each the wake hook that setup installs announced the
+  end of the turn to Claude Code within a second. The session was then
+  closed. The turns served the controller's own work; they are not an
+  acceptance run with criteria fixed in advance.
+- No routing start error occurred, so no controller used the start-error
+  reference that #294 changed.
+
+Still not established for `0.21.0`: a Level 3 cycle on the release; a turn
+with another provider or with a coding profile on the release, in particular
+in a container writer; any session on the server host, where only the
+upgrade, the routing switch and their provider-free checks ran; an account
+sign-in on the release, because the
+[check of #290](#issue-290-candidate-acceptance-2026-11-12) ran on the
+unreleased branch, and guided setup's sign-in offer, a sign-in of a provider
+set to `none` or a browser sign-in on any build; a guided installation whose
+coding profiles pass their probes with the corrected thinking levels (#288);
+a controller with the changed start-error reference (#294); a multi-session
+skill acceptance on the release; and macOS outside CI.
 
 ### v0.21.0 pre-release acceptance
 
