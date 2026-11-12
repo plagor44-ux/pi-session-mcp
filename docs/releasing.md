@@ -200,15 +200,25 @@ Consequences:
 
 ## Prepare a release
 
-A release travels in the pull request of the change it ships. That pull
-request also carries the version, the changelog heading and the pre-release
-acceptance record; there is no separate release pull request. Records that can
-only be made after publishing go into the pull request of the next change.
+One pull request carries the version, the changelog heading and the
+pre-release acceptance record; below it is called the release pull request.
+It is one of two kinds:
+
+- The pull request of the change that the release ships, when the release is
+  decided before that pull request is merged.
+- A pull request of its own, on a branch from current `main` such as
+  `chore/release-<x.y.z>`, when the changes that the release ships are
+  already merged, for example to bundle several merged pull requests or
+  because the release was decided after the merge. It carries only the
+  version, the changelog heading and the pre-release acceptance record.
+
+Records that can only be made after publishing go into the pull request of the
+next change.
 
 Preconditions:
 
-- The change pull request contains every change of the release, and Level 1
-  is green on its head.
+- The head of the release pull request contains every change of the release,
+  and Level 1 is green on it.
 - `npm audit` reports 0 vulnerabilities.
 - The public contract is unchanged, or a minor release has been decided.
 - The acceptance that this release requires is recorded, or its absence is
@@ -216,9 +226,9 @@ Preconditions:
 
 Steps:
 
-1. Bring the change branch up to date with `main` if `main` moved. Never reuse
-   a branch that predates later merges without that: its lockfile would undo
-   later dependency patches.
+1. Bring the branch of the release pull request up to date with `main` if
+   `main` moved. Never reuse a branch that predates later merges without that:
+   its lockfile would undo later dependency patches.
 2. Set the version:
 
    ```bash
@@ -267,12 +277,12 @@ Steps:
    install without `--prefix`. Remove the prefix and the tarball afterwards; the
    tarball is not committed.
 7. Record the pre-release acceptance in the status section of
-   [Acceptance](acceptance.md) and push it to the change pull request. Name the
-   release in the pull request's title and description.
+   [Acceptance](acceptance.md) and push it to the release pull request. Name
+   the release in the pull request's title and description.
 
 ## Publish a release
 
-After the change pull request is merged and CI is green on the merge commit:
+After the release pull request is merged and CI is green on the merge commit:
 
 ```bash
 git switch main

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed
+
+- Documentation only, no runtime change:
+  [Releasing](docs/releasing.md#prepare-a-release) describes both kinds of
+  release pull request, the pull request of the change that a release ships
+  and a pull request of its own for changes that are already merged, which
+  0.20.1 and 0.21.0 used.
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.21.0](docs/acceptance.md#v0210-post-release-evidence)
+  (registry and release assets, Level 2 on a clone of the tag and on the
+  published npm package, the upgrade of both installations, and routed
+  sessions on the published release, one of them with three turns against a
+  real provider). None of it is a Level 3 cycle.
+
 ## 0.21.0 — 2026-11-12
 
 Minor release by maintainer decision for
