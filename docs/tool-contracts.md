@@ -265,7 +265,7 @@ Public MCP errors are stable and sanitized. Their messages do not include inputs
 | `routing_role_required` | Routing is on and the start passed `tier` without `role`. |
 | `routing_tier_below_floor` | The requested `tier` is below the floor that role, risk and workspace set. Omit `tier` or raise it. |
 | `routing_author_required` | A routed review passed neither `authorFamily` nor `allowSameFamily: true`. |
-| `routing_same_family` | Only profiles of the author's family fit the routed review, and the fallback one tier lower, never below the floor, found none of another family. |
+| `routing_same_family` | Only profiles of the author's family fit the routed review in its tier, and no fallback applies: the tier one lower is absent or below the floor, so it is not searched, or it has no fitting profile of another family. |
 | `routing_no_candidate` | No profile of the tier fits the role, the workspace mode, `shell` and the suspensions. Routing does not try another tier. |
 
 Lifecycle errors include `unknown_workspace`, `unknown_session`, `unknown_turn`, `session_running`, `turn_deadline_uncertain`, `prompt_rejected`, `prompt_timeout`, `abort_failed`, `abort_timeout`, and `turn_failed`. Timeout messages are stable: `Pi prompt preflight timed out` and `Pi abort timed out`.
