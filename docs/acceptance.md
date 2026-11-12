@@ -790,8 +790,9 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own. `0.20.1`, released from a later commit, has none; see
-[its record](#v0201-pre-release-acceptance).
+its own. `0.20.1` and `0.21.0`, released from later commits, have none; see
+[the record of `0.20.1`](#v0201-pre-release-acceptance) and
+[that of `0.21.0`](#v0210-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2659,6 +2660,36 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.21.0 pre-release acceptance
+
+The minor release `0.21.0` ships what `main` holds after `v0.20.1`: the
+post-release evidence of `0.20.1` (PR #286), the targeted provider-credential
+check (PR #287), the guided-setup fixes for thinking levels and the key step
+(PR #291), account sign-in after [ADR 0022](adr/0022-account-sign-in.md)
+(PR #292) and the routing fixes for container workspaces and the routing start
+errors (PR #295). Its own pull request carries only the version, the changelog
+heading and this record, on the branch `chore/release-0.21.0` on top of `main`
+at `5b002ed`. The public MCP contract is unchanged since `0.20.1`; the minor
+release is a maintainer decision for the account sign-in.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits after `v0.20.1` change the
+server's routing selection, the provider store and command, the offline model
+catalog and guided setup.
+
+Not established for `0.21.0`: a Level 3 cycle on the release; any turn against
+a real provider on the release, because the
+[check of #278](#provider-credentials-against-a-real-provider-278) ran on
+`0.20.1` and the [check of #290](#issue-290-candidate-acceptance-2026-11-12)
+on the unreleased branch, with one provider, one account and one method;
+guided setup's sign-in offer, a sign-in of a provider set to `none` and a
+browser sign-in, live; a guided installation whose coding profiles pass their
+probes with the corrected thinking levels (#288); a routed session start with
+routing on, live (#293); a controller with the changed start-error reference
+(#294); the server host; macOS outside CI; and the published-release Level 2
+and the upgrades, which follow after publishing.
 
 ### Issue #290 candidate acceptance (2026-11-12)
 
