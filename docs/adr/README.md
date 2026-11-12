@@ -25,3 +25,5 @@ record can narrow or extend an earlier one; the record itself says so.
 | [0018](0018-sandbox-go-module-cache.md) | Read-only Go module cache in the sandboxed shell |
 | [0019](0019-opt-in-session-history.md) | Opt-in session history |
 | [0020](0020-tier-routing.md) | Tier routing |
+| [0021](0021-provider-credentials.md) | Opt-in provider credentials and operator-defined providers |
+| [0022](0022-account-sign-in.md) | Owner-operated account sign-in for built-in providers |

@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Added
+
+- Account sign-in without operating Pi
+  ([#290](https://github.com/plagor44-ux/pi-session-mcp/issues/290),
+  [ADR 0022](docs/adr/0022-account-sign-in.md)).
+  `pi-session-mcp-provider auth login <provider> [--no-browser]` runs the
+  bundled Pi CLI's own sign-in dialogue on the owner's terminal, so no
+  separate Pi installation is needed; the token stays in Pi's own credential
+  store, and the command uses only Pi's exit status. `--no-browser` suits a
+  machine without a browser. Only built-in providers that declare account
+  sign-in qualify (exit 4 `sign_in_unsupported` otherwise); a stored key takes
+  precedence and stops the sign-in (exit 4 `provider_key_stored`); a provider
+  set to `none` uses Pi's login again after a successful sign-in; the command
+  refuses to run without a terminal (exit 64). `pi-session-mcp-provider auth
+  logout <provider>` sets a provider that used Pi's login to `none` and lets
+  Pi delete its local entry; it revokes nothing at the provider. An
+  interactive `--guided --apply` run offers, for each provider named that
+  declares account sign-in, to sign in or to store a key, asks whether to open
+  a browser on this machine, and leaves a Ctrl-C during either command to that
+  command. A sign-in contacts the provider's sign-in endpoints and refreshes
+  that provider's catalog once from Pi's catalog service; the other provider
+  commands and Doctor stay offline. One live sign-in and sign-out with
+  `openai-codex` passed on the branch in a disposable container
+  ([record](docs/acceptance.md#issue-290-candidate-acceptance-2026-11-12)); it
+  is not a Level 3 cycle.
+
 ### Changed
 
 - Acceptance records only, no runtime change: the

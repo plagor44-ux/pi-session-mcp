@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { loadProviderPolicy, loadRuntimeProviderPolicy, openProviderStore, providerSecretValues, refreshProviderRedactionValues, type ProviderPolicyRuntime, type ProviderPolicy } from "../src/provider-store.js";
-import { type ProviderDefinition, ProviderStoreError } from "../src/provider-store-contract.js";
+import { type ProviderDefinition, type ProviderStore, ProviderStoreError } from "../src/provider-store-contract.js";
+import { runProviderCli } from "../src/provider-cli.js";
+import type { PiAuthMode } from "../src/provider-sign-in.js";
 import { createModelCatalog } from "../src/model-catalog.js";
 import { providerStoreCheck } from "../src/doctor.js";
 import { Redactor } from "../src/history/redact.js";
@@ -71,6 +74,20 @@ describe("provider store", () => {
     expect((await policy()).source("openai")).toBe("inherit");
     expect((await fs.lstat(directory)).mode & 0o777).toBe(0o700);
     expect((await fs.lstat(join(directory, "credentials.json"))).mode & 0o777).toBe(0o600);
+  });
+  it("changes a source only from the expected one, checked under the lock", async () => {
+    const sources = async () => Object.fromEntries((await store().read()).sources.map(s => [s.providerId, s.source]));
+    await store().setKey("openai", key, builtin);
+    await store().inherit("openai", builtin, "none");
+    await store().removeKey("openai", builtin, "inherit");
+    expect(await sources()).toEqual({ openai: "key" });
+    expect(await fs.readFile(join(directory, "credentials.json"), "utf8")).toContain(key);
+    await store().removeKey("anthropic", builtin, "inherit");
+    expect(await sources()).toEqual({ openai: "key", anthropic: "none" });
+    await store().inherit("anthropic", builtin, "none");
+    expect(await sources()).toEqual({ openai: "key" });
+    // A condition never hides an unknown provider.
+    for (const change of [() => store().inherit("nope", builtin, "none"), () => store().removeKey("nope", builtin, "inherit")]) await expect(change()).rejects.toMatchObject({ code: "provider_unknown" });
   });
   it.each(["", "has space", "tab\tkey", "line\nkey", "key\x00", "x".repeat(4097)])("rejects invalid key input without changing state", async invalid => {
     await store().setKey("openai", key, builtin);
@@ -216,6 +233,35 @@ describe("provider store", () => {
     await expect(policy()).rejects.toBeInstanceOf(ProviderStoreError);
     const result = await providerStoreCheck(home);
     expect(result.severity).toBe("error"); expect(JSON.stringify(result)).not.toContain(key); expect(JSON.stringify(result)).not.toContain(home);
+  });
+});
+
+describe("account sign-in source changes on the real store (ADR 0022)", () => {
+  const catalog = async () => ({ providers: () => [{ id: "openai", authConfigured: false, models: [], signIn: true as const }] });
+  const cli = (args: string[], s: ProviderStore, runPi: (args: readonly string[], mode: PiAuthMode) => Promise<number>) => runProviderCli(args, {
+    store: s, catalog, runPi, input: Object.assign(new PassThrough(), { isTTY: true }), stderrTerminal: true, stdout: () => {}, stderr: () => {},
+  });
+  const keyed = [{ providerId: "openai", source: "key", bindingValid: true }];
+  it("keeps a key stored during Pi's sign-in of a provider set to none", async () => {
+    await store().removeKey("openai", builtin);
+    expect(await cli(["auth", "login", "openai"], store(), async () => { await store().setKey("openai", key, builtin); return 0; })).toBe(0);
+    expect((await store().read()).sources).toEqual(keyed);
+  });
+  it("keeps a key stored just before a sign-in's source change takes the lock", async () => {
+    await store().removeKey("openai", builtin);
+    const real = store();
+    // Another terminal's `auth set` lands between the command's last look at the source and its write.
+    const raced: ProviderStore = { ...real, inherit: async (...args) => { await real.setKey("openai", key, builtin); return real.inherit(...args); } };
+    expect(await cli(["auth", "login", "openai"], raced, async () => 0)).toBe(0);
+    expect((await store().read()).sources).toEqual(keyed);
+  });
+  it("keeps a key stored while a sign-out loads the catalog", async () => {
+    const real = store();
+    const raced: ProviderStore = { ...real, removeKey: async (...args) => { await real.setKey("openai", key, builtin); return real.removeKey(...args); } };
+    const runPi = vi.fn<(args: readonly string[], mode: PiAuthMode) => Promise<number>>(async () => 0);
+    expect(await cli(["auth", "logout", "openai"], raced, runPi)).toBe(0);
+    expect((await store().read()).sources).toEqual(keyed);
+    expect(runPi).toHaveBeenCalledWith(["auth", "logout", "openai"], "silent");
   });
 });
 

@@ -2,6 +2,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isEntryPoint } from "./entry-point.js";
+import { guidedInterrupts } from "./guided/interrupts.js";
 import { createProcessRunner } from "./setup-process.js";
 import { currentSetupPlatform } from "./setup-platform.js";
 import { createProductionSetup, isSupportedTarget } from "./setup.js";
@@ -29,12 +30,13 @@ export async function main(argv: readonly string[] = process.argv.slice(2), depe
   if (request.listModels) return (await import("./setup-probe-main.js")).runListModels(request.json);
   if (request.guided) {
     const controller = new AbortController();
-    const interrupt = (): void => controller.abort(130);
+    // A Ctrl-C while a credential command runs ends only that command (ADR 0022).
+    const gate = guidedInterrupts(controller);
     const terminate = (): void => controller.abort(143);
-    process.on("SIGINT", interrupt);
+    process.on("SIGINT", gate.interrupt);
     process.on("SIGTERM", terminate);
-    try { return await (await import("./setup-guided-main.js")).runGuidedMain(request.guided, request.json, controller.signal); }
-    finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+    try { return await (await import("./setup-guided-main.js")).runGuidedMain(request.guided, request.json, controller.signal, { deferInterrupts: gate.defer }); }
+    finally { process.removeListener("SIGINT", gate.interrupt); process.removeListener("SIGTERM", terminate); }
   }
   const config = process.env.PI_SESSION_MCP_CONFIG;
   if (!config) {

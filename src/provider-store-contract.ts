@@ -86,10 +86,13 @@ export interface ProviderStore {
   read(): Promise<ProviderStoreSnapshot>;
   /** Stores or rotates a key and binds it to the provider's current identity. */
   setKey(providerId: string, key: string, options: BuiltInProviders): Promise<void>;
-  /** Moves the provider to `none`; never back to `inherit`. */
-  removeKey(providerId: string, options: BuiltInProviders): Promise<void>;
-  /** Restores `inherit` for a built-in provider. */
-  inherit(providerId: string, options: BuiltInProviders): Promise<void>;
+  /**
+   * Moves the provider to `none`; never back to `inherit`. With `onlyFrom` it changes nothing unless the
+   * provider's source, read under the lock, is `onlyFrom`, so a source that changed meanwhile stays.
+   */
+  removeKey(providerId: string, options: BuiltInProviders, onlyFrom?: CredentialSource): Promise<void>;
+  /** Restores `inherit` for a built-in provider; `onlyFrom` as for `removeKey`. */
+  inherit(providerId: string, options: BuiltInProviders, onlyFrom?: CredentialSource): Promise<void>;
   addProvider(definition: ProviderDefinition, options: BuiltInProviders): Promise<void>;
   /** Removes an operator-defined provider and its stored source. */
   removeProvider(providerId: string): Promise<void>;

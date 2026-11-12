@@ -814,6 +814,14 @@ after its key step, while that installer dropped both proposed coding
 profiles; see
 [its record](#provider-credentials-against-a-real-provider-278). It is not a
 Level 3 cycle either.
+On 2026-11-12 the targeted check of
+[#290](https://github.com/plagor44-ux/pi-session-mcp/issues/290) ran on the
+unreleased branch `feat/provider-sign-in`: with only the npm package and no
+separate Pi, the owner signed in to `openai-codex` through
+`pi-session-mcp-provider auth login`, a real probe turn passed, and after the
+sign-out the provider stood at `none` and a session start was refused; see
+[its record](#issue-290-candidate-acceptance-2026-11-12). It is not a Level 3
+cycle either.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2651,6 +2659,90 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### Issue #290 candidate acceptance (2026-11-12)
+
+Recorded on 2026-11-12 between 05:09 and 05:20 UTC for the unreleased branch
+`feat/provider-sign-in` ([ADR 0022](adr/0022-account-sign-in.md)) on its
+commit `17972364997d877c02ee8a31f51b9aa0ded8e5e5`. This is the targeted live
+check of [#290](https://github.com/plagor44-ux/pi-session-mcp/issues/290)
+with one provider, one sign-in method and the owner's own account. It is not
+a Level 3 cycle, involves no client and says nothing about other providers or
+methods. The implementation plan fixed the steps and their expected outcomes
+before the run; the one planned attempt ran, and every outcome matched except
+one scan finding, explained below.
+
+- Package: `npm pack` of that commit (version string still `0.20.1`, tarball
+  SHA-256 `571e56efbc665883768c449f634280dc4aa649f64c2ec5cff49c43d1c242ac42`),
+  installed with `npm install -g` into a fresh prefix, which exited with `0`.
+  The package pins Pi SDK `1.5.2`.
+- Environment: one throwaway container from the public image
+  `node:22-bookworm` (Node.js `22.23.3`, npm `10.9.9`) under rootless Podman
+  `6.1.4` on a Linux host, as an unprivileged user with an empty home, removed
+  when the run ended. Before and after the install no `pi` command was on the
+  `PATH`, and before the run there was no Pi agent directory and no provider
+  store. The container had no display variable, no `xdg-open` and no browser
+  binary. A synthetic Git workspace and a hand-written configuration held one
+  default read-only profile on `openai-codex` with the model `gpt-6-luna` and
+  the thinking level `low`.
+- Roles: the owner started the prepared script on their own terminal. Its
+  only interactive step was Pi's sign-in dialogue under
+  `pi-session-mcp-provider auth login openai-codex --no-browser`, which for
+  this provider uses Pi's device-code method; the owner completed it in a
+  browser outside the container. The script did not record the dialogue. The
+  agent that prepared and evaluated the check read only the files the script
+  wrote: Pi Session MCP's own output, exit statuses, the probe and session
+  reports, and the counts and file names of a scan program. It saw no code,
+  sign-in address, token or account identifier.
+- Before the sign-in: Doctor exited with `0`. `list --json` showed
+  `openai-codex` with the source `inherit` and `authConfigured: false`, and
+  `--probe-profile` without `--apply` reported `probe_auth_missing` without a
+  provider turn.
+- Sign-in: `auth login` exited with `0` and printed `ok`. `list --json` then
+  showed the source `inherit` with `authConfigured: true`, and
+  `--probe-profile --apply` reported `probe_passed` after one provider turn of
+  about 1.5 seconds.
+- Leak scan after the sign-in: the scan program read the provider's entry in
+  Pi's `auth.json` inside the container (three distinct values) and searched
+  for those values and for the shapes of a token, a token field and a sign-in
+  address. In the home directory outside Pi's agent directory, the installed
+  packages and the npm cache, in the output directory and in `/tmp` (618
+  files, none unreadable), no file held a value. Within Pi's agent directory
+  the values were only in `auth.json`, and the environment and command line of
+  the one other process in the container held none. No file matched the shape
+  of a token or a token field. One file matched the shape of a sign-in
+  address: an entry of the Node.js compile cache in `/tmp`, which Pi's bundled
+  CLI enables.
+- That match comes from Pi's code, not from the sign-in. A follow-up in a
+  second throwaway container installed the same tarball and imported only
+  Pi's bundled module for this provider's sign-in, without signing in. Node.js
+  names a cache file after its module, and of the 5560 script files of the
+  installed package and its dependencies only that module gives the matched
+  file's name. The import wrote a cache file of that name in a cache directory
+  of the same name, with the same single shape match, and the module's source
+  text holds one such address. A rehearsal of the script without a sign-in,
+  on the provider `openai` without a credential, had found no shape match.
+- Sign-out: `auth logout` exited with `0` and printed `ok`. `list --json`
+  showed the source `none` with `authConfigured: false`, Pi's `auth.json` no
+  longer had an entry for the provider, `--probe-profile --apply` reported
+  `probe_auth_missing` without a provider turn, and `pi_session_start` through
+  the installed server over stdio was refused with
+  `local_authentication_missing`; the server logged
+  `pi_session_creation_failed` at the stage `check_auth`. A second scan, with
+  no value left in Pi's store to search for, found the same compile-cache
+  entry as the only shape match (634 files). Doctor exited with `0`.
+- Removal: both containers ended with their runs; the image stayed. The
+  sign-out deletes the local entry only. Whether the provider ended the
+  account session was not checked; that is the owner's step in the account
+  settings.
+
+Limits: one provider, one account, one method and one probe turn on a
+read-only profile. No session turn through the server ran while signed in,
+no client took part, and neither guided setup's sign-in offer, a sign-in of a
+provider set to `none` nor a browser method ran live; their tests stay
+provider-free. The scans cover files and the readable process environments,
+not process memory; after the sign-out they could search only for shapes.
+Linux only, in a container without a browser.
 
 ### v0.20.1 post-release evidence
 

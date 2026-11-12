@@ -210,6 +210,8 @@ export function openProviderStore(options: { home?: string } = {}): ProviderStor
   const mutate = (fn: (state: State) => Promise<void>): Promise<void> => safe(() => locked(directory, async () => fn(await readState(directory))));
   const saveCredentials = (s: State) => atomic(directory, "credentials.json", { v: 1, providers: s.credentials });
   const known = (s: State, id: string, o: BuiltInProviders) => { if (!ID.test(id) || (!o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id))) fail("provider_unknown"); };
+  /** Whether a conditional change must leave the locked state as it is: the source is not the expected one. */
+  const elsewhere = (s: State, id: string, onlyFrom: CredentialSource | undefined): boolean => onlyFrom !== undefined && (Object.hasOwn(s.credentials, id) ? s.credentials[id]!.source : "inherit") !== onlyFrom;
   return {
     read: () => safe(async () => {
       const state = await readState(directory);
@@ -217,11 +219,13 @@ export function openProviderStore(options: { home?: string } = {}): ProviderStor
       return snapshot(state, builtins);
     }),
     setKey: (id, key, o) => { if (!keyValid(key)) return Promise.reject(new ProviderStoreError("credential_invalid")); return mutate(async s => { known(s, id, o); s.credentials[id] = { source: "key", key, binding: identity(id, s.definitions) }; await saveCredentials(s); }); },
-    removeKey: (id, o) => mutate(async s => { known(s, id, o); s.credentials[id] = { source: "none" }; await saveCredentials(s); }),
-    inherit: (id, o) => mutate(async s => {
+    removeKey: (id, o, onlyFrom) => mutate(async s => { known(s, id, o); if (elsewhere(s, id, onlyFrom)) return; s.credentials[id] = { source: "none" }; await saveCredentials(s); }),
+    inherit: (id, o, onlyFrom) => mutate(async s => {
       // An entry for a provider that no longer exists can only be deleted; deleting grants nothing.
-      if (ID.test(id) && Object.hasOwn(s.credentials, id) && !o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id)) { delete s.credentials[id]; await saveCredentials(s); return; }
-      known(s, id, o); if (s.definitions.some(d => d.id === id)) fail("provider_inherit_unsupported"); delete s.credentials[id]; await saveCredentials(s); }),
+      const orphan = ID.test(id) && Object.hasOwn(s.credentials, id) && !o.builtInProviderIds.includes(id) && !s.definitions.some(d => d.id === id);
+      if (!orphan) { known(s, id, o); if (s.definitions.some(d => d.id === id)) fail("provider_inherit_unsupported"); }
+      if (elsewhere(s, id, onlyFrom)) return;
+      delete s.credentials[id]; await saveCredentials(s); }),
     addProvider: (definition, o) => {
       if (!definitionValid(definition)) return Promise.reject(new ProviderStoreError("provider_definition_invalid"));
       return mutate(async s => { if (o.builtInProviderIds.includes(definition.id) || s.definitions.some(d => d.id === definition.id)) fail("provider_id_conflict"); await atomic(directory, "providers.json", { v: 1, providers: [...s.definitions, definition] }); });

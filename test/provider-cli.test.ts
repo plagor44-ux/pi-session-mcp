@@ -2,6 +2,7 @@ import { PassThrough, Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 import { runProviderCli } from "../src/provider-cli.js";
 import { ProviderStoreError, type ProviderStore } from "../src/provider-store-contract.js";
+import type { PiAuthMode } from "../src/provider-sign-in.js";
 
 function fixture() {
   let out = "", err = "";
@@ -123,5 +124,126 @@ describe("provider CLI", () => {
       const f = fixture(); vi.mocked(f.store.removeKey).mockRejectedValue(new ProviderStoreError(code));
       expect(await f.run(["auth", "remove", "openai"])).toBe(exit); expect(f.output()).toContain(code);
     }
+  });
+});
+
+const signInCatalog = async () => ({ providers: () => [{ id: "openai", authConfigured: false, models: [], signIn: true as const }, { id: "deepseek", authConfigured: false, models: [] }] });
+const sourceOf = (source: "none" | "key") => ({ sources: [{ providerId: "openai", source, bindingValid: true }], definitions: [] });
+const ANNOUNCE = 'Signing in to openai through Pi. Where Pi suggests "pi auth login", run "pi-session-mcp-provider auth login".\n';
+const KEY_STORED = 'A key is stored for openai and takes precedence over a sign-in. "pi-session-mcp-provider auth inherit openai" drops the key; "pi-session-mcp-provider auth remove openai" disables the provider.\n';
+/** A provider CLI on two terminals whose Pi child exits with `status`. */
+function signInFixture(status = 0) {
+  const f = fixture();
+  const runPi = vi.fn<(args: readonly string[], mode: PiAuthMode) => Promise<number>>(async () => status);
+  const run = (args: string[], extra: Partial<Parameters<typeof runProviderCli>[1]> = {}) => f.run(args, { catalog: signInCatalog, input: terminal(), stderrTerminal: true, runPi, ...extra });
+  return { ...f, runPi, run };
+}
+const order = (mock: { mock: { invocationCallOrder: number[] } }): number => mock.mock.invocationCallOrder[0]!;
+
+describe("provider CLI account sign-in", () => {
+  it("refuses auth login without terminals on stdin and stderr", async () => {
+    const f = signInFixture();
+    expect(await f.run(["auth", "login", "openai"], { input: Readable.from([]) })).toBe(64);
+    expect(await f.run(["auth", "login", "openai"], { stderrTerminal: false })).toBe(64);
+    expect(f.stderr()).toBe("usage_invalid\nusage_invalid\n");
+    expect(f.store.read).not.toHaveBeenCalled(); expect(f.runPi).not.toHaveBeenCalled();
+  });
+  it("rejects malformed login and logout arguments", async () => {
+    const f = signInFixture();
+    for (const args of [["auth", "login"], ["auth", "logout"], ["auth", "login", "openai", "--browser"], ["auth", "login", "openai", "--no-browser", "x"], ["auth", "logout", "openai", "--no-browser"], ["auth", "login", "bad id"]]) {
+      expect(await f.run(args), args.join(" ")).toBe(64);
+    }
+    expect(f.runPi).not.toHaveBeenCalled(); expect(f.store.read).not.toHaveBeenCalled();
+  });
+  it("refuses unknown, operator-defined and key-only providers before Pi runs", async () => {
+    const f = signInFixture();
+    vi.mocked(f.store.read).mockResolvedValue({ sources: [], definitions: [{ id: "custom", api: "openai-completions", baseUrl: "https://example.test", models: [] }] });
+    for (const action of ["login", "logout"]) {
+      expect(await f.run(["auth", action, "nope"])).toBe(3);
+      expect(await f.run(["auth", action, "custom"])).toBe(4);
+      expect(await f.run(["auth", action, "deepseek"])).toBe(4);
+    }
+    expect(f.stderr()).toBe("provider_unknown\nsign_in_unsupported\nsign_in_unsupported\n".repeat(2));
+    expect(f.runPi).not.toHaveBeenCalled(); expect(f.store.removeKey).not.toHaveBeenCalled(); expect(f.store.inherit).not.toHaveBeenCalled();
+  });
+  it("refuses a sign-in while a stored key is the source and says how to change it", async () => {
+    const f = signInFixture(); vi.mocked(f.store.read).mockResolvedValue(sourceOf("key"));
+    expect(await f.run(["auth", "login", "openai"])).toBe(4);
+    expect(f.stderr()).toBe(KEY_STORED + "provider_key_stored\n");
+    expect(f.stdout()).toBe(""); expect(f.runPi).not.toHaveBeenCalled();
+  });
+  it("announces the sign-in and runs Pi's own sign-in with the terminal streams", async () => {
+    const f = signInFixture();
+    expect(await f.run(["auth", "login", "openai"])).toBe(0);
+    expect(f.runPi).toHaveBeenLastCalledWith(["auth", "login", "openai"], "terminal");
+    expect(await f.run(["auth", "login", "openai", "--no-browser"])).toBe(0);
+    expect(f.runPi).toHaveBeenLastCalledWith(["auth", "login", "openai", "--no-browser"], "terminal");
+    expect(f.stderr()).toBe(ANNOUNCE + ANNOUNCE); expect(f.stdout()).toBe("ok\nok\n");
+    expect(f.store.inherit).not.toHaveBeenCalled();
+  });
+  it("enables Pi authentication after a successful sign-in of a provider set to none, only from none", async () => {
+    const f = signInFixture(); vi.mocked(f.store.read).mockResolvedValue(sourceOf("none"));
+    expect(await f.run(["auth", "login", "openai"])).toBe(0);
+    // The store checks the source under its lock (test/provider-store.test.ts); a second read here would race.
+    expect(f.store.read).toHaveBeenCalledOnce();
+    expect(f.store.inherit).toHaveBeenCalledWith("openai", { builtInProviderIds: ["openai", "deepseek"] }, "none");
+    expect(order(vi.mocked(f.store.inherit))).toBeGreaterThan(order(f.runPi));
+    expect(f.stdout()).toBe("ok\n");
+  });
+  it("fails closed when Pi's sign-in does not exit with 0", async () => {
+    const failed = signInFixture(1);
+    const rejected = signInFixture(); rejected.runPi.mockRejectedValue(new Error("spawn failed"));
+    for (const f of [failed, rejected]) {
+      vi.mocked(f.store.read).mockResolvedValue(sourceOf("none"));
+      expect(await f.run(["auth", "login", "openai"])).toBe(1);
+      expect(f.stderr()).toBe(ANNOUNCE + "sign_in_failed\n"); expect(f.stdout()).toBe("");
+      expect(f.store.inherit).not.toHaveBeenCalled(); expect(f.store.read).toHaveBeenCalledOnce();
+    }
+  });
+  it("reports provider_store_unavailable when the source cannot change after Pi signed in", async () => {
+    const busy = signInFixture(); vi.mocked(busy.store.inherit).mockRejectedValue(new ProviderStoreError("provider_store_busy"));
+    const invalid = signInFixture(); vi.mocked(invalid.store.inherit).mockRejectedValue(new ProviderStoreError("provider_store_invalid"));
+    // An error that would map to 3 elsewhere stays 1 here: Pi has already run.
+    const unknown = signInFixture(); vi.mocked(unknown.store.inherit).mockRejectedValue(new ProviderStoreError("provider_unknown"));
+    for (const f of [busy, invalid, unknown]) {
+      vi.mocked(f.store.read).mockResolvedValue(sourceOf("none"));
+      expect(await f.run(["auth", "login", "openai"])).toBe(1);
+      expect(f.stderr()).toBe(ANNOUNCE + "provider_store_unavailable\n"); expect(f.stdout()).toBe("");
+    }
+  });
+  it("signs out by setting none before Pi deletes its entry", async () => {
+    const f = signInFixture();
+    expect(await f.run(["auth", "logout", "openai"])).toBe(0);
+    expect(f.store.removeKey).toHaveBeenCalledWith("openai", { builtInProviderIds: ["openai", "deepseek"] }, "inherit");
+    expect(f.runPi).toHaveBeenCalledWith(["auth", "logout", "openai"], "silent");
+    expect(order(vi.mocked(f.store.removeKey))).toBeLessThan(order(f.runPi));
+    expect(f.stdout()).toBe("ok\n"); expect(f.stderr()).toBe("");
+  });
+  it("signs out without changing a none or key source", async () => {
+    for (const source of ["none", "key"] as const) {
+      const f = signInFixture(); vi.mocked(f.store.read).mockResolvedValue(sourceOf(source));
+      expect(await f.run(["auth", "logout", "openai"])).toBe(0);
+      expect(f.store.removeKey).not.toHaveBeenCalled(); expect(f.store.inherit).not.toHaveBeenCalled();
+      expect(f.runPi).toHaveBeenCalledWith(["auth", "logout", "openai"], "silent");
+    }
+  });
+  it("does not run Pi when the none write fails", async () => {
+    const f = signInFixture(); vi.mocked(f.store.removeKey).mockRejectedValue(new ProviderStoreError("provider_store_busy"));
+    expect(await f.run(["auth", "logout", "openai"])).toBe(1);
+    expect(f.stderr()).toContain("provider_store_busy"); expect(f.runPi).not.toHaveBeenCalled(); expect(f.stdout()).toBe("");
+  });
+  it("reports sign_out_failed and keeps none when Pi's sign-out fails", async () => {
+    const failed = signInFixture(1);
+    const rejected = signInFixture(); rejected.runPi.mockRejectedValue(new Error("spawn failed"));
+    for (const f of [failed, rejected]) {
+      expect(await f.run(["auth", "logout", "openai"])).toBe(1);
+      expect(f.stderr()).toBe("sign_out_failed\n"); expect(f.stdout()).toBe("");
+      expect(f.store.removeKey).toHaveBeenCalledOnce(); expect(f.store.inherit).not.toHaveBeenCalled();
+    }
+  });
+  it("signs out without a terminal", async () => {
+    const f = signInFixture(); vi.mocked(f.store.read).mockResolvedValue(sourceOf("none"));
+    expect(await f.run(["auth", "logout", "openai"], { input: Readable.from([]), stderrTerminal: false })).toBe(0);
+    expect(f.runPi).toHaveBeenCalledWith(["auth", "logout", "openai"], "silent"); expect(f.stdout()).toBe("ok\n");
   });
 });

@@ -9,6 +9,8 @@ export interface CatalogProvider {
   readonly id: string;
   readonly authConfigured: boolean;
   readonly models: readonly string[];
+  /** Present, and true, only for a provider that declares account sign-in (ADR 0022); absent otherwise. */
+  readonly signIn?: true;
 }
 
 export interface ModelCatalog {
@@ -70,7 +72,8 @@ export const AUTH_CHECK_TIMEOUT_MS = 5_000;
 export interface CatalogRuntime {
   registerProvider?: ProviderPolicyRuntime["registerProvider"];
   setRuntimeApiKey?: ProviderPolicyRuntime["setRuntimeApiKey"];
-  getProviders(): readonly { readonly id: string }[];
+  /** `auth.oauth` is present when the provider declares account sign-in; the catalog reads only its presence. */
+  getProviders(): readonly { readonly id: string; readonly auth?: { readonly oauth?: unknown } }[];
   getModels(providerId: string): readonly CatalogModel[];
   /** Resolves the configured authentication's kind, or `undefined` when none is configured. */
   checkAuth(providerId: string, options?: { signal?: AbortSignal }): Promise<unknown>;
@@ -111,8 +114,9 @@ const authConfigured = (runtime: CatalogRuntime, providerId: string): Promise<bo
 });
 
 /**
- * Reads the provider ids Pi knows offline, whether each has configured authentication, and its model
- * ids, including the models of Pi's persisted catalog overlay. `checkAuth` reports only whether and how
+ * Reads the provider ids Pi knows offline, whether each has configured authentication, whether each
+ * declares account sign-in (the presence of `auth.oauth`, for the provider CLI and guided setup), and its
+ * model ids, including the models of Pi's persisted catalog overlay. `checkAuth` reports only whether and how
  * a provider is configured; its result is reduced to a boolean. `hasConfiguredAuth` is not used. Never
  * calls `getAuth`, `getAvailable` or `refresh` itself. Provider policy registers custom definitions
  * and applies in-memory keys offline; no credential value enters catalog output and no provider is
@@ -153,6 +157,7 @@ export async function createModelCatalog(
       id: provider.id,
       authConfigured: configured,
       models: Object.freeze(models.map((model) => model.id).sort(compareIds)),
+      ...(provider.auth?.oauth !== undefined ? { signIn: true as const } : {}),
     });
   }));
   providers.sort((left, right) => compareIds(left.id, right.id));

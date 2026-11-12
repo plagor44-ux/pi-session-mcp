@@ -2,16 +2,19 @@
 
 This guide is for an agent acting with the owner's authorization. The owner
 makes the decisions below; the agent must not infer approval from silence.
-Never ask for, handle or store a provider credential. The owner performs any
-login themselves, using the package's Pi executable:
+Never ask for, handle or store a provider credential. The owner signs in to a
+provider account themselves, on their own terminal; the command refuses to run
+without one:
 
 ```sh
-"$(npm root -g)/pi-session-mcp/node_modules/.bin/pi"
+pi-session-mcp-provider auth login <provider>
 ```
 
-Alternatively, the owner may run `pi-session-mcp-provider auth set <provider>`
-on their terminal. Agents must never enter or handle keys, including through
-standard input. See [provider credentials](installation.md#provider-credentials-and-custom-providers).
+It runs Pi's own sign-in dialogue; `--no-browser` suits a machine without a
+browser. Alternatively, the owner may run
+`pi-session-mcp-provider auth set <provider>` on their terminal. Agents must
+never enter or handle keys, including through standard input, and never take
+part in a sign-in, also not by running the command on a pseudo-terminal. See [provider credentials](installation.md#provider-credentials-and-custom-providers).
 
 ## Stop and ask the owner
 
@@ -25,7 +28,9 @@ standard input. See [provider credentials](installation.md#provider-credentials-
 - `no_read_only_profile`: no live file changed; ask the owner to select a read-only profile.
 
 - **Missing provider login:** stop on `provider_login_required`; ask the owner
-  to log in using the command above, then re-check. Do not handle credentials.
+  to run `pi-session-mcp-provider auth login <provider>` or
+  `pi-session-mcp-provider auth set <provider>` on their own terminal, then
+  re-check. Do not handle credentials.
 - **Existing configuration:** show the intended merge and ask before approving
   changes. Set `allowConfigChange` only with that approval.
 - **Divergent registration:** stop and ask; never replace it automatically.

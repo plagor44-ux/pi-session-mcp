@@ -39,7 +39,10 @@
   (maintainer-approved 2026-11-09), and each model's thinking levels through the
   pi-ai package-root exports `getSupportedThinkingLevels` and
   `clampThinkingLevel`, offline and for the guided setup's profile proposals
-  only (maintainer-approved 2026-11-11, #288). The session
+  only (maintainer-approved 2026-11-11, #288). It may also read offline
+  whether each provider declares account sign-in (`auth.oauth` on the entries
+  of `getProviders()`), for the provider CLI and the guided setup only
+  (ADR 0022). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
   (maintainer-approved 2026-10-30, #199). A third narrow exception is the
@@ -48,28 +51,39 @@
   runtime may call `registerProvider` for operator-defined providers (without
   a key in their configuration) and `setRuntimeApiKey` for providers whose
   source is a stored key, both offline and without persistence; only
-  `src/provider-store.ts` reads key values. Do not widen these exceptions.
+  `src/provider-store.ts` reads key values. A fourth narrow exception is
+  account sign-in (ADR 0022, maintainer-approved 2026-11-11): the provider
+  CLI's `auth login` and `auth logout` run the bundled Pi CLI's commands of the
+  same names as child processes, from the `pi` executable the pinned SDK
+  package declares, and use only their exit status; only
+  `src/provider-sign-in.ts` starts them. Do not widen these exceptions.
 - Use only documented exports from package roots. Record unsupported SDK needs rather than importing internals.
 - Treat MCP annotations as client hints, never as authorization or policy enforcement.
 - CLI reports must be sanitized and must not contain secrets, paths, or
   complete prompts.
   Exception: `pi-session-mcp-history show --full`, `export` and `query` print
   redacted session content by purpose (ADR 0019); their other output follows
-  this rule.
+  this rule. During `pi-session-mcp-provider auth login` the Pi child's own
+  output reaches the owner's terminal unread (ADR 0022); the provider CLI's own
+  lines stay free of secrets and paths.
 - Doctor is offline-only. Setup mutations require explicit `--apply`,
   `--rollback`, or `--remove`; default to dry-run, never pin client versions but
   reject a client whose public command output does not match the expected
   contract, and never auto-replace divergent registrations.
-- Only two setup operations use a provider: `--probe-profile … --apply`, and
-  the probe step of `--guided --apply` for new profiles after explicit
-  `approveProbes`. Both use the fixed probe prompt, never output reply text,
-  and use fakes in tests.
+- Three setup operations use a provider: `--probe-profile … --apply`, the
+  probe step of `--guided --apply` for new profiles after explicit
+  `approveProbes`, and `pi-session-mcp-provider auth login`. The probes use the
+  fixed probe prompt and never output reply text. `auth login` runs Pi's own
+  sign-in on the owner's terminal, contacts the provider's sign-in endpoints
+  and refreshes that provider's catalog once from Pi's catalog service
+  (ADR 0022); it sends no model request. All three use fakes in tests.
 - Guided setup and `install.sh` never read, print or store a provider
-  credential themselves; the owner logs in through Pi or stores a key with
+  credential themselves; the owner signs in with
+  `pi-session-mcp-provider auth login` or stores a key with
   `pi-session-mcp-provider auth set`. Only on an interactive terminal, and
   never with `--answers`, a non-terminal or a dry run, guided setup may run
-  that command as a child process on the same terminal and receives only its
-  exit status (ADR 0021). The provider CLI reads a key only from a terminal
+  either command as a child process on the same terminal and receives only its
+  exit status (ADR 0021, ADR 0022). The provider CLI reads a key only from a terminal
   prompt with echo off or from standard input with `--stdin`, rejects a key in
   an argument and has no command that prints one.
 - Setup accepts only configured client targets and derives absolute paths
@@ -88,7 +102,7 @@
   provider. No real mutation or dogfooding may be claimed without evidence.
 - Write all tracked documentation in English, including plans, handoff notes, and evidence records.
 - Tracked files contain no operator-specific hosts, paths, or internal service names; use placeholders.
-- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), an opt-in local provider store for credential sources, API keys and operator-defined provider definitions (ADR 0021), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
+- The current product boundary is local stdio, in-memory session state, an opt-in local session history file (ADR 0019), an opt-in local provider store for credential sources, API keys and operator-defined provider definitions (ADR 0021), owner-operated account sign-in through Pi's own credential store (ADR 0022), and one trusted local MCP peer. Optional tier routing (ADR 0020) reads `routing.json` beside the configuration and keeps its learning state in that history file. HTTP, a web UI, resume, remote access, and multi-user behavior are out of scope unless a later approved change explicitly expands it.
 - Pi extensions load only from an execution profile's exact
   `npm:<name>@<version>` allowlist, resolved from Pi's install without
   installing. Client prompts never dispatch extension commands, and stdout stays
@@ -108,9 +122,11 @@ file of the area.
   `test/sandbox-shell.test.ts`, `test/sandbox-shell.bwrap.test.ts` and
   `test/profile-boundaries.test.ts`.
 - Credential routing:
-  [ADR 0021](docs/adr/0021-provider-credentials.md); `src/provider-store.ts`
-  and `src/writer-credentials.ts`; `test/provider-store.test.ts` and
-  `test/writer-credentials.test.ts`.
+  [ADR 0021](docs/adr/0021-provider-credentials.md) and
+  [ADR 0022](docs/adr/0022-account-sign-in.md); `src/provider-store.ts`,
+  `src/writer-credentials.ts` and `src/provider-sign-in.ts`;
+  `test/provider-store.test.ts`, `test/writer-credentials.test.ts` and
+  `test/provider-sign-in.test.ts`.
 - Tool binding of a session:
   [ADR 0010](docs/adr/0010-read-only-extension-tools.md) and
   [ADR 0006](docs/adr/0006-pi-extension-allowlist.md); `src/session-tools.ts`

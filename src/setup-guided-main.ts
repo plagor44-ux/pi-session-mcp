@@ -95,18 +95,44 @@ export interface GuidedMainDependencies {
   terminal?: boolean;
   stderrTerminal?: boolean;
   setProviderKey?: (provider: string) => Promise<number>;
+  /** Runs `pi-session-mcp-provider auth login` on the owner's terminal (ADR 0022). */
+  signIn?: (provider: string, noBrowser: boolean) => Promise<number>;
+  /** The default answer to opening a browser for a sign-in; detected from the environment when omitted. */
+  browserDefault?: boolean;
+  /** Runs a credential command with Ctrl-C left to that command; `setup-main` passes its SIGINT gate (ADR 0022). */
+  deferInterrupts?: <T>(run: () => Promise<T>) => Promise<T>;
 }
 
+const runDirectly = <T>(run: () => Promise<T>): Promise<T> => run();
+
 /** The child's stdout goes to stderr: guided setup's stdout carries only its final report. */
-export const PROVIDER_KEY_CHILD_STDIO = Object.freeze(["inherit", 2, "inherit"] as const);
+export const CREDENTIAL_CHILD_STDIO = Object.freeze(["inherit", 2, "inherit"] as const);
+
+const providerEntry = (): string => resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js");
 
 /** Child inherits the owner's terminal; only its exit status returns to guided setup. */
-export function setProviderKeyInTerminal(provider: string, entry = resolve(dirname(fileURLToPath(import.meta.url)), "provider-main.js")): Promise<number> {
+function runProviderCommand(args: readonly string[], entry: string): Promise<number> {
   return new Promise((resolveStatus) => {
-    const child = spawn(process.execPath, [entry, "auth", "set", provider], { stdio: [...PROVIDER_KEY_CHILD_STDIO] });
+    const child = spawn(process.execPath, [entry, ...args], { stdio: [...CREDENTIAL_CHILD_STDIO] });
     child.once("error", () => resolveStatus(1));
     child.once("exit", code => resolveStatus(code ?? 1));
   });
+}
+
+export function setProviderKeyInTerminal(provider: string, entry = providerEntry()): Promise<number> {
+  return runProviderCommand(["auth", "set", provider], entry);
+}
+
+/** `auth login` runs Pi's own sign-in dialogue on the owner's terminal (ADR 0022). */
+export function signInInTerminal(provider: string, noBrowser: boolean, entry = providerEntry()): Promise<number> {
+  return runProviderCommand(["auth", "login", provider, ...(noBrowser ? ["--no-browser"] : [])], entry);
+}
+
+/** A browser on this machine is unlikely in an SSH session, and on Linux without a display. */
+export function opensBrowserByDefault(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): boolean {
+  const set = (name: string): boolean => (env[name] ?? "") !== "";
+  if (set("SSH_CONNECTION") || set("SSH_TTY")) return false;
+  return platform !== "linux" || set("DISPLAY") || set("WAYLAND_DISPLAY");
 }
 
 /** A provider ID that is safe to print on the owner's terminal. */
@@ -148,34 +174,59 @@ function closestProviderIds(typed: string, ids: readonly string[]): string[] {
     .map(({ id }) => id);
 }
 
-/** `auth set` exits with these before it writes: provider_unknown (3), credential_invalid (4) and usage_invalid (64). */
-const KEY_UNCHANGED_EXITS: ReadonlySet<number> = new Set([3, 4, 64]);
+/**
+ * `auth set` and `auth login` exit with these before they change anything: provider_unknown (3),
+ * credential_invalid, sign_in_unsupported or provider_key_stored (4) and usage_invalid (64).
+ */
+const CREDENTIAL_UNCHANGED_EXITS: ReadonlySet<number> = new Set([3, 4, 64]);
 
-export async function offerProviderCredentials(prompter: Prompter, catalog: PricedModelCatalog, reload: () => Promise<PricedModelCatalog>, run: (provider: string) => Promise<number>, report: (text: string) => void): Promise<PricedModelCatalog> {
+/** The step's `?` listing: the provider listing and the providers that declare account sign-in. */
+function signInListing(catalog: PricedModelCatalog): string {
+  const ids = catalog.providers().filter((p) => p.signIn === true && SAFE_PROVIDER_ID.test(p.id)).map((p) => p.id).join(", ") || "none";
+  return `${providerListing(catalog)}Providers with account sign-in: ${ids}\n`;
+}
+
+/** What the credential step runs; each command takes over the owner's terminal and returns only its exit status. */
+export interface CredentialStep {
+  readonly reload: () => Promise<PricedModelCatalog>;
+  readonly setKey: (provider: string) => Promise<number>;
+  readonly signIn: (provider: string, noBrowser: boolean) => Promise<number>;
+  readonly report: (text: string) => void;
+  readonly browserDefault: boolean;
+}
+
+export async function offerProviderCredentials(prompter: Prompter, catalog: PricedModelCatalog, step: CredentialStep): Promise<PricedModelCatalog> {
   // Pi's catalog lists dozens of providers, so the owner names the ones to configure instead of being asked about each.
-  report("Pi Session MCP can store an API key for each provider you name, one at a time; Pi's own login stays the default.\n"
+  step.report("Pi Session MCP can sign you in to a provider account or store an API key, for each provider you name, one at a time.\n"
     + "At each provider question, ? lists the IDs and an empty answer continues.\n");
-  if (!(await prompter.confirm("Store a provider key now?", false))) return catalog;
-  let stored = false;
+  if (!(await prompter.confirm("Sign in to a provider or store a key now?", false))) return catalog;
+  let configured = false;
   for (;;) {
-    const id = (await prompter.text(`${stored ? "Another provider ID" : "Provider ID"} (? lists them, empty to continue)`, "")).trim();
+    const id = (await prompter.text(`${configured ? "Another provider ID" : "Provider ID"} (? lists them, empty to continue)`, "")).trim();
     if (id === "") return catalog;
-    if (id === "?") { report(providerListing(catalog)); continue; }
+    if (id === "?") { step.report(signInListing(catalog)); continue; }
     const ids = catalog.providers().map((p) => p.id).filter((value) => SAFE_PROVIDER_ID.test(value));
     if (!ids.includes(id)) {
       // Name catalog IDs only: the typed value may be a key entered at the wrong question.
       const near = closestProviderIds(id, ids);
-      report(near.length ? `Unknown provider ID. Closest: ${near.join(", ")}. Enter ? to list all.\n` : "Unknown provider ID. Enter ? to list all provider IDs.\n");
+      step.report(near.length ? `Unknown provider ID. Closest: ${near.join(", ")}. Enter ? to list all.\n` : "Unknown provider ID. Enter ? to list all provider IDs.\n");
       continue;
     }
-    const status = await run(id);
-    catalog = await reload();
+    const signIn = catalog.providers().some((p) => p.id === id && p.signIn === true)
+      && await prompter.choose(`${id}: sign in with an account or store an API key?`, ["sign-in", "key"] as const, "sign-in") === "sign-in";
+    const status = signIn
+      ? await step.signIn(id, !(await prompter.confirm("Open a browser on this machine to sign in?", step.browserDefault)))
+      : await step.setKey(id);
+    catalog = await step.reload();
     const authenticated = catalog.providers().some((p) => p.id === id && p.authConfigured);
-    // After a success the key command itself has said whether it stored or replaced the key.
-    if (status === 0 && authenticated) { stored = true; continue; }
-    report(status === 0 ? `${id}: key command succeeded, but not authenticated\n`
-      : KEY_UNCHANGED_EXITS.has(status) ? `${id}: nothing changed, ${authenticated ? "still authenticated" : "not authenticated"}\n`
-        : `${id}: key command failed, ${authenticated ? "authenticated" : "not authenticated"}\n`);
+    // After a success the command itself has said what it stored or replaced.
+    if (status === 0 && authenticated) { configured = true; continue; }
+    const command = signIn ? "sign-in" : "key command";
+    step.report(status === 0 ? `${id}: ${command} succeeded, but not authenticated\n`
+      : CREDENTIAL_UNCHANGED_EXITS.has(status) ? `${id}: nothing changed, ${authenticated ? "still authenticated" : "not authenticated"}\n`
+        : `${id}: ${command} failed, ${authenticated ? "authenticated" : "not authenticated"}\n`
+          // A sign-in that Pi stored before the provider store failed leaves the provider at none.
+          + (signIn && !authenticated ? `If Pi stored the sign-in anyway, "pi-session-mcp-provider auth inherit ${id}" enables it.\n` : ""));
   }
 }
 
@@ -206,16 +257,24 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
           confirm: (question, fallback) => prompter.confirm(question, fallback),
           choose: (question, options, fallback) => prompter.choose(question, options, fallback),
         };
-        catalog = await offerProviderCredentials(currentPrompter, catalog, reload, async provider => {
+        // A credential command owns the terminal while it runs: close the prompter, leave Ctrl-C to the command, reopen.
+        const handOver = async (command: () => Promise<number>): Promise<number> => {
           terminal?.close(); terminal = undefined;
-          try { return await (injected.setProviderKey ?? setProviderKeyInTerminal)(provider); }
+          try { return await (injected.deferInterrupts ?? runDirectly)(command); }
           catch { return 1; }
           finally { if (!injected.prompter) prompter = (terminal = terminalPrompter(signal)).prompter; }
-        }, text => { process.stderr.write(text); });
+        };
+        catalog = await offerProviderCredentials(currentPrompter, catalog, {
+          reload,
+          setKey: (provider) => handOver(() => (injected.setProviderKey ?? setProviderKeyInTerminal)(provider)),
+          signIn: (provider, noBrowser) => handOver(() => (injected.signIn ?? signInInTerminal)(provider, noBrowser)),
+          report: (text) => { process.stderr.write(text); },
+          browserDefault: injected.browserDefault ?? opensBrowserByDefault(process.env, process.platform),
+        });
       }
       for (;;) {
         process.stderr.write(providerListing(catalog));
-        process.stderr.write('Log in separately with "$(npm root -g)/pi-session-mcp/node_modules/.bin/pi". Never enter credentials here.\n');
+        process.stderr.write('Sign in with "pi-session-mcp-provider auth login <provider>" or store a key with "pi-session-mcp-provider auth set <provider>". Never enter credentials here.\n');
         if (catalog.providers().some((p) => p.authConfigured) || !await prompter.confirm("Re-check provider login?", false)) break;
         catalog = await (injected.dependencies?.catalog ?? createModelCatalog)();
       }
