@@ -671,5 +671,6 @@ peer.
 
 A patch release ships only if the MCP contract remains unchanged and its gates
 pass. Apply the current [release procedure](releasing.md): version and
-pre-release acceptance travel in the change PR. Merge, tagging and
-publication remain maintainer decisions. No release is authorized by this plan.
+pre-release acceptance travel in the release PR, which is either the change PR
+or a PR of its own. Merge, tagging and publication remain maintainer
+decisions. No release is authorized by this plan.
