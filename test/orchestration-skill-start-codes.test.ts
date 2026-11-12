@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { ROUTING_ERROR_CODES } from "../src/routing/select.js";
 
 const read = (relative: string): string => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf8");
 const contracts = read("../docs/tool-contracts.md");
@@ -8,7 +9,7 @@ const skill = read("../skills/pi-session-orchestration/SKILL.md");
 const reference = read("../skills/pi-session-orchestration/references/start-errors.md");
 
 const CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
-const CLASSES = ["Operator needed", "Controller action", "Transient", "Unknown"] as const;
+const CLASSES = ["Operator needed", "Controller action", "Routing", "Transient", "Unknown"] as const;
 type StartClass = (typeof CLASSES)[number];
 
 function section(markdown: string, heading: RegExp, name: string): string {
@@ -77,6 +78,14 @@ describe("orchestration skill start-error classification", () => {
     }
   });
 
+  it("documents every routing error of the source and classifies it as Routing", () => {
+    for (const code of ROUTING_ERROR_CODES) {
+      expect(errorTable.split("\n").filter((line) => line.startsWith(`| \`${code}\` |`)), code).toHaveLength(1);
+      expect(classOf(code), code).toEqual(["Routing"]);
+    }
+    expect([...classes.Routing].sort()).toEqual([...ROUTING_ERROR_CODES].sort());
+  });
+
   it("lists no code twice within a class", () => {
     for (const name of CLASSES) expect(new Set(classes[name]).size, name).toBe(classes[name].length);
   });
@@ -135,6 +144,8 @@ describe("orchestration skill start-error classification", () => {
     expect(classes["Controller action"]).toEqual(["writer_uncollected", "writer_busy", "writer_unavailable", "writer_session_lost", "base_not_applicable"]);
     expect(bullet("Controller action")).toMatch(/collect and reset the writer/);
     expect(bullet("Controller action")).toMatch(/wait for or close the open coding session/);
+    expect(bullet("Routing")).toMatch(/do not repeat the same request/);
+    expect(bullet("Routing")).toMatch(/start once with an explicit profile/);
     expect(bullet("Transient")).toMatch(/retry at most once after a pause/);
     expect(bullet("Unknown")).toMatch(/at most one retry in a fresh session/);
   });

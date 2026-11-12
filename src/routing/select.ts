@@ -3,7 +3,8 @@ import type { ConfiguredExecutionProfile } from "../execution-profile.js";
 import { TIERS, tierRank, type Role, type RoutingConfig, type Tier } from "./config.js";
 import type { DecisionInput } from "./store.js";
 
-export type RoutingErrorCode = "routing_off" | "routing_profile_conflict" | "routing_role_required" | "routing_tier_below_floor" | "routing_no_candidate" | "routing_same_family" | "routing_author_required";
+export const ROUTING_ERROR_CODES = ["routing_off", "routing_profile_conflict", "routing_role_required", "routing_tier_below_floor", "routing_no_candidate", "routing_same_family", "routing_author_required"] as const;
+export type RoutingErrorCode = (typeof ROUTING_ERROR_CODES)[number];
 export class RoutingError extends Error {
   constructor(readonly code: RoutingErrorCode) {
     super(code);
