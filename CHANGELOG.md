@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.21.0 — 2026-11-12
+
+Minor release by maintainer decision for
+[ADR 0022](docs/adr/0022-account-sign-in.md)
+([#290](https://github.com/plagor44-ux/pi-session-mcp/issues/290)): account
+sign-in through `pi-session-mcp-provider auth login` and `auth logout`, which
+an interactive guided installation offers. It also ships the guided-setup
+fixes for thinking levels and the key step (#288, #289) and the routing fixes
+for container workspaces and the routing start errors (#293, #294). The MCP
+tool contract is unchanged, so ADR 0003 would allow a patch; the release is a
+minor because the provider command gains the account sign-in of ADR 0022. No
+tool, field, state, MCP error code or Doctor check is new. The provider
+command gains the codes `sign_in_unsupported`, `provider_key_stored`,
+`sign_in_failed` and `sign_out_failed`, and guided setup gains the optional
+finding field `cause` and the stop code `coding_profiles_dropped`. No full live two-client cycle ran on this release;
+see the [acceptance record](docs/acceptance.md#v0210-pre-release-acceptance).
+**Upgrade note:** as for every release, repeat the provisioning command of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Applying the client targets
+installs the changed controller skill; an override of yours stays untouched,
+and Doctor warns with `skill_override_outdated`. **Rollback note:** reinstall
+0.20.1. This release changes no stored format of Pi Session MCP.
+
 ### Added
 
 - Account sign-in without operating Pi
