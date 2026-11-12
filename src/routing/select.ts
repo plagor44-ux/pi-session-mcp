@@ -3,7 +3,8 @@ import type { ConfiguredExecutionProfile } from "../execution-profile.js";
 import { TIERS, tierRank, type Role, type RoutingConfig, type Tier } from "./config.js";
 import type { DecisionInput } from "./store.js";
 
-export type RoutingErrorCode = "routing_off" | "routing_profile_conflict" | "routing_role_required" | "routing_tier_below_floor" | "routing_no_candidate" | "routing_same_family" | "routing_author_required";
+export const ROUTING_ERROR_CODES = ["routing_off", "routing_profile_conflict", "routing_role_required", "routing_tier_below_floor", "routing_no_candidate", "routing_same_family", "routing_author_required"] as const;
+export type RoutingErrorCode = (typeof ROUTING_ERROR_CODES)[number];
 export class RoutingError extends Error {
   constructor(readonly code: RoutingErrorCode) {
     super(code);
@@ -54,8 +55,12 @@ function candidatesFor(tier: Tier, role: Role, request: RoutingRequest, context:
     if (!profile || context.suspended.has(alias)) return false;
     if (profile.permissionProfile !== (role === "code" ? "coding" : "read-only")) return false;
     const mode = context.workspaceMode;
-    if (role === "code" && !codingAllowed(mode, context.relay)) return false;
-    if (mode.mode === "container" && !mode.container?.profiles.includes(alias)) return false;
+    // A container workspace's selected profiles provision its writers; read-only sessions run on
+    // the host checkout and admit any read-only profile, as an explicit start does.
+    if (role === "code") {
+      if (!codingAllowed(mode, context.relay)) return false;
+      if (mode.mode === "container" && !mode.container?.profiles.includes(alias)) return false;
+    }
     if (mode.mode === "snapshot" && ((profile.extensions?.length ?? 0) > 0 || (profile.grantedExtensionTools?.length ?? 0) > 0 || Object.keys(profile.mcpServers ?? {}).length > 0)) return false;
     return !request.shell || profile.shell === "sandboxed";
   });

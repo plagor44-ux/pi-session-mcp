@@ -89,6 +89,25 @@
   accepted and the configuration would keep none. Before, it ended `ok` with
   read-only profiles only. A container workspace that loses every profile
   still stops the run first, with `container_profiles_empty`.
+- Routed `review` and `explore` starts on a container workspace choose among
+  the tier's read-only profiles
+  ([#293](https://github.com/plagor44-ux/pi-session-mcp/issues/293)). The
+  selection applied the workspace's selected profiles, which provision its
+  writers and can only be coding profiles, to every role, so these starts
+  always ended with `routing_no_candidate`, while an explicit read-only start
+  on the same workspace worked. Routed `code` still uses only the selected
+  profiles and still needs the host relay; the family, `shell`, snapshot and
+  suspension rules are unchanged.
+- The seven routing start errors have rows in the
+  [error table of the tool contract](docs/tool-contracts.md#deterministic-mcp-errors)
+  and a class of their own, `Routing`, in the controller skill's start-error
+  reference ([#294](https://github.com/plagor44-ux/pi-session-mcp/issues/294)).
+  A controller that followed the skill treated them as unknown and could retry
+  the same request. The class says to correct the request once or to start
+  once with an explicit profile under the same workspace and family rules, and
+  otherwise to report the code. The contract test takes the codes from the
+  source, so a new routing error fails it until it is documented and
+  classified.
 
 ## 0.20.1 — 2026-11-11
 
