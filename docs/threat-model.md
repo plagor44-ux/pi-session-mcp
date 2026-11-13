@@ -152,8 +152,10 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     outbound channel for workspace content; prefer query-style tools.
 - **Unsafe diagnostics:** Doctor is a separate offline CLI with no MCP or network dependency.
   Its `provider_store` check validates local permissions, ownership, schemas
-  and credential bindings; built-in identity discovery uses the offline catalog
-  without `getAuth` or credential refresh. Its human/JSON output is
+  and credential bindings; built-in identity discovery and the
+  `maxOutputTokens` comparison use the offline catalog over an empty credential
+  store, so they make no `getAuth` call or credential refresh, read no stored
+  credential from Pi and run no command-valued key (#304). Its human/JSON output is
   sanitized and its stable exit statuses are 0 (healthy), 1 (warning), 2
   (failed check), and 64 (usage error).
 - **Untrusted working directory:** an MCP client starts the server in the

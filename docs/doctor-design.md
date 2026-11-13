@@ -3,7 +3,10 @@
 `src/doctor-cli.ts` is a separate local entry point. It never imports the MCP
 server, initializes transport, creates a Pi session, prints credentials, or
 performs network activity. It reads stored credential records only
-in-process: the `provider_store` check validates the provider store, and when
+in-process: the `provider_store` check validates the provider store. Pi's own
+credential store stays unread: the provider discovery behind that check and
+the catalog restore below create their runtime over an empty credential store,
+so no command-valued key runs (#304). When
 a profile sets `maxOutputTokens`, Doctor restores Pi's stored model catalog
 once, offline, to compare each cap with the model's output limit
 (`max_output_tokens_unsupported`). That restore makes no network request and

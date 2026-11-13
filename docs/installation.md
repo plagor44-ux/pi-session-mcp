@@ -368,6 +368,11 @@ pi-session-mcp-setup --list-models --json
 
 This is offline and read-only: no provider request, credential refresh, model
 network access or setup lock. It requires no `PI_SESSION_MCP_CONFIG`.
+Authentication presence comes from Pi's credential store, read as Pi reads it:
+a key that Pi stores as a command (`"key": "!<command>"`) runs that command
+here, as it does for `--probe-profile`, the provider CLI and guided setup.
+Doctor and the writer launch read no stored credential for their provider
+lists (#304).
 Providers registered only by Pi extensions are not listed; the report includes
 that note. Invalid catalog ids are omitted and counted in `omittedIds`.
 Catalog creation failures report `catalog_unavailable`.

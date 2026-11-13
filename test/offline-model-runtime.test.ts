@@ -1,8 +1,11 @@
+import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createModelCatalog, OFFLINE_RUNTIME_OPTIONS, readCatalogOutputLimits } from "../src/model-catalog.js";
+import { catalogBuiltInProviderIds, createModelCatalog, OFFLINE_RUNTIME_OPTIONS, readCatalogOutputLimits } from "../src/model-catalog.js";
+import { loadProviderPolicy, type ProviderPolicy } from "../src/provider-store.js";
 import { defaultModelRuntimeFactory } from "../src/sdk-pi-adapter.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -23,13 +26,24 @@ describe("offline restore of Pi's persisted catalog (#199)", () => {
     expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false });
   });
 
-  it("passes Doctor's signal to the offline restore of the output limits only", async () => {
+  it("passes Doctor's signal and an empty credential store to the offline restore of the output limits", async () => {
     const create = vi.spyOn(ModelRuntime, "create").mockResolvedValue({
       getProviders: () => [], getModels: () => [], checkAuth: async () => undefined,
     } as unknown as ModelRuntime);
     const controller = new AbortController();
     await readCatalogOutputLimits(controller.signal, undefined, async () => { throw new Error("no provider store"); });
-    expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false, signal: controller.signal });
+    expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false, credentials: expect.any(InMemoryCredentialStore), signal: controller.signal });
+    expect(await create.mock.calls[0]![0]!.credentials!.list()).toEqual([]);
+  });
+
+  it("creates the provider discovery's runtime over an empty credential store (#304)", async () => {
+    const create = vi.spyOn(ModelRuntime, "create").mockResolvedValue({
+      getProviders: () => [{ id: "openai" }], getModels: () => [], checkAuth: async () => undefined,
+    } as unknown as ModelRuntime);
+    const policy = { apply: async () => {} } as unknown as ProviderPolicy;
+    expect(await catalogBuiltInProviderIds(undefined, async () => policy)).toEqual(["openai"]);
+    expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false, credentials: expect.any(InMemoryCredentialStore) });
+    expect(await create.mock.calls[0]![0]!.credentials!.list()).toEqual([]);
   });
 
   it("creates the session adapter's default runtime without the refresh-time availability pass", async () => {
@@ -65,6 +79,31 @@ describe("offline restore of Pi's persisted catalog (#199)", () => {
       // SDK 1.5.2 resolves without restoring once the signal is aborted; a rejection would be just as acceptable.
       const aborted = await readCatalogOutputLimits(AbortSignal.abort(), undefined, noStore).catch(() => undefined);
       expect(aborted?.("openai", "overlay-only-model")).toBeUndefined();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("runs no command-valued stored key for Doctor's limits or provider discovery, unlike the authentication catalog (#304)", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network must not be used"));
+      const home = await temporaryRoot("pi-provider-home-");
+      const policy = () => loadProviderPolicy({ home });
+      // Each phase stores its own command, because Pi caches a resolved command for the process.
+      const storeKeyCommand = (marker: string) => writeFile(join(agentDir, "auth.json"),
+        JSON.stringify({ openai: { type: "api_key", key: `!touch '${join(agentDir, marker)}'` } }), { mode: 0o600 });
+
+      await storeKeyCommand("limits-ran");
+      const lookup = await readCatalogOutputLimits(new AbortController().signal, undefined, policy);
+      expect(lookup("openai", "overlay-only-model")).toBe(10_000);
+      expect(existsSync(join(agentDir, "limits-ran"))).toBe(false);
+
+      await storeKeyCommand("discovery-ran");
+      expect(await catalogBuiltInProviderIds(undefined, policy)).toContain("openai");
+      expect(existsSync(join(agentDir, "discovery-ran"))).toBe(false);
+
+      // Control: over Pi's file store the same key runs, so the two reads above would have run it too.
+      await storeKeyCommand("catalog-ran");
+      const catalog = await createModelCatalog(undefined, policy);
+      expect(catalog.providers().find((provider) => provider.id === "openai")?.models).toContain("overlay-only-model");
+      expect(existsSync(join(agentDir, "catalog-ran"))).toBe(true);
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 

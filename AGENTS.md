@@ -32,9 +32,14 @@
   `checkAuth` (reduced to a boolean) only, behind injectable `ModelCatalog`.
   Its runtime is created with `refreshOnCreate: true` and
   `allowModelNetwork: false`: an offline restore of the catalog Pi persisted
-  earlier (`models-store.json`). It reads stored credential records and
-  resolves API-key values in-process, as `checkAuth` does, but makes no
-  network request, no credential refresh and no `getAuth`. The catalog may also
+  earlier (`models-store.json`). Over Pi's file store it reads stored
+  credential records and resolves API-key values as `checkAuth` does; a
+  command-valued key (`!command`) runs its command, as in Pi itself. It makes
+  no network request of its own, no credential refresh and no `getAuth`.
+  Doctor's output-limit read and the provider discovery of the provider store
+  and the writer launch create that runtime over an empty in-memory credential
+  store (pi-ai's package-root `InMemoryCredentialStore`), so they read no stored
+  credential and run no key command (maintainer-approved 2026-11-13, #304). The catalog may also
   read each model's output price offline for the guided setup's tier proposal only
   (maintainer-approved 2026-11-09), and each model's thinking levels through the
   pi-ai package-root exports `getSupportedThinkingLevels` and
