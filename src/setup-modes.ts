@@ -53,27 +53,31 @@ export async function changeExecutionMode(configPath: string, request: ModeReque
       current = executionModesSchema.parse(raw);
       resolveExecutionModes(current, aliases, config.executionProfiles);
     } catch { return done("failed", "modes_file_invalid"); }
-    let mode = request.mode;
+    const existingEntry = current.workspaces[request.alias];
+    const reuse = request.mode === undefined && !Object.values(request.container ?? {}).some(value => value !== undefined)
+      && !request.clearLimits?.length && existingEntry?.mode === "container";
+    const container = reuse ? existingEntry : request.container;
+    let mode = reuse ? "container" as const : request.mode;
     const runtimeUsable = () => (dependencies.containerRuntime ?? containerRuntimeUsable)().catch(() => false);
     if (mode === undefined) {
       if (!await runtimeUsable()) return done("failed", "mode_choice_required");
       mode = "container";
     }
     if (mode === "host" && !request.acceptHostWrites) return done("failed", "host_ack_required");
-    if (mode === "container" && !request.container?.profiles?.length) return done("failed", "container_profiles_required");
+    if (mode === "container" && !container?.profiles?.length) return done("failed", "container_profiles_required");
     if (request.mode === "container" && !await runtimeUsable()) return done("failed", "container_runtime_unavailable");
     const entry = mode === "host" ? { mode, acceptHostWrites: true } : mode === "container" ? (() => {
       const existing = current.workspaces[request.alias];
       const previousBase = existing?.mode === "container" ? existing.base : undefined;
       const requestedBase = request.baseRef?.replace(/^refs\/heads\//, "");
-      const base = requestedBase ?? previousBase ?? request.container?.base;
+      const base = requestedBase ?? previousBase ?? container?.base;
       // Limits are outside the settings drift check, so an omitted flag must not drop one silently (#166).
       const limits = Object.fromEntries((["cpus", "cpuShares", "memory"] as const).flatMap((key) => {
         if (request.clearLimits?.includes(key)) return [];
         const value = request.container?.[key] ?? (existing?.mode === "container" ? existing[key] : undefined);
         return value === undefined ? [] : [[key, value]];
       }));
-      return { ...request.container, ...limits, mode, ...(base === undefined ? {} : { base }) };
+      return { ...container, ...limits, mode, ...(base === undefined ? {} : { base }) };
     })() : mode === "snapshot" ? { mode, source: request.source } : { mode };
     let proposed;
     try {

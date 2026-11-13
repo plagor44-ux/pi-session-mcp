@@ -76,7 +76,7 @@ export class WriterUnavailableError extends Error {
   readonly code = "writer_unavailable";
   constructor(
     readonly reason: "none_ready" | "none_at_base" | "none_admitted",
-    readonly counts?: { busy: number; notAtBaseline: number; settingsChanged: number },
+    readonly counts?: { busy: number; notAtBaseline: number; settingsChanged: number; notReady: number },
   ) {
     super("No writer is available");
     this.name = "WriterUnavailableError";

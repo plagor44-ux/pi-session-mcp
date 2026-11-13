@@ -8,7 +8,7 @@ import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, res
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { writerBaseFreshness, type BaseFreshness, type BaseFreshnessRequest } from "./writer-base-freshness.js";
-import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
+import { readWriterState, writerAcceptanceReason, type WriterAcceptanceReason, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
 import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError, SNAPSHOT_DIRECTORY } from "./review-snapshot.js";
 import { ConfigError, loadConfig, type AppConfig } from "./config.js";
@@ -50,6 +50,7 @@ export interface DoctorCheck {
   readonly severity: DoctorSeverity;
   readonly subject: string;
   readonly remediation?: string;
+  readonly reason?: WriterAcceptanceReason;
 }
 
 export interface DoctorResult {
@@ -520,16 +521,19 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
       for (let index = 1; index <= entry.container.writers; index++) {
         const name = writerName(alias, index), paths = writerPaths(home, name);
-        const remediation = `run pi-session-mcp-setup --repo ${alias} --apply, or --writer ${name} --recreate --apply`;
-        let state: WriterState | undefined, ready = false;
-        try {
-          state = await readWriterState(home, name);
-          if (state?.phase === "ready" && state.acceptance) {
-            runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)();
-            ready = await writerAcceptanceCurrent(paths.wrapper, state, runtime);
-          }
-        } catch { /* Unreadable state or runtime is not ready. */ }
-        checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));
+        let state: WriterState | undefined;
+        try { state = await readWriterState(home, name); } catch { /* The reason function classifies the read failure. */ }
+        if (state?.phase === "ready" && state.acceptance) {
+          runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)().catch(() => ({ imageExists: async () => false }));
+        }
+        const reason = await writerAcceptanceReason(home, name, runtime ?? { imageExists: async () => false });
+        const ready = reason === undefined;
+        const retry = `run pi-session-mcp-setup --repo ${alias} --apply`;
+        const remediation = reason === "image_missing" ? `restore the writer's recorded image in local Podman storage, then ${retry}`
+          : reason === "state_unreadable" ? `restore read access to the writer state, then ${retry}`
+          : reason === "state_invalid" ? `restore a valid writer state from backup, then ${retry}; preserve writer work before any replacement`
+          : reason === "runtime_unavailable" ? `make rootless Podman usable, then ${retry}` : retry;
+        checks.push(ready ? ok("writer_not_ready", name) : { ...failure("writer_not_ready", name, remediation), reason });
         if (!state) continue;
         checks.push(state.launch === "relay" ? ok("writer_not_migrated", name)
           : warning("writer_not_migrated", name, `run pi-session-mcp-setup --repo ${alias} --apply to migrate the writer to the relay`));
@@ -753,6 +757,6 @@ export async function providerStoreCheck(home: string): Promise<DoctorCheck> {
   }
 }
 
-export function renderDoctorHuman(result: DoctorResult): string { return result.checks.map((check) => `${check.severity.toUpperCase()} ${check.id} [${check.subject}]${check.remediation ? `: ${check.remediation}` : ""}`).join("\n") + "\n"; }
+export function renderDoctorHuman(result: DoctorResult): string { return result.checks.map((check) => `${check.severity.toUpperCase()} ${check.id} [${check.subject}${check.reason ? ` (${check.reason})` : ""}]${check.remediation ? `: ${check.remediation}` : ""}`).join("\n") + "\n"; }
 
 export function parseDoctorArgs(args: readonly string[]): { json: boolean } | undefined { return args.length === 0 ? { json: false } : args.length === 1 && args[0] === "--json" ? { json: true } : undefined; }

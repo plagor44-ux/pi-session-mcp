@@ -13,9 +13,21 @@ Subjects are only fixed component names, validated workspace aliases, or
 validated `<profile>:<package>`, `<profile>:<skill-alias>` or `skill:<name>` pairs; paths, configuration values, errors,
 credentials, and provider data are never output.
 
-Each check is `{ id, severity, subject, remediation? }`. Severity is `ok`,
-`warning`, or `error`; remediation is a fixed safe sentence. The initial IDs
-and owners are:
+Each check is `{ id, severity, subject, remediation?, reason? }`. Severity is
+`ok`, `warning`, or `error`; remediation is a fixed safe sentence.
+
+A `writer_not_ready` error includes a sanitized `reason`, also shown next to the
+subject in human output. Precedence is `not_provisioned`, `state_unreadable` or
+`state_invalid`, then `not_accepted`, `runtime_unavailable`, `image_missing`,
+then the first changed binding: `package_version`, `podman_version`,
+`event_delivery`, `wrapper_changed`, or `acceptance_changed` if unknown.
+The optional versioned `acceptance-record.json` sidecar binds diagnostic inputs
+to the state's fingerprint; missing, invalid, unreadable or mismatched records
+are ignored. Admission and the rollback-compatible state schema are unchanged.
+Reset, finish and clone recreation retain this record with acceptance; removing
+the whole writer deletes it together with the writer's state.
+
+The initial IDs and owners are:
 
 | ID | Blocking condition | Subject |
 | --- | --- | --- |

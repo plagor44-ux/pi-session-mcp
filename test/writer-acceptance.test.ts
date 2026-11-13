@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { acceptanceCurrent, acceptWriter, controlStatePath, runIsolationControl } from "../src/writer-acceptance.js";
-import { acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, currentAcceptanceFingerprint, readWriterAcceptanceRecord, readWriterState, writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
 import { wrapperDigest } from "../src/writer-wrapper.js";
 const roots: string[] = [];
@@ -45,7 +45,10 @@ it.each([[0, "not_limited", true], [0, "limited", true], [1, "not_limited", fals
   expect((await acceptWriter(ctx, "repo-w1")).code).toBe(pass ? "writer_accepted" : "acceptance_harness_failed");
   const state = await readWriterState(ctx.home, "repo-w1");
   expect(state?.phase).toBe(pass ? "ready" : "not_ready");
-  if (pass) expect(state?.acceptance?.fingerprint).toMatch(/^sha256:/);
+  if (pass) {
+    expect(state?.acceptance?.fingerprint).toMatch(/^sha256:/);
+    expect(await readWriterAcceptanceRecord(ctx.home, "repo-w1", state!)).toMatchObject({ fingerprint: state!.acceptance!.fingerprint, packageVersion: PACKAGE_VERSION, podmanVersion: "5.4.0", eventDelivery: false });
+  }
   const call = run.mock.calls.find(([cmd]) => cmd === process.execPath)!;
   expect(call[1][0]).toBe("/release/scripts/isolation-acceptance.mjs");
 });

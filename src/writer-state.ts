@@ -76,6 +76,7 @@ export function writerPaths(home: string, name: string) {
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
     config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), npm: join(root, "npm"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"),
     acceptanceFailure: join(root, "acceptance-failure.json"),
+    acceptanceRecord: join(root, "acceptance-record.json"),
   };
 }
 
@@ -174,6 +175,76 @@ export async function writerAcceptanceCurrent(wrapper: string, state: WriterStat
   return state.phase === "ready" && !!state.acceptance && !!runtime.podmanVersion
     && state.acceptance.fingerprint === await currentAcceptanceFingerprint(wrapper, state, runtime.podmanVersion)
     && await runtime.imageExists(state.imageId);
+}
+
+const acceptanceRecordSchema = z.object({
+  schemaVersion: z.literal(1),
+  fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  packageVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,100}$/),
+  podmanVersion: z.string().regex(/^[0-9A-Za-z.+-]{1,100}$/),
+  wrapperDigest: z.string().regex(/^(?:sha256:)?[0-9a-f]{64}$/),
+  eventDelivery: z.boolean(),
+}).strict();
+export type WriterAcceptanceRecord = z.infer<typeof acceptanceRecordSchema>;
+
+/** Diagnostic metadata only; never an authority for admission. A torn pair is no record. */
+export async function readWriterAcceptanceRecord(home: string, name: string, state: WriterState): Promise<WriterAcceptanceRecord | undefined> {
+  try {
+    const handle = await open(writerPaths(home, name).acceptanceRecord, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      if (!(await handle.stat()).isFile()) return undefined;
+      const parsed = acceptanceRecordSchema.safeParse(JSON.parse(await handle.readFile("utf8")));
+      return parsed.success && parsed.data.fingerprint === state.acceptance?.fingerprint ? parsed.data : undefined;
+    } finally { await handle.close(); }
+  } catch { return undefined; }
+}
+
+export async function currentAcceptanceRecord(wrapper: string, state: WriterState, podmanVersion: string): Promise<WriterAcceptanceRecord> {
+  const inputs = { packageVersion: PACKAGE_VERSION, podmanVersion, wrapperDigest: wrapperDigest(await readFile(wrapper, "utf8")),
+    eventDelivery: await writerEventDeliveryEnabled(join(dirname(wrapper), "config")) };
+  return acceptanceRecordSchema.parse({ schemaVersion: 1, ...inputs,
+    fingerprint: acceptanceFingerprint({ ...inputs, imageId: state.imageId, network: state.network, cache: state.cache }) });
+}
+
+export async function writeWriterAcceptanceRecord(home: string, name: string, record: WriterAcceptanceRecord): Promise<void> {
+  const paths = writerPaths(home, name), validated = acceptanceRecordSchema.parse(record);
+  const temporary = join(paths.root, `.acceptance-${randomUUID()}.tmp`);
+  const handle = await open(temporary, "wx", 0o600);
+  try {
+    try { await handle.writeFile(`${JSON.stringify(validated)}\n`); await handle.sync(); }
+    finally { await handle.close(); }
+    await rename(temporary, paths.acceptanceRecord);
+    const directory = await open(paths.root, "r");
+    try { await directory.sync(); } finally { await directory.close(); }
+  } finally { await unlink(temporary).catch(() => undefined); }
+}
+
+export type WriterAcceptanceReason = "not_provisioned" | "state_unreadable" | "state_invalid" | "not_accepted"
+  | "runtime_unavailable" | "image_missing" | "package_version" | "podman_version" | "event_delivery"
+  | "wrapper_changed" | "acceptance_changed";
+
+/** Undefined means current. Reason precedence is state, acceptance, runtime, image, then changed bindings. */
+export async function writerAcceptanceReason(home: string, name: string, runtime: { podmanVersion?: string; imageExists: (id: string) => Promise<boolean> }): Promise<WriterAcceptanceReason | undefined> {
+  let state;
+  try { state = await readWriterState(home, name); }
+  catch (error) { return error instanceof WriterStateError && error.code === "writer_state_invalid" ? "state_invalid" : "state_unreadable"; }
+  if (!state) return "not_provisioned";
+  if (state.phase !== "ready" || !state.acceptance) return "not_accepted";
+  if (!runtime.podmanVersion) return "runtime_unavailable";
+  try { if (!await runtime.imageExists(state.imageId)) return "image_missing"; }
+  catch { return "runtime_unavailable"; }
+  try {
+    const current = await currentAcceptanceRecord(writerPaths(home, name).wrapper, state, runtime.podmanVersion);
+    if (current.fingerprint === state.acceptance.fingerprint) return undefined;
+    const previous = await readWriterAcceptanceRecord(home, name, state);
+    if (previous) {
+      if (previous.packageVersion !== current.packageVersion) return "package_version";
+      if (previous.podmanVersion !== current.podmanVersion) return "podman_version";
+      if (previous.eventDelivery !== current.eventDelivery) return "event_delivery";
+      if (previous.wrapperDigest !== current.wrapperDigest) return "wrapper_changed";
+    }
+  } catch { /* A missing wrapper or unusable record cannot identify a binding. */ }
+  return "acceptance_changed";
 }
 
 export function acceptanceFingerprint(input: {

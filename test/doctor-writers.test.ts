@@ -1,11 +1,13 @@
 import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import fsPromises from "node:fs/promises";
+import { syncBuiltinESMExports } from "node:module";
 import type { AppConfig } from "../src/config.js";
 import { renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorDependencies } from "../src/doctor.js";
 import { LEASE_DIRECTORY } from "../src/writer-lease.js";
-import { currentAcceptanceFingerprint } from "../src/writer-state.js";
+import { currentAcceptanceFingerprint, currentAcceptanceRecord, writeWriterAcceptanceRecord } from "../src/writer-state.js";
 import { writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true }))); });
@@ -44,6 +46,34 @@ it.each(["", "[user]\nname = Worker\n", "x".repeat(65_537)])("warns offline for 
   const { paths, check, ready } = await fixture(); await ready();
   await writeFile(join(paths.clone, ".git/config"), config);
   expect(await check()).toContainEqual(expect.objectContaining({ id: "writer_git_identity_missing", severity: "warning", subject: "repo-w1" }));
+});
+it("names Podman drift and prints the repository remediation", async () => {
+  const f = await fixture(); await f.ready();
+  await writeWriterAcceptanceRecord(f.home, "repo-w1", await currentAcceptanceRecord(f.paths.wrapper, f.state, "5.4.0"));
+  const report = await f.run({ writerRuntime: async () => ({ podmanVersion: "5.5.0", imageExists: async () => true }) });
+  expect(report.checks).toContainEqual(expect.objectContaining({ id: "writer_not_ready", reason: "podman_version", remediation: "run pi-session-mcp-setup --repo repo --apply" }));
+  expect(renderDoctorHuman(report)).toContain("repo-w1 (podman_version)");
+  expect(renderDoctorJson(report)).toContain('"reason":"podman_version"');
+});
+it("reports missing images separately and asks to restore them", async () => {
+  const f = await fixture(); await f.ready();
+  expect(await f.check("5.4.0", false)).toContainEqual(expect.objectContaining({ reason: "image_missing", remediation: expect.stringContaining("restore the writer's recorded image") }));
+});
+it("reports unreadable state without recommending recreate", async () => {
+  const f = await fixture(); await f.ready();
+  const original = fsPromises.open;
+  const mock = vi.spyOn(fsPromises, "open").mockImplementation(((path: unknown, ...args: unknown[]) => {
+    if (path === f.paths.state) return Promise.reject(Object.assign(new Error("private"), { code: "EACCES" }));
+    return Reflect.apply(original, fsPromises, [path, ...args]);
+  }) as typeof fsPromises.open);
+  syncBuiltinESMExports();
+  try {
+    expect(await f.check()).toContainEqual(expect.objectContaining({ reason: "state_unreadable", remediation: "restore read access to the writer state, then run pi-session-mcp-setup --repo repo --apply" }));
+  } finally { mock.mockRestore(); syncBuiltinESMExports(); }
+});
+it("uses acceptance_changed for an older acceptance without a sidecar", async () => {
+  const f = await fixture(); await f.ready();
+  expect(await f.check("5.5.0")).toContainEqual(expect.objectContaining({ reason: "acceptance_changed" }));
 });
 it("detects wrapper drift", async () => {
   const { paths, check, ready } = await fixture(); await ready();

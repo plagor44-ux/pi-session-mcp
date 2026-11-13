@@ -5,7 +5,7 @@ import { lstat, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/pro
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import {
-  acceptanceFingerprint, currentAcceptanceFingerprint, readWriterState, WRITER_NAME_PATTERN, writerName,
+  acceptanceFingerprint, currentAcceptanceFingerprint, currentAcceptanceRecord, writerAcceptanceReason, writerAcceptanceCurrent, readWriterAcceptanceRecord, writeWriterAcceptanceRecord, readWriterState, WRITER_NAME_PATTERN, writerName,
   writerEventDeliveryEnabled, writerPaths, writerRegistrationName, writersRoot, writeWriterState, WriterStateError,
   type WriterState,
 } from "../src/writer-state.js";
@@ -82,7 +82,7 @@ it("derives the private writer layout", () => {
   expect(writersRoot(home)).toBe(join(home, ".local/state/pi-session-mcp/writers"));
   expect(writerPaths(home, name)).toEqual({
     root, clone: join(root, "clone"), agent: join(root, "agent"), bundles: join(root, "bundles"),
-    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), npm: join(root, "npm"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"),
+    config: join(root, "config"), events: join(root, "events"), go: join(root, "go"), uv: join(root, "uv"), npm: join(root, "npm"), wrapper: join(root, "wrapper.sh"), state: join(root, "state.json"), acceptanceFailure: join(root, "acceptance-failure.json"), acceptanceRecord: join(root, "acceptance-record.json"),
   });
 });
 
@@ -119,6 +119,54 @@ it("round-trips and atomically replaces private state without temporary leftover
   expect((await readWriterState(home, name))?.phase).toBe("not_ready");
   expect(await readdir(paths.root)).toEqual(["state.json"]);
   expect(JSON.stringify(state).replace(state.base.ref, "")).not.toContain("/");
+});
+
+it("writes a private strict acceptance sidecar bound to the state's fingerprint", async () => {
+  const home = await temporaryRoot("writer-record-");
+  await writeWriterState(home, name, state);
+  const paths = writerPaths(home, name);
+  await writeFile(paths.wrapper, "wrapper");
+  const record = await currentAcceptanceRecord(paths.wrapper, state, "5.4.0");
+  const accepted = { ...state, acceptance: { ...state.acceptance!, fingerprint: record.fingerprint } };
+  expect(await readWriterAcceptanceRecord(home, name, accepted)).toBeUndefined();
+  await writeWriterAcceptanceRecord(home, name, record);
+  expect(await readWriterAcceptanceRecord(home, name, accepted)).toEqual(record);
+  expect(await readWriterAcceptanceRecord(home, name, state)).toBeUndefined();
+  expect((await lstat(paths.acceptanceRecord)).mode & 0o777).toBe(0o600);
+  expect(await readdir(paths.root)).toEqual(["acceptance-record.json", "state.json", "wrapper.sh"]);
+  for (const raw of [{ ...record, extra: true }, { ...record, schemaVersion: 2 }, { ...record, packageVersion: "/private" }]) {
+    await writeFile(paths.acceptanceRecord, JSON.stringify(raw));
+    expect(await readWriterAcceptanceRecord(home, name, accepted)).toBeUndefined();
+  }
+  await fsPromises.unlink(paths.acceptanceRecord);
+  await writeFile(join(paths.root, "target"), JSON.stringify(record));
+  await symlink(join(paths.root, "target"), paths.acceptanceRecord);
+  expect(await readWriterAcceptanceRecord(home, name, accepted)).toBeUndefined();
+});
+
+it.each(["package_version", "podman_version", "event_delivery", "wrapper_changed", "acceptance_changed"] as const)("identifies %s with deterministic binding precedence", async (reason) => {
+  const home = await temporaryRoot("writer-reason-");
+  await writeWriterState(home, name, state);
+  const paths = writerPaths(home, name);
+  await writeFile(paths.wrapper, "wrapper");
+  const current = await currentAcceptanceRecord(paths.wrapper, state, "5.4.0");
+  const previous = { ...current,
+    ...(reason === "package_version" ? { packageVersion: "0.0.0", podmanVersion: "5.3.0", eventDelivery: true, wrapperDigest: "a".repeat(64) } : {}),
+    ...(reason === "podman_version" ? { podmanVersion: "5.3.0", eventDelivery: true, wrapperDigest: "a".repeat(64) } : {}),
+    ...(reason === "event_delivery" ? { eventDelivery: true, wrapperDigest: "a".repeat(64) } : {}),
+    ...(reason === "wrapper_changed" ? { wrapperDigest: "a".repeat(64) } : {}),
+  };
+  previous.fingerprint = acceptanceFingerprint({ ...previous, imageId: state.imageId, network: state.network, cache: reason === "acceptance_changed" ? "npm" : state.cache });
+  const accepted = { ...state, acceptance: { ...state.acceptance!, fingerprint: previous.fingerprint } };
+  await writeWriterState(home, name, accepted);
+  await writeWriterAcceptanceRecord(home, name, previous);
+  const runtime = { podmanVersion: "5.4.0", imageExists: async () => true };
+  expect(await writerAcceptanceReason(home, name, runtime)).toBe(reason);
+  expect(await writerAcceptanceCurrent(paths.wrapper, accepted, runtime)).toBe(false);
+  // Missing images take precedence over a changed binding.
+  expect(await writerAcceptanceReason(home, name, { ...runtime, imageExists: async () => false })).toBe("image_missing");
+  await writeWriterState(home, name, { ...accepted, acceptance: { ...accepted.acceptance, fingerprint: current.fingerprint } });
+  expect(await writerAcceptanceReason(home, name, runtime)).toBeUndefined();
 });
 
 it("returns undefined only for an absent file", async () => {
