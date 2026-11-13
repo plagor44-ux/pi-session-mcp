@@ -16,7 +16,12 @@
   publishes the field for every profile, `null` when absent, and the writer
   relay compares it, so a writer provisioned with another value is refused as
   `settingsChanged` until it is provisioned again. Doctor validates the value
-  but does not compare it with the catalog. A cap also cuts legitimate large
+  and compares it offline with Pi's stored catalog: the new check
+  `max_output_tokens_unsupported` is an error above the model's maximum and a
+  warning when the stored catalog does not list the model or cannot be read
+  within 10 seconds. It reads the catalog only when a profile sets the field,
+  under an extension of the offline catalog exception that the maintainer
+  approved on 2026-11-13. A cap also cuts legitimate large
   output and generally counts thinking tokens; a tool call cut off at the
   limit is not executed and costs a model step. No profile gets a default cap.
   **Rollback note:** earlier releases reject a configuration with
