@@ -4657,7 +4657,7 @@ machine was still open during the upgrade.
   `controllers_restart_required`. Doctor with the real configuration reported
   no error and `sandbox_unavailable` as passed for every workspace; warnings
   were the known `workspace_gitfile` and `workspace_mode_unset`, and
-  `writer_off_default_base` for one `workflow-artifact-copilot` writer whose
+  `writer_off_default_base` for one `<repository>` writer whose
   base is a feature branch of that repository. `--verify` passed for
   `claude-code:user:pi-session-mcp` (`mcp_verified`, both `skill_verified`,
   `hook_verified`) and `codex:user:pi-session-mcp` (`mcp_verified`, both

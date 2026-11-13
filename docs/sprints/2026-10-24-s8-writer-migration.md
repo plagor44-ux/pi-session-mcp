@@ -113,7 +113,7 @@ image and a new acceptance.
   `refs/remotes/writer-<name>/<branch>` in the operator checkout, and a writer
   is reused only after `--finish --apply`. This replaces cherry-picking from
   host worktrees.
-- `~/.claude/rules/pi-routing.md` and `orchestration.md` must name the writer
+- The operator's rule files (`<operator rule file>`) must name the writer
   registrations instead of the worktree aliases. The rule that both machines
   have identical profile aliases stays.
 - After every release upgrade, each writer must be accepted again, because

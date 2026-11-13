@@ -462,7 +462,7 @@ Expected: PASS, no `ExperimentalWarning` in captured stderr.
 
 - [ ] **Step 4: Independent review**
 
-Review from another model family than the author (per `pi-routing.md`): a read-only Pi `review` profile on the branch diff against `main`, with acceptance criteria "full `npm test` green, the five Review Focus cases covered, one negative case per redaction kind". Address findings in new commits.
+Review from another model family than the author (per `<operator rule file>`): a read-only Pi `review` profile on the branch diff against `main`, with acceptance criteria "full `npm test` green, the five Review Focus cases covered, one negative case per redaction kind". Address findings in new commits.
 
 - [ ] **Step 5: Commit, push, open the one PR**
 

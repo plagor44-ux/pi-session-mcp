@@ -23,7 +23,7 @@ The goal is to make Pi sessions traceable and evaluable after the fact:
    or thinking, each tool call and its result.
 2. **Compare many sessions** later, mostly on demand by a Claude agent on the
    same machine, for example "which profile needed the most rework on
-   smartpaper-ng tasks" or "where did workers run `npm ci` and fail".
+   `<repository>` tasks" or "where did workers run `npm ci` and fail".
 
 The operator chose to build the store now, as an opt-in, rather than a
 metadata-only journal that would have to be extended later
@@ -249,7 +249,7 @@ One new optional block in the existing configuration file, default off:
 "history": {
   "enabled": true,
   "redactPaths": ["config/prod/*.yaml"],
-  "workspaces": { "homelab-infra": { "redactPaths": ["clusters/**/secret*.yaml"] } }
+  "workspaces": { "my-infra": { "redactPaths": ["clusters/**/secret*.yaml"] } }
 }
 ```
 

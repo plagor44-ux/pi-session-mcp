@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed
+
+- Documentation only, no runtime change: tracked records use placeholders
+  instead of names from the operator's own setup
+  ([#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307)), as
+  AGENTS.md requires. Twelve lines in ten files named repositories, the
+  distribution suffix of a recorded kernel release, the operator's memory tool
+  or the operator's rule files; six of these files ship in the npm package.
+  Measured values, timestamps, identifiers and verdicts are unchanged.
+  Published packages and releases stay as published.
+
 ### Fixed
 
 - An abort while a coding session's `read` opens its file no longer ends the

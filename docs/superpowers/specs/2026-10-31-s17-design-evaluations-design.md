@@ -315,8 +315,9 @@ each evaluation directory; amendments are appended, never rewritten.
   At most 4 controller runs in total and at most 120 minutes of wall time for
   all live runs together.
 - Stop rules: a start error of the classes `local_authentication_missing` or
-  `unknown_execution_profile` stops the run and is reported (pi-routing
-  rules); no profile switch to work around a failure; every attempt is kept.
+  `unknown_execution_profile` stops the run and is reported
+  (`<operator rule file>`); no profile switch to work around a failure; every
+  attempt is kept.
 - Routes (designer's call): coding tasks on this repository's container
   writers (`pi-session-mcp-w1`, `-w2`) with one coding profile; review-style
   tasks with one read-only profile; xAI and Cursor profiles are not planned.

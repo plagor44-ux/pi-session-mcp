@@ -46,7 +46,7 @@ stays unusable for good.
 
 Run 2, fix round (`code`, fresh session, writer `pi-session-mcp-w2` on
 `e6af800`, commit `ffe94ef`, integrated as `cdd63bc`). The controller re-ran
-on the host (Node `v26.12.1`, `uname -sr` `Linux 7.3.0-5-cachyos`): both files
+on the host (Node `v26.12.1`, `uname -sr` `Linux 7.3.0`): both files
 56 of 56 passed. Both mutations above now fail exactly one test each (1 failed,
 18 passed of the 19 prototype tests); reverted afterwards.
 

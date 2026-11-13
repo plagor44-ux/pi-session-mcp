@@ -8,7 +8,7 @@
   "exitCode": 0,
   "sequence": [
     "pi_capabilities_get",
-    "hindsight_search_knowledge_pages (operator memory)",
+    "<operator memory tool> search (operator memory)",
     "shell: read the installed controller skill and an operator routing note",
     "pi_session_start 7896f13c (explore-fast)",
     "pi_session_start 31a81d95 (explore-fast)",

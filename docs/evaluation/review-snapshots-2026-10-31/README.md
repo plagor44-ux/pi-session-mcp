@@ -12,7 +12,7 @@ npm run build && node docs/evaluation/review-snapshots-2026-10-31/snapshot-proof
 
 Run 1, by the implementing worker inside a container writer on commit
 `487cfc9` (ten cases, before the tree check below existed): Node `v22.23.3`,
-Git `2.39.5`, `uname -sr` `Linux 7.3.0-5-cachyos`. Build and script exited 0;
+Git `2.39.5`, `uname -sr` `Linux 7.3.0`. Build and script exited 0;
 all ten cases passed. That run's output is the run 2 output without the
 `tree-binding-checked` line.
 
@@ -32,7 +32,7 @@ ordinary `git status` in the same situation does rewrite the index) and
 `plain-remove-deletes-ignored-work` (Git's own `worktree remove` without
 `--force` deletes a tree whose only change is an ignored file, so setup must
 verify before it removes). Node `v26.12.1`, Git `2.56.0`, `uname -sr`
-`Linux 7.3.0-5-cachyos`. `npm run build` exited 0 and the script exited 0:
+`Linux 7.3.0`. `npm run build` exited 0 and the script exited 0:
 
 ```jsonl
 {"case":"setup","expected":"ok","observed":"ok","pass":true}

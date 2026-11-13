@@ -4,7 +4,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-19-extension-ablation-design.md`](../specs/2026-10-19-extension-ablation-design.md), amended with R90 (replicates). Everything not changed here holds as amended: tasks, oracles, sandbox, budget rules, stop rules, evidence handling.
 
-**Scope:** pairing `pl-code` only (`--pairings pl-code`): the three pre-registered implementation tasks (`i-task-5`, `i-task-6`, `i-task-7` from `docs/evaluation/extension-ablation-2026-10-20/tasks.json`), arm A (no extension) against arm B (`pi-lens@4.4.3`), profile `code` (openai gpt-6.1-sol, OAuth refreshed on the host, R86). No review pairing, no pi-cache-optimizer, no Hindsight.
+**Scope:** pairing `pl-code` only (`--pairings pl-code`): the three pre-registered implementation tasks (`i-task-5`, `i-task-6`, `i-task-7` from `docs/evaluation/extension-ablation-2026-10-20/tasks.json`), arm A (no extension) against arm B (`pi-lens@4.4.3`), profile `code` (openai gpt-6.1-sol, OAuth refreshed on the host, R86). No review pairing, no pi-cache-optimizer, no `<operator memory tool>`.
 
 **Budget and projection:** USD 10 hard cap with a new ledger. 3 tasks × 2 arms × 3 replicates = 18 runs; observed `code` runs cost USD 0.06–0.91 (mean ≈ 0.43), so ≈ USD 8 plus preflights. The wave's budget stop applies as before.
 
