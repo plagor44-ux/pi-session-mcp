@@ -193,12 +193,14 @@ runs only after the server has verified that the limits are in force.
 
 - Launcher: `/usr/bin/systemd-run --user --scope --quiet --collect
   --unit=pi-session-mcp-shell-<uuid>
-  --description="pi-session-mcp sandboxed shell" -p MemoryMax=1073741824
+  --description="pi-session-mcp sandboxed shell" -p MemoryMax=2147483648
   -p MemorySwapMax=0 -p TasksMax=512 -p RuntimeMaxSec=<deadline + 30>
   -- /usr/bin/bwrap --info-fd 3
   --block-fd 4 <the fixed arguments of section 2>`. systemd-run moves itself
   into the new scope before it executes bubblewrap, so bubblewrap and every
-  descendant inherit the scope from their first instruction.
+  descendant inherit the scope from their first instruction. The memory value
+  was `1073741824` until the
+  [amendment of 2026-11-13](#amendment-2026-11-13-memory-limit-of-2-gib).
 - Limits per run: `memory.max` 1 GiB (2 GiB since the
   [amendment of 2026-11-13](#amendment-2026-11-13-memory-limit-of-2-gib)),
   `memory.swap.max` 0 and `pids.max` 512
