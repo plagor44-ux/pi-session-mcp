@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Added
+
+- Optional per-profile output token cap
+  ([#262](https://github.com/plagor44-ux/pi-session-mcp/issues/262)). An
+  execution profile may set `maxOutputTokens`, a positive integer that lowers
+  the model's output limit for the sessions of that profile; absent, the
+  catalog limit is sent as before. The session's model carries the lower
+  `maxTokens` on both session paths and in container writers, so the request
+  and Pi's own checks of a `length` stop use the same value. A value above the
+  model's catalog limit refuses the start with the new start error
+  `max_output_tokens_unsupported` and is never clamped. `pi_capabilities_get`
+  publishes the field for every profile, `null` when absent, and the writer
+  relay compares it, so a writer provisioned with another value is refused as
+  `settingsChanged` until it is provisioned again. Doctor validates the value
+  but does not compare it with the catalog. A cap also cuts legitimate large
+  output and generally counts thinking tokens; a tool call cut off at the
+  limit is not executed and costs a model step. No profile gets a default cap.
+  **Rollback note:** earlier releases reject a configuration with
+  `maxOutputTokens`; remove the field before reinstalling one.
+
 ### Changed
 
 - Read-only sessions stream `read` through a guarded hook
