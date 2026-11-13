@@ -8,7 +8,7 @@ const compareAliases = (left: string, right: string): number => left < right ? -
 
 /** The public capability shape of one profile, exactly as `pi_capabilities_get` publishes it. */
 export function projectExecutionProfile(
-  { alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, shell, skills, maxTurnSeconds }: ConfiguredExecutionProfile,
+  { alias, default: isDefault, permissionProfile, provider, model, thinkingLevel, extensions, grantedExtensionTools, shell, skills, maxTurnSeconds, maxOutputTokens }: ConfiguredExecutionProfile,
 ) {
   return {
     alias,
@@ -23,6 +23,7 @@ export function projectExecutionProfile(
     shell: shell ?? ("none" as const),
     skills: (skills ?? []).map((skill) => skill.alias),
     maxTurnSeconds: maxTurnSeconds ?? null,
+    maxOutputTokens: maxOutputTokens ?? null,
   };
 }
 

@@ -314,6 +314,15 @@ hook whose parameters change, which remains for the source comparison of an SDK
 update. `find` gets no operations, as before, and relies on the first layer
 alone.
 
+2026-11-13, #273: the server now provides the guarded `read.createReadStream`
+hook, so streamable text ranges no longer load the whole file through `readFile`.
+Images and non-streamable ranges still use the guarded `readFile`. The order
+remains check, then open by path; the residual risk of a directory swapped for
+a symlink after the check is unchanged. Unlike the SDK's default, the hook
+refuses a signal that is already aborted before it creates the stream: Node
+raises a second, uncaught `AbortError` for a stream created with an aborted
+signal.
+
 ## Contract change and versioning
 
 The capabilities field `shell`, the start error `sandbox_unavailable` and the

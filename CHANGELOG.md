@@ -2,8 +2,45 @@
 
 ## Unreleased
 
+### Added
+
+- Optional per-profile output token cap
+  ([#262](https://github.com/plagor44-ux/pi-session-mcp/issues/262)). An
+  execution profile may set `maxOutputTokens`, a positive integer that lowers
+  the model's output limit for the sessions of that profile; absent, the
+  catalog limit is sent as before. The session's model carries the lower
+  `maxTokens` on both session paths and in container writers, so the request
+  and Pi's own checks of a `length` stop use the same value. A value above the
+  model's catalog limit refuses the start with the new start error
+  `max_output_tokens_unsupported` and is never clamped. `pi_capabilities_get`
+  publishes the field for every profile, `null` when absent, and the writer
+  relay compares it, so a writer provisioned with another value is refused as
+  `settingsChanged` until it is provisioned again. Doctor validates the value
+  but does not compare it with the catalog. A cap also cuts legitimate large
+  output and generally counts thinking tokens; a tool call cut off at the
+  limit is not executed and costs a model step. No profile gets a default cap.
+  **Rollback note:** earlier releases reject a configuration with
+  `maxOutputTokens`; remove the field before reinstalling one.
+
 ### Changed
 
+- Read-only sessions stream `read` through a guarded hook
+  ([#273](https://github.com/plagor44-ux/pi-session-mcp/issues/273),
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)). The read
+  confinement now provides `read.createReadStream`, so a text range that the
+  SDK streams no longer loads the whole file through `readFile`; images and
+  ranges the SDK does not stream still use the guarded `readFile`. The hook
+  checks the path against the read roots before it opens the file, ends on the
+  abort signal and closes the file on every exit. Unlike the SDK's default, it
+  refuses a signal that is already aborted before it creates the stream,
+  because Node raises an uncaught `AbortError` for such a stream. No tool
+  schema, result, error code or configuration field changes.
+- Documentation only, no runtime change:
+  [Installation](docs/installation.md#container-writers) says that a Podman
+  upgrade also makes every container writer `writer_not_ready`, because
+  writer acceptance binds the Podman version, and that repeating each
+  repository's provisioning command with its existing settings accepts the
+  writers again.
 - Documentation only, no runtime change:
   [Releasing](docs/releasing.md#prepare-a-release) describes both kinds of
   release pull request, the pull request of the change that a release ships

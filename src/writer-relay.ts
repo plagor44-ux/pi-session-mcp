@@ -79,11 +79,11 @@ const creationCodes = new Set<PiSessionCreationErrorCode>([
   "model_unavailable", "thinking_level_unavailable", "execution_selection_mismatch", "external_mcp_unavailable",
   "external_mcp_no_tools", "external_mcp_grant_tool_missing", "external_mcp_activation_mismatch",
   "extension_not_installed", "extension_version_mismatch", "extension_load_failed", "extension_tool_conflict",
-  "extension_tool_missing", "skill_load_failed", "sandbox_unavailable", "pi_session_creation_failed",
+  "extension_tool_missing", "skill_load_failed", "sandbox_unavailable", "max_output_tokens_unsupported", "pi_session_creation_failed",
 ]);
 /** The public profile shape `pi_capabilities_get` publishes; `alias` and `default` are not admission fields. */
 type PublishedProfile = z.infer<typeof capabilitiesSchema>["executionProfiles"][number];
-const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell", "maxTurnSeconds"] as const;
+const exactFields = ["permissionProfile", "provider", "model", "thinkingLevel", "shell", "maxTurnSeconds", "maxOutputTokens"] as const;
 const setFields = ["skills", "extensions", "grantedExtensionTools"] as const;
 const sameSet = (left: readonly string[], right: readonly string[]): boolean => {
   const a = new Set(left), b = new Set(right);

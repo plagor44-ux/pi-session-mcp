@@ -61,6 +61,16 @@ describe("loadConfig", () => {
     expect(loaded.executionProfiles.get("safe")).toMatchObject({ alias: "safe", permissionProfile: "read-only" });
   });
 
+  it.each([1, 16000, Number.MAX_SAFE_INTEGER, undefined])("preserves maxOutputTokens %s", async maxOutputTokens => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, maxOutputTokens } } });
+    const profile = (await loadConfig(path)).executionProfiles.get("safe")!;
+    expect(profile.maxOutputTokens).toBe(maxOutputTokens);
+    expect(toResolvedExecutionProfile(profile).maxOutputTokens).toBe(maxOutputTokens);
+  });
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "1", null])("rejects invalid maxOutputTokens %s", async maxOutputTokens => {
+    const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, maxOutputTokens } } });
+    await expect(loadConfig(path)).rejects.toThrow();
+  });
   it.each([60, 86_400, undefined])("preserves optional maxTurnSeconds %s", async maxTurnSeconds => {
     const path = await writeConfig({ workspaces: { repo: "." }, executionProfiles: { safe: { ...validProfile, maxTurnSeconds } } });
     const loaded = await loadConfig(path); const profile = loaded.executionProfiles.get("safe")!;

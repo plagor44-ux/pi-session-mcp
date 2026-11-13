@@ -1,4 +1,4 @@
-import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { access, open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
@@ -99,19 +99,33 @@ type Decided<Operations, Omitted extends keyof Operations = never> = Required<Om
 /**
  * The `*Operations` hooks that re-check every absolute path the SDK hands them; exported for tests.
  * The SDK takes a tool's operations as a whole (`options.operations ?? defaults`), so a hook left out
- * here is absent and never replaced by the SDK's unconfined default. Two are left out on purpose:
- * - `read.createReadStream` (SDK 1.5.1): without it the SDK reads through `readFile`, guarded below.
- * - `grep.readFile`: ignored since SDK 1.5.1. `rg` emits the context lines itself, so the only path
+ * here is absent and never replaced by the SDK's unconfined default. `read.createReadStream` is guarded.
+ * Only `grep.readFile` is left out: ignored since SDK 1.5.1. `rg` emits the context lines itself, so the only path
  *   `grep` hands a hook is the search path; `rg` opens the files, as `fd` does for `find`.
  */
 export function confinedOperations(roots: readonly string[]): {
-  read: Decided<ReadOperations, "createReadStream">; grep: Decided<GrepOperations, "readFile">; ls: Decided<LsOperations>;
+  read: Decided<ReadOperations>; grep: Decided<GrepOperations, "readFile">; ls: Decided<LsOperations>;
 } {
   const guard = async <T>(path: string, run: () => Promise<T>): Promise<T> => { await checkAbsolute(path, roots); return run(); };
   return {
     read: {
       access: (path) => guard(path, () => access(path, constants.R_OK)),
       readFile: (path) => guard(path, () => readFile(path)),
+      createReadStream: async function* (path, { signal }) {
+        await checkAbsolute(path, roots);
+        signal?.throwIfAborted();
+        const handle = await open(path, "r");
+        try {
+          const stats = await handle.stat();
+          const end = stats.isFile() && stats.size > 0 ? stats.size - 1 : undefined;
+          // A stream created with an already aborted signal raises a second AbortError that no
+          // listener catches, so refuse it here, synchronously before the stream exists.
+          signal?.throwIfAborted();
+          yield* handle.createReadStream({ end, signal, autoClose: false });
+        } finally {
+          await handle.close();
+        }
+      },
       detectImageMimeType: (path) => guard(path, () => detectSupportedImageMimeTypeFromFile(path)),
     },
     grep: {

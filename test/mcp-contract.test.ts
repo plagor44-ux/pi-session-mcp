@@ -169,7 +169,7 @@ describe("MCP contracts", () => {
         workspaces: { items: { required: ["alias", "mode"], additionalProperties: false, properties: { mode: { enum: ["unset", "host", "container", "read-only", "snapshot"] } } } },
         executionProfiles: {
           items: {
-            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds"],
+            required: ["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds", "maxOutputTokens"],
             properties: { grantedExtensionTools: { type: "array", items: { type: "string" } }, shell: { enum: ["none", "sandboxed"] } },
             additionalProperties: false,
           },
@@ -265,11 +265,11 @@ describe("MCP contracts", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], grantedExtensionTools: [], shell: "none", skills: [], maxTurnSeconds: null,
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: [], grantedExtensionTools: [], shell: "none", skills: [], maxTurnSeconds: null, maxOutputTokens: null,
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], grantedExtensionTools: [], shell: "none", skills: [], maxTurnSeconds: null,
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: [], grantedExtensionTools: [], shell: "none", skills: [], maxTurnSeconds: null, maxOutputTokens: null,
         },
       ],
     });
@@ -589,6 +589,7 @@ describe("MCP contracts", () => {
 
   it.each([
     ["unknown_provider", "Execution profile provider is not in the local Pi catalog"],
+    ["max_output_tokens_unsupported", "Execution profile output token cap exceeds the model limit"],
     ["external_mcp_unavailable", "Configured external MCP tools are unavailable"],
     ["external_mcp_no_tools", "Configured external MCP server returned no tools"],
     ["external_mcp_grant_tool_missing", "Configured external MCP grant is missing from discovery"],

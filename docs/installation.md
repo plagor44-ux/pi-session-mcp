@@ -552,6 +552,25 @@ Rules:
   controller budgets. See [Tool contracts](tool-contracts.md#optional-turn-duration-policy).
   Older releases reject this configuration field. Re-provision existing writers
   after setting or changing it, or admission refuses them as `settingsChanged`.
+- Optional `maxOutputTokens` caps the output of each model request in a
+  session of the profile. Absent means the model's catalog maximum, as before.
+  A value that is not a positive safe integer fails startup with
+  `invalid_execution_profile_config` (Doctor validates offline). A value above
+  the resolved model's catalog maximum fails session start with
+  `max_output_tokens_unsupported`; there is no clamping, and Doctor does not
+  compare the value with the catalog. Capabilities publish the number or
+  `null`. Older releases reject this configuration field. Re-provision
+  existing writers after setting or changing it, or admission refuses them as
+  `settingsChanged`. A cap also cuts legitimate large output and generally
+  counts thinking tokens. A truncated legitimate tool call is not executed,
+  costs another model step and may be repeated. A cap only helps well below
+  what the idle timeout already bounds: at 137 tokens per second, 40,000
+  tokens take about 290 seconds. In a profile with `extensions`, an extension
+  that registers or unregisters a provider or a virtual model makes Pi
+  resolve the session's model from its catalog again: during session start
+  the start then fails with `execution_selection_mismatch`, and later in the
+  session the cap no longer applies to that session's remaining requests.
+  Container writers load no extensions.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
 - A `read-only` profile may add `"shell": "sandboxed"` to get a `bash` tool
@@ -1198,6 +1217,18 @@ repository step between the install and the client targets:
    `writer_git_identity_missing`. Collect any work, then
    `--writer <name> --reset --apply` (or `--finish --apply`) each writer;
    reset copies the operator checkout's identity into the clone.
+
+Acceptance also binds the Podman version, so a Podman upgrade has the same
+effect without any package upgrade: Doctor reports every container writer
+`writer_not_ready`. Coding starts on container workspaces fail with
+`writer_unavailable`, reason `none_admitted`: each idle writer's launcher
+refuses as not ready, and the relay skips it without counting it. Only a
+writer whose lease another process holds, such as a running session or a
+setup step, counts, as `busy`, so with no such holder all counts are zero.
+Close the coding sessions, then repeat step 2 alone, with each repository's
+existing settings, including its image, cache, tags and base: it accepts
+the writers again and keeps their clones and the work in them. A writer
+that a session still leases fails that step with `writer_busy`.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases

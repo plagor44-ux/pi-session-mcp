@@ -206,6 +206,29 @@ describe("SdkPiSessionAdapter history reads", () => {
 describe("SdkPiSessionAdapter deterministic selection", () => {
   beforeEach(() => vi.restoreAllMocks());
 
+  it.each([undefined, 1000])("passes the catalog model or capped copy to the plain session: %s", async cap => {
+    const fixture = runtimeFixture();
+    Object.assign(fixture.resolvedModel, { maxTokens: 4096 });
+    const { session } = sessionFixture();
+    const createSession = vi.fn(async (options: CreateAgentSessionOptions) => {
+      Object.assign(session, { model: options.model });
+      exposeCustomTools(session, options);
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession });
+    const handle = await adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, ...(cap === undefined ? {} : { maxOutputTokens: cap }) } });
+    expect(session.model?.maxTokens).toBe(cap ?? 4096);
+    expect(createSession.mock.calls[0]![0].model === fixture.resolvedModel).toBe(cap === undefined);
+    await handle.dispose();
+  });
+  it("refuses a cap over the catalog maximum before creating a session", async () => {
+    const fixture = runtimeFixture(); Object.assign(fixture.resolvedModel, { maxTokens: 4096 });
+    const createSession = createSessionFixture(sessionFixture().session);
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession });
+    await expect(adapter.create({ cwd: WORKSPACE_DIR, executionProfile: { ...profile, maxOutputTokens: 4097 } })).rejects.toMatchObject({ code: "max_output_tokens_unsupported" });
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
   it("creates a runtime per session for exact resolution and passes it with explicit options", async () => {
     const fixture = runtimeFixture();
     const runtimeFactory = vi.fn(async () => fixture.runtime);
@@ -824,6 +847,25 @@ function extensionHarness(options: {
     create: (override: ResolvedExecutionProfile = executionProfile) => adapter.create({ cwd: WORKSPACE_DIR, executionProfile: override }),
   };
 }
+
+describe("extension output cap", () => {
+  it("passes the capped model through the extension session path", async () => {
+    const h = extensionHarness(); Object.assign(h.fixture.resolvedModel, { maxTokens: 4096 });
+    h.createSessionFromServices.mockImplementationOnce(async options => {
+      Object.assign(h.session, { model: (options as { model: SdkModel }).model });
+      exposeCustomTools(h.session, options as { customTools?: readonly { name: string }[] });
+      return { session: h.session } as unknown as CreateAgentSessionResult;
+    });
+    const handle = await h.create({ ...h.executionProfile, maxOutputTokens: 1000 });
+    expect(h.session.model?.maxTokens).toBe(1000);
+    await handle.dispose();
+  });
+  it("refuses an unsupported cap before creating an extension session", async () => {
+    const h = extensionHarness(); Object.assign(h.fixture.resolvedModel, { maxTokens: 4096 });
+    await expect(h.create({ ...h.executionProfile, maxOutputTokens: 4097 })).rejects.toMatchObject({ code: "max_output_tokens_unsupported" });
+    expect(h.createSessionFromServices).not.toHaveBeenCalled();
+  });
+});
 
 const SCOPE = "/user.slice/app.slice/test-unit.scope";
 

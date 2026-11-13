@@ -1,4 +1,4 @@
-import { mkdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, open, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { createGrepToolDefinition, createLsToolDefinition, createReadToolDefinition, type Skill, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -185,18 +185,114 @@ describe("confined tools", () => {
   it("the SDK tools hand the hooks the path they open, so the hooks alone refuse an outside path", async () => {
     await expect(bare("read", { path: "src/a.txt" })).resolves.toContain("inside needle");
     await expect(bare("read", { path: "link-file" })).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
+    await expect(bare("read", { path: join(outside, "secret.txt") })).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
     await expect(bare("ls", { path: "link-dir" })).rejects.toThrow(OUTSIDE_ROOTS_MESSAGE);
     // The SDK's grep reports a refused search path as not found; no content comes back either way.
     await expect(bare("grep", { pattern: "needle", path: "link-dir" })).rejects.toThrow(/not found/i);
     await expect(bare("grep", { pattern: "needle", path: "link-file" })).rejects.toThrow(/not found/i);
   });
 
-  it("the SDK reads through the guarded readFile and adds no default for a hook left out", async () => {
+  it("refuses outside streams on first iteration without yielding a chunk", async () => {
+    for (const path of [join(outside, "secret.txt"), join(workspace, "link-file")]) {
+      const chunks: Uint8Array[] = [];
+      const stream = confinedOperations(roots).read.createReadStream(path, {});
+      const consume = async (): Promise<void> => { for await (const chunk of stream) chunks.push(chunk); };
+      await expect(consume()).rejects.toThrow(new Error(OUTSIDE_ROOTS_MESSAGE));
+      expect(chunks).toEqual([]);
+    }
+  });
+
+  it("streams ranges with the same text as the guarded whole-file fallback", async () => {
     const operations = confinedOperations(roots);
     const readFile = vi.fn(operations.read.readFile);
-    const output = await bare("read", { path: "src/a.txt" }, { ...operations, read: { ...operations.read, readFile } });
-    expect(output).toContain("inside needle");
-    expect(readFile).toHaveBeenCalledExactlyOnceWith(join(workspace, "src", "a.txt"));
+    const params = { path: "mixed/own.txt", offset: 2, limit: 1 };
+    const output = await bare("read", params, { ...operations, read: { ...operations.read, readFile } });
+    const { createReadStream: _stream, ...fallback } = operations.read;
+    const definition = createReadToolDefinition(workspace, { operations: fallback });
+    const result = await definition.execute("call", params, undefined, undefined, undefined as never);
+    expect(output).toEqual(JSON.stringify(result.content));
+    expect(output).toContain("own needle");
+    expect(readFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps images and non-streamable ranges on the guarded readFile hook", async () => {
+    const image = join(workspace, "pixel.png");
+    await writeFile(image, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=", "base64"));
+    for (const params of [{ path: image }, { path: "mixed/own.txt", limit: -1 }, { path: "mixed/own.txt", limit: 1.5 }]) {
+      const operations = confinedOperations(roots);
+      const readFile = vi.fn(operations.read.readFile);
+      const createReadStream = vi.fn(operations.read.createReadStream);
+      await bare("read", params, { ...operations, read: { ...operations.read, readFile, createReadStream } });
+      expect(readFile).toHaveBeenCalledExactlyOnceWith(params.path === image ? image : join(workspace, params.path));
+      expect(createReadStream).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(["abort", "early return", "end"])("closes the real stream handle on %s", async (exit) => {
+    // Larger than one stream chunk (64 KiB), so abort and early return end a read that is still running.
+    const large = await temporaryRoot("confined-stream-");
+    const path = join(large, "large.txt");
+    await writeFile(path, "x".repeat(256 * 1024));
+    const sample = await open(path, "r");
+    const prototype = Object.getPrototypeOf(sample) as FileHandle;
+    await sample.close();
+    const original = prototype.createReadStream;
+    const handles: FileHandle[] = [];
+    const spy = vi.spyOn(prototype, "createReadStream").mockImplementation(function (this: FileHandle, options) {
+      handles.push(this);
+      return original.call(this, options);
+    });
+    try {
+      const controller = new AbortController();
+      let chunks = 0;
+      const consume = async (): Promise<void> => {
+        for await (const _chunk of confinedOperations([large]).read.createReadStream(path, { signal: controller.signal })) {
+          chunks++;
+          if (exit === "early return") break;
+          if (exit === "abort") controller.abort();
+        }
+      };
+      if (exit === "abort") await expect(consume()).rejects.toMatchObject({ name: "AbortError" });
+      else await consume();
+      if (exit === "end") expect(chunks).toBeGreaterThan(1);
+      else expect(chunks).toBe(1);
+      expect(handles).toHaveLength(1);
+      expect(handles[0]!.fd).toBe(-1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each(["before the call", "while the file opens"])("refuses a signal aborted %s without creating a stream", async (when) => {
+    const path = join(workspace, "mixed", "own.txt");
+    const sample = await open(path, "r");
+    const prototype = Object.getPrototypeOf(sample) as FileHandle;
+    await sample.close();
+    const controller = new AbortController();
+    const originalStat = prototype.stat;
+    const opened: FileHandle[] = [];
+    const stat = vi.spyOn(prototype, "stat").mockImplementation(async function (this: FileHandle, options) {
+      opened.push(this);
+      const stats = await originalStat.call(this, options);
+      // The abort lands after the file is open and before its stream exists.
+      if (when === "while the file opens") controller.abort();
+      return stats;
+    });
+    const createReadStream = vi.spyOn(prototype, "createReadStream");
+    if (when === "before the call") controller.abort();
+    try {
+      const consume = async (): Promise<void> => {
+        for await (const _chunk of confinedOperations(roots).read.createReadStream(path, { signal: controller.signal })) { /* no chunk is expected */ }
+      };
+      await expect(consume()).rejects.toMatchObject({ name: "AbortError" });
+      // A stream created with an aborted signal raises a second, uncaught AbortError: none may be created.
+      expect(createReadStream).not.toHaveBeenCalled();
+      expect(opened).toHaveLength(when === "before the call" ? 0 : 1);
+      expect(opened.every((handle) => handle.fd === -1)).toBe(true);
+    } finally {
+      stat.mockRestore();
+      createReadStream.mockRestore();
+    }
   });
 });
 
