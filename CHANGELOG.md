@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.22.1 — 2026-11-14
+
+Patch release: an abort while a coding session's `read` opens its file no
+longer ends the server
+([#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298)), because
+coding sessions now get the server's own `read`. Session history redaction
+also covers the keys of stored objects, and it keeps the content of a
+protected file out when the file's path holds a line feed; entries recorded
+before the upgrade are not rewritten. The release also ships placeholders for
+names from the operator's own setup in tracked records (#307), the
+post-release evidence of 0.22.0, test changes that resolve the open code
+scanning alerts and a newer `vite` pin in an evaluation fixture. The MCP tool
+contract is unchanged: no tool, field, state or error code is new, and neither
+is a setup outcome or a Doctor check. No full live two-client cycle ran on
+this release; see the
+[acceptance record](docs/acceptance.md#v0221-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Close the client sessions first:
+the fixes apply to server processes started after the upgrade. The controller
+skills are unchanged. **Rollback note:** reinstall 0.22.0 with the same steps.
+This release changes no stored format of Pi Session MCP.
+
 ### Changed
 
 - Documentation only, no runtime change: tracked records use placeholders

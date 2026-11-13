@@ -790,10 +790,11 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own. `0.20.1`, `0.21.0` and `0.22.0`, released from later commits, have
-none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
-[that of `0.21.0`](#v0210-pre-release-acceptance) and
-[that of `0.22.0`](#v0220-pre-release-acceptance).
+its own. `0.20.1`, `0.21.0`, `0.22.0` and `0.22.1`, released from later
+commits, have none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
+[that of `0.21.0`](#v0210-pre-release-acceptance),
+[that of `0.22.0`](#v0220-pre-release-acceptance) and
+[that of `0.22.1`](#v0221-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2665,6 +2666,35 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.22.1 pre-release acceptance
+
+The patch release `0.22.1` ships what `main` holds after `v0.22.0`, all from
+PR #308: the fix of
+[#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298), with which
+an abort while a coding session's `read` opens its file no longer ends the
+server, the placeholders of
+[#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307) and the
+[post-release evidence of `0.22.0`](#v0220-post-release-evidence). Its own
+pull request, on the branch `chore/release-0.22.1` on top of `main` at
+`d043849`, adds two fixes of the session history redaction, for the keys of
+stored objects and for paths that hold a line feed, test changes that resolve
+the open code scanning alerts and a newer `vite` pin in the T3 evaluation
+fixture; the version commit and this record follow them. The public MCP
+contract is unchanged since `0.22.0`.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits after `v0.22.0` change the
+`read` tool of coding sessions, the stream of the confined `read` and the
+redaction of the session history.
+
+Not established for `0.22.1`: a Level 3 cycle on the release; any turn against
+a real provider on the release, including an abort during a coding session's
+`read`, on the host or in a container writer, a session with history on, a
+session of a profile with `maxOutputTokens` and a streamed `read` in a real
+read-only session; the server host; macOS outside CI; and the
+published-release Level 2 and the upgrades, which follow after publishing.
 
 ### v0.22.0 post-release evidence
 
