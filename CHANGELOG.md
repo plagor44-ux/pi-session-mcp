@@ -19,6 +19,11 @@
   reported the new `writer_not_ready` reason and used the repository step
   without repeated settings). No session ran on the published release for
   that record, and none of it is a Level 3 cycle.
+- Tests only, no runtime change: the tests that start `node -e` children pass
+  paths, markers and nested scripts to them as arguments instead of building
+  the child's code from these values, and one test lost a `replace` call that
+  replaced a string with itself. This resolves the open code scanning alerts,
+  all of which were in test files.
 
 ### Fixed
 

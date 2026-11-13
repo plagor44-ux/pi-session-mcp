@@ -18,22 +18,29 @@ const platformModuleUrl = pathToFileURL(resolve("src/setup-platform.ts")).href;
 /**
  * A raw-Node harness that holds the fence through a real guardian. macOS locks
  * at open time; Linux locks the same open file description through flock.
+ * The code is constant: the module URLs and the lock path arrive as extra
+ * arguments (`guardianArgs`), so `process.argv[1..3]` are the process module URL,
+ * the platform module URL and the lock path; `body` may read `process.argv[4..]`.
  */
-function guardianHarness(lockPath: string, body: readonly string[]): string {
+function guardianHarness(body: readonly string[]): string {
   return [
     "import { constants } from 'node:fs'; import { open } from 'node:fs/promises'; const fs=await import('node:fs');",
-    `import { acquireSetupGuardian } from ${JSON.stringify(processModuleUrl)};`,
-    `import { openLockedDarwin } from ${JSON.stringify(platformModuleUrl)};`,
-    `const handle=process.platform==='darwin'?await openLockedDarwin(${JSON.stringify(lockPath)},{timeoutMs:5000}):await open(${JSON.stringify(lockPath)},constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);`,
+    "const { acquireSetupGuardian } = await import(process.argv[1]);",
+    "const { openLockedDarwin } = await import(process.argv[2]);",
+    "const lockPath=process.argv[3];",
+    "const handle=process.platform==='darwin'?await openLockedDarwin(lockPath,{timeoutMs:5000}):await open(lockPath,constants.O_CREAT|constants.O_RDWR|constants.O_NOFOLLOW,0o600);",
     "const guardian=await acquireSetupGuardian(handle.fd,5000);",
     ...body,
   ].join("\n");
 }
 
-/** A mutation-side statement that records its parent, the guardian, in `marker`. */
-function recordGuardian(marker: string): string {
-  return `fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.ppid));fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)});`;
+/** The extra arguments `guardianHarness` reads, followed by the body's own arguments from `process.argv[4]` on. */
+function guardianArgs(lockPath: string, ...rest: readonly string[]): string[] {
+  return [processModuleUrl, platformModuleUrl, lockPath, ...rest];
 }
+
+/** A mutation-side statement that records its parent, the guardian, in the file named by `process.argv[1]`. */
+const RECORD_GUARDIAN = "fs.writeFileSync(process.argv[1]+'.tmp',String(process.ppid));fs.renameSync(process.argv[1]+'.tmp',process.argv[1]);";
 
 describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
   it("persists only bounded path-free ownership data with restrictive modes", async () => {
@@ -196,17 +203,19 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
     const marker = join(directory, "helper.pid");
     const guardianMarker = join(directory, "guardian.pid");
     const mutationMarker = join(directory, "mutation.pid");
-    const helperScript = `const fs=require('node:fs'); process.on('SIGTERM',()=>{}); fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)}); setInterval(()=>{},1000);`;
+    // The helper reads its marker from process.argv[1]; the mutation reads the guardian marker,
+    // the mutation marker, the helper marker and the helper script from process.argv[1..4].
+    const helperScript = "const fs=require('node:fs'); process.on('SIGTERM',()=>{}); fs.writeFileSync(process.argv[1]+'.tmp',String(process.pid)); fs.renameSync(process.argv[1]+'.tmp',process.argv[1]); setInterval(()=>{},1000);";
     const mutation = [
       "const {spawn}=require('node:child_process'); const fs=require('node:fs');",
-      recordGuardian(guardianMarker),
-      `fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)}); spawn(process.execPath,['-e',${JSON.stringify(helperScript)}],{stdio:'ignore'});`,
+      RECORD_GUARDIAN,
+      "fs.writeFileSync(process.argv[2]+'.tmp',String(process.pid)); fs.renameSync(process.argv[2]+'.tmp',process.argv[2]); spawn(process.execPath,['-e',process.argv[4],process.argv[3]],{stdio:'ignore'});",
       "process.on('SIGTERM',()=>{});setInterval(()=>{},1000);",
     ].join(" ");
-    const harness = guardianHarness(`${path}.flock`, [
-      `const output=await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}]);process.exitCode=output.exitCode;`,
+    const harness = guardianHarness([
+      "const output=await guardian.runner.run(process.execPath,['-e',...process.argv.slice(4)]);process.exitCode=output.exitCode;",
     ]);
-    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
+    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness, ...guardianArgs(`${path}.flock`, mutation, guardianMarker, mutationMarker, marker, helperScript)], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let helperPid: number | undefined;
     let guardianPid: number | undefined;
@@ -255,11 +264,11 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
   it("refuses inheritFds through the guardian runner instead of dropping them", async () => {
     const directory = await temporaryRoot("pi-session-mcp-owned-fds-");
     const resultMarker = join(directory, "result.code");
-    const harness = guardianHarness(join(directory, "ownership.json.flock"), [
+    const harness = guardianHarness([
       "const output=await guardian.runner.run(process.execPath,['-e','0'],undefined,{inheritFds:[handle.fd]});",
-      `fs.writeFileSync(${JSON.stringify(resultMarker)},String(output.exitCode)); await guardian.release(); await handle.close();`,
+      "fs.writeFileSync(process.argv[4],String(output.exitCode)); await guardian.release(); await handle.close();",
     ]);
-    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore" });
+    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness, ...guardianArgs(join(directory, "ownership.json.flock"), resultMarker)], { stdio: "ignore" });
     await new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     expect(await readTextIfPresent(resultMarker)).toBe("126");
   });
@@ -269,13 +278,15 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
     const guardianMarker = join(directory, "guardian.pid");
     const mutationMarker = join(directory, "mutation.started");
     const resultMarker = join(directory, "result.code");
-    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${recordGuardian(guardianMarker)}fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)});setInterval(()=>{},1000);`;
-    const harness = guardianHarness(`${path}.flock`, [
+    // The mutation reads the guardian marker and its own marker from process.argv[1..2]; the harness
+    // reads the result marker from process.argv[4] and the mutation code plus its arguments from [5..].
+    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${RECORD_GUARDIAN}fs.writeFileSync(process.argv[2]+'.tmp',String(process.pid));fs.renameSync(process.argv[2]+'.tmp',process.argv[2]);setInterval(()=>{},1000);`;
+    const harness = guardianHarness([
       "const controller=new AbortController(); process.on('SIGTERM',()=>controller.abort());",
-      `const output=await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}],controller.signal);`,
-      `fs.writeFileSync(${JSON.stringify(`${resultMarker}.tmp`)},String(output.exitCode)); fs.renameSync(${JSON.stringify(`${resultMarker}.tmp`)},${JSON.stringify(resultMarker)}); await guardian.release(); await handle.close();`,
+      "const output=await guardian.runner.run(process.execPath,['-e',...process.argv.slice(5)],controller.signal);",
+      "fs.writeFileSync(process.argv[4]+'.tmp',String(output.exitCode)); fs.renameSync(process.argv[4]+'.tmp',process.argv[4]); await guardian.release(); await handle.close();",
     ]);
-    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
+    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness, ...guardianArgs(`${path}.flock`, resultMarker, mutation, guardianMarker, mutationMarker)], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let guardianPid: number | undefined;
     let mutationPid: number | undefined;
@@ -319,11 +330,11 @@ describe.skipIf(!currentSetupPlatform())("durable setup ownership", () => {
     const mutationMarker = join(directory, "mutation.pid");
     const oracleMarker = join(directory, "owned-oracle.pid");
     if (markerState === "unreadable") await mkdir(mutationMarker);
-    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${recordGuardian(guardianMarker)}fs.writeFileSync(${JSON.stringify(`${oracleMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${oracleMarker}.tmp`)},${JSON.stringify(oracleMarker)});setInterval(()=>{},1000);`;
-    const harness = guardianHarness(lockPath, [
-      `await guardian.runner.run(process.execPath,['-e',${JSON.stringify(mutation)}]);`,
+    const mutation = `const fs=require('node:fs');process.on('SIGTERM',()=>{});${RECORD_GUARDIAN}fs.writeFileSync(process.argv[2]+'.tmp',String(process.pid));fs.renameSync(process.argv[2]+'.tmp',process.argv[2]);setInterval(()=>{},1000);`;
+    const harness = guardianHarness([
+      "await guardian.runner.run(process.execPath,['-e',...process.argv.slice(4)]);",
     ]);
-    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness], { stdio: "ignore", detached: true });
+    const parent = spawn(process.execPath, ["--input-type=module", "-e", harness, ...guardianArgs(lockPath, mutation, guardianMarker, oracleMarker)], { stdio: "ignore", detached: true });
     const parentClosed = new Promise<void>((resolveClose) => parent.once("close", () => resolveClose()));
     let guardianPid: number | undefined;
     let oraclePid: number | undefined;

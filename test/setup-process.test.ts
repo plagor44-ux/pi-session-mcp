@@ -13,14 +13,18 @@ import { cleanupFixtureProcesses, expectProcessTerminated, readPidIfPresent, rea
 
 afterAll(removeTemporaryRoots);
 
-function descendantScript(pidFile: string, parentPidFile: string, exitOnTerm = false): string {
-  const child = `const fs=require('node:fs'); process.on('SIGTERM',()=>{}); fs.writeFileSync(${JSON.stringify(`${pidFile}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${pidFile}.tmp`)},${JSON.stringify(pidFile)}); setInterval(()=>{},1000);`;
-  return [
-    "const {spawn}=require('node:child_process'); const fs=require('node:fs');",
-    `fs.writeFileSync(${JSON.stringify(`${parentPidFile}.tmp`)},String(process.pid)); fs.renameSync(${JSON.stringify(`${parentPidFile}.tmp`)},${JSON.stringify(parentPidFile)}); spawn(process.execPath,['-e',${JSON.stringify(child)}]);`,
+// Code strings stay constant; paths and the nested child script reach the child as extra
+// arguments (`node -e <code> a b` gives process.argv = [execPath, 'a', 'b']).
+const DESCENDANT_CHILD_SCRIPT = "const fs=require('node:fs'); const pidFile=process.argv[1]; process.on('SIGTERM',()=>{}); fs.writeFileSync(pidFile+'.tmp',String(process.pid)); fs.renameSync(pidFile+'.tmp',pidFile); setInterval(()=>{},1000);";
+
+function descendantArgs(pidFile: string, parentPidFile: string, exitOnTerm = false): string[] {
+  const code = [
+    "const {spawn}=require('node:child_process'); const fs=require('node:fs'); const parentPidFile=process.argv[1];",
+    "fs.writeFileSync(parentPidFile+'.tmp',String(process.pid)); fs.renameSync(parentPidFile+'.tmp',parentPidFile); spawn(process.execPath,['-e',process.argv[3],process.argv[2]]);",
     exitOnTerm ? "process.on('SIGTERM',()=>process.exit(0));" : "",
     "setTimeout(()=>{},10000);",
   ].join(" ");
+  return ["-e", code, parentPidFile, pidFile, DESCENDANT_CHILD_SCRIPT];
 }
 
 async function cleanupDescendants(parentPidFile: string, pidFile: string): Promise<void> {
@@ -99,7 +103,7 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
       const closed = once(child, "close");
       await once(child, "message");
       const marker = join(directory, "spawned");
-      child.send({ type: "run", id: 1, command: execPath, args: ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)}, '')`], timeoutMs: 1000, maxOutputBytes: 1024, ...options });
+      child.send({ type: "run", id: 1, command: execPath, args: ["-e", "require('node:fs').writeFileSync(process.argv[1], '')", marker], timeoutMs: 1000, maxOutputBytes: 1024, ...options });
       await closed;
       expect(existsSync(marker)).toBe(false);
     } finally { child.kill("SIGKILL"); await handle.close(); }
@@ -133,9 +137,9 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
     const directory = await temporaryRoot("pi-session-mcp-process-abort-group-");
     const pidFile = join(directory, "child.pid");
     const parentPidFile = join(directory, "parent.pid");
-    const script = descendantScript(pidFile, parentPidFile, true);
+    const args = descendantArgs(pidFile, parentPidFile, true);
     const controller = new AbortController();
-    const resultPromise = createProcessRunner({ timeoutMs: 10_000 }).run(execPath, ["-e", script], controller.signal);
+    const resultPromise = createProcessRunner({ timeoutMs: 10_000 }).run(execPath, args, controller.signal);
     try {
       // The child records readiness after installing its SIGTERM handler. Poll only
       // ENOENT within a wall-clock bound, rather than 100 scheduling-dependent tries.
@@ -155,14 +159,14 @@ describe.skipIf(!currentSetupPlatform())("setup process runner", () => {
     const directory = await temporaryRoot("pi-session-mcp-process-");
     const pidFile = join(directory, "child.pid");
     const parentPidFile = join(directory, "parent.pid");
-    const script = descendantScript(pidFile, parentPidFile);
+    const args = descendantArgs(pidFile, parentPidFile);
     // Timing assumption: the fixture must start its child and record the pid
     // before the runner's budget kills the group; the parent itself would run for 10 s.
     // A 300 ms budget raced startup under load. The 2 s budget also includes child
     // readiness: the child writes its pid only after installing its SIGTERM handler.
     // The pid file outlives the group, so it is read once the runner has settled.
     const controller = new AbortController();
-    const resultPromise = createProcessRunner({ timeoutMs: 2_000 }).run(execPath, ["-e", script], controller.signal);
+    const resultPromise = createProcessRunner({ timeoutMs: 2_000 }).run(execPath, args, controller.signal);
     try {
       const result = await resultPromise;
       expect(result.exitCode).toBe(124);
@@ -214,9 +218,9 @@ describe.skipIf(process.platform !== "linux")("Linux /proc fixture", () => {
   it("preserves one complete kernel stat sample through actual owned reaping", async () => {
     const directory = await temporaryRoot("pi-session-mcp-proc-sample-");
     const marker = join(directory, "child.pid");
-    const childScript = `const fs=require('node:fs');process.on('SIGTERM',()=>process.exit(0));fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)});setInterval(()=>{},1000);`;
-    const parentScript = `const {spawn}=require('node:child_process');const fs=require('node:fs');let child;process.on('SIGTERM',()=>child?.kill('SIGKILL'));child=spawn(process.execPath,['-e',${JSON.stringify(childScript)}],{stdio:'ignore'});child.on('close',()=>process.exit(0));const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(marker)})){clearInterval(timer);process.kill(process.pid,'SIGSTOP');}},10);`;
-    const parent = spawn(execPath, ["-e", parentScript], { stdio: "ignore", detached: true });
+    const childScript = "const fs=require('node:fs');const marker=process.argv[1];process.on('SIGTERM',()=>process.exit(0));fs.writeFileSync(marker+'.tmp',String(process.pid));fs.renameSync(marker+'.tmp',marker);setInterval(()=>{},1000);";
+    const parentScript = "const {spawn}=require('node:child_process');const fs=require('node:fs');const marker=process.argv[1];let child;process.on('SIGTERM',()=>child?.kill('SIGKILL'));child=spawn(process.execPath,['-e',process.argv[2],marker],{stdio:'ignore'});child.on('close',()=>process.exit(0));const timer=setInterval(()=>{if(fs.existsSync(marker)){clearInterval(timer);process.kill(process.pid,'SIGSTOP');}},10);";
+    const parent = spawn(execPath, ["-e", parentScript, marker, childScript], { stdio: "ignore", detached: true });
     let parentClosed = false;
     const closed = new Promise<void>((resolve) => parent.once("close", () => { parentClosed = true; resolve(); }));
     let childPid: number | undefined;
@@ -389,7 +393,7 @@ describe("setup process runner platform gate", () => {
     const marker = join(await temporaryRoot("pi-session-mcp-platform-gate-"), "spawned");
     vi.spyOn(process, "platform", "get").mockReturnValue("win32");
     try {
-      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", `require('node:fs').writeFileSync(${JSON.stringify(marker)},'')`]);
+      const result = await createProcessRunner({ timeoutMs: 1_000 }).run(execPath, ["-e", "require('node:fs').writeFileSync(process.argv[1],'')", marker]);
       expect(result).toEqual({ exitCode: 126, stdout: "", stderr: "" });
       expect(existsSync(marker)).toBe(false);
     } finally { vi.restoreAllMocks(); }

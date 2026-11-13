@@ -41,7 +41,11 @@ function makeBase(files?: Record<string, string>): { repo: string; base: { gitDi
   execFileSync("git", ["clone", "--bare", "--quiet", repo, gitDir], { stdio: "ignore", env: { PATH: process.env.PATH ?? "", HOME: repo } });
   return { repo, base: { gitDir, commit: revParse(repo) } };
 }
-const node = (code: string): string[] => ["node", "-e", code];
+/** `code` stays a constant string; runtime values are extra arguments and reach it as `process.argv[1..]`. */
+const node = (code: string, ...args: string[]): string[] => ["node", "-e", code, ...args];
+
+/** The grandchild of the process-group tests: writes the marker named by its `process.argv[1]` after 1.5 s. */
+const DELAYED_MARKER_SCRIPT = "setTimeout(()=>require('fs').writeFileSync(process.argv[1],'x'),1500)";
 
 /** Matches every text, so the anchor tests below are about the anchors alone; the verdict has its own tests. */
 const ANY_VERDICT = { pattern: "[\\s\\S]*" };
@@ -558,8 +562,9 @@ describe("scoreImplementation", () => {
   it("kills the whole process group on timeout", async () => {
     const { repo, base } = makeBase();
     const marker = join(tmp("oracle-marker-"), "marker");
-    const code = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`)}],{stdio:'ignore'});setTimeout(()=>{},60000)`;
-    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code), timeoutMs: 500 }), { gitDir: base.gitDir });
+    // process.argv[1] is the marker, process.argv[2] the grandchild script.
+    const code = "require('child_process').spawn(process.execPath,['-e',process.argv[2],process.argv[1]],{stdio:'ignore'});setTimeout(()=>{},60000)";
+    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code, marker, DELAYED_MARKER_SCRIPT), timeoutMs: 500 }), { gitDir: base.gitDir });
     expect(r.testsPassed).toBe(false);
     await new Promise((resolve) => setTimeout(resolve, 2500));
     expect(existsSync(marker)).toBe(false);
@@ -569,8 +574,9 @@ describe("scoreImplementation", () => {
   it("kills a background grandchild after a normal exit", async () => {
     const { repo, base } = makeBase();
     const marker = join(tmp("oracle-marker-"), "marker");
-    const code = `require('child_process').spawn(process.execPath,['-e',${JSON.stringify(`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'x'),1500)`)}],{stdio:'ignore'}).unref();`;
-    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code), timeoutMs: 10_000 }), { gitDir: base.gitDir });
+    // process.argv[1] is the marker, process.argv[2] the grandchild script.
+    const code = "require('child_process').spawn(process.execPath,['-e',process.argv[2],process.argv[1]],{stdio:'ignore'}).unref();";
+    const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: node(code, marker, DELAYED_MARKER_SCRIPT), timeoutMs: 10_000 }), { gitDir: base.gitDir });
     expect(r.testsPassed).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 2500));
     expect(existsSync(marker)).toBe(false);
@@ -579,7 +585,7 @@ describe("scoreImplementation", () => {
   it("gives oracle commands a TMPDIR inside the oracle HOME, or the one passed in (R33)", async () => {
     const { repo, base } = makeBase();
     const home = tmp("oracle-home-");
-    const probe = (expected: string) => node(`const p=process.env.TMPDIR;process.exit(p===${JSON.stringify(expected)}&&require('fs').statSync(p).isDirectory()?0:1)`);
+    const probe = (expected: string) => node("const p=process.env.TMPDIR;process.exit(p===process.argv[1]&&require('fs').statSync(p).isDirectory()?0:1)", expected);
     const own = await scoreImplementation(repo, task({}, base, { kind: "implementation", command: probe(join(home, "tmp")), timeoutMs: 10_000 }), { gitDir: base.gitDir, home });
     expect(own.testsPassed).toBe(true);
     const custom = join(home, "custom-tmp");
@@ -633,7 +639,7 @@ describe("scoreImplementation", () => {
   it("applies wrap to every setup and test argv", async () => {
     const { repo, base } = makeBase();
     const log = join(tmp("oracle-wrap-"), "log");
-    const wrap = (argv: readonly string[]): string[] => node(`require('fs').appendFileSync(${JSON.stringify(log)}, process.argv.slice(1).join(' ')+'\\n')`).concat(argv);
+    const wrap = (argv: readonly string[]): string[] => node("require('fs').appendFileSync(process.argv[1], process.argv.slice(2).join(' ')+'\\n')", log).concat(argv);
     const r = await scoreImplementation(repo, task({}, base, { kind: "implementation", setup: [["setup-one", "x"]], command: ["the-command", "y"], timeoutMs: 10_000 }), { gitDir: base.gitDir, wrap });
     expect(r.testsPassed).toBe(true);
     expect(readFileSync(log, "utf8")).toBe("setup-one x\nthe-command y\n");
@@ -667,10 +673,10 @@ describe("scoreImplementation", () => {
     const home = tmp("oracle-home-");
     const homeLog = join(tmp("oracle-homelog-"), "home");
     // macOS (CoreFoundation) adds __CF_USER_TEXT_ENCODING to every process environment by itself; it is the only key ignored.
-    const check = (expectedHome: string) => node(`const e=process.env;process.exit(Object.keys(e).filter((k)=>k!=='__CF_USER_TEXT_ENCODING').sort().join()==='CI,HOME,PATH,TMPDIR'&&e.CI==='1'&&e.HOME===${JSON.stringify(expectedHome)}&&e.TMPDIR===${JSON.stringify(expectedHome)}+'/tmp'?0:1)`);
+    const check = (expectedHome: string) => node("const e=process.env;process.exit(Object.keys(e).filter((k)=>k!=='__CF_USER_TEXT_ENCODING').sort().join()==='CI,HOME,PATH,TMPDIR'&&e.CI==='1'&&e.HOME===process.argv[1]&&e.TMPDIR===process.argv[1]+'/tmp'?0:1)", expectedHome);
     const run = (command: string[], options: { home?: string } = {}) => scoreImplementation(repo, task({}, base, { kind: "implementation", command, timeoutMs: 10_000 }), { gitDir: base.gitDir, ...options });
     expect((await run(check(home), { home })).testsPassed).toBe(true);
-    expect((await run(node(`require('fs').writeFileSync(${JSON.stringify(homeLog)}, process.env.HOME)`))).testsPassed).toBe(true);
+    expect((await run(node("require('fs').writeFileSync(process.argv[1], process.env.HOME)", homeLog))).testsPassed).toBe(true);
     const used = readFileSync(homeLog, "utf8");
     expect(used).not.toBe(repo);
     expect(used.startsWith(repo)).toBe(false);

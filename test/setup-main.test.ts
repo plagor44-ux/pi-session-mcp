@@ -141,11 +141,14 @@ describe("setup executable", () => {
       `writeFileSync(${JSON.stringify(`${cleanupMarker}.tmp`)}, String(group)); renameSync(${JSON.stringify(`${cleanupMarker}.tmp`)}, ${JSON.stringify(cleanupMarker)});`,
       "kill(process.pid, 'SIGSTOP'); } } return delivered; }; } }",
     ].join("\n"));
-    const helperScript = `const fs=require('node:fs');process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(`${termMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${termMarker}.tmp`)},${JSON.stringify(termMarker)});});fs.writeFileSync(${JSON.stringify(`${marker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${marker}.tmp`)},${JSON.stringify(marker)});setInterval(()=>{},1000);`;
+    // Constant code; the marker paths and the helper script reach the children as extra arguments.
+    // The helper reads its marker and the SIGTERM marker from process.argv[1..2]; the mutation reads the
+    // guardian marker, mutation marker, helper marker, SIGTERM marker and helper script from process.argv[1..5].
+    const helperScript = "const fs=require('node:fs');process.on('SIGTERM',()=>{fs.writeFileSync(process.argv[2]+'.tmp',String(process.pid));fs.renameSync(process.argv[2]+'.tmp',process.argv[2]);});fs.writeFileSync(process.argv[1]+'.tmp',String(process.pid));fs.renameSync(process.argv[1]+'.tmp',process.argv[1]);setInterval(()=>{},1000);";
     const mutation = [
       "const {spawn}=require('node:child_process');const fs=require('node:fs');process.on('SIGTERM',()=>{});",
-      `fs.writeFileSync(${JSON.stringify(`${guardianMarker}.tmp`)},String(process.ppid));fs.renameSync(${JSON.stringify(`${guardianMarker}.tmp`)},${JSON.stringify(guardianMarker)});`,
-      `fs.writeFileSync(${JSON.stringify(`${mutationMarker}.tmp`)},String(process.pid));fs.renameSync(${JSON.stringify(`${mutationMarker}.tmp`)},${JSON.stringify(mutationMarker)});spawn(process.execPath,['-e',${JSON.stringify(helperScript)}],{stdio:'ignore'});`,
+      "fs.writeFileSync(process.argv[1]+'.tmp',String(process.ppid));fs.renameSync(process.argv[1]+'.tmp',process.argv[1]);",
+      "fs.writeFileSync(process.argv[2]+'.tmp',String(process.pid));fs.renameSync(process.argv[2]+'.tmp',process.argv[2]);spawn(process.execPath,['-e',process.argv[5],process.argv[3],process.argv[4]],{stdio:'ignore'});",
       "setInterval(()=>{},1000);",
     ].join(" ");
     process.env.PI_SESSION_MCP_CONFIG = "/SECRET/config.json";
@@ -167,7 +170,7 @@ describe("setup executable", () => {
     const createSetup = async (...args: Parameters<NonNullable<SetupMainDependencies["createSetup"]>>): Promise<SetupOrchestrator> => {
       const signal = args[4];
       return { run: async () => new DurableOwnershipStore(ownershipPath, { ...(signal ? { signal } : {}) }).transaction(async (access) => {
-        const running = access.mutationRunner!.run(process.execPath, ["-e", mutation], access.signal?.());
+        const running = access.mutationRunner!.run(process.execPath, ["-e", mutation, guardianMarker, mutationMarker, marker, termMarker, helperScript], access.signal?.());
         try {
           // Independent ownership markers let every failure path resume the guardian.
           guardianPid = await waitForPidFile(guardianMarker);
