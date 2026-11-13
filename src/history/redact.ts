@@ -1,4 +1,6 @@
 import { HISTORY_ENTRY_CAP_BYTES, MIN_KNOWN_VALUE_LENGTH, PATH_RULE_MARKER } from "./constants.js";
+import { filterGrepText, GREP_CHECK_BUDGET } from "./grep-paths.js";
+import type { PathRule } from "./path-rule.js";
 
 export type RedactionKind = "known_value" | "github_token" | "api_key" | "aws_access_key" | "slack_token" | "jwt" | "private_key" | "url_credentials" | "assignment";
 
@@ -104,20 +106,12 @@ function replaceOpaque(value: Json): Json {
   return result;
 }
 
-/** Splits a grep output line into candidate path prefixes (`path:N: text` for matches, `path-N- text` for context). */
-function grepLinePaths(line: string): string[] {
-  const candidates: string[] = [];
-  const separator = /:\d+:|-\d+-/g;
-  for (let match = separator.exec(line); match !== null; match = separator.exec(line)) candidates.push(line.slice(0, match.index));
-  return candidates;
-}
-
 export class Redactor {
   private readonly knownValues: readonly string[];
-  private readonly pathRule: (path: string) => boolean;
+  private readonly pathRule: PathRule;
   private readonly secretValues: () => readonly string[];
 
-  constructor(options: { knownValues: readonly string[]; pathRule: (path: string) => boolean; secretValues?: () => readonly string[] }) {
+  constructor(options: { knownValues: readonly string[]; pathRule: PathRule; secretValues?: () => readonly string[] }) {
     this.secretValues = options.secretValues ?? (() => []);
     this.knownValues = options.knownValues.filter((value) => value.length >= MIN_KNOWN_VALUE_LENGTH);
     this.pathRule = options.pathRule;
@@ -190,17 +184,15 @@ export class Redactor {
       delete message.details;
       return true;
     }
-    const prefix = root === undefined || root === "." || root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
+    const budget = { left: GREP_CHECK_BUDGET };
     let dropped = false;
     for (const block of message.content) {
       if (!isObject(block) || block.type !== "text" || typeof block.text !== "string") continue;
-      const kept = block.text.split("\n").filter((line) => {
-        const drop = grepLinePaths(line).some((path) => this.pathRule(path) || (prefix !== "" && this.pathRule(prefix + path)));
-        dropped ||= drop;
-        return !drop;
-      });
-      block.text = kept.join("\n");
+      const filtered = filterGrepText(block.text, root, this.pathRule, budget);
+      block.text = filtered.text;
+      dropped ||= filtered.dropped;
     }
+    // Pi's details can repeat the output (a truncation record holds the printed text).
     if (dropped) delete message.details;
     return dropped;
   }

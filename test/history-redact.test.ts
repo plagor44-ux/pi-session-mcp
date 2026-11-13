@@ -114,6 +114,88 @@ describe("history redaction", () => {
     expect(result!.json).not.toContain("CASESECRET");
   });
 
+  it("matches protected paths that contain line terminators", () => {
+    const rule = compilePathRule(["config/prod/**"]);
+    for (const path of ["secrets/part\nvisible.txt", "secrets/a\rb", "x/secrets/ y", "secrets/ ", "config/prod/a\nb/c.yaml"]) expect(rule(path), JSON.stringify(path)).toBe(true);
+    for (const path of ["notes/part\nvisible.txt", "src/a\n.ts", "secrets\nx/y"]) expect(rule(path), JSON.stringify(path)).toBe(false);
+  });
+
+  it("drops read and write content of a protected path that contains a line feed", () => {
+    const path = "secrets/part\nvisible.txt";
+    const [, read] = run(redactor(), [toolCall("r", "read", { path }), toolResult("r", "read", "LFREADSECRET")]);
+    expect(read!.droppedByPath).toBe(true);
+    expect(read!.json).not.toContain("LFREADSECRET");
+    const [write] = run(redactor(), [toolCall("w", "write", { path, content: "LFWRITESECRET" })]);
+    expect(write!.droppedByPath).toBe(true);
+    expect(write!.json).not.toContain("LFWRITESECRET");
+  });
+
+  // Pi prints `path:N: text` and `path-N- text`; a path may hold a line feed and `:N:` or `-N-` itself.
+  it.each([
+    ["a match below a protected directory", [], ".", "secrets/part\nvisible.txt:1: needle LFSECRET"],
+    ["a context line", [], ".", "secrets/part\nvisible.txt-2- LFSECRET"],
+    ["a path piece that looks like a separator", [], ".", "secrets/backup-2024-\n05:3: needle LFSECRET"],
+    ["a path that ends in a line feed", [], ".", "secrets/key\n:3: needle LFSECRET"],
+    ["a protected basename", [], ".", "kubeconfig\nprod:4: needle LFSECRET"],
+    ["a path with a leading @", [], ".", "@secrets/x\ny.txt:5: needle LFSECRET"],
+    ["a path below the search root", [], "infra", "secrets/part\nvisible.txt:1: needle LFSECRET"],
+    ["a path that only matches joined onto a normalized root", ["config/prod/app*.yaml"], "config/staging/../prod", "app\nx.yaml:1: needle LFSECRET"],
+  ])("drops grep content of a protected file whose path holds a line feed: %s", (_case, globs, root, output) => {
+    const [, result] = run(redactor(globs), [toolCall("g", "grep", { pattern: "needle", path: root }), toolResult("g", "grep", `notes/plain.txt:1: needle keep-before\n${output}`, { truncation: { content: output } })]);
+    expect(result!.json).not.toContain("LFSECRET");
+    expect(result!.json).toContain("notes/plain.txt:1: needle keep-before");
+    expect(result!.droppedByPath).toBe(true);
+  });
+
+  it("keeps grep lines of an unprotected file whose path holds a line feed", () => {
+    const output = "notes/plain.txt:1: needle keep-before\nnotes/part\nvisible.txt:1: needle keep-lf";
+    const [, result] = run(redactor(), [toolCall("g", "grep", { pattern: "needle", path: "." }), toolResult("g", "grep", output)]);
+    expect(JSON.parse(result!.json).message.content[0].text).toBe(output);
+    expect(result!.droppedByPath).toBe(false);
+  });
+
+  it("tests every separator of a grep line, overlapping ones too", () => {
+    const [, result] = run(redactor(["dump-*"]), [toolCall("g", "grep", { pattern: "x", path: "." }), toolResult("g", "grep", "src/a.ts:1: keep\ndump-1-5- OVERLAPSECRET")]);
+    expect(result!.json).not.toContain("OVERLAPSECRET");
+    expect(result!.json).toContain("src/a.ts:1: keep");
+  });
+
+  it("drops grep lines a multi-line path from a protected line could reach and keeps lines beyond the longest path", () => {
+    const filler = Array.from({ length: 60 }, (_, index) => `notes/filler.txt:${index + 1}: ${"x".repeat(80)}`);
+    const [, result] = run(redactor(), [toolCall("g", "grep", { pattern: "x", path: "." }), toolResult("g", "grep", ["secrets/a.txt:1: needle REACHSECRET", ...filler].join("\n"))]);
+    const text = JSON.parse(result!.json).message.content[0].text as string;
+    expect(text).not.toContain("REACHSECRET");
+    expect(text).not.toContain("notes/filler.txt:1: ");
+    expect(text).toContain("notes/filler.txt:60: ");
+  });
+
+  it("checks multi-line grep paths with a plain predicate as path rule", () => {
+    const r = new Redactor({ knownValues: [], pathRule: (path) => path === "dir\nsecret.txt" });
+    const [, result] = run(r, [toolCall("g", "grep", { pattern: "needle", path: "." }), toolResult("g", "grep", "src/a.ts:1: needle keep-plain\ndir\nsecret.txt:2: needle PLAINSECRET")]);
+    expect(result!.json).not.toContain("PLAINSECRET");
+    expect(result!.json).toContain("src/a.ts:1: needle keep-plain");
+  });
+
+  it("drops the rest of a grep result once checking it would exceed the work budget", () => {
+    // Lines of slashes and separators give each separator thousands of multi-line positions to test,
+    // about three times the work the budget allows.
+    const heavy = Array.from({ length: 400 }, (_, index) => `notes/heavy${index}.txt:1: ${"/:1:".repeat(120)}`);
+    const output = ["src/first.ts:1: keep-first", ...heavy, "src/last.ts:1: dropped-unchecked", "", "[notice]"].join("\n");
+    const [, result] = run(redactor(), [toolCall("g", "grep", { pattern: "x", path: "." }), toolResult("g", "grep", output)]);
+    const text = JSON.parse(result!.json).message.content[0].text as string;
+    expect(text.startsWith("src/first.ts:1: keep-first\n")).toBe(true);
+    expect(text).not.toContain("dropped-unchecked");
+    expect(text.endsWith("\n\n[notice]")).toBe(true);
+    expect(result!.droppedByPath).toBe(true);
+  });
+
+  it("keeps every line of a large ordinary grep result", () => {
+    const output = Array.from({ length: 1000 }, (_, index) => `src/module${index % 40}/file${index}.ts:${index + 1}: const value = call(arg, "a/b/c");`).join("\n");
+    const [, result] = run(redactor(), [toolCall("g", "grep", { pattern: "call", path: "." }), toolResult("g", "grep", output)]);
+    expect(JSON.parse(result!.json).message.content[0].text).toBe(output);
+    expect(result!.droppedByPath).toBe(false);
+  });
+
   it("redacts the whole userinfo of a URL whose password contains @", () => {
     const [out] = run(redactor(), [assistantText("clone https://user:p@ssw0rd@example.org/repo and http://a:b@h/")]);
     expect(out!.json).not.toContain("ssw0rd");

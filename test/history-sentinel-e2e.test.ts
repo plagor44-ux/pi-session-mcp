@@ -7,9 +7,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createGrepToolDefinition, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { runHistoryCli } from "../src/history/cli.js";
 import { PATH_RULE_MARKER } from "../src/history/constants.js";
 import { compilePathRule } from "../src/history/path-rule.js";
@@ -33,6 +33,13 @@ afterEach(() => {
   else process.env.PI_CODING_AGENT_DIR = savedAgentDir;
 });
 afterAll(removeTemporaryRoots);
+// Where rg is not installed, as on the macOS runners, the SDK downloads it on first use. Do that here,
+// so a slow download cannot use up the time limit of the test that greps.
+beforeAll(async () => {
+  const directory = await temporaryRoot("history-e2e-rg-");
+  await writeFile(join(directory, "a.txt"), "needle\n");
+  await createGrepToolDefinition(directory).execute("warm", { pattern: "needle" }, undefined, undefined, undefined as never);
+}, 300_000);
 
 type FauxResponses = Parameters<ReturnType<typeof fauxProvider>["setResponses"]>[0];
 
@@ -159,6 +166,37 @@ describe("session history sentinel end to end", () => {
       expect(output.code, argv[0]).toBe(0);
       expect(output.stdout, argv[0]).toContain("[REDACTED:github_token]");
       for (const secret of secrets) expect(`${output.stdout}${output.stderr}`, `${argv[0]}: ${secret}`).not.toContain(secret);
+    }
+  }, 30_000);
+
+  it.each([
+    ["holds a line feed", "secrets/part\nvisible.txt", "secrets/part"],
+    // Pi prints the backslash as a slash: the last line of the path reads `prod/:1: …`, which no rule protects alone.
+    ["ends in a backslash after a line feed", "kubeconfig\nprod\\", "kubeconfig"],
+  ])("keeps grep content of a protected file whose name %s out of the history file, show --full and export", async (_case, file, kept) => {
+    const secret = "line feed grep sentinel 7d3a";
+    const { home, sessionId } = await recordSession({ [file]: `needle ${secret}\n`, "notes/plain.txt": "needle plain-kept\n" }, [
+      fauxAssistantMessage([fauxToolCall("grep", { pattern: "needle", path: "." })], { stopReason: "toolUse" }),
+      fauxAssistantMessage([fauxToolCall("grep", { pattern: "needle", path: "notes" })], { stopReason: "toolUse" }),
+      fauxAssistantMessage("done"),
+    ], "Search the workspace.");
+
+    const check = await openHistoryStore({ home, readOnly: true });
+    const results = check.db.prepare("SELECT redacted_json, dropped_by_path FROM entries WHERE role = 'toolResult' ORDER BY position").all() as Array<Record<string, unknown>>;
+    check.close();
+    expect(results).toHaveLength(2);
+    // rg found the file: the first piece of its path holds no separator and stays.
+    expect(results[0]).toMatchObject({ dropped_by_path: 1 });
+    expect(String(results[0]!.redacted_json)).toContain(kept);
+    expect(results[1]).toMatchObject({ dropped_by_path: 0 });
+    expect(String(results[1]!.redacted_json)).toContain("plain.txt:1: needle plain-kept");
+
+    expectAbsentFromFiles(home, [secret]);
+    for (const argv of [["show", sessionId, "--full"], ["export", sessionId, "--format", "jsonl"]]) {
+      const output = await historyCli(home, argv);
+      expect(output.code, argv[0]).toBe(0);
+      expect(`${output.stdout}${output.stderr}`, argv[0]).not.toContain(secret);
+      if (argv[0] === "export") expect(output.stdout).toContain("plain-kept");
     }
   }, 30_000);
 });

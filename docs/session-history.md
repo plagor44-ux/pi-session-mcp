@@ -14,7 +14,7 @@ History is off by default. Tier routing in `auto` mode requires it ([ADR 0020](a
 }
 ```
 
-`redactPaths` adds globs to the built-in path rule (`.env`, `.env.*`, `*.sops.*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `kubeconfig*`). For files that match, `read`, `grep`, `edit` and `write` content is never stored. A controller can pass a short `task` label to `pi_session_start`, such as `#215`, to find sessions later.
+`redactPaths` adds globs to the built-in path rule (`.env`, `.env.*`, `*.sops.*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `kubeconfig*`). For files that match, `read`, `grep`, `edit` and `write` content is never stored, also when a path holds a line feed. A file name can hold a line feed, so grep output does not always show where a path ends: history drops every grep line that could belong to a matching file, which can drop lines of other files within 4096 characters after such a line. Checking one grep result has a fixed work budget, well above what ordinary results need; past it, the remaining lines that hold a `:N:` or `-N-` separator are dropped unchecked. A controller can pass a short `task` label to `pi_session_start`, such as `#215`, to find sessions later.
 
 The server reads the configuration once at startup; see [Configure](installation.md#2-configure) for the file location and the other fields.
 

@@ -54,6 +54,25 @@
   Entries recorded before the upgrade are not rewritten:
   `pi-session-mcp-history prune --older-than 0d --apply` deletes the closed
   sessions, or the history file can be deleted while no server runs.
+- Session history keeps the content of a protected file out of `read`,
+  `edit`, `write` and `grep` results also when the file's path holds a line
+  feed or another line terminator. The path rule's `**` did not match across
+  a line terminator, and grep lines were checked one at a time, so a path
+  that spans lines was never tested whole, and the content of a file below
+  `secrets/` whose name holds a line feed was stored. The rule now matches
+  across line terminators. A grep line cannot be split into path and text
+  with certainty, so a line is now dropped when any split makes it content of
+  a protected file: the path can end at each `:N:` or `-N-` separator of the
+  line, overlapping ones included, and start at the line itself or at an
+  earlier line that starts at most 4096 characters before that separator.
+  Each such path is read as the rule reads any path, with backslashes as
+  slashes and `.`, `..` and empty segments resolved, on its own and joined
+  onto the search root. This also drops lines of other files that follow a
+  protected line within that distance. A fixed work budget per tool result,
+  well above what ordinary results of Pi's maximum size need, bounds the
+  check; once it is spent, the remaining lines with a separator are dropped
+  unchecked. As with object keys, entries recorded before the upgrade are not
+  rewritten.
 
 ## 0.22.0 — 2026-11-13
 
