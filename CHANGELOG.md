@@ -36,6 +36,12 @@
   because Node raises an uncaught `AbortError` for such a stream. No tool
   schema, result, error code or configuration field changes.
 - Documentation only, no runtime change:
+  [Installation](docs/installation.md#container-writers) says that a Podman
+  upgrade also makes every container writer `writer_not_ready`, because
+  writer acceptance binds the Podman version, and that repeating each
+  repository's provisioning command with its existing settings accepts the
+  writers again.
+- Documentation only, no runtime change:
   [Releasing](docs/releasing.md#prepare-a-release) describes both kinds of
   release pull request, the pull request of the change that a release ships
   and a pull request of its own for changes that are already merged, which

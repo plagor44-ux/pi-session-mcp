@@ -234,6 +234,58 @@ mean they are implemented or that their gates passed.
   record ([#259](https://github.com/plagor44-ux/pi-session-mcp/issues/259)).
   A nested repository under an ignored path now blocks every non-discard
   cleanup as well. Open: #144, #221.
+- 2026-11-07: patch release 0.19.1 ships Sprint 25 (pre-release record in
+  [Acceptance](acceptance.md#v0191-pre-release-acceptance)); both
+  installations are upgraded. Open: #144, #221.
+- 2026-11-09: [#263](https://github.com/plagor44-ux/pi-session-mcp/pull/263)
+  merges the guided installation and the optional tier routing under
+  [ADR 0020](adr/0020-tier-routing.md), which the owner accepted the same day
+  (unreleased).
+  [#262](https://github.com/plagor44-ux/pi-session-mcp/issues/262) proposes an
+  optional per-profile output token cap after silent hangs of one model inside
+  tool-call arguments. Open: #144, #221, #262.
+- 2026-11-10: minor release 0.20.0 ships #263, the opt-in provider credentials
+  with the command `pi-session-mcp-provider` under
+  [ADR 0021](adr/0021-provider-credentials.md) (#265, #266, #267) and the empty
+  `.git` marker fix (#261) (records in
+  [Acceptance](acceptance.md#v0200-post-release-evidence)); both installations
+  are upgraded. The Pi SDK family moves to 1.5.2
+  ([#270](https://github.com/plagor44-ux/pi-session-mcp/issues/270), unreleased).
+  Since SDK 1.5.1 the `read` tool streams text files, which the confined
+  `read` of ADR 0013 does not
+  ([#273](https://github.com/plagor44-ux/pi-session-mcp/issues/273)). Open:
+  #144, #221, #262, #273.
+- 2026-11-11: patch release 0.20.1 ships the SDK move (#270), the documentation
+  of the credential boundaries and the README onboarding (#275, #276), one
+  report form in the bundled skills (#281) and test and CI maintenance (#272,
+  #280, #282) (records in
+  [Acceptance](acceptance.md#v0201-post-release-evidence)); both installations
+  are upgraded. A Level 3 cycle, the Claude Code wake check and the
+  multi-session skill acceptance ran on the `main` commit `93980d9` (#277).
+  Open: #144, #221, #262, #273.
+- 2026-11-12: minor release 0.21.0 ships account sign-in through
+  `pi-session-mcp-provider auth login` under
+  [ADR 0022](adr/0022-account-sign-in.md) (#290), the guided-setup fixes for
+  thinking levels and the key step (#288, #289) and the routing fixes for
+  container workspaces and routing start errors (#293, #294) (records in
+  [Acceptance](acceptance.md#v0210-post-release-evidence)); both installations
+  are upgraded. Open: #144, #221, #262, #273.
+- 2026-11-13: Sprint 26 implements the guarded stream hook of the confined
+  `read` (#273) and the optional per-profile output token cap (#262) in one
+  pull request (unreleased). The Doctor comparison of the cap with the offline
+  catalog that #262 asks for waits for a maintainer decision, because it
+  widens the catalog exception in AGENTS.md. A Podman upgrade on the
+  development host made every container writer `writer_not_ready`, because
+  acceptance binds the Podman version; the repository step accepted them
+  again, and the [installation guide](installation.md#container-writers) now
+  names this case. The sprint also found an uncaught `AbortError` in the SDK's
+  default `read` of coding sessions
+  ([#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298)), a
+  Doctor remediation for `writer_not_ready` that fails as printed
+  ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)) and a
+  needless restart request after a re-acceptance
+  ([#300](https://github.com/plagor44-ux/pi-session-mcp/issues/300)). Open:
+  #144, #221, #262, #298, #299, #300.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

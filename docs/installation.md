@@ -1213,6 +1213,13 @@ repository step between the install and the client targets:
    `--writer <name> --reset --apply` (or `--finish --apply`) each writer;
    reset copies the operator checkout's identity into the clone.
 
+Acceptance also binds the Podman version, so a Podman upgrade has the same
+effect without any package upgrade: Doctor reports every container writer
+`writer_not_ready`, and coding starts on container workspaces fail with that
+code. Repeat step 2 alone, with each repository's existing settings, including
+its image, cache, tags and base: it accepts the writers again and keeps their
+clones and the work in them.
+
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases
 before this fix did, so with two or more container repositories no repository
