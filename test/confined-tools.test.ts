@@ -255,6 +255,38 @@ describe("confined tools", () => {
       spy.mockRestore();
     }
   });
+
+  it.each(["before the call", "while the file opens"])("refuses a signal aborted %s without creating a stream", async (when) => {
+    const path = join(workspace, "mixed", "own.txt");
+    const sample = await open(path, "r");
+    const prototype = Object.getPrototypeOf(sample) as FileHandle;
+    await sample.close();
+    const controller = new AbortController();
+    const originalStat = prototype.stat;
+    const opened: FileHandle[] = [];
+    const stat = vi.spyOn(prototype, "stat").mockImplementation(async function (this: FileHandle, options) {
+      opened.push(this);
+      const stats = await originalStat.call(this, options);
+      // The abort lands after the file is open and before its stream exists.
+      if (when === "while the file opens") controller.abort();
+      return stats;
+    });
+    const createReadStream = vi.spyOn(prototype, "createReadStream");
+    if (when === "before the call") controller.abort();
+    try {
+      const consume = async (): Promise<void> => {
+        for await (const _chunk of confinedOperations(roots).read.createReadStream(path, { signal: controller.signal })) { /* no chunk is expected */ }
+      };
+      await expect(consume()).rejects.toMatchObject({ name: "AbortError" });
+      // A stream created with an aborted signal raises a second, uncaught AbortError: none may be created.
+      expect(createReadStream).not.toHaveBeenCalled();
+      expect(opened).toHaveLength(when === "before the call" ? 0 : 1);
+      expect(opened.every((handle) => handle.fd === -1)).toBe(true);
+    } finally {
+      stat.mockRestore();
+      createReadStream.mockRestore();
+    }
+  });
 });
 
 describe("allowedReadRoots protected paths", () => {

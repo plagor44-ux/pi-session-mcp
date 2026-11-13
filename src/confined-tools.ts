@@ -113,10 +113,14 @@ export function confinedOperations(roots: readonly string[]): {
       readFile: (path) => guard(path, () => readFile(path)),
       createReadStream: async function* (path, { signal }) {
         await checkAbsolute(path, roots);
+        signal?.throwIfAborted();
         const handle = await open(path, "r");
         try {
           const stats = await handle.stat();
           const end = stats.isFile() && stats.size > 0 ? stats.size - 1 : undefined;
+          // A stream created with an already aborted signal raises a second AbortError that no
+          // listener catches, so refuse it here, synchronously before the stream exists.
+          signal?.throwIfAborted();
           yield* handle.createReadStream({ end, signal, autoClose: false });
         } finally {
           await handle.close();

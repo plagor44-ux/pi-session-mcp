@@ -4,6 +4,17 @@
 
 ### Changed
 
+- Read-only sessions stream `read` through a guarded hook
+  ([#273](https://github.com/plagor44-ux/pi-session-mcp/issues/273),
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)). The read
+  confinement now provides `read.createReadStream`, so a text range that the
+  SDK streams no longer loads the whole file through `readFile`; images and
+  ranges the SDK does not stream still use the guarded `readFile`. The hook
+  checks the path against the read roots before it opens the file, ends on the
+  abort signal and closes the file on every exit. Unlike the SDK's default, it
+  refuses a signal that is already aborted before it creates the stream,
+  because Node raises an uncaught `AbortError` for such a stream. No tool
+  schema, result, error code or configuration field changes.
 - Documentation only, no runtime change:
   [Releasing](docs/releasing.md#prepare-a-release) describes both kinds of
   release pull request, the pull request of the change that a release ships
