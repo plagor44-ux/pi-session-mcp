@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Fixed
+
+- An abort while a coding session's `read` opens its file no longer ends the
+  server ([#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298),
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md#amendment-2026-11-10-operations-hooks-under-pi-sdk-152)).
+  Coding sessions used the SDK's own `read` with its default operations. When
+  `pi_session_abort` or the turn deadline fired after the tool's own abort
+  checks and before its stream existed, that is while `read` detected the
+  image type or opened the file, the SDK created the stream on the aborted
+  signal. Node destroyed it with an `AbortError` that no listener caught, and
+  the process ended: the host server with all of its sessions, or the inner
+  server of a container writer. Coding sessions now get the server's own
+  `read`: the SDK's tool over the SDK's default operations, except that its
+  stream, the one of the confined `read` (#273), refuses an aborted signal
+  before it creates the stream, so the turn ends `aborted`. Its paths stay
+  unconfined, as with the built-in, and the other coding tools stay the SDK's
+  own. No Pi SDK release after 1.5.2 checks the signal itself, so the fix is
+  in the server. No tool schema, result, error code or configuration field
+  changes.
+
 ## 0.22.0 — 2026-11-13
 
 Minor release, because the public contract grows additively: the optional

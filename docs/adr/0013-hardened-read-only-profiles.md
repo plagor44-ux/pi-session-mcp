@@ -328,6 +328,21 @@ refuses a signal that is already aborted before it creates the stream: Node
 raises a second, uncaught `AbortError` for a stream created with an aborted
 signal.
 
+2026-11-13, #298: coding sessions now get a `read` of the server's own as well.
+It is the SDK's `read` over the SDK's default operations, except that its
+stream is the one above (`src/read-operations.ts`, shared with the confined
+hook). With the SDK's default stream, `pi_session_abort` or the turn deadline
+ended the server process when it fired while `read` detected the image type or
+opened the file: the tool checks its signal before both, and the default
+creates the stream on the aborted signal. Paths of the coding `read` stay
+unconfined, as with the built-in it replaces, and the other coding tools stay
+the SDK's built-ins. Two routes could fix it: an SDK release that checks the
+signal itself, adopted through a dependency update, or the server's own read
+operations for coding sessions. No Pi SDK release after 1.5.2 has the check, so
+the server takes the second route; it uses only exports of the package root,
+as the confined tools do. Once an SDK release has the check, a dependency
+update can return coding sessions to the built-in `read`.
+
 ### Amendment 2026-11-13: memory limit of 2 GiB
 
 Issue #301, maintainer decision of 2026-11-13. The 1 GiB of the
@@ -397,4 +412,6 @@ not itself bump the version or authorize publication.
   process with the operator's rights (ADR 0006/0010); confinement covers the
   built-in tools only.
 - macOS, a VM backend and network allowlists inside the sandbox are out of
-  scope. Coding profiles are unchanged (ADR 0008/0009).
+  scope. Coding profiles are unchanged (ADR 0008/0009), except for the `read`
+  of #298 in the
+  [amendment of 2026-11-10](#amendment-2026-11-10-operations-hooks-under-pi-sdk-152).
