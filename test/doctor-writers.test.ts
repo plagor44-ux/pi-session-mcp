@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import fsPromises from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import type { AppConfig } from "../src/config.js";
-import { renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorDependencies } from "../src/doctor.js";
+import { podmanImageExists, renderDoctorHuman, renderDoctorJson, runDoctor, type DoctorDependencies } from "../src/doctor.js";
 import { LEASE_DIRECTORY } from "../src/writer-lease.js";
 import { currentAcceptanceFingerprint, currentAcceptanceRecord, writeWriterAcceptanceRecord } from "../src/writer-state.js";
 import { writerPaths, writeWriterState, type WriterState } from "../src/writer-state.js";
@@ -58,6 +58,21 @@ it("names Podman drift and prints the repository remediation", async () => {
 it("reports missing images separately and asks to restore them", async () => {
   const f = await fixture(); await f.ready();
   expect(await f.check("5.4.0", false)).toContainEqual(expect.objectContaining({ reason: "image_missing", remediation: expect.stringContaining("restore the writer's recorded image") }));
+});
+it.each([
+  ["exit 0", async () => ({ exitCode: 0, stdout: "", stderr: "" }), undefined],
+  ["exit 1", async () => ({ exitCode: 1, stdout: "", stderr: "" }), "image_missing"],
+  ["exit 125", async () => ({ exitCode: 125, stdout: "", stderr: "" }), "runtime_unavailable"],
+  ["a timeout", async () => { throw new Error("aborted"); }, "runtime_unavailable"],
+] as const)("maps an image check with %s like setup does", async (_label, result, reason) => {
+  const f = await fixture(); await f.ready();
+  const run = vi.fn(result);
+  const report = await f.run({ writerRuntime: async () => ({ podmanVersion: "5.4.0", imageExists: podmanImageExists({ run }) }) });
+  expect(run).toHaveBeenCalledWith("podman", ["image", "exists", f.state.imageId], expect.any(AbortSignal));
+  const check = report.checks.find((c) => c.id === "writer_not_ready");
+  if (reason === undefined) expect(check).toEqual(expect.objectContaining({ severity: "ok" }));
+  else expect(check).toEqual(expect.objectContaining({ severity: "error", reason }));
+  if (reason === "runtime_unavailable") expect(check?.remediation).toBe("make rootless Podman usable, then run pi-session-mcp-setup --repo repo --apply");
 });
 it("reports unreadable state without recommending recreate", async () => {
   const f = await fixture(); await f.ready();

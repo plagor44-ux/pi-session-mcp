@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { homedir, userInfo } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
+import type { CommandRunner } from "./client-adapters/types.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
@@ -317,13 +318,22 @@ async function snapshotChecks(config: AppConfig, home: string): Promise<DoctorCh
   return checks;
 }
 
+/**
+ * Only exit status 1 of `podman image exists` means the image is absent, as in setup's acceptance check. Any other
+ * status, a failed start or the timeout throws, so the writer's reason becomes `runtime_unavailable`, not `image_missing`.
+ */
+export function podmanImageExists(runner: CommandRunner): (id: string) => Promise<boolean> {
+  return async (id) => {
+    const { exitCode } = await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000));
+    if (exitCode !== 0 && exitCode !== 1) throw new Error("podman_image_check_failed");
+    return exitCode === 0;
+  };
+}
+
 async function defaultWriterRuntime() {
   const runner = createProcessRunner();
   const info = await podmanInfo(runner);
-  return { ...(info.version ? { podmanVersion: info.version } : {}), imageExists: async (id: string) => {
-    try { return (await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000))).exitCode === 0; }
-    catch { return false; }
-  } };
+  return { ...(info.version ? { podmanVersion: info.version } : {}), imageExists: podmanImageExists(runner) };
 }
 
 async function writerGitIdentity(clone: string): Promise<boolean> {

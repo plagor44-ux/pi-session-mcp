@@ -27,6 +27,9 @@ subject in human output. Precedence is `not_provisioned`, `state_unreadable` or
 `state_invalid`, then `not_accepted`, `runtime_unavailable`, `image_missing`,
 then the first changed binding: `package_version`, `podman_version`,
 `event_delivery`, `wrapper_changed`, or `acceptance_changed` if unknown.
+`image_missing` needs exit status 1 from `podman image exists`; any other
+status, a failed start or the 10-second timeout reports `runtime_unavailable`,
+as setup's acceptance check treats them.
 The optional versioned `acceptance-record.json` sidecar binds diagnostic inputs
 to the state's fingerprint; missing, invalid, unreadable or mismatched records
 are ignored. Admission and the rollback-compatible state schema are unchanged.
