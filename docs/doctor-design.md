@@ -1,8 +1,14 @@
 # Offline doctor contract
 
 `src/doctor-cli.ts` is a separate local entry point. It never imports the MCP
-server, initializes transport, creates a Pi session, reads credentials, or
-performs network activity.
+server, initializes transport, creates a Pi session, prints credentials, or
+performs network activity. It reads stored credential records only
+in-process: the `provider_store` check validates the provider store, and when
+a profile sets `maxOutputTokens`, Doctor restores Pi's stored model catalog
+once, offline, to compare each cap with the model's output limit
+(`max_output_tokens_unsupported`). That restore makes no network request and
+no credential refresh; a catalog that cannot be read within 10 seconds only
+produces warnings.
 It checks the package it was loaded from, never the current working
 directory: an npm executable can run from any directory.
 
@@ -59,6 +65,7 @@ The initial IDs and owners are:
 | `writer_git_identity_missing` | Clone Git config lacks a readable user name and email (warning); set both in the operator checkout, then reset the writer | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning). It reads only `HEAD` and refs, never the index or worktree, so an `ok` result is no proof of a clean clone and never authorizes cleanup; the boundary inspection does (#200) | validated writer name |
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
+| `max_output_tokens_unsupported` | For each profile setting `maxOutputTokens`: error if it exceeds the stored model output limit; warning if the offline comparison is unavailable or lacks a usable limit; otherwise ok | profile alias |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
 | `extension_unpinned` | Warning. Pi's agent settings list a configured pinned extension without a version, as a string or object's `source`; pin it with `pi install npm:<name>@<version>`. Missing, unreadable, or invalid settings are ignored | `<profile>:<package>` |

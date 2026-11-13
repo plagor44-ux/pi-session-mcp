@@ -1,6 +1,6 @@
 import type { Provider } from "@earendil-works/pi-ai";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { AUTH_CHECK_TIMEOUT_MS, createModelCatalog, type CatalogProvider, type CatalogRuntime, type ModelCatalog } from "../src/model-catalog.js";
+import { AUTH_CHECK_TIMEOUT_MS, createModelCatalog, readCatalogOutputLimits, type CatalogProvider, type CatalogRuntime, type ModelCatalog } from "../src/model-catalog.js";
 import { catalogReport, formatCatalogHuman } from "../src/setup-probe-result.js";
 
 vi.mock("../src/provider-store.js", () => ({
@@ -53,6 +53,32 @@ describe("model catalog report", () => {
     expect(human).toContain("example-provider (auth: yes): m-large, m-small");
     expect(human).toContain("Providers registered only by Pi extensions are not listed.");
     expect(human).not.toMatch(/\/[A-Za-z0-9_.-]+\//);
+  });
+});
+
+describe("readCatalogOutputLimits", () => {
+  it("reads only valid limits and applies provider definitions without checking auth", async () => {
+    const providers = [{ id: "built" }];
+    const checkAuth = vi.fn(async () => "api_key");
+    const runtime: CatalogRuntime = {
+      getProviders: () => providers,
+      getModels: (id) => id === "custom" ? [{ id: "custom-model", maxTokens: 55 }] : [
+        { id: "good", maxTokens: 42 }, ...[0, -1, 1.5, "3", Number.MAX_SAFE_INTEGER + 1].map((maxTokens, i) => ({ id: `bad${i}`, maxTokens })),
+      ],
+      registerProvider: () => { providers.push({ id: "custom" }); },
+      checkAuth,
+    };
+    const lookup = await readCatalogOutputLimits(async () => runtime, async () => ({
+      apply: async (r) => { r.registerProvider("custom", {} as never); }, source: () => "inherit", blocked: () => false, boundaryCredentials: () => ({}), definitions: () => [],
+    }));
+    expect(lookup("built", "good")).toBe(42);
+    expect(lookup("custom", "custom-model")).toBe(55);
+    expect(lookup("missing", "good")).toBeUndefined();
+    expect(lookup("built", "missing")).toBeUndefined();
+    for (let i = 0; i < 5; i++) expect(lookup("built", `bad${i}`)).toBeUndefined();
+    const fallback = await readCatalogOutputLimits(async () => runtime, async () => { throw new Error("unavailable"); });
+    expect(fallback("built", "good")).toBe(42);
+    expect(checkAuth).not.toHaveBeenCalled();
   });
 });
 

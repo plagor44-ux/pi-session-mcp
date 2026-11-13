@@ -557,9 +557,12 @@ Rules:
   A value that is not a positive safe integer fails startup with
   `invalid_execution_profile_config` (Doctor validates offline). A value above
   the resolved model's catalog maximum fails session start with
-  `max_output_tokens_unsupported`; there is no clamping, and Doctor does not
-  compare the value with the catalog. Capabilities publish the number or
-  `null`. Older releases reject this configuration field. Re-provision
+  `max_output_tokens_unsupported`; there is no clamping. Doctor compares the
+  value offline with Pi's stored catalog and reports
+  `max_output_tokens_unsupported` as an error above the model's maximum and as
+  a warning when the stored catalog does not list the model or cannot be read.
+  Capabilities publish the number or `null`. Older releases reject this
+  configuration field. Re-provision
   existing writers after setting or changing it, or admission refuses them as
   `settingsChanged`. A cap also cuts legitimate large output and generally
   counts thinking tokens. A truncated legitimate tool call is not executed,

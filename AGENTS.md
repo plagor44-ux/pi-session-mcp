@@ -42,7 +42,9 @@
   only (maintainer-approved 2026-11-11, #288). It may also read offline
   whether each provider declares account sign-in (`auth.oauth` on the entries
   of `getProviders()`), for the provider CLI and the guided setup only
-  (ADR 0022). The session
+  (ADR 0022). It may also read each model's output token limit (`maxTokens`)
+  offline, for Doctor's comparison with a profile's `maxOutputTokens` only
+  (maintainer-approved 2026-11-13, #262). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
   (maintainer-approved 2026-10-30, #199). A third narrow exception is the

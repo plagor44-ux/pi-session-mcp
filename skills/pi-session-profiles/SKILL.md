@@ -54,7 +54,7 @@ when renaming or retiring a profile, and reconnect clients after changes. An
 unknown alias makes routing inactive. Use `pi-session-mcp-routing status` to
 inspect routing and see [ADR 0020](../../docs/adr/0020-tier-routing.md).
 
-An optional `maxOutputTokens` is a positive safe integer per-profile cap, absent by default. It must not exceed the model's catalog maximum; Doctor does not check that comparison. Re-provision writers after changing it. The cap also cuts legitimate large output and generally counts thinking tokens. A truncated legitimate tool call is not executed, costs another model step and may be repeated. A cap only helps well below what the idle timeout already bounds: at 137 tokens per second, 40,000 tokens take about 290 seconds.
+An optional `maxOutputTokens` is a positive safe integer per-profile cap, absent by default. It must not exceed the model's catalog maximum; Doctor checks that comparison against the stored catalog offline and warns when it cannot compare. Re-provision writers after changing it. The cap also cuts legitimate large output and generally counts thinking tokens. A truncated legitimate tool call is not executed, costs another model step and may be repeated. A cap only helps well below what the idle timeout already bounds: at 137 tokens per second, 40,000 tokens take about 290 seconds.
 
 Before deleting a profile, check every container repository's selection. If any
 still selects it, stop and ask. Deleting an unselected profile needs no stop.

@@ -1,6 +1,7 @@
 /**
  * Offline view of Pi's model registry behind an injectable interface, so tests and callers need no
- * provider credentials. Only documented package-root exports of the SDK are used.
+ * provider credentials. Also reads output token limits offline for Doctor's profile comparison.
+ * Only documented package-root exports of the SDK are used.
  */
 import { THINKING_LEVELS, type ThinkingLevel } from "./execution-profile.js";
 import { loadRuntimeProviderPolicy, type ProviderPolicy, type ProviderPolicyRuntime } from "./provider-store.js";
@@ -29,6 +30,7 @@ export interface PricedModelCatalog extends ModelCatalog {
 /** A model entry as the catalog reads it. The thinking fields are only handed to Pi's own rules below. */
 export interface CatalogModel {
   readonly id: string;
+  readonly maxTokens?: unknown;
   readonly cost?: { readonly output?: unknown };
   readonly reasoning?: unknown;
   readonly thinkingLevelMap?: unknown;
@@ -99,6 +101,32 @@ export async function catalogBuiltInProviderIds(
     setRuntimeApiKey: (...args) => { if (!runtime.setRuntimeApiKey) throw new Error("provider_store_unavailable"); return runtime.setRuntimeApiKey(...args); },
   });
   return ids;
+}
+
+/** Offline output limits for Doctor only; no authentication lookup or network refresh. */
+export async function readCatalogOutputLimits(
+  createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime,
+  policyFactory: () => Promise<ProviderPolicy> = loadRuntimeProviderPolicy,
+): Promise<(providerId: string, modelId: string) => number | undefined> {
+  const runtime = await createRuntime();
+  try {
+    const policy = await policyFactory();
+    await policy.apply({
+      getProviders: () => runtime.getProviders(),
+      registerProvider: (...args) => { if (!runtime.registerProvider) throw new Error("provider_store_unavailable"); runtime.registerProvider(...args); },
+      setRuntimeApiKey: (...args) => { if (!runtime.setRuntimeApiKey) throw new Error("provider_store_unavailable"); return runtime.setRuntimeApiKey(...args); },
+    });
+  } catch { /* Built-in catalog entries remain usable. */ }
+  const limits = new Map<string, Map<string, number>>();
+  for (const provider of runtime.getProviders()) {
+    const models = new Map<string, number>();
+    for (const model of runtime.getModels(provider.id)) {
+      const value = model.maxTokens;
+      if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) models.set(model.id, value);
+    }
+    limits.set(provider.id, models);
+  }
+  return (providerId, modelId) => limits.get(providerId)?.get(modelId);
 }
 
 const compareIds = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
