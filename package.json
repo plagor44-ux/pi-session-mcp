@@ -1,6 +1,6 @@
 {
   "name": "pi-session-mcp",
-  "version": "0.21.0",
+  "version": "0.22.0",
   "description": "Local stdio MCP server that lets Codex and Claude Code delegate work to configured Pi coding-agent sessions",
   "license": "MIT",
   "keywords": [

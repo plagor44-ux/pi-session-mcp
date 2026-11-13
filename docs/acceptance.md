@@ -790,9 +790,10 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own. `0.20.1` and `0.21.0`, released from later commits, have none; see
-[the record of `0.20.1`](#v0201-pre-release-acceptance) and
-[that of `0.21.0`](#v0210-pre-release-acceptance).
+its own. `0.20.1`, `0.21.0` and `0.22.0`, released from later commits, have
+none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
+[that of `0.21.0`](#v0210-pre-release-acceptance) and
+[that of `0.22.0`](#v0220-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2664,6 +2665,38 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.22.0 pre-release acceptance
+
+The minor release `0.22.0` ships what `main` holds after `v0.21.0`: the
+post-release evidence of `0.21.0` and the release guide's pull request of its
+own (PR #297), the streamed `read` of read-only sessions and the per-profile
+output cap (PR #302), and Sprint 27 with Doctor's comparison of that cap, the
+cause of `writer_not_ready`, the repository step without repeated settings,
+the 2 GiB memory limit of the sandboxed shell and the catalog reads without
+stored credentials (PR #305). Its own pull request, on the branch
+`chore/release-0.22.0` on top of `main` at `478b71b`, carries a commit that
+patches the development-only advisories of `hono` and `@hono/node-server` in
+the lockfile, then the version commit with the changelog heading and this
+record. The version commit also
+restores the changelog heading of `0.21.0`, which a commit of PR #305 had
+replaced. The public contract grows additively; ADR 0003 requires a minor
+release for that, and the maintainer decided on `0.22.0`.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits after `v0.21.0` change the
+read confinement, session creation, Doctor, the repository step, writer
+acceptance, the sandboxed shell and the offline model catalog.
+
+Not established for `0.22.0`: a Level 3 cycle on the release; any turn against
+a real provider on the release, including a session of a profile with
+`maxOutputTokens` and a streamed `read` in a real read-only session; Doctor's
+comparison against an operator's stored catalog for a profile that sets
+`maxOutputTokens`; the cause of `writer_not_ready` and the repository step
+without repeated settings on installed writers, which the upgrade after
+publishing exercises; the server host; macOS outside CI; and the
+published-release Level 2 and the upgrades, which follow after publishing.
 
 ### v0.21.0 post-release evidence
 

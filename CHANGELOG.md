@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.22.0 — 2026-11-13
+
+Minor release, because the public contract grows additively: the optional
+per-profile output cap `maxOutputTokens`, which `pi_capabilities_get`
+publishes for every profile, with the new start error and Doctor check
+`max_output_tokens_unsupported` (#262), and the count `notReady` in
+`writer_unavailable` with the optional field `reason` of Doctor's
+`writer_not_ready` check (#299). It also ships the repository step without
+repeated settings (#300), the 2 GiB memory limit of the sandboxed shell
+(#301), the streamed `read` of read-only sessions (#273) and catalog reads
+that no longer run a command-valued key from Pi's credential store (#304). No
+tool or state is new. No full live two-client cycle ran on this release; see
+the [acceptance record](docs/acceptance.md#v0220-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade); from this release on,
+`pi-session-mcp-setup --repo <alias> --apply` reuses the recorded settings.
+Applying the client targets installs the changed controller skills; an
+override of yours stays untouched, and Doctor warns with
+`skill_override_outdated`. Set `maxOutputTokens` only after the upgrade,
+because earlier releases reject the field. **Rollback note:** remove
+`maxOutputTokens` from the configuration, then reinstall 0.21.0. It ignores
+the writers' `acceptance-record.json`; no other stored format changes.
+
 ### Added
 
 - Optional per-profile output token cap
@@ -86,7 +110,6 @@
   `pi-session-mcp-provider list` and guided setup still report authentication
   presence and resolve stored keys as Pi does; AGENTS.md and the installation
   guide now say so instead of calling the resolution in-process.
-
 - Doctor names why a container writer is `writer_not_ready`, and its
   remediation works as printed
   ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)). The
@@ -126,6 +149,8 @@
   2.1.5 → 2.1.8 (GHSA-qv5m-9pm6-hqp3, GHSA-jpvv-r467-5p4w), both via MCP
   Inspector. Nothing in the production install path changes; `npm audit` and
   `npm audit --omit=dev` report 0 vulnerabilities.
+
+## 0.21.0 — 2026-11-12
 
 Minor release by maintainer decision for
 [ADR 0022](docs/adr/0022-account-sign-in.md)
