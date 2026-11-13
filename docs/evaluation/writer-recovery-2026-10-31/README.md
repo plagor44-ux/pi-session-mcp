@@ -82,7 +82,7 @@ were:
 The controller re-ran on the host:
 
 - Node `v26.12.1`, Git `2.56.0`;
-- `uname -sr`: `Linux 7.3.0-5-cachyos`;
+- `uname -sr`: `Linux 7.3.0`;
 - result: 21 recovery tests and 31 collect tests, 52 of 52 passed;
 - `tsc --noEmit`: clean.
 

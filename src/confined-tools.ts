@@ -1,4 +1,4 @@
-import { access, open, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import {
@@ -13,6 +13,7 @@ import {
   type Skill,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import { streamLocalFile, type Decided } from "./read-operations.js";
 
 /** Fixed refusal text; it never names the refused path. */
 export const OUTSIDE_ROOTS_MESSAGE = "Path is outside the allowed read roots";
@@ -89,15 +90,8 @@ async function checkAbsolute(path: string, roots: readonly string[]): Promise<vo
 }
 
 /**
- * Every hook of an SDK operations interface, decided: guarded here, or named in `Omitted` and left out.
- * A hook that a later SDK adds, optional or not, is missing from the object below and fails the typecheck
- * (and therefore the Pi SDK canary) instead of going unnoticed. The check goes by hook name: an existing hook
- * whose parameters change still compiles.
- */
-type Decided<Operations, Omitted extends keyof Operations = never> = Required<Omit<Operations, Omitted>> & { [Hook in Omitted]?: never };
-
-/**
  * The `*Operations` hooks that re-check every absolute path the SDK hands them; exported for tests.
+ * Each is `Decided` (see `read-operations.ts`): a hook a later SDK adds fails the typecheck.
  * The SDK takes a tool's operations as a whole (`options.operations ?? defaults`), so a hook left out
  * here is absent and never replaced by the SDK's unconfined default. `read.createReadStream` is guarded.
  * Only `grep.readFile` is left out: ignored since SDK 1.5.1. `rg` emits the context lines itself, so the only path
@@ -113,18 +107,8 @@ export function confinedOperations(roots: readonly string[]): {
       readFile: (path) => guard(path, () => readFile(path)),
       createReadStream: async function* (path, { signal }) {
         await checkAbsolute(path, roots);
-        signal?.throwIfAborted();
-        const handle = await open(path, "r");
-        try {
-          const stats = await handle.stat();
-          const end = stats.isFile() && stats.size > 0 ? stats.size - 1 : undefined;
-          // A stream created with an already aborted signal raises a second AbortError that no
-          // listener catches, so refuse it here, synchronously before the stream exists.
-          signal?.throwIfAborted();
-          yield* handle.createReadStream({ end, signal, autoClose: false });
-        } finally {
-          await handle.close();
-        }
+        // The stream of the coding read as well: it refuses an aborted signal before the stream exists.
+        yield* streamLocalFile(path, signal);
       },
       detectImageMimeType: (path) => guard(path, () => detectSupportedImageMimeTypeFromFile(path)),
     },

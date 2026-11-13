@@ -48,6 +48,7 @@ import {
 } from "./pi-adapter.js";
 import { resolvePiExtension } from "./pi-extensions.js";
 import { loadSelectedSkills, PiSkillError } from "./pi-skills.js";
+import { createCodingReadTool } from "./read-operations.js";
 import { accountHome, createSandboxedBashOperations, probeSandbox, sandboxProtection, type SandboxDependencies, type SandboxProtection } from "./sandbox-shell.js";
 import { composeSessionTools, profileTools } from "./session-tools.js";
 
@@ -503,10 +504,10 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "resource_loader", "pi_session_creation_failed");
     }
 
-    const confined = await this.confinedTools(input, skills);
+    const own = await this.ownTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
     const tools = [...profileTools(executionProfile.permissionProfile, executionProfile.shell), ...mcpTools.tools.map((tool) => tool.name)];
-    const customTools = [...confined, ...mcpTools.tools];
+    const customTools = [...own, ...mcpTools.tools];
     let session: AgentSession;
     try {
       ({ session } = await withCreationDeadline(
@@ -529,7 +530,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "create_session", "pi_session_creation_failed");
     }
     return this.admit(session, executionProfile, tools, mcpTools, () => disposeSdkSession(session),
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills, [], confined);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : undefined, "exact", skills, [], own);
   }
 
   private async createWithExtensions(
@@ -577,9 +578,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_load", "extension_load_failed");
     }
     const model = await this.resolveVerifiedModel(services.modelRuntime, executionProfile);
-    const confined = await this.confinedTools(input, skills);
+    const own = await this.ownTools(input, skills);
     const mcpTools = await this.connectMcpTools(input);
-    const customTools = [...confined, ...mcpTools.tools];
+    const customTools = [...own, ...mcpTools.tools];
     const grantedTools = executionProfile.grantedExtensionTools ?? [];
     const composed = composeSessionTools(executionProfile.permissionProfile, mcpTools.tools.map((tool) => tool.name), extensionTools, grantedTools, executionProfile.shell);
     if (!composed.ok) {
@@ -643,17 +644,19 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "extension_bind", "extension_tool_conflict");
     }
     return this.admit(sessionRuntime.session, executionProfile, tools, mcpTools, disposeRuntime,
-      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools, confined);
+      mcpTools.tools.length > 0 ? "external_mcp_activation_mismatch" : "execution_selection_mismatch", "subset", skills, grantedTools, own);
   }
 
   /**
-   * The server's own tool definitions of a read-only session (ADR 0013); none for coding. The workspace
-   * root is the session directory: a root that cannot be resolved fails the start. With a sandboxed shell
-   * the sandbox is probed first, and a profile whose sandbox cannot start never gets a session.
+   * The server's own tool definitions, which replace the SDK built-ins of the same names. A coding session
+   * gets only `read`, whose stream refuses an aborted signal (#298). A read-only session gets the confined
+   * read tools (ADR 0013); the workspace root is the session directory, and a root that cannot be resolved
+   * fails the start. With a sandboxed shell the sandbox is probed first, and a profile whose sandbox cannot
+   * start never gets a session.
    */
-  private async confinedTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
+  private async ownTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }, skills: readonly Skill[]): Promise<ToolDefinition[]> {
     const { executionProfile } = input;
-    if (executionProfile.permissionProfile !== "read-only") return [];
+    if (executionProfile.permissionProfile === "coding") return [createCodingReadTool(input.cwd)];
     let roots: string[];
     try {
       roots = await allowedReadRoots(input.cwd, skills, this.protectedReadPaths, [providerStoreDirectory(accountHome())]);

@@ -946,7 +946,7 @@ describe("sandboxed shell", () => {
     await createIn(adapter, { ...profile, permissionProfile: "coding" });
     expect(sandbox.spawned).toHaveLength(0);
     expect(createSession.mock.calls[0]![0].customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
-    expect(createSession.mock.calls[1]![0]).not.toHaveProperty("customTools");
+    expect(createSession.mock.calls[1]![0].customTools?.map((tool) => tool.name)).toEqual(["read"]);
   });
 
   it.each([
@@ -1141,14 +1141,39 @@ describe("confined read-only tools", () => {
     expect(options.tools).toEqual(PROFILE_TOOLS["read-only"]);
   });
 
-  it("passes no custom tools to a coding session", async () => {
+  it("passes only the server's own read to a coding session (#298)", async () => {
     const fixture = runtimeFixture();
     const { session } = sessionFixture();
     const createSession = createSessionFixture(session);
     await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }), { ...profile, permissionProfile: "coding" });
     const options = createSession.mock.calls[0]![0];
-    expect(options).not.toHaveProperty("customTools");
+    expect(options.customTools?.map((tool) => tool.name)).toEqual(["read"]);
     expect(options.tools).toEqual(PROFILE_TOOLS.coding);
+  });
+
+  it("keeps the read of a coding session unconfined, as the built-in it replaces", async () => {
+    const outside = await temporaryRoot("sdk-adapter-outside-");
+    await writeFile(join(outside, "notes.txt"), "outside the workspace\n");
+    const fixture = runtimeFixture();
+    const { session } = sessionFixture();
+    const createSession = createSessionFixture(session);
+    await createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }), { ...profile, permissionProfile: "coding" });
+    const read = createSession.mock.calls[0]![0].customTools!.find((tool) => tool.name === "read")!;
+    const result = await (read.execute as unknown as (...args: unknown[]) => Promise<{ content: { type: string; text?: string }[] }>)(
+      "call", { path: join(outside, "notes.txt") }, undefined, undefined, undefined);
+    expect(result.content).toEqual([{ type: "text", text: "outside the workspace\n" }]);
+  });
+
+  it("fails the start when the session resolves another definition for the read of a coding session", async () => {
+    const fixture = runtimeFixture();
+    const { session, dispose } = sessionFixture();
+    const createSession = vi.fn(async (options: CreateAgentSessionOptions): Promise<CreateAgentSessionResult> => {
+      Object.assign(session as object, { getToolDefinition: (name: string) => name === "read" ? { name } : options.customTools?.find((tool) => tool.name === name) });
+      return { session } as unknown as CreateAgentSessionResult;
+    });
+    await expect(createIn(new SdkPiSessionAdapter({ modelRuntimeFactory: async () => fixture.runtime, createSession }), { ...profile, permissionProfile: "coding" }))
+      .rejects.toMatchObject({ code: "pi_session_creation_failed" });
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   it("puts the confined tools ahead of granted MCP tools", async () => {
@@ -1158,13 +1183,13 @@ describe("confined read-only tools", () => {
     expect(options.customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls", "mcp_knowledge_search"]);
   });
 
-  it("passes the confined tools through the extension path of a read-only session only", async () => {
+  it("passes the server's own tools through the extension path: the confined ones for read-only, read for coding", async () => {
     const readOnly = extensionHarness();
     await readOnly.create();
     expect((readOnly.createSessionFromServices.mock.calls[0]![0] as { customTools?: { name: string }[] }).customTools?.map((tool) => tool.name)).toEqual(["read", "grep", "find", "ls"]);
     const coding = extensionHarness({ permissionProfile: "coding" });
     await coding.create();
-    expect(coding.createSessionFromServices.mock.calls[0]![0]).not.toHaveProperty("customTools");
+    expect((coding.createSessionFromServices.mock.calls[0]![0] as { customTools?: { name: string }[] }).customTools?.map((tool) => tool.name)).toEqual(["read"]);
   });
 
   it("fails the start when the session resolves another definition for a confined name", async () => {
