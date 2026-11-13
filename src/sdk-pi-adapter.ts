@@ -728,6 +728,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
       throw this.failure(executionProfile, "model", "pi_session_creation_failed");
     }
     if (!model) throw this.failure(executionProfile, "model", "unknown_model");
+    if (executionProfile.maxOutputTokens !== undefined && executionProfile.maxOutputTokens > model.maxTokens) {
+      throw this.failure(executionProfile, "model", "max_output_tokens_unsupported");
+    }
 
     let authenticated: boolean;
     try {
@@ -754,7 +757,7 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
     if (!available.some((candidate) => candidate.provider === executionProfile.provider && candidate.id === executionProfile.model)) {
       throw this.failure(executionProfile, "availability", "model_unavailable");
     }
-    return model;
+    return executionProfile.maxOutputTokens === undefined ? model : { ...model, maxTokens: executionProfile.maxOutputTokens };
   }
 
   private async connectMcpTools(input: { cwd: string; executionProfile: ResolvedExecutionProfile; signal?: AbortSignal }): Promise<SessionMcpTools> {
@@ -792,6 +795,9 @@ export class SdkPiSessionAdapter implements PiSessionAdapter {
         }
       }
       if (session.model?.provider !== executionProfile.provider || session.model.id !== executionProfile.model) {
+        throw this.failure(executionProfile, "postcheck", "execution_selection_mismatch");
+      }
+      if (executionProfile.maxOutputTokens !== undefined && session.model.maxTokens !== executionProfile.maxOutputTokens) {
         throw this.failure(executionProfile, "postcheck", "execution_selection_mismatch");
       }
       if (session.thinkingLevel !== executionProfile.thinkingLevel) {

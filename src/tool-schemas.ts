@@ -63,6 +63,7 @@ export const capabilitiesSchema = z.object({
     shell: z.enum(["none", "sandboxed"]),
     skills: z.array(aliasSchema),
     maxTurnSeconds: z.number().int().min(60).max(86_400).nullable(),
+    maxOutputTokens: z.number().int().positive().safe().nullable(),
   }).strict()),
 }).strict();
 

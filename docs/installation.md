@@ -552,6 +552,7 @@ Rules:
   controller budgets. See [Tool contracts](tool-contracts.md#optional-turn-duration-policy).
   Older releases reject this configuration field. Re-provision existing writers
   after setting or changing it, or admission refuses them as `settingsChanged`.
+- Optional `maxOutputTokens` is a positive safe integer per-model-request output cap; absent preserves the model catalog maximum. Values above the resolved model maximum fail start with `max_output_tokens_unsupported`, without clamping. Capabilities publish the value or `null`; re-provision container writers after changing it. Doctor validates the value but does not compare it with the catalog. A cap also cuts legitimate large output and generally counts thinking tokens. A truncated legitimate tool call is not executed, costs another model step and may be repeated. A cap only helps well below what the idle timeout already bounds: at 137 tokens per second, 40,000 tokens take about 290 seconds.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
 - A `read-only` profile may add `"shell": "sandboxed"` to get a `bash` tool

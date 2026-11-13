@@ -23,6 +23,7 @@ export type PiSessionCreationErrorCode =
   | "local_authentication_missing"
   | "local_authentication_unavailable"
   | "model_unavailable"
+  | "max_output_tokens_unsupported"
   | "thinking_level_unavailable"
   | "execution_selection_mismatch"
   | "external_mcp_unavailable"
@@ -45,6 +46,7 @@ const PI_SESSION_CREATION_MESSAGES: Record<PiSessionCreationErrorCode, string> =
   local_authentication_missing: "Local authentication for the execution profile is missing",
   local_authentication_unavailable: "Local authentication for the execution profile is unavailable",
   model_unavailable: "Execution profile model is not locally available",
+  max_output_tokens_unsupported: "Execution profile output token cap exceeds the model limit",
   thinking_level_unavailable: "Execution profile thinking level is unavailable for the model",
   execution_selection_mismatch: "Execution profile could not be applied",
   external_mcp_unavailable: "Configured external MCP tools are unavailable",

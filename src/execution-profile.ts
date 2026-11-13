@@ -15,6 +15,7 @@ export interface ConfiguredExecutionProfile {
   readonly alias: string;
   readonly default: boolean;
   readonly maxTurnSeconds?: number;
+  readonly maxOutputTokens?: number;
   readonly permissionProfile: PermissionProfile;
   readonly provider: string;
   readonly model: string;
@@ -32,6 +33,7 @@ export interface ConfiguredExecutionProfile {
 /** The immutable, server-side selection passed to the Pi adapter. */
 export interface ResolvedExecutionProfile {
   readonly maxTurnSeconds?: number;
+  readonly maxOutputTokens?: number;
   readonly alias: string;
   readonly permissionProfile: PermissionProfile;
   readonly provider: string;
@@ -49,6 +51,7 @@ export function toResolvedExecutionProfile(profile: ConfiguredExecutionProfile):
   return Object.freeze({
     alias: profile.alias,
     ...(profile.maxTurnSeconds === undefined ? {} : { maxTurnSeconds: profile.maxTurnSeconds }),
+    ...(profile.maxOutputTokens === undefined ? {} : { maxOutputTokens: profile.maxOutputTokens }),
     permissionProfile: profile.permissionProfile,
     provider: profile.provider,
     model: profile.model,

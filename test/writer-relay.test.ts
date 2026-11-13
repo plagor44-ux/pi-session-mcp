@@ -276,6 +276,11 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       await expect(registry.prompt(session.id, "second")).rejects.toMatchObject({ code: "prompt_rejected" });
     } finally { await registry.shutdown(); }
   });
+  it.each([null, 16001])("maxOutputTokens drift %s refuses a stale writer", async maxOutputTokens => {
+    const s = await setup([{ profile: { maxOutputTokens } }], { executionProfile: { ...profile, maxOutputTokens: 16000 } });
+    await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { settingsChanged: 1 } });
+    expect(await calls(s.home, 1)).not.toContain("pi_session_start");
+  });
   it.each([null, 61])("maxTurnSeconds drift %s refuses a stale writer", async maxTurnSeconds => {
     const s = await setup([{ profile: { maxTurnSeconds } }], { executionProfile: { ...profile, maxTurnSeconds: 60 } });
     await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { settingsChanged: 1 } });

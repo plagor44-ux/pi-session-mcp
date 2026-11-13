@@ -474,7 +474,7 @@ sanitized refusal, with no host fallback. See [Tool contracts](tool-contracts.md
 
 Before the relay starts an inner session it compares every public capability
 field of the writer's profile with the host profile: `permissionProfile`,
-`provider`, `model`, `thinkingLevel`, `shell` and `maxTurnSeconds` exactly, and `skills`,
+`provider`, `model`, `thinkingLevel`, `shell`, `maxTurnSeconds` and `maxOutputTokens` exactly, and `skills`,
 `extensions` and `grantedExtensionTools` as sets. A mismatch or a missing
 entry counts as `settingsChanged`, starts no inner session and moves on to the
 next writer; if no writer is admitted, the start fails with

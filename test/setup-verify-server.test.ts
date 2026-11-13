@@ -36,6 +36,7 @@ function capabilities(profiles = 1) {
       grantedExtensionTools: Array.from({ length: 32 }, (_, i) => `t${i}`.padEnd(64, "x")),
       shell: "sandboxed",
       maxTurnSeconds: 86_400,
+      maxOutputTokens: null as number | null,
       skills: [],
     })),
   };
@@ -57,6 +58,14 @@ async function verifyPayload(value: unknown) {
 }
 
 describe("setup verifier grant validation", () => {
+  it.each([null, 1, Number.MAX_SAFE_INTEGER])("accepts maxOutputTokens %s", async maxOutputTokens => {
+    const payload = capabilities(); Object.assign(payload.executionProfiles[0]!, { maxOutputTokens });
+    expect(await verifyPayload(payload)).toMatchObject({ status: "verified" });
+  });
+  it.each([undefined, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, "1"])("rejects maxOutputTokens %s", async maxOutputTokens => {
+    const payload = capabilities(); Object.assign(payload.executionProfiles[0]!, { maxOutputTokens });
+    expect(await verifyPayload(payload)).toMatchObject({ status: "failed" });
+  });
   it.each([null, 60, 86_400])("accepts maxTurnSeconds %s", async maxTurnSeconds => {
     const payload = capabilities(); Object.assign(payload.executionProfiles[0]!, { maxTurnSeconds });
     expect(await verifyPayload(payload)).toMatchObject({ status: "verified" });

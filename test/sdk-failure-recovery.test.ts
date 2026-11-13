@@ -182,7 +182,7 @@ function textOf(content: unknown): string {
     .join("");
 }
 
-interface ScriptedStep { tool?: { name: string; arguments: Record<string, unknown> }; text?: string; error?: string }
+interface ScriptedStep { tool?: { name: string; arguments: Record<string, unknown> }; text?: string; error?: string; length?: boolean }
 interface ScriptedCall {
   /** True for the compaction summarization call: it is the only model call with an empty tool inventory. */
   readonly summarization: boolean;
@@ -223,7 +223,7 @@ function scriptedRuntime(steps: readonly ScriptedStep[]): { runtime: ModelRuntim
       const step = steps[call] ?? { text: "scripted default" };
       if (step.tool) {
         const invocation = { type: "toolCall", id: `call_${call + 1}`, name: step.tool.name, arguments: step.tool.arguments };
-        return streamOf(assistantMessage([invocation], "toolUse"));
+        return streamOf(assistantMessage([invocation], step.length ? "length" : "toolUse"));
       }
       if (step.error !== undefined) return streamOf(assistantMessage([], "error", { errorMessage: step.error }));
       return streamOf(assistantMessage([{ type: "text", text: step.text ?? "done" }], "stop"));
@@ -321,6 +321,33 @@ async function projectedTurn(client: Client, sessionId: string, turnId: string):
 }
 
 describe("terminal model errors in a real embedded session", () => {
+  it("applies the cap to the actual SDK session model", async () => {
+    const cwd = await temporaryDirectory("pi-session-mcp-cap-");
+    const { runtime } = scriptedRuntime([]);
+    let actual: number | undefined;
+    const adapter = new SdkPiSessionAdapter({ modelRuntimeFactory: async () => runtime, createSession: async options => {
+      const result = await createAgentSession(options);
+      actual = result.session.model?.maxTokens;
+      return result;
+    } });
+    const handle = await adapter.create({ cwd, executionProfile: { ...profile({}), maxOutputTokens: 1000 } });
+    try { assert.equal(actual, 1000); } finally { await handle.dispose(); }
+  });
+  it("does not execute a length-truncated tool call and continues with another model step", async () => {
+    const cwd = await temporaryDirectory("pi-session-mcp-length-");
+    const { runtime, calls } = scriptedRuntime([{ tool: { name: "read", arguments: { path: "missing" } }, length: true }, { text: "recovered" }]);
+    const journal: JournalEntry[] = [];
+    const handle = await observingAdapter(runtime, journal).create({ cwd, executionProfile: profile({}) });
+    try {
+      const result = await handle.prompt("test", () => undefined);
+      assert.equal(calls.length, 2);
+      assert.deepEqual(only(journal, "tool_execution_end"), [{ type: "tool_execution_end", toolName: "read", isError: true }]);
+      assert.equal(calls[1]!.toolResults.length, 1);
+      assert.match(calls[1]!.toolResults[0]!.text, /was not executed: the response hit the output token limit/);
+      assert.deepEqual(only(journal, "message_end").map(entry => entry.stopReason), ["length", "stop"]);
+      assert.match(JSON.stringify(result), /recovered/);
+    } finally { await handle.dispose(); }
+  });
   it("keeps a real non-retryable error terminal: accepted preflight, resolved prompt, no retry, no compaction", async () => {
     const cwd = await temporaryDirectory("pi-session-mcp-sdk-terminal-");
     const { runtime, calls } = scriptedRuntime([{ error: TERMINAL_ERROR_MESSAGE }]);

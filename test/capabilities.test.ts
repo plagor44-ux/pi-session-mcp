@@ -43,11 +43,11 @@ describe("configuration capability projection", () => {
       executionProfiles: [
         {
           alias: "alpha-profile", default: true, permissionProfile: "read-only",
-          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: ["zeta_lookup", "alpha_lookup"], shell: "none", skills: [], maxTurnSeconds: null,
+          provider: "provider-a", model: "model-a", thinkingLevel: "medium", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: ["zeta_lookup", "alpha_lookup"], shell: "none", skills: [], maxTurnSeconds: null, maxOutputTokens: null,
         },
         {
           alias: "zeta-profile", default: false, permissionProfile: "coding",
-          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: [], shell: "none", skills: ["zeta-review", "alpha-docs"], maxTurnSeconds: null,
+          provider: "provider-z", model: "model-z", thinkingLevel: "high", extensions: ["npm:ext@1.0.0"], grantedExtensionTools: [], shell: "none", skills: ["zeta-review", "alpha-docs"], maxTurnSeconds: null, maxOutputTokens: null,
         },
       ],
     });
@@ -63,9 +63,10 @@ describe("configuration capability projection", () => {
   });
 
   it("publishes the optional turn limit as a number or null", () => {
-    const profile: ConfiguredExecutionProfile = { alias: "safe", default: true, permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off", maxTurnSeconds: 86_400 };
+    const profile: ConfiguredExecutionProfile = { alias: "safe", default: true, permissionProfile: "read-only", provider: "p", model: "m", thinkingLevel: "off", maxTurnSeconds: 86_400, maxOutputTokens: 16000 };
     const capabilities = projectCapabilities(new Map(), new Map([["safe", profile]]), configuration);
     expect(capabilities.executionProfiles[0]!.maxTurnSeconds).toBe(86_400);
+    expect(capabilities.executionProfiles[0]!.maxOutputTokens).toBe(16000);
   });
   it("reports the configured shell of every profile, none by default", () => {
     const profile = (alias: string, shell?: "sandboxed"): ConfiguredExecutionProfile => ({
@@ -103,7 +104,7 @@ describe("configuration capability projection", () => {
 
     expect(second).toEqual(first);
     expect(Object.keys(second)).toEqual(["ok", "server", "configuration", "events", "history", "routing", "workspaces", "executionProfiles"]);
-    expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds"]);
+    expect(Object.keys(second.executionProfiles[0]!)).toEqual(["alias", "default", "permissionProfile", "provider", "model", "thinkingLevel", "extensions", "grantedExtensionTools", "shell", "skills", "maxTurnSeconds", "maxOutputTokens"]);
     expect(second.configuration).toEqual({ fingerprint: configuration.fingerprint, reloadPolicy: "restart-required" });
     expect(JSON.stringify(second)).not.toContain("CAPTURED_SNAPSHOT_SENTINEL");
   });
