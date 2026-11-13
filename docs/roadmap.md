@@ -306,6 +306,20 @@ mean they are implemented or that their gates passed.
   credential store, while `--list-models`, `pi-session-mcp-provider list` and
   guided setup keep resolving stored keys as Pi does and document it. Release
   0.22.0 follows the sprint. Open: #144, #221, #298, #303.
+- 2026-11-13: minor release 0.22.0 ships Sprints 26 and 27 (records in
+  [Acceptance](acceptance.md#v0220-post-release-evidence)); both installations
+  are upgraded with the repository step without repeated settings, after
+  Doctor had named `acceptance_changed` as the reason of every writer's
+  `writer_not_ready`. Sprint 28 then, in one pull request (unreleased), gives
+  coding sessions a `read` of the server's own whose stream refuses an aborted
+  signal, the server-side route for
+  [#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298) recorded in
+  the
+  [ADR 0013 amendment](adr/0013-hardened-read-only-profiles.md#amendment-2026-11-10-operations-hooks-under-pi-sdk-152)
+  because no Pi SDK release after 1.5.2 checks the signal; it replaces names
+  from the operator's own setup in tracked records with placeholders
+  ([#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307)) and
+  records the post-release evidence of 0.22.0. Open: #144, #221, #303.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

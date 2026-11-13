@@ -12,6 +12,13 @@
   or the operator's rule files; six of these files ship in the npm package.
   Measured values, timestamps, identifiers and verdicts are unchanged.
   Published packages and releases stay as published.
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.22.0](docs/acceptance.md#v0220-post-release-evidence)
+  (registry and release assets, Level 2 on a clone of the tag and on the
+  published npm package, and the upgrade of both installations, which
+  reported the new `writer_not_ready` reason and used the repository step
+  without repeated settings). No session ran on the published release for
+  that record, and none of it is a Level 3 cycle.
 
 ### Fixed
 
