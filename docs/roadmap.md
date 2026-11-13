@@ -288,6 +288,17 @@ mean they are implemented or that their gates passed.
   sandbox memory limit that the project's own typecheck exceeds
   ([#301](https://github.com/plagor44-ux/pi-session-mcp/issues/301)). Open:
   #144, #221, #262, #298, #299, #300, #301.
+- 2026-11-13: Sprint 27 implements, in one pull request (unreleased), the
+  sandbox memory limit of 2 GiB by maintainer decision under an
+  [ADR 0013 amendment](adr/0013-hardened-read-only-profiles.md#amendment-2026-11-13-memory-limit-of-2-gib)
+  (#301), the cause of `writer_not_ready` in Doctor with a working remediation
+  and the `notReady` count of `writer_unavailable` (#299), the repository step
+  that re-accepts writers without repeating the provisioning settings and asks
+  for a reconnect only for stale controller state (#300), and Doctor's offline
+  comparison of `maxOutputTokens` with Pi's stored catalog under a
+  maintainer-approved extension of the catalog exception in AGENTS.md (#262).
+  #298 stays open: no Pi SDK release after 1.5.2 contains the upstream fix.
+  Release 0.22.0 follows the sprint. Open: #144, #221, #298.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
