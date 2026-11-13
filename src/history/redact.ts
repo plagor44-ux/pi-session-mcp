@@ -74,12 +74,28 @@ type JsonObject = { [key: string]: Json };
 
 const isObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** An object without a prototype, so that a `__proto__` key stays an ordinary key. */
+const emptyObject = (): JsonObject => Object.create(null) as JsonObject;
+
+/**
+ * `key`, or `key#2`, `key#3` and so on when an earlier key of `target` already took it. `next` holds
+ * the next suffix to try for each key of `target`, so that n keys that redact to the same text skip
+ * each taken key once instead of searching from `#2` every time.
+ */
+function freeKey(target: JsonObject, key: string, next: Map<string, number>): string {
+  if (!Object.hasOwn(target, key)) return key;
+  let suffix = next.get(key) ?? 2;
+  while (Object.hasOwn(target, `${key}#${suffix}`)) suffix += 1;
+  next.set(key, suffix + 1);
+  return `${key}#${suffix}`;
+}
+
 function omitted(kind: string, value: string): Json { return { omitted: kind, bytes: value.length }; }
 
 function replaceOpaque(value: Json): Json {
   if (Array.isArray(value)) return value.map(replaceOpaque);
   if (!isObject(value)) return value;
-  const result: JsonObject = {};
+  const result = emptyObject();
   for (const [key, child] of Object.entries(value)) {
     if (typeof child === "string" && SIGNATURE_KEYS.has(key)) result[key] = omitted("signature", child);
     else if (typeof child === "string" && key === "data" && value.type === "image") result[key] = omitted("image", child);
@@ -193,8 +209,11 @@ export class Redactor {
     if (typeof value === "string") return this.text(value, counts);
     if (Array.isArray(value)) return value.map((child) => this.walk(child, counts));
     if (!isObject(value)) return value;
-    const result: JsonObject = {};
-    for (const [key, child] of Object.entries(value)) result[key] = this.walk(child, counts);
+    // A key is content like a value: a recognized secret in it is replaced too. Keys that redact to
+    // the same text get a numbered suffix, so no value overwrites another.
+    const result = emptyObject();
+    const next = new Map<string, number>();
+    for (const [key, child] of Object.entries(value)) result[freeKey(result, this.text(key, counts), next)] = this.walk(child, counts);
     return result;
   }
 

@@ -1,6 +1,6 @@
 # Session history
 
-An opt-in, local record of every session ([ADR 0019](adr/0019-opt-in-session-history.md)). With history on, the server stores each session's metadata, turns and the Pi session entries in one SQLite file, `~/.local/state/pi-session-mcp/history/history.sqlite`. Content is redacted on the host before it is stored, also for writer sessions. Secrets that match no rule can still be stored; see the [threat model](threat-model.md). History never changes a session: a failure becomes a gap in the record. The record cannot restore or resume a session.
+An opt-in, local record of every session ([ADR 0019](adr/0019-opt-in-session-history.md)). With history on, the server stores each session's metadata, turns and the Pi session entries in one SQLite file, `~/.local/state/pi-session-mcp/history/history.sqlite`. Content is redacted on the host before it is stored, also for writer sessions, and that includes the keys of stored objects. Secrets that match no rule can still be stored; see the [threat model](threat-model.md). History never changes a session: a failure becomes a gap in the record. The record cannot restore or resume a session.
 
 History is off by default. Tier routing in `auto` mode requires it ([ADR 0020](adr/0020-tier-routing.md)).
 

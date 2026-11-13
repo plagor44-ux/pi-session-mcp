@@ -44,6 +44,16 @@
   own. No Pi SDK release after 1.5.2 checks the signal itself, so the fix is
   in the server. No tool schema, result, error code or configuration field
   changes.
+- Session history redaction covers object keys. Known secret values and
+  credential patterns were replaced in the values of a stored entry but not
+  in its keys, so a recognized secret used as a key stayed in the history
+  file, for example in the arguments of a tool call or in the structured
+  content of an external MCP tool. Keys now get the same two stages as values.
+  Keys that redact to the same text are numbered (`#2`, `#3`), so no value
+  overwrites another, and a `__proto__` key is stored as an ordinary key.
+  Entries recorded before the upgrade are not rewritten:
+  `pi-session-mcp-history prune --older-than 0d --apply` deletes the closed
+  sessions, or the history file can be deleted while no server runs.
 
 ## 0.22.0 — 2026-11-13
 

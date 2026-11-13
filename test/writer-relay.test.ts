@@ -84,6 +84,20 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       expect(await calls(s.home, 1)).toContain("pi_history_read");
     } finally { await h.done(); }
   });
+  it("relayed entries pass the host's redaction, object keys included", async () => {
+    const token = `ghp_${"Rk8".repeat(12)}`;
+    const entries = [{ type: "message", id: "e1", parentId: null, timestamp: "2026-11-04T10:00:00.000Z", message: { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "ls", arguments: { [token]: { nested: token } } }] } }];
+    const s = await setup([{ historyEntries: entries }]); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      await completedTurn(h.registry, session.id, "hello");
+      await h.registry.close(session.id);
+      const stored = h.rows("SELECT redacted_json FROM entries ORDER BY position");
+      expect(stored).toHaveLength(1);
+      expect(String(stored[0]!.redacted_json)).not.toContain(token);
+      expect(JSON.parse(String(stored[0]!.redacted_json)).message.content[0].arguments).toEqual({ "[REDACTED:github_token]": { nested: "[REDACTED:github_token]" } });
+    } finally { await h.done(); }
+  });
   it("relay keeps the truncation flag of an entry the inner server cut", async () => {
     const direct = await (await setup([{ history: "cut" }])).start();
     expect(await direct.readHistory!(0)).toMatchObject({ truncated: [1], next: 2 });
