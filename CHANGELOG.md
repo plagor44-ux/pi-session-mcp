@@ -120,6 +120,12 @@
   another package version; a missing or unusable previous record counts as
   another version. Re-acceptance after a Podman upgrade with the same package
   version, and writer limits alone, need no reconnect.
+- Security, in the lockfile only, development path: `hono` 4.13.13 → 4.13.18
+  (GHSA-4m76-xfj5-7975, GHSA-h7mg-cq63-vhpq, GHSA-3gg2-335m-rxc6,
+  GHSA-46wx-v44x-9hh2, GHSA-4h7h-rv7c-7m2v) and `@hono/node-server`
+  2.1.5 → 2.1.8 (GHSA-qv5m-9pm6-hqp3, GHSA-jpvv-r467-5p4w), both via MCP
+  Inspector. Nothing in the production install path changes; `npm audit` and
+  `npm audit --omit=dev` report 0 vulnerabilities.
 
 Minor release by maintainer decision for
 [ADR 0022](docs/adr/0022-account-sign-in.md)
