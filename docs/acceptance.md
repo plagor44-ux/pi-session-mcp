@@ -2668,6 +2668,14 @@ workspace without a mode.
 
 ### v0.22.0 pre-release acceptance
 
+`v0.22.0` was accepted on 2026-11-13 from 13:16 to 13:21 UTC on its release
+candidate `cfa94bd`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.1`, npm `12.2.2`, Git `2.56.1`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.2.0`, Codex CLI `0.167.1` and Claude Code `2.1.323`. Level 1 passed,
+and Level 2 passed in the working tree and for the packed tarball, each with
+delivery off and with delivery on. Every command below ran once. The later
+commit changes only this record.
+
 The minor release `0.22.0` ships what `main` holds after `v0.21.0`: the
 post-release evidence of `0.21.0` and the release guide's pull request of its
 own (PR #297), the streamed `read` of read-only sessions and the per-profile
@@ -2678,10 +2686,49 @@ stored credentials (PR #305). Its own pull request, on the branch
 `chore/release-0.22.0` on top of `main` at `478b71b`, carries a commit that
 patches the development-only advisories of `hono` and `@hono/node-server` in
 the lockfile, then the version commit with the changelog heading and this
-record. The version commit also
-restores the changelog heading of `0.21.0`, which a commit of PR #305 had
-replaced. The public contract grows additively; ADR 0003 requires a minor
-release for that, and the maintainer decided on `0.22.0`.
+record. The version commit also restores the changelog heading of `0.21.0`,
+which a commit of PR #305 had replaced. The public contract grows
+additively; ADR 0003 requires a minor release for that, and the maintainer
+decided on `0.22.0`.
+
+- Level 1 in the clone of the candidate after `npm ci`: typecheck,
+  `build:cli`, the test run and `build` exited with `0`, in the order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    193 files, 5279 passed and 15 skipped. The load average was 1.3 when it
+    started.
+  - The bubblewrap and Podman-gated files (`sandbox-shell.bwrap`,
+    `sandbox-shell.go-cache.bwrap`, `writer-lifecycle.podman`,
+    `writer-boundary.podman`), run again on their own with the same setting:
+    65 of 65 passed, none skipped.
+  - `npm audit` and `npm audit --omit=dev` exited with `0` and reported 0
+    vulnerabilities.
+  - Doctor reported `packageVersion` `0.22.0`. It exited with `2` because no
+    configuration was set (`config_missing`); every other check was `ok`.
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing before the pack.
+  - `npm pack` listed 1075 files (tarball shasum
+    `159d51d684b98addd9b09545636adce3c5641a80`), and the package holds no
+    `docs/superpowers/` file. A scan of the unpacked files for hosts, an
+    absolute home path and the maintainer's private name and address found
+    none. A wider scan for names from the operator's own setup found some in
+    records that earlier releases already shipped and that this release does
+    not change: a repository name in an older acceptance record, the kernel's
+    distribution name in three evaluation records, a memory tool name in a
+    recorded run of #214 and the path of an operator's rule file in a sprint
+    record.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.22.0`.
+  The global install resolves `@earendil-works/pi-coding-agent` `1.5.2`,
+  `undici` `8.12.3` and `minimatch` `11.0.3`, and no `hono`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps,
+  and reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. The disposable prefix, the tarball and
+  the clone were removed.
 
 No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
 `main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
