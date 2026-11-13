@@ -229,7 +229,10 @@ describe("confined tools", () => {
   });
 
   it.each(["abort", "early return", "end"])("closes the real stream handle on %s", async (exit) => {
-    const path = join(workspace, "mixed", "own.txt");
+    // Larger than one stream chunk (64 KiB), so abort and early return end a read that is still running.
+    const large = await temporaryRoot("confined-stream-");
+    const path = join(large, "large.txt");
+    await writeFile(path, "x".repeat(256 * 1024));
     const sample = await open(path, "r");
     const prototype = Object.getPrototypeOf(sample) as FileHandle;
     await sample.close();
@@ -241,14 +244,18 @@ describe("confined tools", () => {
     });
     try {
       const controller = new AbortController();
+      let chunks = 0;
       const consume = async (): Promise<void> => {
-        for await (const _chunk of confinedOperations(roots).read.createReadStream(path, { signal: controller.signal })) {
+        for await (const _chunk of confinedOperations([large]).read.createReadStream(path, { signal: controller.signal })) {
+          chunks++;
           if (exit === "early return") break;
           if (exit === "abort") controller.abort();
         }
       };
       if (exit === "abort") await expect(consume()).rejects.toMatchObject({ name: "AbortError" });
       else await consume();
+      if (exit === "end") expect(chunks).toBeGreaterThan(1);
+      else expect(chunks).toBe(1);
       expect(handles).toHaveLength(1);
       expect(handles[0]!.fd).toBe(-1);
     } finally {
