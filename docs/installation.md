@@ -1220,10 +1220,12 @@ repository step between the install and the client targets:
 
 Acceptance also binds the Podman version, so a Podman upgrade has the same
 effect without any package upgrade: Doctor reports every container writer
-`writer_not_ready`, and coding starts on container workspaces fail with that
-code. Repeat step 2 alone, with each repository's existing settings, including
-its image, cache, tags and base: it accepts the writers again and keeps their
-clones and the work in them.
+`writer_not_ready`. Coding starts on container workspaces fail with
+`writer_unavailable`, reason `none_admitted`, with all counts at zero: each
+writer's launcher refuses as not ready, and the relay skips it without
+counting it. Repeat step 2 alone, with each repository's existing settings,
+including its image, cache, tags and base: it accepts the writers again and
+keeps their clones and the work in them.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases

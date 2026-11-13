@@ -282,10 +282,12 @@ mean they are implemented or that their gates passed.
   default `read` of coding sessions
   ([#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298)), a
   Doctor remediation for `writer_not_ready` that fails as printed
-  ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)) and a
+  ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)), a
   needless restart request after a re-acceptance
-  ([#300](https://github.com/plagor44-ux/pi-session-mcp/issues/300)). Open:
-  #144, #221, #262, #298, #299, #300.
+  ([#300](https://github.com/plagor44-ux/pi-session-mcp/issues/300)) and a
+  sandbox memory limit that the project's own typecheck exceeds
+  ([#301](https://github.com/plagor44-ux/pi-session-mcp/issues/301)). Open:
+  #144, #221, #262, #298, #299, #300, #301.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
