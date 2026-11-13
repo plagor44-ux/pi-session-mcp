@@ -565,7 +565,12 @@ Rules:
   counts thinking tokens. A truncated legitimate tool call is not executed,
   costs another model step and may be repeated. A cap only helps well below
   what the idle timeout already bounds: at 137 tokens per second, 40,000
-  tokens take about 290 seconds.
+  tokens take about 290 seconds. In a profile with `extensions`, an extension
+  that registers or unregisters a provider or a virtual model makes Pi
+  resolve the session's model from its catalog again: during session start
+  the start then fails with `execution_selection_mismatch`, and later in the
+  session the cap no longer applies to that session's remaining requests.
+  Container writers load no extensions.
 - A profile may grant tools from local stdio MCP servers through `mcpServers`.
   See [External MCP tools in embedded sessions](session-mcp.md).
 - A `read-only` profile may add `"shell": "sandboxed"` to get a `bash` tool
