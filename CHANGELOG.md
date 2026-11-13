@@ -84,6 +84,19 @@
   zero. **Contract:** the `counts` object of `writer_unavailable` gains the
   integer `notReady`, and the Doctor check gains the optional field `reason`.
   Earlier releases ignore the record.
+- The repository step re-accepts writers without repeating the provisioning
+  settings, and asks for a reconnect only when a running server holds stale
+  state ([#300](https://github.com/plagor44-ux/pi-session-mcp/issues/300)).
+  `pi-session-mcp-setup --repo <alias> --apply` without `--mode` or container
+  settings reuses every recorded setting of a repository already in mode
+  `container`; `--base <branch>` may still set the default base, and a first
+  provisioning still requires `--profiles`. Before, that command failed with
+  `container_profiles_required`. `controllers_restart_required` now appears
+  only when a mode or settings entry was written, writers were provisioned,
+  removed or migrated to relay launch, or re-acceptance replaced a record from
+  another package version; a missing or unusable previous record counts as
+  another version. Re-acceptance after a Podman upgrade with the same package
+  version, and writer limits alone, need no reconnect.
 
 Minor release by maintainer decision for
 [ADR 0022](docs/adr/0022-account-sign-in.md)
