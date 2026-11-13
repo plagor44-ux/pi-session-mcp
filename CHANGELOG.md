@@ -24,6 +24,9 @@
   the child's code from these values, and one test lost a `replace` call that
   replaced a string with itself. This resolves the open code scanning alerts,
   all of which were in test files.
+- Evaluation fixture only, outside the package and its development install:
+  the tooling of the synthetic T3 fixture (`eval/fixtures/T3/tooling`) pins
+  `vite` 6.4.5 instead of 6.4.4 (GHSA-8g5g-mxqh-grgj).
 
 ### Fixed
 
