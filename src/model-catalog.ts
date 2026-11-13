@@ -84,8 +84,9 @@ export interface CatalogRuntime {
 /** Options for an offline restore of Pi's persisted catalog: no model network, no credential refresh. */
 export const OFFLINE_RUNTIME_OPTIONS = { refreshOnCreate: true, allowModelNetwork: false } as const;
 
-const createCatalogRuntime = (): Promise<CatalogRuntime> =>
-  import("@earendil-works/pi-coding-agent").then(({ ModelRuntime }) => ModelRuntime.create({ ...OFFLINE_RUNTIME_OPTIONS }));
+/** `signal` is the SDK's documented cancellation of the create-time restore and its availability pass. */
+const createCatalogRuntime = (signal?: AbortSignal): Promise<CatalogRuntime> =>
+  import("@earendil-works/pi-coding-agent").then(({ ModelRuntime }) => ModelRuntime.create({ ...OFFLINE_RUNTIME_OPTIONS, ...(signal === undefined ? {} : { signal }) }));
 
 /** Offline identity discovery for the store and writer projection; applies the same policy, without checkAuth/getAuth. */
 export async function catalogBuiltInProviderIds(
@@ -103,12 +104,16 @@ export async function catalogBuiltInProviderIds(
   return ids;
 }
 
-/** Offline output limits for Doctor only; no authentication lookup or network refresh. */
+/**
+ * Offline output limits for Doctor only; no authentication lookup of its own and no network refresh. Doctor aborts
+ * `signal` when its bound expires, which ends the restore instead of leaving it running behind the report.
+ */
 export async function readCatalogOutputLimits(
-  createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime,
+  signal?: AbortSignal,
+  createRuntime: (signal?: AbortSignal) => Promise<CatalogRuntime> = createCatalogRuntime,
   policyFactory: () => Promise<ProviderPolicy> = loadRuntimeProviderPolicy,
 ): Promise<(providerId: string, modelId: string) => number | undefined> {
-  const runtime = await createRuntime();
+  const runtime = await createRuntime(signal);
   try {
     const policy = await policyFactory();
     await policy.apply({

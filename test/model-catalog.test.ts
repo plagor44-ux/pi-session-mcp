@@ -68,15 +68,18 @@ describe("readCatalogOutputLimits", () => {
       registerProvider: () => { providers.push({ id: "custom" }); },
       checkAuth,
     };
-    const lookup = await readCatalogOutputLimits(async () => runtime, async () => ({
+    const controller = new AbortController();
+    const create = vi.fn(async (_signal?: AbortSignal) => runtime);
+    const lookup = await readCatalogOutputLimits(controller.signal, create, async () => ({
       apply: async (r) => { r.registerProvider("custom", {} as never); }, source: () => "inherit", blocked: () => false, boundaryCredentials: () => ({}), definitions: () => [],
     }));
+    expect(create).toHaveBeenCalledWith(controller.signal);
     expect(lookup("built", "good")).toBe(42);
     expect(lookup("custom", "custom-model")).toBe(55);
     expect(lookup("missing", "good")).toBeUndefined();
     expect(lookup("built", "missing")).toBeUndefined();
     for (let i = 0; i < 5; i++) expect(lookup("built", `bad${i}`)).toBeUndefined();
-    const fallback = await readCatalogOutputLimits(async () => runtime, async () => { throw new Error("unavailable"); });
+    const fallback = await readCatalogOutputLimits(undefined, async () => runtime, async () => { throw new Error("unavailable"); });
     expect(fallback("built", "good")).toBe(42);
     expect(checkAuth).not.toHaveBeenCalled();
   });

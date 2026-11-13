@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createModelCatalog, OFFLINE_RUNTIME_OPTIONS } from "../src/model-catalog.js";
+import { createModelCatalog, OFFLINE_RUNTIME_OPTIONS, readCatalogOutputLimits } from "../src/model-catalog.js";
 import { defaultModelRuntimeFactory } from "../src/sdk-pi-adapter.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
@@ -21,6 +21,15 @@ describe("offline restore of Pi's persisted catalog (#199)", () => {
     await createModelCatalog();
     expect(create).toHaveBeenCalledTimes(1);
     expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false });
+  });
+
+  it("passes Doctor's signal to the offline restore of the output limits only", async () => {
+    const create = vi.spyOn(ModelRuntime, "create").mockResolvedValue({
+      getProviders: () => [], getModels: () => [], checkAuth: async () => undefined,
+    } as unknown as ModelRuntime);
+    const controller = new AbortController();
+    await readCatalogOutputLimits(controller.signal, undefined, async () => { throw new Error("no provider store"); });
+    expect(create).toHaveBeenCalledWith({ refreshOnCreate: true, allowModelNetwork: false, signal: controller.signal });
   });
 
   it("creates the session adapter's default runtime without the refresh-time availability pass", async () => {
@@ -45,6 +54,17 @@ describe("offline restore of Pi's persisted catalog (#199)", () => {
       const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network must not be used"));
       const catalog = await createModelCatalog();
       expect(catalog.providers().find((provider) => provider.id === "openai")?.models).toContain("overlay-only-model");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("reads an overlay model's output limit offline and restores nothing on an aborted signal", async () => {
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network must not be used"));
+      const noStore = async () => { throw new Error("no provider store"); };
+      const lookup = await readCatalogOutputLimits(new AbortController().signal, undefined, noStore);
+      expect(lookup("openai", "overlay-only-model")).toBe(10_000);
+      // SDK 1.5.2 resolves without restoring once the signal is aborted; a rejection would be just as acceptable.
+      const aborted = await readCatalogOutputLimits(AbortSignal.abort(), undefined, noStore).catch(() => undefined);
+      expect(aborted?.("openai", "overlay-only-model")).toBeUndefined();
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 

@@ -8,7 +8,8 @@ a profile sets `maxOutputTokens`, Doctor restores Pi's stored model catalog
 once, offline, to compare each cap with the model's output limit
 (`max_output_tokens_unsupported`). That restore makes no network request and
 no credential refresh; a catalog that cannot be read within 10 seconds only
-produces warnings.
+produces warnings, and Doctor then aborts the read through the SDK's
+cancellation signal.
 It checks the package it was loaded from, never the current working
 directory: an npm executable can run from any directory.
 

@@ -82,6 +82,31 @@ describe("offline output limit checks", () => {
       expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "warning" }));
     } finally { vi.useRealTimers(); }
   });
+  it("aborts the read at the bound and keeps its later rejection handled", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const reader = vi.fn((signal: AbortSignal) => {
+        signals.push(signal);
+        // Rejects one tick after the abort, when Doctor has already reported: a late rejection must not surface.
+        return new Promise<() => number>((_resolve, reject) => signal.addEventListener("abort", () => { setTimeout(() => reject(new Error("aborted")), 1); }, { once: true }));
+      });
+      const pending = runDoctor({ ...deps, loadConfig: () => config(12346), outputLimits: reader });
+      await vi.waitFor(() => expect(reader).toHaveBeenCalledOnce());
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(signals[0]?.aborted).toBe(true);
+      expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "warning" }));
+      await vi.advanceTimersByTimeAsync(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("aborts the signal after a read that finished in time", async () => {
+    const signals: AbortSignal[] = [];
+    const result = await runDoctor({ ...deps, loadConfig: () => config(12345), outputLimits: async (signal) => { signals.push(signal); return () => 12345; } });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "ok" }));
+    expect(signals[0]?.aborted).toBe(true);
+  });
   it("does not read without caps or valid configuration", async () => {
     const reader = vi.fn(async () => () => 1);
     for (const loadConfig of [() => config(), async () => { throw new Error("invalid"); }]) {

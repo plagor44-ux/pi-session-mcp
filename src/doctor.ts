@@ -87,7 +87,7 @@ export interface DoctorDependencies {
   readonly configPath?: string;
   readonly loadConfig?: (path?: string) => Promise<AppConfig>;
   /** Offline catalog output limits, read only when a profile sets a cap. */
-  readonly outputLimits?: () => Promise<(providerId: string, modelId: string) => number | undefined>;
+  readonly outputLimits?: (signal: AbortSignal) => Promise<(providerId: string, modelId: string) => number | undefined>;
   /** Original configuration, before skill resolution; read only for selected container profiles. */
   readonly loadRawConfig?: () => Promise<unknown>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
@@ -699,15 +699,17 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
   if (config) {
     const profiles = [...config.executionProfiles].filter(([, profile]) => profile.maxOutputTokens !== undefined);
     if (profiles.length) {
+      // Past the bound the comparison is unknown and the read is aborted; Promise.race keeps its late result handled.
+      const controller = new AbortController();
       let timer: ReturnType<typeof setTimeout> | undefined;
       let limits: ((providerId: string, modelId: string) => number | undefined) | undefined;
       try {
         limits = await Promise.race([
-          Promise.resolve().then(() => (dependencies.outputLimits ?? readCatalogOutputLimits)()),
-          new Promise<undefined>((resolve) => { timer = setTimeout(() => resolve(undefined), 10_000); }),
+          Promise.resolve().then(() => (dependencies.outputLimits ?? readCatalogOutputLimits)(controller.signal)),
+          new Promise<undefined>((resolve) => { timer = setTimeout(() => { resolve(undefined); controller.abort(); }, 10_000); }),
         ]);
       } catch { /* An unavailable catalog makes the comparison unknown. */ }
-      finally { if (timer !== undefined) clearTimeout(timer); }
+      finally { if (timer !== undefined) clearTimeout(timer); controller.abort(); }
       for (const [alias, profile] of profiles) {
         let maximum: number | undefined;
         try { maximum = limits?.(profile.provider, profile.model); } catch { /* Treat lookup failure as unknown. */ }

@@ -19,7 +19,8 @@
   and compares it offline with Pi's stored catalog: the new check
   `max_output_tokens_unsupported` is an error above the model's maximum and a
   warning when the stored catalog does not list the model or cannot be read
-  within 10 seconds. It reads the catalog only when a profile sets the field,
+  within 10 seconds, after which Doctor aborts the read. It reads the catalog
+  only when a profile sets the field,
   under an extension of the offline catalog exception that the maintainer
   approved on 2026-11-13. A cap also cuts legitimate large
   output and generally counts thinking tokens; a tool call cut off at the
