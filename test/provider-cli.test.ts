@@ -1,5 +1,5 @@
 import { PassThrough, Readable } from "node:stream";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runProviderCli } from "../src/provider-cli.js";
 import { ProviderStoreError, type ProviderStore } from "../src/provider-store-contract.js";
 import type { PiAuthMode } from "../src/provider-sign-in.js";
@@ -7,6 +7,8 @@ import type { PiAuthMode } from "../src/provider-sign-in.js";
 const catalogs = vi.hoisted(() => ({ createModelCatalog: vi.fn(), createCredentialFreeModelCatalog: vi.fn() }));
 // Only the default catalog factories are replaced; the tests that inject a catalog never reach them.
 vi.mock("../src/model-catalog.js", async (importOriginal) => ({ ...await importOriginal<typeof import("../src/model-catalog.js")>(), ...catalogs }));
+// A result set for one test must not answer a later test that reaches a default factory.
+afterEach(() => { catalogs.createModelCatalog.mockReset(); catalogs.createCredentialFreeModelCatalog.mockReset(); });
 
 function fixture() {
   let out = "", err = "";
