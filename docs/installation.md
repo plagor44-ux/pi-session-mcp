@@ -273,7 +273,12 @@ spends a turn.
 precedence using the stored key, and `none` explicitly disables authentication.
 `auth remove` sets `none`; only `auth inherit` restores Pi authentication.
 Custom providers cannot inherit Pi credentials. The `list` command shows safe
-source and authentication metadata, never keys.
+source and authentication metadata, never keys. It reads authentication
+presence from Pi's credential store as Pi does, so a key that Pi stores as a
+command (`"key": "!<command>"`) runs that command. The other commands read
+only provider identities, over an empty credential store, and run no such
+command (#304); `auth login` and `auth logout` still run Pi's own commands,
+which use Pi's credential store as Pi does.
 
 Custom definitions require an HTTPS URL, or HTTP on loopback only, without
 userinfo, query or fragment. Supported APIs are `openai-completions`,
@@ -370,9 +375,9 @@ This is offline and read-only: no provider request, credential refresh, model
 network access or setup lock. It requires no `PI_SESSION_MCP_CONFIG`.
 Authentication presence comes from Pi's credential store, read as Pi reads it:
 a key that Pi stores as a command (`"key": "!<command>"`) runs that command
-here, as it does for `--probe-profile`, the provider CLI and guided setup.
-Doctor and the writer launch read no stored credential for their provider
-lists (#304).
+here, as it does for `--probe-profile`, `pi-session-mcp-provider list` and
+guided setup. Doctor, the writer launch and the other provider CLI commands
+read no stored credential for their provider lists (#304).
 Providers registered only by Pi extensions are not listed; the report includes
 that note. Invalid catalog ids are omitted and counted in `omittedIds`.
 Catalog creation failures report `catalog_unavailable`.

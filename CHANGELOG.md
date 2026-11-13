@@ -70,20 +70,22 @@
 
 ### Fixed
 
-- Doctor and the provider discovery no longer run a command-valued key from
-  Pi's credential store
+- Doctor, the provider discovery and the provider CLI no longer run a
+  command-valued key from Pi's credential store
   ([#304](https://github.com/plagor44-ux/pi-session-mcp/issues/304)). Doctor's
   `maxOutputTokens` comparison (#262), the `provider_store` check, the provider
-  store's list of built-in providers and the writer launch's provider check
-  restored Pi's catalog over Pi's file store, which resolves each stored API
-  key it reads, so a key stored as `"!<command>"` ran its command.
+  store's list of built-in providers, the writer launch's provider check and
+  every `pi-session-mcp-provider` command except `list` restored Pi's catalog
+  over Pi's file store, which resolves each stored API key it reads, so a key
+  stored as `"!<command>"` ran its command.
   These reads now create the runtime over an empty in-memory credential store
-  (pi-ai's `InMemoryCredentialStore`), so they read no stored credential. The
-  restored catalog is the same, except that a Radius provider no longer imports
-  a legacy catalog from its OAuth credential there. `--list-models`,
-  `--probe-profile`, the provider CLI and guided setup still report
-  authentication presence and resolve stored keys as Pi does; AGENTS.md and the
-  installation guide now say so instead of calling the resolution in-process.
+  (pi-ai's `InMemoryCredentialStore`), so they read no stored credential; the
+  provider CLI also skips its authentication lookup. The restored catalog is
+  the same, except that a Radius provider no longer imports a legacy catalog
+  from its OAuth credential there. `--list-models`, `--probe-profile`,
+  `pi-session-mcp-provider list` and guided setup still report authentication
+  presence and resolve stored keys as Pi does; AGENTS.md and the installation
+  guide now say so instead of calling the resolution in-process.
 
 - Doctor names why a container writer is `writer_not_ready`, and its
   remediation works as printed

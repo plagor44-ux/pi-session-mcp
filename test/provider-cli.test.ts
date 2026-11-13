@@ -4,6 +4,10 @@ import { runProviderCli } from "../src/provider-cli.js";
 import { ProviderStoreError, type ProviderStore } from "../src/provider-store-contract.js";
 import type { PiAuthMode } from "../src/provider-sign-in.js";
 
+const catalogs = vi.hoisted(() => ({ createModelCatalog: vi.fn(), createCredentialFreeModelCatalog: vi.fn() }));
+// Only the default catalog factories are replaced; the tests that inject a catalog never reach them.
+vi.mock("../src/model-catalog.js", async (importOriginal) => ({ ...await importOriginal<typeof import("../src/model-catalog.js")>(), ...catalogs }));
+
 function fixture() {
   let out = "", err = "";
   const store: ProviderStore = {
@@ -123,6 +127,30 @@ describe("provider CLI", () => {
     for (const [code, exit] of [["provider_unknown", 3], ["credential_invalid", 4], ["provider_store_busy", 1]] as const) {
       const f = fixture(); vi.mocked(f.store.removeKey).mockRejectedValue(new ProviderStoreError(code));
       expect(await f.run(["auth", "remove", "openai"])).toBe(exit); expect(f.output()).toContain(code);
+    }
+  });
+  it("restores the catalog over Pi's credential store for list only, by default (#304)", async () => {
+    const identities = { providers: () => [{ id: "openai", authConfigured: false, models: [], signIn: true as const }] };
+    catalogs.createModelCatalog.mockResolvedValue(identities);
+    catalogs.createCredentialFreeModelCatalog.mockResolvedValue(identities);
+    const loadConfig = vi.fn(async () => ({ executionProfiles: new Map() })) as unknown as typeof import("../src/config.js").loadConfig;
+    const cases: readonly (readonly [readonly string[], Partial<Parameters<typeof runProviderCli>[1]>])[] = [
+      [["list"], {}],
+      [["list", "--json"], {}],
+      [["add", "local", "--api", "openai-completions", "--base-url", "https://example.invalid/v1", "--model", "m1"], {}],
+      [["remove", "openai"], { configPath: "/private/path", loadConfig }],
+      [["auth", "set", "openai", "--stdin"], { input: Readable.from(["sk-test-SENTINEL\n"]) }],
+      [["auth", "remove", "openai"], {}],
+      [["auth", "inherit", "openai"], {}],
+      [["auth", "login", "openai"], { input: terminal(), stderrTerminal: true, runPi: async () => 0 }],
+      [["auth", "logout", "openai"], { runPi: async () => 0 }],
+    ];
+    for (const [args, extra] of cases) {
+      catalogs.createModelCatalog.mockClear(); catalogs.createCredentialFreeModelCatalog.mockClear();
+      const list = args[0] === "list";
+      expect(await runProviderCli(args, { store: fixture().store, stdout: () => {}, stderr: () => {}, ...extra }), args.join(" ")).toBe(0);
+      expect(catalogs.createModelCatalog, args.join(" ")).toHaveBeenCalledTimes(list ? 1 : 0);
+      expect(catalogs.createCredentialFreeModelCatalog, args.join(" ")).toHaveBeenCalledTimes(list ? 0 : 1);
     }
   });
 });

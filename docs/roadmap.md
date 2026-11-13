@@ -301,11 +301,11 @@ mean they are implemented or that their gates passed.
   Validating history and routing found that `routing status` does not say
   when the last learning refresh ran (#303), and verifying a review finding
   showed that the offline catalog restore runs a command-valued API key
-  (#304). By maintainer decision, Doctor and the provider discovery now
-  restore the catalog over an empty credential store, while `--list-models`,
-  the provider CLI and guided setup keep resolving stored keys as Pi does and
-  document it. Release 0.22.0 follows the sprint. Open: #144, #221, #298,
-  #303.
+  (#304). By maintainer decision, Doctor, the provider discovery and every
+  provider CLI command except `list` now restore the catalog over an empty
+  credential store, while `--list-models`, `pi-session-mcp-provider list` and
+  guided setup keep resolving stored keys as Pi does and document it. Release
+  0.22.0 follows the sprint. Open: #144, #221, #298, #303.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

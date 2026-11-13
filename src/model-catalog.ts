@@ -70,7 +70,7 @@ export const AUTH_CHECK_TIMEOUT_MS = 5_000;
  * credential record, restores the cached catalog and returns before any credential is refreshed, so no request is made.
  * The availability pass that follows reads credential records as the `checkAuth` calls below do. Over Pi's file store
  * that resolves stored API-key values, and a command-valued key (`!command`) runs its command, as in Pi itself.
- * Reads that need only provider ids and model limits use an empty credential store instead (#304). No credential value
+ * Reads that report no authentication presence use an empty credential store instead (#304). No credential value
  * enters catalog output and no model network call is made.
  */
 export interface CatalogRuntime {
@@ -92,7 +92,7 @@ const createCatalogRuntime = (): Promise<CatalogRuntime> =>
 
 /**
  * The same offline restore over an empty in-memory credential store (pi-ai's `InMemoryCredentialStore`), for reads that
- * need only provider ids and model limits: neither the restore nor its availability pass reads a stored credential or
+ * report no authentication presence: neither the restore nor its availability pass reads a stored credential or
  * runs a command-valued key (#304). The restore publishes Pi's stored catalog without a credential; only a Radius
  * provider's one-time import of a legacy catalog from its OAuth credential is skipped. Provider policy still applies.
  * `signal` is the SDK's documented cancellation of the create-time restore and its availability pass.
@@ -173,12 +173,14 @@ const authConfigured = (runtime: CatalogRuntime, providerId: string): Promise<bo
  * contacted. The runtime reads Pi's file store, so a command-valued stored key runs its command, as
  * in Pi itself. The only refresh is the offline restore at creation. Providers registered only
  * by Pi extensions are not part of the registry. Output prices and thinking levels serve guided
- * setup's proposals only.
+ * setup's proposals only. With `readAuthentication` false the catalog makes no authentication
+ * lookup and reports every provider as not configured; only `createCredentialFreeModelCatalog` passes it.
  */
 export async function createModelCatalog(
   createRuntime: () => Promise<CatalogRuntime> = createCatalogRuntime,
   policyFactory: () => Promise<ProviderPolicy> = loadRuntimeProviderPolicy,
   thinkingLevelRules: () => Promise<ThinkingLevelRules> = loadThinkingLevelRules,
+  readAuthentication = true,
 ): Promise<PricedModelCatalog> {
   const runtime = await createRuntime();
   const rules = await thinkingLevelRules();
@@ -195,7 +197,7 @@ export async function createModelCatalog(
   const prices = new Map<string, Map<string, number>>();
   const entries = new Map<string, Map<string, CatalogModel>>();
   const providers = await Promise.all(runtime.getProviders().map(async (provider) => {
-    const configured = !policyUnavailable && !policy?.blocked(provider.id) && await authConfigured(runtime, provider.id);
+    const configured = readAuthentication && !policyUnavailable && !policy?.blocked(provider.id) && await authConfigured(runtime, provider.id);
     const models = runtime.getModels(provider.id);
     const modelPrices = new Map<string, number>();
     for (const model of models) {
@@ -227,4 +229,17 @@ export async function createModelCatalog(
       return isThinkingLevel(effective) ? effective : undefined;
     },
   });
+}
+
+/**
+ * Provider identities for the provider CLI's commands other than `list` (#304): the catalog above, restored over an
+ * empty credential store and without its authentication lookup, so it reads no stored credential and runs no key
+ * command. Provider ids, model ids and sign-in support are the same, apart from a Radius provider's legacy import
+ * (see `createCredentialFreeRuntime`). `authConfigured` is false for every provider and says nothing; callers must not
+ * report it.
+ */
+export function createCredentialFreeModelCatalog(
+  policyFactory: () => Promise<ProviderPolicy> = loadRuntimeProviderPolicy,
+): Promise<ModelCatalog> {
+  return createModelCatalog(createCredentialFreeRuntime, policyFactory, loadThinkingLevelRules, false);
 }

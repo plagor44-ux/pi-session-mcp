@@ -1,7 +1,7 @@
 import type { Readable } from "node:stream";
 import type { ReadStream } from "node:tty";
 import { loadConfig } from "./config.js";
-import { CATALOG_ID_PATTERN, createModelCatalog, type ModelCatalog } from "./model-catalog.js";
+import { CATALOG_ID_PATTERN, createCredentialFreeModelCatalog, createModelCatalog, type ModelCatalog } from "./model-catalog.js";
 import { ProviderStoreError, SUPPORTED_PROVIDER_APIS, type CredentialSource, type ProviderDefinition, type ProviderStore, type ProviderStoreSnapshot, type SupportedProviderApi } from "./provider-store-contract.js";
 import { openProviderStore } from "./provider-store.js";
 import { readProviderKey } from "./provider-key-input.js";
@@ -9,7 +9,12 @@ import { runBundledPi, type PiAuthMode } from "./provider-sign-in.js";
 
 export interface ProviderCliDependencies {
   store?: ProviderStore;
-  catalog?: () => Promise<ModelCatalog>;
+  /**
+   * The offline catalog. `credentials` is true only for `list`, the one command that reports authentication presence,
+   * which comes from Pi's credential store. Every other command needs provider identities only and gets a catalog that
+   * reads no stored credential and runs no key command (#304).
+   */
+  catalog?: (options: { readonly credentials: boolean }) => Promise<ModelCatalog>;
   input?: Readable & Partial<Pick<ReadStream, "isTTY" | "isRaw" | "setRawMode">>;
   /** Whether stderr is a terminal; defaults to `process.stderr.isTTY === true`. */
   stderrTerminal?: boolean;
@@ -23,6 +28,9 @@ export interface ProviderCliDependencies {
 class Failure extends Error { constructor(readonly code: string, readonly exit: 1 | 3 | 4 | 64) { super(code); } }
 const fail = (code: string, exit: 1 | 3 | 4 | 64): never => { throw new Failure(code, exit); };
 const safeId = (id: string | undefined): id is string => id !== undefined && CATALOG_ID_PATTERN.test(id);
+/** Pi's file store only where authentication presence is reported (#304). */
+const defaultCatalog = ({ credentials }: { readonly credentials: boolean }): Promise<ModelCatalog> =>
+  credentials ? createModelCatalog() : createCredentialFreeModelCatalog();
 /** A provider's stored source; a provider without an entry is `inherit`. */
 const sourceIn = (snapshot: ProviderStoreSnapshot, id: string): CredentialSource => snapshot.sources.find(s => s.providerId === id)?.source ?? "inherit";
 
@@ -72,7 +80,7 @@ export async function runProviderCli(argv: readonly string[], io: ProviderCliDep
     else return fail("usage_invalid", 64);
     const store = io.store ?? openProviderStore();
     const snapshot = await store.read();
-    const catalog = await (io.catalog ?? createModelCatalog)();
+    const catalog = await (io.catalog ?? defaultCatalog)({ credentials: command === "list" });
     const custom = new Set(snapshot.definitions.map(d => d.id));
     const providers = catalog.providers().filter(p => safeId(p.id));
     const builtInProviderIds = providers.filter(p => !custom.has(p.id)).map(p => p.id);
