@@ -1223,12 +1223,12 @@ effect without any package upgrade: Doctor reports every container writer
 `writer_not_ready`. Coding starts on container workspaces fail with
 `writer_unavailable`, reason `none_admitted`: each idle writer's launcher
 refuses as not ready, and the relay skips it without counting it. Only a
-writer that a running session still leases counts, as `busy`, so without
-such a session all counts are zero. Close the coding sessions, then repeat
-step 2 alone, with each repository's existing settings, including its
-image, cache, tags and base: it accepts the writers again and keeps their
-clones and the work in them. A writer that a session still leases fails
-that step with `writer_busy`.
+writer whose lease another process holds, such as a running session or a
+setup step, counts, as `busy`, so with no such holder all counts are zero.
+Close the coding sessions, then repeat step 2 alone, with each repository's
+existing settings, including its image, cache, tags and base: it accepts
+the writers again and keeps their clones and the work in them. A writer
+that a session still leases fails that step with `writer_busy`.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases
