@@ -62,7 +62,28 @@
   sessions on the published release, one of them with three turns against a
   real provider). None of it is a Level 3 cycle.
 
-## 0.21.0 — 2026-11-12
+### Fixed
+
+- Doctor names why a container writer is `writer_not_ready`, and its
+  remediation works as printed
+  ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)). The
+  check carries a sanitized `reason`, in JSON and next to the subject in human
+  output: `not_provisioned`, `state_unreadable`, `state_invalid`,
+  `not_accepted`, `runtime_unavailable`, `image_missing`, or the first
+  acceptance binding that changed (`package_version`, `podman_version`,
+  `event_delivery`, `wrapper_changed`), else `acceptance_changed`. Reasons
+  that re-acceptance fixes name `pi-session-mcp-setup --repo <alias> --apply`,
+  which now works without repeating the provisioning settings (#300); the
+  others name the step that fixes the cause, and `--recreate` is no longer
+  offered. Acceptance writes a private `acceptance-record.json` beside the
+  writer state with the inputs it accepted; a missing, unreadable or
+  mismatched record only makes the reason less specific, and admission still
+  decides by the state alone. `writer_unavailable` with reason
+  `none_admitted` now counts not-ready launcher refusals as `notReady`;
+  before, the relay skipped them without counting, so all counts could be
+  zero. **Contract:** the `counts` object of `writer_unavailable` gains the
+  integer `notReady`, and the Doctor check gains the optional field `reason`.
+  Earlier releases ignore the record.
 
 Minor release by maintainer decision for
 [ADR 0022](docs/adr/0022-account-sign-in.md)
