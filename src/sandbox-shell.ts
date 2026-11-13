@@ -28,8 +28,11 @@ export const SANDBOX_TMP_BYTES = 536_870_912;
 export const SANDBOX_UNAVAILABLE_MESSAGE = "Read-only shell sandbox is not available";
 /** The only launcher of the limited scope: a fixed path, never a `PATH` lookup. */
 export const SYSTEMD_RUN_PATH = "/usr/bin/systemd-run";
-/** `memory.max` of each run's scope (1 GiB); the overlays and tmpfs mounts count against it. Swap is 0. */
-export const SANDBOX_MEMORY_BYTES = 1_073_741_824;
+/**
+ * `memory.max` of each run's scope (2 GiB, ADR 0013 amendment 2026-11-13); the overlays and tmpfs mounts count
+ * against it. Swap is 0. 1 GiB no longer covered this repository's own typecheck (#301).
+ */
+export const SANDBOX_MEMORY_BYTES = 2_147_483_648;
 /** `pids.max` of each run's scope: processes and threads of bubblewrap and all its descendants. */
 export const SANDBOX_TASKS = 512;
 export interface SandboxLimits { readonly memoryBytes: number; readonly tasks: number; }

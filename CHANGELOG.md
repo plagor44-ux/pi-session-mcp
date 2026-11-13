@@ -24,6 +24,15 @@
 
 ### Changed
 
+- The sandboxed shell's memory limit is 2 GiB instead of 1 GiB
+  ([#301](https://github.com/plagor44-ux/pi-session-mcp/issues/301),
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md#amendment-2026-11-13-memory-limit-of-2-gib)).
+  This repository's own typecheck (`npx tsc --noEmit -p .`) exceeded 1 GiB, so
+  a sandboxed reviewer could not run it. Each command's scope now has
+  `memory.max` 2 GiB; swap stays 0, the task limit 512, `/tmp` 512 MiB and the
+  default timeout 600 seconds, and the start probe and Doctor require the new
+  value exactly. One command can therefore use up to 2 GiB of the operator
+  user's memory. No tool schema, error code or configuration field changes.
 - Read-only sessions stream `read` through a guarded hook
   ([#273](https://github.com/plagor44-ux/pi-session-mcp/issues/273),
   [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)). The read

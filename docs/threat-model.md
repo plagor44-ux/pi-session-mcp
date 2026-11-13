@@ -91,10 +91,11 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
   as a temporary overlay whose writes vanish with the command. The operator's
   home, `PI_*` variables and the server's environment never reach the command.
   Each run starts through `/usr/bin/systemd-run` (fixed, trusted) in its own
-  transient systemd user scope limited to 1 GiB memory without swap and 512
+  transient systemd user scope limited to 2 GiB memory without swap and 512
   tasks; bubblewrap holds the command until the server has read the scope's
   effective `memory.max`, `memory.swap.max` and `pids.max` and the cgroup
-  membership of both sandbox processes (ADR 0013, amendment 2026-10-30).
+  membership of both sandbox processes (ADR 0013, amendments 2026-10-30 and
+  2026-11-13).
   The shell fails closed: an untrusted binary, a missing user manager or
   controller, limits that are not in force or a failing probe is
   `sandbox_unavailable`, and a command whose sandbox cannot start or whose
@@ -123,7 +124,7 @@ Pi Session MCP trusts the local process that launches and speaks MCP over inheri
     directory, including their configuration. Lock-dependent tests that need a
     supported local filesystem can fail on the overlay. macOS, a VM backend and
     network allowlists inside the sandbox are out of scope. One command is
-    bounded to 1 GiB of memory without swap, which also bounds the RAM-backed
+    bounded to 2 GiB of memory without swap, which also bounds the RAM-backed
     overlay upper layers of the workspace and Git directory, the root tmpfs and
     `/tmp` (512 MiB on its own), and to 512 processes and threads; a command
     defaults to a 600 second timeout. CPU time and I/O bandwidth are not limited,

@@ -32,7 +32,7 @@ describe("scopeArgs", () => {
   it("wraps bubblewrap in the fixed limited scope", () => {
     expect(scopeArgs("unit", SANDBOX_LIMITS, ["arg"], 600)).toEqual([
       "--user", "--scope", "--quiet", "--collect", "--unit=unit", "--description=pi-session-mcp sandboxed shell",
-      "-p", "MemoryMax=1073741824", "-p", "MemorySwapMax=0", "-p", "TasksMax=512", "-p", "RuntimeMaxSec=630",
+      "-p", "MemoryMax=2147483648", "-p", "MemorySwapMax=0", "-p", "TasksMax=512", "-p", "RuntimeMaxSec=630",
       "--", BWRAP_PATH, "--info-fd", "3", "--block-fd", "4", "arg",
     ]);
   });
@@ -631,6 +631,8 @@ describe("verifyScope", () => {
 
   it("accepts both processes in the named scope with the exact limits", async () => {
     await expect(verifyScope(input, scopeFiles())).resolves.toBe(true);
+    // The default memory limit is 2 GiB since the ADR 0013 amendment of 2026-11-13 (#301).
+    await expect(verifyScope(input, scopeFiles({ [`/sys/fs/cgroup${SCOPE}/memory.max`]: "2147483648\n" }))).resolves.toBe(true);
     await expect(verifyScope({ ...input, limits: { memoryBytes: 67_108_864, tasks: 16 } }, scopeFiles({
       [`/sys/fs/cgroup${SCOPE}/memory.max`]: "67108864\n", [`/sys/fs/cgroup${SCOPE}/pids.max`]: "16\n",
     }))).resolves.toBe(true);
@@ -640,7 +642,8 @@ describe("verifyScope", () => {
     ["no cgroup2 mount", { "/proc/self/mounts": "cgroup /sys/fs/cgroup cgroup rw 0 0\n" }],
     ["unreadable mounts", { "/proc/self/mounts": new Error("EACCES") }],
     ["memory.max not in force", { [`/sys/fs/cgroup${SCOPE}/memory.max`]: "max\n" }],
-    ["another memory.max", { [`/sys/fs/cgroup${SCOPE}/memory.max`]: "1073741823\n" }],
+    ["another memory.max", { [`/sys/fs/cgroup${SCOPE}/memory.max`]: "2147483647\n" }],
+    ["the former 1 GiB memory.max", { [`/sys/fs/cgroup${SCOPE}/memory.max`]: "1073741824\n" }],
     ["swap not disabled", { [`/sys/fs/cgroup${SCOPE}/memory.swap.max`]: "max\n" }],
     ["pids.max not in force", { [`/sys/fs/cgroup${SCOPE}/pids.max`]: "max\n" }],
     ["another pids.max", { [`/sys/fs/cgroup${SCOPE}/pids.max`]: "127\n" }],
