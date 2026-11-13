@@ -298,7 +298,11 @@ mean they are implemented or that their gates passed.
   comparison of `maxOutputTokens` with Pi's stored catalog under a
   maintainer-approved extension of the catalog exception in AGENTS.md (#262).
   #298 stays open: no Pi SDK release after 1.5.2 contains the upstream fix.
-  Release 0.22.0 follows the sprint. Open: #144, #221, #298.
+  Validating history and routing found that `routing status` does not say
+  when the last learning refresh ran (#303), and verifying a review finding
+  showed that the offline catalog restore runs a command-valued API key
+  (#304), which needs a maintainer decision. Release 0.22.0 follows the
+  sprint. Open: #144, #221, #298, #303, #304.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
