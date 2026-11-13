@@ -50,6 +50,8 @@ export function localReadOperations(): Decided<ReadOperations> {
  * The `read` definition of a coding session: the SDK's own tool over `localReadOperations`. Registered as
  * an SDK custom tool, it replaces the built-in `read`, whose stream would end the server on an abort that
  * lands while it opens its file (#298). Paths are not confined: a coding session reads what the built-in reads.
+ * Image resizing keeps the factory default, which the server's in-memory session settings also select for the
+ * built-in.
  */
 export function createCodingReadTool(cwd: string): ToolDefinition {
   return createReadToolDefinition(cwd, { operations: localReadOperations() }) as unknown as ToolDefinition;

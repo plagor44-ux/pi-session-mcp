@@ -336,7 +336,9 @@ ended the server process when it fired while `read` detected the image type or
 opened the file: the tool checks its signal before both, and the default
 creates the stream on the aborted signal. Paths of the coding `read` stay
 unconfined, as with the built-in it replaces, and the other coding tools stay
-the SDK's built-ins. Two routes could fix it: an SDK release that checks the
+the SDK's built-ins. Like the confined `read`, it keeps the factory's image
+resizing, which the server's in-memory session settings also select for the
+built-in. Two routes could fix it: an SDK release that checks the
 signal itself, adopted through a dependency update, or the server's own read
 operations for coding sessions. No Pi SDK release after 1.5.2 has the check, so
 the server takes the second route; it uses only exports of the package root,
