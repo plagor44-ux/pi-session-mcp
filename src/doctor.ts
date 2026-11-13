@@ -4,11 +4,12 @@ import { constants } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { homedir, userInfo } from "node:os";
 import { createProcessRunner } from "./setup-process.js";
+import type { CommandRunner } from "./client-adapters/types.js";
 import { accountHome, probeSandbox, resolveGoModuleCache, sandboxProtection, resolveWorktreeGitDir, type SandboxProtection, type SandboxSelection, type GoModuleCacheProblem } from "./sandbox-shell.js";
 import { podmanInfo, isSafeRefName } from "./writer-boundary.js";
 import { containedBuiltinSkills, containedProfileRefused } from "./writer-lifecycle.js";
 import { writerBaseFreshness, type BaseFreshness, type BaseFreshnessRequest } from "./writer-base-freshness.js";
-import { readWriterState, writerAcceptanceCurrent, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
+import { readWriterState, writerAcceptanceReason, type WriterAcceptanceReason, writerName, writerPaths, writersRoot, type WriterState } from "./writer-state.js";
 import { LEASE_DIRECTORY } from "./writer-lease.js";
 import { readSnapshotState, snapshotPathMatches, snapshotPaths, SnapshotError, SNAPSHOT_DIRECTORY } from "./review-snapshot.js";
 import { ConfigError, loadConfig, type AppConfig } from "./config.js";
@@ -25,6 +26,7 @@ import { LEGACY_SKILL_TREE_FINGERPRINT_PATTERN, readSkillTree, releasedSkillFing
 
 import { openProviderStore } from "./provider-store.js";
 import { ProviderStoreError } from "./provider-store-contract.js";
+import { readCatalogOutputLimits } from "./model-catalog.js";
 
 export type DoctorSeverity = "ok" | "warning" | "error";
 export type DoctorExitCode = 0 | 1 | 2 | 64;
@@ -41,7 +43,7 @@ export type DoctorCheckId =
   | "sandbox_unavailable" | "sandbox_go_cache_unavailable" | "workspace_git_unavailable"
   | "snapshot_path_mismatch" | "snapshot_incomplete" | "snapshot_unavailable"
   | "routing_config_invalid" | "routing_history_required" | "routing_single_family"
-  | "provider_store"
+  | "provider_store" | "max_output_tokens_unsupported"
   | "event_spool_root"
   | "history_storage" | "history_schema" | "history_integrity" | "history_gaps";
 
@@ -50,6 +52,7 @@ export interface DoctorCheck {
   readonly severity: DoctorSeverity;
   readonly subject: string;
   readonly remediation?: string;
+  readonly reason?: WriterAcceptanceReason;
 }
 
 export interface DoctorResult {
@@ -83,6 +86,8 @@ export interface DoctorDependencies {
   /** Explicit configuration path, otherwise captured once from PI_SESSION_MCP_CONFIG. */
   readonly configPath?: string;
   readonly loadConfig?: (path?: string) => Promise<AppConfig>;
+  /** Offline catalog output limits, read only when a profile sets a cap. */
+  readonly outputLimits?: (signal: AbortSignal) => Promise<(providerId: string, modelId: string) => number | undefined>;
   /** Original configuration, before skill resolution; read only for selected container profiles. */
   readonly loadRawConfig?: () => Promise<unknown>;
   readonly packageMetadata?: () => Promise<DoctorPackageMetadata>;
@@ -125,7 +130,7 @@ async function readPrefix(path: string, maxBytes: number): Promise<string> {
 }
 
 const defaultFileSystem: DoctorFileSystem = { readFile, stat, access };
-const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "provider_store", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps", "routing_config_invalid", "routing_history_required", "routing_single_family"];
+const CHECK_ORDER: readonly DoctorCheckId[] = ["node_version_unsupported", "package_metadata_unreadable", "build_missing", "build_stale", "version_mismatch", "config_missing", "config_unreadable", "config_invalid", "skill_controller_selected", "workspace_missing", "workspace_not_directory", "workspace_unreadable", "workspace_not_writable", "workspace_gitfile", "workspace_mode_unset", "workspace_base_unset", "workspace_host_writes_accepted", "container_runtime_unavailable", "container_profile_refused", "writer_lease_directory", "writer_not_ready", "writer_not_migrated", "writer_off_default_base", "writer_base_behind", "writer_dirty", "writer_git_identity_missing", "writer_uncollected_bundle", "provider_store", "max_output_tokens_unsupported", "extension_missing", "extension_version_mismatch", "extension_unpinned", "skill_missing", "skill_unreadable", "skill_duplicate", "skill_override_outdated", "sandbox_unavailable", "sandbox_go_cache_unavailable", "workspace_git_unavailable", "snapshot_path_mismatch", "snapshot_incomplete", "snapshot_unavailable", "event_spool_root", "history_storage", "history_schema", "history_integrity", "history_gaps", "routing_config_invalid", "routing_history_required", "routing_single_family"];
 
 function failure(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "error", subject, remediation }); }
 function warning(id: DoctorCheckId, subject: string, remediation: string): DoctorCheck { return Object.freeze({ id, severity: "warning", subject, remediation }); }
@@ -313,13 +318,22 @@ async function snapshotChecks(config: AppConfig, home: string): Promise<DoctorCh
   return checks;
 }
 
+/**
+ * Only exit status 1 of `podman image exists` means the image is absent, as in setup's acceptance check. Any other
+ * status, a failed start or the timeout throws, so the writer's reason becomes `runtime_unavailable`, not `image_missing`.
+ */
+export function podmanImageExists(runner: CommandRunner): (id: string) => Promise<boolean> {
+  return async (id) => {
+    const { exitCode } = await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000));
+    if (exitCode !== 0 && exitCode !== 1) throw new Error("podman_image_check_failed");
+    return exitCode === 0;
+  };
+}
+
 async function defaultWriterRuntime() {
   const runner = createProcessRunner();
   const info = await podmanInfo(runner);
-  return { ...(info.version ? { podmanVersion: info.version } : {}), imageExists: async (id: string) => {
-    try { return (await runner.run("podman", ["image", "exists", id], AbortSignal.timeout(10_000))).exitCode === 0; }
-    catch { return false; }
-  } };
+  return { ...(info.version ? { podmanVersion: info.version } : {}), imageExists: podmanImageExists(runner) };
 }
 
 async function writerGitIdentity(clone: string): Promise<boolean> {
@@ -520,16 +534,19 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
       }
       for (let index = 1; index <= entry.container.writers; index++) {
         const name = writerName(alias, index), paths = writerPaths(home, name);
-        const remediation = `run pi-session-mcp-setup --repo ${alias} --apply, or --writer ${name} --recreate --apply`;
-        let state: WriterState | undefined, ready = false;
-        try {
-          state = await readWriterState(home, name);
-          if (state?.phase === "ready" && state.acceptance) {
-            runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)();
-            ready = await writerAcceptanceCurrent(paths.wrapper, state, runtime);
-          }
-        } catch { /* Unreadable state or runtime is not ready. */ }
-        checks.push(ready ? ok("writer_not_ready", name) : failure("writer_not_ready", name, remediation));
+        let state: WriterState | undefined;
+        try { state = await readWriterState(home, name); } catch { /* The reason function classifies the read failure. */ }
+        if (state?.phase === "ready" && state.acceptance) {
+          runtime ??= await (dependencies.writerRuntime ?? defaultWriterRuntime)().catch(() => ({ imageExists: async () => false }));
+        }
+        const reason = await writerAcceptanceReason(home, name, runtime ?? { imageExists: async () => false });
+        const ready = reason === undefined;
+        const retry = `run pi-session-mcp-setup --repo ${alias} --apply`;
+        const remediation = reason === "image_missing" ? `restore the writer's recorded image in local Podman storage, then ${retry}`
+          : reason === "state_unreadable" ? `restore read access to the writer state, then ${retry}`
+          : reason === "state_invalid" ? `restore a valid writer state from backup, then ${retry}; preserve writer work before any replacement`
+          : reason === "runtime_unavailable" ? `make rootless Podman usable, then ${retry}` : retry;
+        checks.push(ready ? ok("writer_not_ready", name) : { ...failure("writer_not_ready", name, remediation), reason });
         if (!state) continue;
         checks.push(state.launch === "relay" ? ok("writer_not_migrated", name)
           : warning("writer_not_migrated", name, `run pi-session-mcp-setup --repo ${alias} --apply to migrate the writer to the relay`));
@@ -679,6 +696,31 @@ export async function runDoctor(dependencies: DoctorDependencies = {}): Promise<
     } catch { checks.push(failure("routing_config_invalid", "routing", "correct routing.json to reference configured profiles and valid routing settings")); }
   }
   checks.push(await providerStoreCheck(dependencies.home ?? userInfo().homedir));
+  if (config) {
+    const profiles = [...config.executionProfiles].filter(([, profile]) => profile.maxOutputTokens !== undefined);
+    if (profiles.length) {
+      // Past the bound the comparison is unknown and the read is aborted; Promise.race keeps its late result handled.
+      const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let limits: ((providerId: string, modelId: string) => number | undefined) | undefined;
+      try {
+        limits = await Promise.race([
+          Promise.resolve().then(() => (dependencies.outputLimits ?? readCatalogOutputLimits)(controller.signal)),
+          new Promise<undefined>((resolve) => { timer = setTimeout(() => { resolve(undefined); controller.abort(); }, 10_000); }),
+        ]);
+      } catch { /* An unavailable catalog makes the comparison unknown. */ }
+      finally { if (timer !== undefined) clearTimeout(timer); controller.abort(); }
+      for (const [alias, profile] of profiles) {
+        let maximum: number | undefined;
+        try { maximum = limits?.(profile.provider, profile.model); } catch { /* Treat lookup failure as unknown. */ }
+        checks.push(maximum === undefined
+          ? warning("max_output_tokens_unsupported", alias, "check with pi-session-mcp-setup --list-models that the stored catalog lists the profile's model")
+          : profile.maxOutputTokens! > maximum
+            ? failure("max_output_tokens_unsupported", alias, "lower maxOutputTokens to at most the model's catalog maximum, or remove it")
+            : ok("max_output_tokens_unsupported", alias));
+      }
+    }
+  }
   if (config) checks.push(...await snapshotChecks(config, home));
   if (config?.eventDelivery === "spool") checks.push(await eventSpoolCheck(dependencies.env ?? process.env, dependencies.eventSpoolRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.()));
   const lease = await writerLeaseCheck(home, dependencies.writerLeaseRoot ?? defaultRootInfo, dependencies.uid ?? process.getuid?.());
@@ -753,6 +795,6 @@ export async function providerStoreCheck(home: string): Promise<DoctorCheck> {
   }
 }
 
-export function renderDoctorHuman(result: DoctorResult): string { return result.checks.map((check) => `${check.severity.toUpperCase()} ${check.id} [${check.subject}]${check.remediation ? `: ${check.remediation}` : ""}`).join("\n") + "\n"; }
+export function renderDoctorHuman(result: DoctorResult): string { return result.checks.map((check) => `${check.severity.toUpperCase()} ${check.id} [${check.subject}${check.reason ? ` (${check.reason})` : ""}]${check.remediation ? `: ${check.remediation}` : ""}`).join("\n") + "\n"; }
 
 export function parseDoctorArgs(args: readonly string[]): { json: boolean } | undefined { return args.length === 0 ? { json: false } : args.length === 1 && args[0] === "--json" ? { json: true } : undefined; }

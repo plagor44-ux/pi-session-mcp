@@ -382,12 +382,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "notReady": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "busy",
                       "notAtBaseline",
-                      "settingsChanged"
+                      "settingsChanged",
+                      "notReady"
                     ],
                     "additionalProperties": false
                   }
@@ -771,12 +777,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "notReady": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "busy",
                       "notAtBaseline",
-                      "settingsChanged"
+                      "settingsChanged",
+                      "notReady"
                     ],
                     "additionalProperties": false
                   }
@@ -969,12 +981,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "notReady": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "busy",
                       "notAtBaseline",
-                      "settingsChanged"
+                      "settingsChanged",
+                      "notReady"
                     ],
                     "additionalProperties": false
                   }
@@ -1167,12 +1185,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "notReady": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "busy",
                       "notAtBaseline",
-                      "settingsChanged"
+                      "settingsChanged",
+                      "notReady"
                     ],
                     "additionalProperties": false
                   }
@@ -1464,12 +1488,18 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "notReady": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "busy",
                       "notAtBaseline",
-                      "settingsChanged"
+                      "settingsChanged",
+                      "notReady"
                     ],
                     "additionalProperties": false
                   }

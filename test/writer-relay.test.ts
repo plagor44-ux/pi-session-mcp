@@ -356,7 +356,7 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
   });
   it("fenced and not-ready refusals are skipped without incrementing busy", async () => {
     const s = await setup([{ refuse: "writer_fenced" }, { refuse: "writer_not_ready" }]);
-    await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { busy: 0, notAtBaseline: 0, settingsChanged: 0 } });
+    await expect(s.start()).rejects.toMatchObject({ reason: "none_admitted", counts: { busy: 0, notAtBaseline: 0, settingsChanged: 0, notReady: 1 } });
   });
   it("routing: read-only profile on a container workspace and any profile on a host workspace use the host adapter", async () => {
     const host = { create: vi.fn().mockResolvedValue({}) }, relay = { create: vi.fn().mockResolvedValue({}) };

@@ -177,7 +177,9 @@ base.
   acceptance is still current is decided by the launcher, which refuses a
   stale one). `none_at_base`: ready writers
   exist, none on the requested base. `none_admitted`: candidates existed and
-  each refused; the counts `busy`, `notAtBaseline` and `settingsChanged` say
+  each refused; the counts `busy`, `notAtBaseline`, `settingsChanged` and
+  `notReady` (added by #299 on 2026-11-13; before, a not-ready refusal was
+  skipped without counting) say
   why.
 - The controller cannot name a writer in this version (see Alternatives).
 

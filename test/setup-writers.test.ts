@@ -6,7 +6,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 import { MemoryOwnershipStore } from "../src/setup-ownership.js";
-import { acceptanceFingerprint, readWriterState, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
+import { acceptanceFingerprint, currentAcceptanceRecord, writeWriterAcceptanceRecord, readWriterState, writeWriterState, writerPaths, type WriterState } from "../src/writer-state.js";
 import { registerWriter } from "../src/client-adapters/writer-registration.js";
 import { renderWrapper, wrapperDigest } from "../src/writer-wrapper.js";
 import { PACKAGE_VERSION } from "../src/package-metadata.js";
@@ -16,6 +16,8 @@ import { changeWriterMode, type WriterSetupDependencies } from "../src/setup-wri
 import { OverrideLockError } from "../src/override-lock.js";
 import { executionModesPath } from "../src/execution-modes.js";
 afterAll(removeTemporaryRoots);
+import { loadConfig } from "../src/config.js";
+import { runDoctor } from "../src/doctor.js";
 import { parseSetupArgs } from "../src/setup-cli.js";
 import { runWriterOperation } from "../src/setup-writers.js";
 
@@ -68,6 +70,80 @@ const podmanImage = (ref: string): string => /^[0-9a-f]{64}$/.test(ref) ? ref : 
 const podmanAnswer = (args: readonly string[]): string => args[0] === "ps" ? "[]" : args[0] === "info" ? "true" : args[0] === "version" ? "5.4.0" : args[0] === "image" ? podmanImage(args.at(-1)!) : "";
 const mode = { alias: "x", mode: "container" as const, container: { profiles: ["code"], writers: 2 }, apply: true, acceptHostWrites: false };
 describe("writer setup reconciliation", () => {
+  it("runs Doctor's printed no-settings remediation and accepts with recorded settings", async () => {
+    const f = await fixture();
+    expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
+    const before = await readFile(executionModesPath(f.configPath), "utf8");
+    for (const index of [1, 2]) {
+      const name = `x-w${index}`, previous = (await readWriterState(f.home, name))!;
+      const record = await currentAcceptanceRecord(writerPaths(f.home, name).wrapper, previous, "5.3.0");
+      await writeWriterAcceptanceRecord(f.home, name, record);
+      await writeWriterState(f.home, name, { ...previous, acceptance: { fingerprint: record.fingerprint, verdict: "pass", network: "limited", at: "then" } });
+    }
+    const report = await runDoctor({ home: f.home, loadConfig: () => loadConfig(f.configPath), containerRuntime: async () => true,
+      writerRuntime: async () => ({ podmanVersion: "5.4.0", imageExists: async () => true }) });
+    const finding = report.checks.find(c => c.id === "writer_not_ready" && c.subject === "x-w1")!;
+    expect(finding.reason).toBe("podman_version");
+    const args = finding.remediation!.replace("run pi-session-mcp-setup ", "").split(" ");
+    f.accept.acceptWriter.mockImplementation(async (ctx, name) => {
+      const previous = (await readWriterState(ctx.home, name))!;
+      const record = await currentAcceptanceRecord(writerPaths(ctx.home, name).wrapper, previous, "5.4.0");
+      await writeWriterAcceptanceRecord(ctx.home, name, record);
+      await writeWriterState(ctx.home, name, { ...previous, phase: "ready", acceptance: { fingerprint: record.fingerprint, verdict: "pass", network: "limited", at: "now" } });
+      return { status: "ok", code: "writer_accepted" };
+    });
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(args).repo!, { ...f.deps, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });
+    expect(output.exitCode).toBe(0);
+    expect(output.findings.filter(f => f.code === "writer_accepted")).toHaveLength(2);
+    expect(output.findings.some(f => f.code === "controllers_restart_required")).toBe(false);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_unchanged" }));
+    expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
+    expect(await acceptance.acceptanceCurrent({ home: f.home, releaseRoot: f.home, nodePath: process.execPath, checkout: f.home, alias: "x", runner: f.runner }, "x-w1")).toBe("current");
+  });
+  it.each(["same", "older", "missing", "invalid", "mismatched", "migrated"] as const)("restart advice uses the previous acceptance record (%s)", async kind => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const name = "x-w1", paths = writerPaths(f.home, name), previous = (await readWriterState(f.home, name))!;
+    const record = await currentAcceptanceRecord(paths.wrapper, previous, "5.3.0");
+    if (kind === "older") record.packageVersion = "0.0.0";
+    record.fingerprint = acceptanceFingerprint({ ...record, imageId: previous.imageId, network: previous.network, cache: previous.cache });
+    await writeWriterState(f.home, name, { ...previous, ...(kind === "migrated" ? { launch: "legacy" } : {}), acceptance: { fingerprint: record.fingerprint, verdict: "pass", network: "limited", at: "then" } });
+    if (kind !== "missing") await writeWriterAcceptanceRecord(f.home, name, kind === "mismatched" ? { ...record, fingerprint: `sha256:${"0".repeat(64)}` } : record);
+    if (kind === "invalid") await writeFile(paths.acceptanceRecord, "{}");
+    f.accept.acceptanceCurrent.mockImplementation(async (_ctx, candidate) => candidate === name ? "stale" : "current");
+    // Acceptance really replaces the old record: advice must use the pre-acceptance snapshot.
+    const accept = f.accept.acceptWriter.getMockImplementation()!;
+    f.accept.acceptWriter.mockImplementation(async (ctx, candidate) => {
+      const current = (await readWriterState(ctx.home, candidate))!;
+      await writeWriterAcceptanceRecord(ctx.home, candidate, await currentAcceptanceRecord(writerPaths(ctx.home, candidate).wrapper, current, "5.4.0"));
+      return accept(ctx, candidate);
+    });
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(["--repo", "x", "--apply"]).repo!, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_unchanged" }));
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_accepted" }));
+    expect(output.findings.filter(f => f.code === "controllers_restart_required")).toHaveLength(kind === "same" ? 0 : 1);
+  });
+  it("updates writer limits alone without restart advice when the mode entry is unchanged", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const previous = (await readWriterState(f.home, "x-w1"))!;
+    await writeWriterState(f.home, "x-w1", { ...previous, limits: { cpus: 1 } });
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(["--repo", "x", "--apply"]).repo!, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_limits_updated" }));
+    expect(output.findings.some(f => f.code === "controllers_restart_required")).toBe(false);
+  });
+  it("sets an unset repository base without repeating container settings", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const path = executionModesPath(f.configPath), stored = JSON.parse(await readFile(path, "utf8"));
+    delete stored.workspaces.x.base;
+    await writeFile(path, JSON.stringify(stored));
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(["--repo", "x", "--base", "main", "--apply"]).repo!, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.x).toEqual({ ...stored.workspaces.x, base: "main" });
+  });
   it("plans and applies limits under the fence without settings drift or reprovisioning", async () => {
     const f = await fixture();
     expect((await changeWriterMode(f.configPath, mode, f.deps)).exitCode).toBe(0);
@@ -94,6 +170,8 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(0);
     expect(unfenced).toBe(2);
     expect(output.findings.filter((finding) => finding.code === "writer_limits_updated")).toHaveLength(2);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_applied" }));
+    expect(output.findings.filter(f => f.code === "controllers_restart_required")).toHaveLength(1);
     expect(output.findings.some((finding) => finding.code === "writer_settings_changed")).toBe(false);
     expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
     f.life.writerSettingsDrift.mockImplementation(lifecycle.writerSettingsDrift);

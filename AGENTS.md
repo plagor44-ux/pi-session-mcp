@@ -32,9 +32,15 @@
   `checkAuth` (reduced to a boolean) only, behind injectable `ModelCatalog`.
   Its runtime is created with `refreshOnCreate: true` and
   `allowModelNetwork: false`: an offline restore of the catalog Pi persisted
-  earlier (`models-store.json`). It reads stored credential records and
-  resolves API-key values in-process, as `checkAuth` does, but makes no
-  network request, no credential refresh and no `getAuth`. The catalog may also
+  earlier (`models-store.json`). Over Pi's file store it reads stored
+  credential records and resolves API-key values as `checkAuth` does; a
+  command-valued key (`!command`) runs its command, as in Pi itself. It makes
+  no network request of its own, no credential refresh and no `getAuth`.
+  Doctor's output-limit read, the provider discovery of the provider store
+  and the writer launch, and every `pi-session-mcp-provider` command except
+  `list` create that runtime over an empty in-memory credential store (pi-ai's
+  package-root `InMemoryCredentialStore`), so these catalog reads see no stored
+  credential and run no key command (maintainer-approved 2026-11-13, #304). The catalog may also
   read each model's output price offline for the guided setup's tier proposal only
   (maintainer-approved 2026-11-09), and each model's thinking levels through the
   pi-ai package-root exports `getSupportedThinkingLevels` and
@@ -42,7 +48,9 @@
   only (maintainer-approved 2026-11-11, #288). It may also read offline
   whether each provider declares account sign-in (`auth.oauth` on the entries
   of `getProviders()`), for the provider CLI and the guided setup only
-  (ADR 0022). The session
+  (ADR 0022). It may also read each model's output token limit (`maxTokens`)
+  offline, for Doctor's comparison with a profile's `maxOutputTokens` only
+  (maintainer-approved 2026-11-13, #262). The session
   adapter keeps `refreshOnCreate: false` and restores that catalog only for
   the selected provider, offline and within its auth deadline
   (maintainer-approved 2026-10-30, #199). A third narrow exception is the

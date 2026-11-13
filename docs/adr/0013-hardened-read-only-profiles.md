@@ -193,13 +193,17 @@ runs only after the server has verified that the limits are in force.
 
 - Launcher: `/usr/bin/systemd-run --user --scope --quiet --collect
   --unit=pi-session-mcp-shell-<uuid>
-  --description="pi-session-mcp sandboxed shell" -p MemoryMax=1073741824
+  --description="pi-session-mcp sandboxed shell" -p MemoryMax=2147483648
   -p MemorySwapMax=0 -p TasksMax=512 -p RuntimeMaxSec=<deadline + 30>
   -- /usr/bin/bwrap --info-fd 3
   --block-fd 4 <the fixed arguments of section 2>`. systemd-run moves itself
   into the new scope before it executes bubblewrap, so bubblewrap and every
-  descendant inherit the scope from their first instruction.
-- Limits per run: `memory.max` 1 GiB, `memory.swap.max` 0 and `pids.max` 512
+  descendant inherit the scope from their first instruction. The memory value
+  was `1073741824` until the
+  [amendment of 2026-11-13](#amendment-2026-11-13-memory-limit-of-2-gib).
+- Limits per run: `memory.max` 1 GiB (2 GiB since the
+  [amendment of 2026-11-13](#amendment-2026-11-13-memory-limit-of-2-gib)),
+  `memory.swap.max` 0 and `pids.max` 512
   (processes and threads of bubblewrap and all descendants together). `/tmp`
   stays a 512 MiB tmpfs, and the default timeout stays 600 seconds. The
   first value, 128, was raised before the release: a Node.js process runs
@@ -259,7 +263,8 @@ bound would need a second, outer bubblewrap with its own namespaces and a view
 of the host root, which is a sandbox redesign. Instead the upper layers of the
 workspace and of a linked worktree's Git directory, the root tmpfs and `/tmp`
 are all RAM-backed and charged to the scope's memory cgroup, which has no swap:
-together with the processes' own memory they cannot exceed 1 GiB. Filling them
+together with the processes' own memory they cannot exceed the memory limit
+(1 GiB at first, 2 GiB since 2026-11-13). Filling them
 past that ends the command through the kernel's out-of-memory handling rather
 than with `ENOSPC`; `/tmp` still reports `ENOSPC` at 512 MiB. The individual
 bounds act together; they cannot all be reached at once.
@@ -322,6 +327,38 @@ a symlink after the check is unchanged. Unlike the SDK's default, the hook
 refuses a signal that is already aborted before it creates the stream: Node
 raises a second, uncaught `AbortError` for a stream created with an aborted
 signal.
+
+### Amendment 2026-11-13: memory limit of 2 GiB
+
+Issue #301, maintainer decision of 2026-11-13. The 1 GiB of the
+[amendment of 2026-10-30](#amendment-2026-10-30-resource-limits-of-the-sandboxed-shell)
+was chosen so that a sandboxed reviewer could run this repository's checks. It
+no longer covers them: the kernel ends `npx tsc --noEmit -p .` (TypeScript
+7.0.2) with exit status 137 in a scope with `MemoryMax=1073741824`,
+`MemorySwapMax=0` and `TasksMax=512`, with or without the task limit, and the
+same command passes with `MemoryMax=2147483648` and with 4 GiB (reproduced on
+the host with the same scope properties). A routed sandboxed review on
+2026-11-13 fell back to type-checking narrowed file sets and reported the
+project-wide check as unverified.
+
+New rule: `memory.max` of every run's scope is 2 GiB (`-p MemoryMax=2147483648`
+in the launcher above). Swap stays 0, `pids.max` stays 512, `/tmp` stays a
+512 MiB tmpfs and the default timeout stays 600 seconds. The gate requires the
+new value exactly, as it required the old one, and fails closed otherwise. The
+value stays fixed for every sandboxed profile; there is no configuration field.
+
+Why: 2 GiB is the smallest measured value at which the project's own typecheck
+passes, so the bound of one command grows only as far as that need requires.
+A bounded per-profile limit would add a configuration field and a profile
+comparison for one known need. Keeping 1 GiB and documenting the gap would
+leave sandboxed reviewers unable to run the project-wide typecheck and push
+that check back to the controller.
+
+Consequences: one command, together with its RAM-backed overlay upper layers,
+the root tmpfs and `/tmp`, can now use up to 2 GiB of the operator user's
+memory, and each concurrent command has its own 2 GiB scope. The other limits
+and residual risks of the amendment of 2026-10-30 are unchanged. Hosts need no
+change; the start probe and Doctor verify the new value.
 
 ## Contract change and versioning
 

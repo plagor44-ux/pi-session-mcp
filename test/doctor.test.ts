@@ -46,6 +46,77 @@ const healthyConfig = async () => ({
 
 afterAll(removeTemporaryRoots);
 
+describe("offline output limit checks", () => {
+  const config = async (cap?: number) => {
+    const base = await healthyConfig();
+    const profile = base.executionProfiles.get("safe")!;
+    return { ...base, executionProfiles: new Map([["safe", { ...profile, model: "private-model-id", ...(cap === undefined ? {} : { maxOutputTokens: cap }) }]]) };
+  };
+  const deps = { packageRoot: "/root", fileSystem: fsFor({ files: ["/root/dist/main.js"], dirs: ["/hidden/workspace"] }) };
+  it.each([[12346, "error"], [12345, "ok"], [12344, "ok"]] as const)("compares cap %s", async (cap, severity) => {
+    const reader = vi.fn(async () => () => 12345);
+    const result = await runDoctor({ ...deps, loadConfig: () => config(cap), outputLimits: reader });
+    expect(reader).toHaveBeenCalledOnce();
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", subject: "safe", severity }));
+    const ids = result.checks.map(check => check.id);
+    expect(ids.indexOf("max_output_tokens_unsupported")).toBe(ids.indexOf("provider_store") + 1);
+    for (const output of [renderDoctorHuman(result), renderDoctorJson(result)]) {
+      expect(output).not.toContain(String(cap)); expect(output).not.toContain("12345"); expect(output).not.toContain("private-model-id");
+    }
+  });
+  it.each(["unlisted", "reject"])("warns when %s", async (kind) => {
+    const result = await runDoctor({ ...deps, loadConfig: () => config(12346), outputLimits: async () => {
+      if (kind === "reject") throw new Error("secret");
+      return () => undefined;
+    } });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "warning" }));
+  });
+  it("bounds a stalled reader", async () => {
+    vi.useFakeTimers();
+    try {
+      const reader = vi.fn(() => new Promise<() => number>(() => {}));
+      const pending = runDoctor({ ...deps, loadConfig: () => config(12346), outputLimits: reader });
+      await vi.waitFor(() => expect(reader).toHaveBeenCalledOnce());
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "warning" }));
+    } finally { vi.useRealTimers(); }
+  });
+  it("aborts the read at the bound and keeps its later rejection handled", async () => {
+    vi.useFakeTimers();
+    try {
+      const signals: AbortSignal[] = [];
+      const reader = vi.fn((signal: AbortSignal) => {
+        signals.push(signal);
+        // Rejects one tick after the abort, when Doctor has already reported: a late rejection must not surface.
+        return new Promise<() => number>((_resolve, reject) => signal.addEventListener("abort", () => { setTimeout(() => reject(new Error("aborted")), 1); }, { once: true }));
+      });
+      const pending = runDoctor({ ...deps, loadConfig: () => config(12346), outputLimits: reader });
+      await vi.waitFor(() => expect(reader).toHaveBeenCalledOnce());
+      expect(signals[0]?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const result = await pending;
+      expect(signals[0]?.aborted).toBe(true);
+      expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "warning" }));
+      await vi.advanceTimersByTimeAsync(1);
+    } finally { vi.useRealTimers(); }
+  });
+  it("aborts the signal after a read that finished in time", async () => {
+    const signals: AbortSignal[] = [];
+    const result = await runDoctor({ ...deps, loadConfig: () => config(12345), outputLimits: async (signal) => { signals.push(signal); return () => 12345; } });
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "max_output_tokens_unsupported", severity: "ok" }));
+    expect(signals[0]?.aborted).toBe(true);
+  });
+  it("does not read without caps or valid configuration", async () => {
+    const reader = vi.fn(async () => () => 1);
+    for (const loadConfig of [() => config(), async () => { throw new Error("invalid"); }]) {
+      const result = await runDoctor({ ...deps, loadConfig, outputLimits: reader });
+      expect(result.checks.some(check => check.id === "max_output_tokens_unsupported")).toBe(false);
+    }
+    expect(reader).not.toHaveBeenCalled();
+  });
+});
+
 describe("offline doctor", () => {
   it("accepts an npm installation that has no lockfile and no sources", async () => {
     // An npm installation has package.json and the built files, but no lockfile, no src/ and no tsconfig.

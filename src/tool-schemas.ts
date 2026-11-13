@@ -39,7 +39,7 @@ export const turnSuccessSchema = z.object({ ok: z.literal(true), turn: turnSchem
 /** One page of raw Pi entries from an inner writer server (ADR 0019). The host treats it as untrusted input. */
 export const historyPageSuccessSchema = z.object({ ok: z.literal(true), sessionId: z.string(), header: z.unknown().optional(), entries: z.array(z.unknown()), truncated: z.array(z.number().int().min(0)).optional(), next: z.number().int().min(0), more: z.boolean() });
 export const listSchema = z.object({ ok: z.literal(true), sessions: z.array(viewSchema) });
-export const errorSchema = z.object({ ok: z.literal(false), error: z.object({ code: z.string(), message: z.string(), reason: z.enum(["none_ready", "none_at_base", "none_admitted"]).optional(), counts: z.object({ busy: z.number().int().nonnegative(), notAtBaseline: z.number().int().nonnegative(), settingsChanged: z.number().int().nonnegative() }).optional() }) });
+export const errorSchema = z.object({ ok: z.literal(false), error: z.object({ code: z.string(), message: z.string(), reason: z.enum(["none_ready", "none_at_base", "none_admitted"]).optional(), counts: z.object({ notReady: z.number().int().nonnegative(), busy: z.number().int().nonnegative(), notAtBaseline: z.number().int().nonnegative(), settingsChanged: z.number().int().nonnegative() }).optional() }) });
 export const capabilitiesSchema = z.object({
   ok: z.literal(true),
   server: z.object({ name: z.literal(packageMetadata.name), version: z.literal(packageMetadata.version) }).strict(),

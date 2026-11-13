@@ -1,8 +1,18 @@
 # Offline doctor contract
 
 `src/doctor-cli.ts` is a separate local entry point. It never imports the MCP
-server, initializes transport, creates a Pi session, reads credentials, or
-performs network activity.
+server, initializes transport, creates a Pi session, prints credentials, or
+performs network activity. It reads stored credential records only
+in-process: the `provider_store` check validates the provider store. Pi's own
+credential store stays unread: the provider discovery behind that check and
+the catalog restore below create their runtime over an empty credential store,
+so no command-valued key runs (#304). When
+a profile sets `maxOutputTokens`, Doctor restores Pi's stored model catalog
+once, offline, to compare each cap with the model's output limit
+(`max_output_tokens_unsupported`). That restore makes no network request and
+no credential refresh; a catalog that cannot be read within 10 seconds only
+produces warnings, and Doctor then aborts the read through the SDK's
+cancellation signal.
 It checks the package it was loaded from, never the current working
 directory: an npm executable can run from any directory.
 
@@ -13,9 +23,24 @@ Subjects are only fixed component names, validated workspace aliases, or
 validated `<profile>:<package>`, `<profile>:<skill-alias>` or `skill:<name>` pairs; paths, configuration values, errors,
 credentials, and provider data are never output.
 
-Each check is `{ id, severity, subject, remediation? }`. Severity is `ok`,
-`warning`, or `error`; remediation is a fixed safe sentence. The initial IDs
-and owners are:
+Each check is `{ id, severity, subject, remediation?, reason? }`. Severity is
+`ok`, `warning`, or `error`; remediation is a fixed safe sentence.
+
+A `writer_not_ready` error includes a sanitized `reason`, also shown next to the
+subject in human output. Precedence is `not_provisioned`, `state_unreadable` or
+`state_invalid`, then `not_accepted`, `runtime_unavailable`, `image_missing`,
+then the first changed binding: `package_version`, `podman_version`,
+`event_delivery`, `wrapper_changed`, or `acceptance_changed` if unknown.
+`image_missing` needs exit status 1 from `podman image exists`; any other
+status, a failed start or the 10-second timeout reports `runtime_unavailable`,
+as setup's acceptance check treats them.
+The optional versioned `acceptance-record.json` sidecar binds diagnostic inputs
+to the state's fingerprint; missing, invalid, unreadable or mismatched records
+are ignored. Admission and the rollback-compatible state schema are unchanged.
+Reset, finish and clone recreation retain this record with acceptance; removing
+the whole writer deletes it together with the writer's state.
+
+The initial IDs and owners are:
 
 | ID | Blocking condition | Subject |
 | --- | --- | --- |
@@ -47,6 +72,7 @@ and owners are:
 | `writer_git_identity_missing` | Clone Git config lacks a readable user name and email (warning); set both in the operator checkout, then reset the writer | validated writer name |
 | `writer_dirty` | HEAD is not the base branch, its commit differs, another branch exists, or Git metadata cannot safely be inspected (warning). It reads only `HEAD` and refs, never the index or worktree, so an `ok` result is no proof of a clean clone and never authorizes cleanup; the boundary inspection does (#200) | validated writer name |
 | `writer_uncollected_bundle` | Bundles directory is unsafe/unreadable or contains entries other than base.bundle (warning; an absent directory alone does not warn) | validated writer name |
+| `max_output_tokens_unsupported` | For each profile setting `maxOutputTokens`: error if it exceeds the stored model output limit; warning if the offline comparison is unavailable or lacks a usable limit; otherwise ok | profile alias |
 | `extension_missing` | Pi has no user install of a package that a profile's `extensions` names | `<profile>:<package>` |
 | `extension_version_mismatch` | The installed manifest's version differs from the pinned version, or the manifest or its `pi.extensions` entries are invalid | `<profile>:<package>` |
 | `extension_unpinned` | Warning. Pi's agent settings list a configured pinned extension without a version, as a string or object's `source`; pin it with `pi install npm:<name>@<version>`. Missing, unreadable, or invalid settings are ignored | `<profile>:<package>` |

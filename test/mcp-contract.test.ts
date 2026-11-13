@@ -85,7 +85,7 @@ describe("MCP contracts", () => {
 
   it("writer_unavailable carries reason and counts", async () => {
     const connected = await client();
-    const counts = { busy: 1, notAtBaseline: 2, settingsChanged: 3 };
+    const counts = { busy: 1, notAtBaseline: 2, settingsChanged: 3, notReady: 4 };
     connected.adapter.plans.push({ creationError: new WriterUnavailableError("none_admitted", counts) });
     const response = await connected.client.callTool({ name: "pi_session_start", arguments: { workspace: "repo" } });
     expect(response.structuredContent).toEqual({ ok: false, error: { code: "writer_unavailable", message: "No writer is available", reason: "none_admitted", counts } });

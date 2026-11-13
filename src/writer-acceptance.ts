@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path";
 import { podmanInfo } from "./writer-boundary.js";
 import type { WriterContext, WriterOutcome } from "./writer-lifecycle.js";
-import { currentAcceptanceFingerprint, readWriterState, writerAcceptanceCurrent, writerPaths, writersRoot, writeWriterState, WriterStateError } from "./writer-state.js";
+import { currentAcceptanceRecord, writeWriterAcceptanceRecord, currentAcceptanceFingerprint, readWriterState, writerAcceptanceCurrent, writerPaths, writersRoot, writeWriterState, WriterStateError } from "./writer-state.js";
 
 function leasedContext(ctx: WriterContext): WriterContext {
   if (ctx.leaseFd === undefined) return ctx;
@@ -130,7 +130,8 @@ export async function acceptWriter(ctx: WriterContext, name: string): Promise<Wr
     await writeWriterState(ctx.home, name, { ...retained, phase: "not_ready" });
     const info = await podmanInfo(ctx.runner);
     if (!info.usable || !info.version) return await fail("podman_unavailable");
-    const fingerprint = await currentAcceptanceFingerprint(paths.wrapper, state, info.version);
+    const record = await currentAcceptanceRecord(paths.wrapper, state, info.version);
+    const { fingerprint } = record;
     const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
     // Acceptance makes no provider request: a launch-time refresh of an expired host token would change
     // the host agent directory inside the harness's digest window (#131).
@@ -139,6 +140,7 @@ export async function acceptWriter(ctx: WriterContext, name: string): Promise<Wr
     const network = networkOf(ran.data);
     if (ran.exitCode !== 0 || ran.report !== "present" || ran.data.verdict !== "pass" || (network !== "limited" && network !== "not_limited")) return await fail("acceptance_harness_failed");
     if (fingerprint !== await currentAcceptanceFingerprint(paths.wrapper, state, info.version)) return await fail("acceptance_fingerprint_changed");
+    await writeWriterAcceptanceRecord(ctx.home, name, record);
     await writeWriterState(ctx.home, name, { ...retained, phase: "ready", acceptance: { fingerprint, verdict: "pass", network, at: new Date().toISOString() } });
     await rm(paths.acceptanceFailure, { force: true }).catch(() => {}); // A stale failure record would contradict the accepted state.
     return { status: "ok", code: "writer_accepted" };

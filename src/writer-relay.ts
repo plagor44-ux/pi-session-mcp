@@ -277,7 +277,7 @@ export class WriterRelayAdapter implements PiSessionAdapter {
     const base = input.base ?? settings?.base;
     const candidates = base === undefined ? [] : ready.filter(({ state }) => state.base.ref === `refs/heads/${base}`);
     if (!candidates.length) throw new WriterUnavailableError("none_at_base");
-    const counts = { busy: 0, notAtBaseline: 0, settingsChanged: 0 };
+    const counts = { busy: 0, notAtBaseline: 0, settingsChanged: 0, notReady: 0 };
     const env: Record<string, string> = { HOME: this.options.home };
     for (const key of ["PATH", "XDG_RUNTIME_DIR"]) if (process.env[key] !== undefined) env[key] = process.env[key];
     const factory = this.options.spawn ?? { spawn: (wrapper: string, environment: Record<string, string>) => new ChildStdioTransport(wrapper, environment) };
@@ -311,6 +311,7 @@ export class WriterRelayAdapter implements PiSessionAdapter {
         if (error instanceof InnerError) {
           if (error.code === "writer_busy") counts.busy++;
           else if (error.code === "writer_uncollected") counts.notAtBaseline++;
+          else if (error.code === "writer_not_ready") counts.notReady++;
           else if (!["writer_fenced", "writer_not_ready", "container_runtime_unavailable"].includes(error.code)) {
             const code = error.code as PiSessionCreationErrorCode;
             throw new PiSessionCreationError(creationCodes.has(code) ? code : "pi_session_creation_failed");

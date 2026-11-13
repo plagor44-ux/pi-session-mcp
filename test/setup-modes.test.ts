@@ -19,6 +19,18 @@ async function fixture() {
 const request = (overrides: Partial<ModeRequest> = {}): ModeRequest => ({ alias: "a", mode: "read-only", acceptHostWrites: false, apply: false, ...overrides });
 const probe = (usable: boolean) => ({ containerRuntime: async () => usable });
 describe("setup execution modes", () => {
+  it("reuses all recorded container settings without flags, optionally changing only the base", async () => {
+    const { config, path } = await fixture();
+    const initial = request({ mode: "container", container: { profiles: ["code"], writers: 3, cache: "npm", tags: "reachable", image: "a".repeat(64), clean: "all" }, apply: true });
+    expect((await changeExecutionMode(config, initial, probe(true))).exitCode).toBe(0);
+    const before = await readFile(path, "utf8");
+    const noSettings = { alias: "a", acceptHostWrites: false, apply: true };
+    expect((await changeExecutionMode(config, noSettings, probe(true))).findings).toEqual([expect.objectContaining({ code: "mode_unchanged" })]);
+    expect(await readFile(path, "utf8")).toBe(before);
+    expect((await changeExecutionMode(config, { ...noSettings, baseRef: "dev" }, probe(true))).exitCode).toBe(0);
+    expect(JSON.parse(await readFile(path, "utf8")).workspaces.a).toEqual({ ...JSON.parse(before).workspaces.a, base: "dev" });
+    expect((await changeExecutionMode(config, { ...noSettings, container: { writers: 2 } }, probe(true))).findings[0]?.code).toBe("container_profiles_required");
+  });
   it("plans and applies a snapshot mode only for a valid source", async () => {
     const { config, path } = await fixture();
     await writeFile(path, JSON.stringify({ schemaVersion: 1, workspaces: { b: { mode: "host", acceptHostWrites: true } } }));

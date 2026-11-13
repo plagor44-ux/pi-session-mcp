@@ -16,7 +16,13 @@
   publishes the field for every profile, `null` when absent, and the writer
   relay compares it, so a writer provisioned with another value is refused as
   `settingsChanged` until it is provisioned again. Doctor validates the value
-  but does not compare it with the catalog. A cap also cuts legitimate large
+  and compares it offline with Pi's stored catalog: the new check
+  `max_output_tokens_unsupported` is an error above the model's maximum and a
+  warning when the stored catalog does not list the model or cannot be read
+  within 10 seconds, after which Doctor aborts the read. It reads the catalog
+  only when a profile sets the field,
+  under an extension of the offline catalog exception that the maintainer
+  approved on 2026-11-13. A cap also cuts legitimate large
   output and generally counts thinking tokens; a tool call cut off at the
   limit is not executed and costs a model step. No profile gets a default cap.
   **Rollback note:** earlier releases reject a configuration with
@@ -24,6 +30,15 @@
 
 ### Changed
 
+- The sandboxed shell's memory limit is 2 GiB instead of 1 GiB
+  ([#301](https://github.com/plagor44-ux/pi-session-mcp/issues/301),
+  [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md#amendment-2026-11-13-memory-limit-of-2-gib)).
+  This repository's own typecheck (`npx tsc --noEmit -p .`) exceeded 1 GiB, so
+  a sandboxed reviewer could not run it. Each command's scope now has
+  `memory.max` 2 GiB; swap stays 0, the task limit 512, `/tmp` 512 MiB and the
+  default timeout 600 seconds, and the start probe and Doctor require the new
+  value exactly. One command can therefore use up to 2 GiB of the operator
+  user's memory. No tool schema, error code or configuration field changes.
 - Read-only sessions stream `read` through a guarded hook
   ([#273](https://github.com/plagor44-ux/pi-session-mcp/issues/273),
   [ADR 0013](docs/adr/0013-hardened-read-only-profiles.md)). The read
@@ -53,7 +68,58 @@
   sessions on the published release, one of them with three turns against a
   real provider). None of it is a Level 3 cycle.
 
-## 0.21.0 — 2026-11-12
+### Fixed
+
+- Doctor, the provider discovery and the provider CLI no longer run a
+  command-valued key from Pi's credential store
+  ([#304](https://github.com/plagor44-ux/pi-session-mcp/issues/304)). Doctor's
+  `maxOutputTokens` comparison (#262), the `provider_store` check, the provider
+  store's list of built-in providers, the writer launch's provider check and
+  every `pi-session-mcp-provider` command except `list` restored Pi's catalog
+  over Pi's file store, which resolves each stored API key it reads, so a key
+  stored as `"!<command>"` ran its command.
+  These reads now create the runtime over an empty in-memory credential store
+  (pi-ai's `InMemoryCredentialStore`), so they read no stored credential; the
+  provider CLI also skips its authentication lookup. The restored catalog is
+  the same, except that a Radius provider no longer imports a legacy catalog
+  from its OAuth credential there. `--list-models`, `--probe-profile`,
+  `pi-session-mcp-provider list` and guided setup still report authentication
+  presence and resolve stored keys as Pi does; AGENTS.md and the installation
+  guide now say so instead of calling the resolution in-process.
+
+- Doctor names why a container writer is `writer_not_ready`, and its
+  remediation works as printed
+  ([#299](https://github.com/plagor44-ux/pi-session-mcp/issues/299)). The
+  check carries a sanitized `reason`, in JSON and next to the subject in human
+  output: `not_provisioned`, `state_unreadable`, `state_invalid`,
+  `not_accepted`, `runtime_unavailable`, `image_missing`, or the first
+  acceptance binding that changed (`package_version`, `podman_version`,
+  `event_delivery`, `wrapper_changed`), else `acceptance_changed`. Reasons
+  that re-acceptance fixes name `pi-session-mcp-setup --repo <alias> --apply`,
+  which now works without repeating the provisioning settings (#300); the
+  others name the step that fixes the cause, and `--recreate` is no longer
+  offered. Acceptance writes a private `acceptance-record.json` beside the
+  writer state with the inputs it accepted; a missing, unreadable or
+  mismatched record only makes the reason less specific, and admission still
+  decides by the state alone. `writer_unavailable` with reason
+  `none_admitted` now counts not-ready launcher refusals as `notReady`;
+  before, the relay skipped them without counting, so all counts could be
+  zero. **Contract:** the `counts` object of `writer_unavailable` gains the
+  integer `notReady`, and the Doctor check gains the optional field `reason`.
+  Earlier releases ignore the record.
+- The repository step re-accepts writers without repeating the provisioning
+  settings, and asks for a reconnect only when a running server holds stale
+  state ([#300](https://github.com/plagor44-ux/pi-session-mcp/issues/300)).
+  `pi-session-mcp-setup --repo <alias> --apply` without `--mode` or container
+  settings reuses every recorded setting of a repository already in mode
+  `container`; `--base <branch>` may still set the default base, and a first
+  provisioning still requires `--profiles`. Before, that command failed with
+  `container_profiles_required`. `controllers_restart_required` now appears
+  only when a mode or settings entry was written, writers were provisioned,
+  removed or migrated to relay launch, or re-acceptance replaced a record from
+  another package version; a missing or unusable previous record counts as
+  another version. Re-acceptance after a Podman upgrade with the same package
+  version, and writer limits alone, need no reconnect.
 
 Minor release by maintainer decision for
 [ADR 0022](docs/adr/0022-account-sign-in.md)

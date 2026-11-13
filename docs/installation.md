@@ -215,7 +215,7 @@ the same arguments.
   `cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/user@$(id -u).service/cgroup.subtree_control`),
   with swap accounting enabled in the kernel so that each scope has a
   `memory.swap.max` file.
-  Every command runs in its own transient scope limited to 1 GiB memory
+  Every command runs in its own transient scope limited to 2 GiB memory
   without swap and 512 processes and threads; the overlays, `/tmp` and the
   sandbox's other tmpfs count against that memory. Without these the probe
   fails with `sandbox_unavailable`: a host where the sandboxed shell worked
@@ -273,7 +273,12 @@ spends a turn.
 precedence using the stored key, and `none` explicitly disables authentication.
 `auth remove` sets `none`; only `auth inherit` restores Pi authentication.
 Custom providers cannot inherit Pi credentials. The `list` command shows safe
-source and authentication metadata, never keys.
+source and authentication metadata, never keys. It reads authentication
+presence from Pi's credential store as Pi does, so a key that Pi stores as a
+command (`"key": "!<command>"`) runs that command. The other commands read
+only provider identities, over an empty credential store, and run no such
+command (#304); `auth login` and `auth logout` still run Pi's own commands,
+which use Pi's credential store as Pi does.
 
 Custom definitions require an HTTPS URL, or HTTP on loopback only, without
 userinfo, query or fragment. Supported APIs are `openai-completions`,
@@ -368,6 +373,11 @@ pi-session-mcp-setup --list-models --json
 
 This is offline and read-only: no provider request, credential refresh, model
 network access or setup lock. It requires no `PI_SESSION_MCP_CONFIG`.
+Authentication presence comes from Pi's credential store, read as Pi reads it:
+a key that Pi stores as a command (`"key": "!<command>"`) runs that command
+here, as it does for `--probe-profile`, `pi-session-mcp-provider list` and
+guided setup. Doctor, the writer launch and the other provider CLI commands
+read no stored credential for their provider lists (#304).
 Providers registered only by Pi extensions are not listed; the report includes
 that note. Invalid catalog ids are omitted and counted in `omittedIds`.
 Catalog creation failures report `catalog_unavailable`.
@@ -557,9 +567,12 @@ Rules:
   A value that is not a positive safe integer fails startup with
   `invalid_execution_profile_config` (Doctor validates offline). A value above
   the resolved model's catalog maximum fails session start with
-  `max_output_tokens_unsupported`; there is no clamping, and Doctor does not
-  compare the value with the catalog. Capabilities publish the number or
-  `null`. Older releases reject this configuration field. Re-provision
+  `max_output_tokens_unsupported`; there is no clamping. Doctor compares the
+  value offline with Pi's stored catalog and reports
+  `max_output_tokens_unsupported` as an error above the model's maximum and as
+  a warning when the stored catalog does not list the model or cannot be read.
+  Capabilities publish the number or `null`. Older releases reject this
+  configuration field. Re-provision
   existing writers after setting or changing it, or admission refuses them as
   `settingsChanged`. A cap also cuts legitimate large output and generally
   counts thinking tokens. A truncated legitimate tool call is not executed,
@@ -1182,9 +1195,12 @@ repository step between the install and the client targets:
 1. Close all coding sessions and controllers first. This quiescence barrier
    ensures no old-release launcher is still in flight. Install the new package
    (`npm install -g` or the release checkout above).
-2. For each repository in mode `container`, repeat its existing provisioning command
-   with `--apply`, for example
-   `pi-session-mcp-setup --repo <alias> --mode container ... --apply`. It
+2. For each repository already recorded in mode `container`, run
+   `pi-session-mcp-setup --repo <alias> --apply`. Without `--mode` or container
+   settings this reuses every recorded setting unchanged; optionally add
+   `--base <branch>` to set the default base (including `workspace_base_unset`).
+   A first provisioning still requires `--profiles`; when specifying container
+   settings, repeat the full provisioning command as before. The repository step
    migrates writers under the lease and container fence: removes owned writer
    registrations and hooks, rewrites stable wrappers for the new release,
    marks writers `launch: "relay"` and re-accepts them provider-free before
@@ -1206,8 +1222,16 @@ repository step between the install and the client targets:
    `--writer <name> --remove` it and provision it again
    ([Isolation setup](isolation-setup.md)).
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
-   for each writer. Reconnect the host `pi-session-mcp` server after migration
-   and client setup. Later reset, finish and recreate need no reconnect.
+   for each writer. Reconnect the host `pi-session-mcp` server when the repository
+   step reports `controllers_restart_required`: a mode/settings entry was written,
+   writers were provisioned, removed or migrated to relay launch, or re-acceptance
+   replaced a record from another package version (a missing or unusable previous
+   record counts as unknown and also requires reconnecting). Re-acceptance alone
+   with a previous record from the same package version, such as after a Podman
+   upgrade, needs no reconnect. Writer limits alone are read afresh at launch;
+   updating them without writing the mode entry also needs no reconnect.
+   Client registration changes still need a reconnect. Later reset, finish and
+   recreate need no reconnect.
    On 0.12.0, client-target verify fails with `mcp_failed` once a container
    workspace exists
    ([#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160)); 0.12.1
@@ -1222,13 +1246,22 @@ Acceptance also binds the Podman version, so a Podman upgrade has the same
 effect without any package upgrade: Doctor reports every container writer
 `writer_not_ready`. Coding starts on container workspaces fail with
 `writer_unavailable`, reason `none_admitted`: each idle writer's launcher
-refuses as not ready, and the relay skips it without counting it. Only a
-writer whose lease another process holds, such as a running session or a
-setup step, counts, as `busy`, so with no such holder all counts are zero.
-Close the coding sessions, then repeat step 2 alone, with each repository's
-existing settings, including its image, cache, tags and base: it accepts
+refuses as not ready, and the relay counts it as `notReady`. A writer whose
+lease another process holds, such as a running session or setup step, counts
+as `busy`. Doctor names the cause next to the writer and in JSON's `reason`.
+Close the coding sessions, then repeat step 2 alone without settings: it accepts
 the writers again and keeps their clones and the work in them. A writer
 that a session still leases fails that step with `writer_busy`.
+
+For `not_provisioned`, `not_accepted`, `package_version`, `podman_version`,
+`event_delivery`, `wrapper_changed` and `acceptance_changed`, Doctor recommends
+`pi-session-mcp-setup --repo <alias> --apply`. Older acceptances without a usable
+sidecar report `acceptance_changed` when stale. For `image_missing`, first restore
+the recorded image in local Podman storage; recreate uses that same image and
+cannot fix its absence. For `state_unreadable`, restore state read access; for
+`state_invalid`, restore valid state from backup, preserving work before any
+replacement. Recreate requires valid readable state and cannot repair either.
+For `runtime_unavailable`, make rootless Podman usable before the repository step.
 
 The repository step does not count another repository's writers that are not
 ready yet, so the repositories can be accepted one after the other. Releases
