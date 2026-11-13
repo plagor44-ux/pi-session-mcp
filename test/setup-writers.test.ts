@@ -95,9 +95,44 @@ describe("writer setup reconciliation", () => {
     const output = await changeWriterMode(f.configPath, parseSetupArgs(args).repo!, { ...f.deps, acceptance: { ...f.accept, acceptanceCurrent: acceptance.acceptanceCurrent } });
     expect(output.exitCode).toBe(0);
     expect(output.findings.filter(f => f.code === "writer_accepted")).toHaveLength(2);
+    expect(output.findings.some(f => f.code === "controllers_restart_required")).toBe(false);
     expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_unchanged" }));
     expect(await readFile(executionModesPath(f.configPath), "utf8")).toBe(before);
     expect(await acceptance.acceptanceCurrent({ home: f.home, releaseRoot: f.home, nodePath: process.execPath, checkout: f.home, alias: "x", runner: f.runner }, "x-w1")).toBe("current");
+  });
+  it.each(["same", "older", "missing", "invalid", "mismatched", "migrated"] as const)("restart advice uses the previous acceptance record (%s)", async kind => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const name = "x-w1", paths = writerPaths(f.home, name), previous = (await readWriterState(f.home, name))!;
+    const record = await currentAcceptanceRecord(paths.wrapper, previous, "5.3.0");
+    if (kind === "older") record.packageVersion = "0.0.0";
+    record.fingerprint = acceptanceFingerprint({ ...record, imageId: previous.imageId, network: previous.network, cache: previous.cache });
+    await writeWriterState(f.home, name, { ...previous, ...(kind === "migrated" ? { launch: "legacy" } : {}), acceptance: { fingerprint: record.fingerprint, verdict: "pass", network: "limited", at: "then" } });
+    if (kind !== "missing") await writeWriterAcceptanceRecord(f.home, name, kind === "mismatched" ? { ...record, fingerprint: `sha256:${"0".repeat(64)}` } : record);
+    if (kind === "invalid") await writeFile(paths.acceptanceRecord, "{}");
+    f.accept.acceptanceCurrent.mockImplementation(async (_ctx, candidate) => candidate === name ? "stale" : "current");
+    // Acceptance really replaces the old record: advice must use the pre-acceptance snapshot.
+    const accept = f.accept.acceptWriter.getMockImplementation()!;
+    f.accept.acceptWriter.mockImplementation(async (ctx, candidate) => {
+      const current = (await readWriterState(ctx.home, candidate))!;
+      await writeWriterAcceptanceRecord(ctx.home, candidate, await currentAcceptanceRecord(writerPaths(ctx.home, candidate).wrapper, current, "5.4.0"));
+      return accept(ctx, candidate);
+    });
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(["--repo", "x", "--apply"]).repo!, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_unchanged" }));
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_accepted" }));
+    expect(output.findings.filter(f => f.code === "controllers_restart_required")).toHaveLength(kind === "same" ? 0 : 1);
+  });
+  it("updates writer limits alone without restart advice when the mode entry is unchanged", async () => {
+    const f = await fixture();
+    await changeWriterMode(f.configPath, mode, f.deps);
+    const previous = (await readWriterState(f.home, "x-w1"))!;
+    await writeWriterState(f.home, "x-w1", { ...previous, limits: { cpus: 1 } });
+    const output = await changeWriterMode(f.configPath, parseSetupArgs(["--repo", "x", "--apply"]).repo!, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "writer_limits_updated" }));
+    expect(output.findings.some(f => f.code === "controllers_restart_required")).toBe(false);
   });
   it("sets an unset repository base without repeating container settings", async () => {
     const f = await fixture();
@@ -135,6 +170,8 @@ describe("writer setup reconciliation", () => {
     expect(output.exitCode).toBe(0);
     expect(unfenced).toBe(2);
     expect(output.findings.filter((finding) => finding.code === "writer_limits_updated")).toHaveLength(2);
+    expect(output.findings).toContainEqual(expect.objectContaining({ code: "mode_applied" }));
+    expect(output.findings.filter(f => f.code === "controllers_restart_required")).toHaveLength(1);
     expect(output.findings.some((finding) => finding.code === "writer_settings_changed")).toBe(false);
     expect(f.life.provisionWriter).toHaveBeenCalledTimes(2);
     f.life.writerSettingsDrift.mockImplementation(lifecycle.writerSettingsDrift);

@@ -79,8 +79,10 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
             writers = await plannedWriters(configPath, ctx, proposed, await plan(ctx, proposed), deps);
           }
         } catch (error) { writers = error instanceof DoctorGateError ? result(operation, [...failed(error.message).findings, ...error.findings]) : failed(FENCE_CODES.includes(codeFor(error)) ? codeFor(error) : "writer_reconcile_failed"); }
-        const findings = [...modes.findings, ...writers.findings].filter((f) => f.code !== "controllers_restart_required");
-        if (request.apply && findings.some((f) => f.status === "ok")) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
+        const combined = [...modes.findings, ...writers.findings];
+        const restart = combined.some(f => f.status === "ok" && ["mode_applied", "writer_provisioned", "writer_removed", "controllers_restart_required"].includes(f.code));
+        const findings = combined.filter((f) => f.code !== "controllers_restart_required");
+        if (request.apply && restart) findings.push({ target: modesTarget(request.alias), status: "ok", code: "controllers_restart_required" });
         return result(operation, findings, writers.exitCode ? "failed" : request.apply ? undefined : "planned");
       },
     });

@@ -1209,8 +1209,16 @@ repository step between the install and the client targets:
    `--writer <name> --remove` it and provision it again
    ([Isolation setup](isolation-setup.md)).
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
-   for each writer. Reconnect the host `pi-session-mcp` server after migration
-   and client setup. Later reset, finish and recreate need no reconnect.
+   for each writer. Reconnect the host `pi-session-mcp` server when the repository
+   step reports `controllers_restart_required`: a mode/settings entry was written,
+   writers were provisioned, removed or migrated to relay launch, or re-acceptance
+   replaced a record from another package version (a missing or unusable previous
+   record counts as unknown and also requires reconnecting). Re-acceptance alone
+   with a previous record from the same package version, such as after a Podman
+   upgrade, needs no reconnect. Writer limits alone are read afresh at launch;
+   updating them without writing the mode entry also needs no reconnect.
+   Client registration changes still need a reconnect. Later reset, finish and
+   recreate need no reconnect.
    On 0.12.0, client-target verify fails with `mcp_failed` once a container
    workspace exists
    ([#160](https://github.com/plagor44-ux/pi-session-mcp/issues/160)); 0.12.1

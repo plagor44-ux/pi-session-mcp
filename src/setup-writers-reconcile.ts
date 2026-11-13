@@ -7,7 +7,8 @@ import { unregisterWriter, type WriterRegistrationIntent } from "./client-adapte
 import { sameWriterLimits, writerLimits } from "./writer-limits.js";
 import { renderWrapper, wrapperDigest } from "./writer-wrapper.js";
 import type * as lifecycle from "./writer-lifecycle.js";
-import { readWriterState, writeWriterState, writerPaths } from "./writer-state.js";
+import { PACKAGE_VERSION } from "./package-metadata.js";
+import { readWriterAcceptanceRecord, readWriterState, writeWriterState, writerPaths } from "./writer-state.js";
 import { codeFor, context, doctorGate, FENCE_CODES, fenced, INFRASTRUCTURE_CODE, intent, plan, preflight, remove, services, targetFor, writerHook, writerIndex, type WriterSetupDependencies } from "./setup-writers-common.js";
 import { renderInputs, settingsDriftCheck } from "./setup-writers-plan.js";
 import type { WakeHookOutcome } from "./setup-hooks.js";
@@ -59,6 +60,7 @@ async function migrateToRelay(ctx: lifecycle.WriterContext, name: string, deps: 
   if (state.launch !== "relay" || wrapperChanged) {
     const { acceptance: _oldAcceptance, ...unaccepted } = state;
     await writeWriterState(ctx.home, name, { ...unaccepted, launch: "relay", phase: "not_ready" });
+    if (state.launch !== "relay") findings.push({ target: targetFor(ctx.alias, name), status: "ok", code: "controllers_restart_required" });
   }
   return undefined;
 }
@@ -105,6 +107,9 @@ export async function reconcileUnlocked(configPath: string, alias: string, reque
           add(name, { status: "ok", code: "writer_limits_updated" });
         }
       }
+      // Read under the lease, before migration clears acceptance or acceptance replaces its sidecar.
+      const previousState = await readWriterState(ctx.home, name);
+      const previousRecord = previousState && await readWriterAcceptanceRecord(ctx.home, name, previousState);
       const refused = await migrateToRelay(ctx, name, deps, findings);
       if (refused) { add(name, refused); return; }
       // A ready phase with a stale binding (package upgrade, new image, Podman version) is accepted again (#130).
@@ -112,6 +117,9 @@ export async function reconcileUnlocked(configPath: string, alias: string, reque
       if (current === "stale") {
         const outcome = await accept.acceptWriter(ctx, name);
         add(name, outcome); if (outcome.status === "failed") return;
+        if (outcome.code === "writer_accepted" && outcome.status === "ok" && previousRecord?.packageVersion !== PACKAGE_VERSION) {
+          add(name, { status: "ok", code: "controllers_restart_required" });
+        }
       } else if (current === "unknown") { add(name, { status: "failed", code: "podman_unavailable" }); return; }
     }); } catch (error) {
       // A broken writer is reported on its own target and the others are still reconciled.
