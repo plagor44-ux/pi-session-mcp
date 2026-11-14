@@ -29,11 +29,18 @@
   uses. This also covers a glob in which `**` shares a segment with other
   characters, such as `x/a*b**/c`. In a glob without `/`, a `**` is read as
   the `*` that it equals in a file name, so a long name is not read again and
-  again either (`**b*c` took seconds on a name of 100,000 characters). In a
-  local measurement, each of these paths now took less than a tenth of a
-  second. The rule decides as before: the paths it protects are the same, and
-  the grep check and its work budget are unchanged. The built-in globs were
-  never slow, and entries already recorded are not affected.
+  again either (`**b*c` took seconds on a name of 100,000 characters).
+  Whatever the globs, resolving the `.` and `..` segments of a path took time
+  that grew with the square of its length when a `..` followed many of its
+  names: a path of 400,000 characters took about two seconds. The rule now
+  resolves a path in one pass, to the same result. The grep check resolves
+  the search root of its call in the same way, and it no longer reads a long
+  run of `/` in that root again from each of its characters, which took
+  seconds for a root of 100,000 of them before a name. In a local
+  measurement, each of these paths now took less than a tenth of a second.
+  The rule and the grep check decide as before: the paths they protect are
+  the same, and the work budget of the grep check is unchanged. Entries
+  already recorded are not affected.
 
 ## 0.22.1 — 2026-11-14
 

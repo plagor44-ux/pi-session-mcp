@@ -1,5 +1,3 @@
-import { posix } from "node:path";
-
 /** Default globs whose file content history never stores (design calls 4 and 17). Configuration adds, never removes. */
 export const DEFAULT_REDACT_PATHS: readonly string[] = [".env", ".env.*", "*.sops.*", "secrets/**", "*.pem", "*.key", "id_rsa*", "id_ed25519*", "kubeconfig*"];
 
@@ -296,14 +294,29 @@ export function readPath(parts: Pick<NonNullable<PathRule["parts"]>, "start" | "
   }
 }
 
-/** Resolves `.`, `..` and repeated separators the way the tools resolve them, so an equivalent spelling of a protected path matches too. */
+/**
+ * Resolves `.`, `..` and repeated separators the way the tools resolve them, so an equivalent
+ * spelling of a protected path matches too. The result is what `posix.normalize` gives, without a
+ * leading `./` or a `/` at the end. Each segment is read once here: with `posix.normalize`, a long
+ * path in which a `..` follows many of the names took time that grew with the square of its length.
+ */
 function normalize(path: string): string {
   let value = path.replace(/\\/g, "/");
   if (value.startsWith("@")) value = value.slice(1);
-  if (value.length === 0) return "";
-  value = posix.normalize(value);
-  while (value.startsWith("./")) value = value.slice(2);
-  return value === "." ? "" : value.replace(/\/+$/, "");
+  const absolute = value.startsWith("/");
+  const kept: string[] = [];
+  for (let from = 0; from <= value.length; ) {
+    const slash = value.indexOf("/", from);
+    const to = slash === -1 ? value.length : slash;
+    const segment = value.slice(from, to);
+    if (segment === "..") {
+      // A `..` takes away the name before it. Without one it stays in a relative path and vanishes above `/`.
+      if (kept.length > 0 && kept[kept.length - 1] !== "..") kept.pop();
+      else if (!absolute) kept.push(segment);
+    } else if (segment !== "" && segment !== ".") kept.push(segment);
+    from = to + 1;
+  }
+  return kept.length === 0 ? "" : `${absolute ? "/" : ""}${kept.join("/")}`;
 }
 
 /**

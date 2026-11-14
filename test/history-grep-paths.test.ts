@@ -167,6 +167,18 @@ describe("grep path filter", () => {
     }
   });
 
+  it.each([
+    ["a `..` after every other segment", `${"a".repeat(400_000)}${"/x/..".repeat(80_000)}`],
+    ["a long run of `/` before its last name", `${"/".repeat(100_000)}a`],
+  ])("resolves a long search root with %s in one pass", (_case, root) => {
+    // Each took seconds: the first as the path of the same form does in the rule, the second because
+    // a search for the `/` characters at the root's end read the run again from each of its characters.
+    const text = "notes/a.txt:1: x\nsecrets/b.txt:2: y";
+    const started = performance.now();
+    expect(filterGrepText(text, root, compilePathRule([]), { left: GREP_CHECK_BUDGET })).toEqual({ text: "notes/a.txt:1: x", dropped: true });
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("spends the budget when reading the search root would cost more than is left", () => {
     // The glob's leading `*` reads each character of the root's name, the longest one a file system allows.
     const rule = compilePathRule(["*q*/**"]);

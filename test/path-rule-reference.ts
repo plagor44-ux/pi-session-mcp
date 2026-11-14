@@ -1,4 +1,5 @@
-import { compilePathRule, DEFAULT_REDACT_PATHS } from "../src/history/path-rule.js";
+import { posix } from "node:path";
+import { DEFAULT_REDACT_PATHS } from "../src/history/path-rule.js";
 
 /** The plain translation of a glob into a regular expression, without the rule's measures against backtracking. */
 function plain(glob: string): string {
@@ -17,6 +18,20 @@ function plain(glob: string): string {
 }
 
 /**
+ * A path as `posix.normalize` resolves it, a reference for the rule's own pass over the segments: a
+ * backslash is a `/`, one leading `@` is dropped, and neither a leading `./` nor a `/` at the end
+ * stays.
+ */
+export function plainNormalize(path: string): string {
+  let value = path.replace(/\\/g, "/");
+  if (value.startsWith("@")) value = value.slice(1);
+  if (value.length === 0) return "";
+  value = posix.normalize(value);
+  while (value.startsWith("./")) value = value.slice(2);
+  return value === "." ? "" : value.replace(/\/+$/, "");
+}
+
+/**
  * The path rule as the plain translations of its globs decide it, a reference for the compiled rule
  * and for the grep check: a glob without `/` tests the basename, a glob with `/` the normalized path
  * and every part of it that starts after a `/`.
@@ -25,9 +40,8 @@ export function plainPathRule(extra: readonly string[]): (path: string) => boole
   const globs = [...DEFAULT_REDACT_PATHS, ...extra];
   const names = globs.filter((glob) => !glob.includes("/")).map((glob) => new RegExp(`^${plain(glob)}$`, "is"));
   const nested = globs.filter((glob) => glob.includes("/")).map((glob) => new RegExp(`^(?:.*/)?(?:${plain(glob)})$`, "is"));
-  const { normalize } = compilePathRule([]).parts!;
   return (path) => {
-    const value = normalize(path);
+    const value = plainNormalize(path);
     if (value.length === 0) return false;
     const last = value.slice(value.lastIndexOf("/") + 1);
     return names.some((pattern) => pattern.test(last)) || nested.some((pattern) => pattern.test(value));
