@@ -24,13 +24,21 @@ export function explorationAllowed(spend: { knownUsd: number; costUnknown: boole
 }
 type Input = { store: HistoryStore; config: RoutingConfig; now: Date; deadlineMs?: number };
 const LAST_REFRESH_KEY = "last_refresh_at";
+/**
+ * The time of the last learning refresh, or null when none is recorded. A report prints this value,
+ * and the history file is not a trusted source for a report: only a value in the form that a
+ * refresh stores counts as a time.
+ */
 export function lastRefreshAt(store: HistoryStore): string | null {
   const value = store.db.prepare("SELECT value FROM routing_meta WHERE key = ?").get(LAST_REFRESH_KEY)?.value;
-  return typeof value === "string" && value !== "" ? value : null;
+  if (typeof value !== "string") return null;
+  const time = Date.parse(value);
+  return !Number.isNaN(time) && new Date(time).toISOString() === value ? value : null;
 }
 export function manualRefreshRouting(input: Input): ReturnType<typeof refreshRouting> {
   const result = refreshRouting(input);
-  input.store.db.prepare("INSERT INTO routing_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(LAST_REFRESH_KEY, input.now.toISOString());
+  // With routing off no refresh runs, so there is no time of one to record.
+  if (input.config.mode !== "off") input.store.db.prepare("INSERT INTO routing_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(LAST_REFRESH_KEY, input.now.toISOString());
   return result;
 }
 export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input): { outcomes: number; changes: number; proposals: number } {

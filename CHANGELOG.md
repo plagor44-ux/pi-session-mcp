@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- `pi-session-mcp-routing status` reports `lastRefreshAt`, the time of the
+  last learning refresh, or `null` when none is recorded
+  ([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)). The
+  `samples` and `verdictCoverage` of the status count a recorded verdict only
+  after the next refresh, and the report did not show when that was. A refresh
+  by hand, `pi-session-mcp-routing refresh`, now records its time as the
+  automatic one does, so the next automatic refresh follows 24 hours after it
+  at the earliest. With routing off it runs no refresh and records no time.
+  The report prints the stored value only in the form that a refresh stores
+  and `null` otherwise. No MCP tool, configuration field, setup outcome or
+  Doctor check changes.
+
 ### Fixed
 
 - Session history tests a tool call's own path in time that grows no faster

@@ -39,6 +39,17 @@ describe("routing CLI", () => {
     const after = await status("--json"); expect(after.lastRefreshAt).toBe(now.toISOString()); expect(cell(after).samples.a).toBe(1); expect(cell(after).verdictCoverage).toBe(1);
     expect(maybeRefreshRouting({ store: f.store, config: { ...ROUTING_OFF, mode: "manual" }, now: new Date(now.getTime() + 86399999) })).toBe(false);
   } finally { f.store.close(); } });
+  it("reports a stored refresh time only in the form a refresh stores, never other text from the history file", async () => { const f = await fixture(); try {
+    const set = f.store.db.prepare("INSERT INTO routing_meta (key,value) VALUES ('last_refresh_at',?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    const stored = now.toISOString();
+    for (const value of ["/home/operator/.ssh/id_rsa", "sk-not-a-time", "2026-11-09", "2026-11-09T12:00:00Z", "2026-13-45T99:99:99.999Z", ` ${stored}`, `${stored}\n/etc/passwd`]) {
+      set.run(value);
+      const result = await f.run("status", "--json");
+      expect(result.code).toBe(0); expect(JSON.parse(result.out).lastRefreshAt, JSON.stringify(value)).toBeNull(); expect(result.out, JSON.stringify(value)).not.toContain(value.trim());
+    }
+    set.run(stored);
+    expect(JSON.parse((await f.run("status", "--json")).out).lastRefreshAt).toBe(stored);
+  } finally { f.store.close(); } });
   it("shows order, samples against minSamples, coverage and bypasses", async () => { const f = await fixture(); try {
     f.store.db.exec("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override,turns,verdict,settled) VALUES ('1','now','medium','code','normal','a','explicit',0,0,1,'accepted',1),('2','now',NULL,NULL,'normal','a','default',0,0,0,NULL,0)");
     const result = await f.run("status", "--json"); expect(result.code).toBe(0); const status = JSON.parse(result.out); const cell = status.cells.find((c: {tier: string; role: string}) => c.tier === "medium" && c.role === "code"); expect(cell.order).toEqual(["a", "b"]); expect(cell.samples).toEqual({ a: 1, b: 0 }); expect(cell.minSamples).toBe(8); expect(cell.verdictCoverage).toBe(1); expect(cell.bypassShare).toBe(1); expect(status.verdictCoverage).toBe(0.5); expect(status.bypassShare).toBe(1);

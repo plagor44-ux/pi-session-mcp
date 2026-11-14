@@ -132,7 +132,8 @@ Status reports `lastRefreshAt`, the time of the last learning refresh, or null
 if none is recorded. Its `samples` and `verdictCoverage` count a recorded
 verdict only after the next refresh. Run `pi-session-mcp-routing refresh` to
 refresh by hand; this also postpones the next automatic refresh until at least
-24 hours after the manual refresh.
+24 hours after the manual refresh. With routing off, `refresh` runs no refresh
+and records no time.
 
 Learning compares Wilson lower bounds, with the default minimum of 8 samples
 and margin 0.1, and makes at most one swap per cell per refresh. In auto mode,
