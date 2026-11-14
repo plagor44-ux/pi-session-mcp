@@ -49,6 +49,11 @@ describe("routing CLI", () => {
     }
     set.run(stored);
     expect(JSON.parse((await f.run("status", "--json")).out).lastRefreshAt).toBe(stored);
+    // A year past 9999 has its own ISO form, which a refresh would store as well.
+    const far = new Date(Date.UTC(10000, 0, 1)).toISOString();
+    expect(far).toBe("+010000-01-01T00:00:00.000Z");
+    set.run(far);
+    expect(JSON.parse((await f.run("status", "--json")).out).lastRefreshAt).toBe(far);
   } finally { f.store.close(); } });
   it("shows order, samples against minSamples, coverage and bypasses", async () => { const f = await fixture(); try {
     f.store.db.exec("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override,turns,verdict,settled) VALUES ('1','now','medium','code','normal','a','explicit',0,0,1,'accepted',1),('2','now',NULL,NULL,'normal','a','default',0,0,0,NULL,0)");
