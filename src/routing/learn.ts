@@ -23,6 +23,16 @@ export function explorationAllowed(spend: { knownUsd: number; costUnknown: boole
   return !spend.costUnknown && spend.pending < 3 && spend.knownUsd < budgetUsd;
 }
 type Input = { store: HistoryStore; config: RoutingConfig; now: Date; deadlineMs?: number };
+const LAST_REFRESH_KEY = "last_refresh_at";
+export function lastRefreshAt(store: HistoryStore): string | null {
+  const value = store.db.prepare("SELECT value FROM routing_meta WHERE key = ?").get(LAST_REFRESH_KEY)?.value;
+  return typeof value === "string" && value !== "" ? value : null;
+}
+export function manualRefreshRouting(input: Input): ReturnType<typeof refreshRouting> {
+  const result = refreshRouting(input);
+  input.store.db.prepare("INSERT INTO routing_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(LAST_REFRESH_KEY, input.now.toISOString());
+  return result;
+}
 export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input): { outcomes: number; changes: number; proposals: number } {
   const result = { outcomes: 0, changes: 0, proposals: 0 };
   if (config.mode === "off") return result;
@@ -80,8 +90,8 @@ export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input)
 export function maybeRefreshRouting(input: Input): boolean {
   if (input.config.mode === "off") return false;
   const claimed = input.store.transaction(() => {
-    input.store.db.prepare("INSERT OR IGNORE INTO routing_meta (key, value) VALUES ('last_refresh_at', '')").run();
-    return input.store.db.prepare("UPDATE routing_meta SET value = ? WHERE key = 'last_refresh_at' AND value <= ?").run(input.now.toISOString(), new Date(input.now.getTime() - 86400000).toISOString()).changes === 1;
+    input.store.db.prepare("INSERT OR IGNORE INTO routing_meta (key, value) VALUES (?, '')").run(LAST_REFRESH_KEY);
+    return input.store.db.prepare("UPDATE routing_meta SET value = ? WHERE key = ? AND value <= ?").run(input.now.toISOString(), LAST_REFRESH_KEY, new Date(input.now.getTime() - 86400000).toISOString()).changes === 1;
   });
   if (claimed) refreshRouting(input);
   return claimed;

@@ -154,6 +154,7 @@ describe("routing learning", () => {
   it("refreshes again after 24 hours only", async () => {
     const { store } = await fixture();
     try { expect(maybeRefreshRouting({ store, config: config(), now })).toBe(true);
+      expect(store.db.prepare("SELECT value FROM routing_meta WHERE key = 'last_refresh_at'").get()).toMatchObject({ value: now.toISOString() });
       expect(maybeRefreshRouting({ store, config: config(), now: new Date(now.getTime() + 86399999) })).toBe(false);
       expect(maybeRefreshRouting({ store, config: config(), now: new Date(now.getTime() + 86400000) })).toBe(true);
     } finally { store.close(); }

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { loadConfig } from "../config.js";
 import { historyLocation, openHistoryStore, type HistoryStore } from "../history/store.js";
 import { loadRoutingConfig, routingConfigPath, writeRoutingDocument, ROLES, TIERS, type Role, type Tier } from "./config.js";
-import { refreshRouting } from "./learn.js";
+import { lastRefreshAt, manualRefreshRouting } from "./learn.js";
 import { createRoutingStore } from "./store.js";
 
 export interface RoutingCliIo { stdout(text: string): void; stderr(text: string): void; home?: string; now?: () => Date; configPath?: string }
@@ -52,7 +52,7 @@ export async function runRoutingCli(argv: readonly string[], io: RoutingCliIo): 
       }));
       const totals = db?.prepare("SELECT count(*) AS total, sum(CASE WHEN verdict IS NOT NULL THEN 1 ELSE 0 END) AS verdicts, sum(CASE WHEN origin IN ('explicit','default') THEN 1 ELSE 0 END) AS bypasses FROM routing_decisions").get();
       const total = Number(totals?.total ?? 0);
-      const report = { mode: routing.mode, cells, verdictCoverage: total ? Number(totals?.verdicts ?? 0) / total : 0, bypassShare: total ? Number(totals?.bypasses ?? 0) / total : 0 };
+      const report = { mode: routing.mode, lastRefreshAt: store ? lastRefreshAt(store) : null, cells, verdictCoverage: total ? Number(totals?.verdicts ?? 0) / total : 0, bypassShare: total ? Number(totals?.bypasses ?? 0) / total : 0 };
       io.stdout(JSON.stringify(report, null, args.includes("--json") ? 0 : 2) + "\n"); return 0;
     }
     if (command === "proposals") {
@@ -61,7 +61,7 @@ export async function runRoutingCli(argv: readonly string[], io: RoutingCliIo): 
       io.stdout(JSON.stringify(safe) + "\n"); return 0;
     }
     const active = store!; const database = active.db;
-    if (command === "refresh") { const result = refreshRouting({ store: active, config: routing, now: io.now?.() ?? new Date() }); io.stdout(JSON.stringify(result) + "\n"); return 0; }
+    if (command === "refresh") { const result = manualRefreshRouting({ store: active, config: routing, now: io.now?.() ?? new Date() }); io.stdout(JSON.stringify(result) + "\n"); return 0; }
     if (command === "apply") {
       active.transaction(() => {
         const row = database.prepare("SELECT * FROM routing_versions WHERE id = ? AND state = 'proposed'").get(Number(args[0]));

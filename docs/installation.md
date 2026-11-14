@@ -128,6 +128,12 @@ Use `pi-session-mcp-routing` with `status [--json]`, `mode <off|manual|auto>`,
 Rollback restores the earlier order and freezes the cell; apply refuses a
 reorder with `routing_cell_frozen` until unfreeze.
 
+Status reports `lastRefreshAt`, the time of the last learning refresh, or null
+if none is recorded. Its `samples` and `verdictCoverage` count a recorded
+verdict only after the next refresh. Run `pi-session-mcp-routing refresh` to
+refresh by hand; this also postpones the next automatic refresh until at least
+24 hours after the manual refresh.
+
 Learning compares Wilson lower bounds, with the default minimum of 8 samples
 and margin 0.1, and makes at most one swap per cell per refresh. In auto mode,
 exploration defaults to 10%, with a 5 USD budget over 7 days, fewer than 3
