@@ -28,6 +28,18 @@ function spend(budget: Budget, cost: number): boolean {
   return budget.left < 0;
 }
 
+const SLASH = 47;
+
+/**
+ * `root` without the `/` characters at its end, read from the end. A search for `/+$` reads a run of
+ * `/` again from each of its characters when the run does not end the root.
+ */
+function withoutEndSlashes(root: string): string {
+  let end = root.length;
+  while (end > 0 && root.charCodeAt(end - 1) === SLASH) end -= 1;
+  return root.slice(0, end);
+}
+
 /** Start of each `:N:` (match) or `-N-` (context) separator in `line`, overlapping ones included. */
 function separators(line: string): number[] {
   const found: number[] = [];
@@ -67,7 +79,7 @@ type Check = (line: number, end: number, budget: Budget) => boolean;
  * `secrets/` line within that distance. Lines without a separator hold no file content and stay.
  */
 export function filterGrepText(text: string, root: string | undefined, rule: PathRule, budget: Budget): { text: string; dropped: boolean } {
-  const prefix = root === undefined || root === "." || root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
+  const prefix = root === undefined || root === "." || root === "" ? "" : `${withoutEndSlashes(root)}/`;
   const lines = text.split("\n");
   const starts: number[] = [];
   for (let index = 0, position = 0; index < lines.length; position += lines[index]!.length + 1, index += 1) starts.push(position);

@@ -1,5 +1,3 @@
-import { posix } from "node:path";
-
 /** Default globs whose file content history never stores (design calls 4 and 17). Configuration adds, never removes. */
 export const DEFAULT_REDACT_PATHS: readonly string[] = [".env", ".env.*", "*.sops.*", "secrets/**", "*.pem", "*.key", "id_rsa*", "id_ed25519*", "kubeconfig*"];
 
@@ -276,14 +274,49 @@ export interface PathRule {
   };
 }
 
-/** Resolves `.`, `..` and repeated separators the way the tools resolve them, so an equivalent spelling of a protected path matches too. */
+/**
+ * The globs with `/` on a normalized path and on each part of it that starts after a `/`, in one
+ * pass: `read` takes each segment in turn, the last one too, and a glob that matched at its end
+ * matched the path or such a part. `work` counts the matcher states read. It grows with the path's
+ * length, whatever the globs, where one regular expression for the path and its parts would read
+ * the rest of the path again at each `/` for a glob with a `**` before further steps.
+ */
+export function readPath(parts: Pick<NonNullable<PathRule["parts"]>, "start" | "read">, path: string): { readonly found: boolean; readonly work: number } {
+  let state = parts.start;
+  let work = 0;
+  for (let from = 0; ; ) {
+    const to = path.indexOf("/", from);
+    const next = parts.read(state, to === -1 ? path.slice(from) : path.slice(from, to), Number.POSITIVE_INFINITY)!;
+    work += next.work;
+    if (to === -1) return { found: next.state.matched, work };
+    state = next.state;
+    from = to + 1;
+  }
+}
+
+/**
+ * Resolves `.`, `..` and repeated separators the way the tools resolve them, so an equivalent
+ * spelling of a protected path matches too. The result is what `posix.normalize` gives, without a
+ * leading `./` or a `/` at the end. Each segment is read once here: with `posix.normalize`, a long
+ * path in which a `..` follows many of the names took time that grew with the square of its length.
+ */
 function normalize(path: string): string {
   let value = path.replace(/\\/g, "/");
   if (value.startsWith("@")) value = value.slice(1);
-  if (value.length === 0) return "";
-  value = posix.normalize(value);
-  while (value.startsWith("./")) value = value.slice(2);
-  return value === "." ? "" : value.replace(/\/+$/, "");
+  const absolute = value.startsWith("/");
+  const kept: string[] = [];
+  for (let from = 0; from <= value.length; ) {
+    const slash = value.indexOf("/", from);
+    const to = slash === -1 ? value.length : slash;
+    const segment = value.slice(from, to);
+    if (segment === "..") {
+      // A `..` takes away the name before it. Without one it stays in a relative path and vanishes above `/`.
+      if (kept.length > 0 && kept[kept.length - 1] !== "..") kept.pop();
+      else if (!absolute) kept.push(segment);
+    } else if (segment !== "" && segment !== ".") kept.push(segment);
+    from = to + 1;
+  }
+  return kept.length === 0 ? "" : `${absolute ? "/" : ""}${kept.join("/")}`;
 }
 
 /**
@@ -294,19 +327,19 @@ function normalize(path: string): string {
 export function compilePathRule(extra: readonly string[]): PathRule {
   const globs = [...DEFAULT_REDACT_PATHS, ...extra];
   const names = globs.filter((glob) => !glob.includes("/")).map(parse);
-  const basename = names.map((steps) => new RegExp(`^${source(steps, { count: 0 })}$`, FLAGS));
+  // A basename holds no `/`, so `**` matches there what `*` matches. As a `*` it gives up no stretch
+  // that the next wildcard of the name can take, so a long basename is not read again and again.
+  const basename = names.map((steps) => new RegExp(`^${source(steps.map((step): Step => (step.kind === "**" ? { kind: "*" } : step)), { count: 0 })}$`, FLAGS));
   const cores = globs.filter((glob) => glob.includes("/")).map((glob) => {
     const steps = parse(glob);
     let start = 0;
     while (steps[start]?.kind === "**/") start += 1;
     return steps.slice(start);
   });
-  // One pass for the path and every suffix that starts after a `/`.
   const alternatives = (list: readonly (readonly Step[])[]): string => {
     const groups = { count: 0 };
     return list.map((steps) => source(steps, groups)).join("|");
   };
-  const anywhere = cores.length === 0 ? undefined : new RegExp(`^(?:.*/)?(?:${alternatives(cores)})$`, FLAGS);
   // A glob whose only `**` is its last step reads at most to the end of the segments it spans, or
   // to the end of the text once it matched, so one pass over a text reads each character a bounded
   // number of times.
@@ -317,13 +350,6 @@ export function compilePathRule(extra: readonly string[]): PathRule {
     if (scan === undefined || from >= text.length) return { found: false, cost: 1 };
     scan.lastIndex = from;
     return { found: scan.test(text), cost: text.length - from + CALL };
-  };
-  const rule = (path: string): boolean => {
-    if (typeof path !== "string") return false;
-    const value = normalize(path);
-    if (value.length === 0) return false;
-    const last = value.slice(value.lastIndexOf("/") + 1);
-    return basename.some((pattern) => pattern.test(last)) || (anywhere !== undefined && anywhere.test(value));
   };
   const keyOf = (sets: readonly (readonly number[])[]): string => sets.map((states) => states.join(",")).join(";");
   const empty = cores.map(() => []);
@@ -371,5 +397,13 @@ export function compilePathRule(extra: readonly string[]): PathRule {
     });
     return rests.size === 0 ? undefined : probe([...rests.values()]);
   };
-  return Object.assign(rule, { parts: { normalize, name: probe(names), lead: probe(cores), within, deep: deep.length === 0 ? undefined : probe(deep), start, read, rest } });
+  const parts = { normalize, name: probe(names), lead: probe(cores), within, deep: deep.length === 0 ? undefined : probe(deep), start, read, rest };
+  const rule = (path: string): boolean => {
+    if (typeof path !== "string") return false;
+    const value = normalize(path);
+    if (value.length === 0) return false;
+    const last = value.slice(value.lastIndexOf("/") + 1);
+    return basename.some((pattern) => pattern.test(last)) || readPath(parts, value).found;
+  };
+  return Object.assign(rule, { parts });
 }

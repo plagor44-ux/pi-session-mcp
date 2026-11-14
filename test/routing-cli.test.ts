@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { openHistoryStore } from "../src/history/store.js";
 import { runRoutingCli } from "../src/routing/cli.js";
+import { ROUTING_OFF } from "../src/routing/config.js";
+import { maybeRefreshRouting } from "../src/routing/learn.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
 
 afterAll(removeTemporaryRoots);
@@ -20,6 +22,39 @@ function proposal(store: Awaited<ReturnType<typeof openHistoryStore>>, kind = "r
   return Number(store.db.prepare("INSERT INTO routing_versions (tier,role,kind,profile,before_json,after_json,reason,state,created_at) VALUES ('medium','code',?,?,'[\"a\",\"b\"]','[\"b\",\"a\"]','reason','proposed','now')").run(kind, kind === "suspend" ? "a" : null).lastInsertRowid);
 }
 describe("routing CLI", () => {
+  it("reports refresh times and counts a later verdict only after refresh", async () => { const f = await fixture(); try {
+    const status = async (...args: string[]) => JSON.parse((await f.run("status", ...args)).out);
+    expect((await status("--json")).lastRefreshAt).toBeNull();
+    f.store.db.exec("INSERT INTO routing_meta (key,value) VALUES ('last_refresh_at','')");
+    expect((await status()).lastRefreshAt).toBeNull();
+    const earlier = new Date(now.getTime() - 3600000);
+    expect(maybeRefreshRouting({ store: f.store, config: { ...ROUTING_OFF, mode: "manual" }, now: earlier })).toBe(true);
+    expect((await status("--json")).lastRefreshAt).toBe(earlier.toISOString());
+    f.store.db.exec("INSERT INTO instances (id,pid,package_version,started_at) VALUES ('i',1,'1','now'); INSERT INTO sessions (id,instance_id,public_session_id,workspace,execution_profile,package_version,configuration_fingerprint,created_at,closed_at,capture_source) VALUES ('s','i','s','w','a','1','f','now','now','host'); INSERT INTO turns (session_id,turn_id,state) VALUES ('s','t','completed');");
+    f.store.db.prepare("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override) VALUES ('s',?,'medium','code','normal','a','floor',0,0)").run(earlier.toISOString());
+    f.store.db.prepare("INSERT INTO verdicts (session_id,verdict,reason,recorded_at,source) VALUES ('s','accepted','',?,'test')").run(new Date(now.getTime() - 1000).toISOString());
+    const before = await status(); const cell = (s: typeof before) => s.cells.find((c: { tier: string; role: string }) => c.tier === "medium" && c.role === "code");
+    expect(before.lastRefreshAt).toBe(earlier.toISOString()); expect(cell(before).samples.a).toBe(0); expect(cell(before).verdictCoverage).toBe(0);
+    expect((await f.run("refresh")).code).toBe(0);
+    const after = await status("--json"); expect(after.lastRefreshAt).toBe(now.toISOString()); expect(cell(after).samples.a).toBe(1); expect(cell(after).verdictCoverage).toBe(1);
+    expect(maybeRefreshRouting({ store: f.store, config: { ...ROUTING_OFF, mode: "manual" }, now: new Date(now.getTime() + 86399999) })).toBe(false);
+  } finally { f.store.close(); } });
+  it("reports a stored refresh time only in the form a refresh stores, never other text from the history file", async () => { const f = await fixture(); try {
+    const set = f.store.db.prepare("INSERT INTO routing_meta (key,value) VALUES ('last_refresh_at',?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    const stored = now.toISOString();
+    for (const value of ["/home/operator/.ssh/id_rsa", "sk-not-a-time", "2026-11-09", "2026-11-09T12:00:00Z", "2026-13-45T99:99:99.999Z", ` ${stored}`, `${stored}\n/etc/passwd`]) {
+      set.run(value);
+      const result = await f.run("status", "--json");
+      expect(result.code).toBe(0); expect(JSON.parse(result.out).lastRefreshAt, JSON.stringify(value)).toBeNull(); expect(result.out, JSON.stringify(value)).not.toContain(value.trim());
+    }
+    set.run(stored);
+    expect(JSON.parse((await f.run("status", "--json")).out).lastRefreshAt).toBe(stored);
+    // A year past 9999 has its own ISO form, which a refresh would store as well.
+    const far = new Date(Date.UTC(10000, 0, 1)).toISOString();
+    expect(far).toBe("+010000-01-01T00:00:00.000Z");
+    set.run(far);
+    expect(JSON.parse((await f.run("status", "--json")).out).lastRefreshAt).toBe(far);
+  } finally { f.store.close(); } });
   it("shows order, samples against minSamples, coverage and bypasses", async () => { const f = await fixture(); try {
     f.store.db.exec("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override,turns,verdict,settled) VALUES ('1','now','medium','code','normal','a','explicit',0,0,1,'accepted',1),('2','now',NULL,NULL,'normal','a','default',0,0,0,NULL,0)");
     const result = await f.run("status", "--json"); expect(result.code).toBe(0); const status = JSON.parse(result.out); const cell = status.cells.find((c: {tier: string; role: string}) => c.tier === "medium" && c.role === "code"); expect(cell.order).toEqual(["a", "b"]); expect(cell.samples).toEqual({ a: 1, b: 0 }); expect(cell.minSamples).toBe(8); expect(cell.verdictCoverage).toBe(1); expect(cell.bypassShare).toBe(1); expect(status.verdictCoverage).toBe(0.5); expect(status.bypassShare).toBe(1);
@@ -35,7 +70,7 @@ describe("routing CLI", () => {
   it("still applies a suspend proposal for a frozen cell", async () => { const f = await fixture(); try { f.store.db.exec(`INSERT INTO routing_cells VALUES ('medium','code','["a","b"]',1)`); expect((await f.run("apply", String(proposal(f.store, "suspend")))).code).toBe(0); } finally { f.store.close(); } });
   it("lists proposals", async () => { const f = await fixture(); try { const id = proposal(f.store); const listed = await f.run("proposals"); expect(JSON.parse(listed.out)).toEqual([expect.objectContaining({ id, tier: "medium", role: "code", kind: "reorder" })]); } finally { f.store.close(); } });
   it("settles a finished session through refresh", async () => { const f = await fixture(); try { f.store.db.exec("INSERT INTO instances (id,pid,package_version,started_at) VALUES ('i',1,'1','now'); INSERT INTO sessions (id,instance_id,public_session_id,workspace,execution_profile,package_version,configuration_fingerprint,created_at,closed_at,capture_source) VALUES ('s','i','s','w','a','1','f','now','now','host'); INSERT INTO turns (session_id,turn_id,state) VALUES ('s','t','completed'); INSERT INTO verdicts (session_id,verdict,reason,recorded_at,source) VALUES ('s','accepted','','now','test');"); f.store.db.prepare("INSERT INTO routing_decisions (session_ref,decided_at,tier,role,risk,profile,origin,exploration,same_family_override) VALUES ('s',?,'medium','code','normal','a','floor',0,0)").run(now.toISOString()); const refreshed = await f.run("refresh"); expect(refreshed.code).toBe(0); expect(JSON.parse(refreshed.out)).toEqual({ outcomes: 1, changes: 0, proposals: 0 }); expect(f.store.db.prepare("SELECT verdict, settled FROM routing_decisions").get()).toMatchObject({ verdict: "accepted", settled: 1 }); } finally { f.store.close(); } });
-  it("reports the configured order with history disabled", async () => { const f = await fixture(false); try { const status = await f.run("status", "--json"); expect(status.code).toBe(0); expect(JSON.parse(status.out).cells.find((c: { tier: string; role: string }) => c.tier === "medium" && c.role === "code")).toMatchObject({ order: ["a", "b"], frozen: false, samples: { a: 0, b: 0 } }); } finally { f.store.close(); } });
+  it("reports the configured order with history disabled", async () => { const f = await fixture(false); try { const status = await f.run("status", "--json"); expect(status.code).toBe(0); expect(JSON.parse(status.out).lastRefreshAt).toBeNull(); expect(JSON.parse(status.out).cells.find((c: { tier: string; role: string }) => c.tier === "medium" && c.role === "code")).toMatchObject({ order: ["a", "b"], frozen: false, samples: { a: 0, b: 0 } }); } finally { f.store.close(); } });
   it("prints no path", async () => { const f = await fixture(); try { for (const args of [["status", "--json"], ["proposals"], ["bad", f.home]]) { const r = await f.run(...args); expect(r.out + r.err).not.toContain(f.home); } } finally { f.store.close(); } });
   it("returns 64 for unknown commands and arguments", async () => { const f = await fixture(); try { for (const args of [[], ["bad"], ["status", "--bad"], ["rollback", "bad", "code"], ["apply", "1", "extra"]]) expect((await f.run(...args)).code).toBe(64); } finally { f.store.close(); } });
 });

@@ -2,6 +2,60 @@
 
 ## Unreleased
 
+### Added
+
+- `pi-session-mcp-routing status` reports `lastRefreshAt`, the time of the
+  last learning refresh, or `null` when none is recorded
+  ([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)). The
+  `samples` and `verdictCoverage` of the status count a recorded verdict only
+  after the next refresh, and the report did not show when that was. A refresh
+  by hand, `pi-session-mcp-routing refresh`, now records its time as the
+  automatic one does, so the next automatic refresh follows 24 hours after it
+  at the earliest. With routing off it runs no refresh and records no time.
+  The report prints the stored value only in the form that a refresh stores
+  and `null` otherwise. No MCP tool, configuration field, setup outcome or
+  Doctor check changes.
+
+### Changed
+
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.22.1](docs/acceptance.md#v0221-post-release-evidence)
+  (registry, advisories and release assets, Level 2 on a clone of the tag and
+  on the published npm package, and the upgrade of both installations, which
+  reported `package_version` as the reason of every writer's
+  `writer_not_ready`). The record also notes that one server process of the
+  workstation had started before the upgrade to `0.22.0` and so held modules
+  of `0.21.0`. No session ran on the published release for that record, and
+  none of it is a Level 3 cycle.
+- Documentation only: in its list of amendments, ADR 0013 names ADR 0018 as
+  accepted and shipped in 0.17.0, where it still said proposed.
+
+### Fixed
+
+- Session history tests a tool call's own path in time that grows no faster
+  than the path's length, for every configured glob
+  ([#310](https://github.com/plagor44-ux/pi-session-mcp/issues/310)). For a
+  glob with a `**` before further steps, such as `**/config/**/secret*` or
+  `clusters/**/secret*.yaml`, the test read the rest of the path again at each
+  `/`, so a crafted path argument of 200,000 characters held the host server
+  for about two seconds per call. The globs with `/` are now read in one pass
+  over the path's segments, with the matcher that the grep check already
+  uses. This also covers a glob in which `**` shares a segment with other
+  characters, such as `x/a*b**/c`. In a glob without `/`, a `**` is read as
+  the `*` that it equals in a file name, so a long name is not read again and
+  again either (`**b*c` took seconds on a name of 100,000 characters).
+  Whatever the globs, resolving the `.` and `..` segments of a path took time
+  that grew with the square of its length when a `..` followed many of its
+  names: a path of 400,000 characters took about two seconds. The rule now
+  resolves a path in one pass, to the same result. The grep check resolves
+  the search root of its call in the same way, and it no longer reads a long
+  run of `/` in that root again from each of its characters, which took
+  seconds for a root of 100,000 of them before a name. In a local
+  measurement, each of these paths now took less than a tenth of a second.
+  The rule and the grep check decide as before: the paths they protect are
+  the same, and the work budget of the grep check is unchanged. Entries
+  already recorded are not affected.
+
 ## 0.22.1 — 2026-11-14
 
 Patch release: an abort while a coding session's `read` opens its file no

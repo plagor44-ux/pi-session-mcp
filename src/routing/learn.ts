@@ -23,6 +23,24 @@ export function explorationAllowed(spend: { knownUsd: number; costUnknown: boole
   return !spend.costUnknown && spend.pending < 3 && spend.knownUsd < budgetUsd;
 }
 type Input = { store: HistoryStore; config: RoutingConfig; now: Date; deadlineMs?: number };
+const LAST_REFRESH_KEY = "last_refresh_at";
+/**
+ * The time of the last learning refresh, or null when none is recorded. A report prints this value,
+ * and the history file is not a trusted source for a report: only a value in the form that a
+ * refresh stores counts as a time.
+ */
+export function lastRefreshAt(store: HistoryStore): string | null {
+  const value = store.db.prepare("SELECT value FROM routing_meta WHERE key = ?").get(LAST_REFRESH_KEY)?.value;
+  if (typeof value !== "string") return null;
+  const time = Date.parse(value);
+  return !Number.isNaN(time) && new Date(time).toISOString() === value ? value : null;
+}
+export function manualRefreshRouting(input: Input): ReturnType<typeof refreshRouting> {
+  const result = refreshRouting(input);
+  // With routing off no refresh runs, so there is no time of one to record.
+  if (input.config.mode !== "off") input.store.db.prepare("INSERT INTO routing_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(LAST_REFRESH_KEY, input.now.toISOString());
+  return result;
+}
 export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input): { outcomes: number; changes: number; proposals: number } {
   const result = { outcomes: 0, changes: 0, proposals: 0 };
   if (config.mode === "off") return result;
@@ -80,8 +98,8 @@ export function refreshRouting({ store, config, now, deadlineMs = 2000 }: Input)
 export function maybeRefreshRouting(input: Input): boolean {
   if (input.config.mode === "off") return false;
   const claimed = input.store.transaction(() => {
-    input.store.db.prepare("INSERT OR IGNORE INTO routing_meta (key, value) VALUES ('last_refresh_at', '')").run();
-    return input.store.db.prepare("UPDATE routing_meta SET value = ? WHERE key = 'last_refresh_at' AND value <= ?").run(input.now.toISOString(), new Date(input.now.getTime() - 86400000).toISOString()).changes === 1;
+    input.store.db.prepare("INSERT OR IGNORE INTO routing_meta (key, value) VALUES (?, '')").run(LAST_REFRESH_KEY);
+    return input.store.db.prepare("UPDATE routing_meta SET value = ? WHERE key = ? AND value <= ?").run(input.now.toISOString(), LAST_REFRESH_KEY, new Date(input.now.getTime() - 86400000).toISOString()).changes === 1;
   });
   if (claimed) refreshRouting(input);
   return claimed;

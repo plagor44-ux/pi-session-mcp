@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
-import { explorationAllowed, maybeRefreshRouting, nextSwap, refreshRouting, wilsonLowerBound } from "../src/routing/learn.js";
+import { explorationAllowed, lastRefreshAt, manualRefreshRouting, maybeRefreshRouting, nextSwap, refreshRouting, wilsonLowerBound } from "../src/routing/learn.js";
 import { openHistoryStore } from "../src/history/store.js";
 import { ROUTING_OFF, type RoutingConfig } from "../src/routing/config.js";
 import { removeTemporaryRoots, temporaryRoot } from "./temporary-roots.js";
@@ -154,8 +154,22 @@ describe("routing learning", () => {
   it("refreshes again after 24 hours only", async () => {
     const { store } = await fixture();
     try { expect(maybeRefreshRouting({ store, config: config(), now })).toBe(true);
+      expect(store.db.prepare("SELECT value FROM routing_meta WHERE key = 'last_refresh_at'").get()).toMatchObject({ value: now.toISOString() });
       expect(maybeRefreshRouting({ store, config: config(), now: new Date(now.getTime() + 86399999) })).toBe(false);
       expect(maybeRefreshRouting({ store, config: config(), now: new Date(now.getTime() + 86400000) })).toBe(true);
+    } finally { store.close(); }
+  });
+  it("records the time of a manual refresh, and none while routing is off", async () => {
+    const { store } = await fixture();
+    try {
+      expect(lastRefreshAt(store)).toBeNull();
+      // With routing off no refresh runs, so there is no time of one to record.
+      expect(manualRefreshRouting({ store, config: { ...config(), mode: "off" }, now })).toEqual({ outcomes: 0, changes: 0, proposals: 0 });
+      expect(lastRefreshAt(store)).toBeNull();
+      manualRefreshRouting({ store, config: config("manual"), now });
+      expect(lastRefreshAt(store)).toBe(now.toISOString());
+      manualRefreshRouting({ store, config: { ...config(), mode: "off" }, now: new Date(now.getTime() + 1000) });
+      expect(lastRefreshAt(store)).toBe(now.toISOString());
     } finally { store.close(); }
   });
   it("stops exploration over budget, unknown cost or 3 pending", () => {
