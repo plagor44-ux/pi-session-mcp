@@ -54,3 +54,15 @@ export function generatedGlob(random: () => number): string {
   for (let count = 1 + Math.floor(random() * 7); count > 0; count -= 1) glob += GLOB_PIECES[Math.floor(random() * GLOB_PIECES.length)]!;
   return glob;
 }
+
+const DEEP_PIECES = ["**/", "/**/", "/**"];
+
+/**
+ * A glob with `/` and a `**` before further steps: one to three pieces, a `**` beside a `/`, and one
+ * to three more pieces, half of the time below a leading `**` with `/`.
+ */
+export function generatedDeepGlob(random: () => number): string {
+  const pieces = (): string => Array.from({ length: 1 + Math.floor(random() * 3) }, () => GLOB_PIECES[Math.floor(random() * GLOB_PIECES.length)]!).join("");
+  const lead = random() < 0.5 ? "**/" : "";
+  return `${lead}${pieces()}${DEEP_PIECES[Math.floor(random() * DEEP_PIECES.length)]!}${pieces()}`;
+}

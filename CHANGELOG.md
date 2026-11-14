@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Fixed
+
+- Session history tests a tool call's own path in time that grows no faster
+  than the path's length, for every configured glob
+  ([#310](https://github.com/plagor44-ux/pi-session-mcp/issues/310)). For a
+  glob with a `**` before further steps, such as `**/config/**/secret*` or
+  `clusters/**/secret*.yaml`, the test read the rest of the path again at each
+  `/`, so a crafted path argument of 200,000 characters held the host server
+  for about two seconds per call. The globs with `/` are now read in one pass
+  over the path's segments, with the matcher that the grep check already
+  uses. This also covers a glob in which `**` shares a segment with other
+  characters, such as `x/a*b**/c`. In a glob without `/`, a `**` is read as
+  the `*` that it equals in a file name, so a long name is not read again and
+  again either (`**b*c` took seconds on a name of 100,000 characters). In a
+  local measurement, each of these paths now took less than a tenth of a
+  second. The rule decides as before: the paths it protects are the same, and
+  the grep check and its work budget are unchanged. The built-in globs were
+  never slow, and entries already recorded are not affected.
+
 ## 0.22.1 — 2026-11-14
 
 Patch release: an abort while a coding session's `read` opens its file no
