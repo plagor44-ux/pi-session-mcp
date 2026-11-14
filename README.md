@@ -11,7 +11,7 @@ Pi Session MCP is a local, stdio-only [Model Context Protocol](https://modelcont
 
 > Pi Session MCP is an independent project. It is not affiliated with or endorsed by the makers of Pi, OpenAI or Anthropic. Product names are used only to describe compatibility.
 
-> **Status: pre-1.0.** Version 0.22.0 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients on a release ran on 0.16.1; none has run on 0.22.0, and the [0.22.0 acceptance record](docs/acceptance.md#v0220-pre-release-acceptance) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
+> **Status: pre-1.0.** Version 0.22.1 is for Linux and macOS with Codex CLI or Claude Code. Each release passes the provider-free checks. The last full live cycle with both clients on a release ran on 0.16.1; none has run on 0.22.1, and the [0.22.1 acceptance record](docs/acceptance.md#v0221-pre-release-acceptance) lists what is not established. A `coding` profile is not an operating-system sandbox; the [threat model](docs/threat-model.md) states the limits.
 
 [Example](#example-a-second-opinion) · [Quick start](#quick-start) · [Status](#status) · [Security model](#security-model)
 
@@ -69,7 +69,7 @@ curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
   sha256sum -c install.sh.sha256
 ```
 
-On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.22.0](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.22.0).
+On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.22.1](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.22.1).
 
 The checksum comes from the same release as the script. A match shows that the two files belong together, which catches a damaged or incomplete download. It does not prove who published the script, because whoever can replace one file can replace both. Read `install.sh` before you run it. It is short: it checks the platform and the Node.js version, runs `npm install -g pi-session-mcp@<version>` with the version written in the script unless that version is installed already, and starts `pi-session-mcp-setup --guided --apply`. It refuses to upgrade a different installed version.
 
@@ -120,14 +120,14 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 
 ## Status
 
-The package version is **0.22.0**.
+The package version is **0.22.1**.
 
 | | |
 | --- | --- |
 | Stability | Pre-1.0. Tools, fields, states and error codes change only in a new minor release. |
 | Platforms | Linux and macOS with Node.js 22.19.0 or newer. CI covers macOS 15 and 26 on Apple silicon; Intel Macs are untested. Setup refuses other platforms with `platform_unsupported`. |
 | Clients | Codex CLI and Claude Code. Setup accepts a client whose public `mcp` command output matches the expected contract, without pinning versions. |
-| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle on a release ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). A later cycle ran on the `main` commit `93980d9` with Pi SDK 1.5.2 ([record](docs/evaluation/level3-2026-11-10/README.md)), before the release commits of 0.20.1, 0.21.0 and 0.22.0; it is evidence for that commit only, and none of these releases has a cycle of its own. For 0.22.0 the [acceptance record](docs/acceptance.md#v0220-pre-release-acceptance) names what is not established: a full live cycle on the release, a turn against a real provider on the release, a profile with `maxOutputTokens` against a real provider, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
+| Acceptance | Every release passes the provider-free checks. The last full live two-client cycle on a release ran on 0.16.1 with Pi SDK 1.5.0 ([record](docs/evaluation/level3-2026-11-02/README.md)). A later cycle ran on the `main` commit `93980d9` with Pi SDK 1.5.2 ([record](docs/evaluation/level3-2026-11-10/README.md)), before the release commits of 0.20.1, 0.21.0, 0.22.0 and 0.22.1; it is evidence for that commit only, and none of these releases has a cycle of its own. For 0.22.1 the [acceptance record](docs/acceptance.md#v0221-pre-release-acceptance) names what is not established: a full live cycle on the release, a turn against a real provider on the release, including an abort during a coding session's `read` and a session with history on, a profile with `maxOutputTokens` against a real provider, and macOS outside CI. The levels are defined in [Acceptance](docs/acceptance.md). |
 | Out of scope | HTTP, a web UI, resume, remote access and multi-user behavior. One trusted local MCP peer talks to one server process. |
 
 ## Security model

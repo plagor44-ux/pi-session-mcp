@@ -308,7 +308,7 @@ describe("Unix socket connects (R43)", () => {
       const realistic = { sandboxed: true, boundPaths: ["/run/systemd/resolve", "/opt", "/etc/resolv.conf", "/tmp/build-x"] };
       const resolve = `100 connect(5<socket:[1]>, {sa_family=AF_UNIX, sun_path="/run/systemd/resolve/io.systemd.Resolve"}, 42) = 0`;
       expect(egress(resolve, realistic)).toBe(0);
-      expect(egress(resolve.replace("connect(5<socket:[1]>, ", "sendto(5<socket:[1]>, \"x\", 1, 0, ").replace("}, 42)", "}, 42)"), realistic)).toBe(0);
+      expect(egress(resolve.replace("connect(5<socket:[1]>, ", "sendto(5<socket:[1]>, \"x\", 1, 0, "), realistic)).toBe(0);
       for (const path of ["/run/systemd/userdb/io.systemd.Multiplexer", "/run/nscd/socket", "/var/run/nscd/socket", "/run/systemd/resolve/io.systemd.Resolve"]) {
         expect(egress(unix(`"${path}"`), realistic), path).toBe(0);
       }

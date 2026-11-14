@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { createGrepToolDefinition } from "@earendil-works/pi-coding-agent";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { ChildStdioTransport } from "../src/child-stdio-transport.js";
 import { SessionRegistry, type TurnTerminalNotice } from "../src/session-registry.js";
@@ -84,6 +85,48 @@ describe.skipIf(process.platform !== "linux")("writer relay", () => {
       expect(await calls(s.home, 1)).toContain("pi_history_read");
     } finally { await h.done(); }
   });
+  it("relayed entries pass the host's redaction, object keys included", async () => {
+    const token = `ghp_${"Rk8".repeat(12)}`;
+    const entries = [{ type: "message", id: "e1", parentId: null, timestamp: "2026-11-04T10:00:00.000Z", message: { role: "assistant", content: [{ type: "toolCall", id: "c1", name: "ls", arguments: { [token]: { nested: token } } }] } }];
+    const s = await setup([{ historyEntries: entries }]); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      await completedTurn(h.registry, session.id, "hello");
+      await h.registry.close(session.id);
+      const stored = h.rows("SELECT redacted_json FROM entries ORDER BY position");
+      expect(stored).toHaveLength(1);
+      expect(String(stored[0]!.redacted_json)).not.toContain(token);
+      expect(JSON.parse(String(stored[0]!.redacted_json)).message.content[0].arguments).toEqual({ "[REDACTED:github_token]": { nested: "[REDACTED:github_token]" } });
+    } finally { await h.done(); }
+  });
+  it.each([
+    ["holds a line feed", "secrets/part\nvisible.txt", "secrets/part\\nvisible.txt:1: needle RELAYLFSECRET", "secrets/part"],
+    // Pi prints the backslash as a slash: the last line of the path reads `prod/:1: …`, which no rule protects alone.
+    ["ends in a backslash after a line feed", "kubeconfig\nprod\\", "kubeconfig\\nprod/:1: needle RELAYLFSECRET", "kubeconfig"],
+  ])("relayed grep output of a protected file whose name %s passes the host's path rule", async (_case, file, printed, kept) => {
+    // Real SDK grep output; where rg is missing, as on the macOS runners, the SDK downloads it first.
+    const workspace = await temporaryRoot("relay-grep-");
+    await mkdir(dirname(join(workspace, file)), { recursive: true });
+    await writeFile(join(workspace, file), "needle RELAYLFSECRET\n");
+    const grep = await createGrepToolDefinition(workspace).execute("g1", { pattern: "needle", path: "." }, undefined, undefined, undefined as never);
+    expect(JSON.stringify(grep.content)).toContain(printed);
+    const timestamp = "2026-11-04T10:00:00.000Z";
+    const entries = [
+      { type: "message", id: "e1", parentId: null, timestamp, message: { role: "assistant", content: [{ type: "toolCall", id: "g1", name: "grep", arguments: { pattern: "needle", path: "." } }] } },
+      { type: "message", id: "e2", parentId: "e1", timestamp, message: { role: "toolResult", toolCallId: "g1", toolName: "grep", content: grep.content, isError: false } },
+    ];
+    const s = await setup([{ historyEntries: entries }]); const h = await historyRegistry(s.adapter);
+    try {
+      const session = await h.registry.start("repo", profile);
+      await completedTurn(h.registry, session.id, "hello");
+      await h.registry.close(session.id);
+      const stored = h.rows("SELECT redacted_json, dropped_by_path FROM entries ORDER BY position");
+      expect(stored).toHaveLength(2);
+      expect(stored[1]).toMatchObject({ dropped_by_path: 1 });
+      expect(String(stored[1]!.redacted_json)).not.toContain("RELAYLFSECRET");
+      expect(String(stored[1]!.redacted_json)).toContain(kept);
+    } finally { await h.done(); }
+  }, 300_000);
   it("relay keeps the truncation flag of an entry the inner server cut", async () => {
     const direct = await (await setup([{ history: "cut" }])).start();
     expect(await direct.readHistory!(0)).toMatchObject({ truncated: [1], next: 2 });

@@ -790,10 +790,11 @@ On 2026-11-10 one full ten-task cycle passed on the unreleased `main` commit
 `93980d9` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-10/README.md). It is evidence for that
 commit only: the published `0.20.0` has no cycle, and a later release needs
-its own. `0.20.1`, `0.21.0` and `0.22.0`, released from later commits, have
-none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
-[that of `0.21.0`](#v0210-pre-release-acceptance) and
-[that of `0.22.0`](#v0220-pre-release-acceptance).
+its own. `0.20.1`, `0.21.0`, `0.22.0` and `0.22.1`, released from later
+commits, have none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
+[that of `0.21.0`](#v0210-pre-release-acceptance),
+[that of `0.22.0`](#v0220-pre-release-acceptance) and
+[that of `0.22.1`](#v0221-pre-release-acceptance).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2665,6 +2666,89 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.22.1 pre-release acceptance
+
+`v0.22.1` was accepted on 2026-11-14 from 01:46 to 01:50 UTC on its release
+candidate `66876f4`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.1`, npm `12.2.2`, Git `2.56.1`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.2.0`, Codex CLI `0.167.1` and Claude Code `2.1.325`. Level 1 passed,
+and Level 2 passed in the working tree and for the packed tarball, each with
+delivery off and with delivery on. Every command below ran once on that
+candidate. The later commit changes only this record.
+
+The patch release `0.22.1` ships what `main` holds after `v0.22.0`, all from
+PR #308: the fix of
+[#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298), with which
+an abort while a coding session's `read` opens its file no longer ends the
+server, the placeholders of
+[#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307) and the
+[post-release evidence of `0.22.0`](#v0220-post-release-evidence). Its own
+pull request, on the branch `chore/release-0.22.1` on top of `main` at
+`d043849`, adds two fixes of the session history redaction, for the keys of
+stored objects and for paths that hold a line feed, test changes that resolve
+the open code scanning alerts and a newer `vite` pin in the T3 evaluation
+fixture; the version commit and this record follow them. The public MCP
+contract is unchanged since `0.22.0`.
+
+- Level 1 in the clone of the candidate after `npm ci`: typecheck,
+  `build:cli`, the test run and `build` exited with `0`, in the order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    197 files, 5348 passed and 15 skipped. The load average was 1.1 when it
+    started.
+  - The bubblewrap and Podman-gated files (`sandbox-shell.bwrap`,
+    `sandbox-shell.go-cache.bwrap`, `writer-lifecycle.podman`,
+    `writer-boundary.podman`), run again on their own with the same setting:
+    65 of 65 passed, none skipped. On the earlier candidate `35f194b`, which
+    holds the same versions of these files and of the code they test, the
+    first such run had one failure: `returns promptly on abort and leaves no
+    sandbox process` still found a sandbox process after the 2 s it waits.
+    Three further runs of the four files there passed 65 of 65 each.
+  - The files of #298 (`coding-read-abort`, `read-operations`), run again on
+    their own with the same setting: 10 of 10 passed. Those of the history
+    redaction (`history-redact`, `history-sentinel-e2e`, `writer-relay`): 107
+    of 107 passed.
+  - `npm audit` and `npm audit --omit=dev` exited with `0` and reported 0
+    vulnerabilities.
+  - Doctor reported `packageVersion` `0.22.1`. It exited with `2` because no
+    configuration was set (`config_missing`); every other check was `ok`.
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing before the pack.
+  - `npm pack` listed 1079 files (tarball shasum
+    `240efa4e8f3416c555c2412c5ba89879847b4ccb`), and the package holds no
+    `docs/superpowers/` file. A scan of the unpacked files for hosts, an
+    absolute home path and the maintainer's private name and address found
+    none. A wider scan for names from the operator's own setup found none of
+    the names that #307 replaced. Its only matches are in records that
+    earlier releases already shipped: links to one of the project's own
+    sprint records, the name of an operator image that names its toolchain,
+    and a snapshot alias derived from the name of this repository.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.22.1`.
+  The global install resolves `@earendil-works/pi-coding-agent` `1.5.2`,
+  `undici` `8.12.3` and `minimatch` `11.0.3`, and no `hono`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`) with 9 of 9 steps,
+  and reported the real registrations unchanged, no leftover process, the leak
+  check passed and the build unchanged. The disposable prefix, the tarball and
+  the clone were removed.
+
+No Level 3 cycle ran on this release. The cycle of 2026-11-10 ran on the
+`main` commit `93980d9` ([record](evaluation/level3-2026-11-10/README.md)) and
+is evidence for that commit only. The commits after `v0.22.0` change the
+`read` tool of coding sessions, the stream of the confined `read` and the
+redaction of the session history.
+
+Not established for `0.22.1`: a Level 3 cycle on the release; any turn against
+a real provider on the release, including an abort during a coding session's
+`read`, on the host or in a container writer, a session with history on, a
+session of a profile with `maxOutputTokens` and a streamed `read` in a real
+read-only session; the server host; macOS outside CI; and the
+published-release Level 2 and the upgrades, which follow after publishing.
 
 ### v0.22.0 post-release evidence
 

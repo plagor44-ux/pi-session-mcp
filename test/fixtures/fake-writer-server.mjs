@@ -18,7 +18,8 @@ const completed = () => ({ ...running(), state: "completed", completedAt: "1", a
 const tools = ["pi_capabilities_get", "pi_session_start", "pi_session_prompt", "pi_turn_get", "pi_session_abort", "pi_session_close", ...(scenario.history === "noTool" ? [] : ["pi_history_read"])].map(name => ({ name, inputSchema: { type: "object" } }));
 // The real server's input schemas are strict; reject what it would reject.
 const required = { pi_session_start: ["workspace", "executionProfile"], pi_session_prompt: ["sessionId", "prompt"], pi_turn_get: ["sessionId", "turnId"], pi_session_abort: ["sessionId"], pi_session_close: ["sessionId"], pi_history_read: ["sessionId"] };
-const historyEntries = [1, 2].map(n => ({ type: "message", id: `e${n}`, parentId: n === 1 ? null : "e1", timestamp: "2026-11-04T10:00:00.000Z", message: { role: "assistant", content: [{ type: "text", text: scenario.history === "oversized" ? "x".repeat(600000) : `entry ${n}` }] } }));
+// `historyEntries` replaces the two default entries with the scenario's own raw entries.
+const historyEntries = Array.isArray(scenario.historyEntries) ? scenario.historyEntries : [1, 2].map(n => ({ type: "message", id: `e${n}`, parentId: n === 1 ? null : "e1", timestamp: "2026-11-04T10:00:00.000Z", message: { role: "assistant", content: [{ type: "text", text: scenario.history === "oversized" ? "x".repeat(600000) : `entry ${n}` }] } }));
 function historyPage(cursor) {
   if (scenario.history === "malformed") return { ok: true, sessionId: id, entries: "nope", next: 0, more: false };
   const header = { type: "session", version: 3, id: "pi-inner", timestamp: "2026-11-04T10:00:00.000Z", cwd: "/workspace" };

@@ -1,4 +1,6 @@
 import { HISTORY_ENTRY_CAP_BYTES, MIN_KNOWN_VALUE_LENGTH, PATH_RULE_MARKER } from "./constants.js";
+import { filterGrepText, GREP_CHECK_BUDGET } from "./grep-paths.js";
+import type { PathRule } from "./path-rule.js";
 
 export type RedactionKind = "known_value" | "github_token" | "api_key" | "aws_access_key" | "slack_token" | "jwt" | "private_key" | "url_credentials" | "assignment";
 
@@ -74,12 +76,28 @@ type JsonObject = { [key: string]: Json };
 
 const isObject = (value: unknown): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** An object without a prototype, so that a `__proto__` key stays an ordinary key. */
+const emptyObject = (): JsonObject => Object.create(null) as JsonObject;
+
+/**
+ * `key`, or `key#2`, `key#3` and so on when an earlier key of `target` already took it. `next` holds
+ * the next suffix to try for each key of `target`, so that n keys that redact to the same text skip
+ * each taken key once instead of searching from `#2` every time.
+ */
+function freeKey(target: JsonObject, key: string, next: Map<string, number>): string {
+  if (!Object.hasOwn(target, key)) return key;
+  let suffix = next.get(key) ?? 2;
+  while (Object.hasOwn(target, `${key}#${suffix}`)) suffix += 1;
+  next.set(key, suffix + 1);
+  return `${key}#${suffix}`;
+}
+
 function omitted(kind: string, value: string): Json { return { omitted: kind, bytes: value.length }; }
 
 function replaceOpaque(value: Json): Json {
   if (Array.isArray(value)) return value.map(replaceOpaque);
   if (!isObject(value)) return value;
-  const result: JsonObject = {};
+  const result = emptyObject();
   for (const [key, child] of Object.entries(value)) {
     if (typeof child === "string" && SIGNATURE_KEYS.has(key)) result[key] = omitted("signature", child);
     else if (typeof child === "string" && key === "data" && value.type === "image") result[key] = omitted("image", child);
@@ -88,20 +106,12 @@ function replaceOpaque(value: Json): Json {
   return result;
 }
 
-/** Splits a grep output line into candidate path prefixes (`path:N: text` for matches, `path-N- text` for context). */
-function grepLinePaths(line: string): string[] {
-  const candidates: string[] = [];
-  const separator = /:\d+:|-\d+-/g;
-  for (let match = separator.exec(line); match !== null; match = separator.exec(line)) candidates.push(line.slice(0, match.index));
-  return candidates;
-}
-
 export class Redactor {
   private readonly knownValues: readonly string[];
-  private readonly pathRule: (path: string) => boolean;
+  private readonly pathRule: PathRule;
   private readonly secretValues: () => readonly string[];
 
-  constructor(options: { knownValues: readonly string[]; pathRule: (path: string) => boolean; secretValues?: () => readonly string[] }) {
+  constructor(options: { knownValues: readonly string[]; pathRule: PathRule; secretValues?: () => readonly string[] }) {
     this.secretValues = options.secretValues ?? (() => []);
     this.knownValues = options.knownValues.filter((value) => value.length >= MIN_KNOWN_VALUE_LENGTH);
     this.pathRule = options.pathRule;
@@ -174,17 +184,15 @@ export class Redactor {
       delete message.details;
       return true;
     }
-    const prefix = root === undefined || root === "." || root === "" ? "" : `${root.replace(/\/+$/, "")}/`;
+    const budget = { left: GREP_CHECK_BUDGET };
     let dropped = false;
     for (const block of message.content) {
       if (!isObject(block) || block.type !== "text" || typeof block.text !== "string") continue;
-      const kept = block.text.split("\n").filter((line) => {
-        const drop = grepLinePaths(line).some((path) => this.pathRule(path) || (prefix !== "" && this.pathRule(prefix + path)));
-        dropped ||= drop;
-        return !drop;
-      });
-      block.text = kept.join("\n");
+      const filtered = filterGrepText(block.text, root, this.pathRule, budget);
+      block.text = filtered.text;
+      dropped ||= filtered.dropped;
     }
+    // Pi's details can repeat the output (a truncation record holds the printed text).
     if (dropped) delete message.details;
     return dropped;
   }
@@ -193,8 +201,11 @@ export class Redactor {
     if (typeof value === "string") return this.text(value, counts);
     if (Array.isArray(value)) return value.map((child) => this.walk(child, counts));
     if (!isObject(value)) return value;
-    const result: JsonObject = {};
-    for (const [key, child] of Object.entries(value)) result[key] = this.walk(child, counts);
+    // A key is content like a value: a recognized secret in it is replaced too. Keys that redact to
+    // the same text get a numbered suffix, so no value overwrites another.
+    const result = emptyObject();
+    const next = new Map<string, number>();
+    for (const [key, child] of Object.entries(value)) result[freeKey(result, this.text(key, counts), next)] = this.walk(child, counts);
     return result;
   }
 

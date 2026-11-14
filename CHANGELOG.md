@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.22.1 — 2026-11-14
+
+Patch release: an abort while a coding session's `read` opens its file no
+longer ends the server
+([#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298)), because
+coding sessions now get the server's own `read`. Session history redaction
+also covers the keys of stored objects, and it keeps the content of a
+protected file out when the file's path holds a line feed; entries recorded
+before the upgrade are not rewritten. The release also ships placeholders for
+names from the operator's own setup in tracked records (#307), the
+post-release evidence of 0.22.0, test changes that resolve the open code
+scanning alerts and a newer `vite` pin in an evaluation fixture. The MCP tool
+contract is unchanged: no tool, field, state or error code is new, and neither
+is a setup outcome or a Doctor check. No full live two-client cycle ran on
+this release; see the
+[acceptance record](docs/acceptance.md#v0221-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Close the client sessions first:
+the fixes apply to server processes started after the upgrade. The controller
+skills are unchanged. **Rollback note:** reinstall 0.22.0 with the same steps.
+This release changes no stored format of Pi Session MCP.
+
 ### Changed
 
 - Documentation only, no runtime change: tracked records use placeholders
@@ -19,6 +42,14 @@
   reported the new `writer_not_ready` reason and used the repository step
   without repeated settings). No session ran on the published release for
   that record, and none of it is a Level 3 cycle.
+- Tests only, no runtime change: the tests that start `node -e` children pass
+  paths, markers and nested scripts to them as arguments instead of building
+  the child's code from these values, and one test lost a `replace` call that
+  replaced a string with itself. This resolves the open code scanning alerts,
+  all of which were in test files.
+- Evaluation fixture only, outside the package and its development install:
+  the tooling of the synthetic T3 fixture (`eval/fixtures/T3/tooling`) pins
+  `vite` 6.4.5 instead of 6.4.4 (GHSA-8g5g-mxqh-grgj).
 
 ### Fixed
 
@@ -39,6 +70,35 @@
   own. No Pi SDK release after 1.5.2 checks the signal itself, so the fix is
   in the server. No tool schema, result, error code or configuration field
   changes.
+- Session history redaction covers object keys. Known secret values and
+  credential patterns were replaced in the values of a stored entry but not
+  in its keys, so a recognized secret used as a key stayed in the history
+  file, for example in the arguments of a tool call or in the structured
+  content of an external MCP tool. Keys now get the same two stages as values.
+  Keys that redact to the same text are numbered (`#2`, `#3`), so no value
+  overwrites another, and a `__proto__` key is stored as an ordinary key.
+  Entries recorded before the upgrade are not rewritten:
+  `pi-session-mcp-history prune --older-than 0d --apply` deletes the closed
+  sessions, or the history file can be deleted while no server runs.
+- Session history keeps the content of a protected file out of `read`,
+  `edit`, `write` and `grep` results also when the file's path holds a line
+  feed or another line terminator. The path rule's `**` did not match across
+  a line terminator, and grep lines were checked one at a time, so a path
+  that spans lines was never tested whole, and the content of a file below
+  `secrets/` whose name holds a line feed was stored. The rule now matches
+  across line terminators. A grep line cannot be split into path and text
+  with certainty, so a line is now dropped when any split makes it content of
+  a protected file: the path can end at each `:N:` or `-N-` separator of the
+  line, overlapping ones included, and start at the line itself or at an
+  earlier line that starts at most 4096 characters before that separator.
+  Each such path is read as the rule reads any path, with backslashes as
+  slashes and `.`, `..` and empty segments resolved, on its own and joined
+  onto the search root. This also drops lines of other files that follow a
+  protected line within that distance. A fixed work budget per tool result,
+  well above what ordinary results of Pi's maximum size need, bounds the
+  check; once it is spent, the remaining lines with a separator are dropped
+  unchecked. As with object keys, entries recorded before the upgrade are not
+  rewritten.
 
 ## 0.22.0 — 2026-11-13
 

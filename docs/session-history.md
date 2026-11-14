@@ -1,6 +1,6 @@
 # Session history
 
-An opt-in, local record of every session ([ADR 0019](adr/0019-opt-in-session-history.md)). With history on, the server stores each session's metadata, turns and the Pi session entries in one SQLite file, `~/.local/state/pi-session-mcp/history/history.sqlite`. Content is redacted on the host before it is stored, also for writer sessions. Secrets that match no rule can still be stored; see the [threat model](threat-model.md). History never changes a session: a failure becomes a gap in the record. The record cannot restore or resume a session.
+An opt-in, local record of every session ([ADR 0019](adr/0019-opt-in-session-history.md)). With history on, the server stores each session's metadata, turns and the Pi session entries in one SQLite file, `~/.local/state/pi-session-mcp/history/history.sqlite`. Content is redacted on the host before it is stored, also for writer sessions, and that includes the keys of stored objects. Secrets that match no rule can still be stored; see the [threat model](threat-model.md). History never changes a session: a failure becomes a gap in the record. The record cannot restore or resume a session.
 
 History is off by default. Tier routing in `auto` mode requires it ([ADR 0020](adr/0020-tier-routing.md)).
 
@@ -14,7 +14,7 @@ History is off by default. Tier routing in `auto` mode requires it ([ADR 0020](a
 }
 ```
 
-`redactPaths` adds globs to the built-in path rule (`.env`, `.env.*`, `*.sops.*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `kubeconfig*`). For files that match, `read`, `grep`, `edit` and `write` content is never stored. A controller can pass a short `task` label to `pi_session_start`, such as `#215`, to find sessions later.
+`redactPaths` adds globs to the built-in path rule (`.env`, `.env.*`, `*.sops.*`, `secrets/**`, `*.pem`, `*.key`, `id_rsa*`, `id_ed25519*`, `kubeconfig*`). For files that match, `read`, `grep`, `edit` and `write` content is never stored, also when a path holds a line feed. A file name can hold a line feed, so grep output does not always show where a path ends: history drops every grep line that could belong to a matching file, which can drop lines of other files within 4096 characters after such a line. Checking one grep result has a fixed work budget, well above what ordinary results need; past it, the remaining lines that hold a `:N:` or `-N-` separator are dropped unchecked. A controller can pass a short `task` label to `pi_session_start`, such as `#215`, to find sessions later.
 
 The server reads the configuration once at startup; see [Configure](installation.md#2-configure) for the file location and the other fields.
 
