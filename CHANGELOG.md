@@ -27,6 +27,8 @@
   workstation had started before the upgrade to `0.22.0` and so held modules
   of `0.21.0`. No session ran on the published release for that record, and
   none of it is a Level 3 cycle.
+- Documentation only: in its list of amendments, ADR 0013 names ADR 0018 as
+  accepted and shipped in 0.17.0, where it still said proposed.
 
 ### Fixed
 
