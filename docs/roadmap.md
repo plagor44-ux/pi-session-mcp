@@ -320,6 +320,19 @@ mean they are implemented or that their gates passed.
   from the operator's own setup in tracked records with placeholders
   ([#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307)) and
   records the post-release evidence of 0.22.0. Open: #144, #221, #303.
+- 2026-11-14: patch release 0.22.1 ships Sprint 28 (records in
+  [Acceptance](acceptance.md#v0221-post-release-evidence)); both installations
+  are upgraded with the steps used for 0.22.0, after Doctor had named
+  `package_version` as the reason of every writer's `writer_not_ready`.
+  Sprint 29 then, in one pull request (unreleased), tests a tool call's own
+  path in time that grows no faster than the path's length
+  ([#310](https://github.com/plagor44-ux/pi-session-mcp/issues/310)): the
+  rule reads the globs with `/` in one pass over the path's segments and
+  resolves the path's `.` and `..` segments in one pass, and the grep check
+  resolves its search root in the same way. The sprint also shows the time of
+  the last learning refresh in `pi-session-mcp-routing status`
+  ([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)) and
+  records the post-release evidence of 0.22.1. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following

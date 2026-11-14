@@ -16,6 +16,18 @@
   and `null` otherwise. No MCP tool, configuration field, setup outcome or
   Doctor check changes.
 
+### Changed
+
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.22.1](docs/acceptance.md#v0221-post-release-evidence)
+  (registry, advisories and release assets, Level 2 on a clone of the tag and
+  on the published npm package, and the upgrade of both installations, which
+  reported `package_version` as the reason of every writer's
+  `writer_not_ready`). The record also notes that one server process of the
+  workstation had started before the upgrade to `0.22.0` and so held modules
+  of `0.21.0`. No session ran on the published release for that record, and
+  none of it is a Level 3 cycle.
+
 ### Fixed
 
 - Session history tests a tool call's own path in time that grows no faster

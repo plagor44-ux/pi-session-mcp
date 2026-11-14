@@ -2667,6 +2667,159 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.22.1 post-release evidence
+
+Recorded on 2026-11-14 for the published release `0.22.1`. The counts below
+come from the logs of the runs named here, which also hold the exit status of
+every setup, install and verify command of both upgrades. The record was
+completed at 20:41 UTC with a second check of the tag, the CI runs, the
+alerts, the GitHub release and the workstation's server processes.
+
+The annotated tag `v0.22.1` (tag object
+`de7c374f64d737211324b6dec146b62ff1440f19`) points to
+`5be1691f5b14571ecaa24370a6fff530d4a8ada9`, the merge commit of PR #309 on
+`main` and the package's `gitHead`. CI passed on that commit and on the tag,
+each in its first attempt, and CodeQL passed on that commit. Code scanning
+alerts #1 to #30 and Dependabot alert #20 are closed as fixed.
+
+- npm: `npm publish --dry-run` in a fresh clone of the tag reported 1079
+  files with the shasum `aa80b2ec0ab9f9d22908a9aa08daf3edbd9d930e` and ended
+  with the package line `+ pi-session-mcp@0.22.1`; its exit status was not
+  kept. The maintainer then published the package; that step was not observed
+  for this record. The registry has served `0.22.1` as `latest` since 13:02
+  UTC, with the same shasum and file count. The tarball downloaded from the
+  registry has that shasum, the integrity the registry names and 1079
+  entries, and it holds no `docs/superpowers/` file. A scan of its unpacked
+  files for private names, hosts, a home path and names from the operator's
+  own setup found no line that the package `0.22.0` did not hold. The seven
+  lines of `0.22.0` that
+  [#307](https://github.com/plagor44-ux/pi-session-mcp/issues/307) replaced
+  with placeholders are gone. The other matches are file names of the
+  repository, and two image names and a workspace alias that evaluation
+  records describe. The first read of the registry, 44 seconds after the
+  publication, showed `0.22.1` as `latest` but returned no data for the
+  version, so the download and the scan of that run did not take place. They
+  were repeated on their own from 13:03 UTC, and the figures here are from
+  that repetition.
+- The advisories
+  [GHSA-76c6-qhp2-5xrf](https://github.com/plagor44-ux/pi-session-mcp/security/advisories/GHSA-76c6-qhp2-5xrf)
+  and
+  [GHSA-8p9f-wjqf-8jg3](https://github.com/plagor44-ux/pi-session-mcp/security/advisories/GHSA-8p9f-wjqf-8jg3)
+  were published at 13:05 UTC. Each names `>= 0.18.0, < 0.22.1` as affected
+  and `0.22.1` as patched, without a CVE.
+- GitHub release `v0.22.1`, published at 13:05 UTC and marked latest, with
+  `install.sh` and `install.sh.sha256`. Both were downloaded through
+  `releases/latest/download/` at 20:41 UTC: the checksum matched, and
+  `install.sh` is byte-identical to the tag's file.
+- The pre-release record names a different tarball shasum because its
+  candidate `66876f4` predates the commit that added that record, which the
+  package ships.
+
+Runs on the host of the pre-release acceptance, with Node.js `26.13.1`, npm
+`12.2.2`, Codex CLI `0.167.1` and Claude Code `2.1.325`:
+
+- A second fresh clone of the tag, from 08:08 to 08:11 UTC, before the
+  package was published: `git describe --tags --exact-match` printed
+  `v0.22.1`. `npm ci`, typecheck, `build:cli`, the test run with
+  `NODE_OPTIONS=--unhandled-rejections=strict` and `build` exited with `0`;
+  197 files, 5348 passed and 15 skipped, at a load average of 1.1 when the
+  test run started. The bubblewrap and Podman-gated test files, run again on
+  their own, passed 65 of 65 tests in 4 files. `npm audit` and
+  `npm audit --omit=dev` reported 0 vulnerabilities, `git diff --check`
+  exited with `0` and `git status --short` printed nothing. Doctor reported
+  `packageVersion` `0.22.1` and exited with `2` because no configuration was
+  set (`config_missing`).
+- The published package, from 13:02 to 13:04 UTC: `npm install -g --prefix
+  <fresh prefix> pi-session-mcp@0.22.1` exited with `0`. The installed
+  manifest names version `0.22.1`, `scripts/install-smoke.mjs` reported
+  `smoke_passed` with that version, and the installed Doctor reported
+  `packageVersion` `0.22.1` and exited with `2` for `config_missing`. The
+  install resolves `@earendil-works/pi-coding-agent` `1.5.2`, `undici`
+  `8.12.3` and `minimatch` `11.0.3`.
+- Level 2: four runs of `scripts/setup-acceptance.mjs`, each exiting with
+  `0`. Two used the tag clone (`--setup` with its built `dist/setup-main.js`,
+  `--build-dir` the clone) and two the published package (`--setup` the
+  installed `pi-session-mcp-setup`, `--build-dir` the installed package), each
+  once without and once with `--events spool`. The harness script was the tag
+  clone's own in the first pair and, in the second, that of the maintainer's
+  checkout at the tagged commit, without uncommitted changes. Both sources
+  reported 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`. Every run covered the four targets (Codex `user`; Claude
+  Code `user`, `project` and `local`) with 9 of 9 steps, and reported the real
+  registrations unchanged, no leftover process, the leak check passed and the
+  build unchanged. The files of the tag clone's `dist/`, and those of the
+  installed package without its `node_modules/`, had the same digest before
+  and after their two runs. The prefix and the clone were removed.
+
+The files of #298 and the history redaction files ran on the tag only within
+the full test run; the
+[pre-release acceptance](#v0221-pre-release-acceptance) also ran them on their
+own.
+
+Installations: both run `0.22.1`, upgraded from `0.22.0` on 2026-11-14 with
+the steps used for `0.22.0`, the workstation from 13:05 to 13:12 UTC and the
+server from 13:07 to 13:18 UTC. In order: backups named for `0.22.1` of the
+configuration, `execution-modes.json` and `routing.json`, Doctor and a verify
+of both client targets, the client targets removed, the npm install, Doctor,
+each container repository's step (`pi-session-mcp-setup --repo <alias>`)
+first as a dry run and then with `--apply`, Doctor, the client targets
+applied and verified, `--writer <name> --verify` for every writer, and
+Doctor. Every one of these commands exited with `0`, except Doctor. It exited
+with `2` right after the npm install and with `1`, for warnings only, before
+the upgrade and after the repository steps. Neither machine had a running
+writer container at the start, and neither Doctor reported `writer_dirty`
+before the upgrade.
+
+- Right after the npm install, Doctor reported every writer of both machines
+  as `writer_not_ready`, each with the reason `package_version`. The dry runs
+  then reported `mode_unchanged` for every repository and `writer_planned` for
+  every writer. With `--apply`, every repository reported `mode_unchanged` and
+  `controllers_restart_required`, and every writer `writer_accepted`. Each
+  writer then had an acceptance record with mode `0600`.
+- Workstation, with Node.js `26.13.1` and npm `12.2.2`: all six container
+  repositories reported `mode_unchanged`, and all 22 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. Both
+  client targets verified (`mcp_verified`, both `skill_verified`, and
+  `hook_verified` for Claude Code). Doctor reported `packageVersion` `0.22.1`
+  and no error. Its 37 warnings were those it had reported on `0.22.0` right
+  before the upgrade: `snapshot_unavailable`, `writer_base_behind` on 14
+  writers, and the known `workspace_gitfile` and `workspace_mode_unset` of the
+  worktree aliases, 11 each. The open controller sessions were not closed
+  first, as [Installation](installation.md#npm-installation) asks: four
+  server processes ran under four Claude Code sessions. None had a child
+  process or a TCP connection at the start, and the owner chose to upgrade
+  without closing them. A server process that was running holds the modules
+  it had loaded and would load any further module from the replaced package,
+  so it is on no defined release until its controller reconnects. Those
+  modules were not the ones of `0.22.0` in every process. At 20:41 UTC two of
+  the four were still running: one had started on 2026-11-13 at 06:01 UTC,
+  before that host's upgrade to `0.22.0`, so it holds modules of `0.21.0`, and
+  the other at 17:37 UTC that day, after it. The other two had ended, and
+  their start times were not recorded.
+- Server, with Node.js `24.22.2` and npm `11.19.1`, driven over SSH: all five
+  container repositories reported `mode_unchanged`, and all 16 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt; the
+  load average was between 2.9 and 3.5 during the repository steps. Both
+  client targets verified (`mcp_verified`, both `skill_verified`; that host
+  has no wake hook). Doctor reported `packageVersion` `0.22.1` and no error;
+  its 3 warnings were those from before the upgrade, `workspace_mode_unset`
+  and `writer_base_behind` on two writers. The server processes of the two
+  client sessions there had no child process or TCP connection at the start;
+  they too stay on the modules they had loaded until their controllers
+  reconnect.
+
+No session ran on the published release for this record. Sessions that ran on
+it later that day, for the changes that followed the release, were not
+examined for it.
+
+Still not established for `0.22.1`: a Level 3 cycle on the release; any turn
+against a real provider on the release, including an abort during a coding
+session's `read`, on the host or in a container writer, and a session with
+history on; any other reason of `writer_not_ready` than `package_version` on
+installed writers; any session on the server host, where only the upgrade and
+its provider-free checks ran; a multi-session skill acceptance on the release;
+and macOS outside CI.
+
 ### v0.22.1 pre-release acceptance
 
 `v0.22.1` was accepted on 2026-11-14 from 01:46 to 01:50 UTC on its release
