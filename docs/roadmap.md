@@ -333,6 +333,20 @@ mean they are implemented or that their gates passed.
   the last learning refresh in `pi-session-mcp-routing status`
   ([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)) and
   records the post-release evidence of 0.22.1. Open: #144, #221.
+- 2026-11-17: [Sprint 30](sprints/2026-11-17-s30-release-0.22.2.md) prepares
+  patch release 0.22.2 for Sprint 29 in its own draft pull request on
+  `chore/release-0.22.2` (unreleased). Level 2 passes in the working tree and
+  for the packed tarball. The first full Level 3 cycle on a release candidate
+  since 0.16.1 reaches all ten tasks and every live criterion. Targeted live
+  checks on the packed tarball cover two writers in parallel with a
+  cross-family review on a review snapshot, an abort next to a running
+  session, history after real turns, routing status and refresh, and an
+  upgrade from 0.22.1 to the candidate and back (records in
+  [Acceptance](acceptance.md#v0222-pre-release-acceptance)). `npm audit`
+  reports a development-only advisory without a fixed version, so the Level 1
+  audit criterion and the release precondition are not met; the maintainer
+  decides. The sprint file proposes #221 before #144 and lists the open
+  proofs for 1.0. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
