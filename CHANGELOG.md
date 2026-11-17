@@ -23,7 +23,11 @@ skills are unchanged. **Rollback note:** reinstall 0.22.1 with the same steps.
 This release changes no stored format of Pi Session MCP. A time that a refresh
 by hand recorded stays in the history file, and 0.22.1 reads it as the time of
 the last automatic refresh, so its next automatic refresh follows 24 hours
-after it at the earliest.
+after it at the earliest. **Known advisory:** `npm audit` reports
+GHSA-fc5q-39xc-vjpf for `picomatch` 4.0.7, the newest published version,
+which only the development dependencies `vitest` and `vite` (through MCP
+Inspector) resolve. The advisory names no fixed version. `npm audit --omit=dev`
+reports none, and an npm installation contains no `picomatch`.
 
 ### Added
 

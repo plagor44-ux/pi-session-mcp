@@ -795,6 +795,12 @@ commits, have none; see [the record of `0.20.1`](#v0201-pre-release-acceptance),
 [that of `0.21.0`](#v0210-pre-release-acceptance),
 [that of `0.22.0`](#v0220-pre-release-acceptance) and
 [that of `0.22.1`](#v0221-pre-release-acceptance).
+On 2026-11-17 one full ten-task cycle ran on the release candidate `502408e`
+of `0.22.2` with Pi SDK `1.5.2`; see
+[its record](evaluation/level3-2026-11-17/README.md). All ten tasks and every
+live criterion passed; its Level 1 criterion is not met, because `npm audit`
+reports a development-only advisory that has no fixed version (see
+[the record of `0.22.2`](#v0222-pre-release-acceptance)).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -2666,6 +2672,124 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.22.2 pre-release acceptance
+
+`v0.22.2` was checked on 2026-11-17 from 21:54 to 22:40 UTC on its release
+candidate `502408e`, in a fresh clone on Linux 7.3 (`x64`) with Node.js
+`26.13.1`, npm `12.2.2`, Git `2.56.1`, systemd `262`, bubblewrap `0.13.1`,
+Podman `6.2.0`, Codex CLI `0.167.1` and Claude Code `2.1.326`. Level 1 passed
+except `npm audit`, and Level 2 passed in the working tree and for the packed
+tarball, each with delivery off and with delivery on. A full Level 3 cycle and
+targeted live checks ran on the same build. Every command below ran once on
+that candidate. The later commit changes only this record, two evaluation
+records, the changelog and the README.
+
+The patch release `0.22.2` ships what `main` holds after `v0.22.1`, all from
+PR #311: the fix of
+[#310](https://github.com/plagor44-ux/pi-session-mcp/issues/310), with which
+session history tests a tool call's own path in time that grows no faster
+than the path's length, the `lastRefreshAt` of `pi-session-mcp-routing status`
+and the recorded time of a refresh by hand
+([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)), the
+[post-release evidence of `0.22.1`](#v0221-post-release-evidence) and a
+status correction in ADR 0013. Its own pull request, on the branch
+`chore/release-0.22.2` on top of `main` at `51b3c1a`, carries only the version
+commit and this record.
+
+- Public contract: `tools/list` of the published `0.22.1` and of the candidate,
+  read over stdio, lists the same eight tools with the same definitions. The
+  only difference is the constant of `server.version` in the output schema of
+  `pi_capabilities_get`. `lastRefreshAt` is an addition to the report of the
+  routing CLI only; no MCP tool, configuration field, setup outcome or Doctor
+  check changes.
+- Level 1 in the clone of the candidate after `npm ci`: typecheck,
+  `build:cli`, the test run and `build` exited with `0`, in the order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    197 files, 5375 passed and 15 skipped. The load average was 5.5 when it
+    started.
+  - The files of #310 and #303 (`history-path-rule`, `history-grep-paths`,
+    `routing-learn`, `routing-cli`), together with those of the history
+    redaction (`history-redact`, `history-sentinel-e2e`) and of #298
+    (`coding-read-abort`, `read-operations`), run again on their own with the
+    same setting: 151 of 151 passed.
+  - `npm audit` exited with `1` and reported 7 high vulnerabilities, all from
+    one advisory: GHSA-fc5q-39xc-vjpf, a regular-expression denial of service
+    in `picomatch` up to and including 4.0.7. The lockfile resolves
+    `picomatch` 4.0.7, the newest published version, only under `vitest`
+    5.0.3 and under `vite` 8.3.5 of MCP Inspector 2.11.0, both development
+    dependencies. The advisory names no fixed version, so the lockfile patch
+    of [Releasing](releasing.md#patch-audit-advisories) cannot help. The
+    lockfile of `v0.22.1` resolves the same version, and its record of
+    2026-11-14 found 0 vulnerabilities. The advisory, published on
+    2026-10-19, was last updated on 2026-11-17 at 15:56 UTC, so the report
+    follows from the advisory database, not from a change of this release.
+    `npm audit --omit=dev` exited with
+    `0` and reported 0 vulnerabilities, and the packed installation below
+    contains no `picomatch`. Level 1 and the release precondition require 0
+    vulnerabilities; whether this advisory blocks the release is the
+    maintainer's decision.
+  - Doctor reported `packageVersion` `0.22.2`. It exited with `2` because no
+    configuration was set (`config_missing`); every other check was `ok`.
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing before the pack.
+  - `npm pack` listed 1079 files (tarball shasum
+    `a44a31d9149aef4bcffe8e4863142001f61ace7b`, SHA-256
+    `4de116a8aa5f71580d294551d1edc835370e3760b8217c04a5d3a09cba3ba20c`), and
+    the package holds no `docs/superpowers/` file. A scan of the unpacked
+    files for the absolute home path, the server's host name and the
+    maintainer's address found none.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.22.2`.
+  The global install resolves `@earendil-works/pi-coding-agent` `1.5.2`,
+  `undici` `8.12.3` and `minimatch` `11.0.3`, and no `hono` and no
+  `picomatch`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`), and reported the
+  real registrations unchanged, no leftover process, the leak check passed
+  (36 reports, 0 hits) and the build unchanged. The disposable prefix and the
+  tarball were removed.
+- Level 3: one full ten-task cycle with both clients on the candidate
+  ([record](evaluation/level3-2026-11-17/README.md)). All 10 tasks reached
+  their intended outcome, and every live criterion passed. Its gate is not
+  passed as written, because its Level 1 criterion fails on `npm audit` alone.
+- Targeted live checks on the packed tarball of the candidate
+  ([record](evaluation/release-0.22.2-2026-11-17/README.md)), each with its
+  own temporary configuration, test aliases and synthetic data:
+  - two coding workers in parallel on the leased container writer pool
+    (`openai` `gpt-6.1-terra` and `deepseek` `deepseek-flash`), collection of
+    the two reported writers, integration in the operator checkout and a
+    review of the integrated commit on a review snapshot by `mistral`
+    `zai-glm-5-3` with `NO_FINDINGS`; `--finish --apply` ran only after the
+    collection;
+  - an abort of a coding turn while a read-only session of the same server
+    was running: the aborted turn's command left no file and no process, the
+    other turn completed, and both sessions closed;
+  - session history after real turns: the content of `.env` and a synthetic
+    token were absent from the history file, and the metadata and verdicts
+    were readable from a fresh process;
+  - routing status before and after a refresh by hand, and with routing off;
+  - an upgrade of a temporary installation from the published `0.22.1` to the
+    candidate and back, in the order of
+    [Installation](installation.md#upgrade), with a container writer, both
+    client targets and a history file. The real clients, started afresh,
+    loaded `0.22.1`, `0.22.2` and `0.22.1`, and the writer's uncollected
+    commit and the history sessions with their verdicts were kept across both
+    switches;
+  - a practice comparison on one task of an application repository of the
+    operator: Claude Code delegating through Pi Session MCP and through a
+    native subagent both passed the operator's oracle.
+
+Not established for `0.22.2`: an abort during a coding session's `read`
+against a real provider, a profile with `maxOutputTokens` against a real
+provider, tier routing with real routed starts, a provider store with a
+stored key, the Claude Code wake, the server host, macOS outside CI, and the
+published-release Level 2 and the upgrades of the real installations, which
+follow after publishing.
 
 ### v0.22.1 post-release evidence
 
