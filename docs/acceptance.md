@@ -782,7 +782,7 @@ skill acceptance with one or two concurrent sessions, are not Level 3 cycles
 even where they used a real controller or a real model. The wording "passed all
 three levels" refers to earlier private cycles only. When this note was written
 on 2026-10-13, the full ten-task Level 3 cycle had not been repeated on Pi SDK
-`1.x`; the two cycles named next came later. This note adds no result and
+`1.x`; the cycles named next came later. This note adds no result and
 changes none.
 On 2026-11-02 one full ten-task cycle passed on the published `0.16.1`
 with Pi SDK `1.5.0`; see [its record](evaluation/level3-2026-11-02/README.md).
@@ -839,7 +839,8 @@ cycle either.
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
 builds with Pi SDK `1.x` the live two-client acceptance has been repeated in
-the two cycles named above and in no other.
+the three cycles named above and in no other; the third met every live
+criterion but not its Level 1 criterion.
 
 `v0.6.2` passed Level 1 on a fresh clone of its tag. It passed Level 2 in all
 three variants: working tree, published release, and published npm package.
@@ -2682,8 +2683,10 @@ Podman `6.2.0`, Codex CLI `0.167.1` and Claude Code `2.1.326`. Level 1 passed
 except `npm audit`, and Level 2 passed in the working tree and for the packed
 tarball, each with delivery off and with delivery on. A full Level 3 cycle and
 targeted live checks ran on the same build. Every command below ran once on
-that candidate. The later commit changes only this record, two evaluation
-records, the changelog and the README.
+that candidate. The later commits change only this record, two evaluation
+records, the changelog and the README. Level 1 and Level 2 are repeated on the
+head commit of the pull request, and the pull request names their results, the
+`dist/` digest and the tarball checksum.
 
 The patch release `0.22.2` ships what `main` holds after `v0.22.1`, all from
 PR #311: the fix of
@@ -2695,7 +2698,7 @@ and the recorded time of a refresh by hand
 [post-release evidence of `0.22.1`](#v0221-post-release-evidence) and a
 status correction in ADR 0013. Its own pull request, on the branch
 `chore/release-0.22.2` on top of `main` at `51b3c1a`, carries only the version
-commit and this record.
+commit and the record commits described above.
 
 - Public contract: `tools/list` of the published `0.22.1` and of the candidate,
   read over stdio, lists the same eight tools with the same definitions. The

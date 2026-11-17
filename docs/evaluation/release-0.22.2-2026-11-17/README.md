@@ -127,9 +127,11 @@ synthetic token of the GitHub token form.
 
 Routing in mode `manual`, on the same private history file.
 
-- At the server start, the empty history got an automatic learning refresh,
-  and `pi-session-mcp-routing status --json` reported its time in
-  `lastRefreshAt`.
+- The first session start on the server ran the automatic learning refresh,
+  14 ms after the session was created, and
+  `pi-session-mcp-routing status --json` reported its time in
+  `lastRefreshAt`. The server checks for that refresh after a session start,
+  not when it starts.
 - `pi-session-mcp-routing refresh` reported 2 outcomes, 0 changes and 0
   proposals. The next `status` reported the time of that refresh, and the
   history's routing metadata held the same value.
@@ -179,9 +181,10 @@ repeated settings: `writer_accepted`, `mode_unchanged`, Doctor only
   `writer_collected`, and the collected ref held exactly the commit of the
   session under `0.22.1`, with its one file. Every version listed all
   sessions recorded before it, with their verdicts.
-- Rollback note: a `0.22.1` server started one minute after the candidate's
-  refresh by hand left the stored refresh time unchanged. That matches the
-  changelog: `0.22.1` reads the time as that of its last automatic refresh.
+- Rollback note: a session start on a `0.22.1` server, one minute after the
+  candidate's refresh by hand, left the stored refresh time unchanged. That
+  matches the changelog: `0.22.1` reads the time as that of its last automatic
+  refresh.
 - Cleanup: the writer was removed (`writer_removed`), the targets were removed
   from the disposable home, and the prefix and the disposable home were
   deleted.

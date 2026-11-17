@@ -9,10 +9,11 @@ It is the first full cycle on a release candidate since the
 [cycle on v0.16.1](../level3-2026-11-02/README.md).
 
 The candidate commit is the version commit of `0.22.2` on the branch
-`chore/release-0.22.2`. The commit after it changes only acceptance records,
-the changelog and the README; its build is compared with this one in the
-[acceptance record](../../acceptance.md#v0222-pre-release-acceptance). A result
-for this commit is not evidence for another commit.
+`chore/release-0.22.2`. The commits after it change only acceptance and
+evaluation records, the changelog and the README. Level 1 and Level 2 are
+repeated on the head commit of the release pull request, which names their
+results and the `dist/` digest; this cycle did not run again. A result for this
+commit is not evidence for another commit.
 
 One attempt is on record.
 
@@ -156,8 +157,9 @@ decision.
 
 ## Not covered
 
-Level 2 for an installed release (it ran on this candidate, see the
-acceptance record), interactive approval dialogs, external MCP grants, client
+Level 2 and Level 3 on the published release and the published package
+(Level 2 ran on this candidate in the working tree and for the packed tarball;
+see the acceptance record), interactive approval dialogs, external MCP grants, client
 restart or resume, container writers (no workspace of this cycle was a
 container workspace), the Claude Code wake (delivery was off), several
 sessions at the same time, session history, tier routing, macOS, and model
