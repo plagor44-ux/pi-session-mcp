@@ -347,6 +347,13 @@ mean they are implemented or that their gates passed.
   audit criterion and the release precondition are not met; the maintainer
   decides. The sprint file proposes #221 before #144 and lists the open
   proofs for 1.0. Open: #144, #221.
+- 2026-11-18: patch release 0.22.2 ships Sprint 29 (records in
+  [Acceptance](acceptance.md#v0222-post-release-evidence)), with the
+  development-only advisory on record as the maintainer decided. Level 2
+  passes from a fresh clone of the tag and from the published npm package, and
+  both installations are upgraded with the steps used for 0.22.1, after
+  Doctor had named `package_version` as the reason of every writer's
+  `writer_not_ready`. Open: #144, #221.
 
 The explicit 2026-10-17 user request adds a bounded development-only
 [token-footprint measurement](sprints/2026-10-17-token-footprint.md), following
