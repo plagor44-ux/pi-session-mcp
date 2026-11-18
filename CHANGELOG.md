@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.22.2 — 2026-11-17
+
+Patch release: session history tests a tool call's own path, and the grep
+check its search root, in time that grows no faster than the path's length
+([#310](https://github.com/plagor44-ux/pi-session-mcp/issues/310)), so a
+crafted path argument no longer holds the host server for seconds. The paths
+that history protects are the same as before. `pi-session-mcp-routing status`
+reports `lastRefreshAt`, and a refresh by hand now records its time
+([#303](https://github.com/plagor44-ux/pi-session-mcp/issues/303)). That field
+is an additive change of the routing CLI's report only. The MCP tool contract
+is unchanged: no tool, field, state or error code is new, and neither is a
+configuration field, a setup outcome or a Doctor check. See the
+[acceptance record](docs/acceptance.md#v0222-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Close the client sessions first:
+the fixes apply to server processes started after the upgrade. The controller
+skills are unchanged. **Rollback note:** reinstall 0.22.1 with the same steps.
+This release changes no stored format of Pi Session MCP. A time that a refresh
+by hand recorded stays in the history file, and 0.22.1 reads it as the time of
+the last automatic refresh, so its next automatic refresh follows 24 hours
+after it at the earliest. **Known advisory:** `npm audit` reports
+GHSA-fc5q-39xc-vjpf for `picomatch` 4.0.7, the newest published version,
+which only the development dependencies `vitest` and `vite` (through MCP
+Inspector) resolve. The advisory names no fixed version. `npm audit --omit=dev`
+reports none, and an npm installation contains no `picomatch`.
+
 ### Added
 
 - `pi-session-mcp-routing status` reports `lastRefreshAt`, the time of the
