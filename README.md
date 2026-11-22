@@ -74,7 +74,7 @@ curl -fsSLO "$base/install.sh" && curl -fsSLO "$base/install.sh.sha256" &&
   sha256sum -c install.sh.sha256
 ```
 
-On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.22.2](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.22.2).
+On macOS, use `shasum -a 256 -c install.sh.sha256` instead of `sha256sum -c install.sh.sha256`. For a fixed version, replace `latest/download` with `download/v<version>`. This README describes [v0.23.0](https://github.com/plagor44-ux/pi-session-mcp/releases/tag/v0.23.0).
 
 The checksum comes from the same release as the script. A match shows that the two files belong together, which catches a damaged or incomplete download. It does not prove who published the script, because whoever can replace one file can replace both. Read `install.sh` before you run it. It is short: it checks the platform and the Node.js version, runs `npm install -g pi-session-mcp@<version>` with the version written in the script unless that version is installed already, and starts `pi-session-mcp-setup --guided --apply`. It refuses to upgrade a different installed version.
 
@@ -125,7 +125,7 @@ The [tool contracts](docs/tool-contracts.md) define every field, state and error
 
 ## Status
 
-The package version is **0.22.2**.
+The package version is **0.23.0**.
 
 | | |
 | --- | --- |
