@@ -842,9 +842,9 @@ SDK from `1.5.2` to `1.6.0`, passed Level 1 and the Level 2 acceptance in the
 working tree and for the packed tarball, each with delivery off and on; see
 [the record of `0.23.0`](#v0230-pre-release-acceptance). After the release,
 the published artifacts were checked, among them Level 2 from a clone of the
-tag and from the published package; see the
-[post-release evidence](#v0230-post-release-evidence). No Level 3 cycle and
-no targeted live check has run on Pi SDK `1.6.0`.
+tag and from the published package, and the two installations were upgraded;
+see the [post-release evidence](#v0230-post-release-evidence). No Level 3
+cycle and no targeted live check has run on Pi SDK `1.6.0`.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2686,9 +2686,7 @@ workspace without a mode.
 
 ### v0.23.0 post-release evidence
 
-Recorded for the published release `0.23.0`, released on 2026-11-22. This
-section holds the checks of the published artifacts; the upgrades of the real
-installations are not part of it yet.
+Recorded for the published release `0.23.0`, released on 2026-11-22.
 
 The annotated tag `v0.23.0` (tag object `6b0f46f`) points to
 `31ff573dec6ffafd26a040e6695cdf51db58dfdb`, the merge commit of PR #315 on
@@ -2722,12 +2720,36 @@ Runs of the published release, with Codex CLI `0.171.0` and Claude Code
   passed with 160 of 160 checks with delivery off and 228 of 228 with
   `--events spool`.
 
-No Level 3 cycle and no targeted live check ran on Pi SDK `1.6.0`.
+Installations: both operator installations were upgraded from `0.22.2` to
+`0.23.0` on 2026-11-22 along the documented upgrade path: the client targets
+removed, the package installed, each container repository's step
+(`pi-session-mcp-setup --repo <alias>`) first as a dry run and then with
+`--apply`, and the client targets applied and verified again. Every repository
+reported `mode_unchanged` and `controllers_restart_required`.
 
-Still not established for `0.23.0`, beyond what the
-[pre-release record](#v0230-pre-release-acceptance) names, which this section
-does not change: the upgrades of the real installations are not recorded
-here.
+- First installation: 6 container repositories, and all 22 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. The
+  Claude Code and Codex targets verified (`mcp_verified`). Doctor reported no
+  error and 36 warnings, the same as before the upgrade: `snapshot_unavailable`
+  1, `workspace_gitfile` 11, `workspace_mode_unset` 11 and `writer_base_behind`
+  13.
+- Second installation: 5 container repositories, and all 16 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. Both
+  client targets verified (`mcp_verified`). Doctor reported no error and 3
+  warnings, the same as before the upgrade: `workspace_mode_unset` 1 and
+  `writer_base_behind` 2.
+- A later, independent check found version `0.23.0` installed on both. Doctor
+  on the first installation exited with `1`, for warnings only: 335 checks
+  `ok` and 36 warnings.
+
+Running controller sessions keep the modules they loaded until they reconnect:
+a client needs an MCP reconnect, and Codex a restart. No stored format
+changed.
+
+No Level 3 cycle and no targeted live check ran on Pi SDK `1.6.0`. This
+section adds no live check on the release: what the
+[pre-release record](#v0230-pre-release-acceptance) names as not established
+stays so, except the published-release Level 2 and the upgrades above.
 
 ### v0.23.0 pre-release acceptance
 
