@@ -835,6 +835,11 @@ After the release of `0.21.0` on the same day, a routed review session ran
 three turns against a real provider on the published release; see the
 [post-release evidence](#v0210-post-release-evidence). It is not a Level 3
 cycle either.
+On 2026-11-22 the release candidate `c5859ec` of `0.23.0`, which moves the Pi
+SDK from `1.5.2` to `1.6.0`, passed Level 1 and the Level 2 acceptance in the
+working tree and for the packed tarball, each with delivery off and on; see
+[the record of `0.23.0`](#v0230-pre-release-acceptance). No Level 3 cycle and
+no targeted live check has run on Pi SDK `1.6.0`.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2673,6 +2678,81 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.23.0 pre-release acceptance
+
+`v0.23.0` was checked on 2026-11-22 from 12:07 to 12:12 UTC on its release
+candidate `c5859ec`, in the release worktree on Linux 7.3 (`x64`) with Node.js
+`26.13.1`, npm `12.2.3`, Git `2.56.1`, Codex CLI `0.171.0` and Claude Code
+`2.1.330`. Level 1 passed, and Level 2 passed in the working tree and for the
+packed tarball, each with delivery off and with delivery on. No live check ran:
+there is no Level 3 cycle and no targeted live check on Pi SDK `1.6.0`. Every
+command below ran once on that candidate, except `npm pack`, which ran twice.
+The later commits change only this record, the
+[evaluation record](evaluation/release-0.23.0-2026-11-22/README.md) and the
+README status text. The evaluation record holds the commands with their exit
+codes.
+
+The release `0.23.0` ships what `main` holds after `v0.22.2`: the move of the
+Pi SDK family from `1.5.2` to `1.6.0`
+([#314](https://github.com/plagor44-ux/pi-session-mcp/pull/314), with the
+changelog's account of the upstream changes), the README header and logo
+([#313](https://github.com/plagor44-ux/pi-session-mcp/pull/313)) and an
+amendment to ADR 0013 on the abort handling of `read`. The maintainer decided
+on a minor release; the public MCP contract is unchanged, which
+[ADR 0003](adr/0003-post-mvp-maintenance.md) would accept as a patch. Its own
+pull request, on the branch `chore/release-0.23.0` on top of `main` at
+`f47ca69`, carries only the version commit and the record commits.
+
+- Public contract: no file under `src/`, `test/`, `scripts/` or `skills/`
+  differs between `v0.22.2` and the candidate, so the tool definitions, the
+  configuration schema, the setup outcomes and the Doctor checks are the same
+  sources as in `0.22.2`. The controller skills are unchanged. A `tools/list`
+  comparison of the two builds was not run.
+- Level 1 in the release worktree of the candidate, after `npm ci`:
+  typecheck, `build:cli`, the test run and `build` exited with `0`, in the
+  order CI uses.
+  - The test run, with `NODE_OPTIONS=--unhandled-rejections=strict`, reported
+    197 files, 5375 passed and 15 skipped.
+  - `npm audit` and `npm audit --omit=dev` both exited with `0` and reported 0
+    vulnerabilities. The lockfile still resolves `picomatch` `4.0.7`, as in
+    `0.22.2`, but the advisory that the record of `0.22.2` names for it is
+    not reported at the time of this run; the result follows from the
+    advisory database at that moment, not from a change of this release.
+  - Doctor reported `packageVersion` `0.23.0`. It exited with `2` because no
+    configuration was set (`config_missing`); every other check was `ok`.
+  - `git diff --check` exited with `0`, and `git status --short` printed
+    nothing after the build.
+  - `npm pack` listed 1081 files (tarball shasum
+    `a8d3a5e407ab6913f2f3c376d978089d4f0efb92`, SHA-256
+    `e37364fc17823fec2a3dfe5d88b68b18f164f8327169c70b46737923fbb664ae`). A
+    second pack produced the same digests. The package holds no
+    `docs/superpowers/` file, and a scan of the unpacked files for the
+    absolute home path of the build host and the maintainer's address found
+    none.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.23.0`.
+  The global install resolves all eight `@earendil-works` packages of the SDK
+  family at `1.6.0`, `undici` `8.12.4` and `minimatch` `11.0.3`, and no `hono`
+  and no `picomatch`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`), and reported the
+  real registrations unchanged, no leftover process, the leak check passed
+  (36 reports, 0 hits) and the build unchanged. The disposable prefixes and the
+  tarballs were removed.
+
+Not established for `0.23.0`: any live behaviour on Pi SDK `1.6.0`, among it
+the new GPT-6.2 models, the changed `find` pattern semantics, the wider
+provider retries and the tool results of an aborted batch; an abort during a
+coding session's `read` against a real provider; a profile with
+`maxOutputTokens` against a real provider; tier routing with real routed
+starts; a provider store with a stored key; the Claude Code wake; container
+writers; the server host; macOS outside CI; and the published-release Level 2
+and the upgrades of the real installations, which follow after publishing.
 
 ### v0.22.2 pre-release acceptance
 
