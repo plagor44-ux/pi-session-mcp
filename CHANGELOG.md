@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.23.1 — 2026-11-22
+
+Patch release: the setup CLI gains a read-only check for container writers and
+reports more about a guided dry run; the MCP tool contract is unchanged, so
+[ADR 0003](docs/adr/0003-post-mvp-maintenance.md) allows a patch. The maintainer
+decided on this version. No tool, field, state or error code of the eight MCP
+tools changes, and the setup report stays at schema version 1 with additive,
+optional fields. **Changed exit status:** `--guided --answers` now exits with
+`64` instead of `1` for `answers_invalid` and the new `answers_unreadable`; a
+script that tested for exit `1` there must accept `64` (see "Changed"). A live
+two-client cycle (Level 3) on Pi SDK 1.6.0 has not been run; see the
+[acceptance record](docs/acceptance.md#v0231-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Close the client sessions first:
+the update applies to server processes started after the upgrade. The bundled
+`pi-session-profiles` skill changes (see "Changed"); the other controller
+skills are unchanged. **Rollback note:** reinstall 0.23.0 with the same steps.
+This release changes no stored format of Pi Session MCP.
+
 ### Added
 
 - `pi-session-mcp-setup --writer <name> --inspect [--json]`: a read-only check
