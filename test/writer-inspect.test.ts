@@ -85,6 +85,17 @@ it("does not count a skip-worktree path that is absent from the worktree on purp
   expect((await inspectWriter(f.ctx, "repo-w1")).counts?.changes).toBe(1);
 }, 60_000);
 
+it("counts a new file that is staged and then removed from the worktree", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "new.txt"), "new\n");
+  await f.work("add", "new.txt");
+  await rm(join(f.paths.clone, "new.txt"));
+  expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, changes: 1 } });
+  // The same path staged, then deleted, next to a real deletion of another file: two paths.
+  await rm(join(f.paths.clone, "base.txt"));
+  expect((await inspectWriter(f.ctx, "repo-w1")).counts?.changes).toBe(2);
+}, 60_000);
+
 it("counts a tracked file that was deleted in the worktree", async () => {
   const f = await fixture();
   await rm(join(f.paths.clone, "base.txt"));
