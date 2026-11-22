@@ -420,7 +420,7 @@ export interface InspectCounts {
   stashes: number;
   /** Refs outside branches and the stash that name objects the operator checkout does not hold. */
   unexportedRefs: number;
-  /** Tracked files that differ from HEAD. */
+  /** Tracked paths that differ from HEAD in the index or in the worktree, each counted once, paths that an index flag hides included. */
   changes: number;
   untracked: number;
   /** Untracked files that Git ignores: collection never exports them, remove deletes them. */
@@ -432,7 +432,8 @@ export type InspectOutcome = WriterOutcome & { counts?: InspectCounts };
 
 /**
  * Counters for `inspectWriter`, from a second read-only boundary run: the clone is mounted read-only and Git works on a
- * copy of the index under `/tmp`. Each list is written to a file first, so a failing Git command fails the script instead
+ * copy of the index under `/tmp` (on which the assume-unchanged and skip-worktree flags are cleared, as the inspection does, so that
+ * no changed path stays hidden). Each list is written to a file first, so a failing Git command fails the script instead
  * of counting zero. Paths stay NUL-separated and are only counted, never read back.
  */
 const COUNT_SCRIPT = `set -eu
@@ -442,7 +443,12 @@ export GIT_INDEX_FILE=/tmp/index
 count() { tr -cd '\\0' < "$1" | wc -c | tr -d ' '; }
 lines() { wc -l < "$1" | tr -d ' '; }
 ${BOUNDARY_GIT} rev-list --count --branches HEAD --not "$1" > /tmp/commits
-${BOUNDARY_GIT} diff --no-ext-diff --no-textconv -z --name-only HEAD > /tmp/changes
+${INDEX_GIT} ls-files -z > /tmp/all-paths
+${INDEX_GIT} update-index -z --no-assume-unchanged --stdin < /tmp/all-paths
+${INDEX_GIT} update-index -z --no-skip-worktree --stdin < /tmp/all-paths
+${INDEX_GIT} diff-index --cached --name-only -z HEAD > /tmp/staged-changes
+${INDEX_GIT} diff --no-ext-diff --no-textconv --name-only -z > /tmp/worktree-changes
+cat /tmp/staged-changes /tmp/worktree-changes | sort -z -u > /tmp/changes
 ${BOUNDARY_GIT} ls-files -z --others --exclude-standard > /tmp/untracked
 ${BOUNDARY_GIT} ls-files -z --others --ignored --exclude-standard > /tmp/ignored
 if ${BOUNDARY_GIT} rev-parse -q --verify refs/stash > /dev/null; then ${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash > /tmp/stashes; else : > /tmp/stashes; fi

@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, expect, it } from "vitest";
 import { collectWriter, inspectWriter } from "../src/writer-lifecycle.js";
@@ -37,6 +37,44 @@ it("counts commits on a detached HEAD that no branch reaches", async () => {
   await f.commit("detached one", "one.txt", "1\n");
   await f.commit("detached two", "two.txt", "2\n");
   expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, commits: 2 } });
+}, 60_000);
+
+it("counts staged work that the worktree has restored to the HEAD content", async () => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "base.txt"), "staged\n");
+  await f.work("add", "base.txt");
+  await writeFile(join(f.paths.clone, "base.txt"), "base\n");
+  expect(await f.work("diff", "HEAD", "--name-only")).toBe("");
+  expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, changes: 1 } });
+}, 60_000);
+
+it("counts the union of staged and worktree changes, a path changed in both once", async () => {
+  const f = await fixture();
+  await f.commit("second file", "second.txt", "s\n");
+  await f.work("reset", "--hard", f.baseCommit);
+  await f.commit("tracked a", "a.txt", "a\n");
+  await f.commit("tracked b", "b.txt", "b\n");
+  await f.work("reset", "--hard", "HEAD");
+  await writeFile(join(f.paths.clone, "a.txt"), "staged a\n");
+  await f.work("add", "a.txt");
+  await writeFile(join(f.paths.clone, "a.txt"), "worktree a\n");
+  await writeFile(join(f.paths.clone, "b.txt"), "worktree b\n");
+  const outcome = await inspectWriter(f.ctx, "repo-w1");
+  expect(outcome).toMatchObject({ status: "failed", code: "writer_uncollected", counts: { changes: 2 } });
+}, 60_000);
+
+it.each([["assume-unchanged", "--assume-unchanged"], ["skip-worktree", "--skip-worktree"]])("counts a changed path that the index flag %s hides from Git", async (_name, flag) => {
+  const f = await fixture();
+  await writeFile(join(f.paths.clone, "base.txt"), "hidden change\n");
+  await f.work("update-index", flag, "base.txt");
+  expect(await f.work("status", "--porcelain")).toBe("");
+  expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, changes: 1 } });
+}, 60_000);
+
+it("counts a tracked file that was deleted in the worktree", async () => {
+  const f = await fixture();
+  await rm(join(f.paths.clone, "base.txt"));
+  expect(await inspectWriter(f.ctx, "repo-w1")).toMatchObject({ status: "failed", code: "writer_uncollected", counts: { changes: 1 } });
 }, 60_000);
 
 it("counts ignored files of a clean writer without calling it dirty", async () => {

@@ -325,7 +325,7 @@ The finding carries path-free counters:
 | `branches` | Local branches other than the recorded base branch |
 | `stashes` | Stash entries |
 | `unexportedRefs` | Tags, notes and other refs whose objects the operator checkout does not hold |
-| `changes` | Tracked files that differ from `HEAD` |
+| `changes` | Tracked paths that differ from `HEAD` in the index or in the worktree, each counted once; staged work that the worktree has restored and paths hidden by an index flag (`assume-unchanged`, `skip-worktree`) count too |
 | `untracked` | Untracked files that Git does not ignore |
 | `ignored` | Untracked files that Git ignores |
 | `nestedRepositories` | `.git` entries below the top level, ignored paths included |
